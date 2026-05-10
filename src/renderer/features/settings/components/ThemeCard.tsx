@@ -39,9 +39,9 @@ const ThemeCard: React.FC = () => {
         </button>
         <button
           type="button"
-          onClick={() => handleSetTheme('emlight')}
-          className={`${buttonBase} ${theme === 'emlight' ? activeClass : inactiveClass}`}
-          aria-pressed={theme === 'emlight'}
+          onClick={() => handleSetTheme('ylight')}
+          className={`${buttonBase} ${theme === 'ylight' ? activeClass : inactiveClass}`}
+          aria-pressed={theme === 'ylight'}
           aria-label="Set theme to Yoda Light"
         >
           <Sun className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -49,9 +49,9 @@ const ThemeCard: React.FC = () => {
         </button>
         <button
           type="button"
-          onClick={() => handleSetTheme('emdark')}
-          className={`${buttonBase} ${theme === 'emdark' ? activeClass : inactiveClass}`}
-          aria-pressed={theme === 'emdark'}
+          onClick={() => handleSetTheme('ydark')}
+          className={`${buttonBase} ${theme === 'ydark' ? activeClass : inactiveClass}`}
+          aria-pressed={theme === 'ydark'}
           aria-label="Set theme to Yoda Dark"
         >
           <Moon className="h-4 w-4 shrink-0" aria-hidden="true" />

@@ -37,11 +37,16 @@ export const terminalSettingsSchema = z.object({
 });
 
 export const themeSchema = z
-  .enum(['emlight', 'emdark'])
+  .enum(['ylight', 'ydark', 'emlight', 'emdark'])
   .nullable()
   .catch(null)
   .optional()
-  .default(null);
+  .default(null)
+  .transform((value) => {
+    if (value === 'emlight') return 'ylight' as const;
+    if (value === 'emdark') return 'ydark' as const;
+    return value as 'ylight' | 'ydark' | null | undefined;
+  });
 
 export const defaultAgentSchema = z.optional(z.enum(AGENT_PROVIDER_IDS)).default(DEFAULT_AGENT_ID);
 

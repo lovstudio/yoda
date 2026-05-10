@@ -44,7 +44,7 @@ export function HomeMainPanel() {
             <div className="logo-shimmer-container">
               <img
                 key={effectiveTheme}
-                src={effectiveTheme === 'emdark' ? yodaLogoWhite : yodaLogo}
+                src={effectiveTheme === 'ydark' ? yodaLogoWhite : yodaLogo}
                 alt="Yoda"
                 className="logo-shimmer-image"
               />
@@ -52,8 +52,8 @@ export function HomeMainPanel() {
                 className="logo-shimmer-overlay"
                 aria-hidden="true"
                 style={{
-                  WebkitMaskImage: `url(${effectiveTheme === 'emdark' ? yodaLogoWhite : yodaLogo})`,
-                  maskImage: `url(${effectiveTheme === 'emdark' ? yodaLogoWhite : yodaLogo})`,
+                  WebkitMaskImage: `url(${effectiveTheme === 'ydark' ? yodaLogoWhite : yodaLogo})`,
+                  maskImage: `url(${effectiveTheme === 'ydark' ? yodaLogoWhite : yodaLogo})`,
                   WebkitMaskRepeat: 'no-repeat',
                   maskRepeat: 'no-repeat',
                   WebkitMaskSize: 'contain',

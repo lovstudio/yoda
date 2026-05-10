@@ -81,7 +81,7 @@ export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
             onClick={onGetStarted}
             size="sm"
             className={
-              effectiveTheme === 'emdark' ? 'bg-gray-200 text-gray-900 hover:bg-gray-300' : ''
+              effectiveTheme === 'ydark' ? 'bg-gray-200 text-gray-900 hover:bg-gray-300' : ''
             }
           >
             Start shipping

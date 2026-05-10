@@ -1,0 +1,48 @@
+<svg width="380" height="70" viewBox="0 0 380 70" xmlns="http://www.w3.org/2000/svg" fill="black">
+  <!-- ============ Monogram: abstract Yoda head + lightsaber ============ -->
+
+  <!-- Left ear: long pointed triangle, tip top-left -->
+  <path d="M0 8 L18 4 L22 28 L14 32 Z"/>
+
+  <!-- Right ear: mirror -->
+  <path d="M62 8 L44 4 L40 28 L48 32 Z"/>
+
+  <!-- Head: rounded dome (top arc) + flat-bottom rectangle, slightly trapezoidal -->
+  <path d="M14 30
+           Q14 14 31 14
+           Q48 14 48 30
+           L48 50
+           Q48 56 42 56
+           L20 56
+           Q14 56 14 50
+           Z"/>
+
+  <!-- Negative space brow line: small horizontal slit hinting at 'eyes' -->
+  <rect x="20" y="34" width="22" height="2" fill="white"/>
+
+  <!-- Lightsaber across bottom (diagonal, small) -->
+  <g transform="rotate(-25 31 60)">
+    <rect x="6" y="58" width="11" height="4" rx="0.6"/>     <!-- hilt -->
+    <rect x="11" y="55" width="2" height="2"/>              <!-- stud -->
+    <rect x="17" y="58" width="2" height="4"/>              <!-- emitter -->
+    <rect x="19" y="59" width="38" height="2"/>             <!-- blade -->
+  </g>
+
+  <!-- ============ Wordmark "YODA" (offset by 76px) ============ -->
+  <g transform="translate(76 0)">
+    <!-- Y -->
+    <path d="M0 4 L12 4 L23 28 L34 4 L46 4 L29 38 L29 60 L17 60 L17 38 Z"/>
+    <!-- O -->
+    <path d="M62 4 L92 4 L100 12 L100 52 L92 60 L62 60 L54 52 L54 12 Z
+             M64 18 L64 46 L66 48 L88 48 L90 46 L90 18 L88 16 L66 16 L64 18 Z"
+          fill-rule="evenodd"/>
+    <!-- D -->
+    <path d="M108 4 L138 4 L154 20 L154 44 L138 60 L108 60 Z
+             M120 16 L120 48 L134 48 L142 40 L142 24 L134 16 Z"
+          fill-rule="evenodd"/>
+    <!-- A -->
+    <path d="M178 60 L166 60 L185 4 L201 4 L220 60 L208 60 L204 47 L182 47 Z
+             M186 35 L200 35 L193 14 Z"
+          fill-rule="evenodd"/>
+  </g>
+</svg>

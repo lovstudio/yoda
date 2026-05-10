@@ -1,0 +1,22 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Big Sur+ rounded square. Inner safe area 824x824 centered, corner radius ~22% (185px). -->
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="#444444"/>
+  <!-- Monogram: 8x scale of v4 region 0..62 x 0..62 → 496x496. Center inside icon. -->
+  <g transform="translate(264 264) scale(8)" fill="#ffffff">
+    <!-- Lightsaber BEHIND the head, diagonal -->
+    <g>
+      <rect x="-2" y="56" width="14" height="5" rx="0.8" transform="rotate(-45 5 58.5)"/>
+      <rect x="3" y="51" width="2.5" height="2.5" transform="rotate(-45 5 58.5)"/>
+      <rect x="12" y="56.2" width="58" height="2.6" transform="rotate(-45 5 58.5)"/>
+    </g>
+    <!-- Head dome with chin -->
+    <path d="M 16 28 Q 16 12 32 12 Q 48 12 48 28 L 48 38 Q 48 50 32 56 Q 16 50 16 38 Z"/>
+    <!-- Left ear -->
+    <path d="M 19 18 L 4 2 L 11 24 Z"/>
+    <!-- Right ear -->
+    <path d="M 45 18 L 60 2 L 53 24 Z"/>
+    <!-- Eye dots (knockouts as bg color) -->
+    <circle cx="26" cy="32" r="1.8" fill="#444444"/>
+    <circle cx="38" cy="32" r="1.8" fill="#444444"/>
+  </g>
+</svg>

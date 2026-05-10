@@ -1,0 +1,31 @@
+<svg width="320" height="70" viewBox="0 0 320 70" xmlns="http://www.w3.org/2000/svg" fill="black">
+  <!-- Y -->
+  <path d="M0 4 L12 4 L23 28 L34 4 L46 4 L29 38 L29 60 L17 60 L17 38 Z"/>
+
+  <!-- O: square with chamfered corners -->
+  <path d="M62 4 L92 4 L100 12 L100 52 L92 60 L62 60 L54 52 L54 12 Z
+           M64 18 L64 46 L66 48 L88 48 L90 46 L90 18 L88 16 L66 16 L64 18 Z"
+        fill-rule="evenodd"/>
+
+  <!-- D: half-octagon -->
+  <path d="M108 4 L138 4 L154 20 L154 44 L138 60 L108 60 Z
+           M120 16 L120 48 L134 48 L142 40 L142 24 L134 16 Z"
+        fill-rule="evenodd"/>
+
+  <!-- A: triangular with crossbar -->
+  <path d="M178 60 L166 60 L185 4 L201 4 L220 60 L208 60 L204 47 L182 47 Z
+           M186 35 L200 35 L193 14 Z"
+        fill-rule="evenodd"/>
+
+  <!-- Lightsaber: rotated -10° around (260, 36); hilt + blade -->
+  <g transform="rotate(-10 260 36)">
+    <!-- Hilt (pommel + grip + emitter) -->
+    <rect x="232" y="32" width="22" height="8" rx="1.2"/>
+    <!-- Activation stud -->
+    <rect x="240" y="28" width="3" height="3"/>
+    <!-- Emitter ring (slight bulge before blade) -->
+    <rect x="253" y="31" width="3" height="10"/>
+    <!-- Blade -->
+    <path d="M256 33 L312 33 L316 36 L312 39 L256 39 Z"/>
+  </g>
+</svg>

@@ -213,7 +213,7 @@ describe('portLegacySettings', () => {
     });
     expect(readRawSetting(appSqlite, 'defaultAgent')).toBe('codex');
     expect(readRawSetting(appSqlite, 'reviewPrompt')).toBe('Review this worktree carefully.');
-    expect(readRawSetting(appSqlite, 'theme')).toBe('emdark');
+    expect(readRawSetting(appSqlite, 'theme')).toBe('ydark');
 
     const terminal = readRawSetting(appSqlite, 'terminal') as Record<string, unknown>;
     expect(terminal.autoCopyOnSelection).toBe(true);

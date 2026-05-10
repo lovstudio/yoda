@@ -272,7 +272,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   resolveImage,
 }) => {
   const { effectiveTheme } = useTheme();
-  const isDark = effectiveTheme === 'emdark';
+  const isDark = effectiveTheme === 'ydark';
 
   const fullComponents = useFullComponents(isDark, resolveImage);
   const compactComponents = useCompactComponents();

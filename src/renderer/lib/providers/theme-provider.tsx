@@ -4,17 +4,17 @@ import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-
 import { useLocalStorage } from '@renderer/lib/hooks/useLocalStorage';
 import { applyThemeToAll } from '@renderer/lib/pty/pty';
 
-type EffectiveTheme = 'emlight' | 'emdark';
+type EffectiveTheme = 'ylight' | 'ydark';
 
 function getSystemTheme(): EffectiveTheme {
-  if (typeof window === 'undefined') return 'emlight';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'emdark' : 'emlight';
+  if (typeof window === 'undefined') return 'ylight';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'ydark' : 'ylight';
 }
 
 function applyTheme(effective: EffectiveTheme) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  root.classList.remove('emlight', 'emdark');
+  root.classList.remove('ylight', 'ydark', 'emlight', 'emdark');
   root.classList.add(effective);
 }
 
@@ -51,7 +51,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = () => {
       if (isLoading) return;
-      const newEffective = mq.matches ? 'emdark' : 'emlight';
+      const newEffective = mq.matches ? 'ydark' : 'ylight';
       applyTheme(newEffective);
       applyThemeToAll();
     };
@@ -69,7 +69,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   };
 
   const toggleTheme = () => {
-    const next = effectiveTheme === 'emlight' ? 'emdark' : 'emlight';
+    const next = effectiveTheme === 'ylight' ? 'ydark' : 'ylight';
     setTheme(next);
   };
 

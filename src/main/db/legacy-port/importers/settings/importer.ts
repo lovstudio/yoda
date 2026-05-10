@@ -74,8 +74,8 @@ async function updateScalarSetting<K extends AppSettingsKey>(
 
 function mapLegacyTheme(theme: unknown): AppSettings['theme'] | undefined {
   const value = theme as LegacyTheme;
-  if (value === 'light') return 'emlight';
-  if (value === 'dark' || value === 'dark-black') return 'emdark';
+  if (value === 'light') return 'ylight';
+  if (value === 'dark' || value === 'dark-black') return 'ydark';
   if (value === 'system') return null;
   return undefined;
 }

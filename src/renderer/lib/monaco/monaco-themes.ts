@@ -25,7 +25,7 @@ function cssColorToHex(cssColor: string): string {
  * token map. Entries where the variable is not defined for that theme are
  * omitted.
  */
-function readMonacoVarsForTheme(cssClass: 'emlight' | 'emdark'): MonacoColors {
+function readMonacoVarsForTheme(cssClass: 'ylight' | 'ydark'): MonacoColors {
   const el = document.createElement('div');
   el.className = cssClass;
   el.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;';
@@ -68,17 +68,17 @@ export function defineMonacoThemes(monaco: Monaco): void {
     base: 'vs-dark',
     inherit: true,
     rules: [],
-    colors: readMonacoVarsForTheme('emdark'),
+    colors: readMonacoVarsForTheme('ydark'),
   });
 
   monaco.editor.defineTheme('custom-light', {
     base: 'vs',
     inherit: true,
     rules: [],
-    colors: readMonacoVarsForTheme('emlight'),
+    colors: readMonacoVarsForTheme('ylight'),
   });
 }
 
 export function getMonacoTheme(effectiveTheme: string): string {
-  return effectiveTheme === 'emlight' ? 'custom-light' : 'custom-dark';
+  return effectiveTheme === 'ylight' ? 'custom-light' : 'custom-dark';
 }

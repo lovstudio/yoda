@@ -20,7 +20,7 @@ const AgentLogo: React.FC<AgentLogoProps> = ({
   grayscale,
 }) => {
   const { effectiveTheme } = useTheme();
-  const isDark = effectiveTheme === 'emdark';
+  const isDark = effectiveTheme === 'ydark';
 
   const resolvedIsSvg = isSvg ?? logo.trimStart().startsWith('<svg');
 

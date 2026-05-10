@@ -5,8 +5,8 @@
 
 @custom-variant dark (&:is(.dark *));
 @custom-variant dark-black (&:is(.dark-black *));
-@custom-variant emlight (&:is(.emlight *));
-@custom-variant emdark (&:is(.emdark *));
+@custom-variant ylight (&:is(.ylight *));
+@custom-variant ydark (&:is(.ydark *));
 
 @theme inline {
   --font-sans:
@@ -123,7 +123,7 @@
 }
 
 @layer base {
-  .emlight {
+  .ylight {
     --background: color(display-p3 0.988 0.988 0.988);
     --background-1: color(display-p3 0.975 0.975 0.975);
     --background-2: color(display-p3 0.939 0.939 0.939);
@@ -216,7 +216,7 @@
     --foreground-diff-deleted: color(display-p3 0.83 0.329 0.324);
   }
 
-  .emdark {
+  .ydark {
     --background: color(display-p3 0.067 0.067 0.067);
     --background-1: color(display-p3 0.098 0.098 0.098);
     --background-2: color(display-p3 0.135 0.135 0.135);
@@ -389,7 +389,7 @@
   .logo-shimmer-container {
     position: relative;
     display: inline-block;
-    height: 2.25rem;
+    height: 4.5rem;
   }
 
   .logo-shimmer-image {
@@ -423,7 +423,7 @@
     will-change: transform;
   }
 
-  .emdark .logo-shimmer-overlay::before {
+  .ydark .logo-shimmer-overlay::before {
     background: linear-gradient(
       120deg,
       rgba(0, 0, 0, 0) 0%,

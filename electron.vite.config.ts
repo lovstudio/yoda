@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
+import { lovinspPlugin } from 'lovinsp';
 
 export default defineConfig({
   main: {
@@ -27,7 +28,7 @@ export default defineConfig({
   },
   renderer: {
     root: 'src/renderer',
-    plugins: [react(), tailwindcss()],
+    plugins: [lovinspPlugin({ bundler: 'vite' }), react(), tailwindcss()],
     resolve: {
       alias: {
         '@': resolve('src'),
