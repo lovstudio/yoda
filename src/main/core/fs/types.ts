@@ -235,10 +235,10 @@ export interface FileSystemProvider {
   }>;
 
   /**
-   * Copy a local file into the project's .emdash attachments directory.
+   * Copy a local file into the project's .yoda attachments directory.
    * Only supported on local filesystems (srcPath is an absolute local path).
    * @param srcPath - Absolute local path of the source file
-   * @param subdir - Subdirectory inside .emdash/ (defaults to "attachments")
+   * @param subdir - Subdirectory inside .yoda/ (defaults to "attachments")
    * @returns Promise resolving to the saved file paths
    */
   saveAttachment?(

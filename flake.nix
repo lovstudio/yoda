@@ -1,5 +1,5 @@
 {
-  description = "Nix dev shell for the Emdash Electron workspace";
+  description = "Nix dev shell for the Yoda Electron workspace";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -82,10 +82,10 @@
             pkgs.patchelf
           ];
         cleanSrc = lib.cleanSource ./.;
-        emdashPackage =
+        yodaPackage =
           if pkgs.stdenv.isLinux then
             pkgs.stdenv.mkDerivation rec {
-              pname = "emdash";
+              pname = "yoda";
               version = packageJson.version;
               src = cleanSrc;
               pnpmDeps =
@@ -117,7 +117,7 @@
                 pkgs.libutempter
               ];
               env = {
-                HOME = "$TMPDIR/emdash-home";
+                HOME = "$TMPDIR/yoda-home";
                 npm_config_build_from_source = "true";
                 npm_config_manage_package_manager_versions = "false";
                 # Skip Electron binary download during pnpm install
@@ -127,7 +127,7 @@
               buildPhase = ''
                 runHook preBuild
 
-                mkdir -p "$TMPDIR/emdash-home"
+                mkdir -p "$TMPDIR/yoda-home"
                 pnpm config set manage-package-manager-versions false
 
                 # Build the app (renderer + main)
@@ -154,38 +154,38 @@
                   exit 1
                 fi
 
-                install -d $out/share/emdash
-                cp -R "$unpackedDir" $out/share/emdash/
+                install -d $out/share/yoda
+                cp -R "$unpackedDir" $out/share/yoda/
 
                 if ls "$distDir"/*.AppImage >/dev/null 2>&1; then
                   for image in "$distDir"/*.AppImage; do
-                    install -Dm755 "$image" "$out/share/emdash/$(basename "$image")"
+                    install -Dm755 "$image" "$out/share/yoda/$(basename "$image")"
                   done
                 fi
 
                 install -d $out/bin
-                cat <<EOF > $out/bin/emdash
+                cat <<EOF > $out/bin/yoda
 #!${pkgs.bash}/bin/bash
 set -euo pipefail
 
-APP_ROOT="$out/share/emdash/linux-unpacked"
-exec "\$APP_ROOT/emdash" "\$@"
+APP_ROOT="$out/share/yoda/linux-unpacked"
+exec "\$APP_ROOT/yoda" "\$@"
 EOF
-                chmod +x $out/bin/emdash
+                chmod +x $out/bin/yoda
 
                 runHook postInstall
               '';
 
               meta = {
-                description = "Emdash – multi-agent orchestration desktop app";
-                homepage = "https://emdash.sh";
+                description = "Yoda – multi-agent orchestration desktop app";
+                homepage = "https://yoda.sh";
                 license = lib.licenses.asl20;
                 platforms = [ "x86_64-linux" ];
               };
             }
           else
-            pkgs.writeShellScriptBin "emdash" ''
-              echo "The packaged Emdash app is currently only available for Linux when using Nix." >&2
+            pkgs.writeShellScriptBin "yoda" ''
+              echo "The packaged Yoda app is currently only available for Linux when using Nix." >&2
               exit 1
             '';
       in {
@@ -193,18 +193,18 @@ EOF
           packages = sharedEnv;
 
           shellHook = ''
-            echo "Emdash dev shell ready"
+            echo "Yoda dev shell ready"
             echo "Node: $(node --version)"
             echo "Run 'pnpm run d' for the full dev loop."
           '';
         };
 
-        packages.emdash = emdashPackage;
-        packages.default = emdashPackage;
+        packages.yoda = yodaPackage;
+        packages.default = yodaPackage;
 
         apps.default = {
           type = "app";
-          program = "${emdashPackage}/bin/emdash";
+          program = "${yodaPackage}/bin/yoda";
         };
       });
 }

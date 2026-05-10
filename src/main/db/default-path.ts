@@ -1,13 +1,13 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-export const PREVIOUS_DB_FILENAME = 'emdash3.db';
-export const CURRENT_DB_FILENAME = 'emdash4.db';
-const USER_DATA_DIR_NAME = 'emdash';
+export const PREVIOUS_DB_FILENAME = 'yoda3.db';
+export const CURRENT_DB_FILENAME = 'yoda4.db';
+const USER_DATA_DIR_NAME = 'yoda';
 
 /**
  * Returns the platform-specific default userData directory without requiring
- * the Electron `app` module. This is pinned to the shared `emdash` directory
+ * the Electron `app` module. This is pinned to the shared `yoda` directory
  * regardless of product identity.
  *
  * Pass this result as `userDataPath` to `resolveDatabasePath()` when running

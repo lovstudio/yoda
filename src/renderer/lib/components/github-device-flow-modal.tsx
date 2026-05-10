@@ -1,6 +1,6 @@
 import { AlertCircle, Check, Copy, ExternalLink } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import emdashLogo from '@/assets/images/emdash/emdash_logo_white.svg';
+import yodaLogo from '@/assets/images/yoda/yoda_logo_white.svg';
 import {
   githubAuthDeviceCodeChannel,
   githubAuthErrorChannel,
@@ -247,7 +247,7 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
   return (
     <>
       <div className="flex flex-col items-center px-8 py-12">
-        <img src={emdashLogo} alt="Emdash" className="mb-8 h-8 opacity-90" />
+        <img src={yodaLogo} alt="Yoda" className="mb-8 h-8 opacity-90" />
 
         {success ? (
           // Success State
@@ -290,9 +290,7 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
           <div className="flex w-full flex-col items-center space-y-6">
             <div className="space-y-2 text-center">
               <h2 className="text-2xl font-semibold">Connect to GitHub</h2>
-              <p className="text-sm text-muted-foreground">
-                Follow these steps to authorize Emdash
-              </p>
+              <p className="text-sm text-muted-foreground">Follow these steps to authorize Yoda</p>
             </div>
 
             {userCode && (
@@ -372,9 +370,7 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
               <p className="text-center text-xs text-muted-foreground">
                 Having{' '}
                 <button
-                  onClick={() =>
-                    rpc.app.openExternal('https://github.com/generalaction/emdash/issues')
-                  }
+                  onClick={() => rpc.app.openExternal('https://github.com/lovstudio/yoda/issues')}
                   className="text-primary hover:underline focus:underline focus:outline-none"
                 >
                   trouble

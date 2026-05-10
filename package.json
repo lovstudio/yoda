@@ -1,7 +1,7 @@
 {
-  "name": "emdash",
+  "name": "yoda",
   "version": "1.1.13",
-  "description": "A cross-platform Electron app that orchestrates multiple coding agents in parallel",
+  "description": "Yoda — master agentic coding through precise parallel orchestration of multiple coding agents",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./out/main/index.js",
@@ -14,8 +14,8 @@
     "dev:renderer": "electron-vite dev --watch renderer",
     "db:generate": "drizzle-kit generate",
     "db:reset": "pnpm run db:reset:3 && pnpm run db:reset:4",
-    "db:reset:3": "rm -f \"$HOME/Library/Application Support/emdash/emdash3.db\" \"$HOME/Library/Application Support/emdash/emdash3.db-wal\" \"$HOME/Library/Application Support/emdash/emdash3.db-shm\" \"$HOME/.config/emdash/emdash3.db\" \"$HOME/.config/emdash/emdash3.db-wal\" \"$HOME/.config/emdash/emdash3.db-shm\"",
-    "db:reset:4": "rm -f \"$HOME/Library/Application Support/emdash/emdash4.db\" \"$HOME/Library/Application Support/emdash/emdash4.db-wal\" \"$HOME/Library/Application Support/emdash/emdash4.db-shm\" \"$HOME/.config/emdash/emdash4.db\" \"$HOME/.config/emdash/emdash4.db-wal\" \"$HOME/.config/emdash/emdash4.db-shm\"",
+    "db:reset:3": "rm -f \"$HOME/Library/Application Support/yoda/yoda3.db\" \"$HOME/Library/Application Support/yoda/yoda3.db-wal\" \"$HOME/Library/Application Support/yoda/yoda3.db-shm\" \"$HOME/.config/yoda/yoda3.db\" \"$HOME/.config/yoda/yoda3.db-wal\" \"$HOME/.config/yoda/yoda3.db-shm\"",
+    "db:reset:4": "rm -f \"$HOME/Library/Application Support/yoda/yoda4.db\" \"$HOME/Library/Application Support/yoda/yoda4.db-wal\" \"$HOME/Library/Application Support/yoda/yoda4.db-shm\" \"$HOME/.config/yoda/yoda4.db\" \"$HOME/.config/yoda/yoda4.db-wal\" \"$HOME/.config/yoda/yoda4.db-shm\"",
     "test": "vitest run",
     "build": "electron-vite build",
     "build:main": "electron-vite build --filter main",
@@ -45,8 +45,8 @@
     "openai"
   ],
   "author": {
-    "name": "Emdash Contributors",
-    "email": "support@emdash.sh"
+    "name": "LovStudio",
+    "email": "support@lovstudio.ai"
   },
   "engines": {
     "node": ">=24.0.0",

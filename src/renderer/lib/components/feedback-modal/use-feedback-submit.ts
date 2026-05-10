@@ -55,7 +55,7 @@ export function buildFeedbackContent({
 
   const trimmedAppVersion = appVersion?.trim();
   if (trimmedAppVersion) {
-    metadataLines.push(`Emdash Version: ${trimmedAppVersion}`);
+    metadataLines.push(`Yoda Version: ${trimmedAppVersion}`);
   }
 
   return [trimmedFeedback, metadataLines.join('\n')].filter(Boolean).join('\n\n');

@@ -138,7 +138,7 @@ export async function runLegacyPort(
     if (hasBetaDatabaseFile(userDataPath)) {
       importBetaDatabaseIntoDestination(appTarget.sqlite, betaPath);
     } else {
-      log.warn('legacy-port: v1-beta source selected but emdash3.db was not found', { betaPath });
+      log.warn('legacy-port: v1-beta source selected but yoda3.db was not found', { betaPath });
     }
   }
 
@@ -148,7 +148,7 @@ export async function runLegacyPort(
   }
 
   if (!hasLegacyDatabaseFile(userDataPath)) {
-    log.info('legacy-port: no legacy emdash.db found, marking complete');
+    log.info('legacy-port: no legacy yoda.db found, marking complete');
     await markStatus(stateStore, 'no-legacy-file');
     return;
   }
@@ -182,7 +182,7 @@ export async function runLegacyPort(
         if (shouldCopyBeta) {
           copyAttachedBetaDatabaseIntoDestination(appTarget.sqlite);
         } else {
-          log.warn('legacy-port: v1-beta source selected but emdash3.db was not found', {
+          log.warn('legacy-port: v1-beta source selected but yoda3.db was not found', {
             betaPath,
           });
         }

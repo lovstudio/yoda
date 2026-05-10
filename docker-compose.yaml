@@ -1,11 +1,11 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Emdash SSH Dev Container — docker-compose
+# Yoda SSH Dev Container — docker-compose
 #
 # Usage:
 #   cp .env.example .env       # fill in your API keys
 #   docker compose up --build -d
 #
-# Connect from emdash:
+# Connect from yoda:
 #   host: localhost  port: 2222  user: devuser  auth: password  pass: devpass
 # ──────────────────────────────────────────────────────────────────────────────
 services:
@@ -13,7 +13,7 @@ services:
     build:
       context: ./docker-ssh
       dockerfile: dockerfile
-    container_name: emdash-ssh-dev
+    container_name: yoda-ssh-dev
     ports:
       - "2222:22"
     environment:

@@ -1,11 +1,11 @@
 #!/bin/bash
 # ──────────────────────────────────────────────────────────────────────────────
-# Emdash BYOI terminate script
+# Yoda BYOI terminate script
 #
-# Called by emdash when a task is terminated. Stops and removes the Docker
+# Called by yoda when a task is terminated. Stops and removes the Docker
 # container that was created by provision.sh.
 #
-# REMOTE_WORKSPACE_ID is set by emdash to the `id` returned by provision.sh
+# REMOTE_WORKSPACE_ID is set by yoda to the `id` returned by provision.sh
 # (which is the container name).
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail

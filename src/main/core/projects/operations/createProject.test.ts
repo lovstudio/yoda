@@ -81,7 +81,7 @@ describe('createLocalProject', () => {
   });
 
   it('initializes git when the selected folder is not yet a repository', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-project-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-project-'));
     tempDirs.push(projectPath);
     const row = {
       id: 'project-id',
@@ -130,7 +130,7 @@ describe('createLocalProject', () => {
   });
 
   it('rejects non-git directories unless initialization is explicitly enabled', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-project-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-project-'));
     tempDirs.push(projectPath);
 
     mocks.detectInfoMock.mockResolvedValue({
@@ -152,7 +152,7 @@ describe('createLocalProject', () => {
   });
 
   it('does not run git init when the folder is already a repository', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-project-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-project-'));
     tempDirs.push(projectPath);
     const row = {
       id: 'project-id',
@@ -181,7 +181,7 @@ describe('createLocalProject', () => {
   });
 
   it('stores the git remote default branch as baseRef instead of the current feature branch', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-project-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-project-'));
     tempDirs.push(projectPath);
     const row = {
       id: 'project-id',
@@ -220,7 +220,7 @@ describe('createLocalProject', () => {
   });
 
   it('keeps the detected baseRef when the git default branch is not present on the remote', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-project-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-project-'));
     tempDirs.push(projectPath);
     const row = {
       id: 'project-id',

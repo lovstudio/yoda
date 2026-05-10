@@ -119,7 +119,7 @@ export const listInstalledFontsAll = async (): Promise<string[]> => {
 const readPackageVersion = async (packageJsonPath: string): Promise<string | null> => {
   try {
     const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
-    if (packageJson.name === 'emdash' && packageJson.version) {
+    if (packageJson.name === 'yoda' && packageJson.version) {
       return packageJson.version as string;
     }
   } catch {

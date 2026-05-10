@@ -1,13 +1,13 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Emdash SSH Dev Container
+# Yoda SSH Dev Container
 #
-# A self-contained Linux environment you can SSH into from emdash's SSH remote
+# A self-contained Linux environment you can SSH into from yoda's SSH remote
 # development feature. Includes git, gh, tmux, Node.js, and Claude Code out
 # of the box. Other agents (codex, gemini, etc.) can be installed on top.
 #
 # Usage:
 #   docker compose up --build -d
-#   Then add an SSH connection in emdash:
+#   Then add an SSH connection in yoda:
 #     host: localhost  port: 2222  user: devuser  auth: password  pass: devpass
 # ──────────────────────────────────────────────────────────────────────────────
 FROM ubuntu:24.04
@@ -68,7 +68,7 @@ RUN npm install -g @anthropic-ai/claude-code
 # RUN npm install -g opencode               # OpenCode
 
 # ── Dev user ─────────────────────────────────────────────────────────────────
-# 'devuser' is the account emdash will SSH into.
+# 'devuser' is the account yoda will SSH into.
 # Password is 'devpass' — change or replace with key auth for security.
 RUN useradd -m -s /bin/bash devuser \
     && echo 'devuser:devpass' | chpasswd \
@@ -95,8 +95,8 @@ RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/
 USER devuser
 WORKDIR /home/devuser
 
-RUN git config --global user.email "devuser@emdash-dev" \
-    && git config --global user.name "Emdash Dev" \
+RUN git config --global user.email "devuser@yoda-dev" \
+    && git config --global user.name "Yoda Dev" \
     && git config --global init.defaultBranch main \
     # Required: allow git operations in worktrees under /home/devuser
     && git config --global safe.directory '*'

@@ -1,12 +1,12 @@
 import { createRPCController } from '@shared/ipc/rpc';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
-import { emdashAccountService } from './services/emdash-account-service';
+import { yodaAccountService } from './services/yoda-account-service';
 
 export const accountController = createRPCController({
   getSession: async () => {
     try {
-      return await emdashAccountService.getSession();
+      return await yodaAccountService.getSession();
     } catch (error) {
       log.error('Failed to get account session:', error);
       return { user: null, isSignedIn: false, hasAccount: false };
@@ -15,7 +15,7 @@ export const accountController = createRPCController({
 
   signIn: async (provider?: string) => {
     try {
-      const result = await emdashAccountService.signIn(provider);
+      const result = await yodaAccountService.signIn(provider);
       telemetryService.capture('user_signed_in');
       return { success: true, user: result.user };
     } catch (error) {
@@ -27,9 +27,14 @@ export const accountController = createRPCController({
     }
   },
 
+  cancelSignIn: async () => {
+    yodaAccountService.cancelSignIn();
+    return { success: true };
+  },
+
   signOut: async () => {
     try {
-      await emdashAccountService.signOut();
+      await yodaAccountService.signOut();
       telemetryService.capture('user_signed_out');
       return { success: true };
     } catch (error) {
@@ -40,7 +45,7 @@ export const accountController = createRPCController({
 
   checkHealth: async () => {
     try {
-      return await emdashAccountService.checkServerHealth();
+      return await yodaAccountService.checkServerHealth();
     } catch {
       return false;
     }
@@ -48,7 +53,7 @@ export const accountController = createRPCController({
 
   validateSession: async () => {
     try {
-      return await emdashAccountService.validateSession();
+      return await yodaAccountService.validateSession();
     } catch {
       return false;
     }

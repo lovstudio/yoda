@@ -6,7 +6,7 @@ import {
   menuRedoChannel,
   menuUndoChannel,
 } from '@shared/events/appEvents';
-import { EMDASH_DOCS_URL, EMDASH_RELEASES_URL } from '@shared/urls';
+import { YODA_DOCS_URL, YODA_RELEASES_URL } from '@shared/urls';
 import { events } from '@main/lib/events';
 
 export function setupApplicationMenu(): void {
@@ -120,13 +120,13 @@ export function setupApplicationMenu(): void {
         {
           label: 'Docs',
           click: () => {
-            void shell.openExternal(EMDASH_DOCS_URL);
+            void shell.openExternal(YODA_DOCS_URL);
           },
         },
         {
           label: 'Changelog',
           click: () => {
-            void shell.openExternal(EMDASH_RELEASES_URL);
+            void shell.openExternal(YODA_RELEASES_URL);
           },
         },
         ...(!isMac

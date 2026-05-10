@@ -15,7 +15,7 @@ vi.mock('@main/core/settings/settings-service', () => ({
     get: vi.fn().mockImplementation((key: string) => {
       if (key === 'project') return Promise.resolve({ tmuxByDefault: false });
       return Promise.resolve({
-        defaultWorktreeDirectory: '/tmp/emdash/worktrees',
+        defaultWorktreeDirectory: '/tmp/yoda/worktrees',
       });
     }),
   },
@@ -62,7 +62,7 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
   });
 
   it('seeds default preserve patterns when the repo has no shared config', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
 
     const provider = new LocalProjectSettingsProvider(projectId(), projectPath, 'main', storage());
@@ -73,10 +73,10 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
   });
 
   it('seeds default preserve patterns when shared config omits preservePatterns', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
     fs.writeFileSync(
-      path.join(projectPath, '.emdash.json'),
+      path.join(projectPath, '.yoda.json'),
       JSON.stringify({ shellSetup: 'nvm use' })
     );
 
@@ -88,10 +88,10 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
   });
 
   it('does not seed default preserve patterns when shared config defines preservePatterns', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
     fs.writeFileSync(
-      path.join(projectPath, '.emdash.json'),
+      path.join(projectPath, '.yoda.json'),
       JSON.stringify({ preservePatterns: ['.env.shared'] })
     );
 
@@ -101,18 +101,18 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
   });
 
   it('does not seed computed worktreeDirectory into project settings', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
 
     const provider = new LocalProjectSettingsProvider(projectId(), projectPath, 'main', storage());
 
     await expect(provider.get()).resolves.not.toHaveProperty('worktreeDirectory');
-    await expect(provider.getDefaultWorktreeDirectory()).resolves.toBe('/tmp/emdash/worktrees');
-    await expect(provider.getWorktreeDirectory()).resolves.toBe('/tmp/emdash/worktrees');
+    await expect(provider.getDefaultWorktreeDirectory()).resolves.toBe('/tmp/yoda/worktrees');
+    await expect(provider.getWorktreeDirectory()).resolves.toBe('/tmp/yoda/worktrees');
   });
 
   it('keeps computed worktreeDirectory default separate from configured overrides', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
     const provider = new LocalProjectSettingsProvider(projectId(), projectPath, 'main', storage());
     const expectedOverridePath = path.resolve(projectPath, 'worktrees');
@@ -124,12 +124,12 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
 
     const expectedOverride = fs.realpathSync(expectedOverridePath);
     await expect(provider.get()).resolves.toMatchObject({ worktreeDirectory: expectedOverride });
-    await expect(provider.getDefaultWorktreeDirectory()).resolves.toBe('/tmp/emdash/worktrees');
+    await expect(provider.getDefaultWorktreeDirectory()).resolves.toBe('/tmp/yoda/worktrees');
     await expect(provider.getWorktreeDirectory()).resolves.toBe(expectedOverride);
   });
 
   it('retries legacy config migration after a failed attempt', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
     const row = {
       baseProjectSettingsJson: '{}',
@@ -161,7 +161,7 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
   });
 
   it('clears shareable fields without validating base settings', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
     const row = {
       baseProjectSettingsJson: JSON.stringify({
@@ -203,7 +203,7 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
   });
 
   it('normalizes and canonicalizes local absolute worktreeDirectory on update', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
 
     const provider = new LocalProjectSettingsProvider(projectId(), projectPath, 'main', storage());
@@ -219,7 +219,7 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
   });
 
   it('rejects local relative worktreeDirectory values', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
 
     const provider = new LocalProjectSettingsProvider(projectId(), projectPath, 'main', storage());
@@ -232,7 +232,7 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
   });
 
   it('rejects foreign absolute worktreeDirectory values for local projects', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
 
     const provider = new LocalProjectSettingsProvider(projectId(), projectPath, 'main', storage());
@@ -246,7 +246,7 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
   });
 
   it('surfaces local worktreeDirectory validation errors', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
     fs.writeFileSync(path.join(projectPath, 'not-a-directory'), 'file');
 
@@ -262,7 +262,7 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
   });
 
   it('clears blank local worktreeDirectory values', async () => {
-    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-settings-local-'));
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);
 
     const provider = new LocalProjectSettingsProvider(projectId(), projectPath, 'main', storage());
@@ -345,7 +345,7 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
       undefined,
       storage()
     );
-    await expect(provider.getWorktreeDirectory()).resolves.toBe('/remote/repo/.emdash/worktrees');
+    await expect(provider.getWorktreeDirectory()).resolves.toBe('/remote/repo/.yoda/worktrees');
   });
 
   it('rejects tilde worktreeDirectory for ssh projects', async () => {
@@ -393,7 +393,7 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
       undefined,
       storage()
     );
-    await expect(provider.getWorktreeDirectory()).resolves.toBe('/remote/repo/.emdash/worktrees');
+    await expect(provider.getWorktreeDirectory()).resolves.toBe('/remote/repo/.yoda/worktrees');
   });
 
   it('expands and caches ssh home for tilde worktreeDirectory values', async () => {

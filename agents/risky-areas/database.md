@@ -16,5 +16,5 @@
 ## Current Behavior
 
 - database path is resolved by main-process db path helpers
-- `EMDASH_DB_FILE` overrides the default location
+- `YODA_DB_FILE` overrides the default location
 - database initialization happens in `src/main/db/initialize.ts`

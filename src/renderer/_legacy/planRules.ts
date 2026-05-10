@@ -27,7 +27,7 @@ Note: If you detect the user wants to plan before executing, remain in plan mode
 `;
 
 export const PLAN_TERMINAL_PREAMBLE =
-  '[Plan Mode] Read-only. See .emdash/planning.md. Present plan for approval.';
+  '[Plan Mode] Read-only. See .yoda/planning.md. Present plan for approval.';
 
 export const PLAN_CHAT_PREAMBLE =
-  '[Plan Mode] Read-only. See .emdash/planning.md. Present plan for approval.';
+  '[Plan Mode] Read-only. See .yoda/planning.md. Present plan for approval.';

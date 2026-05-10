@@ -5,7 +5,7 @@ import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
 
 export class LinearConnectionService {
-  private readonly LINEAR_TOKEN_SECRET_KEY = 'emdash-linear-token';
+  private readonly LINEAR_TOKEN_SECRET_KEY = 'yoda-linear-token';
 
   private cachedToken: string | null | undefined = undefined;
   private client: LinearClient | null = null;

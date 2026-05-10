@@ -1,7 +1,7 @@
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { log } from '@main/lib/logger';
 
-const TMUX_SESSION_PREFIX = 'emdash-';
+const TMUX_SESSION_PREFIX = 'yoda-';
 
 export function buildTmuxShellLine(sessionName: string, commandLine: string): string {
   const quotedName = JSON.stringify(sessionName);

@@ -21,7 +21,7 @@ afterEach(() => {
 
 describe('ensureUserBinDirsInPath', () => {
   it('prepends existing user bin directories to process PATH', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-user-bin-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-user-bin-'));
     process.env.PATH = '/usr/bin';
 
     const added = ensureUserBinDirsInPath([dir]);
@@ -31,7 +31,7 @@ describe('ensureUserBinDirsInPath', () => {
   });
 
   it('does not duplicate existing path entries', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emdash-user-bin-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-user-bin-'));
     process.env.PATH = [dir, '/usr/bin'].join(path.delimiter);
 
     const added = ensureUserBinDirsInPath([dir]);
@@ -86,15 +86,15 @@ describe('resolveUserEnv (AppImage env scrub)', () => {
 
   it('strips AppImage runtime vars and /tmp/.mount_* path entries from the probe shell env and final PATH', async () => {
     execSyncMock.mockReturnValue('PATH=/usr/local/bin:/usr/bin\n');
-    process.env.APPIMAGE = '/home/user/emdash.AppImage';
-    process.env.APPDIR = '/tmp/.mount_emdashTest';
-    process.env.ARGV0 = '/home/user/emdash.AppImage';
+    process.env.APPIMAGE = '/home/user/yoda.AppImage';
+    process.env.APPDIR = '/tmp/.mount_yodaTest';
+    process.env.ARGV0 = '/home/user/yoda.AppImage';
     process.env.OWD = '/home/user';
-    process.env.CHROME_DESKTOP = 'emdash.desktop';
-    process.env.GSETTINGS_SCHEMA_DIR = '/tmp/.mount_emdashTest/usr/share/glib-2.0/schemas';
-    process.env.PATH = '/tmp/.mount_emdashTest/usr/bin:/usr/local/bin:/usr/bin';
-    process.env.LD_LIBRARY_PATH = '/tmp/.mount_emdashTest/usr/lib:/usr/lib';
-    process.env.XDG_DATA_DIRS = '/tmp/.mount_emdashTest/usr/share:/usr/local/share:/usr/share';
+    process.env.CHROME_DESKTOP = 'yoda.desktop';
+    process.env.GSETTINGS_SCHEMA_DIR = '/tmp/.mount_yodaTest/usr/share/glib-2.0/schemas';
+    process.env.PATH = '/tmp/.mount_yodaTest/usr/bin:/usr/local/bin:/usr/bin';
+    process.env.LD_LIBRARY_PATH = '/tmp/.mount_yodaTest/usr/lib:/usr/lib';
+    process.env.XDG_DATA_DIRS = '/tmp/.mount_yodaTest/usr/share:/usr/local/share:/usr/share';
 
     await resolveUserEnv();
 

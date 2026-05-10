@@ -5,7 +5,7 @@ describe('makeCodexNotifyCommand', () => {
   it('writes the Windows notify script only once per script path', () => {
     const writeFile = vi.fn();
     const mkdir = vi.fn();
-    const scriptPath = 'C:\\Temp\\emdash-codex-notify.ps1';
+    const scriptPath = 'C:\\Temp\\yoda-codex-notify.ps1';
 
     makeCodexNotifyCommand({ platform: 'win32', scriptPath, mkdir, writeFile });
     makeCodexNotifyCommand({ platform: 'win32', scriptPath, mkdir, writeFile });
@@ -16,12 +16,12 @@ describe('makeCodexNotifyCommand', () => {
 });
 
 describe('makeOpenCodePluginContent', () => {
-  it('posts OpenCode session events to the Emdash hook server', () => {
+  it('posts OpenCode session events to the Yoda hook server', () => {
     const content = makeOpenCodePluginContent();
 
-    expect(content).toContain('EMDASH_HOOK_PORT');
+    expect(content).toContain('YODA_HOOK_PORT');
     expect(content).toContain("event.type === 'session.idle'");
     expect(content).toContain("event.type === 'session.error'");
-    expect(content).toContain("'X-Emdash-Event-Type': payload.type");
+    expect(content).toContain("'X-Yoda-Event-Type': payload.type");
   });
 });

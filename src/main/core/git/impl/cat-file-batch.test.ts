@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { CatFileBatch } from './cat-file-batch';
 
 function makeTempRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'emdash-catfile-'));
+  const dir = mkdtempSync(join(tmpdir(), 'yoda-catfile-'));
   execSync('git init', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.email "t@test.local"', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.name "test"', { cwd: dir, stdio: 'pipe' });

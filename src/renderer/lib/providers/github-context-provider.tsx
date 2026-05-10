@@ -172,7 +172,7 @@ export function GithubContextProvider({ children }: { children: React.ReactNode 
 
       const isServerUp = hasAccount && (await fetchAccountHealth());
       if (hasAccount && isServerUp) {
-        setGithubStatusMessage('Connecting via Emdash account...');
+        setGithubStatusMessage('Connecting via Yoda account...');
         const oauthResult = await rpc.github.connectOAuth();
         if (oauthResult?.success) {
           await checkStatus();

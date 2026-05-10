@@ -18,6 +18,7 @@ export function AccountTab() {
   const signOutMutation = useAccountSignOut();
   const { toast } = useToast();
   const showConfirmSignOut = useShowModal('confirmActionModal');
+  const showAccountDeviceFlow = useShowModal('accountDeviceFlowModal');
 
   const [error, setError] = useState<string | null>(null);
 
@@ -25,33 +26,33 @@ export function AccountTab() {
   const isSignedIn = session?.isSignedIn ?? false;
   const hasAccount = session?.hasAccount ?? false;
 
-  const handleSignIn = async () => {
+  const handleSignIn = () => {
     setError(null);
-    try {
-      const result = await signInMutation.mutateAsync(undefined);
-      if (!result.success) {
-        const message = result.error || 'Sign in failed';
-        setError(message);
+    showAccountDeviceFlow({
+      onError: (msg: string) => setError(msg),
+    });
+    signInMutation
+      .mutateAsync(undefined)
+      .then((result) => {
+        if (!result.success) {
+          const message = result.error || 'Sign in failed';
+          setError(message);
+          toast({
+            title: 'Sign in failed',
+            description: message,
+            variant: 'destructive',
+          });
+          return;
+        }
         toast({
-          title: 'Sign in failed',
-          description: message,
-          variant: 'destructive',
+          title: 'Signed in to Yoda',
+          description: result.user ? `Connected as @${result.user.username}` : 'Signed in',
         });
-        return;
-      }
-      toast({
-        title: 'Signed in to Emdash',
-        description: result.user ? `Connected as @${result.user.username}` : 'Signed in',
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : 'Sign in failed';
+        setError(message);
       });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Sign in failed';
-      setError(message);
-      toast({
-        title: 'Sign in failed',
-        description: message,
-        variant: 'destructive',
-      });
-    }
   };
 
   const performSignOut = async () => {
@@ -69,8 +70,8 @@ export function AccountTab() {
 
   const handleSignOut = () => {
     showConfirmSignOut({
-      title: 'Sign out of Emdash?',
-      description: 'You will need to sign in again to reconnect your Emdash account.',
+      title: 'Sign out of Yoda?',
+      description: 'You will need to sign in again to reconnect your Yoda account.',
       confirmLabel: 'Sign Out',
       variant: 'default',
       onSuccess: () => void performSignOut(),
@@ -127,7 +128,7 @@ export function AccountTab() {
           <div>
             <p className="text-sm font-medium text-foreground">Session expired</p>
             <p className="text-xs text-muted-foreground">
-              Sign in again to reconnect your Emdash account.
+              Sign in again to reconnect your Yoda account.
             </p>
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
@@ -153,9 +154,9 @@ export function AccountTab() {
     <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
       <div className="flex flex-col gap-3">
         <div>
-          <p className="text-sm font-medium text-foreground">Emdash Account</p>
+          <p className="text-sm font-medium text-foreground">Yoda Account</p>
           <p className="text-xs text-muted-foreground">
-            Create an Emdash account to automatically connect GitHub using OAuth2.
+            Create an Yoda account to automatically connect GitHub using OAuth2.
           </p>
         </div>
         {error && <p className="text-xs text-destructive">{error}</p>}

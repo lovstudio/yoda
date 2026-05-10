@@ -1,6 +1,6 @@
 import { app, shell } from 'electron';
 import { createRPCController } from '@shared/ipc/rpc';
-import { EMDASH_RELEASES_URL } from '@shared/urls';
+import { YODA_RELEASES_URL } from '@shared/urls';
 import { updateService } from '@main/core/updates/update-service';
 import { formatUpdaterError } from './utils';
 
@@ -34,7 +34,7 @@ export const updateController = createRPCController({
 
   openLatest: async () => {
     try {
-      await shell.openExternal(EMDASH_RELEASES_URL);
+      await shell.openExternal(YODA_RELEASES_URL);
       setTimeout(() => {
         try {
           app.quit();

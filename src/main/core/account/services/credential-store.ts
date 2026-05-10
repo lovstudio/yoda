@@ -1,7 +1,7 @@
 import { encryptedAppSecretsStore } from '@main/core/secrets/encrypted-app-secrets-store';
 import { log } from '@main/lib/logger';
 
-const ACCOUNT_SESSION_SECRET_KEY = 'emdash-account-token';
+const ACCOUNT_SESSION_SECRET_KEY = 'yoda-account-token';
 
 export class AccountCredentialStore {
   async get(): Promise<string | null> {

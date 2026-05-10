@@ -17,11 +17,11 @@ export function makeClaudeHookCommand(eventType: string): string {
   return (
     'curl -sf -X POST ' +
     '-H "Content-Type: application/json" ' +
-    '-H "X-Emdash-Token: $EMDASH_HOOK_TOKEN" ' +
-    '-H "X-Emdash-Pty-Id: $EMDASH_PTY_ID" ' +
-    `-H "X-Emdash-Event-Type: ${eventType}" ` +
+    '-H "X-Yoda-Token: $YODA_HOOK_TOKEN" ' +
+    '-H "X-Yoda-Pty-Id: $YODA_PTY_ID" ' +
+    `-H "X-Yoda-Event-Type: ${eventType}" ` +
     '-d @- ' +
-    '"http://127.0.0.1:$EMDASH_HOOK_PORT/hook" || true'
+    '"http://127.0.0.1:$YODA_HOOK_PORT/hook" || true'
   );
 }
 
@@ -35,11 +35,11 @@ function makePosixCodexNotifyCommand(): string[] {
     '-c',
     'curl -sf -X POST ' +
       "-H 'Content-Type: application/json' " +
-      '-H "X-Emdash-Token: $EMDASH_HOOK_TOKEN" ' +
-      '-H "X-Emdash-Pty-Id: $EMDASH_PTY_ID" ' +
-      '-H "X-Emdash-Event-Type: notification" ' +
+      '-H "X-Yoda-Token: $YODA_HOOK_TOKEN" ' +
+      '-H "X-Yoda-Pty-Id: $YODA_PTY_ID" ' +
+      '-H "X-Yoda-Event-Type: notification" ' +
       '-d "$1" ' +
-      '"http://127.0.0.1:$EMDASH_HOOK_PORT/hook" || true',
+      '"http://127.0.0.1:$YODA_HOOK_PORT/hook" || true',
     '_',
   ];
 }
@@ -49,12 +49,12 @@ function windowsCodexNotifyScript(): string {
     'param([string]$payload)',
     'try {',
     '  Invoke-WebRequest -UseBasicParsing -Method POST ' +
-      "-Uri ('http://127.0.0.1:' + $env:EMDASH_HOOK_PORT + '/hook') " +
+      "-Uri ('http://127.0.0.1:' + $env:YODA_HOOK_PORT + '/hook') " +
       '-Headers @{ ' +
       "'Content-Type' = 'application/json'; " +
-      "'X-Emdash-Token' = $env:EMDASH_HOOK_TOKEN; " +
-      "'X-Emdash-Pty-Id' = $env:EMDASH_PTY_ID; " +
-      "'X-Emdash-Event-Type' = 'notification' " +
+      "'X-Yoda-Token' = $env:YODA_HOOK_TOKEN; " +
+      "'X-Yoda-Pty-Id' = $env:YODA_PTY_ID; " +
+      "'X-Yoda-Event-Type' = 'notification' " +
       '} -Body $payload | Out-Null',
     '} catch {',
     '  exit 0',
@@ -65,7 +65,7 @@ function windowsCodexNotifyScript(): string {
 
 function ensureWindowsCodexNotifyScript(options: CodexNotifyCommandOptions): string {
   const platform = options.platform ?? process.platform;
-  const scriptPath = options.scriptPath ?? join(tmpdir(), 'emdash-codex-notify.ps1');
+  const scriptPath = options.scriptPath ?? join(tmpdir(), 'yoda-codex-notify.ps1');
   if (ensuredWindowsCodexNotifyScriptPaths.has(scriptPath)) {
     return scriptPath;
   }

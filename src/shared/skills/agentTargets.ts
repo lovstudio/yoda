@@ -13,7 +13,7 @@ export interface AgentSyncTarget {
 const home = os.homedir();
 
 /**
- * Agents that Emdash syncs skills INTO (symlinks from ~/.agentskills/).
+ * Agents that Yoda syncs skills INTO (symlinks from ~/.agentskills/).
  * Each agent has its own native directory for skills/commands.
  */
 export const agentTargets: AgentSyncTarget[] = [
@@ -64,7 +64,7 @@ export const agentTargets: AgentSyncTarget[] = [
 /**
  * All global directories where agents store skills.
  * Derived from agentTargets (parent dir of each skill dir) plus shared/cross-agent paths.
- * Used to discover externally-installed skills (not installed through Emdash).
+ * Used to discover externally-installed skills (not installed through Yoda).
  */
 export const skillScanPaths: string[] = [
   // Auto-derive from agent targets (e.g. ~/.claude/commands, ~/.codex/skills)

@@ -1,4 +1,4 @@
-<img alt="Emdash banner" src="https://github.com/user-attachments/assets/a2ecaf3c-9d84-40ca-9a8e-d4f612cc1c6f" />
+<img alt="Yoda banner" src="https://github.com/user-attachments/assets/a2ecaf3c-9d84-40ca-9a8e-d4f612cc1c6f" />
 
 
 <div align="center" style="margin:24px 0;">
@@ -6,38 +6,38 @@
 <br />
 
 [![Apache 2.0 License](https://img.shields.io/badge/License-Apache_2.0-555555.svg?labelColor=333333&color=666666)](./LICENSE.md)
-[![Downloads](https://img.shields.io/github/downloads/generalaction/emdash/total?labelColor=333333&color=666666)](https://github.com/generalaction/emdash/releases)
-[![GitHub Stars](https://img.shields.io/github/stars/generalaction/emdash?labelColor=333333&color=666666)](https://github.com/generalaction/emdash)
-[![Last Commit](https://img.shields.io/github/last-commit/generalaction/emdash?labelColor=333333&color=666666)](https://github.com/generalaction/emdash/commits/main)
-[![Commit Activity](https://img.shields.io/github/commit-activity/m/generalaction/emdash?labelColor=333333&color=666666)](https://github.com/generalaction/emdash/graphs/commit-activity)
+[![Downloads](https://img.shields.io/github/downloads/lovstudio/yoda/total?labelColor=333333&color=666666)](https://github.com/lovstudio/yoda/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/lovstudio/yoda?labelColor=333333&color=666666)](https://github.com/lovstudio/yoda)
+[![Last Commit](https://img.shields.io/github/last-commit/lovstudio/yoda?labelColor=333333&color=666666)](https://github.com/lovstudio/yoda/commits/main)
+[![Commit Activity](https://img.shields.io/github/commit-activity/m/lovstudio/yoda?labelColor=333333&color=666666)](https://github.com/lovstudio/yoda/graphs/commit-activity)
 <br>
 [![Discord](https://img.shields.io/badge/Discord-join-%235462eb?labelColor=%235462eb&logo=discord&logoColor=%23f5f5f5)](https://discord.gg/f2fv7YxuR2)
 <a href="https://www.ycombinator.com"><img src="https://img.shields.io/badge/Y%20Combinator-W26-orange" alt="Y Combinator W26"></a>
-[![Follow @emdashsh on X](https://img.shields.io/twitter/follow/emdashsh?logo=X&color=%23f5f5f5)](https://twitter.com/intent/follow?screen_name=emdashsh)
+[![Follow @lovstudio on X](https://img.shields.io/twitter/follow/lovstudio?logo=X&color=%23f5f5f5)](https://twitter.com/intent/follow?screen_name=lovstudio)
 
 <br />
 
-  <a href="https://emdash.sh/download" style="display:inline-block; margin-right:8px; text-decoration:none; outline:none; border:none;">
-    <img src="https://emdash.sh/media/readme/downloadforwindows.png" alt="Download for Windows" height="40">
+  <a href="https://lovstudio.ai/yoda/download" style="display:inline-block; margin-right:8px; text-decoration:none; outline:none; border:none;">
+    <img src="https://lovstudio.ai/yoda/media/readme/downloadforwindows.png" alt="Download for Windows" height="40">
   </a>
-  <a href="https://emdash.sh/download" style="display:inline-block; margin-right:8px; text-decoration:none; outline:none; border:none;">
-    <img src="https://emdash.sh/media/readme/downloadformacos.png" alt="Download for macOS" height="40">
+  <a href="https://lovstudio.ai/yoda/download" style="display:inline-block; margin-right:8px; text-decoration:none; outline:none; border:none;">
+    <img src="https://lovstudio.ai/yoda/media/readme/downloadformacos.png" alt="Download for macOS" height="40">
   </a>
-  <a href="https://emdash.sh/download" style="display:inline-block; text-decoration:none; outline:none; border:none;">
-    <img src="https://emdash.sh/media/readme/downloadforlinux.png" alt="Download for Linux" height="40">
+  <a href="https://lovstudio.ai/yoda/download" style="display:inline-block; text-decoration:none; outline:none; border:none;">
+    <img src="https://lovstudio.ai/yoda/media/readme/downloadforlinux.png" alt="Download for Linux" height="40">
   </a>
 
 </div>
 
 <br />
 
-Emdash is a provider-agnostic desktop app that lets you run multiple coding agents in parallel, each isolated in its own git worktree, either locally or over SSH on a remote machine. We call it an Agentic Development Environment (ADE).
+Yoda is the Jedi-master desktop for agentic coding — a provider-agnostic Agentic Development Environment (ADE) built around the discipline of running many coding agents in parallel without losing the plot. Each agent gets its own isolated git worktree, locally or over SSH, so you can dispatch work, review diffs, and merge with the calm precision of a master orchestrator instead of the chaos of switching tabs.
 
-Emdash supports 24 CLI agents, including Claude Code, Codex, OpenCode, Gemini and Amp. Users can directly pass Linear, GitHub, or Jira tickets to an agent, review diffs, test changes, create PRs, see CI/CD checks, and merge.
+Yoda speaks 24 CLI agents (Claude Code, Codex, OpenCode, Gemini, Amp, …), routes Linear / GitHub / Jira tickets straight into a session, surfaces CI/CD checks, and turns parallel agent management from a juggling act into a craft.
 
 **Develop on remote servers via SSH**
 
-Connect to remote machines via SSH/SFTP to work with remote codebases. Emdash supports SSH agent and key authentication, with secure credential storage in your OS keychain. Run agents on remote projects using the same parallel workflow as local development. [Learn more](https://www.emdash.sh/cloud)
+Connect to remote machines via SSH/SFTP to work with remote codebases. Yoda supports SSH agent and key authentication, with secure credential storage in your OS keychain. Run agents on remote projects using the same parallel workflow as local development. [Learn more](https://lovstudio.ai/yoda/cloud)
 
 <div align="center" style="margin:24px 0;">
 
@@ -45,26 +45,26 @@ Connect to remote machines via SSH/SFTP to work with remote codebases. Emdash su
 
 </div>
 
-<img alt="Emdash product" src="https://emdash.sh/media/blog/public-v1-beta/v1beta.jpg" />
+<img alt="Yoda product" src="https://lovstudio.ai/yoda/media/blog/public-v1-beta/v1beta.jpg" />
 
 # Installation
 
 ### macOS
-- Homebrew: `brew install --cask emdash`
-- Apple Silicon: https://releases.emdash.sh/emdash-arm64.dmg
-- Intel x64: https://releases.emdash.sh/emdash-x64.dmg
+- Homebrew: `brew install --cask yoda`
+- Apple Silicon: https://releases.lovstudio.ai/yoda/yoda-arm64.dmg
+- Intel x64: https://releases.lovstudio.ai/yoda/yoda-x64.dmg
 
 ### Windows
-- Installer (x64): https://releases.emdash.sh/emdash-x64.msi
-- Portable (x64): https://releases.emdash.sh/emdash-x64.exe
+- Installer (x64): https://releases.lovstudio.ai/yoda/yoda-x64.msi
+- Portable (x64): https://releases.lovstudio.ai/yoda/yoda-x64.exe
 
 ### Linux
-- AppImage (x64): https://releases.emdash.sh/emdash-x86_64.AppImage
-- Debian package (x64): https://releases.emdash.sh/emdash-amd64.deb
+- AppImage (x64): https://releases.lovstudio.ai/yoda/yoda-x86_64.AppImage
+- Debian package (x64): https://releases.lovstudio.ai/yoda/yoda-amd64.deb
 
 ### Release Overview
 
-**[Latest Releases (macOS • Windows • Linux)](https://github.com/generalaction/emdash/releases/latest)**
+**[Latest Releases (macOS • Windows • Linux)](https://github.com/lovstudio/yoda/releases/latest)**
 
 # Providers
 
@@ -72,7 +72,7 @@ Connect to remote machines via SSH/SFTP to work with remote codebases. Emdash su
 
 ### Supported CLI Providers
 
-Emdash currently supports 26 CLI providers, and we are adding new ones regularly. If you miss one, let us know or create a PR.
+Yoda currently supports 26 CLI providers, and we are adding new ones regularly. If you miss one, let us know or create a PR.
 
 | CLI Provider | Status | Install |
 | ----------- | ------ | ----------- |
@@ -103,7 +103,7 @@ Emdash currently supports 26 CLI providers, and we are adding new ones regularly
 
 ### Issues
 
-Emdash allows you to pass issues, tickets, and support threads straight to your coding agent.
+Yoda allows you to pass issues, tickets, and support threads straight to your coding agent.
 
 | Tool | Status | Authentication |
 | ----------- | ------ | ----------- |
@@ -135,7 +135,7 @@ Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md) to get star
 > TELEMETRY_ENABLED=false
 > ```
 >
-> Full details: see [Telemetry](https://emdash.sh/docs/telemetry).
+> Full details: see [Telemetry](https://lovstudio.ai/yoda/docs/telemetry).
 </details>
 
 <details>
@@ -144,12 +144,12 @@ Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md) to get star
 > **App data is local‑first**. We store app state in a local **SQLite** database:
 >
 > ```
-> macOS:   ~/Library/Application Support/emdash/emdash.db
-> Windows: %APPDATA%\emdash\emdash.db
-> Linux:   ~/.config/emdash/emdash.db
+> macOS:   ~/Library/Application Support/yoda/yoda.db
+> Windows: %APPDATA%\yoda\yoda.db
+> Linux:   ~/.config/yoda/yoda.db
 > ```
 >
-> **Privacy Note:** While Emdash itself stores data locally, **when you use any coding agent (Claude Code, Codex, Qwen, etc.), your code and prompts are sent to that provider's cloud API servers** for processing. Each provider has their own data handling and retention policies.
+> **Privacy Note:** While Yoda itself stores data locally, **when you use any coding agent (Claude Code, Codex, Qwen, etc.), your code and prompts are sent to that provider's cloud API servers** for processing. Each provider has their own data handling and retention policies.
 >
 > You can reset the local DB by deleting it (quit the app first). The file is recreated on next launch.
 </details>
@@ -157,7 +157,7 @@ Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md) to get star
 <details>
 <summary><b>How do I add a new provider?</b></summary>
 
-> Emdash is **provider‑agnostic** and built to add CLIs quickly.
+> Yoda is **provider‑agnostic** and built to add CLIs quickly.
 >
 > - Open a PR following the **Contributing Guide** (`CONTRIBUTING.md`).
 > - Include: provider name, how it’s invoked (CLI command), auth notes, and minimal setup steps.
@@ -167,20 +167,20 @@ Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md) to get star
 </details>
 
 <details>
-<summary><b>What permissions does Emdash need?</b></summary>
+<summary><b>What permissions does Yoda need?</b></summary>
 
 > - **Filesystem/Git:** to read/write your repo and create **Git worktrees** for isolation.  
 > - **Network:** only for provider CLIs you choose to use (e.g., Codex, Claude) and optional GitHub actions.  
 > - **Local DB:** to store your app state in SQLite on your machine.
 >
-> Emdash itself does **not** send your code or chats to any servers. Third‑party CLIs may transmit data per their policies.
+> Yoda itself does **not** send your code or chats to any servers. Third‑party CLIs may transmit data per their policies.
 </details>
 
 
 <details>
 <summary><b>Can I work with remote projects over SSH?</b></summary>
 
-> **Yes!** Emdash supports remote development via SSH.
+> **Yes!** Yoda supports remote development via SSH.
 >
 > **Setup:**
 > 1. Go to **Settings → SSH Connections** and add your server details
@@ -192,9 +192,7 @@ Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md) to get star
 > - Git installed on the remote server
 > - For agent auth: SSH agent running with your key loaded (`ssh-add -l`)
 >
-> See [Remote Projects](https://emdash.sh/docs/remote-projects) for detailed setup instructions and [Bring Your Own Infrastructure](https://emdash.sh/docs/bring-your-own-infrastructure) for technical details.
+> See [Remote Projects](https://lovstudio.ai/yoda/docs/remote-projects) for detailed setup instructions and [Bring Your Own Infrastructure](https://lovstudio.ai/yoda/docs/bring-your-own-infrastructure) for technical details.
 </details>
 
-[![Follow @emdashsh](https://img.shields.io/twitter/follow/emdashsh?style=social&label=Follow%20%40emdashsh)](https://x.com/emdashsh)
-[![Follow @rabanspiegel](https://img.shields.io/twitter/follow/rabanspiegel?style=social&label=Follow%20%40rabanspiegel)](https://x.com/rabanspiegel)
-[![Follow @arnestrickmann](https://img.shields.io/twitter/follow/arnestrickmann?style=social&label=Follow%20%40arnestrickmann)](https://x.com/arnestrickmann)
+[![Follow @lovstudio](https://img.shields.io/twitter/follow/lovstudio?style=social&label=Follow%20%40lovstudio)](https://x.com/lovstudio)

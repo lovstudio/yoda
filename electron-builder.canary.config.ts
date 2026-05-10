@@ -36,11 +36,11 @@ const config: Configuration = {
       { target: 'dmg', arch: ['arm64'] },
       { target: 'zip', arch: ['arm64'] },
     ],
-    icon: 'src/assets/images/emdash/emdash-canary.icns',
+    icon: 'src/assets/images/yoda/yoda-canary.icns',
     notarize: false,
   },
   dmg: {
-    icon: 'src/assets/images/emdash/emdash-canary.icns',
+    icon: 'src/assets/images/yoda/yoda-canary.icns',
   },
   linux: {
     category: 'Development',
@@ -51,16 +51,16 @@ const config: Configuration = {
     ],
   },
   win: {
-    icon: 'src/assets/images/emdash/app-icon-canary.png',
+    icon: 'src/assets/images/yoda/app-icon-canary.png',
     target: [
       { target: 'nsis', arch: ['x64'] },
       { target: 'msi', arch: ['x64'] },
     ],
     azureSignOptions: {
-      publisherName: 'General Action, Inc.',
+      publisherName: 'LovStudio',
       endpoint: 'https://eus.codesigning.azure.net/',
-      certificateProfileName: 'emdash-public',
-      codeSigningAccountName: 'emdash',
+      certificateProfileName: 'yoda-public',
+      codeSigningAccountName: 'yoda',
     },
   },
   msi: {

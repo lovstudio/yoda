@@ -1,6 +1,6 @@
 import { FolderOpen, Github, Plus, Server, type LucideIcon } from 'lucide-react';
-import emdashLogoWhite from '@/assets/images/emdash/emdash_logo_white.svg';
-import emdashLogo from '@/assets/images/emdash/emdash_logo.svg';
+import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
+import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -44,16 +44,16 @@ export function HomeMainPanel() {
             <div className="logo-shimmer-container">
               <img
                 key={effectiveTheme}
-                src={effectiveTheme === 'emdark' ? emdashLogoWhite : emdashLogo}
-                alt="Emdash"
+                src={effectiveTheme === 'emdark' ? yodaLogoWhite : yodaLogo}
+                alt="Yoda"
                 className="logo-shimmer-image"
               />
               <span
                 className="logo-shimmer-overlay"
                 aria-hidden="true"
                 style={{
-                  WebkitMaskImage: `url(${effectiveTheme === 'emdark' ? emdashLogoWhite : emdashLogo})`,
-                  maskImage: `url(${effectiveTheme === 'emdark' ? emdashLogoWhite : emdashLogo})`,
+                  WebkitMaskImage: `url(${effectiveTheme === 'emdark' ? yodaLogoWhite : yodaLogo})`,
+                  maskImage: `url(${effectiveTheme === 'emdark' ? yodaLogoWhite : yodaLogo})`,
                   WebkitMaskRepeat: 'no-repeat',
                   maskRepeat: 'no-repeat',
                   WebkitMaskSize: 'contain',

@@ -1,13 +1,13 @@
 /* global fetch, process */
 
-export const EmdashNotifications = async () => ({
+export const YodaNotifications = async () => ({
   event: async ({ event }) => {
-    const port = process.env.EMDASH_HOOK_PORT;
-    const token = process.env.EMDASH_HOOK_TOKEN;
-    const ptyId = process.env.EMDASH_PTY_ID;
+    const port = process.env.YODA_HOOK_PORT;
+    const token = process.env.YODA_HOOK_TOKEN;
+    const ptyId = process.env.YODA_PTY_ID;
     if (!port || !token || !ptyId) return;
 
-    const payload = toEmdashPayload(event);
+    const payload = toYodaPayload(event);
     if (!payload) return;
 
     try {
@@ -15,9 +15,9 @@ export const EmdashNotifications = async () => ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Emdash-Token': token,
-          'X-Emdash-Pty-Id': ptyId,
-          'X-Emdash-Event-Type': payload.type,
+          'X-Yoda-Token': token,
+          'X-Yoda-Pty-Id': ptyId,
+          'X-Yoda-Event-Type': payload.type,
         },
         body: JSON.stringify(payload.body),
       });
@@ -27,7 +27,7 @@ export const EmdashNotifications = async () => ({
   },
 });
 
-function toEmdashPayload(event) {
+function toYodaPayload(event) {
   if (event.type === 'session.idle') {
     return {
       type: 'notification',

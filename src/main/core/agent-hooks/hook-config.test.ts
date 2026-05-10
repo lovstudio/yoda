@@ -34,22 +34,22 @@ describe('HookConfigWriter', () => {
 
     await writer.writeForProvider('pi');
 
-    expect(fs.files.get('.pi/extensions/emdash-hook.ts')).toContain("pi.on('agent_end'");
-    expect(fs.files.get('.pi/extensions/emdash-hook.ts')).toContain(
+    expect(fs.files.get('.pi/extensions/yoda-hook.ts')).toContain("pi.on('agent_end'");
+    expect(fs.files.get('.pi/extensions/yoda-hook.ts')).toContain(
       "process.once('uncaughtException'"
     );
-    expect(fs.files.get('.pi/extensions/emdash-hook.ts')).toContain("'X-Emdash-Event-Type'");
-    expect(fs.files.get('.gitignore')).toBe('.pi/extensions/emdash-hook.ts\n');
+    expect(fs.files.get('.pi/extensions/yoda-hook.ts')).toContain("'X-Yoda-Event-Type'");
+    expect(fs.files.get('.gitignore')).toBe('.pi/extensions/yoda-hook.ts\n');
   });
 
   it('does not duplicate the Pi gitignore entry', async () => {
     const fs = new MemoryFs();
-    fs.files.set('.gitignore', '.pi/extensions/emdash-hook.ts\n');
+    fs.files.set('.gitignore', '.pi/extensions/yoda-hook.ts\n');
     const writer = makeWriter(fs);
 
     await writer.writeForProvider('pi');
 
-    expect(fs.files.get('.gitignore')).toBe('.pi/extensions/emdash-hook.ts\n');
+    expect(fs.files.get('.gitignore')).toBe('.pi/extensions/yoda-hook.ts\n');
   });
 
   it('skips the Pi extension when pi is unavailable', async () => {
@@ -59,7 +59,7 @@ describe('HookConfigWriter', () => {
 
     await writer.writeForProvider('pi');
 
-    expect(fs.files.has('.pi/extensions/emdash-hook.ts')).toBe(false);
+    expect(fs.files.has('.pi/extensions/yoda-hook.ts')).toBe(false);
     expect(fs.files.has('.gitignore')).toBe(false);
   });
 
@@ -70,24 +70,22 @@ describe('HookConfigWriter', () => {
 
     await writer.writeForProvider('opencode');
 
-    expect(fs.files.get('.opencode/plugins/emdash-notifications.js')).toContain(
-      'EmdashNotifications'
-    );
-    expect(fs.files.get('.opencode/plugins/emdash-notifications.js')).toContain(
+    expect(fs.files.get('.opencode/plugins/yoda-notifications.js')).toContain('YodaNotifications');
+    expect(fs.files.get('.opencode/plugins/yoda-notifications.js')).toContain(
       "event.type === 'session.idle'"
     );
-    expect(fs.files.get('.gitignore')).toBe('.opencode/plugins/emdash-notifications.js\n');
+    expect(fs.files.get('.gitignore')).toBe('.opencode/plugins/yoda-notifications.js\n');
   });
 
   it('does not duplicate the OpenCode gitignore entry', async () => {
     mockResolveCommandPath.mockResolvedValue('/usr/local/bin/opencode');
     const fs = new MemoryFs();
-    fs.files.set('.gitignore', '.opencode/plugins/emdash-notifications.js\n');
+    fs.files.set('.gitignore', '.opencode/plugins/yoda-notifications.js\n');
     const writer = makeWriter(fs);
 
     await writer.writeForProvider('opencode');
 
-    expect(fs.files.get('.gitignore')).toBe('.opencode/plugins/emdash-notifications.js\n');
+    expect(fs.files.get('.gitignore')).toBe('.opencode/plugins/yoda-notifications.js\n');
   });
 
   it('skips the OpenCode plugin when opencode is unavailable', async () => {
@@ -97,7 +95,7 @@ describe('HookConfigWriter', () => {
 
     await writer.writeForProvider('opencode');
 
-    expect(fs.files.has('.opencode/plugins/emdash-notifications.js')).toBe(false);
+    expect(fs.files.has('.opencode/plugins/yoda-notifications.js')).toBe(false);
     expect(fs.files.has('.gitignore')).toBe(false);
   });
 });

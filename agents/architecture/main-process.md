@@ -6,7 +6,7 @@ The main process is organized into domain modules under `src/main/core/`. Each d
 
 ## Domain Modules (`src/main/core/`)
 
-- **account** — Emdash account service, credential store, provider token registry
+- **account** — Yoda account service, credential store, provider token registry
 - **agent-hooks** — HTTP hook server for agent callbacks, event enrichment, OS notifications, hook config writer (Claude/Codex)
 - **app** — App lifecycle service and controller
 - **conversations** — Conversation CRUD, session start, agent event classifiers (per-provider terminal output parsers)

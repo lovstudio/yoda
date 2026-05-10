@@ -22,7 +22,7 @@ describe('featurebaseIssueProvider', () => {
     vi.clearAllMocks();
   });
 
-  it('maps Featurebase posts to Emdash issues', async () => {
+  it('maps Featurebase posts to Yoda issues', async () => {
     const get = vi.fn().mockResolvedValue({
       data: [
         {

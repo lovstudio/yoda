@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { PREVIOUS_DB_FILENAME } from '@main/db/default-path';
 
 export function resolveLegacyDatabasePath(userDataPath: string): string {
-  return join(userDataPath, 'emdash.db');
+  return join(userDataPath, 'yoda.db');
 }
 
 export function hasLegacyDatabaseFile(userDataPath: string): boolean {

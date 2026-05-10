@@ -16,15 +16,15 @@ ports:
 required_env: []
 optional_env:
   - TELEMETRY_ENABLED
-  - EMDASH_DB_FILE
-  - EMDASH_DISABLE_NATIVE_DB
-  - EMDASH_DISABLE_CLONE_CACHE
-  - EMDASH_DISABLE_PTY
+  - YODA_DB_FILE
+  - YODA_DISABLE_NATIVE_DB
+  - YODA_DISABLE_CLONE_CACHE
+  - YODA_DISABLE_PTY
   - CODEX_SANDBOX_MODE
   - CODEX_APPROVAL_POLICY
 ---
 
-# Emdash Agent Guide
+# Yoda Agent Guide
 
 Start here. Load only the linked `agents/` docs that are relevant to the task.
 
@@ -40,7 +40,7 @@ Start here. Load only the linked `agents/` docs that are relevant to the task.
 - Main-process changes: `agents/architecture/main-process.md`
 - Renderer/UI changes: `agents/architecture/renderer.md`
 - Shared types or provider metadata: `agents/architecture/shared.md`
-- Worktree behavior or `.emdash.json`: `agents/workflows/worktrees.md`
+- Worktree behavior or `.yoda.json`: `agents/workflows/worktrees.md`
 - SSH or remote project work: `agents/workflows/remote-development.md`
 - Provider integration or CLI behavior: `agents/integrations/providers.md`
 - MCP changes: `agents/integrations/mcp.md`

@@ -93,8 +93,8 @@ jobs:
         with:
           name: WINDOWS-BETA-BUILD
           path: |
-            release/emdash-*.exe
-            release/emdash-*.msi
+            release/yoda-*.exe
+            release/yoda-*.msi
             release/*.blockmap
             release/latest*.yml
           if-no-files-found: error

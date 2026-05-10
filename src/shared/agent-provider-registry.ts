@@ -54,7 +54,7 @@ export type AgentProviderDefinition = {
    * CLI flag to assign a unique session ID per chat instance.
    * Used to isolate session state when multiple chats of the same provider
    * run in the same worktree. The flag receives a deterministic UUID
-   * derived from the Emdash conversation ID.
+   * derived from the Yoda conversation ID.
    * e.g. '--session-id' for Claude Code.
    */
   sessionIdFlag?: string;
@@ -506,7 +506,7 @@ export const AGENT_PROVIDERS: AgentProviderDefinition[] = [
     autoApproveFlag: '--yolo',
     initialPromptFlag: '',
     // Bare `letta` auto-resumes the cwd's last conversation; `--new` is
-    // required to start a fresh one when emdash spins up a new chat.
+    // required to start a fresh one when yoda spins up a new chat.
     newConversationFlag: '--new',
     useKeystrokeInjection: true,
     icon: 'letta.svg',

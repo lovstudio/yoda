@@ -1,4 +1,4 @@
-/** Canonical MCP server — the normalized shape Emdash uses internally */
+/** Canonical MCP server — the normalized shape Yoda uses internally */
 export interface McpServer {
   name: string;
   transport: 'stdio' | 'http';

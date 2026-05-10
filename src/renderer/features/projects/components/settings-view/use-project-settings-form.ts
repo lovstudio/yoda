@@ -183,7 +183,7 @@ export function useProjectSettingsForm({
         });
         toast({
           title: 'Team config shared',
-          description: '.emdash.json was written successfully.',
+          description: '.yoda.json was written successfully.',
         });
         onSuccess();
       },

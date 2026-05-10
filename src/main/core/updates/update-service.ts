@@ -316,7 +316,7 @@ class UpdateService implements IInitializable, IDisposable {
       if (!version) return null;
 
       const response = await fetch(
-        `https://api.github.com/repos/generalaction/emdash/releases/tags/v${version}`
+        `https://api.github.com/repos/lovstudio/yoda/releases/tags/v${version}`
       );
 
       if (response.ok) {

@@ -677,7 +677,7 @@ describe('legacy-port table passes', () => {
         if (
           command === 'tmux' &&
           args?.[0] === 'has-session' &&
-          args[2] !== 'emdash-claude-chat-conv-legacy-chat'
+          args[2] !== 'yoda-claude-chat-conv-legacy-chat'
         ) {
           throw new Error('missing');
         }
@@ -708,7 +708,7 @@ describe('legacy-port table passes', () => {
     expect(calls).toEqual([
       {
         command: 'tmux',
-        args: ['has-session', '-t', 'emdash-claude-chat-conv-legacy-chat'],
+        args: ['has-session', '-t', 'yoda-claude-chat-conv-legacy-chat'],
       },
       {
         command: 'tmux',
@@ -716,7 +716,7 @@ describe('legacy-port table passes', () => {
       },
       {
         command: 'tmux',
-        args: ['rename-session', '-t', 'emdash-claude-chat-conv-legacy-chat', newTmuxName],
+        args: ['rename-session', '-t', 'yoda-claude-chat-conv-legacy-chat', newTmuxName],
       },
     ]);
   });

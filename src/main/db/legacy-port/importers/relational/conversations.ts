@@ -182,7 +182,7 @@ function legacyPtyLookupKey(providerId: string, suffix: string): string {
 }
 
 function makeLegacyTmuxSessionName(legacyPtyId: string): string {
-  return `emdash-${legacyPtyId.replace(/[^a-zA-Z0-9._-]/g, '-')}`;
+  return `yoda-${legacyPtyId.replace(/[^a-zA-Z0-9._-]/g, '-')}`;
 }
 
 function parseConversationTimestampMs(conversationId: string): number | undefined {

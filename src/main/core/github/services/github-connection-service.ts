@@ -34,7 +34,7 @@ export interface DeviceCodeResult {
 
 /**
  * Manages GitHub authentication tokens regardless of how they were obtained
- * (Emdash Account OAuth, Device Flow, PAT, or extracted from gh CLI).
+ * (Yoda Account OAuth, Device Flow, PAT, or extracted from gh CLI).
  */
 export type TokenSource = 'secure_storage' | 'cli' | null;
 
@@ -56,7 +56,7 @@ export interface GitHubConnectionService {
   logout(): Promise<void>;
 }
 
-const GITHUB_TOKEN_SECRET_KEY = 'emdash-github-token';
+const GITHUB_TOKEN_SECRET_KEY = 'yoda-github-token';
 
 interface GitHubKVSchema extends Record<string, unknown> {
   tokenSource: Exclude<TokenSource, null>;

@@ -1,25 +1,32 @@
-import { CheckCircle, Github, LogIn, User } from 'lucide-react';
+import { CheckCircle, LogIn, User } from 'lucide-react';
 import { useState } from 'react';
 import { useAccountSession, useAccountSignIn } from '@renderer/lib/hooks/useAccount';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 
 export function SignInStep({ onComplete }: { onComplete: () => void }) {
   const { data: session, isLoading: sessionLoading } = useAccountSession();
   const signInMutation = useAccountSignIn();
+  const showAccountDeviceFlow = useShowModal('accountDeviceFlowModal');
   const [error, setError] = useState<string | null>(null);
 
-  const handleSignIn = async () => {
+  const handleSignIn = () => {
     setError(null);
-    try {
-      const result = await signInMutation.mutateAsync(undefined);
-      if (!result.success) {
-        setError(result.error || 'Sign in failed');
-        return;
-      }
-      onComplete();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed');
-    }
+    showAccountDeviceFlow({
+      onError: (msg: string) => setError(msg),
+    });
+    signInMutation
+      .mutateAsync(undefined)
+      .then((result) => {
+        if (!result.success) {
+          setError(result.error || 'Sign in failed');
+          return;
+        }
+        onComplete();
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Sign in failed');
+      });
   };
 
   if (sessionLoading) {
@@ -66,11 +73,12 @@ export function SignInStep({ onComplete }: { onComplete: () => void }) {
   return (
     <div className="flex flex-col space-y-8 max-w-sm">
       <div className="flex flex-col items-center justify-center gap-6">
-        <Github className="h-10 w-10" absoluteStrokeWidth strokeWidth={1.5} />
+        <LogIn className="h-10 w-10" absoluteStrokeWidth strokeWidth={1.5} />
         <div className="flex flex-col items-center justify-center gap-2">
-          <h1 className="text-xl text-center">Connect your GitHub account to Emdash</h1>
+          <h1 className="text-xl text-center">Sign in to Lovstudio</h1>
           <p className="text-md text-foreground-muted text-center">
-            This will allow you to work with your GitHub repositories in Emdash
+            Yoda uses your Lovstudio account for sync and personalization. You can connect GitHub
+            separately.
           </p>
         </div>
       </div>
@@ -78,7 +86,7 @@ export function SignInStep({ onComplete }: { onComplete: () => void }) {
       <div className="flex flex-col w-full gap-2">
         <Button size={'lg'} onClick={handleSignIn} disabled={signInMutation.isPending}>
           <LogIn className="h-4 w-4" />
-          {signInMutation.isPending ? 'Signing in...' : 'Sign in with GitHub'}
+          {signInMutation.isPending ? 'Signing in...' : 'Sign in to Lovstudio'}
         </Button>
         <Button variant="ghost" onClick={onComplete} disabled={signInMutation.isPending}>
           Skip

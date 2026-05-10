@@ -41,7 +41,7 @@ export function SettingsPage({
   onTabChange: (tab: SettingsPageTab) => void;
 }) {
   const handleDocsClick = useCallback(() => {
-    void rpc.app.openExternal('https://docs.emdash.sh');
+    void rpc.app.openExternal('https://lovstudio.ai/yoda/docs');
   }, []);
 
   const tabs: Array<{
@@ -88,7 +88,7 @@ export function SettingsPage({
     },
     account: {
       title: 'Account',
-      description: 'Manage your Emdash account.',
+      description: 'Manage your Yoda account.',
       sections: [{ component: <AccountTab /> }],
     },
     'clis-models': {

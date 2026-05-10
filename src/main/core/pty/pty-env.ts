@@ -105,8 +105,8 @@ export interface AgentEnvOptions {
   includeShellVar?: boolean;
 
   /**
-   * Emdash hook server connection details.  When set, injects
-   * EMDASH_HOOK_PORT, EMDASH_PTY_ID, and EMDASH_HOOK_TOKEN so agent CLIs
+   * Yoda hook server connection details.  When set, injects
+   * YODA_HOOK_PORT, YODA_PTY_ID, and YODA_HOOK_TOKEN so agent CLIs
    * can call back on lifecycle events.
    */
   hook?: {
@@ -144,7 +144,7 @@ export function buildTerminalEnv(): Record<string, string> {
   // Terminal identity — always override so xterm capabilities are correct.
   env.TERM = 'xterm-256color';
   env.COLORTERM = 'truecolor';
-  env.TERM_PROGRAM = 'emdash';
+  env.TERM_PROGRAM = 'yoda';
 
   // Ensure SHELL reflects the user's configured shell on POSIX. Native Windows
   // shells are selected via ComSpec by the spawn resolver, not SHELL.
@@ -185,7 +185,7 @@ export function buildAgentEnv(options: AgentEnvOptions = {}): Record<string, str
   const env: Record<string, string> = {
     TERM: 'xterm-256color',
     COLORTERM: 'truecolor',
-    TERM_PROGRAM: 'emdash',
+    TERM_PROGRAM: 'yoda',
     HOME: process.env.HOME || os.homedir(),
     USER: process.env.USER || os.userInfo().username,
     PATH: resolvedPath,
@@ -216,9 +216,9 @@ export function buildAgentEnv(options: AgentEnvOptions = {}): Record<string, str
   }
 
   if (hook && hook.port > 0) {
-    env.EMDASH_HOOK_PORT = String(hook.port);
-    env.EMDASH_PTY_ID = hook.ptyId;
-    env.EMDASH_HOOK_TOKEN = hook.token;
+    env.YODA_HOOK_PORT = String(hook.port);
+    env.YODA_PTY_ID = hook.ptyId;
+    env.YODA_HOOK_TOKEN = hook.token;
   }
 
   return env;

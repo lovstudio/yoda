@@ -11,7 +11,7 @@
 ## Current Model
 
 - remote projects are backed by SSH connections
-- remote worktrees live under `<project>/.emdash/worktrees/<task-slug>/`
+- remote worktrees live under `<project>/.yoda/worktrees/<task-slug>/`
 - remote PTYs stream agent shells back to the renderer
 
 ## Authentication And Storage

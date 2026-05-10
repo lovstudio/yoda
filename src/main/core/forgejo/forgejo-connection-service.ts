@@ -56,7 +56,7 @@ function isNotConfigured(error: unknown): boolean {
 }
 
 export class ForgejoConnectionService {
-  private readonly FORGEJO_TOKEN_SECRET_KEY = 'emdash-forgejo-token';
+  private readonly FORGEJO_TOKEN_SECRET_KEY = 'yoda-forgejo-token';
 
   private client: Client | null = null;
   private clientKey: string | null = null;

@@ -1,20 +1,19 @@
+import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { config as dotenvConfig } from 'dotenv';
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
-import dockIcon from '@/assets/images/emdash/icon-dock.png?asset';
+import dockIcon from '@/assets/images/yoda/icon-dock.png?asset';
 import { PRODUCT_NAME } from '@shared/app-identity';
 import { registerRPCRouter } from '@shared/ipc/rpc';
 import { setupApplicationMenu } from './app/menu';
 import { registerAppScheme, setupAppProtocol } from './app/protocol';
 import { createMainWindow } from './app/window';
-import { providerTokenRegistry } from './core/account/provider-token-registry';
-import { emdashAccountService } from './core/account/services/emdash-account-service';
+import { yodaAccountService } from './core/account/services/yoda-account-service';
 import { agentHookService } from './core/agent-hooks/agent-hook-service';
 import { appService } from './core/app/service';
 import { localDependencyManager } from './core/dependencies/dependency-manager';
 import { editorBufferService } from './core/editor/editor-buffer-service';
 import { gitWatcherRegistry } from './core/git/git-watcher-registry';
-import { githubConnectionService } from './core/github/services/github-connection-service';
 import { projectManager } from './core/projects/project-manager';
 import { prSyncScheduler } from './core/pull-requests/pr-sync-scheduler';
 import { searchService } from './core/search/search-service';
@@ -38,7 +37,23 @@ if (process.platform === 'linux') {
 registerAppScheme();
 
 app.setName(PRODUCT_NAME);
-app.setPath('userData', join(app.getPath('appData'), 'emdash'));
+
+const yodaUserData = join(app.getPath('appData'), 'yoda');
+migrateLegacyEmdashUserData(join(app.getPath('appData'), 'emdash'), yodaUserData);
+app.setPath('userData', yodaUserData);
+
+function migrateLegacyEmdashUserData(legacyPath: string, newPath: string): void {
+  if (existsSync(newPath) || !existsSync(legacyPath)) return;
+  try {
+    mkdirSync(newPath, { recursive: true });
+    for (const entry of readdirSync(legacyPath, { withFileTypes: true })) {
+      cpSync(join(legacyPath, entry.name), join(newPath, entry.name), { recursive: true });
+    }
+    log.info(`Migrated legacy user data from ${legacyPath} to ${newPath}`);
+  } catch (err) {
+    log.error('Failed to migrate legacy emdash user data', err);
+  }
+}
 
 app.on('second-instance', () => {
   const win = BrowserWindow.getAllWindows()[0];
@@ -99,10 +114,10 @@ void app.whenReady().then(async () => {
     log.warn('telemetry init failed:', e);
   }
 
-  emdashAccountService.on('accountChanged', (username, userId, email) => {
+  yodaAccountService.on('accountChanged', (username, userId, email) => {
     void telemetryService.identify(username, userId, email);
   });
-  emdashAccountService.on('accountCleared', () => {
+  yodaAccountService.on('accountCleared', () => {
     telemetryService.clearIdentity();
   });
 
@@ -115,11 +130,9 @@ void app.whenReady().then(async () => {
     log.error('Failed to start agent event service:', e);
   });
 
-  emdashAccountService.loadSessionToken().catch((e) => {
+  yodaAccountService.loadSessionToken().catch((e) => {
     log.warn('Failed to load account session token:', e);
   });
-
-  providerTokenRegistry.register('github', (token) => githubConnectionService.storeToken(token));
 
   registerRPCRouter(rpcRouter, ipcMain);
 

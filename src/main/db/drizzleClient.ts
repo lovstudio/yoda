@@ -29,8 +29,8 @@ function openDatabase(filePath: string, busyTimeoutMs: number): Database.Databas
 }
 
 export function createDrizzleClient(options: CreateDrizzleClientOptions = {}): DrizzleClient {
-  if (process.env.EMDASH_DISABLE_NATIVE_DB === '1') {
-    throw new Error('Native SQLite database is disabled via EMDASH_DISABLE_NATIVE_DB=1');
+  if (process.env.YODA_DISABLE_NATIVE_DB === '1') {
+    throw new Error('Native SQLite database is disabled via YODA_DISABLE_NATIVE_DB=1');
   }
 
   const busyTimeout = options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS;

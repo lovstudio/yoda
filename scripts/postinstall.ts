@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-if (process.env.CI || process.env.EMDASH_SKIP_ELECTRON_REBUILD === '1') {
+if (process.env.CI || process.env.YODA_SKIP_ELECTRON_REBUILD === '1') {
   process.exit(0);
 }
 
@@ -35,8 +35,8 @@ function runElectronRebuild(onlyModules) {
   process.exit(typeof result.status === 'number' ? result.status : 1);
 }
 
-const disablePty = process.env.EMDASH_DISABLE_PTY === '1';
-const disableNativeDb = process.env.EMDASH_DISABLE_NATIVE_DB === '1';
+const disablePty = process.env.YODA_DISABLE_PTY === '1';
+const disableNativeDb = process.env.YODA_DISABLE_NATIVE_DB === '1';
 
 const nativeModules: string[] = [];
 if (!disableNativeDb) nativeModules.push('better-sqlite3');

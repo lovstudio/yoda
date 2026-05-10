@@ -325,7 +325,7 @@ export const githubController = createRPCController({
       const settings = {};
       const projectDir =
         (settings as { projects?: { defaultDirectory?: string } }).projects?.defaultDirectory ??
-        path.join(homedir(), 'emdash-projects');
+        path.join(homedir(), 'yoda-projects');
       const localPath = path.join(projectDir, name);
       const cloneCtx = new GitHubAuthExecutionContext(
         new LocalExecutionContext({ root: path.dirname(localPath) }),

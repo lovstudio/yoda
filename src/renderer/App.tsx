@@ -17,7 +17,7 @@ import { queryClient } from './lib/query-client';
 import { RightSidebarProvider } from './lib/ui/right-sidebar';
 import { TooltipProvider } from './lib/ui/tooltip';
 
-export const HAS_SEEN_ONBOARDING = 'emdash:has-seen-onboarding:v1';
+export const HAS_SEEN_ONBOARDING = 'yoda:has-seen-onboarding:v1';
 
 type AppView = 'onboarding' | 'welcome' | 'workspace';
 type OnboardingStep = 'sign-in' | 'import';

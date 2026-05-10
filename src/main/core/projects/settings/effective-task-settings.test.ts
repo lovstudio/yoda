@@ -57,7 +57,7 @@ describe('getEffectiveTaskSettings', () => {
     });
 
     expect(settings.preservePatterns).toContain('.env');
-    expect(settings.preservePatterns).not.toContain('.emdash.json');
+    expect(settings.preservePatterns).not.toContain('.yoda.json');
     expect(settings.shellSetup).toBe('nvm use');
   });
 

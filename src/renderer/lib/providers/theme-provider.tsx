@@ -29,7 +29,7 @@ export const ThemeContext = createContext<ThemeContextType | undefined>(undefine
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { value: themeValue, isLoading, update } = useAppSettingsKey('theme');
-  const [, setCachedTheme] = useLocalStorage<Theme>('emdash-theme', null);
+  const [, setCachedTheme] = useLocalStorage<Theme>('yoda-theme', null);
 
   const theme: Theme = themeValue ?? null;
   const effectiveTheme: EffectiveTheme = theme ?? getSystemTheme();

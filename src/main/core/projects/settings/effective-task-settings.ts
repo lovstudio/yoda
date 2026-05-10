@@ -16,17 +16,17 @@ export async function getEffectiveTaskSettings(args: {
   const parsedSettings = shareableProjectSettingsSchema.safeParse(await projectSettings.get());
   const localShareableSettings = parsedSettings.success ? parsedSettings.data : {};
   const defaults = defaultShareableProjectSettings();
-  const exists = await taskFs.exists('.emdash.json');
+  const exists = await taskFs.exists('.yoda.json');
   if (!exists) {
     return mergeShareableProjectSettings(defaults, localShareableSettings);
   }
 
   try {
-    const { content } = await taskFs.read('.emdash.json');
+    const { content } = await taskFs.read('.yoda.json');
     const projectFileSettings = shareableProjectSettingsSchema.parse(JSON.parse(content));
     return mergeShareableProjectSettings(defaults, projectFileSettings, localShareableSettings);
   } catch (err) {
-    log.warn('Failed to parse task .emdash.json, falling back to project settings', err);
+    log.warn('Failed to parse task .yoda.json, falling back to project settings', err);
     return mergeShareableProjectSettings(defaults, localShareableSettings);
   }
 }

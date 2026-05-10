@@ -41,16 +41,16 @@ async function readLegacyProjectConfig(
 ): Promise<ProjectSettings | undefined> {
   if (!configReader) return undefined;
   try {
-    if (!(await configReader.exists('.emdash.json'))) return undefined;
-    const { content } = await configReader.read('.emdash.json');
+    if (!(await configReader.exists('.yoda.json'))) return undefined;
+    const { content } = await configReader.read('.yoda.json');
     const parsed = legacyProjectConfigSchema.safeParse(parseJsonObject(content));
     if (!parsed.success) {
-      log.warn('Failed to parse legacy .emdash.json for migration', parsed.error);
+      log.warn('Failed to parse legacy .yoda.json for migration', parsed.error);
       return undefined;
     }
     return parsed.data;
   } catch (error) {
-    log.warn('Failed to read legacy .emdash.json for migration', error);
+    log.warn('Failed to read legacy .yoda.json for migration', error);
     return undefined;
   }
 }

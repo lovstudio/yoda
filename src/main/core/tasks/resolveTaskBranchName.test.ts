@@ -5,7 +5,7 @@ describe('resolveTaskBranchName', () => {
   it('uses Linear branchName as-is when available', () => {
     const branchName = resolveTaskBranchName({
       rawBranch: 'linear-issue-branch-name-creation',
-      branchPrefix: 'emdash',
+      branchPrefix: 'yoda',
       suffix: 'abc12',
       linkedIssue: {
         provider: 'linear',
@@ -22,7 +22,7 @@ describe('resolveTaskBranchName', () => {
   it('falls back to the existing prefixed and suffixed format when Linear branchName is absent', () => {
     const branchName = resolveTaskBranchName({
       rawBranch: 'linear-issue-branch-name-creation',
-      branchPrefix: 'emdash',
+      branchPrefix: 'yoda',
       suffix: 'abc12',
       linkedIssue: {
         provider: 'linear',
@@ -32,13 +32,13 @@ describe('resolveTaskBranchName', () => {
       },
     });
 
-    expect(branchName).toBe('emdash/linear-issue-branch-name-creation-abc12');
+    expect(branchName).toBe('yoda/linear-issue-branch-name-creation-abc12');
   });
 
   it('keeps the existing format for non-Linear issues', () => {
     const branchName = resolveTaskBranchName({
       rawBranch: 'bugfix-login',
-      branchPrefix: 'emdash',
+      branchPrefix: 'yoda',
       suffix: 'xyz99',
       linkedIssue: {
         provider: 'jira',
@@ -49,6 +49,6 @@ describe('resolveTaskBranchName', () => {
       },
     });
 
-    expect(branchName).toBe('emdash/bugfix-login-xyz99');
+    expect(branchName).toBe('yoda/bugfix-login-xyz99');
   });
 });

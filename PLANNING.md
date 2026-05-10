@@ -21,8 +21,8 @@ Plan Mode provides a read‑only operating mode where agents research, analyze, 
 4) Execute: Only after approval should changes be made
 
 ## Environment (for CLIs)
-- `EMDASH_PLAN_MODE=1`
-- `EMDASH_PLAN_FILE=<absolute path to policy>` (also see this file)
+- `YODA_PLAN_MODE=1`
+- `YODA_PLAN_FILE=<absolute path to policy>` (also see this file)
 
 If the provider supports a native plan mode, use it (e.g., for Claude Code: `/plan`).
 

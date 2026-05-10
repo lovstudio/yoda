@@ -9,14 +9,14 @@ import {
   makeCodexNotifyCommand,
   makeOpenCodePluginContent,
 } from './agent-notify-command';
-import piEmdashExtension from './pi-emdash-extension.ts?raw';
+import piYodaExtension from './pi-yoda-extension.ts?raw';
 
-const EMDASH_MARKER = 'EMDASH_HOOK_PORT';
+const YODA_MARKER = 'YODA_HOOK_PORT';
 
 const CLAUDE_SETTINGS_PATH = '.claude/settings.local.json';
 const CODEX_CONFIG_PATH = '.codex/config.toml';
-const PI_EMDASH_EXTENSION_PATH = '.pi/extensions/emdash-hook.ts';
-const OPENCODE_PLUGIN_PATH = '.opencode/plugins/emdash-notifications.js';
+const PI_YODA_EXTENSION_PATH = '.pi/extensions/yoda-hook.ts';
+const OPENCODE_PLUGIN_PATH = '.opencode/plugins/yoda-notifications.js';
 const GITIGNORE_PATH = '.gitignore';
 type HookConfigWriteOptions = { writeGitIgnoreEntries?: boolean };
 
@@ -71,12 +71,12 @@ export class HookConfigWriter {
     if (!(await resolveCommandPath('pi', this.exec))) return false;
 
     const existing = await this.fs
-      .read(PI_EMDASH_EXTENSION_PATH)
+      .read(PI_YODA_EXTENSION_PATH)
       .then((r) => r.content)
       .catch(() => undefined);
-    if (existing === piEmdashExtension) return true;
+    if (existing === piYodaExtension) return true;
 
-    await this.fs.write(PI_EMDASH_EXTENSION_PATH, piEmdashExtension);
+    await this.fs.write(PI_YODA_EXTENSION_PATH, piYodaExtension);
     return true;
   }
 
@@ -119,7 +119,7 @@ export class HookConfigWriter {
     if (providerId === 'pi') {
       const wroteConfig = await this.writePiExtension();
       if (wroteConfig && writeGitIgnoreEntries) {
-        await this.ensureGitIgnoreEntries([PI_EMDASH_EXTENSION_PATH]);
+        await this.ensureGitIgnoreEntries([PI_YODA_EXTENSION_PATH]);
       }
       return;
     }
@@ -144,7 +144,7 @@ export class HookConfigWriter {
   }
 
   private buildHookEntries(existing: unknown[], command: string): unknown[] {
-    const userEntries = existing.filter((entry) => !JSON.stringify(entry).includes(EMDASH_MARKER));
+    const userEntries = existing.filter((entry) => !JSON.stringify(entry).includes(YODA_MARKER));
     return [...userEntries, { hooks: [{ type: 'command', command }] }];
   }
 

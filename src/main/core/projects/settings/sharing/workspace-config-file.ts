@@ -5,7 +5,7 @@ import {
 import { SHAREABLE_FIELD_ACCESSORS } from '@shared/project-settings-fields';
 import { parseJsonObject } from '../project-settings-json';
 
-export const CONFIG_FILE = '.emdash.json';
+export const CONFIG_FILE = '.yoda.json';
 
 export function parseWorkspaceConfigObject(raw: string): Record<string, unknown> {
   return parseJsonObject(raw) as Record<string, unknown>;

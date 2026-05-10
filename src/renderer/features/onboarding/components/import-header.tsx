@@ -13,20 +13,20 @@ export type ImportHeaderProps = {
 };
 
 function singleSourceTitle(source: LegacyImportSource): string {
-  return `Import your Emdash ${sourceLabel(source)} data`;
+  return `Import your Yoda ${sourceLabel(source)} data`;
 }
 
 function singleSourceDescription(preview: LegacyPortPreviewSource): string {
   return `Found ${formatCount(preview.projects, 'project')} and ${formatCount(
     preview.tasks,
     'task'
-  )} from your previous Emdash installation`;
+  )} from your previous Yoda installation`;
 }
 
 export function ImportHeader({ isLoading, singleSource = null }: ImportHeaderProps) {
   const title = singleSource
     ? singleSourceTitle(singleSource.source)
-    : 'Do you want to import projects and tasks from other Emdash versions?';
+    : 'Do you want to import projects and tasks from other Yoda versions?';
   const description = singleSource
     ? singleSourceDescription(singleSource.preview)
     : 'Select one or more sources.';
@@ -39,7 +39,7 @@ export function ImportHeader({ isLoading, singleSource = null }: ImportHeaderPro
           <h1 className="text-xl text-center">{title}</h1>
           {isLoading ? (
             <p className="text-md text-foreground-muted text-center">
-              Scanning existing Emdash data...
+              Scanning existing Yoda data...
             </p>
           ) : (
             <p className="text-md text-foreground-muted text-center">{description}</p>
