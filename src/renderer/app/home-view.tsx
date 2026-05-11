@@ -193,7 +193,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                   type="button"
                   aria-label={t('home.addAria')}
                   onClick={() => showAddProjectModal({ strategy: 'local', mode: 'pick' })}
-                  className="flex size-8 items-center justify-center rounded-full text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
                 >
                   <Plus className="size-4" />
                 </button>
@@ -208,7 +208,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                 <button
                   type="button"
                   aria-label={t('home.voiceAria')}
-                  className="flex size-8 items-center justify-center rounded-full text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
                 >
                   <Mic className="size-4" />
                 </button>
@@ -218,7 +218,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                   disabled={!canSubmit}
                   onClick={() => void handleSubmit()}
                   className={cn(
-                    'flex size-8 items-center justify-center rounded-full transition-all duration-150',
+                    'flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-150',
                     canSubmit
                       ? 'scale-100 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
                       : 'scale-95 text-foreground-muted/60'
