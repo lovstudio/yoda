@@ -1,4 +1,14 @@
-import { ArrowUp, FolderOpen, GitBranch, Mic, Monitor, Plus, Server } from 'lucide-react';
+import {
+  ArrowUp,
+  ChevronDown,
+  FolderOpen,
+  GitBranch,
+  Mic,
+  Monitor,
+  Pin,
+  Plus,
+  Server,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -21,8 +31,16 @@ import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { ComboboxTrigger, ComboboxValue } from '@renderer/lib/ui/combobox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
+
+type TaskStrategyKind = 'new-branch' | 'no-worktree';
 
 export function HomeTitlebar() {
   return <Titlebar />;
@@ -100,6 +118,8 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
 
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [strategyKind, setStrategyKind] = useState<TaskStrategyKind>('new-branch');
+  const effectiveStrategyKind: TaskStrategyKind = isUnborn ? 'no-worktree' : strategyKind;
   const trimmed = prompt.trim();
   const canSubmit =
     !!mounted && !!providerId && !!defaultBranch && trimmed.length > 0 && !submitting;
@@ -113,9 +133,10 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
       const existingNames = Array.from(mounted.taskManager.tasks.values(), (t) => t.data.name);
       const taskName = ensureUniqueTaskSlug(baseName, existingNames);
 
-      const strategy = isUnborn
-        ? ({ kind: 'no-worktree' } as const)
-        : ({ kind: 'new-branch', taskBranch: taskName, pushBranch: false } as const);
+      const strategy =
+        effectiveStrategyKind === 'no-worktree'
+          ? ({ kind: 'no-worktree' } as const)
+          : ({ kind: 'new-branch', taskBranch: taskName, pushBranch: false } as const);
 
       void mounted.taskManager.createTask({
         id: taskId,
@@ -142,7 +163,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     mounted,
     providerId,
     defaultBranch,
-    isUnborn,
+    effectiveStrategyKind,
     trimmed,
     submitting,
     autoApproveDefaults,
@@ -270,7 +291,17 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
           <Chip icon={projectData?.type === 'ssh' ? Server : Monitor}>
             {projectData?.type === 'ssh' ? t('home.remoteMode') : t('home.localMode')}
           </Chip>
-          <Chip icon={GitBranch}>{branchLabel}</Chip>
+          <StrategyChip
+            strategyKind={effectiveStrategyKind}
+            disabled={isUnborn || !mounted}
+            onChange={setStrategyKind}
+            ariaLabel={t('home.strategyAria')}
+            labels={{
+              newBranch: t('home.strategyNewBranch'),
+              noWorktree: t('home.strategyNoWorktree', { branch: branchLabel }),
+              base: t('home.baseBranchLabel', { branch: branchLabel }),
+            }}
+          />
           {!mounted && (
             <span className="text-xs text-foreground-muted">{t('home.needProjectHint')}</span>
           )}
@@ -314,6 +345,66 @@ function Chip({ icon: Icon, children }: ChipProps) {
       <Icon className="size-3.5 text-foreground-muted" />
       {children}
     </span>
+  );
+}
+
+interface StrategyChipProps {
+  strategyKind: TaskStrategyKind;
+  disabled: boolean;
+  onChange: (next: TaskStrategyKind) => void;
+  ariaLabel: string;
+  labels: { newBranch: string; noWorktree: string; base: string };
+}
+
+function StrategyChip({
+  strategyKind,
+  disabled,
+  onChange,
+  ariaLabel,
+  labels,
+}: StrategyChipProps) {
+  const isNewBranch = strategyKind === 'new-branch';
+  const Icon = isNewBranch ? GitBranch : Pin;
+  const label = isNewBranch ? labels.base : labels.noWorktree;
+
+  if (disabled) {
+    return (
+      <span className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground">
+        <Icon className="size-3.5 text-foreground-muted" />
+        {label}
+      </span>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label={ariaLabel}
+            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
+          >
+            <Icon className="size-3.5 text-foreground-muted" />
+            <span>{label}</span>
+            <ChevronDown className="size-3 text-foreground-muted" />
+          </button>
+        }
+      />
+      <DropdownMenuContent align="start" className="min-w-56">
+        <DropdownMenuItem onClick={() => onChange('new-branch')}>
+          <GitBranch className="size-4 text-foreground-muted" />
+          <div className="flex flex-col">
+            <span>{labels.newBranch}</span>
+            <span className="text-xs text-foreground-muted">{labels.base}</span>
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onChange('no-worktree')}>
+          <Pin className="size-4 text-foreground-muted" />
+          <span>{labels.noWorktree}</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
