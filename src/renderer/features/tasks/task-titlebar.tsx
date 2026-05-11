@@ -117,14 +117,14 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
   return (
     <Titlebar
       leftSlot={
-        <div className="flex items-center gap-1 px-2">
+        <div className="flex items-center gap-1 px-2 min-w-0">
           <Popover>
-            <PopoverTrigger className="flex items-center gap-1 text-sm text-foreground-muted hover:text-foreground">
-              <span className="flex items-center gap-1">
-                <span className="text-sm text-foreground-passive">{projectName}</span>
-                <span className="text-sm text-foreground-passive">/</span>
+            <PopoverTrigger className="flex items-center gap-1 text-sm text-foreground-muted hover:text-foreground min-w-0">
+              <span className="flex items-center gap-1 min-w-0">
+                <span className="text-sm text-foreground-passive shrink-0">{projectName}</span>
+                <span className="text-sm text-foreground-passive shrink-0">/</span>
                 <span className="flex items-center gap-1.5 min-w-0">
-                  <span className="truncate max-w-56">{taskDisplayName(taskStore)}</span>
+                  <span className="truncate">{taskDisplayName(taskStore)}</span>
                   <ConnectionStatusDot state={provisionedTask.workspace.connectionState} />
                 </span>
               </span>
