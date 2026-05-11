@@ -1,9 +1,14 @@
 import { FolderOpen, Github, Plus, Server, type LucideIcon } from 'lucide-react';
+import { observer } from 'mobx-react-lite';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
+import { getSortInstant } from '@renderer/features/sidebar/sidebar-store';
+import { registeredTaskData, type TaskStore } from '@renderer/features/tasks/stores/task';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { appState } from '@renderer/lib/stores/app-state';
 
 const PROJECT_ACTIONS = [
   {
@@ -32,9 +37,11 @@ export function HomeTitlebar() {
   return <Titlebar />;
 }
 
-export function HomeMainPanel() {
+export const HomeMainPanel = observer(function HomeMainPanel() {
   const { effectiveTheme } = useTheme();
   const showAddProjectModal = useShowModal('addProjectModal');
+  const { navigate } = useNavigate();
+  const recent = getRecentTasks(5);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-background text-foreground">
@@ -64,9 +71,25 @@ export function HomeMainPanel() {
               />
             </div>
           </div>
-          <p className="whitespace-nowrap text-xs text-muted-foreground">
-            Agentic Development Environment
-          </p>
+          {recent.length > 0 ? (
+            <ul className="mx-auto flex max-w-[600px] flex-col items-center gap-1">
+              {recent.map(({ projectId, taskId, label }) => (
+                <li key={`${projectId}:${taskId}`}>
+                  <button
+                    type="button"
+                    onClick={() => navigate('task', { projectId, taskId })}
+                    className="rounded px-2 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="whitespace-nowrap text-xs text-muted-foreground">
+              Agentic Development Environment
+            </p>
+          )}
         </div>
         <div className="mx-auto mt-4 grid w-full max-w-[600px] grid-cols-2 gap-2 sm:grid-cols-[repeat(4,minmax(132px,1fr))]">
           {PROJECT_ACTIONS.map((action) => (
@@ -81,6 +104,38 @@ export function HomeMainPanel() {
       </div>
     </div>
   );
+});
+
+type RecentTaskRow = {
+  projectId: string;
+  taskId: string;
+  label: string;
+};
+
+function getRecentTasks(limit: number): RecentTaskRow[] {
+  const entries: { projectId: string; projectName: string; task: TaskStore; sortKey: string }[] =
+    [];
+  for (const project of appState.projects.projects.values()) {
+    if (!project.mountedProject) continue;
+    const projectId = project.id;
+    if (!projectId) continue;
+    const projectName = project.name?.trim() || projectId;
+    for (const task of project.mountedProject.taskManager.tasks.values()) {
+      const visible =
+        task.state === 'unregistered' || !('archivedAt' in task.data && task.data.archivedAt);
+      if (!visible) continue;
+      const sortKey = getSortInstant(task, 'updated');
+      if (!sortKey) continue;
+      entries.push({ projectId, projectName, task, sortKey });
+    }
+  }
+  entries.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+  return entries.slice(0, limit).map(({ projectId, projectName, task }) => {
+    const reg = registeredTaskData(task);
+    const branch = reg?.branchName?.trim();
+    const suffix = branch && branch.length > 0 ? branch : task.displayName;
+    return { projectId, taskId: task.data.id, label: `${projectName}/${suffix}` };
+  });
 }
 
 function HomeProjectAction({
