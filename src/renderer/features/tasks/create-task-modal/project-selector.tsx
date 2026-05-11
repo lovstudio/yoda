@@ -1,9 +1,13 @@
+import { FolderPlus } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState } from 'react';
+import { basenameFromAnyPath } from '@shared/path-name';
 import {
   asMounted,
   getProjectManagerStore,
 } from '@renderer/features/projects/stores/project-selectors';
+import { useToast } from '@renderer/lib/hooks/use-toast';
+import { rpc } from '@renderer/lib/ipc';
 import {
   Combobox,
   ComboboxCollection,
@@ -12,9 +16,11 @@ import {
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
+  ComboboxSeparator,
   ComboboxTrigger,
   ComboboxValue,
 } from '@renderer/lib/ui/combobox';
+import { log } from '@renderer/utils/logger';
 
 interface ProjectOption {
   value: string;
@@ -33,6 +39,8 @@ export const ProjectSelector = observer(function ProjectSelector({
   trigger,
 }: ProjectSelectorProps) {
   const [open, setOpen] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
+  const { toast } = useToast();
 
   const options: ProjectOption[] = Array.from(getProjectManagerStore().projects.entries()).flatMap(
     ([id, store]) => {
@@ -47,6 +55,64 @@ export const ProjectSelector = observer(function ProjectSelector({
     if (!item) return;
     onChange(item.value);
     setOpen(false);
+  }
+
+  async function handleBrowse() {
+    if (browsing) return;
+    setBrowsing(true);
+    try {
+      const path = await rpc.app.openSelectDirectoryDialog({
+        title: 'Select a local project',
+        message: 'Select a project directory to open',
+      });
+      if (!path) return;
+
+      const status = await rpc.projects.inspectProjectPath({ type: 'local', path });
+      if (!status.isDirectory) {
+        toast({
+          title: 'Cannot add project',
+          description: 'Pick a folder to add it as a project.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (status.existingProject) {
+        onChange(status.existingProject.id);
+        setOpen(false);
+        return;
+      }
+      if (!status.isGitRepo) {
+        toast({
+          title: 'Cannot add project',
+          description: `${basenameFromAnyPath(path)} is not a git repository.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const projectId = await getProjectManagerStore().createProject(
+        { type: 'local' },
+        {
+          mode: 'pick',
+          name: basenameFromAnyPath(path),
+          path,
+          initGitRepository: false,
+        }
+      );
+      if (projectId) {
+        onChange(projectId);
+        setOpen(false);
+      }
+    } catch (err) {
+      log.error('Failed to add project from picker:', err);
+      toast({
+        title: 'Cannot add project',
+        description: 'Failed to add the selected folder as a project.',
+        variant: 'destructive',
+      });
+    } finally {
+      setBrowsing(false);
+    }
   }
 
   return (
@@ -82,6 +148,19 @@ export const ProjectSelector = observer(function ProjectSelector({
             </ComboboxGroup>
           )}
         </ComboboxList>
+        <ComboboxSeparator />
+        <button
+          type="button"
+          disabled={browsing}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            void handleBrowse();
+          }}
+          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-foreground outline-hidden hover:bg-background-quaternary-1 disabled:pointer-events-none disabled:opacity-50"
+        >
+          <FolderPlus className="size-4 text-foreground-muted" />
+          {browsing ? 'Opening…' : 'Browse for folder…'}
+        </button>
       </ComboboxContent>
     </Combobox>
   );

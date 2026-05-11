@@ -1,7 +1,14 @@
+import { MoreHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { selectCurrentPr } from '@shared/pull-requests';
+import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { TaskSidebarAgentStatus } from '@renderer/features/sidebar/task-sidebar-agent-status';
-import { TaskContextMenu } from '@renderer/features/tasks/components/task-context-menu';
+import {
+  TaskActionsMenu,
+  TaskContextMenu,
+} from '@renderer/features/tasks/components/task-context-menu';
 import { TaskGitDiffStats } from '@renderer/features/tasks/components/task-git-diff-stats';
 import { type TaskStore } from '@renderer/features/tasks/stores/task';
 import {
@@ -9,6 +16,7 @@ import {
   getTaskManagerStore,
   getTaskStore,
 } from '@renderer/features/tasks/stores/task-selectors';
+import { rpc } from '@renderer/lib/ipc';
 import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider';
 import {
   useNavigate,
@@ -18,7 +26,7 @@ import {
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
-import { SidebarMenuRow } from './sidebar-primitives';
+import { SidebarItemMiniButton, SidebarMenuRow } from './sidebar-primitives';
 
 interface SidebarTaskItemProps {
   taskId: string;
@@ -32,15 +40,18 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   projectId,
   rowVariant = 'underProject',
 }: SidebarTaskItemProps) {
+  const { t } = useTranslation();
   const { navigate } = useNavigate();
   const { setCollapsed } = useWorkspaceLayoutContext();
   const showRename = useShowModal('renameTaskModal');
   const showConfirm = useShowModal('confirmActionModal');
+  const showManageRunScripts = useShowModal('manageRunScriptsModal');
 
   const { currentView } = useWorkspaceSlots();
   const { params } = useParams('task');
   const isActive =
     currentView === 'task' && params.taskId === taskId && params.projectId === projectId;
+  const [isMenuOpen, setMenuOpen] = useState(false);
 
   const task = getTaskStore(projectId, taskId)!;
   const taskManager = getTaskManagerStore(projectId);
@@ -66,9 +77,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
 
   const handleDelete = () =>
     showConfirm({
-      title: 'Delete task',
-      description: `"${taskName}" will be permanently deleted. This action cannot be undone.`,
-      confirmLabel: 'Delete',
+      title: t('sidebar.deleteTask.title'),
+      description: t('sidebar.deleteTask.description', { name: taskName }),
+      confirmLabel: t('sidebar.deleteTask.confirmLabel'),
       onSuccess: () => {
         void taskManager?.deleteTask(taskId);
         if (isActive) navigate('project', { projectId });
@@ -85,19 +96,48 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const handleReconnect =
     workspace?.connectionState != null ? () => workspace.reconnect() : undefined;
 
+  const project = getProjectStore(projectId);
+  const projectName = project?.state === 'unregistered' ? projectId : (project?.name ?? projectId);
+
+  const handleConfigureScripts = () => showManageRunScripts({ projectId, projectName });
+
+  const handleRunScript = () => {
+    if (!provisionedTask) {
+      navigate('task', { projectId, taskId });
+      return;
+    }
+    void rpc.terminals
+      .runLifecycleScript({
+        projectId,
+        workspaceId: provisionedTask.workspaceId,
+        type: 'run',
+      })
+      .catch(() => {});
+  };
+
+  const handleViewStatus = () => {
+    navigate('task', { projectId, taskId });
+  };
+
+  const menuActions = {
+    isPinned: task.data.isPinned,
+    canPin,
+    isArchived: false,
+    branchName,
+    onPin: () => void task.setPinned(true),
+    onUnpin: () => void task.setPinned(false),
+    onRename: handleRename,
+    onArchive: handleArchive,
+    onReconnect: handleReconnect,
+    onDelete: handleDelete,
+    onRunScript: handleRunScript,
+    canRunScript: Boolean(provisionedTask),
+    onConfigureScripts: handleConfigureScripts,
+    onViewStatus: handleViewStatus,
+  };
+
   return (
-    <TaskContextMenu
-      isPinned={task.data.isPinned}
-      canPin={canPin}
-      isArchived={false}
-      branchName={branchName}
-      onPin={() => void task.setPinned(true)}
-      onUnpin={() => void task.setPinned(false)}
-      onRename={handleRename}
-      onArchive={handleArchive}
-      onReconnect={handleReconnect}
-      onDelete={handleDelete}
-    >
+    <TaskContextMenu {...menuActions}>
       <SidebarMenuRow
         className={cn(
           'group/row flex items-center justify-between px-1 h-8 gap-1',
@@ -123,7 +163,30 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           <TaskGitDiffStats task={task} className="h-full shrink-0 flex items-center pl-1 pr-1" />
           <RenderPrBadge task={task} />
         </div>
-        <TaskSidebarAgentStatus task={task} />
+        <div
+          className={cn(
+            'items-center gap-0.5',
+            isMenuOpen ? 'flex' : 'hidden group-hover/row:flex'
+          )}
+        >
+          <TaskActionsMenu
+            {...menuActions}
+            open={isMenuOpen}
+            onOpenChange={setMenuOpen}
+            trigger={
+              <SidebarItemMiniButton
+                type="button"
+                aria-label={t('sidebar.runScripts.menuLabel')}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </SidebarItemMiniButton>
+            }
+          />
+        </div>
+        <div className={cn('items-center', isMenuOpen ? 'hidden' : 'flex group-hover/row:hidden')}>
+          <TaskSidebarAgentStatus task={task} />
+        </div>
       </SidebarMenuRow>
     </TaskContextMenu>
   );

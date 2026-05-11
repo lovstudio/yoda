@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronsUpDownIcon } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getRepositoryStore } from '@renderer/features/projects/stores/project-selectors';
 import { rpc } from '@renderer/lib/ipc';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
@@ -43,6 +44,7 @@ export function AddRemoteModal({
   branchName,
   onSuccess,
 }: Props) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('create');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +73,7 @@ export function AddRemoteModal({
     try {
       if (tab === 'create') {
         if (!owner) {
-          setError('No repository owner available');
+          setError(t('tasks.addRemote.noOwner'));
           return;
         }
 
@@ -82,7 +84,7 @@ export function AddRemoteModal({
         });
 
         if (!result.success) {
-          setError(result.error ?? 'Failed to create repository');
+          setError(result.error ?? t('tasks.addRemote.createFailed'));
           return;
         }
 
@@ -90,7 +92,7 @@ export function AddRemoteModal({
         const addRemoteResult = await rpc.repository.addRemote(projectId, selectedRemote, cloneUrl);
 
         if (!addRemoteResult.success) {
-          setError(toErrorMessage(addRemoteResult.error, 'Failed to add remote'));
+          setError(toErrorMessage(addRemoteResult.error, t('tasks.addRemote.addRemoteFailed')));
           return;
         }
       } else {
@@ -101,14 +103,14 @@ export function AddRemoteModal({
         );
 
         if (!addRemoteResult.success) {
-          setError(toErrorMessage(addRemoteResult.error, 'Failed to add remote'));
+          setError(toErrorMessage(addRemoteResult.error, t('tasks.addRemote.addRemoteFailed')));
           return;
         }
       }
 
       const fetchResult = await rpc.repository.fetch(projectId);
       if (!fetchResult.success) {
-        setError(toErrorMessage(fetchResult.error, 'Failed to fetch remote'));
+        setError(toErrorMessage(fetchResult.error, t('tasks.addRemote.fetchFailed')));
         return;
       }
 
@@ -123,12 +125,10 @@ export function AddRemoteModal({
           const repositoryStore = getRepositoryStore(projectId);
           repositoryStore?.refreshLocal();
           repositoryStore?.refreshRemote();
-          setError(
-            'Remote already has commits. Linking succeeded, but integrating histories must be resolved manually.'
-          );
+          setError(t('tasks.addRemote.rejectedHint'));
           return;
         }
-        setError(toErrorMessage(publishResult.error, 'Failed to publish branch'));
+        setError(toErrorMessage(publishResult.error, t('tasks.addRemote.publishFailed')));
         return;
       }
 
@@ -137,7 +137,7 @@ export function AddRemoteModal({
       repositoryStore?.refreshRemote();
       onSuccess();
     } catch (e) {
-      setError(toErrorMessage(e, 'An error occurred'));
+      setError(toErrorMessage(e, t('tasks.addRemote.errorGeneric')));
     } finally {
       setIsSubmitting(false);
     }
@@ -147,13 +147,17 @@ export function AddRemoteModal({
     <ModalLayout
       header={
         <DialogHeader>
-          <DialogTitle>Add Remote</DialogTitle>
+          <DialogTitle>{t('tasks.addRemote.title')}</DialogTitle>
         </DialogHeader>
       }
       footer={
         <DialogFooter>
           <ConfirmButton onClick={() => void handleSubmit()} disabled={!isValid || isSubmitting}>
-            {isSubmitting ? 'Adding...' : tab === 'create' ? 'Create & Publish' : 'Link & Publish'}
+            {isSubmitting
+              ? t('tasks.addRemote.submitting')
+              : tab === 'create'
+                ? t('tasks.addRemote.createPublish')
+                : t('tasks.addRemote.linkPublish')}
           </ConfirmButton>
         </DialogFooter>
       }
@@ -167,17 +171,17 @@ export function AddRemoteModal({
           }}
         >
           <ToggleGroupItem className="flex-1" value="create">
-            Create Repository
+            {t('tasks.addRemote.create')}
           </ToggleGroupItem>
           <ToggleGroupItem className="flex-1" value="link">
-            Link Existing
+            {t('tasks.addRemote.linkExisting')}
           </ToggleGroupItem>
         </ToggleGroup>
 
         {tab === 'create' && (
           <FieldGroup>
             <Field>
-              <FieldLabel>Repository Name</FieldLabel>
+              <FieldLabel>{t('tasks.addRemote.repositoryName')}</FieldLabel>
               <Input
                 autoFocus
                 value={repositoryName}
@@ -185,7 +189,7 @@ export function AddRemoteModal({
               />
             </Field>
             <Field>
-              <FieldLabel>Owner</FieldLabel>
+              <FieldLabel>{t('tasks.addRemote.owner')}</FieldLabel>
               <ComboboxPopover
                 trigger={
                   <ComboboxTrigger
@@ -204,18 +208,22 @@ export function AddRemoteModal({
               />
             </Field>
             <Field>
-              <FieldLabel>Visibility</FieldLabel>
+              <FieldLabel>{t('tasks.addRemote.visibility')}</FieldLabel>
               <RadioGroup
                 value={visibility}
                 onValueChange={(v) => setVisibility(v as 'public' | 'private')}
               >
                 <div className="flex items-center gap-3">
                   <RadioGroupItem value="private" />
-                  <Label className="cursor-pointer font-normal">Private</Label>
+                  <Label className="cursor-pointer font-normal">
+                    {t('tasks.addRemote.private')}
+                  </Label>
                 </div>
                 <div className="flex items-center gap-3">
                   <RadioGroupItem value="public" />
-                  <Label className="cursor-pointer font-normal">Public</Label>
+                  <Label className="cursor-pointer font-normal">
+                    {t('tasks.addRemote.public')}
+                  </Label>
                 </div>
               </RadioGroup>
             </Field>
@@ -225,10 +233,10 @@ export function AddRemoteModal({
         {tab === 'link' && (
           <FieldGroup>
             <Field>
-              <FieldLabel>Remote URL</FieldLabel>
+              <FieldLabel>{t('tasks.addRemote.remoteUrl')}</FieldLabel>
               <Input
                 autoFocus
-                placeholder="https://git.example.com/owner/repo.git"
+                placeholder={t('tasks.addRemote.remoteUrlPlaceholder')}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />

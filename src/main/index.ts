@@ -153,6 +153,11 @@ void app.whenReady().then(async () => {
   }
 });
 
+// In dev, the parent script sends SIGTERM on Ctrl+C. Convert it to app.quit()
+// so before-quit runs (DB / PTY / git watchers get cleaned up).
+process.on('SIGTERM', () => app.quit());
+process.on('SIGINT', () => app.quit());
+
 app.on('before-quit', (event) => {
   event.preventDefault();
   telemetryService.capture('app_closed');

@@ -365,7 +365,7 @@ class AppService implements IInitializable, IDisposable {
   }): Promise<string | undefined> {
     const result = await dialog.showOpenDialog(getMainWindow()!, {
       title: args.title,
-      properties: ['openDirectory'],
+      properties: ['openDirectory', 'createDirectory'],
       message: args.message,
     });
     if (result.canceled) return undefined;

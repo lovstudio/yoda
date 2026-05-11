@@ -12,7 +12,6 @@ import { useTerminalSearch } from '@renderer/lib/pty/use-terminal-search';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
-import { ContextBar } from './context-bar';
 import type { ConversationStore } from './conversation-manager';
 
 export const ConversationsPanel = observer(function ConversationsPanel() {
@@ -167,7 +166,6 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
           </PaneSizingProvider>
         </div>
       </div>
-      <ContextBar />
     </div>
   );
 });

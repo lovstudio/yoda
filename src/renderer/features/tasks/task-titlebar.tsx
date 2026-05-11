@@ -11,6 +11,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import type { Issue } from '@shared/tasks';
 import {
   asMounted,
@@ -88,6 +89,7 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
   projectId: string;
   taskId: string;
 }) {
+  const { t } = useTranslation();
   const taskStore = getTaskStore(projectId, taskId)!;
   const taskPayload = getRegisteredTaskData(projectId, taskId)!;
   const provisionedTask = useProvisionedTask();
@@ -130,7 +132,9 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
             </PopoverTrigger>
             <PopoverContent align="start" className="w-96 p-4 flex flex-col gap-2">
               <div className="flex flex-col gap-1 w-full">
-                <MicroLabel className="text-foreground-passive items-center flex">Task</MicroLabel>
+                <MicroLabel className="text-foreground-passive items-center flex">
+                  {t('tasks.task')}
+                </MicroLabel>
                 <span className="text-sm tracking-tight">{taskDisplayName(taskStore)}</span>
               </div>
               <OpenInMenu path={provisionedTask.path} />
@@ -141,7 +145,7 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
                 </span>
                 {taskPayload.sourceBranch && (
                   <span className="flex items-center gap-2 text-foreground-passive">
-                    Created from
+                    {t('tasks.git.createdFrom')}
                     <span className="flex items-center gap-1 text-foreground-muted">
                       <GitBranch className="size-3.5" /> {taskPayload.sourceBranch.branch}
                     </span>
@@ -160,11 +164,11 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
                             onClick={() => fetch()}
                           >
                             <RefreshCcw className="size-3" />
-                            {isFetching ? 'Fetching...' : 'Fetch'}
+                            {isFetching ? t('tasks.git.fetching') : t('tasks.git.fetch')}
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          {isFetching ? 'Fetching...' : 'Fetch changes'}
+                          {isFetching ? t('tasks.git.fetching') : t('tasks.git.fetchChanges')}
                         </TooltipContent>
                       </Tooltip>
                       <Tooltip>
@@ -178,10 +182,10 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
                           >
                             <ArrowDown className="size-3" />
                             {isPulling ? (
-                              'Pulling...'
+                              t('tasks.git.pulling')
                             ) : (
                               <span className="flex items-center gap-1">
-                                Pull
+                                {t('tasks.git.pull')}
                                 <Badge variant="secondary" className="shrink-0">
                                   {behindCount}
                                 </Badge>
@@ -191,10 +195,10 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
                         </TooltipTrigger>
                         <TooltipContent>
                           {isPulling
-                            ? 'Pulling...'
+                            ? t('tasks.git.pulling')
                             : behindCount === 0
-                              ? 'Nothing to pull'
-                              : 'Pull changes'}
+                              ? t('tasks.git.nothingToPull')
+                              : t('tasks.git.pullChanges')}
                         </TooltipContent>
                       </Tooltip>
                       <Tooltip>
@@ -208,10 +212,10 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
                           >
                             <ArrowUp className="size-3" />
                             {isPushing ? (
-                              'Pushing...'
+                              t('tasks.git.pushing')
                             ) : (
                               <span className="flex items-center gap-1">
-                                Push
+                                {t('tasks.git.push')}
                                 <Badge variant="secondary" className="shrink-0">
                                   {aheadCount}
                                 </Badge>
@@ -221,10 +225,10 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
                         </TooltipTrigger>
                         <TooltipContent>
                           {isPushing
-                            ? 'Pushing...'
+                            ? t('tasks.git.pushing')
                             : aheadCount === 0
-                              ? 'Nothing to push'
-                              : 'Push changes'}
+                              ? t('tasks.git.nothingToPush')
+                              : t('tasks.git.pushChanges')}
                         </TooltipContent>
                       </Tooltip>
                     </>
@@ -239,11 +243,11 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
                           onClick={() => publish()}
                         >
                           <ArrowUp className="size-3" />
-                          {isPublishing ? 'Publishing...' : 'Publish'}
+                          {isPublishing ? t('tasks.git.publishing') : t('tasks.git.publish')}
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        {isPublishing ? 'Publishing...' : 'Publish branch'}
+                        {isPublishing ? t('tasks.git.publishing') : t('tasks.git.publishBranch')}
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -297,7 +301,7 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
               </Toggle>
             </TooltipTrigger>
             <TooltipContent>
-              Toggle terminal <ShortcutHint settingsKey="toggleTerminalDrawer" />
+              {t('tasks.toggleTerminal')} <ShortcutHint settingsKey="toggleTerminalDrawer" />
             </TooltipContent>
           </Tooltip>
           <Separator orientation="vertical" className="h-5 self-center!" />
@@ -316,27 +320,31 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
           >
             <Tooltip>
               <TooltipTrigger>
-                <ToggleGroupItem size="icon-sm" value="changes" aria-label="Changes">
+                <ToggleGroupItem size="icon-sm" value="changes" aria-label={t('tasks.changes')}>
                   <FileDiff className="size-3.5" />
                 </ToggleGroupItem>
               </TooltipTrigger>
-              <TooltipContent>Changes</TooltipContent>
+              <TooltipContent>{t('tasks.changes')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger>
-                <ToggleGroupItem size="icon-sm" value="conversations" aria-label="Conversations">
+                <ToggleGroupItem
+                  size="icon-sm"
+                  value="conversations"
+                  aria-label={t('tasks.conversations')}
+                >
                   <MessageSquare className="size-3.5" />
                 </ToggleGroupItem>
               </TooltipTrigger>
-              <TooltipContent>Conversations</TooltipContent>
+              <TooltipContent>{t('tasks.conversations')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger>
-                <ToggleGroupItem size="icon-sm" value="files" aria-label="Files">
+                <ToggleGroupItem size="icon-sm" value="files" aria-label={t('tasks.files')}>
                   <FolderOpen className="size-3.5" />
                 </ToggleGroupItem>
               </TooltipTrigger>
-              <TooltipContent>Files</TooltipContent>
+              <TooltipContent>{t('tasks.files')}</TooltipContent>
             </Tooltip>
           </ToggleGroup>
         </div>

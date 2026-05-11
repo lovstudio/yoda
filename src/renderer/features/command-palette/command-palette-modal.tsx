@@ -3,6 +3,7 @@ import { Command } from 'cmdk';
 import { FolderOpen, GitBranch, MessageSquare, Zap } from 'lucide-react';
 import { useObserver } from 'mobx-react-lite';
 import React, { useDeferredValue, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SearchItem } from '@shared/search';
 import { getTaskView } from '@renderer/features/tasks/stores/task-selectors';
 import { commandRegistry } from '@renderer/lib/commands/registry';
@@ -81,6 +82,7 @@ export function CommandPaletteModal({
   taskId,
   onClose,
 }: CommandPaletteProps & BaseModalProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const deferred = useDeferredValue(query);
   const { navigate } = useNavigate();
@@ -150,7 +152,7 @@ export function CommandPaletteModal({
         <Command.Input
           value={query}
           onValueChange={setQuery}
-          placeholder="Search tasks, projects, actions…"
+          placeholder={t('commandPalette.placeholder')}
           className="w-full bg-transparent px-3 py-3 text-sm outline-none placeholder:text-foreground/40"
           autoFocus
         />
@@ -159,7 +161,7 @@ export function CommandPaletteModal({
         {query ? (
           <>
             <Command.Empty className="py-8 text-center text-sm text-foreground/40">
-              No results for &ldquo;{query}&rdquo;
+              {t('commandPalette.noResultsFor', { query })}
             </Command.Empty>
             {merged.map((item) => (
               <PaletteItem

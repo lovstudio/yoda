@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { CLISpinner } from '@renderer/features/tasks/components/cliSpinner';
 import {
@@ -21,6 +22,7 @@ export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
 }: {
   task: TaskStore;
 }) {
+  const { t } = useTranslation();
   const isBootstrapping =
     isUnregistered(task) ||
     (isUnprovisioned(task) && (task.phase === 'provision' || task.phase === 'provision-error'));
@@ -36,7 +38,7 @@ export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
             <CLISpinner variant="2" />
           </span>
         </TooltipTrigger>
-        <TooltipContent>Creating task workspace...</TooltipContent>
+        <TooltipContent>{t('sidebar.creatingWorkspace')}</TooltipContent>
       </Tooltip>
     );
   }

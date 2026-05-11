@@ -1,6 +1,7 @@
 import { FolderInput, FolderPlus, MessageSquareShare, Plug, Puzzle, Settings } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   isCurrentView,
   useNavigate,
@@ -26,10 +27,10 @@ import { UpdateSection } from './update-section';
 import { useSidebarDrop } from './use-sidebar-drop';
 
 export const LeftSidebar: React.FC = observer(function LeftSidebar() {
+  const { t } = useTranslation();
   const { navigate } = useNavigate();
   const { currentView } = useWorkspaceSlots();
 
-  const showAddProjectModal = useShowModal('addProjectModal');
   const showFeedbackModal = useShowModal('feedbackModal');
   const { isDragOver, onDragOver, onDragEnter, onDragLeave, onDrop } = useSidebarDrop();
 
@@ -47,11 +48,59 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       {isDragOver && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-background-tertiary/80 backdrop-blur-sm pointer-events-none">
           <FolderInput className="size-8 text-foreground" />
-          <span className="text-xs font-medium text-foreground">Drop to add project</span>
+          <span className="text-xs font-medium text-foreground">
+            {t('sidebar.dropToAddProject')}
+          </span>
         </div>
       )}
       <SidebarSpace />
       <SidebarContainer className="w-full border-r-0 flex-1 min-h-0">
+        <SidebarFooter className="mt-0 border-t-0 border-b">
+          <SidebarMenu>
+            <SidebarMenuButton
+              isActive={isCurrentView(currentView, 'home')}
+              onClick={() => navigate('home')}
+              aria-label={t('sidebar.newSession')}
+              className="w-full justify-between"
+            >
+              <span className="flex items-center gap-2 min-w-0 w-full">
+                <FolderPlus className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
+                <span className="truncate min-w-0">{t('sidebar.newSession')}</span>
+              </span>
+              <ShortcutHint settingsKey="newProject" />
+            </SidebarMenuButton>
+            <SidebarMenuButton
+              isActive={isCurrentView(currentView, 'skills')}
+              onClick={() => navigate('skills')}
+              aria-label={t('sidebar.skills')}
+              className="w-full justify-start"
+            >
+              <Puzzle className="h-5 w-5 sm:h-4 sm:w-4" />
+              {t('sidebar.skills')}
+            </SidebarMenuButton>
+            <SidebarMenuButton
+              isActive={isCurrentView(currentView, 'mcp')}
+              onClick={() => navigate('mcp')}
+              aria-label={t('sidebar.automation')}
+              className="w-full justify-start"
+            >
+              <Plug className="h-5 w-5 sm:h-4 sm:w-4" />
+              {t('sidebar.automation')}
+            </SidebarMenuButton>
+            <SidebarMenuButton
+              isActive={isCurrentView(currentView, 'settings')}
+              onClick={() => navigate('settings')}
+              aria-label={t('sidebar.settings')}
+              className="w-full justify-between"
+            >
+              <span className="flex items-center gap-2">
+                <Settings className="h-5 w-5 sm:h-4 sm:w-4" />
+                {t('sidebar.settings')}
+              </span>
+              <ShortcutHint settingsKey="settings" />
+            </SidebarMenuButton>
+          </SidebarMenu>
+        </SidebarFooter>
         <SidebarContent className="flex flex-col">
           <SidebarPinnedTaskList />
           <SidebarGroup className="mb-0 min-h-0 flex-1 flex flex-col">
@@ -63,52 +112,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
-        <SidebarFooter>
-          <SidebarMenu>
-            <SidebarMenuButton
-              isActive={false}
-              onClick={() => showAddProjectModal({})}
-              aria-label="Add Project"
-              className="w-full justify-between"
-            >
-              <span className="flex items-center gap-2 min-w-0 w-full">
-                <FolderPlus className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
-                <span className="truncate min-w-0">Add Project</span>
-              </span>
-              <ShortcutHint settingsKey="newProject" />
-            </SidebarMenuButton>
-            <SidebarMenuButton
-              isActive={isCurrentView(currentView, 'skills')}
-              onClick={() => navigate('skills')}
-              aria-label="Skills"
-              className="w-full justify-start"
-            >
-              <Puzzle className="h-5 w-5 sm:h-4 sm:w-4" />
-              Skills
-            </SidebarMenuButton>
-            <SidebarMenuButton
-              isActive={isCurrentView(currentView, 'mcp')}
-              onClick={() => navigate('mcp')}
-              aria-label="MCP"
-              className="w-full justify-start"
-            >
-              <Plug className="h-5 w-5 sm:h-4 sm:w-4" />
-              MCP
-            </SidebarMenuButton>
-            <SidebarMenuButton
-              isActive={isCurrentView(currentView, 'settings')}
-              onClick={() => navigate('settings')}
-              aria-label="Settings"
-              className="w-full justify-between"
-            >
-              <span className="flex items-center gap-2">
-                <Settings className="h-5 w-5 sm:h-4 sm:w-4" />
-                Settings
-              </span>
-              <ShortcutHint settingsKey="settings" />
-            </SidebarMenuButton>
-          </SidebarMenu>
-        </SidebarFooter>
         <div className="flex items-center gap-2 justify-between px-3 py-2 border-t border-border">
           <button
             type="button"
@@ -116,7 +119,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
             onClick={() => showFeedbackModal({})}
           >
             <MessageSquareShare className="size-4 shrink-0" />
-            <span className="truncate">Give feedback</span>
+            <span className="truncate">{t('sidebar.giveFeedback')}</span>
           </button>
           <UpdateSection />
         </div>

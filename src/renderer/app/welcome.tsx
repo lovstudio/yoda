@@ -1,4 +1,5 @@
 import { motion, type Variants } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import IconLight from '@/assets/images/yoda/icon-light.png';
 import YTBanner from '@/assets/images/ytbanner.png';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
@@ -9,6 +10,7 @@ interface WelcomeScreenProps {
 }
 
 export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
+  const { t } = useTranslation();
   const { effectiveTheme } = useTheme();
 
   const containerVariants: Variants = {
@@ -68,7 +70,7 @@ export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
           className="text-lg font-semibold tracking-tight text-foreground"
           variants={itemVariants}
         >
-          Welcome.
+          {t('home.welcome')}
         </motion.h1>
 
         <motion.div
@@ -84,7 +86,7 @@ export function WelcomeScreen({ onGetStarted }: WelcomeScreenProps) {
               effectiveTheme === 'ydark' ? 'bg-gray-200 text-gray-900 hover:bg-gray-300' : ''
             }
           >
-            Start shipping
+            {t('home.welcomeStart')}
           </Button>
         </motion.div>
       </motion.div>

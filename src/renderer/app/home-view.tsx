@@ -1,109 +1,285 @@
-import { FolderOpen, Github, Plus, Server, type LucideIcon } from 'lucide-react';
+import { ArrowUp, FolderOpen, GitBranch, Mic, Monitor, Plus, Server } from 'lucide-react';
+import { observer } from 'mobx-react-lite';
+import { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
+import { ensureUniqueTaskSlug } from '@shared/task-name';
+import {
+  asMounted,
+  getProjectManagerStore,
+  getRepositoryStore,
+} from '@renderer/features/projects/stores/project-selectors';
+import { useEffectiveProvider } from '@renderer/features/tasks/conversations/use-effective-provider';
+import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
+import { useAgentAutoApproveDefaults } from '@renderer/features/tasks/hooks/useAgentAutoApproveDefaults';
+import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
+import { rpc } from '@renderer/lib/ipc';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-
-const PROJECT_ACTIONS = [
-  {
-    label: 'Open project',
-    icon: FolderOpen,
-    modalArgs: { strategy: 'local', mode: 'pick' },
-  },
-  {
-    label: 'Create New Project',
-    icon: Plus,
-    modalArgs: { strategy: 'local', mode: 'new' },
-  },
-  {
-    label: 'Clone from GitHub',
-    icon: Github,
-    modalArgs: { strategy: 'local', mode: 'clone' },
-  },
-  {
-    label: 'Add Remote Project',
-    icon: Server,
-    modalArgs: { strategy: 'ssh', mode: 'pick' },
-  },
-] as const;
+import { appState } from '@renderer/lib/stores/app-state';
+import { ComboboxTrigger, ComboboxValue } from '@renderer/lib/ui/combobox';
+import { Textarea } from '@renderer/lib/ui/textarea';
+import { cn } from '@renderer/utils/utils';
 
 export function HomeTitlebar() {
   return <Titlebar />;
 }
 
-export function HomeMainPanel() {
+export const HomeMainPanel = observer(function HomeMainPanel() {
+  const { t } = useTranslation();
   const { effectiveTheme } = useTheme();
   const showAddProjectModal = useShowModal('addProjectModal');
+  const { navigate } = useNavigate();
+
+  const projectManager = getProjectManagerStore();
+  const mountedProjects = useMemo(
+    () =>
+      Array.from(projectManager.projects.values()).flatMap((s) => {
+        const m = asMounted(s);
+        return m ? [m] : [];
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projectManager.projects.size]
+  );
+
+  const navProjectId = (() => {
+    const nav = appState.navigation;
+    if (nav.currentViewId === 'task') {
+      return (nav.viewParamsStore['task'] as { projectId?: string } | undefined)?.projectId;
+    }
+    if (nav.currentViewId === 'project') {
+      return (nav.viewParamsStore['project'] as { projectId?: string } | undefined)?.projectId;
+    }
+    return undefined;
+  })();
+
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(
+    () =>
+      navProjectId ??
+      Array.from(projectManager.projects.values())
+        .reverse()
+        .find((p) => p.state === 'mounted')?.data?.id
+  );
+
+  const projectStore = selectedProjectId
+    ? projectManager.projects.get(selectedProjectId)
+    : undefined;
+  const mounted = asMounted(projectStore);
+  const projectData = mounted?.data;
+  const connectionId = projectData?.type === 'ssh' ? projectData.connectionId : undefined;
+
+  const repo = selectedProjectId ? getRepositoryStore(selectedProjectId) : undefined;
+  const defaultBranch = repo?.defaultBranch;
+  const isUnborn = repo?.isUnborn ?? false;
+  const branchLabel = defaultBranch?.branch ?? repo?.currentBranch ?? 'main';
+
+  const { providerId, setProviderOverride } = useEffectiveProvider(connectionId);
+  const autoApproveDefaults = useAgentAutoApproveDefaults();
+
+  const [prompt, setPrompt] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const trimmed = prompt.trim();
+  const canSubmit =
+    !!mounted && !!providerId && !!defaultBranch && trimmed.length > 0 && !submitting;
+
+  const handleSubmit = useCallback(async () => {
+    if (!mounted || !providerId || !defaultBranch || trimmed.length === 0 || submitting) return;
+    setSubmitting(true);
+    try {
+      const taskId = crypto.randomUUID();
+      const baseName = await rpc.tasks.generateTaskName({ title: trimmed });
+      const existingNames = Array.from(mounted.taskManager.tasks.values(), (t) => t.data.name);
+      const taskName = ensureUniqueTaskSlug(baseName, existingNames);
+
+      const strategy = isUnborn
+        ? ({ kind: 'no-worktree' } as const)
+        : ({ kind: 'new-branch', taskBranch: taskName, pushBranch: false } as const);
+
+      void mounted.taskManager.createTask({
+        id: taskId,
+        projectId: mounted.data.id,
+        name: taskName,
+        sourceBranch: defaultBranch,
+        strategy,
+        initialConversation: {
+          id: crypto.randomUUID(),
+          projectId: mounted.data.id,
+          taskId,
+          provider: providerId,
+          title: taskName,
+          initialPrompt: trimmed,
+          autoApprove: autoApproveDefaults.getDefault(providerId),
+        },
+      });
+      navigate('task', { projectId: mounted.data.id, taskId });
+      setPrompt('');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [
+    mounted,
+    providerId,
+    defaultBranch,
+    isUnborn,
+    trimmed,
+    submitting,
+    autoApproveDefaults,
+    navigate,
+  ]);
+
+  const recentTasks = useMemo(() => {
+    type RecentEntry = {
+      id: string;
+      projectId: string;
+      name: string;
+      createdAt: string;
+    };
+    const entries: RecentEntry[] = [];
+    for (const p of mountedProjects) {
+      for (const t of p.taskManager.tasks.values()) {
+        entries.push({
+          id: t.data.id,
+          projectId: p.data.id,
+          name: t.data.name,
+          createdAt: t.data.createdAt,
+        });
+      }
+    }
+    entries.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    return entries.slice(0, 5);
+  }, [mountedProjects]);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-background text-foreground">
-      <div className="container mx-auto flex min-h-full max-w-6xl flex-1 flex-col justify-center px-8 py-8">
-        <div className="mb-3 text-center">
-          <div className="mb-3 flex items-center justify-center">
-            <div className="logo-shimmer-container">
-              <img
-                key={effectiveTheme}
-                src={effectiveTheme === 'ydark' ? yodaLogoWhite : yodaLogo}
-                alt="Yoda"
-                className="logo-shimmer-image"
-              />
-              <span
-                className="logo-shimmer-overlay"
-                aria-hidden="true"
-                style={{
-                  WebkitMaskImage: `url(${effectiveTheme === 'ydark' ? yodaLogoWhite : yodaLogo})`,
-                  maskImage: `url(${effectiveTheme === 'ydark' ? yodaLogoWhite : yodaLogo})`,
-                  WebkitMaskRepeat: 'no-repeat',
-                  maskRepeat: 'no-repeat',
-                  WebkitMaskSize: 'contain',
-                  maskSize: 'contain',
-                  WebkitMaskPosition: 'center',
-                  maskPosition: 'center',
-                }}
-              />
+      <div className="container mx-auto flex min-h-full max-w-3xl flex-1 flex-col px-8 py-12">
+        <div className="mb-8 text-center">
+          <div className="mb-4 flex items-center justify-center">
+            <img
+              key={effectiveTheme}
+              src={effectiveTheme === 'ydark' ? yodaLogoWhite : yodaLogo}
+              alt="Yoda"
+              className="h-9"
+            />
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('home.headline')}</h1>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-background-1 shadow-sm">
+          <div className="flex flex-col">
+            <Textarea
+              autoFocus
+              placeholder={t('home.promptPlaceholder')}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (
+                  e.key === 'Enter' &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing &&
+                  e.keyCode !== 229
+                ) {
+                  e.preventDefault();
+                  if (canSubmit) void handleSubmit();
+                }
+              }}
+              className="min-h-28 resize-none border-0 bg-transparent px-5 py-4 text-base placeholder:text-foreground-muted focus-visible:ring-0"
+            />
+            <div className="flex items-center justify-between gap-2 px-3 pb-3">
+              <button
+                type="button"
+                aria-label={t('home.addAria')}
+                onClick={() => showAddProjectModal({ strategy: 'local', mode: 'pick' })}
+                className="flex size-7 items-center justify-center rounded-full text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+              >
+                <Plus className="size-4" />
+              </button>
+              <div className="flex items-center gap-2">
+                <AgentSelector
+                  value={providerId}
+                  onChange={setProviderOverride}
+                  connectionId={connectionId}
+                  className="h-7 border-0 bg-transparent px-2 text-xs hover:bg-background-2"
+                />
+                <button
+                  type="button"
+                  aria-label={t('home.voiceAria')}
+                  className="flex size-7 items-center justify-center rounded-full text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+                >
+                  <Mic className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={t('home.submitAria')}
+                  disabled={!canSubmit}
+                  onClick={() => void handleSubmit()}
+                  className={cn(
+                    'flex size-8 items-center justify-center rounded-full transition-colors',
+                    canSubmit
+                      ? 'bg-foreground text-background hover:opacity-90'
+                      : 'bg-background-2 text-foreground-muted'
+                  )}
+                >
+                  <ArrowUp className="size-4" />
+                </button>
+              </div>
             </div>
           </div>
-          <p className="whitespace-nowrap text-xs text-muted-foreground">
-            Agentic Development Environment
-          </p>
         </div>
-        <div className="mx-auto mt-4 grid w-full max-w-[600px] grid-cols-2 gap-2 sm:grid-cols-[repeat(4,minmax(132px,1fr))]">
-          {PROJECT_ACTIONS.map((action) => (
-            <HomeProjectAction
-              key={action.label}
-              label={action.label}
-              icon={action.icon}
-              onClick={() => showAddProjectModal(action.modalArgs)}
-            />
-          ))}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <ProjectSelector
+            value={selectedProjectId}
+            onChange={setSelectedProjectId}
+            trigger={
+              <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+                <FolderOpen className="size-3.5 text-foreground-muted" />
+                <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
+              </ComboboxTrigger>
+            }
+          />
+          <Chip icon={projectData?.type === 'ssh' ? Server : Monitor}>
+            {projectData?.type === 'ssh' ? t('home.remoteMode') : t('home.localMode')}
+          </Chip>
+          <Chip icon={GitBranch}>{branchLabel}</Chip>
+          {!mounted && (
+            <span className="text-xs text-foreground-muted">{t('home.needProjectHint')}</span>
+          )}
         </div>
+
+        {recentTasks.length > 0 && (
+          <div className="mt-10 flex flex-col">
+            {recentTasks.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => navigate('task', { projectId: t.projectId, taskId: t.id })}
+                className="flex items-center gap-3 border-b border-border/60 py-3 text-left text-sm text-foreground-muted transition-colors hover:text-foreground"
+              >
+                <GitBranch className="size-4 shrink-0 text-foreground-passive" />
+                <span className="truncate">{t.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
+});
+
+interface ChipProps {
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
 }
 
-function HomeProjectAction({
-  label,
-  icon: Icon,
-  onClick,
-}: {
-  label: string;
-  icon: LucideIcon;
-  onClick: () => void;
-}) {
+function Chip({ icon: Icon, children }: ChipProps) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className="group flex h-[68px] w-full flex-col items-start rounded-md border border-border/80 bg-background px-3.5 py-3 text-left shadow-sm transition-all hover:border-border-1 hover:bg-background-1 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-    >
-      <Icon className="size-4 text-foreground-muted transition-colors group-hover:text-foreground" />
-      <span className="mt-auto whitespace-nowrap pt-4 text-[11px] font-semibold leading-none tracking-normal text-foreground">
-        {label}
-      </span>
-    </button>
+    <span className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground">
+      <Icon className="size-3.5 text-foreground-muted" />
+      {children}
+    </span>
   );
 }
 

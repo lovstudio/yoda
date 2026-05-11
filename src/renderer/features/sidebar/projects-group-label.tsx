@@ -1,5 +1,6 @@
 import { ListFilter } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
 import {
@@ -14,9 +15,10 @@ import {
 import { MicroLabel } from '@renderer/lib/ui/label';
 
 export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between pl-5 pr-2.5 h-[40px]">
-      <MicroLabel className="text-foreground-tertiary-passive">Projects</MicroLabel>
+      <MicroLabel className="text-foreground-tertiary-passive">{t('sidebar.projects')}</MicroLabel>
       <DropdownMenu>
         <DropdownMenuTrigger>
           <Button
@@ -29,19 +31,19 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
         </DropdownMenuTrigger>
         <DropdownMenuContent className="min-w-48">
           <DropdownMenuGroup>
-            <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('sidebar.sortBy')}</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={sidebarStore.taskSortBy}>
               <DropdownMenuRadioItem
                 value="created-at"
                 onClick={() => sidebarStore.applySort('created-at')}
               >
-                Created at
+                {t('sidebar.sortByCreatedAt')}
               </DropdownMenuRadioItem>
               <DropdownMenuRadioItem
                 value="updated-at"
                 onClick={() => sidebarStore.applySort('updated-at')}
               >
-                Last used
+                {t('sidebar.sortByUpdatedAt')}
               </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuGroup>
