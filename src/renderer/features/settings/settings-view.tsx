@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   SettingsPage,
   type SettingsPageTab,
@@ -41,11 +42,12 @@ export function useSettingsTab() {
 }
 
 export function SettingsTitlebar() {
+  const { t } = useTranslation();
   return (
     <Titlebar
       leftSlot={
         <div className="flex items-center px-2">
-          <span className="text-sm text-foreground-muted">Settings</span>
+          <span className="text-sm text-foreground-muted">{t('settings.title')}</span>
         </div>
       }
     />

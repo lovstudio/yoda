@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { LegacyImportSource } from '@shared/legacy-port';
 import { useImportProgress } from '@renderer/lib/hooks/useImportProgress';
 import {
@@ -30,6 +31,7 @@ function toggleSourceSelection(
 }
 
 export function ImportStep({ onComplete }: { onComplete: () => void }) {
+  const { t } = useTranslation();
   const { data: preview, isLoading: previewLoading } = useLegacyPortPreview(true);
   const importMutation = useLegacyPortImport();
   const startFreshMutation = useLegacyPortStartFresh();
@@ -95,12 +97,14 @@ export function ImportStep({ onComplete }: { onComplete: () => void }) {
     try {
       const result = await startFreshMutation.mutateAsync();
       if (!result.success) {
-        setStartFreshError(result.error ?? 'Start fresh failed');
+        setStartFreshError(result.error ?? t('onboarding.import.startFreshFailed'));
         return;
       }
       onComplete();
     } catch (err) {
-      setStartFreshError(err instanceof Error ? err.message : 'Start fresh failed');
+      setStartFreshError(
+        err instanceof Error ? err.message : t('onboarding.import.startFreshFailed')
+      );
     }
   };
 
@@ -152,10 +156,12 @@ export function ImportStep({ onComplete }: { onComplete: () => void }) {
 
       <div className="flex w-full shrink-0 flex-col gap-2">
         <Button size={'lg'} onClick={handleImport} disabled={isBusy || !canImport}>
-          {importProgress.isImporting ? 'Importing...' : 'Import data'}
+          {importProgress.isImporting
+            ? t('onboarding.import.importing')
+            : t('onboarding.import.importData')}
         </Button>
         <Button variant="ghost" onClick={handleStartFresh} disabled={isBusy}>
-          Start fresh
+          {t('onboarding.import.startFresh')}
         </Button>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { Info } from 'lucide-react';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
 import { Switch } from '@renderer/lib/ui/switch';
@@ -29,12 +30,13 @@ function InfoTooltip({ label, content }: { label: string; content: React.ReactNo
 }
 
 export const AutoGenerateTaskNamesRow: React.FC = () => {
+  const { t } = useTranslation();
   const taskSettings = useTaskSettings();
 
   return (
     <SettingRow
-      title="Auto-generate task names"
-      description="Automatically suggests a task name when creating a new task."
+      title={t('settings.tasks.autoGenerateName')}
+      description={t('settings.tasks.autoGenerateNameDescription')}
       control={
         <>
           <ResetToDefaultButton
@@ -55,20 +57,21 @@ export const AutoGenerateTaskNamesRow: React.FC = () => {
 };
 
 export const AutoTrustWorktreesRow: React.FC = () => {
+  const { t } = useTranslation();
   const taskSettings = useTaskSettings();
 
   return (
     <SettingRow
       title={
         <div className="flex items-center gap-1.5">
-          Auto-trust worktree directories
+          {t('settings.tasks.autoTrustWorktrees')}
           <InfoTooltip
-            label="More info about auto-trust worktrees"
-            content="Only applies to Claude Code. Writes trust entries to ~/.claude.json before launching."
+            label={t('settings.tasks.autoTrustWorktreesInfoLabel')}
+            content={t('settings.tasks.autoTrustWorktreesInfo')}
           />
         </div>
       }
-      description="Skip the folder trust prompt in Claude Code for new tasks."
+      description={t('settings.tasks.autoTrustWorktreesDescription')}
       control={
         <>
           <ResetToDefaultButton
@@ -89,6 +92,7 @@ export const AutoTrustWorktreesRow: React.FC = () => {
 };
 
 export const EnableTmuxRow: React.FC = () => {
+  const { t } = useTranslation();
   const {
     value: projects,
     update,
@@ -102,8 +106,8 @@ export const EnableTmuxRow: React.FC = () => {
 
   return (
     <SettingRow
-      title="Enable tmux"
-      description="Run agent sessions and terminals in tmux sessions by default."
+      title={t('settings.tasks.enableTmux')}
+      description={t('settings.tasks.enableTmuxDescription')}
       control={
         <>
           <ResetToDefaultButton

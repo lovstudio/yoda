@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { Input } from '@renderer/lib/ui/input';
 import { Switch } from '@renderer/lib/ui/switch';
@@ -6,6 +7,7 @@ import { ResetToDefaultButton } from './ResetToDefaultButton';
 import { SettingRow } from './SettingRow';
 
 const RepositorySettingsCard: React.FC = () => {
+  const { t } = useTranslation();
   const {
     value: project,
     update: updateProject,
@@ -46,8 +48,8 @@ const RepositorySettingsCard: React.FC = () => {
                 updateProject({ branchPrefix: next });
               }
             }}
-            placeholder="Branch prefix"
-            aria-label="Branch prefix"
+            placeholder={t('settings.branchPrefix.placeholder')}
+            aria-label={t('settings.branchPrefix.aria')}
             disabled={projectBusy}
             className="flex-1"
           />
@@ -59,12 +61,13 @@ const RepositorySettingsCard: React.FC = () => {
           />
         </div>
         <div className="text-[11px] text-muted-foreground">
-          Example: <code className="rounded bg-muted/60 px-1">{example}</code>
+          {t('settings.branchPrefix.example')}{' '}
+          <code className="rounded bg-muted/60 px-1">{example}</code>
         </div>
       </div>
       <SettingRow
-        title="Auto-push on create"
-        description="Push the new branch to the selected project remote and set upstream after creation."
+        title={t('settings.repositoryTab.autoPush')}
+        description={t('settings.branchPrefix.autoPushDescription')}
         control={
           <>
             <ResetToDefaultButton
@@ -77,14 +80,14 @@ const RepositorySettingsCard: React.FC = () => {
               checked={pushOnCreate}
               onCheckedChange={(checked) => updateProject({ pushOnCreate: checked })}
               disabled={projectBusy}
-              aria-label="Enable automatic push on create"
+              aria-label={t('settings.repositoryTab.autoPushAria')}
             />
           </>
         }
       />
       <SettingRow
-        title="Auto-update .gitignore"
-        description="When Yoda writes CLI hook configs, also add their paths to .gitignore."
+        title={t('settings.repositoryTab.autoUpdateGitignore')}
+        description={t('settings.branchPrefix.autoUpdateGitignoreDescription')}
         control={
           <>
             <ResetToDefaultButton
@@ -99,7 +102,7 @@ const RepositorySettingsCard: React.FC = () => {
                 updateLocalProject({ writeAgentConfigToGitIgnore: checked })
               }
               disabled={localProjectBusy}
-              aria-label="Enable .gitignore updates for CLI hook configs"
+              aria-label={t('settings.repositoryTab.autoUpdateGitignoreAria')}
             />
           </>
         }

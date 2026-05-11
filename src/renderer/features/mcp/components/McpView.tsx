@@ -1,5 +1,6 @@
 import { Loader2, Plus, RefreshCw, Search } from 'lucide-react';
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useModalContext, useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
@@ -8,6 +9,7 @@ import type { McpModalMode } from './McpModal';
 import { useMcps } from './useMcps';
 
 export const McpView: React.FC = () => {
+  const { t } = useTranslation();
   const {
     installed,
     catalog,
@@ -26,9 +28,9 @@ export const McpView: React.FC = () => {
   const handleRemoveRequest = (serverName: string) => {
     closeModal();
     showConfirm({
-      title: 'Remove MCP server?',
-      description: `This will remove "${serverName}" from all agents. This action cannot be undone.`,
-      confirmLabel: 'Remove',
+      title: t('mcp.removeServerTitle'),
+      description: t('mcp.removeServerDescription', { name: serverName }),
+      confirmLabel: t('mcp.removeServerConfirm'),
       onSuccess: () => void removeServer(serverName),
     });
   };
@@ -71,10 +73,8 @@ export const McpView: React.FC = () => {
       <div className="mx-auto w-full max-w-3xl px-8 py-8">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-lg font-semibold">MCP</h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Connect your agents with external data sources and tools
-          </p>
+          <h1 className="text-lg font-semibold">{t('mcp.title')}</h1>
+          <p className="mt-1 text-xs text-muted-foreground">{t('mcp.subtitle')}</p>
         </div>
 
         {/* Toolbar */}
@@ -84,7 +84,7 @@ export const McpView: React.FC = () => {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search servers..."
+              placeholder={t('mcp.searchPlaceholder')}
               className="pl-9"
             />
           </div>
@@ -93,7 +93,7 @@ export const McpView: React.FC = () => {
             size="icon"
             onClick={refresh}
             disabled={isRefreshing}
-            aria-label="Refresh providers"
+            aria-label={t('mcp.refreshAria')}
           >
             <RefreshCw
               className={`h-4 w-4 text-muted-foreground ${isRefreshing ? 'animate-spin' : ''}`}
@@ -101,14 +101,16 @@ export const McpView: React.FC = () => {
           </Button>
           <Button variant="outline" size="sm" onClick={() => openModal({ type: 'add-custom' })}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Custom MCP
+            {t('mcp.customMcp')}
           </Button>
         </div>
 
         {/* Installed */}
         {filteredInstalled.length > 0 && (
           <div className="mb-6">
-            <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground">Added</h2>
+            <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground">
+              {t('mcp.added')}
+            </h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {filteredInstalled.map((server) => (
                 <McpCard
@@ -126,7 +128,7 @@ export const McpView: React.FC = () => {
         {filteredCatalog.length > 0 && (
           <div className="mb-6">
             <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground">
-              Recommended
+              {t('mcp.recommended')}
             </h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {filteredCatalog.map((entry) => (
@@ -144,7 +146,7 @@ export const McpView: React.FC = () => {
         {filteredInstalled.length === 0 && filteredCatalog.length === 0 && (
           <div className="py-12 text-center">
             <p className="text-sm text-muted-foreground">
-              {search ? 'No servers match your search.' : 'No servers available.'}
+              {search ? t('mcp.noMatches') : t('mcp.noServers')}
             </p>
           </div>
         )}

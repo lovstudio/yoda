@@ -1,5 +1,6 @@
 import { LogIn, LogOut, User } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import {
   useAccountHealth,
@@ -12,6 +13,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { ServerUnavailableMessage } from './ServerUnavailableMessage';
 
 export function AccountTab() {
+  const { t } = useTranslation();
   const { data: session, isLoading } = useAccountSession();
   const { data: serverAvailable } = useAccountHealth();
   const signInMutation = useAccountSignIn();
@@ -35,22 +37,24 @@ export function AccountTab() {
       .mutateAsync(undefined)
       .then((result) => {
         if (!result.success) {
-          const message = result.error || 'Sign in failed';
+          const message = result.error || t('settings.account.signInFailed');
           setError(message);
           toast({
-            title: 'Sign in failed',
+            title: t('settings.account.signInFailed'),
             description: message,
             variant: 'destructive',
           });
           return;
         }
         toast({
-          title: 'Signed in to Yoda',
-          description: result.user ? `Connected as @${result.user.username}` : 'Signed in',
+          title: t('settings.account.signedIn'),
+          description: result.user
+            ? t('settings.account.signedInDescription', { username: result.user.username })
+            : t('settings.account.signedInFallback'),
         });
       })
       .catch((err) => {
-        const message = err instanceof Error ? err.message : 'Sign in failed';
+        const message = err instanceof Error ? err.message : t('settings.account.signInFailed');
         setError(message);
       });
   };
@@ -59,9 +63,9 @@ export function AccountTab() {
     try {
       await signOutMutation.mutateAsync();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Sign out failed';
+      const message = err instanceof Error ? err.message : t('settings.account.signOutFailed');
       toast({
-        title: 'Sign out failed',
+        title: t('settings.account.signOutFailed'),
         description: message,
         variant: 'destructive',
       });
@@ -70,9 +74,9 @@ export function AccountTab() {
 
   const handleSignOut = () => {
     showConfirmSignOut({
-      title: 'Sign out of Yoda?',
-      description: 'You will need to sign in again to reconnect your Yoda account.',
-      confirmLabel: 'Sign Out',
+      title: t('settings.account.signOutConfirmTitle'),
+      description: t('settings.account.signOutConfirmDescription'),
+      confirmLabel: t('settings.account.signOutConfirmLabel'),
       variant: 'default',
       onSuccess: () => void performSignOut(),
     });
@@ -81,7 +85,7 @@ export function AccountTab() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-        Loading account...
+        {t('settings.account.loading')}
       </div>
     );
   }
@@ -103,7 +107,8 @@ export function AccountTab() {
           )}
           <div className="flex-1">
             <p className="text-sm font-medium text-foreground">
-              Connected as <span className="font-semibold">@{user.username}</span>
+              {t('settings.account.connectedAs')}{' '}
+              <span className="font-semibold">@{user.username}</span>
             </p>
             {user.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
           </div>
@@ -114,7 +119,7 @@ export function AccountTab() {
             disabled={signOutMutation.isPending}
           >
             <LogOut className="h-3.5 w-3.5" />
-            Sign Out
+            {t('settings.account.signOut')}
           </Button>
         </div>
       </div>
@@ -126,9 +131,11 @@ export function AccountTab() {
       <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
         <div className="flex flex-col gap-3">
           <div>
-            <p className="text-sm font-medium text-foreground">Session expired</p>
+            <p className="text-sm font-medium text-foreground">
+              {t('settings.account.sessionExpired')}
+            </p>
             <p className="text-xs text-muted-foreground">
-              Sign in again to reconnect your Yoda account.
+              {t('settings.account.sessionExpiredHint')}
             </p>
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
@@ -142,7 +149,9 @@ export function AccountTab() {
               disabled={signInMutation.isPending}
             >
               <LogIn className="h-3.5 w-3.5" />
-              {signInMutation.isPending ? 'Signing in...' : 'Sign In'}
+              {signInMutation.isPending
+                ? t('settings.account.signingIn')
+                : t('settings.account.signIn')}
             </Button>
           )}
         </div>
@@ -154,10 +163,8 @@ export function AccountTab() {
     <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
       <div className="flex flex-col gap-3">
         <div>
-          <p className="text-sm font-medium text-foreground">Yoda Account</p>
-          <p className="text-xs text-muted-foreground">
-            Create an Yoda account to automatically connect GitHub using OAuth2.
-          </p>
+          <p className="text-sm font-medium text-foreground">{t('settings.account.yodaAccount')}</p>
+          <p className="text-xs text-muted-foreground">{t('settings.account.createAccountHint')}</p>
         </div>
         {error && <p className="text-xs text-destructive">{error}</p>}
         {serverAvailable === false ? (
@@ -170,7 +177,9 @@ export function AccountTab() {
             disabled={signInMutation.isPending}
           >
             <LogIn className="h-3.5 w-3.5" />
-            {signInMutation.isPending ? 'Creating account...' : 'Create Account'}
+            {signInMutation.isPending
+              ? t('settings.account.creatingAccount')
+              : t('settings.account.createAccount')}
           </Button>
         )}
       </div>

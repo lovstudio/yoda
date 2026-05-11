@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@renderer/utils/utils';
 import { ImportStep } from './import-step';
 import { SignInStep } from './sign-in-step';
@@ -7,14 +8,14 @@ type OnboardingStep = 'sign-in' | 'import';
 
 const stepConfig: Record<
   OnboardingStep,
-  { label: string; component: React.ComponentType<{ onComplete: () => void }> }
+  { labelKey: string; component: React.ComponentType<{ onComplete: () => void }> }
 > = {
   'sign-in': {
-    label: 'Sign in',
+    labelKey: 'onboarding.signInTitle',
     component: SignInStep,
   },
   import: {
-    label: 'Import',
+    labelKey: 'onboarding.importTitle',
     component: ImportStep,
   },
 };
@@ -49,6 +50,7 @@ export function OnboardingShell({
   steps: OnboardingStep[];
   onComplete: () => void;
 }) {
+  const { t } = useTranslation();
   const [activeIndex, setActiveIndex] = useState(0);
   const activeStep = steps[activeIndex];
   const StepComponent = stepConfig[activeStep]?.component;
@@ -68,7 +70,7 @@ export function OnboardingShell({
         {steps.map((step, index) => (
           <StepHeader
             key={step}
-            label={stepConfig[step].label}
+            label={t(stepConfig[step].labelKey)}
             isLast={index === steps.length - 1}
             isActive={step === activeStep}
           />

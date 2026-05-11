@@ -1,5 +1,6 @@
 import { Check, ChevronDown } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
@@ -37,6 +38,7 @@ const dedupeAndSort = (fonts: string[]) =>
   );
 
 const TerminalSettingsCard: React.FC = () => {
+  const { t } = useTranslation();
   const {
     value: terminal,
     update,
@@ -159,8 +161,8 @@ const TerminalSettingsCard: React.FC = () => {
   return (
     <div className="flex flex-col gap-4">
       <SettingRow
-        title="Terminal font"
-        description="Choose the font family for the terminal."
+        title={t('settings.terminal.font')}
+        description={t('settings.terminal.fontDescription')}
         control={
           <div className="w-[183px] flex-shrink-0">
             <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -188,15 +190,15 @@ const TerminalSettingsCard: React.FC = () => {
                       setPickerOpen(false);
                       applyFont(typed);
                     }}
-                    placeholder="Search or type custom font"
-                    aria-label="Search font options"
+                    placeholder={t('settings.terminal.searchFontPlaceholder')}
+                    aria-label={t('settings.terminal.searchFontAria')}
                     className="h-8"
                   />
                   <div className="max-h-56 overflow-auto">
                     {filteredPopularOptions.length > 0 ? (
                       <>
                         <div className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                          Popular
+                          {t('settings.terminal.popular')}
                         </div>
                         {filteredPopularOptions.map((option) => {
                           const selected =
@@ -223,13 +225,13 @@ const TerminalSettingsCard: React.FC = () => {
 
                     {filteredInstalledOptions.length > 0 || loadingFonts ? (
                       <div className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Installed Fonts
+                        {t('settings.terminal.installedFonts')}
                       </div>
                     ) : null}
 
                     {loadingFonts ? (
                       <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        Loading installed fonts...
+                        {t('settings.terminal.loadingInstalled')}
                       </div>
                     ) : null}
 
@@ -255,7 +257,7 @@ const TerminalSettingsCard: React.FC = () => {
 
                     {!loadingFonts && !hasAnyResults ? (
                       <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        No fonts found.
+                        {t('settings.terminal.noFontsFound')}
                       </div>
                     ) : null}
                   </div>
@@ -266,8 +268,8 @@ const TerminalSettingsCard: React.FC = () => {
         }
       />
       <SettingRow
-        title="Auto-copy selected text"
-        description="Automatically copy text to clipboard when you select it in the terminal."
+        title={t('settings.terminal.autoCopySelected')}
+        description={t('settings.terminal.autoCopySelectedDescription')}
         control={
           <Switch
             checked={autoCopyOnSelection}

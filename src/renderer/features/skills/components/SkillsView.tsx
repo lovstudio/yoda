@@ -1,5 +1,6 @@
 import { Loader2, Plus, RefreshCw, Search } from 'lucide-react';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
@@ -9,6 +10,7 @@ import SkillDetailModal from './SkillDetailModal';
 import { useSkills } from './useSkills';
 
 const SkillsView: React.FC = () => {
+  const { t } = useTranslation();
   const {
     isLoading,
     isRefreshing,
@@ -43,10 +45,8 @@ const SkillsView: React.FC = () => {
       <div className="mx-auto w-full max-w-3xl px-8 py-8">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-lg font-semibold">Skills</h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Extend your agents with reusable skill modules
-          </p>
+          <h1 className="text-lg font-semibold">{t('skills.title')}</h1>
+          <p className="mt-1 text-xs text-muted-foreground">{t('skills.subtitle')}</p>
         </div>
 
         {/* Toolbar */}
@@ -54,7 +54,7 @@ const SkillsView: React.FC = () => {
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search skills..."
+              placeholder={t('skills.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -65,7 +65,7 @@ const SkillsView: React.FC = () => {
             size="icon"
             onClick={refresh}
             disabled={isRefreshing}
-            aria-label="Refresh catalog"
+            aria-label={t('skills.refreshAria')}
           >
             <RefreshCw
               className={`h-4 w-4 text-muted-foreground ${isRefreshing ? 'animate-spin' : ''}`}
@@ -73,7 +73,7 @@ const SkillsView: React.FC = () => {
           </Button>
           <Button variant="outline" size="sm" onClick={() => showCreateSkillModal({})}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            New Skill
+            {t('skills.newSkill')}
           </Button>
         </div>
 
@@ -115,7 +115,7 @@ const SkillsView: React.FC = () => {
         {installedSkills.length > 0 && (
           <div className="mb-6">
             <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground">
-              Installed
+              {t('skills.installed')}
             </h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {installedSkills.map((skill) => (
@@ -128,7 +128,7 @@ const SkillsView: React.FC = () => {
         {recommendedSkills.length > 0 && (
           <div className="mb-6">
             <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground">
-              Recommended
+              {t('skills.recommended')}
             </h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {recommendedSkills.map((skill) => (
@@ -141,7 +141,7 @@ const SkillsView: React.FC = () => {
         {installedSkills.length === 0 && recommendedSkills.length === 0 && (
           <div className="py-12 text-center">
             <p className="text-sm text-muted-foreground">
-              {searchQuery ? 'No skills match your search.' : 'No skills available.'}
+              {searchQuery ? t('skills.noMatches') : t('skills.noSkills')}
             </p>
           </div>
         )}

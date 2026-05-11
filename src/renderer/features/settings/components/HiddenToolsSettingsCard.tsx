@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { OPEN_IN_APPS, type OpenInAppId } from '@shared/openInApps';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useOpenInApps } from '@renderer/lib/hooks/useOpenInApps';
@@ -7,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@rende
 import IntegrationRow from './IntegrationRow';
 
 export default function HiddenToolsSettingsCard() {
+  const { t } = useTranslation();
   const { value: openIn, update, isLoading, isSaving } = useAppSettingsKey('openIn');
   const { icons, labels, availability } = useOpenInApps();
 
@@ -37,7 +39,9 @@ export default function HiddenToolsSettingsCard() {
           const label = labels[app.id] ?? app.label;
           const icon = icons[app.id];
           const indicatorClass = isDetected ? 'bg-emerald-500' : 'bg-muted-foreground/50';
-          const statusLabel = isDetected ? 'Detected' : 'Not detected';
+          const statusLabel = isDetected
+            ? t('settings.openInApps.detected')
+            : t('settings.openInApps.notDetected');
 
           return (
             <IntegrationRow
@@ -61,16 +65,21 @@ export default function HiddenToolsSettingsCard() {
                           checked={isVisible}
                           disabled={isLoading || isSaving || !canToggleVisibility}
                           onCheckedChange={(checked) => toggle(app.id, checked)}
-                          aria-label={`${isVisible ? 'Hide' : 'Show'} ${label} in open menu`}
+                          aria-label={t('settings.openInApps.ariaToggle', {
+                            verb: isVisible
+                              ? t('settings.openInApps.hide')
+                              : t('settings.openInApps.show'),
+                            label,
+                          })}
                         />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="text-xs">
                       {!isDetected
-                        ? 'Install this tool to show it in menu'
+                        ? t('settings.openInApps.tooltipNotInstalled')
                         : isVisible
-                          ? 'Hide from menu'
-                          : 'Show in menu'}
+                          ? t('settings.openInApps.tooltipHide')
+                          : t('settings.openInApps.tooltipShow')}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

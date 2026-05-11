@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
   Select,
@@ -13,6 +14,7 @@ import { ResetToDefaultButton } from './ResetToDefaultButton';
 import { SettingRow } from './SettingRow';
 
 const NotificationSettingsCard: React.FC = () => {
+  const { t } = useTranslation();
   const {
     value: notifications,
     update,
@@ -24,8 +26,8 @@ const NotificationSettingsCard: React.FC = () => {
   return (
     <div className="flex flex-col gap-4">
       <SettingRow
-        title="Notifications"
-        description="Get notified when agents need your attention."
+        title={t('settings.notifications.title')}
+        description={t('settings.notifications.description')}
         control={
           <>
             <ResetToDefaultButton
@@ -49,8 +51,8 @@ const NotificationSettingsCard: React.FC = () => {
         )}
       >
         <SettingRow
-          title="Sound"
-          description="Play audio cues for agent events."
+          title={t('settings.notifications.sound')}
+          description={t('settings.notifications.soundDescription')}
           control={
             <>
               <ResetToDefaultButton
@@ -69,8 +71,8 @@ const NotificationSettingsCard: React.FC = () => {
         />
 
         <SettingRow
-          title="Sound timing"
-          description="When to play sounds."
+          title={t('settings.notifications.soundTiming')}
+          description={t('settings.notifications.soundTimingDescription')}
           control={
             <>
               <ResetToDefaultButton
@@ -87,8 +89,8 @@ const NotificationSettingsCard: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="min-w-max">
-                  <SelectItem value="always">Always</SelectItem>
-                  <SelectItem value="unfocused">Only when unfocused</SelectItem>
+                  <SelectItem value="always">{t('settings.notifications.always')}</SelectItem>
+                  <SelectItem value="unfocused">{t('settings.notifications.unfocused')}</SelectItem>
                 </SelectContent>
               </Select>
             </>
@@ -96,8 +98,8 @@ const NotificationSettingsCard: React.FC = () => {
         />
 
         <SettingRow
-          title="OS notifications"
-          description="Show system banners when agents need attention or finish (while Yoda is unfocused)."
+          title={t('settings.notifications.osNotifications')}
+          description={t('settings.notifications.osNotificationsDescription')}
           control={
             <>
               <ResetToDefaultButton

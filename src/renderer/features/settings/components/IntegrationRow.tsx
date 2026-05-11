@@ -1,5 +1,6 @@
 import { Check, Copy, ExternalLink, Trash2 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 
 type IntegrationStatus =
@@ -39,13 +40,13 @@ const STATUS_CLASSES: Record<IntegrationStatus, string> = {
   needs_key: 'border border-border/60 bg-transparent text-muted-foreground',
 };
 
-const STATUS_LABELS: Record<IntegrationStatus, string> = {
-  connected: 'Connected',
-  loading: 'Connecting…',
-  error: 'Not connected',
-  disconnected: 'Not connected',
-  missing: 'Not connected',
-  needs_key: 'Not connected',
+const STATUS_LABEL_KEYS: Record<IntegrationStatus, string> = {
+  connected: 'settings.integrationsTab.statusConnected',
+  loading: 'settings.integrationsTab.statusConnecting',
+  error: 'settings.integrationsTab.statusNotConnected',
+  disconnected: 'settings.integrationsTab.statusNotConnected',
+  missing: 'settings.integrationsTab.statusNotConnected',
+  needs_key: 'settings.integrationsTab.statusNotConnected',
 };
 
 const BUTTON_BASE =
@@ -78,6 +79,7 @@ const IntegrationRow: React.FC<IntegrationRowProps> = ({
   showStatusPill = true,
   installCommand,
 }) => {
+  const { t } = useTranslation();
   const resolvedStatus = STATUS_CLASSES[status] ? status : 'disconnected';
   const showConnect = resolvedStatus !== 'connected' && status !== 'loading' && !!onConnect;
   const showDisconnect = resolvedStatus === 'connected' && !!onDisconnect;
@@ -85,7 +87,8 @@ const IntegrationRow: React.FC<IntegrationRowProps> = ({
   const [copied, setCopied] = useState(false);
   const copyResetRef = useRef<number | null>(null);
 
-  const resolvedStatusLabel = statusLabel ?? STATUS_LABELS[status] ?? STATUS_LABELS.disconnected;
+  const resolvedStatusLabel =
+    statusLabel ?? t(STATUS_LABEL_KEYS[status] ?? STATUS_LABEL_KEYS.disconnected);
 
   const defaultMiddle =
     status === 'connected' && accountLabel ? (
@@ -182,14 +185,20 @@ const IntegrationRow: React.FC<IntegrationRowProps> = ({
                     void handleCopyInstall();
                   }}
                   className={ICON_BUTTON}
-                  aria-label={copied ? 'Command copied' : `Copy install command for ${name}`}
+                  aria-label={
+                    copied
+                      ? t('settings.integrationsTab.commandCopied')
+                      : t('settings.integrationsTab.copyInstallFor', { name })
+                  }
                 >
                   <CopyIcon className="h-4 w-4" aria-hidden="true" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">
                 <div className="max-w-[240px] space-y-1">
-                  <div className="text-xs font-medium text-foreground">Copy install command</div>
+                  <div className="text-xs font-medium text-foreground">
+                    {t('settings.integrationsTab.copyInstallCommand')}
+                  </div>
                   <code className="block truncate font-mono text-tiny text-muted-foreground">
                     {installCommand}
                   </code>
@@ -215,7 +224,7 @@ const IntegrationRow: React.FC<IntegrationRowProps> = ({
             type="button"
             onClick={onOpen}
             className={ICON_BUTTON}
-            aria-label={`Open ${name} settings`}
+            aria-label={t('settings.integrationsTab.openSettings', { name })}
           >
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -226,7 +235,7 @@ const IntegrationRow: React.FC<IntegrationRowProps> = ({
             type="button"
             onClick={onDisconnect}
             className={ICON_BUTTON}
-            aria-label={`Disconnect ${name}`}
+            aria-label={t('settings.integrationsTab.disconnect', { name })}
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -239,7 +248,7 @@ const IntegrationRow: React.FC<IntegrationRowProps> = ({
             className={BUTTON_BASE}
             disabled={connectDisabled}
           >
-            {connectContent ?? 'Connect'}
+            {connectContent ?? t('settings.integrationsTab.connectButton')}
           </button>
         ) : null}
       </div>

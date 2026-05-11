@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { PRODUCT_NAME } from '@shared/app-identity';
 import { useTelemetryConsent } from '@renderer/lib/hooks/useTelemetryConsent';
 import { rpc } from '@renderer/lib/ipc';
@@ -7,17 +8,18 @@ import { Switch } from '@renderer/lib/ui/switch';
 import { SettingRow } from './SettingRow';
 
 const TelemetryCard: React.FC = () => {
+  const { t } = useTranslation();
   const { prefEnabled, envDisabled, hasKeyAndHost, loading, setTelemetryEnabled } =
     useTelemetryConsent();
 
   return (
     <SettingRow
-      title="Privacy & Telemetry"
+      title={t('settings.telemetry.title')}
       description={
         <div>
-          <p>Help improve {PRODUCT_NAME} by sending anonymous usage data.</p>
+          <p>{t('settings.telemetry.description', { product: PRODUCT_NAME })}</p>
           <p>
-            <span>See </span>
+            <span>{t('settings.telemetry.see')}</span>
             <Button
               type="button"
               variant="link"
@@ -26,13 +28,13 @@ const TelemetryCard: React.FC = () => {
               onClick={() => rpc.app.openExternal('https://lovstudio.ai/yoda/docs/telemetry')}
             >
               <span className="transition-colors group-hover:text-foreground">
-                Telemetry information
+                {t('settings.telemetry.info')}
               </span>
               <span className="text-sm text-muted-foreground transition-colors group-hover:text-foreground">
                 ↗
               </span>
             </Button>
-            <span> for details.</span>
+            <span>{t('settings.telemetry.forDetails')}</span>
           </p>
         </div>
       }
@@ -47,11 +49,11 @@ const TelemetryCard: React.FC = () => {
               void setTelemetryEnabled(checked);
             }}
             disabled={loading || envDisabled}
-            aria-label="Enable anonymous telemetry"
+            aria-label={t('settings.telemetry.ariaToggle')}
           />
           {!hasKeyAndHost && (
             <span className="text-[10px] text-muted-foreground">
-              Inactive in this build (no PostHog keys)
+              {t('settings.telemetry.inactive')}
             </span>
           )}
         </div>

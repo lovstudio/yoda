@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { isValidProviderId, type AgentProviderId } from '@shared/agent-provider-registry';
 import type { AppSettings } from '@shared/app-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -8,6 +9,7 @@ import { SettingRow } from './SettingRow';
 const DEFAULT_AGENT: AgentProviderId = 'claude';
 
 const DefaultAgentSettingsCard: React.FC = () => {
+  const { t } = useTranslation();
   const {
     value: defaultAgentValue,
     update,
@@ -25,8 +27,8 @@ const DefaultAgentSettingsCard: React.FC = () => {
 
   return (
     <SettingRow
-      title="Default agent"
-      description="The agent that will be selected by default when creating a new task."
+      title={t('settings.defaultAgent.title')}
+      description={t('settings.defaultAgent.description')}
       control={
         <div className="w-[183px] shrink-0">
           <AgentSelector

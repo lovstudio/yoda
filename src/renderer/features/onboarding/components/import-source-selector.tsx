@@ -1,7 +1,8 @@
 import { Check } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { type LegacyImportSource, type LegacyPortPreviewSource } from '@shared/legacy-port';
 import { cn } from '@renderer/utils/utils';
-import { formatCount, sourceLabel } from './import-format';
+import { sourceLabel } from './import-format';
 
 function SourceCard({
   source,
@@ -16,6 +17,14 @@ function SourceCard({
   disabled: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
+  const projects = t(
+    `onboarding.import.projectCount${preview.projects === 1 ? 'Singular' : 'Plural'}`,
+    { count: preview.projects }
+  );
+  const tasks = t(`onboarding.import.taskCount${preview.tasks === 1 ? 'Singular' : 'Plural'}`, {
+    count: preview.tasks,
+  });
   return (
     <button
       type="button"
@@ -42,7 +51,7 @@ function SourceCard({
         </span>
       </span>
       <span className="text-sm text-foreground-muted">
-        {formatCount(preview.projects, 'project')} · {formatCount(preview.tasks, 'task')}
+        {projects} · {tasks}
       </span>
     </button>
   );

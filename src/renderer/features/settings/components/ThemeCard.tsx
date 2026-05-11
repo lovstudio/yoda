@@ -1,10 +1,12 @@
 import { Monitor, Moon, Sun } from 'lucide-react';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Theme } from '@shared/app-settings';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { captureTelemetry } from '@renderer/utils/telemetryClient';
 
 const ThemeCard: React.FC = () => {
+  const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
 
   const handleSetTheme = (next: Theme) => {
@@ -23,8 +25,8 @@ const ThemeCard: React.FC = () => {
   return (
     <div className="grid gap-3 text-sm">
       <div>
-        <div className="font-medium text-foreground">Color mode</div>
-        <div className="text-foreground-muted">Choose how Yoda looks.</div>
+        <div className="font-medium text-foreground">{t('settings.theme.colorMode')}</div>
+        <div className="text-foreground-muted">{t('settings.theme.chooseHowYodaLooks')}</div>
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-2">
         <button
@@ -32,30 +34,30 @@ const ThemeCard: React.FC = () => {
           onClick={() => handleSetTheme(null)}
           className={`${buttonBase} ${theme === null ? activeClass : inactiveClass}`}
           aria-pressed={theme === null}
-          aria-label="Set theme to system preference"
+          aria-label={t('settings.theme.ariaSystem')}
         >
           <Monitor className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="text-centert">System</span>
+          <span className="text-centert">{t('settings.theme.system')}</span>
         </button>
         <button
           type="button"
           onClick={() => handleSetTheme('ylight')}
           className={`${buttonBase} ${theme === 'ylight' ? activeClass : inactiveClass}`}
           aria-pressed={theme === 'ylight'}
-          aria-label="Set theme to Yoda Light"
+          aria-label={t('settings.theme.ariaLight')}
         >
           <Sun className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="text-center">Yoda Light</span>
+          <span className="text-center">{t('settings.theme.yodaLight')}</span>
         </button>
         <button
           type="button"
           onClick={() => handleSetTheme('ydark')}
           className={`${buttonBase} ${theme === 'ydark' ? activeClass : inactiveClass}`}
           aria-pressed={theme === 'ydark'}
-          aria-label="Set theme to Yoda Dark"
+          aria-label={t('settings.theme.ariaDark')}
         >
           <Moon className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="text-center">Yoda Dark</span>
+          <span className="text-center">{t('settings.theme.yodaDark')}</span>
         </button>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { ExternalLink } from 'lucide-react';
 import React, { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { rpc } from '@renderer/lib/ipc';
 import { Separator } from '@renderer/lib/ui/separator';
 import { cn } from '@renderer/utils/utils';
@@ -9,6 +10,7 @@ import DefaultAgentSettingsCard from './DefaultAgentSettingsCard';
 import HiddenToolsSettingsCard from './HiddenToolsSettingsCard';
 import IntegrationsCard from './IntegrationsCard';
 import KeyboardSettingsCard from './KeyboardSettingsCard';
+import LanguageCard from './LanguageCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import RepositorySettingsCard from './RepositorySettingsCard';
 import { ReviewPromptResetButton, ReviewPromptSettingsCard } from './ReviewPromptSettingsCard';
@@ -40,6 +42,7 @@ export function SettingsPage({
   tab: SettingsPageTab;
   onTabChange: (tab: SettingsPageTab) => void;
 }) {
+  const { t } = useTranslation();
   const handleDocsClick = useCallback(() => {
     void rpc.app.openExternal('https://lovstudio.ai/yoda/docs');
   }, []);
@@ -49,13 +52,13 @@ export function SettingsPage({
     label: string;
     isExternal?: boolean;
   }> = [
-    { id: 'general', label: 'General' },
-    { id: 'account', label: 'Account' },
-    { id: 'clis-models', label: 'Agents' },
-    { id: 'integrations', label: 'Integrations' },
-    { id: 'repository', label: 'Repository' },
-    { id: 'interface', label: 'Interface' },
-    { id: 'docs', label: 'Docs', isExternal: true },
+    { id: 'general', label: t('settings.tabs.general') },
+    { id: 'account', label: t('settings.tabs.account') },
+    { id: 'clis-models', label: t('settings.tabs.agents') },
+    { id: 'integrations', label: t('settings.tabs.integrations') },
+    { id: 'repository', label: t('settings.tabs.repository') },
+    { id: 'interface', label: t('settings.tabs.interface') },
+    { id: 'docs', label: t('settings.tabs.docs'), isExternal: true },
   ];
 
   const tabContent: Record<
@@ -63,9 +66,12 @@ export function SettingsPage({
     { title: string; description: string; sections: SectionConfig[] }
   > = {
     general: {
-      title: 'General',
-      description: 'Manage your account, privacy settings, notifications, and app updates.',
+      title: t('settings.tabs.general'),
+      description: t('settings.general.description'),
       sections: [
+        {
+          component: <LanguageCard />,
+        },
         {
           component: <TelemetryCard />,
         },
@@ -87,22 +93,22 @@ export function SettingsPage({
       ],
     },
     account: {
-      title: 'Account',
-      description: 'Manage your Yoda account.',
+      title: t('settings.tabs.account'),
+      description: t('settings.account.description'),
       sections: [{ component: <AccountTab /> }],
     },
     'clis-models': {
-      title: 'Agents',
-      description: 'Manage CLI agents and model configurations.',
+      title: t('settings.tabs.agents'),
+      description: t('settings.agentsTab.description'),
       sections: [
         { component: <DefaultAgentSettingsCard /> },
         {
-          title: 'Review Prompt',
+          title: t('settings.agentsTab.reviewPrompt'),
           action: <ReviewPromptResetButton />,
           component: <ReviewPromptSettingsCard />,
         },
         {
-          title: 'CLI agents',
+          title: t('settings.agentsTab.cliAgents'),
           component: (
             <div className="rounded-xl border border-border/60 bg-muted/10 p-2">
               <CliAgentsList />
@@ -112,24 +118,29 @@ export function SettingsPage({
       ],
     },
     integrations: {
-      title: 'Integrations',
-      description: 'Connect external services and tools.',
-      sections: [{ title: 'Integrations', component: <IntegrationsCard /> }],
+      title: t('settings.tabs.integrations'),
+      description: t('settings.integrationsTab.description'),
+      sections: [{ title: t('settings.integrationsTab.title'), component: <IntegrationsCard /> }],
     },
     repository: {
-      title: 'Repository',
-      description: 'Configure repository and branch settings.',
-      sections: [{ title: 'Branch prefix', component: <RepositorySettingsCard /> }],
+      title: t('settings.tabs.repository'),
+      description: t('settings.repositoryTab.description'),
+      sections: [
+        { title: t('settings.repositoryTab.branchPrefix'), component: <RepositorySettingsCard /> },
+      ],
     },
     interface: {
-      title: 'Interface',
-      description: 'Customize the appearance and behavior of the app.',
+      title: t('settings.tabs.interface'),
+      description: t('settings.interfaceTab.description'),
       sections: [
         { component: <ThemeCard /> },
         { component: <TerminalSettingsCard /> },
-        { title: 'Keyboard shortcuts', component: <KeyboardSettingsCard /> },
         {
-          title: 'Tools',
+          title: t('settings.interfaceTab.keyboardShortcuts'),
+          component: <KeyboardSettingsCard />,
+        },
+        {
+          title: t('settings.interfaceTab.tools'),
           component: <HiddenToolsSettingsCard />,
         },
       ],

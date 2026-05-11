@@ -1,7 +1,8 @@
 import { Check } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { type LegacyImportSource, type LegacyProjectConflict } from '@shared/legacy-port';
 import { cn } from '@renderer/utils/utils';
-import { formatCount, sourceLabel } from './import-format';
+import { sourceLabel } from './import-format';
 
 function ConflictChoice({
   source,
@@ -16,7 +17,12 @@ function ConflictChoice({
   disabled: boolean;
   onSelect: () => void;
 }) {
+  const { t } = useTranslation();
   const details = source === 'v0' ? conflict.v0 : conflict.v1Beta;
+  const taskCount = t(
+    `onboarding.import.taskCount${details.taskCount === 1 ? 'Singular' : 'Plural'}`,
+    { count: details.taskCount }
+  );
 
   return (
     <button
@@ -32,7 +38,7 @@ function ConflictChoice({
     >
       <span className="flex items-center justify-between gap-2">
         <span className="truncate text-sm font-medium">
-          {sourceLabel(source)} · {formatCount(details.taskCount, 'task')}
+          {sourceLabel(source)} · {taskCount}
         </span>
         {selected && <Check className="h-4 w-4 shrink-0" />}
       </span>
@@ -54,12 +60,13 @@ function ConflictCard({
   disabled: boolean;
   onSelect: (source: LegacyImportSource) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-2 border p-2.5">
       <div className="flex min-w-0 items-center justify-between gap-3">
         <span className="truncate text-sm font-medium">{conflict.v1Beta.name}</span>
         <span className="shrink-0 text-xs text-foreground-muted">
-          {conflict.kind === 'ssh' ? 'SSH' : 'Local'}
+          {conflict.kind === 'ssh' ? t('onboarding.import.ssh') : t('onboarding.import.local')}
         </span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -93,14 +100,15 @@ export function ProjectConflicts({
   disabled?: boolean;
   onChoiceChange: (identityKey: string, source: LegacyImportSource) => void;
 }) {
+  const { t } = useTranslation();
   if (conflicts.length === 0) return null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2.5">
       <div className="flex shrink-0 flex-col gap-1">
-        <h2 className="text-base font-medium">Project conflicts</h2>
+        <h2 className="text-base font-medium">{t('onboarding.import.conflictsTitle')}</h2>
         <p className="text-sm text-foreground-muted">
-          These projects exist in both selected versions. Choose which version to keep.
+          {t('onboarding.import.conflictsDescription')}
         </p>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">

@@ -1,10 +1,12 @@
 import { CheckCircle, LogIn, User } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAccountSession, useAccountSignIn } from '@renderer/lib/hooks/useAccount';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 
 export function SignInStep({ onComplete }: { onComplete: () => void }) {
+  const { t } = useTranslation();
   const { data: session, isLoading: sessionLoading } = useAccountSession();
   const signInMutation = useAccountSignIn();
   const showAccountDeviceFlow = useShowModal('accountDeviceFlowModal');
@@ -19,20 +21,20 @@ export function SignInStep({ onComplete }: { onComplete: () => void }) {
       .mutateAsync(undefined)
       .then((result) => {
         if (!result.success) {
-          setError(result.error || 'Sign in failed');
+          setError(result.error || t('onboarding.signInFailed'));
           return;
         }
         onComplete();
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Sign in failed');
+        setError(err instanceof Error ? err.message : t('onboarding.signInFailed'));
       });
   };
 
   if (sessionLoading) {
     return (
       <div className="flex items-center justify-center py-12 text-sm text-foreground-muted">
-        Loading...
+        {t('onboarding.loading')}
       </div>
     );
   }
@@ -57,14 +59,16 @@ export function SignInStep({ onComplete }: { onComplete: () => void }) {
             <CheckCircle className="absolute -bottom-1 -right-1 h-5 w-5 text-primary fill-background" />
           </div>
           <div className="flex flex-col items-center justify-center gap-1">
-            <h1 className="text-xl text-center">Connected as @{user.username}</h1>
+            <h1 className="text-xl text-center">
+              {t('onboarding.connectedAs', { username: user.username })}
+            </h1>
             {user.email && (
               <p className="text-sm text-foreground-muted text-center">{user.email}</p>
             )}
           </div>
         </div>
         <Button size={'lg'} onClick={onComplete}>
-          Continue
+          {t('onboarding.continue')}
         </Button>
       </div>
     );
@@ -75,10 +79,9 @@ export function SignInStep({ onComplete }: { onComplete: () => void }) {
       <div className="flex flex-col items-center justify-center gap-6">
         <LogIn className="h-10 w-10" absoluteStrokeWidth strokeWidth={1.5} />
         <div className="flex flex-col items-center justify-center gap-2">
-          <h1 className="text-xl text-center">Sign in to Lovstudio</h1>
+          <h1 className="text-xl text-center">{t('onboarding.signInToLovstudio')}</h1>
           <p className="text-md text-foreground-muted text-center">
-            Yoda uses your Lovstudio account for sync and personalization. You can connect GitHub
-            separately.
+            {t('onboarding.signInDescription')}
           </p>
         </div>
       </div>
@@ -86,10 +89,10 @@ export function SignInStep({ onComplete }: { onComplete: () => void }) {
       <div className="flex flex-col w-full gap-2">
         <Button size={'lg'} onClick={handleSignIn} disabled={signInMutation.isPending}>
           <LogIn className="h-4 w-4" />
-          {signInMutation.isPending ? 'Signing in...' : 'Sign in to Lovstudio'}
+          {signInMutation.isPending ? t('onboarding.signingIn') : t('onboarding.signInToLovstudio')}
         </Button>
         <Button variant="ghost" onClick={onComplete} disabled={signInMutation.isPending}>
-          Skip
+          {t('onboarding.skip')}
         </Button>
       </div>
     </div>

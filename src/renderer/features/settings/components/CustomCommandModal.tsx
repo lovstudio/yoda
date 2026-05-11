@@ -1,5 +1,6 @@
 import { Info, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AGENT_PROVIDERS, type AgentProviderDefinition } from '@shared/agent-provider-registry';
 import type { ProviderCustomConfig } from '@shared/app-settings';
 import { useProviderSettings } from '@renderer/features/settings/use-provider-settings';
@@ -52,6 +53,7 @@ const configToFormState = (config: ProviderCustomConfig, fallback: FormState): F
 });
 
 const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose, providerId }) => {
+  const { t } = useTranslation();
   const provider = useMemo(() => AGENT_PROVIDERS.find((p) => p.id === providerId), [providerId]);
   const registryDefaults = useMemo(() => getDefaultFromProvider(provider), [provider]);
 
@@ -186,7 +188,7 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
           <DialogHeader className="flex-row items-start gap-4">
             <div>
               <DialogTitle className="text-lg font-semibold">
-                {provider.name} Execution Settings
+                {t('settings.customCommand.executionSettings', { name: provider.name })}
               </DialogTitle>
             </div>
           </DialogHeader>
@@ -195,7 +197,9 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="text-sm text-muted-foreground">Loading...</div>
+              <div className="text-sm text-muted-foreground">
+                {t('settings.customCommand.loading')}
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
@@ -203,15 +207,17 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="cli" className="text-sm font-medium">
-                    CLI Command
+                    {t('settings.customCommand.cliCommand')}
                   </Label>
-                  <FieldTooltip content="The CLI command to execute (e.g., claude, codex)" />
+                  <FieldTooltip content={t('settings.customCommand.cliCommandTooltip')} />
                 </div>
                 <Input
                   id="cli"
                   value={form.cli}
                   onChange={(e) => handleChange('cli', e.target.value)}
-                  placeholder={registryDefaults.cli || 'CLI command'}
+                  placeholder={
+                    registryDefaults.cli || t('settings.customCommand.cliCommandPlaceholder')
+                  }
                   className="font-mono text-sm"
                 />
               </div>
@@ -220,15 +226,17 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="resumeFlag" className="text-sm font-medium">
-                    Resume Flag
+                    {t('settings.customCommand.resumeFlag')}
                   </Label>
-                  <FieldTooltip content="Flag used when resuming a session (e.g., -c -r)" />
+                  <FieldTooltip content={t('settings.customCommand.resumeFlagTooltip')} />
                 </div>
                 <Input
                   id="resumeFlag"
                   value={form.resumeFlag}
                   onChange={(e) => handleChange('resumeFlag', e.target.value)}
-                  placeholder={registryDefaults.resumeFlag || '(none)'}
+                  placeholder={
+                    registryDefaults.resumeFlag || t('settings.customCommand.noneFallback')
+                  }
                   className="font-mono text-sm"
                 />
               </div>
@@ -237,15 +245,17 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="defaultArgs" className="text-sm font-medium">
-                    Default Args
+                    {t('settings.customCommand.defaultArgs')}
                   </Label>
-                  <FieldTooltip content="Default arguments (e.g., run -s)" />
+                  <FieldTooltip content={t('settings.customCommand.defaultArgsTooltip')} />
                 </div>
                 <Input
                   id="defaultArgs"
                   value={form.defaultArgs}
                   onChange={(e) => handleChange('defaultArgs', e.target.value)}
-                  placeholder={registryDefaults.defaultArgs || '(none)'}
+                  placeholder={
+                    registryDefaults.defaultArgs || t('settings.customCommand.noneFallback')
+                  }
                   className="font-mono text-sm"
                 />
               </div>
@@ -254,15 +264,15 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="extraArgs" className="text-sm font-medium">
-                    Additional parameters
+                    {t('settings.customCommand.extraArgs')}
                   </Label>
-                  <FieldTooltip content="Extra flags appended to the command (e.g. --enable-all-github-mcp-tools)" />
+                  <FieldTooltip content={t('settings.customCommand.extraArgsTooltip')} />
                 </div>
                 <Input
                   id="extraArgs"
                   value={form.extraArgs}
                   onChange={(e) => handleChange('extraArgs', e.target.value)}
-                  placeholder="e.g. --enable-all-github-mcp-tools"
+                  placeholder={t('settings.customCommand.argsPlaceholder')}
                   className="font-mono text-sm"
                 />
               </div>
@@ -270,8 +280,10 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
               {/* Environment variables */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Label className="text-sm font-medium">Environment variables</Label>
-                  <FieldTooltip content="Environment variables set when running the agent" />
+                  <Label className="text-sm font-medium">
+                    {t('settings.customCommand.envVars')}
+                  </Label>
+                  <FieldTooltip content={t('settings.customCommand.envVarsTooltip')} />
                 </div>
                 <div className="space-y-2">
                   {form.envEntries.map((entry, i) => (
@@ -279,13 +291,13 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
                       <Input
                         value={entry.key}
                         onChange={(e) => setEnvEntry(i, { key: e.target.value })}
-                        placeholder="KEY"
+                        placeholder={t('settings.customCommand.envKeyPlaceholder')}
                         className="min-w-0 flex-1 font-mono text-sm"
                       />
                       <Input
                         value={entry.value}
                         onChange={(e) => setEnvEntry(i, { value: e.target.value })}
-                        placeholder="value"
+                        placeholder={t('settings.customCommand.envValuePlaceholder')}
                         className="min-w-0 flex-1 font-mono text-sm"
                       />
                       <Button
@@ -294,7 +306,7 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
                         size="icon"
                         onClick={() => removeEnvEntry(i)}
                         className="h-8 w-8 shrink-0"
-                        aria-label="Remove"
+                        aria-label={t('settings.customCommand.removeAria')}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -308,7 +320,7 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
                     className="gap-1.5"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Add variable
+                    {t('settings.customCommand.addVariable')}
                   </Button>
                 </div>
               </div>
@@ -317,15 +329,17 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="autoApproveFlag" className="text-sm font-medium">
-                    Auto-approve Flag
+                    {t('settings.customCommand.autoApproveFlag')}
                   </Label>
-                  <FieldTooltip content="Flag used in auto-approve mode" />
+                  <FieldTooltip content={t('settings.customCommand.autoApproveFlagTooltip')} />
                 </div>
                 <Input
                   id="autoApproveFlag"
                   value={form.autoApproveFlag}
                   onChange={(e) => handleChange('autoApproveFlag', e.target.value)}
-                  placeholder={registryDefaults.autoApproveFlag || '(none)'}
+                  placeholder={
+                    registryDefaults.autoApproveFlag || t('settings.customCommand.noneFallback')
+                  }
                   className="font-mono text-sm"
                 />
               </div>
@@ -334,15 +348,18 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="initialPromptFlag" className="text-sm font-medium">
-                    Initial Prompt Flag
+                    {t('settings.customCommand.initialPromptFlag')}
                   </Label>
-                  <FieldTooltip content="Flag for passing initial prompt (empty means pass directly)" />
+                  <FieldTooltip content={t('settings.customCommand.initialPromptFlagTooltip')} />
                 </div>
                 <Input
                   id="initialPromptFlag"
                   value={form.initialPromptFlag}
                   onChange={(e) => handleChange('initialPromptFlag', e.target.value)}
-                  placeholder={registryDefaults.initialPromptFlag || '(pass directly)'}
+                  placeholder={
+                    registryDefaults.initialPromptFlag ||
+                    t('settings.customCommand.passDirectlyFallback')
+                  }
                   className="font-mono text-sm"
                 />
               </div>
@@ -350,7 +367,7 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
               {/* Preview */}
               <div className="mt-6 rounded-lg border border-border/60 bg-muted/30 p-4">
                 <div className="mb-2 text-xs font-medium text-muted-foreground">
-                  Command Preview
+                  {t('settings.customCommand.preview')}
                 </div>
                 <code className="block break-all font-mono text-sm text-foreground">
                   {previewCommand}
@@ -359,7 +376,7 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
 
               {isOverridden && (
                 <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-600 dark:text-yellow-400">
-                  Custom configuration is applied
+                  {t('settings.customCommand.customApplied')}
                 </div>
               )}
             </div>
@@ -376,11 +393,11 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
             className="gap-1.5"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            Reset to Defaults
+            {t('settings.customCommand.resetToDefaults')}
           </Button>
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={saving}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <ConfirmButton
               type="button"
@@ -388,7 +405,7 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
               onClick={() => void handleSave()}
               disabled={isLoading || saving || !hasChanges}
             >
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? t('settings.customCommand.saving') : t('common.save')}
             </ConfirmButton>
           </div>
         </div>
@@ -397,23 +414,26 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
   );
 };
 
-const FieldTooltip: React.FC<{ content: string }> = ({ content }) => (
-  <TooltipProvider>
-    <Tooltip>
-      <TooltipTrigger>
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground"
-          aria-label="More information"
-        >
-          <Info className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-[200px] text-xs">
-        {content}
-      </TooltipContent>
-    </Tooltip>
-  </TooltipProvider>
-);
+const FieldTooltip: React.FC<{ content: string }> = ({ content }) => {
+  const { t } = useTranslation();
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground"
+            aria-label={t('settings.customCommand.moreInfoAria')}
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[200px] text-xs">
+          {content}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
 
 export default CustomCommandModal;

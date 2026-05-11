@@ -1,6 +1,7 @@
 import { Import } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { LegacyImportSource, LegacyPortPreviewSource } from '@shared/legacy-port';
-import { formatCount, sourceLabel } from './import-format';
+import { sourceLabel } from './import-format';
 
 export type SingleSourceImport = {
   source: LegacyImportSource;
@@ -12,24 +13,21 @@ export type ImportHeaderProps = {
   singleSource?: SingleSourceImport | null;
 };
 
-function singleSourceTitle(source: LegacyImportSource): string {
-  return `Import your Yoda ${sourceLabel(source)} data`;
-}
-
-function singleSourceDescription(preview: LegacyPortPreviewSource): string {
-  return `Found ${formatCount(preview.projects, 'project')} and ${formatCount(
-    preview.tasks,
-    'task'
-  )} from your previous Yoda installation`;
-}
-
 export function ImportHeader({ isLoading, singleSource = null }: ImportHeaderProps) {
+  const { t } = useTranslation();
+
+  const formatCountKey = (count: number, kind: 'project' | 'task') =>
+    t(`onboarding.import.${kind}Count${count === 1 ? 'Singular' : 'Plural'}`, { count });
+
   const title = singleSource
-    ? singleSourceTitle(singleSource.source)
-    : 'Do you want to import projects and tasks from other Yoda versions?';
+    ? t('onboarding.import.headerSingleTitle', { source: sourceLabel(singleSource.source) })
+    : t('onboarding.import.headerMultiTitle');
   const description = singleSource
-    ? singleSourceDescription(singleSource.preview)
-    : 'Select one or more sources.';
+    ? t('onboarding.import.headerSingleDescription', {
+        projectsCount: formatCountKey(singleSource.preview.projects, 'project'),
+        tasksCount: formatCountKey(singleSource.preview.tasks, 'task'),
+      })
+    : t('onboarding.import.headerMultiDescription');
 
   return (
     <div className="flex shrink-0 flex-col items-center justify-center gap-4">
@@ -39,7 +37,7 @@ export function ImportHeader({ isLoading, singleSource = null }: ImportHeaderPro
           <h1 className="text-xl text-center">{title}</h1>
           {isLoading ? (
             <p className="text-md text-foreground-muted text-center">
-              Scanning existing Yoda data...
+              {t('onboarding.import.scanning')}
             </p>
           ) : (
             <p className="text-md text-foreground-muted text-center">{description}</p>

@@ -1,5 +1,6 @@
 import { Check, Loader2, Plus } from 'lucide-react';
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import featurebaseSvg from '@/assets/images/Featurebase.svg?raw';
 import forgejoSvg from '@/assets/images/Forgejo.svg?raw';
 import githubSvg from '@/assets/images/Github.svg?raw';
@@ -34,6 +35,7 @@ const SvgLogo = ({ raw }: { raw: string }) => {
 };
 
 const IntegrationsCard: React.FC = () => {
+  const { t } = useTranslation();
   const {
     authenticated,
     isLoading,
@@ -78,7 +80,7 @@ const IntegrationsCard: React.FC = () => {
     {
       id: 'github',
       name: 'GitHub',
-      description: 'Connect your repositories',
+      description: t('settings.integrationsTab.githubDescription'),
       logoSvg: githubSvg,
       connected: authenticated,
       loading: isLoading || githubLoading,
@@ -86,7 +88,7 @@ const IntegrationsCard: React.FC = () => {
       onCancel: cancelGithubConnect,
       onDisconnect: logout,
       disabledTooltip: isCliManaged
-        ? 'Run `gh auth logout` in your terminal to disconnect'
+        ? t('settings.integrationsTab.githubCliManagedTooltip')
         : undefined,
     },
     {
@@ -95,7 +97,7 @@ const IntegrationsCard: React.FC = () => {
       description:
         isLinearConnected && connectionStatus.linear.displayName
           ? connectionStatus.linear.displayName
-          : 'Work on Linear tickets',
+          : t('settings.integrationsTab.linearDescription'),
       logoSvg: linearSvg,
       connected: !!isLinearConnected,
       loading: isLinearLoading,
@@ -108,7 +110,7 @@ const IntegrationsCard: React.FC = () => {
       description:
         isJiraConnected && connectionStatus.jira.displayName
           ? connectionStatus.jira.displayName
-          : 'Work on Jira tickets',
+          : t('settings.integrationsTab.jiraDescription'),
       logoSvg: jiraSvg,
       connected: !!isJiraConnected,
       loading: isJiraLoading,
@@ -121,7 +123,7 @@ const IntegrationsCard: React.FC = () => {
       description:
         isGitlabConnected && connectionStatus.gitlab.displayName
           ? connectionStatus.gitlab.displayName
-          : 'Work on GitLab issues',
+          : t('settings.integrationsTab.gitlabDescription'),
       logoSvg: gitlabSvg,
       connected: !!isGitlabConnected,
       loading: isGitlabLoading,
@@ -131,7 +133,7 @@ const IntegrationsCard: React.FC = () => {
     {
       id: 'plain',
       name: 'Plain',
-      description: 'Work on Plain threads',
+      description: t('settings.integrationsTab.plainDescription'),
       logoSvg: plainSvg,
       connected: !!isPlainConnected,
       loading: isPlainLoading,
@@ -144,7 +146,7 @@ const IntegrationsCard: React.FC = () => {
       description:
         isForgejoConnected && connectionStatus.forgejo.displayName
           ? connectionStatus.forgejo.displayName
-          : 'Work on Forgejo issues',
+          : t('settings.integrationsTab.forgejoDescription'),
       logoSvg: forgejoSvg,
       connected: !!isForgejoConnected,
       loading: isForgejoLoading,
@@ -154,7 +156,7 @@ const IntegrationsCard: React.FC = () => {
     {
       id: 'featurebase',
       name: 'Featurebase',
-      description: 'Work on Featurebase posts',
+      description: t('settings.integrationsTab.featurebaseDescription'),
       logoSvg: featurebaseSvg,
       connected: !!isFeaturebaseConnected,
       loading: isFeaturebaseLoading,
@@ -200,7 +202,7 @@ const IntegrationsCard: React.FC = () => {
                   size="icon"
                   className="h-8 w-8 shrink-0"
                   onClick={integration.onDisconnect}
-                  aria-label={`Disconnect ${integration.name}`}
+                  aria-label={t('settings.integrationsTab.disconnect', { name: integration.name })}
                 >
                   <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 </Button>
@@ -218,8 +220,8 @@ const IntegrationsCard: React.FC = () => {
                 }
                 aria-label={
                   integration.loading
-                    ? `Cancel connecting ${integration.name}`
-                    : `Connect ${integration.name}`
+                    ? t('settings.integrationsTab.cancelConnecting', { name: integration.name })
+                    : t('settings.integrationsTab.connect', { name: integration.name })
                 }
               >
                 {integration.loading ? (
