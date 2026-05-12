@@ -93,36 +93,6 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
 
   const isExpanded = sidebarStore.expandedProjectIds.has(projectId);
 
-  if (!project) return null;
-
-  const sshConnectionId = project.data?.type === 'ssh' ? project.data.connectionId : null;
-  const isSshProject = sshConnectionId !== null;
-  const sshConnectionState = sshConnectionId
-    ? appState.sshConnections.stateFor(sshConnectionId)
-    : null;
-  const canReconnect = sshConnectionState !== 'connected';
-  const ProjectIcon = isSshProject ? FolderInput : FolderClosed;
-
-  const renderSpinnerWithTooltip = () => {
-    if (!isUnregisteredProject(project)) return null;
-    const labelKey = UNREGISTERED_PHASE_KEY[project.phase] ?? 'sidebar.phase.loading';
-    return (
-      <Tooltip>
-        <TooltipTrigger>
-          <SidebarItemMiniButton type="button" disabled aria-label={t('sidebar.loading')}>
-            <Loader2 className="h-4 w-4 animate-spin text-foreground/60" />
-          </SidebarItemMiniButton>
-        </TooltipTrigger>
-        <TooltipContent>{t(labelKey)}</TooltipContent>
-      </Tooltip>
-    );
-  };
-
-  const handleArchive = () => {
-    void getProjectManagerStore().archiveProject(projectId);
-    if (isProjectActive) navigate('home');
-  };
-
   const handleAddTask = useCallback(async () => {
     const mounted = mountedForExpress;
     const repo = getRepositoryStore(projectId);
@@ -169,6 +139,36 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     navigate,
     projectId,
   ]);
+
+  if (!project) return null;
+
+  const sshConnectionId = project.data?.type === 'ssh' ? project.data.connectionId : null;
+  const isSshProject = sshConnectionId !== null;
+  const sshConnectionState = sshConnectionId
+    ? appState.sshConnections.stateFor(sshConnectionId)
+    : null;
+  const canReconnect = sshConnectionState !== 'connected';
+  const ProjectIcon = isSshProject ? FolderInput : FolderClosed;
+
+  const renderSpinnerWithTooltip = () => {
+    if (!isUnregisteredProject(project)) return null;
+    const labelKey = UNREGISTERED_PHASE_KEY[project.phase] ?? 'sidebar.phase.loading';
+    return (
+      <Tooltip>
+        <TooltipTrigger>
+          <SidebarItemMiniButton type="button" disabled aria-label={t('sidebar.loading')}>
+            <Loader2 className="h-4 w-4 animate-spin text-foreground/60" />
+          </SidebarItemMiniButton>
+        </TooltipTrigger>
+        <TooltipContent>{t(labelKey)}</TooltipContent>
+      </Tooltip>
+    );
+  };
+
+  const handleArchive = () => {
+    void getProjectManagerStore().archiveProject(projectId);
+    if (isProjectActive) navigate('home');
+  };
 
   const menuActions = {
     isSsh: isSshProject,
