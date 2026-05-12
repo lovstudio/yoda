@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { MicroLabel } from '@renderer/lib/ui/label';
 import { cn } from '@renderer/utils/utils';
 
 export const SidebarContainer = React.forwardRef<
@@ -97,6 +98,33 @@ export const SidebarMenuButton = React.forwardRef<HTMLButtonElement, SidebarMenu
     />
   )
 );
+
+interface SidebarSectionHeaderProps {
+  label: React.ReactNode;
+  collapsed: boolean;
+  onToggle: () => void;
+  rightSlot?: React.ReactNode;
+}
+export function SidebarSectionHeader({
+  label,
+  collapsed,
+  onToggle,
+  rightSlot,
+}: SidebarSectionHeaderProps) {
+  return (
+    <div className="flex items-center pl-5 pr-2.5 h-[40px]">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        className="flex items-center flex-1 min-w-0 text-left hover:text-foreground-tertiary"
+      >
+        <MicroLabel className="text-foreground-tertiary-passive cursor-pointer">{label}</MicroLabel>
+      </button>
+      {rightSlot}
+    </div>
+  );
+}
 
 interface SidebarMenuRowProps extends React.HTMLAttributes<HTMLDivElement> {
   isActive?: boolean;

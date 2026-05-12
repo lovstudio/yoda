@@ -33,10 +33,7 @@ export class MountedProject {
   private _snapshotDisposer: (() => void) | null = null;
 
   get snapshot(): ProjectViewSnapshot {
-    return {
-      activeView: this.view.activeView,
-      taskViewTab: this.view.taskView.tab,
-    };
+    return this.view.snapshot;
   }
 
   constructor(data: LocalProject | SshProject, savedSnapshot?: ProjectViewSnapshot) {

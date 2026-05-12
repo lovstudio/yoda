@@ -100,7 +100,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
           )}
           <ChevronDown className="size-3.5 shrink-0 text-foreground-muted" />
         </ComboboxTrigger>
-        <ComboboxContent className="min-w-(--anchor-width)">
+        <ComboboxContent className="w-auto min-w-(--anchor-width)">
           <ComboboxInput showTrigger={false} placeholder="Search agents..." />
           <ComboboxList className="pb-0">
             {(group: AgentGroup) => (

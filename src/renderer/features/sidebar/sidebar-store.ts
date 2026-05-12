@@ -35,11 +35,16 @@ export type SidebarRow =
   | { kind: 'project'; projectId: string }
   | { kind: 'task'; projectId: string; taskId: string };
 
+export type ProjectTypeFilter = 'all' | 'local' | 'ssh';
+
 export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   projectOrder: string[] = [];
   taskOrderByProject: Record<string, string[]> = {};
   expandedProjectIds = observable.set<string>();
   taskSortBy: SidebarTaskSortBy = 'created-at';
+  pinnedCollapsed = false;
+  projectsCollapsed = false;
+  projectTypeFilter: ProjectTypeFilter = 'all';
 
   constructor(private readonly projectManager: ProjectManagerStore) {
     makeAutoObservable(this, {
@@ -82,7 +87,12 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       (p): p is ProjectStore & { data: LocalProject | SshProject } => p.state !== 'unregistered'
     );
 
-    const sorted = [...real].sort((a, b) => {
+    const typeFiltered =
+      this.projectTypeFilter === 'all'
+        ? real
+        : real.filter((p) => p.data.type === this.projectTypeFilter);
+
+    const sorted = [...typeFiltered].sort((a, b) => {
       const ai = this.projectOrder.indexOf(a.data.id);
       const bi = this.projectOrder.indexOf(b.data.id);
       if (ai === -1 && bi === -1) return 0;
@@ -144,6 +154,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       projectOrder: [...this.projectOrder],
       taskOrderByProject: { ...this.taskOrderByProject },
       taskSortBy: this.taskSortBy,
+      pinnedCollapsed: this.pinnedCollapsed,
+      projectsCollapsed: this.projectsCollapsed,
     };
   }
 
@@ -161,6 +173,20 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       const v = parseSidebarTaskSortBy(snapshot.taskSortBy);
       if (v !== undefined) this.taskSortBy = v;
     }
+    if (snapshot.pinnedCollapsed !== undefined) {
+      this.pinnedCollapsed = snapshot.pinnedCollapsed;
+    }
+    if (snapshot.projectsCollapsed !== undefined) {
+      this.projectsCollapsed = snapshot.projectsCollapsed;
+    }
+  }
+
+  togglePinnedCollapsed(): void {
+    this.pinnedCollapsed = !this.pinnedCollapsed;
+  }
+
+  toggleProjectsCollapsed(): void {
+    this.projectsCollapsed = !this.projectsCollapsed;
   }
 
   /** Called on first load when no snapshot exists — expand all known projects. */
@@ -169,6 +195,18 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       const projectId = project.state === 'unregistered' ? project.id : project.data!.id;
       this.expandedProjectIds.add(projectId);
     }
+  }
+
+  collapseAllProjects(): void {
+    this.expandedProjectIds.clear();
+  }
+
+  setProjectTypeFilter(filter: ProjectTypeFilter): void {
+    this.projectTypeFilter = filter;
+  }
+
+  clearManualTaskOrder(): void {
+    this.taskOrderByProject = {};
   }
 
   toggleProjectExpanded(projectId: string): void {

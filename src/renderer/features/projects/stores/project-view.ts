@@ -20,12 +20,16 @@ export class ProjectViewStore implements Snapshottable<ProjectViewSnapshot> {
     return {
       activeView: this.activeView,
       taskViewTab: this.taskView.tab,
+      taskViewArchivedOnlyWithNote: this.taskView.archivedOnlyWithNote,
     };
   }
 
   restoreSnapshot(snapshot: Partial<ProjectViewSnapshot>): void {
     if (snapshot.activeView) this.activeView = snapshot.activeView as ProjectView;
     if (snapshot.taskViewTab) this.taskView.setTab(snapshot.taskViewTab);
+    if (typeof snapshot.taskViewArchivedOnlyWithNote === 'boolean') {
+      this.taskView.setArchivedOnlyWithNote(snapshot.taskViewArchivedOnlyWithNote);
+    }
   }
 }
 
@@ -33,6 +37,7 @@ class TaskViewStore {
   tab: 'active' | 'archived' = 'active';
   searchQuery: string = '';
   selectedIds: Set<string> = new Set();
+  archivedOnlyWithNote: boolean = false;
 
   constructor() {
     makeAutoObservable(this);
@@ -48,6 +53,10 @@ class TaskViewStore {
 
   setSelectedIds(ids: Set<string>) {
     this.selectedIds = ids;
+  }
+
+  setArchivedOnlyWithNote(value: boolean) {
+    this.archivedOnlyWithNote = value;
   }
 
   toggleSelect(id: string) {

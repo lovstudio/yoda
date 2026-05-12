@@ -1,10 +1,10 @@
 import {
   FolderInput,
-  FolderPlus,
   MessageSquareShare,
   Puzzle,
   Search,
   Settings,
+  SquarePen,
   Workflow,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
@@ -17,6 +17,7 @@ import {
   useWorkspaceSlots,
 } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { cn } from '@renderer/utils/utils';
 import { SidebarPinnedTaskList } from './pinned-task-list';
@@ -84,7 +85,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               className="w-full justify-between"
             >
               <span className="flex items-center gap-2 min-w-0 w-full">
-                <FolderPlus className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
+                <SquarePen className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
                 <span className="truncate min-w-0">{t('sidebar.newSession')}</span>
               </span>
               <ShortcutHint settingsKey="newProject" />
@@ -108,11 +109,13 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
           <SidebarPinnedTaskList />
           <SidebarGroup className="mb-0 min-h-0 flex-1 flex flex-col">
             <ProjectsGroupLabel />
-            <SidebarGroupContent className="min-h-0 flex-1 flex flex-col">
-              <SidebarMenu className="flex-1 min-h-0 flex flex-col">
-                <SidebarVirtualList />
-              </SidebarMenu>
-            </SidebarGroupContent>
+            {!sidebarStore.projectsCollapsed && (
+              <SidebarGroupContent className="min-h-0 flex-1 flex flex-col">
+                <SidebarMenu className="flex-1 min-h-0 flex flex-col">
+                  <SidebarVirtualList />
+                </SidebarMenu>
+              </SidebarGroupContent>
+            )}
           </SidebarGroup>
         </SidebarContent>
         <div className="flex flex-col border-t border-border">

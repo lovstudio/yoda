@@ -53,6 +53,13 @@ export const SETTINGS_DEFAULTS = {
   browserPreview: {
     enabled: true,
   },
+  homeDraft: {
+    prompt: '',
+    selectedProjectId: null,
+    strategyKind: 'new-branch' as const,
+    providerOverride: null,
+    expressMode: false,
+  },
 } satisfies SettingsDefaultsMap;
 
 export function getDefaultForKey<K extends AppSettingsKey>(key: K): AppSettings[K] {

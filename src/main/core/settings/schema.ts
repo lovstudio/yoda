@@ -126,6 +126,16 @@ export const interfaceSettingsSchema = z.object({
 
 export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });
 
+export const homeDraftSchema = z.object({
+  prompt: z.string(),
+  selectedProjectId: z.string().nullable(),
+  strategyKind: z.enum(['new-branch', 'no-worktree']),
+  providerOverride: z.enum(AGENT_PROVIDER_IDS).nullable(),
+  /** When true, the sidebar "+" button creates a task immediately using the
+   *  last home-draft agent runtime config instead of opening the home view. */
+  expressMode: z.boolean(),
+});
+
 export const openInSettingsSchema = z.object({
   default: openInAppIdSchema,
   hidden: z.array(openInAppIdSchema),
@@ -145,6 +155,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   interface: interfaceSettingsSchema,
   terminal: terminalSettingsSchema,
   browserPreview: browserPreviewSettingsSchema,
+  homeDraft: homeDraftSchema,
 } as const;
 
 export const appSettingsSchema = z.object({
@@ -161,4 +172,5 @@ export const appSettingsSchema = z.object({
   interface: interfaceSettingsSchema,
   terminal: terminalSettingsSchema,
   browserPreview: browserPreviewSettingsSchema,
+  homeDraft: homeDraftSchema,
 });

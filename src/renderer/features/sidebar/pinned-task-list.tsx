@@ -1,30 +1,34 @@
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
-import { MicroLabel } from '@renderer/lib/ui/label';
-import { SidebarGroup, SidebarMenu } from './sidebar-primitives';
+import { SidebarGroup, SidebarMenu, SidebarSectionHeader } from './sidebar-primitives';
 import { SidebarTaskItem } from './task-item';
 
 export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
   const { t } = useTranslation();
   const entries = sidebarStore.pinnedSidebarEntries;
-  if (entries.length === 0) return null;
+  const collapsed = sidebarStore.pinnedCollapsed;
+  const showList = !collapsed && entries.length > 0;
 
   return (
-    <SidebarGroup className="shrink-0 flex flex-col">
-      <div className="flex items-center justify-between pl-5 pr-2.5 h-[40px]">
-        <MicroLabel className="text-foreground-tertiary-passive">{t('sidebar.pinned')}</MicroLabel>
-      </div>
-      <SidebarMenu className="px-3 pb-2">
-        {entries.map(({ projectId, taskId }) => (
-          <SidebarTaskItem
-            key={`${projectId}:${taskId}`}
-            projectId={projectId}
-            taskId={taskId}
-            rowVariant="pinned"
-          />
-        ))}
-      </SidebarMenu>
+    <SidebarGroup className="shrink-0 flex flex-col mb-0">
+      <SidebarSectionHeader
+        label={t('sidebar.pinned')}
+        collapsed={collapsed}
+        onToggle={() => sidebarStore.togglePinnedCollapsed()}
+      />
+      {showList && (
+        <SidebarMenu className="px-3">
+          {entries.map(({ projectId, taskId }) => (
+            <SidebarTaskItem
+              key={`${projectId}:${taskId}`}
+              projectId={projectId}
+              taskId={taskId}
+              rowVariant="pinned"
+            />
+          ))}
+        </SidebarMenu>
+      )}
     </SidebarGroup>
   );
 });

@@ -74,6 +74,7 @@ export type TaskViewSnapshot = {
 export type ProjectViewSnapshot = {
   activeView: string;
   taskViewTab: 'active' | 'archived';
+  taskViewArchivedOnlyWithNote?: boolean;
 };
 
 export type NavigationSnapshot = {
@@ -89,4 +90,6 @@ export type SidebarSnapshot = {
   projectOrder?: string[];
   taskOrderByProject?: Record<string, string[]>;
   taskSortBy?: SidebarTaskSortBy;
+  pinnedCollapsed?: boolean;
+  projectsCollapsed?: boolean;
 };

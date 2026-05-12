@@ -1,6 +1,6 @@
 import { Eye, Loader2, Pencil } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { Activity, useEffect, useRef } from 'react';
+import { Activity, useEffect, useRef, useState } from 'react';
 import { usePanelRef } from 'react-resizable-panels';
 import {
   getTaskStore,
@@ -104,21 +104,29 @@ const SIDEBAR_COLLAPSED_SIZE = '0px';
 const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
   const { taskView } = useProvisionedTask();
   const sidebarPanelRef = usePanelRef();
+  const [isHandleDragging, setIsHandleDragging] = useState(false);
 
   useEffect(() => {
-    if (taskView.isSidebarCollapsed) {
-      sidebarPanelRef.current?.collapse();
-    } else {
-      sidebarPanelRef.current?.expand();
+    const panel = sidebarPanelRef.current;
+    if (!panel) return;
+    const isCollapsed = panel.isCollapsed();
+    if (taskView.isSidebarCollapsed && !isCollapsed) {
+      panel.collapse();
+    } else if (!taskView.isSidebarCollapsed && isCollapsed) {
+      panel.expand();
     }
   }, [taskView.isSidebarCollapsed, sidebarPanelRef]);
 
   return (
     <ResizablePanelGroup orientation="horizontal" id="task-sidebar-layout">
-      <ResizablePanel id="task-main-area">
+      <ResizablePanel id="task-main-area" data-yoda-animate={isHandleDragging ? 'false' : 'true'}>
         <TaskMainColumn />
       </ResizablePanel>
-      <ResizableHandle />
+      <ResizableHandle
+        onPointerDown={() => setIsHandleDragging(true)}
+        onPointerUp={() => setIsHandleDragging(false)}
+        onPointerCancel={() => setIsHandleDragging(false)}
+      />
       <ResizablePanel
         id="task-sidebar"
         panelRef={sidebarPanelRef}
@@ -127,9 +135,13 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
         maxSize="50%"
         collapsible
         collapsedSize={SIDEBAR_COLLAPSED_SIZE}
-        onResize={() =>
-          taskView.setSidebarCollapsed(sidebarPanelRef.current?.isCollapsed() ?? false)
-        }
+        data-yoda-animate={isHandleDragging ? 'false' : 'true'}
+        onResize={() => {
+          const wantCollapsed = sidebarPanelRef.current?.isCollapsed() ?? false;
+          if (taskView.isSidebarCollapsed !== wantCollapsed) {
+            taskView.setSidebarCollapsed(wantCollapsed);
+          }
+        }}
       >
         <TaskSidebar />
       </ResizablePanel>
@@ -141,35 +153,46 @@ const TaskMainColumn = observer(function TaskMainColumn() {
   const { taskView } = useProvisionedTask();
   const bottomPanelRef = usePanelRef();
   const draggingRef = useRef(false);
+  const [isHandleDragging, setIsHandleDragging] = useState(false);
 
   useEffect(() => {
-    if (taskView.isTerminalDrawerOpen) {
-      bottomPanelRef.current?.expand();
-    } else {
-      bottomPanelRef.current?.collapse();
+    const panel = bottomPanelRef.current;
+    if (!panel) return;
+    const isCollapsed = panel.isCollapsed();
+    if (taskView.isTerminalDrawerOpen && isCollapsed) {
+      panel.expand();
+    } else if (!taskView.isTerminalDrawerOpen && !isCollapsed) {
+      panel.collapse();
     }
   }, [taskView.isTerminalDrawerOpen, bottomPanelRef]);
 
   return (
     <ResizablePanelGroup orientation="vertical" id="task-main-vertical">
-      <ResizablePanel id="task-main-content" minSize="30%">
+      <ResizablePanel
+        id="task-main-content"
+        minSize="30%"
+        data-yoda-animate={isHandleDragging ? 'false' : 'true'}
+      >
         <UnifiedMainContent />
       </ResizablePanel>
       <ResizableHandle
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
+          setIsHandleDragging(true);
           if (!draggingRef.current) {
             draggingRef.current = true;
             panelDragStore.setDragging(true);
           }
         }}
         onPointerUp={() => {
+          setIsHandleDragging(false);
           if (draggingRef.current) {
             draggingRef.current = false;
             panelDragStore.setDragging(false);
           }
         }}
         onPointerCancel={() => {
+          setIsHandleDragging(false);
           if (draggingRef.current) {
             draggingRef.current = false;
             panelDragStore.setDragging(false);
@@ -184,7 +207,13 @@ const TaskMainColumn = observer(function TaskMainColumn() {
         collapsedSize="0%"
         defaultSize="25%"
         minSize="15%"
-        onResize={() => taskView.setTerminalDrawerOpen(!bottomPanelRef.current?.isCollapsed())}
+        data-yoda-animate={isHandleDragging ? 'false' : 'true'}
+        onResize={() => {
+          const wantOpen = !(bottomPanelRef.current?.isCollapsed() ?? false);
+          if (taskView.isTerminalDrawerOpen !== wantOpen) {
+            taskView.setTerminalDrawerOpen(wantOpen);
+          }
+        }}
       >
         <TerminalsPanel />
       </ResizablePanel>

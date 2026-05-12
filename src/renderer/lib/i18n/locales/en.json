@@ -49,6 +49,17 @@
     "sortBy": "Sort by",
     "sortByCreatedAt": "Created at",
     "sortByUpdatedAt": "Last used",
+    "sort": "Sort",
+    "filter": "Filter",
+    "more": "More",
+    "filterByType": "Project type",
+    "filterAll": "All projects",
+    "filterLocal": "Local only",
+    "filterSsh": "SSH only",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all",
+    "clearManualOrder": "Reset task order",
+    "expressMode": "Express mode",
     "update": "Update",
     "creatingWorkspace": "Creating task workspace…",
     "loading": "Loading",
@@ -57,6 +68,7 @@
     "changeSshConnection": "Change SSH connection",
     "archiveProject": "Archive project",
     "archiveTask": "Archive task",
+    "archiveTaskWithNote": "Archive task with note…",
     "phase": {
       "creatingRepo": "Creating repository…",
       "cloning": "Cloning…",
@@ -359,7 +371,15 @@
     }
   },
   "home": {
-    "headline": "What do you want to build with yoda?",
+    "greeting": {
+      "earlyMorning": "Early bird, {{name}}",
+      "morning": "Morning, {{name}}",
+      "noon": "Hi {{name}}",
+      "afternoon": "Afternoon, {{name}}",
+      "evening": "Evening, {{name}}",
+      "lateNight": "Up late, {{name}}"
+    },
+    "headline": "What's next?",
     "promptPlaceholder": "Ask yoda anything. Type @ to use plugins or mention files.",
     "addAria": "Add",
     "voiceAria": "Voice input",
@@ -368,10 +388,13 @@
     "remoteMode": "Remote",
     "localMode": "Local",
     "needProjectHint": "Pick a project to send a message.",
-    "baseBranchLabel": "base: {{branch}}",
-    "strategyNewBranch": "New branch (worktree)",
-    "strategyNoWorktree": "Work on {{branch}} directly",
+    "strategyChipNoWorktree": "In-place: {{branch}}",
+    "strategyChipNewBranch": "Worktree: {{branch}}",
     "strategyAria": "Choose how to start the task",
+    "strategyNoWorktreeTitle": "In-place on {{branch}}",
+    "strategyNoWorktreeDesc": "Fastest path. Changes land on the current branch in place — no isolation. Best for tiny fixes or solo work.",
+    "strategyNewBranchTitle": "Worktree off {{branch}}",
+    "strategyNewBranchDesc": "Spins up an isolated copy on a new branch. Keeps {{branch}} clean and lets multiple tasks run in parallel.",
     "welcome": "Welcome.",
     "welcomeStart": "Start shipping",
     "createNewProject": "Create new project",
@@ -397,6 +420,13 @@
       "renaming": "Renaming…",
       "submit": "Rename",
       "renameFailed": "Failed to rename task"
+    },
+    "archiveWithNote": {
+      "title": "Archive \"{{name}}\"",
+      "label": "Note",
+      "placeholder": "Why are you archiving this task?",
+      "archiving": "Archiving…",
+      "submit": "Archive"
     },
     "addRemote": {
       "title": "Add Remote",

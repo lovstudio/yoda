@@ -14,8 +14,18 @@ export type EffectiveProvider = {
   createDisabled: boolean;
 };
 
-export function useEffectiveProvider(connectionId?: string): EffectiveProvider {
-  const [providerOverride, setProviderOverride] = useState<AgentProviderId | null>(null);
+export type ExternalProviderOverride = {
+  value: AgentProviderId | null;
+  set: (id: AgentProviderId | null) => void;
+};
+
+export function useEffectiveProvider(
+  connectionId?: string,
+  external?: ExternalProviderOverride
+): EffectiveProvider {
+  const [localOverride, setLocalOverride] = useState<AgentProviderId | null>(null);
+  const providerOverride = external ? external.value : localOverride;
+  const setProviderOverride = external ? external.set : setLocalOverride;
 
   const { value: defaultAgentValue } = useAppSettingsKey('defaultAgent');
   const defaultProviderId: AgentProviderId = isValidProviderId(defaultAgentValue)

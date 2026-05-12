@@ -1,5 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Archive, RotateCcw, Trash2, X } from 'lucide-react';
+import { Archive, FileText, RotateCcw, Trash2, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useRef } from 'react';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
@@ -11,7 +11,9 @@ import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { SearchInput } from '@renderer/lib/ui/search-input';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
+import { Toggle } from '@renderer/lib/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import { TaskRow, type ReadyTask } from './task-row';
 
@@ -144,10 +146,18 @@ export const TaskList = observer(function TaskList() {
   if (!taskView) return null;
 
   const displayTasks = taskView.tab === 'active' ? activeTasks : archivedTasks;
+  const onlyWithNote = taskView.tab === 'archived' && taskView.archivedOnlyWithNote;
+  const noteFiltered = onlyWithNote
+    ? displayTasks.filter((t) => Boolean(t.data.archiveNote?.trim()))
+    : displayTasks;
   const q = taskView.searchQuery.trim().toLowerCase();
   const filteredTasks = q
-    ? displayTasks.filter((t) => t.data.name.toLowerCase().includes(q))
-    : displayTasks;
+    ? noteFiltered.filter((t) => {
+        if (t.data.name.toLowerCase().includes(q)) return true;
+        const note = t.data.archiveNote;
+        return note ? note.toLowerCase().includes(q) : false;
+      })
+    : noteFiltered;
 
   const clearSelection = () => taskView.setSelectedIds(new Set());
 
@@ -198,6 +208,22 @@ export const TaskList = observer(function TaskList() {
               onChange={(e) => taskView.setSearchQuery(e.target.value)}
               className="flex-1"
             />
+            {taskView.tab === 'archived' && (
+              <Tooltip>
+                <TooltipTrigger>
+                  <Toggle
+                    variant="outline"
+                    size="sm"
+                    pressed={taskView.archivedOnlyWithNote}
+                    onPressedChange={(pressed) => taskView.setArchivedOnlyWithNote(pressed)}
+                    aria-label="Only show tasks with a note"
+                  >
+                    <FileText className="size-3.5" />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent>Only with notes</TooltipContent>
+              </Tooltip>
+            )}
             <Button onClick={() => showCreateTaskModal({ projectId })}>
               Create Task <ShortcutHint settingsKey="newTask" />
             </Button>

@@ -564,4 +564,8 @@
   .file-diff-view .comment-view-zone {
     pointer-events: auto !important;
   }
+
+  [data-panel][data-yoda-animate='true'] {
+    transition: flex-grow 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
 }

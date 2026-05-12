@@ -10,17 +10,23 @@ import {
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ensureUniqueTaskSlug } from '@shared/task-name';
 import {
   isUnregisteredProject,
   type UnregisteredProject,
 } from '@renderer/features/projects/stores/project';
 import {
+  asMounted,
   getProjectManagerStore,
   getProjectStore,
   getRepositoryStore,
   projectViewKind,
 } from '@renderer/features/projects/stores/project-selectors';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { useEffectiveProvider } from '@renderer/features/tasks/conversations/use-effective-provider';
+import { useAgentAutoApproveDefaults } from '@renderer/features/tasks/hooks/useAgentAutoApproveDefaults';
 import { ConnectionStatusDot } from '@renderer/lib/components/connection-status-dot';
+import { rpc } from '@renderer/lib/ipc';
 import {
   useNavigate,
   useParams,
@@ -61,6 +67,15 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     void repo?.localData.load();
     void repo?.remoteData.load();
   }, [projectId]);
+
+  const { value: homeDraft } = useAppSettingsKey('homeDraft');
+  const expressMode = homeDraft?.expressMode ?? false;
+  const projectStoreForExpress = getProjectStore(projectId);
+  const mountedForExpress = asMounted(projectStoreForExpress);
+  const expressConnectionId =
+    mountedForExpress?.data?.type === 'ssh' ? mountedForExpress.data.connectionId : undefined;
+  const { providerId: expressProviderId } = useEffectiveProvider(expressConnectionId);
+  const expressAutoApproveDefaults = useAgentAutoApproveDefaults();
 
   const currentProjectId =
     currentView === 'task'
@@ -107,6 +122,53 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     void getProjectManagerStore().archiveProject(projectId);
     if (isProjectActive) navigate('home');
   };
+
+  const handleAddTask = useCallback(async () => {
+    const mounted = mountedForExpress;
+    const repo = getRepositoryStore(projectId);
+    const defaultBranch = repo?.defaultBranch;
+    const isUnborn = repo?.isUnborn ?? false;
+    // Express mode requires a runnable runtime config. Fall back to the home
+    // view whenever any prerequisite is missing so the user can fix it there.
+    if (!expressMode || !mounted || !expressProviderId || !defaultBranch) {
+      navigate('home', { projectId });
+      return;
+    }
+    const strategyKind = homeDraft?.strategyKind ?? 'new-branch';
+    const effectiveStrategyKind = isUnborn ? 'no-worktree' : strategyKind;
+    const taskId = crypto.randomUUID();
+    const baseName = await rpc.tasks.generateTaskName({});
+    const existingNames = Array.from(mounted.taskManager.tasks.values(), (t) => t.data.name);
+    const taskName = ensureUniqueTaskSlug(baseName, existingNames);
+    const strategy =
+      effectiveStrategyKind === 'no-worktree'
+        ? ({ kind: 'no-worktree' } as const)
+        : ({ kind: 'new-branch', taskBranch: taskName, pushBranch: false } as const);
+    void mounted.taskManager.createTask({
+      id: taskId,
+      projectId: mounted.data.id,
+      name: taskName,
+      sourceBranch: defaultBranch,
+      strategy,
+      initialConversation: {
+        id: crypto.randomUUID(),
+        projectId: mounted.data.id,
+        taskId,
+        provider: expressProviderId,
+        title: taskName,
+        autoApprove: expressAutoApproveDefaults.getDefault(expressProviderId),
+      },
+    });
+    navigate('task', { projectId: mounted.data.id, taskId });
+  }, [
+    expressMode,
+    expressProviderId,
+    expressAutoApproveDefaults,
+    homeDraft?.strategyKind,
+    mountedForExpress,
+    navigate,
+    projectId,
+  ]);
 
   const menuActions = {
     isSsh: isSshProject,
@@ -217,7 +279,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
             onPointerEnter={() => prefetchRepository()}
             onClick={(e) => {
               e.stopPropagation();
-              navigate('home', { projectId });
+              void handleAddTask();
             }}
             disabled={project.state === 'unregistered'}
           >

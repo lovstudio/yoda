@@ -432,25 +432,30 @@ export class TaskManagerStore {
     await task.setPinned(isPinned);
   }
 
-  async archiveTask(taskId: string): Promise<void> {
+  async archiveTask(taskId: string, note?: string): Promise<void> {
     const currentTask = this.tasks.get(taskId);
     if (!currentTask || !isRegistered(currentTask)) return;
     const previousArchivedAt = currentTask.data.archivedAt;
+    const previousArchiveNote = currentTask.data.archiveNote;
+    const trimmedNote = note?.trim();
+    const nextNote = trimmedNote && trimmedNote.length > 0 ? trimmedNote : undefined;
 
     try {
       runInAction(() => {
         const task = this.tasks.get(taskId);
         if (task && isRegistered(task)) {
           task.data.archivedAt = new Date().toISOString();
+          task.data.archiveNote = nextNote;
         }
       });
-      await rpc.tasks.archiveTask(this.projectId, taskId);
+      await rpc.tasks.archiveTask(this.projectId, taskId, nextNote);
       void this.teardownTask(taskId).catch(() => {});
     } catch (e) {
       runInAction(() => {
         const task = this.tasks.get(taskId);
         if (task && isRegistered(task)) {
           task.data.archivedAt = previousArchivedAt;
+          task.data.archiveNote = previousArchiveNote;
         }
       });
       throw e;

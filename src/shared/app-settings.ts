@@ -2,6 +2,7 @@ import type z from 'zod';
 import {
   appSettingsSchema,
   type agentAutoApproveDefaultsSchema,
+  type homeDraftSchema,
   type interfaceSettingsSchema,
   type localProjectSettingsSchema,
   type notificationSettingsSchema,
@@ -21,6 +22,7 @@ export type TerminalSettings = z.infer<typeof terminalSettingsSchema>;
 export type Theme = z.infer<typeof themeSchema>;
 
 export type InterfaceSettings = z.infer<typeof interfaceSettingsSchema>;
+export type HomeDraft = z.infer<typeof homeDraftSchema>;
 export type ProviderCustomConfig = z.infer<typeof providerCustomConfigEntrySchema>;
 export type ProviderCustomConfigs = Record<string, ProviderCustomConfig>;
 export type AppSettings = z.infer<typeof appSettingsSchema>;

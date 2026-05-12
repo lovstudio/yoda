@@ -126,6 +126,7 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
 
   useHotkey(getHotkeyRegistration('newTerminal', keyboard), () => void handleCreate(), {
     enabled: activeItem.kind === 'terminal' && newTerminalHotkey !== null,
+    conflictBehavior: 'replace',
   });
 
   const emptyState = (

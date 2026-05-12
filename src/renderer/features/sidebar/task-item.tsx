@@ -41,6 +41,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const showRename = useShowModal('renameTaskModal');
+  const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
   const showConfirm = useShowModal('confirmActionModal');
   const showManageRunScripts = useShowModal('manageRunScriptsModal');
 
@@ -68,6 +69,17 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const handleArchive = () => {
     if (isActive) navigate('project', { projectId });
     void taskManager?.archiveTask(taskId);
+  };
+
+  const handleArchiveWithNote = () => {
+    showArchiveWithNote({
+      projectId,
+      taskId,
+      taskName,
+      onSuccess: () => {
+        if (isActive) navigate('project', { projectId });
+      },
+    });
   };
 
   const handleRename = () => showRename({ projectId, taskId, currentName: taskName });
@@ -125,6 +137,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     onUnpin: () => void task.setPinned(false),
     onRename: handleRename,
     onArchive: handleArchive,
+    onArchiveWithNote: handleArchiveWithNote,
     onReconnect: handleReconnect,
     onDelete: handleDelete,
     onRunScript: handleRunScript,

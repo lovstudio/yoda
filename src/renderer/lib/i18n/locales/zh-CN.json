@@ -49,6 +49,16 @@
     "sortBy": "排序方式",
     "sortByCreatedAt": "创建时间",
     "sortByUpdatedAt": "最近使用",
+    "sort": "排序",
+    "filter": "筛选",
+    "more": "更多",
+    "filterByType": "项目类型",
+    "filterAll": "全部项目",
+    "filterLocal": "仅本地",
+    "filterSsh": "仅 SSH",
+    "expandAll": "全部展开",
+    "collapseAll": "全部折叠",
+    "clearManualOrder": "重置任务顺序",
     "update": "更新",
     "creatingWorkspace": "正在创建任务工作区…",
     "loading": "加载中",
@@ -57,6 +67,7 @@
     "changeSshConnection": "更换 SSH 连接",
     "archiveProject": "归档项目",
     "archiveTask": "归档任务",
+    "archiveTaskWithNote": "归档任务（附备注）…",
     "phase": {
       "creatingRepo": "创建仓库中…",
       "cloning": "克隆中…",
@@ -359,7 +370,15 @@
     }
   },
   "home": {
-    "headline": "要在 yoda 中构建什么？",
+    "greeting": {
+      "earlyMorning": "起得真早，{{name}}",
+      "morning": "早，{{name}}",
+      "noon": "中午好，{{name}}",
+      "afternoon": "下午好，{{name}}",
+      "evening": "晚上好，{{name}}",
+      "lateNight": "夜深了，{{name}}"
+    },
+    "headline": "今天想做点什么？",
     "promptPlaceholder": "可向 yoda 询问任何事。输入 @ 使用插件或提及文件",
     "addAria": "添加",
     "voiceAria": "语音输入",
@@ -368,10 +387,13 @@
     "remoteMode": "远程模式",
     "localMode": "本地模式",
     "needProjectHint": "先选择一个项目即可发送",
-    "baseBranchLabel": "基于：{{branch}}",
-    "strategyNewBranch": "新建分支（worktree）",
-    "strategyNoWorktree": "直接在 {{branch}} 上工作",
+    "strategyChipNoWorktree": "就地：{{branch}}",
+    "strategyChipNewBranch": "分叉：{{branch}}",
     "strategyAria": "选择任务起始方式",
+    "strategyNoWorktreeTitle": "就地修改 {{branch}}",
+    "strategyNoWorktreeDesc": "最快路径，改动直接落在当前分支，无隔离。适合小修小补或单人开发。",
+    "strategyNewBranchTitle": "分叉至新 worktree",
+    "strategyNewBranchDesc": "在新分支上拉出独立工作目录，保持 {{branch}} 干净，可同时跑多个任务互不打架。",
     "welcome": "欢迎",
     "welcomeStart": "开始使用",
     "createNewProject": "新建项目",
@@ -397,6 +419,13 @@
       "renaming": "重命名中…",
       "submit": "重命名",
       "renameFailed": "重命名任务失败"
+    },
+    "archiveWithNote": {
+      "title": "归档 \"{{name}}\"",
+      "label": "备注",
+      "placeholder": "为何归档此任务？",
+      "archiving": "归档中…",
+      "submit": "归档"
     },
     "addRemote": {
       "title": "添加远端",

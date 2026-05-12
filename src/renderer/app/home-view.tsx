@@ -1,30 +1,34 @@
 import {
+  Anchor,
   ArrowUp,
   ChevronDown,
   FolderOpen,
   GitBranch,
+  GitFork,
   Mic,
   Monitor,
-  Pin,
   Plus,
   Server,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
+import { type AgentProviderId } from '@shared/agent-provider-registry';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
 import {
   asMounted,
   getProjectManagerStore,
   getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useEffectiveProvider } from '@renderer/features/tasks/conversations/use-effective-provider';
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
 import { useAgentAutoApproveDefaults } from '@renderer/features/tasks/hooks/useAgentAutoApproveDefaults';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
+import { useAccountSession } from '@renderer/lib/hooks/useAccount';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
@@ -41,6 +45,15 @@ import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 
 type TaskStrategyKind = 'new-branch' | 'no-worktree';
+
+function getGreetingKey(hour: number): string {
+  if (hour >= 5 && hour < 9) return 'home.greeting.earlyMorning';
+  if (hour >= 9 && hour < 12) return 'home.greeting.morning';
+  if (hour >= 12 && hour < 14) return 'home.greeting.noon';
+  if (hour >= 14 && hour < 18) return 'home.greeting.afternoon';
+  if (hour >= 18 && hour < 22) return 'home.greeting.evening';
+  return 'home.greeting.lateNight';
+}
 
 export function HomeTitlebar() {
   return <Titlebar />;
@@ -60,6 +73,9 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const { effectiveTheme } = useTheme();
   const showAddProjectModal = useShowModal('addProjectModal');
   const { navigate } = useNavigate();
+  const { data: accountSession } = useAccountSession();
+  const sessionUser = accountSession?.user;
+  const greetingName = sessionUser?.name?.trim() || sessionUser?.username || '';
 
   const projectManager = getProjectManagerStore();
   const mountedProjects = useMemo(
@@ -86,20 +102,32 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     return undefined;
   })();
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(
+  const { value: draft, update: updateDraft } = useAppSettingsKey('homeDraft');
+
+  const fallbackProjectId = useMemo(
     () =>
       homeProjectId ??
       navProjectId ??
       Array.from(projectManager.projects.values())
         .reverse()
-        .find((p) => p.state === 'mounted')?.data?.id
+        .find((p) => p.state === 'mounted')?.data?.id,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [homeProjectId, navProjectId, projectManager.projects.size]
+  );
+
+  const selectedProjectId = draft?.selectedProjectId ?? fallbackProjectId;
+  const setSelectedProjectId = useCallback(
+    (next: string | undefined) => {
+      updateDraft({ selectedProjectId: next ?? null });
+    },
+    [updateDraft]
   );
 
   useEffect(() => {
     if (!homeProjectId) return;
-    setSelectedProjectId(homeProjectId);
+    updateDraft({ selectedProjectId: homeProjectId });
     setHomeParams({ projectId: undefined });
-  }, [homeProjectId, setHomeParams]);
+  }, [homeProjectId, setHomeParams, updateDraft]);
 
   const projectStore = selectedProjectId
     ? projectManager.projects.get(selectedProjectId)
@@ -113,23 +141,59 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const isUnborn = repo?.isUnborn ?? false;
   const branchLabel = defaultBranch?.branch ?? repo?.currentBranch ?? 'main';
 
-  const { providerId, setProviderOverride } = useEffectiveProvider(connectionId);
+  const providerOverrideValue = draft?.providerOverride ?? null;
+  const setProviderOverridePersisted = useCallback(
+    (id: AgentProviderId | null) => {
+      updateDraft({ providerOverride: id });
+    },
+    [updateDraft]
+  );
+  const { providerId, setProviderOverride } = useEffectiveProvider(connectionId, {
+    value: providerOverrideValue,
+    set: setProviderOverridePersisted,
+  });
   const autoApproveDefaults = useAgentAutoApproveDefaults();
 
-  const [prompt, setPrompt] = useState('');
+  const persistedPrompt = draft?.prompt ?? '';
+  const [prompt, setPrompt] = useState(persistedPrompt);
+  const hydratedPromptRef = useRef(false);
+  useEffect(() => {
+    if (hydratedPromptRef.current) return;
+    if (draft === undefined) return;
+    hydratedPromptRef.current = true;
+    setPrompt(draft.prompt ?? '');
+  }, [draft]);
+  const promptWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!hydratedPromptRef.current) return;
+    if (prompt === persistedPrompt) return;
+    if (promptWriteRef.current) clearTimeout(promptWriteRef.current);
+    promptWriteRef.current = setTimeout(() => {
+      updateDraft({ prompt });
+    }, 300);
+    return () => {
+      if (promptWriteRef.current) clearTimeout(promptWriteRef.current);
+    };
+  }, [prompt, persistedPrompt, updateDraft]);
+
   const [submitting, setSubmitting] = useState(false);
-  const [strategyKind, setStrategyKind] = useState<TaskStrategyKind>('new-branch');
+  const strategyKind: TaskStrategyKind = draft?.strategyKind ?? 'new-branch';
+  const setStrategyKind = useCallback(
+    (next: TaskStrategyKind) => {
+      updateDraft({ strategyKind: next });
+    },
+    [updateDraft]
+  );
   const effectiveStrategyKind: TaskStrategyKind = isUnborn ? 'no-worktree' : strategyKind;
   const trimmed = prompt.trim();
-  const canSubmit =
-    !!mounted && !!providerId && !!defaultBranch && trimmed.length > 0 && !submitting;
+  const canSubmit = !!mounted && !!providerId && !!defaultBranch && !submitting;
 
   const handleSubmit = useCallback(async () => {
-    if (!mounted || !providerId || !defaultBranch || trimmed.length === 0 || submitting) return;
+    if (!mounted || !providerId || !defaultBranch || submitting) return;
     setSubmitting(true);
     try {
       const taskId = crypto.randomUUID();
-      const baseName = await rpc.tasks.generateTaskName({ title: trimmed });
+      const baseName = await rpc.tasks.generateTaskName(trimmed ? { title: trimmed } : {});
       const existingNames = Array.from(mounted.taskManager.tasks.values(), (t) => t.data.name);
       const taskName = ensureUniqueTaskSlug(baseName, existingNames);
 
@@ -150,12 +214,13 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
           taskId,
           provider: providerId,
           title: taskName,
-          initialPrompt: trimmed,
+          initialPrompt: trimmed || undefined,
           autoApprove: autoApproveDefaults.getDefault(providerId),
         },
       });
       navigate('task', { projectId: mounted.data.id, taskId });
       setPrompt('');
+      updateDraft({ prompt: '' });
     } finally {
       setSubmitting(false);
     }
@@ -168,6 +233,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     submitting,
     autoApproveDefaults,
     navigate,
+    updateDraft,
   ]);
 
   const recentTasks = useMemo(() => {
@@ -208,7 +274,12 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
               className="h-9"
             />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('home.headline')}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {greetingName
+              ? `${t(getGreetingKey(new Date().getHours()), { name: greetingName })} · `
+              : ''}
+            {t('home.headline')}
+          </h1>
         </div>
 
         <div className="rounded-2xl border border-border bg-background-1 shadow-sm">
@@ -297,9 +368,12 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
             onChange={setStrategyKind}
             ariaLabel={t('home.strategyAria')}
             labels={{
-              newBranch: t('home.strategyNewBranch'),
-              noWorktree: t('home.strategyNoWorktree', { branch: branchLabel }),
-              base: t('home.baseBranchLabel', { branch: branchLabel }),
+              chipNewBranch: t('home.strategyChipNewBranch', { branch: branchLabel }),
+              chipNoWorktree: t('home.strategyChipNoWorktree', { branch: branchLabel }),
+              newBranchTitle: t('home.strategyNewBranchTitle', { branch: branchLabel }),
+              newBranchDesc: t('home.strategyNewBranchDesc', { branch: branchLabel }),
+              noWorktreeTitle: t('home.strategyNoWorktreeTitle', { branch: branchLabel }),
+              noWorktreeDesc: t('home.strategyNoWorktreeDesc'),
             }}
           />
           {!mounted && (
@@ -353,25 +427,26 @@ interface StrategyChipProps {
   disabled: boolean;
   onChange: (next: TaskStrategyKind) => void;
   ariaLabel: string;
-  labels: { newBranch: string; noWorktree: string; base: string };
+  labels: {
+    chipNewBranch: string;
+    chipNoWorktree: string;
+    newBranchTitle: string;
+    newBranchDesc: string;
+    noWorktreeTitle: string;
+    noWorktreeDesc: string;
+  };
 }
 
-function StrategyChip({
-  strategyKind,
-  disabled,
-  onChange,
-  ariaLabel,
-  labels,
-}: StrategyChipProps) {
+function StrategyChip({ strategyKind, disabled, onChange, ariaLabel, labels }: StrategyChipProps) {
   const isNewBranch = strategyKind === 'new-branch';
-  const Icon = isNewBranch ? GitBranch : Pin;
-  const label = isNewBranch ? labels.base : labels.noWorktree;
+  const Icon = isNewBranch ? GitFork : Anchor;
+  const chipLabel = isNewBranch ? labels.chipNewBranch : labels.chipNoWorktree;
 
   if (disabled) {
     return (
       <span className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground">
         <Icon className="size-3.5 text-foreground-muted" />
-        {label}
+        {chipLabel}
       </span>
     );
   }
@@ -386,22 +461,35 @@ function StrategyChip({
             className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
           >
             <Icon className="size-3.5 text-foreground-muted" />
-            <span>{label}</span>
+            <span>{chipLabel}</span>
             <ChevronDown className="size-3 text-foreground-muted" />
           </button>
         }
       />
-      <DropdownMenuContent align="start" className="min-w-56">
-        <DropdownMenuItem onClick={() => onChange('new-branch')}>
-          <GitBranch className="size-4 text-foreground-muted" />
-          <div className="flex flex-col">
-            <span>{labels.newBranch}</span>
-            <span className="text-xs text-foreground-muted">{labels.base}</span>
+      <DropdownMenuContent align="start" className="w-80 p-1.5">
+        <DropdownMenuItem
+          onClick={() => onChange('no-worktree')}
+          className="items-start gap-3 rounded-md px-2.5 py-2"
+        >
+          <Anchor className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium text-foreground">{labels.noWorktreeTitle}</span>
+            <span className="text-xs leading-snug text-foreground-muted">
+              {labels.noWorktreeDesc}
+            </span>
           </div>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onChange('no-worktree')}>
-          <Pin className="size-4 text-foreground-muted" />
-          <span>{labels.noWorktree}</span>
+        <DropdownMenuItem
+          onClick={() => onChange('new-branch')}
+          className="items-start gap-3 rounded-md px-2.5 py-2"
+        >
+          <GitFork className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium text-foreground">{labels.newBranchTitle}</span>
+            <span className="text-xs leading-snug text-foreground-muted">
+              {labels.newBranchDesc}
+            </span>
+          </div>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

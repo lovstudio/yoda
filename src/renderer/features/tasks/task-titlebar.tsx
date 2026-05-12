@@ -122,7 +122,12 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
           <Popover>
             <PopoverTrigger className="flex items-center gap-1 text-sm text-foreground-muted hover:text-foreground min-w-0">
               <span className="flex items-center gap-1 min-w-0">
-                <span className="text-sm text-foreground-passive shrink-0">{projectName}</span>
+                <span className="text-sm text-foreground-passive shrink-0 inline-flex items-baseline gap-1">
+                  {projectName}
+                  <span className="text-[11px] text-foreground-passive/70 font-mono truncate max-w-28">
+                    ({provisionedTask.workspace.git.branchName})
+                  </span>
+                </span>
                 <span className="text-sm text-foreground-passive shrink-0">/</span>
                 <span className="flex items-center gap-1.5 min-w-0">
                   <span className="truncate">{taskDisplayName(taskStore)}</span>
