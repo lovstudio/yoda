@@ -1,5 +1,6 @@
 import { FileText } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useState } from 'react';
 import { selectCurrentPr } from '@shared/pull-requests';
 import { type Task } from '@shared/tasks';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -40,12 +41,20 @@ export const TaskRow = observer(function TaskRow({
   const taskManager = getTaskManagerStore(task.data.projectId);
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
   const preArchiveCommand = homeDraft?.preArchiveCommand ?? '';
+  const [isArchiving, setIsArchiving] = useState(false);
 
-  const handleArchive = () =>
+  const handleArchive = () => {
+    if (isArchiving) return;
+    setIsArchiving(true);
     void (async () => {
-      await runPreArchiveCommand(task.data.projectId, task.data.id, preArchiveCommand);
-      await taskManager?.archiveTask(task.data.id);
+      try {
+        await runPreArchiveCommand(task.data.projectId, task.data.id, preArchiveCommand);
+        await taskManager?.archiveTask(task.data.id);
+      } finally {
+        setIsArchiving(false);
+      }
     })();
+  };
   const handleArchiveWithNote = () =>
     showArchiveWithNote({
       projectId: task.data.projectId,
@@ -94,11 +103,15 @@ export const TaskRow = observer(function TaskRow({
     >
       <button
         onClick={() => {
-          if (isArchived) return;
+          if (isArchived || isArchiving) return;
           handleProvision();
           navigate('task', { projectId: task.data.projectId, taskId: task.data.id });
         }}
-        className="group flex items-center gap-2 rounded-lg p-3  hover:bg-background-1 transition-colors w-full"
+        disabled={isArchiving}
+        className={cn(
+          'group flex items-center gap-2 rounded-lg p-3  hover:bg-background-1 transition-colors w-full',
+          isArchiving && 'opacity-50 pointer-events-none'
+        )}
       >
         <div
           onClick={(e) => e.stopPropagation()}

@@ -1,4 +1,4 @@
-import { Archive, MoreHorizontal } from 'lucide-react';
+import { Archive, Loader2, MoreHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -57,6 +57,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const taskManager = getTaskManagerStore(projectId);
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
   const preArchiveCommand = homeDraft?.preArchiveCommand ?? '';
+  const [isArchiving, setIsArchiving] = useState(false);
 
   const isBootstrapping =
     task.state === 'unregistered' ||
@@ -71,10 +72,16 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   };
 
   const handleArchive = () => {
+    if (isArchiving) return;
     if (isActive) navigate('project', { projectId });
+    setIsArchiving(true);
     void (async () => {
-      await runPreArchiveCommand(projectId, taskId, preArchiveCommand);
-      await taskManager?.archiveTask(taskId);
+      try {
+        await runPreArchiveCommand(projectId, taskId, preArchiveCommand);
+        await taskManager?.archiveTask(taskId);
+      } finally {
+        setIsArchiving(false);
+      }
     })();
   };
 
@@ -165,16 +172,19 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       <SidebarMenuRow
         className={cn(
           'group/row flex items-center justify-between px-1 h-8 gap-1',
-          rowVariant === 'pinned' ? 'pl-2' : 'pl-8'
+          rowVariant === 'pinned' ? 'pl-2' : 'pl-8',
+          isArchiving && 'opacity-50 pointer-events-none'
         )}
         isActive={isActive}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => {
+          if (isArchiving) return;
           handleProvision();
           navigate('task', { projectId, taskId });
         }}
         onDoubleClick={(e) => {
           e.stopPropagation();
+          if (isArchiving) return;
           handleRename();
         }}
       >
@@ -192,35 +202,47 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         <div
           className={cn(
             'items-center gap-0.5',
-            isMenuOpen ? 'flex' : 'hidden group-hover/row:flex'
+            isMenuOpen || isArchiving ? 'flex' : 'hidden group-hover/row:flex'
           )}
         >
-          <TaskActionsMenu
-            {...menuActions}
-            open={isMenuOpen}
-            onOpenChange={setMenuOpen}
-            trigger={
-              <SidebarItemMiniButton
-                type="button"
-                aria-label={t('sidebar.runScripts.menuLabel')}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </SidebarItemMiniButton>
-            }
-          />
+          {!isArchiving && (
+            <TaskActionsMenu
+              {...menuActions}
+              open={isMenuOpen}
+              onOpenChange={setMenuOpen}
+              trigger={
+                <SidebarItemMiniButton
+                  type="button"
+                  aria-label={t('sidebar.runScripts.menuLabel')}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </SidebarItemMiniButton>
+              }
+            />
+          )}
           <SidebarItemMiniButton
             type="button"
             aria-label={t('sidebar.archiveTask')}
+            disabled={isArchiving}
             onClick={(e) => {
               e.stopPropagation();
               handleArchive();
             }}
           >
-            <Archive className="h-4 w-4" />
+            {isArchiving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Archive className="h-4 w-4" />
+            )}
           </SidebarItemMiniButton>
         </div>
-        <div className={cn('items-center', isMenuOpen ? 'hidden' : 'flex group-hover/row:hidden')}>
+        <div
+          className={cn(
+            'items-center',
+            isMenuOpen || isArchiving ? 'hidden' : 'flex group-hover/row:hidden'
+          )}
+        >
           <TaskSidebarAgentStatus task={task} needsReview={needsReview} />
         </div>
       </SidebarMenuRow>
