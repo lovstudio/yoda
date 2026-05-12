@@ -19,7 +19,8 @@ const SKIP_PATTERNS = [
 ];
 
 const MIN_MESSAGE_LENGTH = 2;
-const HAS_ALPHA = /[A-Za-z]/;
+// Accept any Unicode letter — including CJK, Cyrillic, etc. — not just ASCII.
+const HAS_ALPHA = /\p{L}/u;
 
 type SanitizerMode = 'normal' | 'escape' | 'csi' | 'osc' | 'osc-escape' | 'ss3';
 type InputAction =

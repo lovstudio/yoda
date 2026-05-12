@@ -179,6 +179,12 @@ describe('TerminalInputBuffer', () => {
     expect(isRealTaskInput('fix')).toBe(true);
   });
 
+  it('accepts non-ASCII (CJK) prompts', () => {
+    expect(isRealTaskInput('修复登录页')).toBe(true);
+    expect(isRealTaskInput('修')).toBe(false); // still below MIN_MESSAGE_LENGTH
+    expect(isRealTaskInput('修复')).toBe(true);
+  });
+
   it('clearLine removes prefilled slash command before subsequent submit', () => {
     const buffer = new SubmittedInputBuffer();
 
