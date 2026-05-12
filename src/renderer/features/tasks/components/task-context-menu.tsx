@@ -2,6 +2,7 @@ import {
   Activity,
   Archive,
   Copy,
+  FileText,
   Pencil,
   Pin,
   PinOff,
@@ -37,6 +38,7 @@ interface TaskMenuActions {
   onUnpin: () => void;
   onRename: () => void;
   onArchive: () => void;
+  onArchiveWithNote?: () => void;
   onRestore?: () => void;
   onReconnect?: () => void;
   onDelete: () => void;
@@ -130,6 +132,15 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       label: t('sidebar.archiveTask'),
       onSelect: actions.onArchive,
     });
+    if (actions.onArchiveWithNote) {
+      items.push({
+        key: 'archive-with-note',
+        group: 3,
+        icon: FileText,
+        label: t('sidebar.archiveTaskWithNote'),
+        onSelect: actions.onArchiveWithNote,
+      });
+    }
   }
   if (actions.isArchived && actions.onRestore) {
     items.push({

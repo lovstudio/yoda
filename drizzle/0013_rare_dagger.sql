@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `archive_note` text;

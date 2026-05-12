@@ -116,6 +116,7 @@ export const tasks = sqliteTable(
     taskBranch: text('task_branch'),
     linkedIssue: text('linked_issue'),
     archivedAt: text('archived_at'), // null = active, timestamp = archived
+    archiveNote: text('archive_note'),
     createdAt: text('created_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),

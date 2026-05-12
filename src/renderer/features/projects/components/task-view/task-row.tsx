@@ -1,3 +1,4 @@
+import { FileText } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { selectCurrentPr } from '@shared/pull-requests';
 import { type Task } from '@shared/tasks';
@@ -32,10 +33,17 @@ export const TaskRow = observer(function TaskRow({
 }) {
   const { navigate } = useNavigate();
   const showRename = useShowModal('renameTaskModal');
+  const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
   const showConfirm = useShowModal('confirmActionModal');
   const taskManager = getTaskManagerStore(task.data.projectId);
 
   const handleArchive = () => void taskManager?.archiveTask(task.data.id);
+  const handleArchiveWithNote = () =>
+    showArchiveWithNote({
+      projectId: task.data.projectId,
+      taskId: task.data.id,
+      taskName: task.data.name,
+    });
   const handleRestore = () => void taskManager?.restoreTask(task.data.id);
   const handleProvision = () => void taskManager?.provisionTask(task.data.id);
   const handleDelete = () =>
@@ -68,6 +76,7 @@ export const TaskRow = observer(function TaskRow({
       onUnpin={() => void task.setPinned(false)}
       onRename={handleRename}
       onArchive={handleArchive}
+      onArchiveWithNote={handleArchiveWithNote}
       onRestore={handleRestore}
       onDelete={handleDelete}
     >
@@ -92,12 +101,21 @@ export const TaskRow = observer(function TaskRow({
             aria-label="Select task"
           />
         </div>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 text-left text-sm truncate">{task.data.name}</span>
             <TaskGitDiffStats task={task} className="text-xs shrink-0" />
             {currentPr && <PrBadge pr={currentPr} />}
           </div>
+          {task.data.archiveNote && (
+            <div
+              className="flex min-w-0 items-center gap-1 text-xs text-foreground-passive"
+              title={task.data.archiveNote}
+            >
+              <FileText className="size-3 shrink-0" />
+              <span className="min-w-0 truncate text-left italic">{task.data.archiveNote}</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center shrink-0 [&>span]:ring-2 [&>span]:ring-background [&>span:not(:first-child)]:-ml-1.5">
           {Object.entries(task.conversationStats).map(([providerId, count]) => {

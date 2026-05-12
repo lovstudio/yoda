@@ -7,23 +7,29 @@ import { tasks } from '@main/db/schema';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
 
-export async function archiveTask(projectId: string, taskId: string): Promise<void> {
+export async function archiveTask(projectId: string, taskId: string, note?: string): Promise<void> {
   const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
   if (!task) return;
 
   const project = projectManager.getProject(projectId);
 
+  const trimmedNote = note?.trim();
   await db
     .update(tasks)
     .set({
       status: 'archived',
       archivedAt: sql`CURRENT_TIMESTAMP`,
+      archiveNote: trimmedNote && trimmedNote.length > 0 ? trimmedNote : null,
       updatedAt: sql`CURRENT_TIMESTAMP`,
       statusChangedAt: sql`CURRENT_TIMESTAMP`,
     })
     .where(eq(tasks.id, taskId));
   taskEvents._emit('task:archived', taskId, projectId);
-  telemetryService.capture('task_archived', { project_id: projectId, task_id: taskId });
+  telemetryService.capture('task_archived', {
+    project_id: projectId,
+    task_id: taskId,
+    has_note: Boolean(trimmedNote && trimmedNote.length > 0),
+  });
 
   if (!project) return;
 

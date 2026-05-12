@@ -31,6 +31,7 @@ export type Task = {
   /** ISO timestamp: when lifecycle status last changed (current status entered). */
   statusChangedAt: string;
   archivedAt?: string;
+  archiveNote?: string;
   lastInteractedAt?: string;
   linkedIssue?: Issue;
   isPinned: boolean;
