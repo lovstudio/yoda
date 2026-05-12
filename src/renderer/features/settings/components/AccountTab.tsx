@@ -108,7 +108,10 @@ export function AccountTab() {
           <div className="flex-1">
             <p className="text-sm font-medium text-foreground">
               {t('settings.account.connectedAs')}{' '}
-              <span className="font-semibold">@{user.username}</span>
+              <span className="font-semibold">{user.name?.trim() || `@${user.username}`}</span>
+              {user.name?.trim() && (
+                <span className="ml-1 text-xs text-muted-foreground">@{user.username}</span>
+              )}
             </p>
             {user.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
           </div>

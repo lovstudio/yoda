@@ -9,7 +9,7 @@ export const accountAuthDeviceCodeChannel = defineEvent<{
 }>('account:auth:device-code');
 
 export const accountAuthSuccessChannel = defineEvent<{
-  user: { userId: string; username: string; avatarUrl: string; email: string };
+  user: { userId: string; username: string; name: string; avatarUrl: string; email: string };
 }>('account:auth:success');
 
 export const accountAuthErrorChannel = defineEvent<{

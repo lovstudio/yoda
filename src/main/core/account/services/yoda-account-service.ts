@@ -13,6 +13,7 @@ import { accountCredentialStore } from './credential-store';
 export interface AccountUser {
   userId: string;
   username: string;
+  name: string;
   avatarUrl: string;
   email: string;
 }
@@ -21,6 +22,7 @@ export interface CachedProfile {
   hasAccount: boolean;
   userId: string;
   username: string;
+  name: string;
   avatarUrl: string;
   email: string;
   lastValidated: string;
@@ -61,7 +63,7 @@ interface DevicePollSuccessResponse {
   refreshToken: string;
   expiresIn: number;
   expiresAt: number;
-  user: { id: string; email: string };
+  user: { id: string; email: string; name?: string; avatarUrl?: string };
 }
 
 interface DevicePollPendingResponse {
@@ -98,6 +100,7 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
           ? {
               userId: this.cachedProfile.userId,
               username: this.cachedProfile.username,
+              name: this.cachedProfile.name ?? '',
               avatarUrl: this.cachedProfile.avatarUrl,
               email: this.cachedProfile.email,
             }
@@ -105,6 +108,10 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
       isSignedIn,
       hasAccount,
     };
+  }
+
+  getSessionToken(): string | null {
+    return this.sessionToken;
   }
 
   async loadSessionToken(): Promise<void> {
@@ -152,7 +159,8 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
         hasAccount: true,
         userId: session.user.id,
         username,
-        avatarUrl: '',
+        name: session.user.name?.trim() ?? '',
+        avatarUrl: session.user.avatarUrl?.trim() ?? '',
         email: session.user.email,
         lastValidated: new Date().toISOString(),
       };
@@ -166,6 +174,7 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
       const user: AccountUser = {
         userId: profile.userId,
         username: profile.username,
+        name: profile.name,
         avatarUrl: profile.avatarUrl,
         email: profile.email,
       };
@@ -314,10 +323,23 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
     const json = (await response.json()) as {
       accessToken: string;
       refreshToken: string;
+      user?: { id: string; email: string; name?: string; avatarUrl?: string };
     };
     await accountCredentialStore.set(json.accessToken);
     await accountKV.set('refreshToken', json.refreshToken);
     this.sessionToken = json.accessToken;
+
+    if (json.user && this.cachedProfile) {
+      const updated: CachedProfile = {
+        ...this.cachedProfile,
+        name: json.user.name?.trim() || this.cachedProfile.name || '',
+        avatarUrl: json.user.avatarUrl?.trim() || this.cachedProfile.avatarUrl || '',
+        email: json.user.email || this.cachedProfile.email,
+        lastValidated: new Date().toISOString(),
+      };
+      this.cachedProfile = updated;
+      await accountKV.set('profile', updated);
+    }
   }
 }
 
