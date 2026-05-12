@@ -1,6 +1,8 @@
 import {
   Activity,
   Archive,
+  CircleDot,
+  CircleSlash,
   Copy,
   FileText,
   Pencil,
@@ -33,9 +35,13 @@ interface TaskMenuActions {
   isPinned: boolean;
   canPin: boolean;
   isArchived: boolean;
+  needsReview: boolean;
+  canMarkReview: boolean;
   branchName?: string;
   onPin: () => void;
   onUnpin: () => void;
+  onMarkNeedsReview: () => void;
+  onUnmarkNeedsReview: () => void;
   onRename: () => void;
   onArchive: () => void;
   onArchiveWithNote?: () => void;
@@ -113,6 +119,25 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     label: 'Rename',
     onSelect: actions.onRename,
   });
+  if (actions.canMarkReview) {
+    items.push(
+      actions.needsReview
+        ? {
+            key: 'unmark-review',
+            group: 2,
+            icon: CircleSlash,
+            label: 'Unmark review',
+            onSelect: actions.onUnmarkNeedsReview,
+          }
+        : {
+            key: 'mark-review',
+            group: 2,
+            icon: CircleDot,
+            label: 'Mark for review',
+            onSelect: actions.onMarkNeedsReview,
+          }
+    );
+  }
   if (actions.onReconnect) {
     items.push({
       key: 'reconnect',

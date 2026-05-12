@@ -2,9 +2,11 @@ import { FileText } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { selectCurrentPr } from '@shared/pull-requests';
 import { type Task } from '@shared/tasks';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { TaskContextMenu } from '@renderer/features/tasks/components/task-context-menu';
 import { TaskGitDiffStats } from '@renderer/features/tasks/components/task-git-diff-stats';
+import { runPreArchiveCommand } from '@renderer/features/tasks/run-pre-archive-command';
 import { type TaskStore } from '@renderer/features/tasks/stores/task';
 import {
   asProvisioned,
@@ -36,8 +38,14 @@ export const TaskRow = observer(function TaskRow({
   const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
   const showConfirm = useShowModal('confirmActionModal');
   const taskManager = getTaskManagerStore(task.data.projectId);
+  const { value: homeDraft } = useAppSettingsKey('homeDraft');
+  const preArchiveCommand = homeDraft?.preArchiveCommand ?? '';
 
-  const handleArchive = () => void taskManager?.archiveTask(task.data.id);
+  const handleArchive = () =>
+    void (async () => {
+      await runPreArchiveCommand(task.data.projectId, task.data.id, preArchiveCommand);
+      await taskManager?.archiveTask(task.data.id);
+    })();
   const handleArchiveWithNote = () =>
     showArchiveWithNote({
       projectId: task.data.projectId,
@@ -71,9 +79,13 @@ export const TaskRow = observer(function TaskRow({
       isPinned={task.data.isPinned}
       canPin={canPin}
       isArchived={isArchived}
+      needsReview={task.data.needsReview}
+      canMarkReview={task.state !== 'unregistered'}
       branchName={branchName}
       onPin={() => void task.setPinned(true)}
       onUnpin={() => void task.setPinned(false)}
+      onMarkNeedsReview={() => void task.setNeedsReview(true)}
+      onUnmarkNeedsReview={() => void task.setNeedsReview(false)}
       onRename={handleRename}
       onArchive={handleArchive}
       onArchiveWithNote={handleArchiveWithNote}

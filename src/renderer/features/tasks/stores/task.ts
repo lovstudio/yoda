@@ -32,6 +32,7 @@ export type UnregisteredTaskData = {
   createdAt: string;
   statusChangedAt: string;
   isPinned: boolean;
+  needsReview: boolean;
 };
 
 export class ProvisionedTask {
@@ -295,6 +296,25 @@ export class TaskStore {
     } catch (e) {
       runInAction(() => {
         task.isPinned = previous;
+      });
+      log.error(e);
+      throw e;
+    }
+  }
+
+  async setNeedsReview(needsReview: boolean): Promise<void> {
+    if (this.state === 'unregistered') return;
+    const task = registeredTaskData(this);
+    if (!task) return;
+    const previous = task.needsReview;
+    runInAction(() => {
+      task.needsReview = needsReview;
+    });
+    try {
+      await rpc.tasks.setTaskNeedsReview(task.id, needsReview);
+    } catch (e) {
+      runInAction(() => {
+        task.needsReview = previous;
       });
       log.error(e);
       throw e;

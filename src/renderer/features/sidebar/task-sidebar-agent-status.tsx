@@ -19,8 +19,10 @@ import { getSortInstant } from './sidebar-store';
  */
 export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
   task,
+  needsReview = false,
 }: {
   task: TaskStore;
+  needsReview?: boolean;
 }) {
   const { t } = useTranslation();
   const isBootstrapping =
@@ -45,6 +47,22 @@ export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
 
   if (status) {
     return <AgentStatusIndicator status={status} />;
+  }
+
+  if (needsReview) {
+    return (
+      <Tooltip>
+        <TooltipTrigger>
+          <span className="size-6 flex justify-center items-center">
+            <span
+              aria-label="Needs review"
+              className="size-1.5 rounded-full bg-amber-400 dark:bg-amber-300"
+            />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>Needs review</TooltipContent>
+      </Tooltip>
+    );
   }
 
   const sortKind = sidebarStore.taskSortBy === 'created-at' ? 'created' : 'updated';

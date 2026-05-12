@@ -35,6 +35,7 @@ export type Task = {
   lastInteractedAt?: string;
   linkedIssue?: Issue;
   isPinned: boolean;
+  needsReview: boolean;
   isUserNamed: boolean;
   prs: PullRequest[];
   conversations: Record<string, number>;

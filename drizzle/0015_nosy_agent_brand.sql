@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `needs_review` integer DEFAULT 0 NOT NULL;

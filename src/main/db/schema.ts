@@ -129,6 +129,7 @@ export const tasks = sqliteTable(
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
     isPinned: integer('is_pinned').notNull().default(0), // boolean, 0=false, 1=true
+    needsReview: integer('needs_review').notNull().default(0), // boolean, 0=false, 1=true — surfaces a review marker in the UI
     isUserNamed: integer('is_user_named').notNull().default(0), // 1 if user manually renamed; blocks agent auto-sync
     workspaceProvider: text('workspace_provider'), // 'local' | 'ssh' | null (null = inherit from project settings)
     workspaceId: text('workspace_id'),

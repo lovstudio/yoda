@@ -4,11 +4,13 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { selectCurrentPr } from '@shared/pull-requests';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { TaskSidebarAgentStatus } from '@renderer/features/sidebar/task-sidebar-agent-status';
 import {
   TaskActionsMenu,
   TaskContextMenu,
 } from '@renderer/features/tasks/components/task-context-menu';
+import { runPreArchiveCommand } from '@renderer/features/tasks/run-pre-archive-command';
 import { type TaskStore } from '@renderer/features/tasks/stores/task';
 import {
   asProvisioned,
@@ -53,6 +55,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
 
   const task = getTaskStore(projectId, taskId)!;
   const taskManager = getTaskManagerStore(projectId);
+  const { value: homeDraft } = useAppSettingsKey('homeDraft');
+  const preArchiveCommand = homeDraft?.preArchiveCommand ?? '';
 
   const isBootstrapping =
     task.state === 'unregistered' ||
@@ -68,7 +72,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
 
   const handleArchive = () => {
     if (isActive) navigate('project', { projectId });
-    void taskManager?.archiveTask(taskId);
+    void (async () => {
+      await runPreArchiveCommand(projectId, taskId, preArchiveCommand);
+      await taskManager?.archiveTask(taskId);
+    })();
   };
 
   const handleArchiveWithNote = () => {
@@ -96,6 +103,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     });
 
   const canPin = task.state !== 'unregistered';
+  const canMarkReview = task.state !== 'unregistered';
+  const needsReview = task.data.needsReview;
 
   const provisionedTask = asProvisioned(task);
   const branchName =
@@ -133,9 +142,13 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     isPinned: task.data.isPinned,
     canPin,
     isArchived: false,
+    needsReview,
+    canMarkReview,
     branchName,
     onPin: () => void task.setPinned(true),
     onUnpin: () => void task.setPinned(false),
+    onMarkNeedsReview: () => void task.setNeedsReview(true),
+    onUnmarkNeedsReview: () => void task.setNeedsReview(false),
     onRename: handleRename,
     onArchive: handleArchive,
     onArchiveWithNote: handleArchiveWithNote,
@@ -208,7 +221,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           </SidebarItemMiniButton>
         </div>
         <div className={cn('items-center', isMenuOpen ? 'hidden' : 'flex group-hover/row:hidden')}>
-          <TaskSidebarAgentStatus task={task} />
+          <TaskSidebarAgentStatus task={task} needsReview={needsReview} />
         </div>
       </SidebarMenuRow>
     </TaskContextMenu>
