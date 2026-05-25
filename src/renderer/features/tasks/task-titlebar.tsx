@@ -6,7 +6,6 @@ import {
   FolderOpen,
   GitBranch,
   ListChecks,
-  MessageSquare,
   Pin,
   RefreshCcw,
   Terminal,
@@ -359,20 +358,6 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
                 }
               />
               <TooltipContent>{t('tasks.changes')}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <ToggleGroupItem
-                    size="icon-sm"
-                    value="conversations"
-                    aria-label={t('tasks.conversations')}
-                  >
-                    <MessageSquare className="size-3.5" />
-                  </ToggleGroupItem>
-                }
-              />
-              <TooltipContent>{t('tasks.conversations')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
