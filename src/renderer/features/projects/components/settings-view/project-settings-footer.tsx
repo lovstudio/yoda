@@ -1,4 +1,5 @@
 import { Check, Loader2, Undo2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
@@ -24,6 +25,7 @@ export function ProjectSettingsFooter({
   onUndo,
   onSave,
 }: ProjectSettingsFooterProps) {
+  const { t } = useTranslation();
   const saving = saveStatus === 'saving';
   const saved = saveStatus === 'saved' && !dirty;
   const saveDisabled = saving || !dirty;
@@ -42,13 +44,12 @@ export function ProjectSettingsFooter({
                 hidden={!canShareConfig}
                 onClick={onShare}
               >
-                Share with team
+                {t('projects.settings.shareWithTeam')}
               </Button>
             }
           />
           <TooltipContent side="bottom" align="end">
-            Writes selected settings to .yoda.json. Commit that file to share these defaults with
-            your team.
+            {t('projects.settings.shareWithTeamTooltip')}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -57,7 +58,7 @@ export function ProjectSettingsFooter({
         <Button
           variant="outline"
           size="icon-sm"
-          aria-label="Reset changes"
+          aria-label={t('projects.settings.resetChanges')}
           onClick={onUndo}
           disabled={!dirty || saving}
         >
@@ -67,7 +68,11 @@ export function ProjectSettingsFooter({
           <span className="inline-flex min-w-22 items-center justify-center gap-1.5">
             {saving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
             {!saving && saved && <Check className="size-4" aria-hidden="true" />}
-            {saving ? 'Saving…' : saved ? 'Saved' : 'Save settings'}
+            {saving
+              ? t('common.saving')
+              : saved
+                ? t('common.saved')
+                : t('projects.settings.saveSettings')}
           </span>
         </ConfirmButton>
       </div>

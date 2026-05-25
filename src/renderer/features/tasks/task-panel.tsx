@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Bot, Circle, CircleCheck, CircleDot } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import type { ClaudeSessionMetadata, ClaudeTodo } from '@shared/conversations';
 import type { TaskLifecycleStatus } from '@shared/tasks';
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -15,6 +16,7 @@ import { LifecycleStatusIndicator } from './components/lifecycleStatusIndicator'
 const REFRESH_MS = 3_000;
 
 export const TaskPanel = observer(function TaskPanel() {
+  const { t } = useTranslation();
   const provisioned = useProvisionedTask();
   const { tabManager } = provisioned.taskView;
   const activeConversation = tabManager.activeConversation;
@@ -22,7 +24,7 @@ export const TaskPanel = observer(function TaskPanel() {
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto">
       <div className="shrink-0 pl-4 pr-2 pt-2 pb-1">
-        <MicroLabel>Task</MicroLabel>
+        <MicroLabel>{t('tasks.task')}</MicroLabel>
       </div>
 
       <div className="flex flex-col gap-3 px-3 pb-4">
@@ -34,6 +36,7 @@ export const TaskPanel = observer(function TaskPanel() {
 });
 
 const AgentInfoSection = observer(function AgentInfoSection() {
+  const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const taskStore = getTaskStore(projectId, taskId);
   const provisioned = useProvisionedTask();
@@ -45,7 +48,7 @@ const AgentInfoSection = observer(function AgentInfoSection() {
   return (
     <section className="flex flex-col gap-2 rounded-md border border-border p-2">
       <header className="flex items-center justify-between">
-        <MicroLabel className="text-foreground-passive">Agent</MicroLabel>
+        <MicroLabel className="text-foreground-passive">{t('tasks.panel.agent')}</MicroLabel>
         <LifecycleStatusIndicator
           lifecycleStatus={status}
           onLifecycleStatusChange={(next) => {
@@ -66,7 +69,9 @@ const AgentInfoSection = observer(function AgentInfoSection() {
           <Bot className="size-5 shrink-0 text-foreground-passive" />
         )}
         <div className="flex min-w-0 flex-col">
-          <span className="truncate text-sm">{config?.name ?? 'No active conversation'}</span>
+          <span className="truncate text-sm">
+            {config?.name ?? t('tasks.panel.noActiveConversation')}
+          </span>
           {activeConversation ? (
             <span className="truncate text-xs text-foreground-passive font-mono">
               {activeConversation.data.title}
@@ -79,14 +84,17 @@ const AgentInfoSection = observer(function AgentInfoSection() {
 });
 
 function EmptySessionHint() {
+  const { t } = useTranslation();
+
   return (
     <div className="rounded-md border border-dashed border-border p-3 text-xs text-foreground-passive">
-      Open or create a conversation to see todos and summary.
+      {t('tasks.panel.emptyHint')}
     </div>
   );
 }
 
 const ClaudeSessionSections = observer(function ClaudeSessionSections() {
+  const { t } = useTranslation();
   const provisioned = useProvisionedTask();
   const { tabManager } = provisioned.taskView;
   const activeConversation = tabManager.activeConversation!;
@@ -108,7 +116,7 @@ const ClaudeSessionSections = observer(function ClaudeSessionSections() {
   if (!isClaude) {
     return (
       <div className="rounded-md border border-dashed border-border p-3 text-xs text-foreground-passive">
-        Todos / summary panel is only available for Claude Code conversations.
+        {t('tasks.panel.claudeOnly')}
       </div>
     );
   }
@@ -161,11 +169,12 @@ function DebugStrip({
 }
 
 function TodosSection({ todos, loading }: { todos: ClaudeTodo[]; loading: boolean }) {
+  const { t } = useTranslation();
   const done = todos.filter((t) => t.status === 'completed').length;
   return (
     <section className="flex flex-col gap-2 rounded-md border border-border p-2">
       <header className="flex items-center justify-between">
-        <MicroLabel className="text-foreground-passive">Todos</MicroLabel>
+        <MicroLabel className="text-foreground-passive">{t('tasks.panel.todos')}</MicroLabel>
         {todos.length > 0 ? (
           <span className="text-xs text-foreground-passive font-mono">
             {done}/{todos.length}
@@ -174,7 +183,7 @@ function TodosSection({ todos, loading }: { todos: ClaudeTodo[]; loading: boolea
       </header>
       {todos.length === 0 ? (
         <p className="text-xs text-foreground-passive">
-          {loading ? 'Loading…' : 'No todos. Ask the agent to plan with its task tool.'}
+          {loading ? t('common.loading') : t('tasks.panel.noTodos')}
         </p>
       ) : (
         <ul className="flex flex-col gap-1">
@@ -209,10 +218,12 @@ function TodoStatusIcon({ status }: { status: ClaudeTodo['status'] }) {
 }
 
 function SummarySection({ summary, model }: { summary: string | null; model: string | null }) {
+  const { t } = useTranslation();
+
   return (
     <section className="flex flex-col gap-2 rounded-md border border-border p-2">
       <header className="flex items-center justify-between">
-        <MicroLabel className="text-foreground-passive">Summary</MicroLabel>
+        <MicroLabel className="text-foreground-passive">{t('tasks.panel.summary')}</MicroLabel>
         {model ? (
           <span className="truncate text-[11px] text-foreground-passive font-mono" title={model}>
             {model}
@@ -222,9 +233,7 @@ function SummarySection({ summary, model }: { summary: string | null; model: str
       {summary ? (
         <p className="whitespace-pre-wrap text-sm text-foreground">{summary}</p>
       ) : (
-        <p className="text-xs text-foreground-passive">
-          No summary yet. Run /compact in the agent to generate one.
-        </p>
+        <p className="text-xs text-foreground-passive">{t('tasks.panel.noSummary')}</p>
       )}
     </section>
   );

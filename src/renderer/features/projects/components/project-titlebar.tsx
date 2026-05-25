@@ -1,5 +1,6 @@
 import { ChevronDown, Ellipsis, ExternalLink, GithubIcon, Globe, Trash2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { parseGitHubRepository } from '@shared/github-repository';
 import {
   asMounted,
@@ -27,6 +28,7 @@ const MountedProjectTitlebarLeft = observer(function ProjectTitlebarLeft({
 }: {
   projectId: string;
 }) {
+  const { t } = useTranslation();
   const { navigate } = useNavigate();
   const store = getProjectStore(projectId);
   const displayName = projectDisplayName(store);
@@ -59,9 +61,9 @@ const MountedProjectTitlebarLeft = observer(function ProjectTitlebarLeft({
             className="flex items-center gap-2 text-foreground-destructive"
             onClick={() => {
               showConfirmDeleteProject({
-                title: 'Delete project',
-                description: `"${displayName}" will be deleted. The project folder and worktrees will stay on the filesystem.`,
-                confirmLabel: 'Delete',
+                title: t('projects.deleteProjectTitle'),
+                description: t('projects.deleteProjectDescription', { name: displayName }),
+                confirmLabel: t('common.delete'),
                 onSuccess: () => {
                   void getProjectManagerStore().deleteProject(projectId);
                   navigate('home');
@@ -70,7 +72,7 @@ const MountedProjectTitlebarLeft = observer(function ProjectTitlebarLeft({
             }}
           >
             <Trash2 className="size-4 " />
-            Remove Project
+            {t('projects.removeProject')}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

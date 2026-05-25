@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { AgentProviderId } from '@shared/agent-provider-registry';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import {
@@ -46,6 +47,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
     installable = true,
     autoFocus = false,
   }) => {
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const { groups, installingAgents, installAgent } = useAgentAvailability({
       connectionId,
@@ -96,12 +98,14 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
               <span className="flex-1 truncate text-left">{selectedConfig.name}</span>
             </>
           ) : (
-            <span className="flex-1 truncate text-foreground-muted">No agent installed</span>
+            <span className="flex-1 truncate text-foreground-muted">
+              {t('agents.noAgentInstalled')}
+            </span>
           )}
           <ChevronDown className="size-3.5 shrink-0 text-foreground-muted" />
         </ComboboxTrigger>
         <ComboboxContent className="w-auto min-w-(--anchor-width)">
-          <ComboboxInput showTrigger={false} placeholder="Search agents..." />
+          <ComboboxInput showTrigger={false} placeholder={t('agents.searchAgents')} />
           <ComboboxList className="pb-0">
             {(group: AgentGroup) => (
               <ComboboxGroup key={group.value} items={group.items} className="py-1">

@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
@@ -26,34 +27,35 @@ type IntegrationSetupModalArgs = {
 
 type Props = BaseModalProps<void> & IntegrationSetupModalArgs;
 
-const descriptions: Record<IntegrationType, { title: string; subtitle: string }> = {
+const descriptions: Record<IntegrationType, { titleKey: string; subtitleKey: string }> = {
   linear: {
-    title: 'Connect Linear',
-    subtitle: 'Enter your Linear API key to connect your workspace.',
+    titleKey: 'integrations.setupModal.linear.title',
+    subtitleKey: 'integrations.setupModal.linear.subtitle',
   },
   jira: {
-    title: 'Connect Jira',
-    subtitle: 'Enter your Jira site URL, email, and API token to connect.',
+    titleKey: 'integrations.setupModal.jira.title',
+    subtitleKey: 'integrations.setupModal.jira.subtitle',
   },
   gitlab: {
-    title: 'Connect GitLab',
-    subtitle: 'Enter your GitLab instance URL and personal access token.',
+    titleKey: 'integrations.setupModal.gitlab.title',
+    subtitleKey: 'integrations.setupModal.gitlab.subtitle',
   },
   plain: {
-    title: 'Connect Plain',
-    subtitle: 'Enter your Plain API key to connect your workspace.',
+    titleKey: 'integrations.setupModal.plain.title',
+    subtitleKey: 'integrations.setupModal.plain.subtitle',
   },
   forgejo: {
-    title: 'Connect Forgejo',
-    subtitle: 'Enter your Forgejo instance URL and API token.',
+    titleKey: 'integrations.setupModal.forgejo.title',
+    subtitleKey: 'integrations.setupModal.forgejo.subtitle',
   },
   featurebase: {
-    title: 'Connect Featurebase',
-    subtitle: 'Enter your Featurebase API key to connect your workspace.',
+    titleKey: 'integrations.setupModal.featurebase.title',
+    subtitleKey: 'integrations.setupModal.featurebase.subtitle',
   },
 };
 
 export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props) {
+  const { t } = useTranslation();
   const {
     connectLinear,
     connectJira,
@@ -144,7 +146,7 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
       }
       onSuccess();
     } catch (e) {
-      setError((e as Error).message || 'Failed to connect.');
+      setError((e as Error).message || t('integrations.connectFailed'));
     }
   }, [
     integration,
@@ -165,15 +167,16 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
     connectForgejo,
     connectFeaturebase,
     onSuccess,
+    t,
   ]);
 
-  const { title, subtitle } = descriptions[integration];
+  const { titleKey, subtitleKey } = descriptions[integration];
 
   return (
     <>
       <DialogHeader showCloseButton={false}>
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription className="text-xs">{subtitle}</DialogDescription>
+        <DialogTitle>{t(titleKey)}</DialogTitle>
+        <DialogDescription className="text-xs">{t(subtitleKey)}</DialogDescription>
       </DialogHeader>
       <DialogContentArea>
         {integration === 'linear' && (
@@ -227,11 +230,11 @@ export function IntegrationSetupModal({ integration, onSuccess, onClose }: Props
       </DialogContentArea>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <ConfirmButton onClick={() => void handleSubmit()} disabled={!canSubmit || isLoading}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Connect
+          {t('integrations.connect')}
         </ConfirmButton>
       </DialogFooter>
     </>

@@ -2,6 +2,7 @@ import { useHotkey } from '@tanstack/react-hotkeys';
 import { Terminal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
@@ -25,6 +26,7 @@ import { getTerminalsPaneSize, nextTerminalName } from './terminal-tabs';
 type ActiveItem = { kind: 'terminal'; id: string } | { kind: 'script'; id: string };
 
 export const TerminalsPanel = observer(function TerminalsPanel() {
+  const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const provisionedTask = useProvisionedTask();
   const terminalMgr = provisionedTask.terminals;
@@ -132,8 +134,8 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
   const emptyState = (
     <EmptyState
       icon={<Terminal className="h-5 w-5 text-muted-foreground" />}
-      label="No terminals yet"
-      description="Add a terminal to run shell commands in this task's working directory."
+      label={t('tasks.terminals.emptyTitle')}
+      description={t('tasks.terminals.emptyDescription')}
       action={
         <Button
           size="sm"
@@ -141,7 +143,7 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
           onClick={handleCreate}
           className="flex items-center gap-2"
         >
-          New terminal
+          {t('tasks.terminals.newTerminal')}
           <ShortcutHint settingsKey="newTerminal" />
         </Button>
       }

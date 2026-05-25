@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { type AgentProviderId } from '@shared/agent-provider-registry';
 import type { McpProvidersResponse } from '@shared/mcp/types';
 import AgentLogo from '@renderer/lib/components/agent-logo';
@@ -20,11 +21,12 @@ export const ProviderSelect: React.FC<ProviderSelectProps> = ({
   transport,
   onToggle,
 }) => {
+  const { t } = useTranslation();
   const selectedProviderIds = new Set(selectedProviders);
 
   return (
     <Field>
-      <FieldLabel>Sync to agents</FieldLabel>
+      <FieldLabel>{t('mcp.syncToAgents')}</FieldLabel>
       <div className="flex flex-wrap gap-2">
         {providers
           .filter((p) => p.installed)
@@ -41,7 +43,7 @@ export const ProviderSelect: React.FC<ProviderSelectProps> = ({
                 disabled={unsupported}
                 aria-pressed={selected}
                 onClick={() => onToggle(p.id)}
-                title={unsupported ? `${p.name} does not support HTTP servers` : undefined}
+                title={unsupported ? t('mcp.httpUnsupportedTitle', { name: p.name }) : undefined}
                 className={cn(
                   'gap-1.5 border transition-[border-color,background-color,color,box-shadow]',
                   unsupported &&
@@ -70,9 +72,7 @@ export const ProviderSelect: React.FC<ProviderSelectProps> = ({
           })}
       </div>
       {transport === 'http' && providers.some((p) => p.installed && !p.supportsHttp) && (
-        <p className="mt-1.5 text-xs text-muted-foreground">
-          Some agents don't support HTTP servers and are disabled.
-        </p>
+        <p className="mt-1.5 text-xs text-muted-foreground">{t('mcp.httpUnsupported')}</p>
       )}
     </Field>
   );

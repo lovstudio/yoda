@@ -1,5 +1,6 @@
 import { AlertCircle, Check, Copy, ExternalLink } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import yodaLogo from '@/assets/images/yoda/yoda_logo_white.svg';
 import {
   githubAuthDeviceCodeChannel,
@@ -40,6 +41,7 @@ export function GithubDeviceFlowModalOverlay({
 }
 
 export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModalProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { cancelGithubConnect } = useGithubContext();
 
@@ -75,7 +77,7 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
     countdownIntervalRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
-          setError('Code expired. Please try again.');
+          setError(t('auth.codeExpired'));
           return 0;
         }
         return prev - 1;
@@ -88,7 +90,7 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
         countdownIntervalRef.current = null;
       }
     };
-  }, [success, error]);
+  }, [success, error, t]);
 
   // Reset state on mount (new auth flow)
   useEffect(() => {
@@ -121,8 +123,8 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
 
         if (!isAutomatic) {
           toast({
-            title: '✓ Code copied',
-            description: 'Paste it in GitHub to authorize',
+            title: t('auth.codeCopied'),
+            description: t('auth.github.pasteCodeDescription'),
           });
         }
 
@@ -131,14 +133,14 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
         log.error('Failed to copy:', err);
         if (!isAutomatic) {
           toast({
-            title: 'Copy failed',
-            description: 'Please copy the code manually',
+            title: t('auth.copyFailed'),
+            description: t('auth.copyFailedDescription'),
             variant: 'destructive',
           });
         }
       }
     },
-    [toast]
+    [toast, t]
   );
 
   const openGitHub = useCallback(() => {
@@ -202,8 +204,8 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
       }
 
       toast({
-        title: 'Authentication Failed',
-        description: data.message || 'An error occurred',
+        title: t('auth.github.authenticationFailed'),
+        description: data.message || t('common.errorOccurred'),
         variant: 'destructive',
       });
     });
@@ -214,7 +216,7 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
       cleanupSuccess();
       cleanupError();
     };
-  }, [copyToClipboard, onError, onClose, toast]);
+  }, [copyToClipboard, onError, onClose, toast, t]);
 
   const handleClose = () => {
     onClose();
@@ -256,8 +258,8 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
               <Check className="h-8 w-8 text-white" strokeWidth={3} />
             </div>
             <div className="space-y-2 text-center">
-              <h2 className="text-2xl font-semibold">Success!</h2>
-              <p className="text-sm text-muted-foreground">You're connected to GitHub</p>
+              <h2 className="text-2xl font-semibold">{t('common.success')}</h2>
+              <p className="text-sm text-muted-foreground">{t('auth.github.connected')}</p>
               {user && (
                 <div className="mt-4 flex items-center justify-center gap-2">
                   {user.avatar_url && (
@@ -278,25 +280,27 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
               <AlertCircle className="h-8 w-8 text-red-500" />
             </div>
             <div className="space-y-2 text-center">
-              <h2 className="text-xl font-semibold">Authentication Failed</h2>
+              <h2 className="text-xl font-semibold">{t('auth.github.authenticationFailed')}</h2>
               <p className="text-sm text-muted-foreground">{error}</p>
             </div>
             <Button onClick={handleClose} variant="outline" className="w-full">
-              Close
+              {t('common.close')}
             </Button>
           </div>
         ) : (
           // Waiting State
           <div className="flex w-full flex-col items-center space-y-6">
             <div className="space-y-2 text-center">
-              <h2 className="text-2xl font-semibold">Connect to GitHub</h2>
-              <p className="text-sm text-muted-foreground">Follow these steps to authorize Yoda</p>
+              <h2 className="text-2xl font-semibold">{t('auth.github.connectTitle')}</h2>
+              <p className="text-sm text-muted-foreground">{t('auth.github.authorize')}</p>
             </div>
 
             {userCode && (
               <>
                 <div className="w-full space-y-3 rounded-lg bg-muted/30 p-6">
-                  <p className="text-center text-xs font-medium text-muted-foreground">Your code</p>
+                  <p className="text-center text-xs font-medium text-muted-foreground">
+                    {t('auth.yourCode')}
+                  </p>
                   <p className="select-all text-center font-mono text-4xl font-bold tracking-wider">
                     {userCode}
                   </p>
@@ -311,12 +315,12 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
                   {copied ? (
                     <>
                       <Check className="mr-2 h-4 w-4" />
-                      Copied!
+                      {t('common.copied')}
                     </>
                   ) : (
                     <>
                       <Copy className="mr-2 h-4 w-4" />
-                      Copy Code
+                      {t('auth.copyCode')}
                     </>
                   )}
                 </Button>
@@ -329,32 +333,32 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
                   1
                 </div>
                 <p className="text-muted-foreground">
-                  Paste the code in GitHub{' '}
-                  <span className="font-medium text-foreground">(already copied!)</span>
+                  {t('auth.github.stepPaste')}{' '}
+                  <span className="font-medium text-foreground">{t('auth.alreadyCopied')}</span>
                 </p>
               </div>
               <div className="flex items-start gap-3">
                 <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold">
                   2
                 </div>
-                <p className="text-muted-foreground">Click Authorize</p>
+                <p className="text-muted-foreground">{t('auth.github.stepAuthorize')}</p>
               </div>
             </div>
 
             {browserOpening && (
               <div className="w-full rounded-lg border border-blue-500/20 bg-blue-500/10 p-4">
                 <p className="text-center text-sm text-blue-600 dark:text-blue-400">
-                  Opening GitHub in {browserOpenCountdown}s...
+                  {t('auth.openingService', { service: 'GitHub', seconds: browserOpenCountdown })}
                 </p>
               </div>
             )}
 
             <div className="flex flex-col items-center gap-2 text-center">
               <Spinner className="h-5 w-5 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Waiting for authorization...</p>
+              <p className="text-sm text-muted-foreground">{t('auth.waiting')}</p>
               {timeRemaining > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Code expires in {formatTime(timeRemaining)}
+                  {t('auth.codeExpiresIn', { time: formatTime(timeRemaining) })}
                 </p>
               )}
             </div>
@@ -362,29 +366,29 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
             {verificationUri && !browserOpening && (
               <Button onClick={openGitHub} className="w-full" size="lg">
                 <ExternalLink className="mr-2 h-4 w-4" />
-                Open GitHub
+                {t('auth.openService', { service: 'GitHub' })}
               </Button>
             )}
 
             <div className="w-full border-t pt-4">
               <p className="text-center text-xs text-muted-foreground">
-                Having{' '}
+                {t('auth.having')}{' '}
                 <button
                   onClick={() => rpc.app.openExternal('https://github.com/lovstudio/yoda/issues')}
                   className="text-primary hover:underline focus:underline focus:outline-none"
                 >
-                  trouble
+                  {t('auth.trouble')}
                 </button>
                 ?
               </p>
             </div>
 
             <div className="space-x-3 text-center text-xs text-muted-foreground">
-              <span>⌘C to copy</span>
+              <span>{t('auth.shortcutCopy')}</span>
               <span>•</span>
-              <span>⌘R to reopen</span>
+              <span>{t('auth.shortcutReopen')}</span>
               <span>•</span>
-              <span>Esc to cancel</span>
+              <span>{t('auth.shortcutCancel')}</span>
             </div>
           </div>
         )}

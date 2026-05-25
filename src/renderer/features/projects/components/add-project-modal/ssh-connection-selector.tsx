@@ -1,5 +1,6 @@
 import { ChevronsUpDownIcon, PencilIcon, PlusIcon } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { appState } from '@renderer/lib/stores/app-state';
 import { ComboboxTrigger, ComboboxValue } from '@renderer/lib/ui/combobox';
 import { ComboboxPopover } from '@renderer/lib/ui/combobox-popover';
@@ -17,6 +18,7 @@ export const SshConnectionSelector = observer(function SshConnectionSelector({
   onAddConnection,
   onEditConnection,
 }: SshConnectionSelectorProps) {
+  const { t } = useTranslation();
   const { connections } = appState.sshConnections;
 
   const options = connections
@@ -33,7 +35,7 @@ export const SshConnectionSelector = observer(function SshConnectionSelector({
   const actions = [
     {
       id: 'add',
-      label: 'Add Connection',
+      label: t('ssh.addConnection'),
       icon: <PlusIcon className="size-4" />,
       onClick: onAddConnection,
     },
@@ -41,7 +43,7 @@ export const SshConnectionSelector = observer(function SshConnectionSelector({
       ? [
           {
             id: 'edit',
-            label: 'Edit Connection',
+            label: t('ssh.editConnection'),
             icon: <PencilIcon className="size-4" />,
             onClick: () => onEditConnection(connectionId),
           },
@@ -60,7 +62,9 @@ export const SshConnectionSelector = observer(function SshConnectionSelector({
           render={
             <button className="flex h-9 w-full min-w-0 items-center justify-between rounded-md border border-border px-2.5 py-1 text-left text-sm outline-none">
               <ComboboxValue
-                placeholder={<p className="text-muted-foreground">Select or add a connection</p>}
+                placeholder={
+                  <p className="text-muted-foreground">{t('ssh.selectOrAddConnection')}</p>
+                }
               />
               <ChevronsUpDownIcon className="size-4 shrink-0 text-muted-foreground" />
             </button>

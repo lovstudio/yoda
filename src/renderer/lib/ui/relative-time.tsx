@@ -1,5 +1,7 @@
 import { formatDistanceToNowStrict } from 'date-fns';
+import { enUS, zhCN } from 'date-fns/locale';
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type RelativeTimeProps = {
   value: string | number | Date;
@@ -37,6 +39,7 @@ function toCompactLabel(date: Date): string {
 }
 
 export const RelativeTime: React.FC<RelativeTimeProps> = ({ value, className, compact, ago }) => {
+  const { t, i18n } = useTranslation();
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -54,17 +57,18 @@ export const RelativeTime: React.FC<RelativeTimeProps> = ({ value, className, co
 
     return (
       <time className={className} dateTime={date.toISOString()}>
-        {short}
-        {ago && <span className="text-foreground-muted"> ago</span>}
+        {short === 'now' ? t('common.now') : short}
+        {ago && <span className="text-foreground-muted"> {t('common.ago')}</span>}
       </time>
     );
   }
 
-  const label = formatDistanceToNowStrict(date, { addSuffix: true });
+  const locale = i18n.language?.startsWith('zh') ? zhCN : enUS;
+  const label = formatDistanceToNowStrict(date, { addSuffix: true, locale });
   return (
     <time className={className} dateTime={date.toISOString()}>
       {label}
-      {ago && 'ago'}
+      {ago && t('common.ago')}
     </time>
   );
 };

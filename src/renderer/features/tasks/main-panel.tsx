@@ -1,6 +1,7 @@
 import { Eye, Loader2, Pencil } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { Activity, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { usePanelRef } from 'react-resizable-panels';
 import {
   getTaskStore,
@@ -20,6 +21,7 @@ import { TerminalsPanel } from './terminals/terminal-panel';
 import { TaskSidebar } from './view/task-sidebar';
 
 export const TaskMainPanel = observer(function TaskMainPanel() {
+  const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const taskStore = getTaskStore(projectId, taskId);
   const kind = taskViewKind(taskStore, projectId);
@@ -28,7 +30,7 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-3">
         <Loader2 className="h-5 w-5 animate-spin text-foreground-muted" />
-        <p className="text-xs font-mono text-foreground-muted">Creating task</p>
+        <p className="text-xs font-mono text-foreground-muted">{t('tasks.creatingTask')}</p>
       </div>
     );
   }
@@ -38,7 +40,7 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
       <div className="flex h-full w-full flex-col items-center justify-center p-8">
         <div className="flex max-w-xs flex-col items-center text-center gap-2">
           <p className="text-sm font-medium font-mono text-foreground-destructive">
-            Error creating task
+            {t('tasks.errorCreatingTask')}
           </p>
           <p className="text-xs font-mono text-foreground-passive">{taskErrorMessage(taskStore)}</p>
         </div>
@@ -47,7 +49,7 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
   }
 
   if (kind === 'project-mounting' || kind === 'provisioning') {
-    const progressMessage = taskStore?.provisionProgressMessage ?? 'Setting up workspace…';
+    const progressMessage = taskStore?.provisionProgressMessage ?? t('tasks.settingUpWorkspace');
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-3">
         <Loader2 className="h-5 w-5 animate-spin text-foreground-muted" />
@@ -61,7 +63,7 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
       <div className="flex h-full w-full flex-col items-center justify-center p-8">
         <div className="flex max-w-xs flex-col items-center text-center gap-2">
           <p className="text-sm font-medium font-mono text-foreground-destructive">
-            Failed to set up workspace
+            {t('tasks.failedSetUpWorkspace')}
           </p>
           <p className="text-xs font-mono text-foreground-muted">{taskErrorMessage(taskStore)}</p>
         </div>
@@ -70,7 +72,7 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
   }
 
   if (kind === 'idle' || kind === 'teardown') {
-    const progressMessage = taskStore?.provisionProgressMessage ?? 'Setting up workspace…';
+    const progressMessage = taskStore?.provisionProgressMessage ?? t('tasks.settingUpWorkspace');
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-3">
         <Loader2 className="h-5 w-5 animate-spin text-foreground-muted" />
@@ -84,7 +86,7 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
       <div className="flex h-full w-full flex-col items-center justify-center p-8">
         <div className="flex max-w-xs flex-col items-center text-center gap-2">
           <p className="text-sm font-medium font-mono text-foreground-destructive">
-            Failed to tear down workspace
+            {t('tasks.failedTearDownWorkspace')}
           </p>
           <p className="text-xs font-mono text-foreground-muted">{taskErrorMessage(taskStore)}</p>
         </div>
@@ -271,6 +273,7 @@ const UnifiedMainContent = observer(function UnifiedMainContent() {
  * Lets the user toggle back to the SVG preview renderer.
  */
 const SvgSourceToggleOverlay = observer(function SvgSourceToggleOverlay() {
+  const { t } = useTranslation();
   const { taskView } = useProvisionedTask();
   const { tabManager } = taskView;
   const activeTab = tabManager.activeFileEntry;
@@ -288,10 +291,10 @@ const SvgSourceToggleOverlay = observer(function SvgSourceToggleOverlay() {
       size="sm"
       className="absolute right-3 top-3 z-10"
     >
-      <ToggleGroupItem value="svg" aria-label="View rendered">
+      <ToggleGroupItem value="svg" aria-label={t('editor.viewRendered')}>
         <Eye className="h-3.5 w-3.5" />
       </ToggleGroupItem>
-      <ToggleGroupItem value="svg-source" aria-label="Edit source">
+      <ToggleGroupItem value="svg-source" aria-label={t('editor.editSource')}>
         <Pencil className="h-3.5 w-3.5" />
       </ToggleGroupItem>
     </ToggleGroup>

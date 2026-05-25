@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { observer } from 'mobx-react-lite';
 import { useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Commit } from '@shared/git';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
@@ -11,6 +12,7 @@ import { usePrCommits } from './use-pr-commits';
 const ITEM_HEIGHT = 43;
 
 export const PrCommitsList = observer(function PrCommitsList() {
+  const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
   const task = useProvisionedTask();
   const pr = task.workspace.pr.currentPr;
@@ -31,7 +33,12 @@ export const PrCommitsList = observer(function PrCommitsList() {
   });
 
   if (commits.length === 0 && !isFetchingNextPage) {
-    return <EmptyState label="No commits" description="No commits available" />;
+    return (
+      <EmptyState
+        label={t('pullRequests.noCommits')}
+        description={t('pullRequests.noCommitsDescription')}
+      />
+    );
   }
 
   return (
@@ -66,7 +73,7 @@ export const PrCommitsList = observer(function PrCommitsList() {
             onClick={() => void fetchNextPage()}
             disabled={isFetchingNextPage}
           >
-            {isFetchingNextPage ? 'Loading…' : 'Load more'}
+            {isFetchingNextPage ? t('common.loading') : t('common.loadMore')}
           </button>
         </div>
       )}

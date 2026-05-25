@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { Branch, Remote } from '@shared/git';
 import { ProjectBranchSelector } from '@renderer/lib/components/project-branch-selector';
 import { Field, FieldDescription, FieldTitle } from '@renderer/lib/ui/field';
@@ -25,15 +26,16 @@ export function BaseProjectSettingsSection({
   worktreeDirectoryError,
   update,
 }: BaseProjectSettingsSectionProps) {
+  const { t } = useTranslation();
   const remoteValue = form.remote || 'origin';
   const selectedRemote = remotes.find((remote) => remote.name === remoteValue);
 
   return (
     <>
       <Field>
-        <FieldTitle>Worktree directory</FieldTitle>
+        <FieldTitle>{t('projects.settings.worktreeDirectory')}</FieldTitle>
         <FieldDescription className="text-foreground-muted">
-          Change where worktrees are created.
+          {t('projects.settings.worktreeDirectoryDescription')}
         </FieldDescription>
         <div className="relative">
           <Input
@@ -54,9 +56,9 @@ export function BaseProjectSettingsSection({
       <Separator />
 
       <Field>
-        <FieldTitle>Default branch</FieldTitle>
+        <FieldTitle>{t('projects.defaultBranch')}</FieldTitle>
         <FieldDescription className="text-foreground-muted">
-          The branch new tasks are created from by default.
+          {t('projects.settings.defaultBranchDescription')}
         </FieldDescription>
         <ProjectBranchSelector
           projectId={projectId}
@@ -68,9 +70,9 @@ export function BaseProjectSettingsSection({
       <Separator />
 
       <Field>
-        <FieldTitle>Remote</FieldTitle>
+        <FieldTitle>{t('projects.remote')}</FieldTitle>
         <FieldDescription className="text-foreground-muted">
-          The git remote used for fetching and syncing worktrees. Defaults to{' '}
+          {t('projects.settings.remoteDescription')}{' '}
           <code className="font-mono text-xs">origin</code>.
         </FieldDescription>
         <Select value={remoteValue} onValueChange={(value) => update('remote', value ?? '')}>
@@ -108,9 +110,9 @@ export function BaseProjectSettingsSection({
 
       <Field orientation="horizontal">
         <div className="flex flex-1 flex-col gap-1">
-          <FieldTitle>Enable tmux</FieldTitle>
+          <FieldTitle>{t('settings.tasks.enableTmux')}</FieldTitle>
           <FieldDescription className="text-foreground-muted">
-            Run the agent session inside a tmux session.
+            {t('projects.settings.enableTmuxDescription')}
           </FieldDescription>
         </div>
         <Switch checked={form.tmux} onCheckedChange={(checked) => update('tmux', checked)} />

@@ -1,5 +1,6 @@
 import { Info } from 'lucide-react';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Input } from '@renderer/lib/ui/input';
 
 interface Props {
@@ -9,25 +10,29 @@ interface Props {
 }
 
 const FeaturebaseSetupForm: React.FC<Props> = ({ apiKey, onChange, error }) => {
+  const { t } = useTranslation();
+
   return (
     <div className="grid gap-2">
       <Input
         type="password"
-        placeholder="Featurebase API key"
+        placeholder={t('integrations.setup.featurebase.placeholder')}
         value={apiKey}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
         className="h-9 w-full"
-        aria-label="Featurebase API key"
+        aria-label={t('integrations.setup.featurebase.placeholder')}
         autoFocus
       />
       <div className="rounded-md border border-dashed border-border/70 bg-muted/40 p-2">
         <div className="flex items-start gap-2">
           <Info className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <div className="text-xs leading-snug text-muted-foreground">
-            <p className="font-medium text-foreground">How to get a Featurebase API key</p>
+            <p className="font-medium text-foreground">
+              {t('integrations.setup.featurebase.title')}
+            </p>
             <ol className="mt-1 list-decimal pl-4">
-              <li>Open Featurebase, go to dashboard settings and API keys.</li>
-              <li>Create a new API key and copy it.</li>
+              <li>{t('integrations.setup.featurebase.step1')}</li>
+              <li>{t('integrations.setup.featurebase.step2')}</li>
             </ol>
           </div>
         </div>

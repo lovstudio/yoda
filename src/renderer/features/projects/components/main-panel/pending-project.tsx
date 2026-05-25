@@ -1,5 +1,6 @@
 import { AlertCircle, Check, Loader2, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { type UnregisteredProject } from '@renderer/features/projects/stores/project';
 import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -7,10 +8,10 @@ import { Button } from '@renderer/lib/ui/button';
 
 type Stage = 'creating-repo' | 'cloning' | 'registering';
 
-const STAGE_LABELS: Record<Stage, string> = {
-  'creating-repo': 'Creating repository',
-  cloning: 'Cloning',
-  registering: 'Registering',
+const STAGE_LABEL_KEYS: Record<Stage, string> = {
+  'creating-repo': 'sidebar.phase.creatingRepo',
+  cloning: 'sidebar.phase.cloning',
+  registering: 'sidebar.phase.registering',
 };
 
 const STAGES_BY_MODE: Record<'pick' | 'clone' | 'new', Stage[]> = {
@@ -24,6 +25,7 @@ export const PendingProjectStatus = observer(function PendingProjectStatus({
 }: {
   project: UnregisteredProject;
 }) {
+  const { t } = useTranslation();
   const { navigate } = useNavigate();
   const stages = STAGES_BY_MODE[project.mode];
   const currentStageIndex = stages.indexOf(project.phase as Stage);
@@ -62,7 +64,7 @@ export const PendingProjectStatus = observer(function PendingProjectStatus({
                       : 'text-sm text-muted-foreground/50'
                 }
               >
-                {STAGE_LABELS[stage]}
+                {t(STAGE_LABEL_KEYS[stage])}
               </span>
             </div>
           );
@@ -73,12 +75,12 @@ export const PendingProjectStatus = observer(function PendingProjectStatus({
             <div className="flex min-w-0 items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
               <span className="min-w-0 break-words text-sm text-destructive">
-                {project.error ?? 'An error occurred'}
+                {project.error ?? t('common.errorOccurred')}
               </span>
             </div>
             <Button size="sm" variant="outline" className="self-start" onClick={handleDismiss}>
               <X className="mr-1.5 h-3.5 w-3.5" />
-              Dismiss
+              {t('common.dismiss')}
             </Button>
           </div>
         )}

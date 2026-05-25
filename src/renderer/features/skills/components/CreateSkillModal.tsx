@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { isValidSkillName } from '@shared/skills/validation';
 import { rpc } from '@renderer/lib/ipc';
 import type { BaseModalProps } from '@renderer/lib/modal/modal-provider';
@@ -20,6 +21,7 @@ import { captureTelemetry } from '@renderer/utils/telemetryClient';
 type Props = BaseModalProps<void>;
 
 export function CreateSkillModal({ onSuccess, onClose }: Props) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -34,11 +36,11 @@ export function CreateSkillModal({ onSuccess, onClose }: Props) {
 
     const trimmedName = name.trim();
     if (!isValidSkillName(trimmedName)) {
-      setCreateError('Name must be lowercase letters, numbers, and hyphens (2-64 chars).');
+      setCreateError(t('skills.create.validation.name'));
       return;
     }
     if (!description.trim()) {
-      setCreateError('Description is required.');
+      setCreateError(t('skills.create.validation.description'));
       return;
     }
 
@@ -51,7 +53,7 @@ export function CreateSkillModal({ onSuccess, onClose }: Props) {
       });
 
       if (!result.success) {
-        setCreateError(result.error || 'Failed to create skill');
+        setCreateError(result.error || t('skills.create.failed'));
         return;
       }
 
@@ -59,7 +61,7 @@ export function CreateSkillModal({ onSuccess, onClose }: Props) {
       onSuccess();
       void queryClient.invalidateQueries({ queryKey: ['skills', 'catalog'] });
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : 'Failed to create skill');
+      setCreateError(error instanceof Error ? error.message : t('skills.create.failed'));
     } finally {
       setIsCreating(false);
     }
@@ -69,7 +71,7 @@ export function CreateSkillModal({ onSuccess, onClose }: Props) {
     <>
       <DialogHeader>
         <div className="flex flex-col gap-0.5">
-          <DialogTitle>New Skill</DialogTitle>
+          <DialogTitle>{t('skills.newSkill')}</DialogTitle>
         </div>
       </DialogHeader>
 
@@ -77,7 +79,7 @@ export function CreateSkillModal({ onSuccess, onClose }: Props) {
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="skill-name" className="text-xs">
-              Name
+              {t('common.name')}
             </Label>
             <Input
               id="skill-name"
@@ -89,18 +91,16 @@ export function CreateSkillModal({ onSuccess, onClose }: Props) {
               }}
               className="text-sm"
             />
-            <p className="text-[10px] text-muted-foreground">
-              Lowercase letters, numbers, and hyphens
-            </p>
+            <p className="text-[10px] text-muted-foreground">{t('skills.create.nameHint')}</p>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="skill-desc" className="text-xs">
-              Description
+              {t('common.description')}
             </Label>
             <Input
               id="skill-desc"
-              placeholder="What does this skill do?"
+              placeholder={t('skills.create.descriptionPlaceholder')}
               value={description}
               onChange={(e) => {
                 setDescription(e.target.value);
@@ -112,11 +112,11 @@ export function CreateSkillModal({ onSuccess, onClose }: Props) {
 
           <div className="space-y-2">
             <Label htmlFor="skill-content" className="text-xs">
-              Instructions
+              {t('skills.create.instructions')}
             </Label>
             <Textarea
               id="skill-content"
-              placeholder="Write the skill instructions here. The YAML frontmatter (name and description) will be added automatically."
+              placeholder={t('skills.create.instructionsPlaceholder')}
               value={content}
               onChange={(e) => {
                 setContent(e.target.value);
@@ -125,7 +125,7 @@ export function CreateSkillModal({ onSuccess, onClose }: Props) {
               className="h-64 max-h-[40dvh] resize-y overflow-y-auto field-sizing-fixed font-mono text-sm"
             />
             <p className="text-[10px] text-muted-foreground">
-              Define what this skill does and how agents should use it
+              {t('skills.create.instructionsHint')}
             </p>
           </div>
 
@@ -135,7 +135,7 @@ export function CreateSkillModal({ onSuccess, onClose }: Props) {
 
       <DialogFooter className="gap-2 sm:gap-2">
         <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={isCreating}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <ConfirmButton
           type="button"
@@ -143,7 +143,7 @@ export function CreateSkillModal({ onSuccess, onClose }: Props) {
           size="sm"
           disabled={isCreating}
         >
-          {isCreating ? 'Creating...' : 'Create'}
+          {isCreating ? t('common.creating') : t('common.create')}
         </ConfirmButton>
       </DialogFooter>
     </>

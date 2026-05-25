@@ -1,5 +1,6 @@
 import { ImageIcon, LogIn, Paperclip, XIcon } from 'lucide-react';
 import React, { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAttachments } from '@renderer/lib/hooks/use-attachments';
 import { useAccountSession, useAccountSignIn } from '@renderer/lib/hooks/useAccount';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
@@ -41,13 +42,15 @@ function AttachmentThumbnail({
   onRemove: () => void;
   disabled: boolean;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="group relative size-14 shrink-0 overflow-hidden rounded-md border border-border bg-background">
       <img src={previewUrl} alt={name} className="size-full object-cover" />
       <button
         type="button"
         onClick={onRemove}
-        aria-label={`Remove ${name}`}
+        aria-label={t('feedback.removeAttachment', { name })}
         disabled={disabled}
         className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:enabled:opacity-100 disabled:cursor-not-allowed"
       >
@@ -58,12 +61,13 @@ function AttachmentThumbnail({
 }
 
 function SignInGate({ blurb }: { blurb?: string }) {
+  const { t } = useTranslation();
   const signIn = useAccountSignIn();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <DialogHeader>
         <div className="flex flex-col gap-0.5">
-          <DialogTitle>Feedback</DialogTitle>
+          <DialogTitle>{t('feedback.title')}</DialogTitle>
           {blurb ? <DialogDescription className="text-xs">{blurb}</DialogDescription> : null}
         </div>
       </DialogHeader>
@@ -71,10 +75,8 @@ function SignInGate({ blurb }: { blurb?: string }) {
         <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
           <LogIn className="size-8 text-muted-foreground" aria-hidden="true" />
           <div className="space-y-1">
-            <p className="text-sm font-medium">Sign in to send feedback</p>
-            <p className="text-xs text-muted-foreground">
-              We use your Lovstudio account email so we can reply to you.
-            </p>
+            <p className="text-sm font-medium">{t('feedback.signInTitle')}</p>
+            <p className="text-xs text-muted-foreground">{t('feedback.signInDescription')}</p>
           </div>
           <Button
             type="button"
@@ -83,7 +85,9 @@ function SignInGate({ blurb }: { blurb?: string }) {
             className="gap-2"
           >
             {signIn.isPending ? <Spinner size="sm" /> : <LogIn className="size-4" />}
-            <span>{signIn.isPending ? 'Signing in…' : 'Sign in'}</span>
+            <span>
+              {signIn.isPending ? t('settings.account.signingIn') : t('settings.account.signIn')}
+            </span>
           </Button>
         </div>
       </DialogContentArea>
@@ -92,6 +96,7 @@ function SignInGate({ blurb }: { blurb?: string }) {
 }
 
 export function FeedbackModal({ onSuccess, blurb }: Props) {
+  const { t } = useTranslation();
   const { data: session, isLoading: sessionLoading } = useAccountSession();
   const {
     attachments,
@@ -157,18 +162,18 @@ export function FeedbackModal({ onSuccess, blurb }: Props) {
         <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary/5">
           <div className="flex flex-col items-center gap-1 text-primary">
             <ImageIcon className="size-6" />
-            <span className="text-xs font-medium">Drop image here</span>
+            <span className="text-xs font-medium">{t('feedback.dropImageHere')}</span>
           </div>
         </div>
       )}
       <DialogHeader>
         <div className="flex flex-col gap-0.5">
-          <DialogTitle>Feedback</DialogTitle>
+          <DialogTitle>{t('feedback.title')}</DialogTitle>
           {blurb ? (
             <DialogDescription className="text-xs">{blurb}</DialogDescription>
           ) : (
             <DialogDescription className="text-xs">
-              Sending as {session.user?.email}
+              {t('feedback.sendingAs', { email: session.user?.email })}
             </DialogDescription>
           )}
         </div>
@@ -180,7 +185,7 @@ export function FeedbackModal({ onSuccess, blurb }: Props) {
               htmlFor="feedback-category"
               className="text-xs font-medium text-muted-foreground"
             >
-              Category
+              {t('feedback.category.label')}
             </label>
             <Select
               value={category}
@@ -190,22 +195,22 @@ export function FeedbackModal({ onSuccess, blurb }: Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="idea">Idea</SelectItem>
-                <SelectItem value="bug">Bug</SelectItem>
-                <SelectItem value="contact">Contact</SelectItem>
+                <SelectItem value="idea">{t('feedback.category.idea')}</SelectItem>
+                <SelectItem value="bug">{t('feedback.category.bug')}</SelectItem>
+                <SelectItem value="contact">{t('feedback.category.contact')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-1.5">
             <label htmlFor="feedback-details" className="sr-only">
-              Feedback details
+              {t('feedback.detailsLabel')}
             </label>
             <Textarea
               id="feedback-details"
               autoFocus
               rows={5}
-              placeholder="What do you like? How can we improve?"
+              placeholder={t('feedback.detailsPlaceholder')}
               className="resize-none"
               value={feedbackDetails}
               onChange={(event) => {
@@ -262,7 +267,7 @@ export function FeedbackModal({ onSuccess, blurb }: Props) {
           disabled={submitting}
         >
           <Paperclip className="h-4 w-4" aria-hidden="true" />
-          <span>Attach image</span>
+          <span>{t('feedback.attachImage')}</span>
         </Button>
         <ConfirmButton
           type="submit"
@@ -274,10 +279,10 @@ export function FeedbackModal({ onSuccess, blurb }: Props) {
           {submitting ? (
             <>
               <Spinner size="sm" />
-              <span>Sending...</span>
+              <span>{t('feedback.sending')}</span>
             </>
           ) : (
-            <span>Send Feedback</span>
+            <span>{t('feedback.send')}</span>
           )}
         </ConfirmButton>
       </DialogFooter>

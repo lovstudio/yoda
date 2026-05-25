@@ -1,5 +1,6 @@
 import { AlertCircle, Check, Copy, ExternalLink } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import yodaLogo from '@/assets/images/yoda/yoda_logo_white.svg';
 import {
   accountAuthDeviceCodeChannel,
@@ -38,6 +39,7 @@ export function AccountDeviceFlowModalOverlay({
 }
 
 export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowModalProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const [userCode, setUserCode] = useState<string>('');
@@ -72,7 +74,7 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
     countdownIntervalRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
-          setError('Code expired. Please try again.');
+          setError(t('auth.codeExpired'));
           return 0;
         }
         return prev - 1;
@@ -85,7 +87,7 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
         countdownIntervalRef.current = null;
       }
     };
-  }, [success, error]);
+  }, [success, error, t]);
 
   const copyToClipboard = useCallback(
     async (code: string, isAutomatic = false) => {
@@ -105,21 +107,24 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
 
         setCopied(true);
         if (!isAutomatic) {
-          toast({ title: '✓ Code copied', description: 'Paste it on Lovstudio to authorize' });
+          toast({
+            title: t('auth.codeCopied'),
+            description: t('auth.lovstudio.pasteCodeDescription'),
+          });
         }
         setTimeout(() => setCopied(false), 2000);
       } catch (err) {
         log.error('Failed to copy:', err);
         if (!isAutomatic) {
           toast({
-            title: 'Copy failed',
-            description: 'Please copy the code manually',
+            title: t('auth.copyFailed'),
+            description: t('auth.copyFailedDescription'),
             variant: 'destructive',
           });
         }
       }
     },
-    [toast]
+    [toast, t]
   );
 
   const openVerification = useCallback(() => {
@@ -169,7 +174,7 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
       setError(data.message);
       onError?.(data.message);
       toast({
-        title: 'Sign-in failed',
+        title: t('auth.lovstudio.signInFailed'),
         description: data.message,
         variant: 'destructive',
       });
@@ -180,7 +185,7 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
       cleanupSuccess();
       cleanupError();
     };
-  }, [copyToClipboard, onError, onClose, toast]);
+  }, [copyToClipboard, onError, onClose, toast, t]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -212,8 +217,8 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
             <Check className="h-8 w-8 text-white" strokeWidth={3} />
           </div>
           <div className="space-y-2 text-center">
-            <h2 className="text-2xl font-semibold">Signed in</h2>
-            <p className="text-sm text-muted-foreground">Welcome to Yoda</p>
+            <h2 className="text-2xl font-semibold">{t('auth.signedIn')}</h2>
+            <p className="text-sm text-muted-foreground">{t('auth.lovstudio.signedInWelcome')}</p>
             {user && (
               <div className="mt-4 flex items-center justify-center gap-2">
                 <div className="text-left">
@@ -230,24 +235,26 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
             <AlertCircle className="h-8 w-8 text-red-500" />
           </div>
           <div className="space-y-2 text-center">
-            <h2 className="text-xl font-semibold">Sign-in failed</h2>
+            <h2 className="text-xl font-semibold">{t('auth.lovstudio.signInFailed')}</h2>
             <p className="text-sm text-muted-foreground">{error}</p>
           </div>
           <Button onClick={onClose} variant="outline" className="w-full">
-            Close
+            {t('common.close')}
           </Button>
         </div>
       ) : (
         <div className="flex w-full flex-col items-center space-y-6">
           <div className="space-y-2 text-center">
-            <h2 className="text-2xl font-semibold">Sign in to Lovstudio</h2>
-            <p className="text-sm text-muted-foreground">Authorize Yoda from your browser</p>
+            <h2 className="text-2xl font-semibold">{t('auth.lovstudio.signInTitle')}</h2>
+            <p className="text-sm text-muted-foreground">{t('auth.lovstudio.authorize')}</p>
           </div>
 
           {userCode && (
             <>
               <div className="w-full space-y-3 rounded-lg bg-muted/30 p-6">
-                <p className="text-center text-xs font-medium text-muted-foreground">Your code</p>
+                <p className="text-center text-xs font-medium text-muted-foreground">
+                  {t('auth.yourCode')}
+                </p>
                 <p className="select-all text-center font-mono text-4xl font-bold tracking-wider">
                   {userCode}
                 </p>
@@ -262,12 +269,12 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
                 {copied ? (
                   <>
                     <Check className="mr-2 h-4 w-4" />
-                    Copied!
+                    {t('common.copied')}
                   </>
                 ) : (
                   <>
                     <Copy className="mr-2 h-4 w-4" />
-                    Copy Code
+                    {t('auth.copyCode')}
                   </>
                 )}
               </Button>
@@ -279,17 +286,15 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
               <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold">
                 1
               </div>
-              <p className="text-muted-foreground">
-                Sign in to Lovstudio in your browser if needed
-              </p>
+              <p className="text-muted-foreground">{t('auth.lovstudio.stepSignIn')}</p>
             </div>
             <div className="flex items-start gap-3">
               <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold">
                 2
               </div>
               <p className="text-muted-foreground">
-                Confirm the code{' '}
-                <span className="font-medium text-foreground">(already copied!)</span>
+                {t('auth.lovstudio.stepConfirm')}{' '}
+                <span className="font-medium text-foreground">{t('auth.alreadyCopied')}</span>
               </p>
             </div>
           </div>
@@ -297,17 +302,17 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
           {browserOpening && (
             <div className="w-full rounded-lg border border-blue-500/20 bg-blue-500/10 p-4">
               <p className="text-center text-sm text-blue-600 dark:text-blue-400">
-                Opening Lovstudio in {browserOpenCountdown}s...
+                {t('auth.openingService', { service: 'Lovstudio', seconds: browserOpenCountdown })}
               </p>
             </div>
           )}
 
           <div className="flex flex-col items-center gap-2 text-center">
             <Spinner className="h-5 w-5 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Waiting for authorization...</p>
+            <p className="text-sm text-muted-foreground">{t('auth.waiting')}</p>
             {timeRemaining > 0 && (
               <p className="text-xs text-muted-foreground">
-                Code expires in {formatTime(timeRemaining)}
+                {t('auth.codeExpiresIn', { time: formatTime(timeRemaining) })}
               </p>
             )}
           </div>
@@ -315,16 +320,16 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
           {(verificationUriComplete || verificationUri) && !browserOpening && (
             <Button onClick={openVerification} className="w-full" size="lg">
               <ExternalLink className="mr-2 h-4 w-4" />
-              Open Lovstudio
+              {t('auth.openService', { service: 'Lovstudio' })}
             </Button>
           )}
 
           <div className="space-x-3 text-center text-xs text-muted-foreground">
-            <span>⌘C to copy</span>
+            <span>{t('auth.shortcutCopy')}</span>
             <span>•</span>
-            <span>⌘R to reopen</span>
+            <span>{t('auth.shortcutReopen')}</span>
             <span>•</span>
-            <span>Esc to cancel</span>
+            <span>{t('auth.shortcutCancel')}</span>
           </div>
         </div>
       )}

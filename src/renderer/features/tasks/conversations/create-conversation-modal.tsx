@@ -1,5 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAgentAutoApproveDefaults } from '@renderer/features/tasks/hooks/useAgentAutoApproveDefaults';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
@@ -33,6 +34,7 @@ export const CreateConversationModal = observer(function CreateConversationModal
   projectId: string;
   taskId: string;
 }) {
+  const { t } = useTranslation();
   const { providerId, setProviderOverride, createDisabled } = useEffectiveProvider(connectionId);
   const conversationMgr = asProvisioned(getTaskStore(projectId, taskId))?.conversations;
   const autoApproveDefaults = useAgentAutoApproveDefaults();
@@ -71,12 +73,12 @@ export const CreateConversationModal = observer(function CreateConversationModal
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Create Conversation</DialogTitle>
+        <DialogTitle>{t('tasks.conversations.createConversation')}</DialogTitle>
       </DialogHeader>
       <DialogContentArea>
         <FieldGroup>
           <Field>
-            <FieldLabel>Agent</FieldLabel>
+            <FieldLabel>{t('tasks.panel.agent')}</FieldLabel>
             <AgentSelector
               autoFocus
               value={providerId}
@@ -93,14 +95,14 @@ export const CreateConversationModal = observer(function CreateConversationModal
                   if (providerId) autoApproveDefaults.setDefault(providerId, checked);
                 }}
               />
-              <FieldLabel>Dangerously skip permissions</FieldLabel>
+              <FieldLabel>{t('tasks.create.dangerouslySkipPermissions')}</FieldLabel>
             </div>
           </Field>
         </FieldGroup>
       </DialogContentArea>
       <DialogFooter>
         <ConfirmButton onClick={handleCreateConversation} disabled={createDisabled}>
-          Create
+          {t('common.create')}
         </ConfirmButton>
       </DialogFooter>
     </>

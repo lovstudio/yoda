@@ -1,5 +1,6 @@
 import { Folder } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
 import { cn } from '@renderer/utils/utils';
@@ -17,9 +18,11 @@ export function LocalDirectorySelector({
   message,
   onPathChange,
   path: initialPath,
-  placeholder = 'Select a directory',
+  placeholder,
 }: LocalDirectorySelectorProps) {
+  const { t } = useTranslation();
   const [path, setPath] = useState<string>(initialPath || '');
+  const displayPlaceholder = placeholder ?? t('projects.addProject.selectDirectory');
 
   const handleOpenFileDialog = async () => {
     const result = await rpc.app.openSelectDirectoryDialog({
@@ -45,10 +48,10 @@ export function LocalDirectorySelector({
         )}
       >
         {' '}
-        {path || placeholder}
+        {path || displayPlaceholder}
       </p>
       <Button variant="outline" size="xs">
-        Choose
+        {t('projects.addProject.choose')}
       </Button>
     </button>
   );

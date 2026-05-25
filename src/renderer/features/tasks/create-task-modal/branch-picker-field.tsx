@@ -1,4 +1,5 @@
 import { ChevronDown, GitBranch } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { BranchDisplay } from '@renderer/lib/components/branch-display';
 import { ProjectBranchSelector } from '@renderer/lib/components/project-branch-selector';
 import { ComboboxTrigger, ComboboxValue } from '@renderer/lib/ui/combobox';
@@ -19,16 +20,18 @@ export function BranchPickerField({
   state,
   projectId,
   currentBranch,
-  label = 'From Branch',
+  label,
   className,
   isUnborn = false,
 }: BranchPickerFieldProps) {
+  const { t } = useTranslation();
   const { createBranchAndWorktree, setCreateBranchAndWorktree, pushBranch, setPushBranch } = state;
+  const displayLabel = label ?? t('tasks.create.fromBranch');
 
   return (
     <div className={cn('border border-border rounded-md overflow-hidden', className)}>
       {!createBranchAndWorktree && currentBranch ? (
-        <BranchDisplay label={label} branchName={currentBranch} />
+        <BranchDisplay label={displayLabel} branchName={currentBranch} />
       ) : projectId ? (
         <ProjectBranchSelector
           projectId={projectId}
@@ -37,14 +40,14 @@ export function BranchPickerField({
           trigger={
             <ComboboxTrigger className="flex w-full items-center gap-2 justify-between hover:bg-background-1 data-popup-open:bg-background-1 p-2 outline-none">
               <div className="flex flex-col text-left text-sm gap-0.5">
-                <span className="text-foreground-passive text-xs">{label}</span>
+                <span className="text-foreground-passive text-xs">{displayLabel}</span>
                 <span className="flex items-center gap-1">
                   <GitBranch
                     absoluteStrokeWidth
                     strokeWidth={2}
                     className="size-3.5 shrink-0 text-foreground-muted"
                   />
-                  <ComboboxValue placeholder="Select a branch" />
+                  <ComboboxValue placeholder={t('branchSelector.selectBranch')} />
                 </span>
               </div>
 
@@ -64,14 +67,14 @@ export function BranchPickerField({
               className="cursor-pointer"
               onClick={() => setCreateBranchAndWorktree(!createBranchAndWorktree)}
             >
-              Create task branch and worktree
+              {t('tasks.create.createTaskBranchAndWorktree')}
             </span>
           </div>
           {createBranchAndWorktree && (
             <div className="flex items-center gap-2 text-sm text-foreground-muted select-none">
               <Switch checked={pushBranch} onCheckedChange={setPushBranch} />
               <span className="cursor-pointer" onClick={() => setPushBranch(!pushBranch)}>
-                Push branch to remote
+                {t('tasks.create.pushBranchToRemote')}
               </span>
             </div>
           )}
@@ -79,7 +82,7 @@ export function BranchPickerField({
       )}
       {isUnborn && (
         <p className="border-t border-border bg-background-1 px-2 py-1 text-xs text-foreground-muted">
-          Create an initial commit to enable branch-based tasks.
+          {t('tasks.create.initialCommitRequired')}
         </p>
       )}
     </div>

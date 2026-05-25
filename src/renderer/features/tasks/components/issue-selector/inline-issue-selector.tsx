@@ -1,6 +1,7 @@
 import { Check, Loader2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Issue } from '@shared/tasks';
 import {
   ISSUE_PROVIDER_META,
@@ -34,6 +35,7 @@ export const InlineIssueSelector = observer(function InlineIssueSelector({
   disabled,
   excludeTaskId,
 }: InlineIssueSelectorProps) {
+  const { t } = useTranslation();
   const linkedIssueMap = getLinkedIssueMap(projectId, excludeTaskId);
   const {
     issues,
@@ -162,7 +164,9 @@ export const InlineIssueSelector = observer(function InlineIssueSelector({
           value={query}
           onChange={handleQueryChange}
           onKeyDown={handleKeyDown}
-          placeholder={`Search ${issueProvider ?? 'issues'}…`}
+          placeholder={t('issues.searchPlaceholder', {
+            provider: issueProvider ?? t('issues.issues'),
+          })}
           autoFocus
         />
       </InputGroup>
@@ -171,7 +175,11 @@ export const InlineIssueSelector = observer(function InlineIssueSelector({
       <div ref={listRef} className="overflow-y-auto overflow-x-hidden h-52 p-1">
         {issues.length === 0 ? (
           <div className="text-center text-sm text-foreground-passive flex items-center justify-center h-full">
-            {query ? 'No issues found' : `No ${issueProvider} issues to show`}
+            {query
+              ? t('issues.noIssuesFound')
+              : t('issues.noProviderIssues', {
+                  provider: issueProvider ?? t('issues.issues'),
+                })}
           </div>
         ) : (
           issues.map((issue, index) => {
@@ -200,10 +208,10 @@ export const InlineIssueSelector = observer(function InlineIssueSelector({
         )}
       </div>
       <div className="flex items-center justify-between h-6 px-2 text-xs bg-background-1 border-t border-border">
-        <div className="text-foreground-muted">Navigate with arrow keys</div>
+        <div className="text-foreground-muted">{t('common.navigateWithArrowKeys')}</div>
         <div className="text-foreground-muted">
           <button className="flex items-center gap-2">
-            Select Issue <Kbd>↵</Kbd>
+            {t('issues.selectIssue')} <Kbd>↵</Kbd>
           </button>{' '}
         </div>
       </div>

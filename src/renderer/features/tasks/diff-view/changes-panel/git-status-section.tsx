@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, GitBranch, RefreshCcw } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import {
   getProjectStore,
   getRepositoryStore,
@@ -15,13 +16,13 @@ import { useGitActions } from '@renderer/features/tasks/use-git-actions';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
-import { getBranchTooltipText, getPublishTooltipText } from './git-status-tooltips';
 
 export const GitStatusSection = observer(function GitStatusSection() {
+  const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const workspaceId = asProvisioned(getTaskStore(projectId, taskId))?.workspaceId;
   const branchName = getTaskGitStore(projectId, taskId)?.branchName;
-  const projectName = projectDisplayName(getProjectStore(projectId)) ?? 'repository';
+  const projectName = projectDisplayName(getProjectStore(projectId)) ?? t('common.repository');
   const repositoryStore = getRepositoryStore(projectId);
   const showAddRemoteModal = useShowModal('addRemoteModal');
 
@@ -39,6 +40,13 @@ export const GitStatusSection = observer(function GitStatusSection() {
     isPushing,
   } = useGitActions(projectId, taskId);
   const shouldOfferAddRemote = (repositoryStore?.remotes.length ?? 0) === 0;
+  const publishTooltip = isPublishing
+    ? t('tasks.git.publishing')
+    : !branchName
+      ? t('changes.initialCommitFirst')
+      : shouldOfferAddRemote
+        ? t('changes.createOrLinkRemoteThenPublish')
+        : t('tasks.git.publishBranch');
 
   const handlePublishClick = () => {
     if (!branchName || !workspaceId) return;
@@ -63,7 +71,9 @@ export const GitStatusSection = observer(function GitStatusSection() {
               <GitBranch className="size-3 shrink-0" />
               <span className="truncate text-xs">{branchName}</span>
             </TooltipTrigger>
-            <TooltipContent side="bottom">{getBranchTooltipText(branchName)}</TooltipContent>
+            <TooltipContent side="bottom">
+              {branchName ? branchName : t('changes.initialCommitFirst')}
+            </TooltipContent>
           </Tooltip>
           <div className="flex items-center gap-1">
             {hasUpstream ? (
@@ -81,7 +91,9 @@ export const GitStatusSection = observer(function GitStatusSection() {
                       </Button>
                     }
                   />
-                  <TooltipContent>{isFetching ? 'Fetching...' : 'Fetch changes'}</TooltipContent>
+                  <TooltipContent>
+                    {isFetching ? t('tasks.git.fetching') : t('tasks.git.fetchChanges')}
+                  </TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger
@@ -98,10 +110,10 @@ export const GitStatusSection = observer(function GitStatusSection() {
                   />
                   <TooltipContent>
                     {isPulling
-                      ? 'Pulling...'
+                      ? t('tasks.git.pulling')
                       : behindCount === 0
-                        ? 'Nothing to pull'
-                        : 'Pull changes'}
+                        ? t('tasks.git.nothingToPull')
+                        : t('tasks.git.pullChanges')}
                   </TooltipContent>
                 </Tooltip>
                 <Tooltip>
@@ -119,10 +131,10 @@ export const GitStatusSection = observer(function GitStatusSection() {
                   />
                   <TooltipContent>
                     {isPushing
-                      ? 'Pushing...'
+                      ? t('tasks.git.pushing')
                       : aheadCount === 0
-                        ? 'Nothing to push'
-                        : 'Push changes'}
+                        ? t('tasks.git.nothingToPush')
+                        : t('tasks.git.pushChanges')}
                   </TooltipContent>
                 </Tooltip>
               </>
@@ -138,16 +150,14 @@ export const GitStatusSection = observer(function GitStatusSection() {
                     >
                       <ArrowUp className="size-3" />
                       {isPublishing
-                        ? 'Publishing...'
+                        ? t('tasks.git.publishing')
                         : shouldOfferAddRemote
-                          ? 'Add Remote'
-                          : 'Publish'}
+                          ? t('tasks.addRemote.title')
+                          : t('tasks.git.publish')}
                     </Button>
                   }
                 />
-                <TooltipContent>
-                  {getPublishTooltipText({ isPublishing, branchName, shouldOfferAddRemote })}
-                </TooltipContent>
+                <TooltipContent>{publishTooltip}</TooltipContent>
               </Tooltip>
             )}
           </div>

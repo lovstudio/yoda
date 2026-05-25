@@ -1,15 +1,10 @@
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getPrSyncStore } from '@renderer/features/projects/stores/project-selectors';
 import { ListPopoverCard } from '@renderer/lib/components/list-popover-card';
 import { Button } from '@renderer/lib/ui/button';
-
-const KIND_LABELS: Record<string, string> = {
-  full: 'Full sync',
-  incremental: 'Incremental sync',
-  single: 'Single PR',
-};
 
 interface SyncStatusCardProps {
   icon: ReactNode;
@@ -40,6 +35,7 @@ export const PrSyncStatusCard = observer(function PrSyncStatusCard({
   projectId,
   repositoryUrl,
 }: Props) {
+  const { t } = useTranslation();
   const prSync = getPrSyncStore(projectId);
   const state = prSync?.getState(repositoryUrl);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -59,14 +55,14 @@ export const PrSyncStatusCard = observer(function PrSyncStatusCard({
     return (
       <SyncStatusCard
         icon={<CheckCircle2 className="size-3.5 shrink-0 text-green-500" />}
-        content="Sync complete"
+        content={t('pullRequests.sync.complete')}
       />
     );
   }
 
   if (!state || state.status === 'done') return null;
 
-  const kindLabel = KIND_LABELS[state.kind] ?? state.kind;
+  const kindLabel = t(`pullRequests.sync.kind.${state.kind}`, { defaultValue: state.kind });
 
   if (state.status === 'running' && state.kind !== 'single') {
     const hasProgress = state.total != null && state.total > 0;
@@ -75,7 +71,12 @@ export const PrSyncStatusCard = observer(function PrSyncStatusCard({
         icon={<Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
         label={kindLabel}
         content={
-          hasProgress ? `Syncing PRs: ${state.synced ?? 0} / ${state.total}` : 'Syncing PRs…'
+          hasProgress
+            ? t('pullRequests.sync.syncingProgress', {
+                synced: state.synced ?? 0,
+                total: state.total,
+              })
+            : t('pullRequests.sync.syncing')
         }
         actions={
           <Button
@@ -84,7 +85,7 @@ export const PrSyncStatusCard = observer(function PrSyncStatusCard({
             className="shrink-0 h-6 px-2 text-xs"
             onClick={() => prSync?.cancel(repositoryUrl)}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
         }
       />
@@ -96,7 +97,7 @@ export const PrSyncStatusCard = observer(function PrSyncStatusCard({
       <SyncStatusCard
         icon={<RotateCcw className="size-3.5 shrink-0 text-muted-foreground" />}
         label={kindLabel}
-        content="Sync cancelled"
+        content={t('pullRequests.sync.cancelled')}
         actions={
           <Button
             variant="ghost"
@@ -104,7 +105,7 @@ export const PrSyncStatusCard = observer(function PrSyncStatusCard({
             className="h-6 px-2 text-xs"
             onClick={() => prSync?.retry()}
           >
-            Resume
+            {t('common.resume')}
           </Button>
         }
       />
@@ -115,10 +116,10 @@ export const PrSyncStatusCard = observer(function PrSyncStatusCard({
   return (
     <SyncStatusCard
       icon={<AlertCircle className="size-3.5 shrink-0 text-foreground-destructive" />}
-      label={<span className="text-destructive font-medium">Sync failed</span>}
+      label={<span className="text-destructive font-medium">{t('pullRequests.sync.failed')}</span>}
       content={
         <span className="block truncate" title={state.error}>
-          {state.error ?? 'Unknown error'}
+          {state.error ?? t('common.unknownError')}
         </span>
       }
       actions={
@@ -129,13 +130,13 @@ export const PrSyncStatusCard = observer(function PrSyncStatusCard({
             className="h-6 px-2 text-xs"
             onClick={() => prSync?.retry()}
           >
-            Retry
+            {t('common.retry')}
           </Button>
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={() => prSync?.clear(repositoryUrl)}
-            aria-label="Dismiss"
+            aria-label={t('common.dismiss')}
           >
             <X className="size-3.5" />
           </Button>

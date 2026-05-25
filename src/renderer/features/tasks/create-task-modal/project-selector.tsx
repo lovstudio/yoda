@@ -1,6 +1,7 @@
 import { FolderPlus } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { basenameFromAnyPath } from '@shared/path-name';
 import { projectDisplayName } from '@shared/projects';
 import {
@@ -43,17 +44,12 @@ interface ProjectSelectorProps {
   trigger?: React.ReactNode;
 }
 
-const EMPTY_PROJECT_OPTION: EmptyProjectOption = {
-  kind: 'empty',
-  value: '__empty_project__',
-  label: 'No project',
-};
-
 export const ProjectSelector = observer(function ProjectSelector({
   value,
   onChange,
   trigger,
 }: ProjectSelectorProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const { toast } = useToast();
@@ -67,7 +63,10 @@ export const ProjectSelector = observer(function ProjectSelector({
     }
   );
   const optionGroups: Array<{ value: string; items: ProjectSelectorOption[] }> = [
-    { value: 'empty', items: [EMPTY_PROJECT_OPTION] },
+    {
+      value: 'empty',
+      items: [{ kind: 'empty', value: '__empty_project__', label: t('projects.noProject') }],
+    },
     { value: 'options', items: options },
   ];
 
@@ -88,16 +87,16 @@ export const ProjectSelector = observer(function ProjectSelector({
     setBrowsing(true);
     try {
       const path = await rpc.app.openSelectDirectoryDialog({
-        title: 'Select a local project',
-        message: 'Select a project directory to open',
+        title: t('projects.selectLocalProject'),
+        message: t('projects.selectProjectDirectory'),
       });
       if (!path) return;
 
       const status = await rpc.projects.inspectProjectPath({ type: 'local', path });
       if (!status.isDirectory) {
         toast({
-          title: 'Cannot add project',
-          description: 'Pick a folder to add it as a project.',
+          title: t('projects.cannotAddProject'),
+          description: t('projects.pickFolderDescription'),
           variant: 'destructive',
         });
         return;
@@ -109,8 +108,8 @@ export const ProjectSelector = observer(function ProjectSelector({
       }
       if (!status.isGitRepo) {
         toast({
-          title: 'Cannot add project',
-          description: `${basenameFromAnyPath(path)} is not a git repository.`,
+          title: t('projects.cannotAddProject'),
+          description: t('projects.notGitRepository', { name: basenameFromAnyPath(path) }),
           variant: 'destructive',
         });
         return;
@@ -132,8 +131,8 @@ export const ProjectSelector = observer(function ProjectSelector({
     } catch (err) {
       log.error('Failed to add project from picker:', err);
       toast({
-        title: 'Cannot add project',
-        description: 'Failed to add the selected folder as a project.',
+        title: t('projects.cannotAddProject'),
+        description: t('projects.failedAddSelectedFolder'),
         variant: 'destructive',
       });
     } finally {
@@ -158,11 +157,15 @@ export const ProjectSelector = observer(function ProjectSelector({
     >
       {trigger ?? (
         <ComboboxTrigger className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md border border-border bg-transparent px-2.5 py-1 text-sm outline-none">
-          <ComboboxValue placeholder="Select a project" />
+          <ComboboxValue placeholder={t('projects.selectProject')} />
         </ComboboxTrigger>
       )}
       <ComboboxContent className="w-auto min-w-(--anchor-width)">
-        <ComboboxInput showTrigger={false} showClear={!!value} placeholder="Search projects..." />
+        <ComboboxInput
+          showTrigger={false}
+          showClear={!!value}
+          placeholder={t('projects.searchProjects')}
+        />
         <ComboboxList className="pb-0">
           {(group: { value: string; items: ProjectSelectorOption[] }) => (
             <ComboboxGroup key={group.value} items={group.items} className="py-1">
@@ -187,7 +190,7 @@ export const ProjectSelector = observer(function ProjectSelector({
           className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-foreground outline-hidden hover:bg-background-quaternary-1 disabled:pointer-events-none disabled:opacity-50"
         >
           <FolderPlus className="size-4 text-foreground-muted" />
-          {browsing ? 'Opening…' : 'Browse for folder…'}
+          {browsing ? t('projects.opening') : t('projects.browseForFolder')}
         </button>
       </ComboboxContent>
     </Combobox>

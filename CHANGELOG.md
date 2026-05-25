@@ -6,6 +6,20 @@ This project resets to **0.1.0** with the rebrand from `emdash` to `yoda`. Older
 release history (`v0.4.x`, `v1.1.x`) belongs to the upstream `emdash` codebase
 and is preserved in git tags only.
 
+## 0.3.2 — 2026-05-25
+
+### Added
+
+- Add renderer i18n coverage for the main workspace, settings, projects, tasks,
+  integrations, MCP, skills, and shared UI surfaces.
+
+### Fixed
+
+- Fix Chinese language resolution so Settings → Language updates the interface
+  immediately instead of falling back to English.
+- Translate remaining top-level Chinese labels and render localized select
+  values in settings controls.
+
 ## 0.3.1 — 2026-05-21
 
 ### Fixed
@@ -125,7 +139,7 @@ and is preserved in git tags only.
 
 - `.npmrc` pins `use-node-version=24.14.0` for consistent pnpm runs.
 - `pnpm run d` uses `--prefer-frozen-lockfile --reporter=append-only
-  --silent` to quiet routine installs.
+--silent` to quiet routine installs.
 - `scripts/dev.ts` filters known-noisy Electron/macOS log lines unless
   `YODA_DEV_VERBOSE=1` is set.
 - `scripts/postinstall.ts` renames the dev Electron.app bundle to

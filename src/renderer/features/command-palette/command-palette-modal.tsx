@@ -220,8 +220,8 @@ export function CommandPaletteModal({
           )}
           title={
             sessionsChipDisabled
-              ? 'Open a local project to search session transcripts'
-              : 'Toggle in:sessions — search prompts inside Claude transcripts (lovcode)'
+              ? t('commandPalette.sessionsRequiresProject')
+              : t('commandPalette.sessionsToggleTitle')
           }
         >
           {inSessionsScope && lovcodeFetching ? (
@@ -229,18 +229,18 @@ export function CommandPaletteModal({
           ) : (
             <MessagesSquare className="size-3" />
           )}
-          In sessions
+          {t('commandPalette.inSessions')}
         </button>
       </div>
       <Command.List className="h-96 overflow-y-auto p-1">
         {inSessionsScope ? (
           searchText.length === 0 ? (
             <div className="py-8 text-center text-xs text-foreground/40">
-              Type to search prompts inside Claude transcripts.
+              {t('commandPalette.sessionsEmptyHint')}
             </div>
           ) : lovcodeUnavailable ? (
             <div className="py-8 text-center text-xs text-foreground/40">
-              Open a local project to search session transcripts.
+              {t('commandPalette.sessionsRequiresProject')}
             </div>
           ) : lovcodeNotInstalled ? (
             <LovcodeInstallBanner />
@@ -248,11 +248,11 @@ export function CommandPaletteModal({
             <>
               <Command.Empty className="py-8 text-center text-sm text-foreground/40">
                 {lovcodeFetching
-                  ? 'Searching transcripts…'
+                  ? t('commandPalette.searchingTranscripts')
                   : t('commandPalette.noResultsFor', { query: searchText })}
               </Command.Empty>
               {lovcodeTaskItems.length > 0 && (
-                <Command.Group heading="Tasks (sessions)" className={GROUP_CLASS}>
+                <Command.Group heading={t('commandPalette.tasksSessions')} className={GROUP_CLASS}>
                   {lovcodeTaskItems.map((item) => (
                     <PaletteItem
                       key={`session-task:${item.id}`}

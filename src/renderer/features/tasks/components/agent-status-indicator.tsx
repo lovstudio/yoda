@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { CLISpinner } from '@renderer/features/tasks/components/cliSpinner';
 import type { AgentStatus } from '@renderer/features/tasks/conversations/conversation-manager';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
@@ -11,19 +12,14 @@ interface AgentStatusIndicatorProps {
   disableTooltip?: boolean;
 }
 
-const STATUS_LABELS = {
-  working: 'Agent is working',
-  'awaiting-input': 'Agent is awaiting input',
-  error: 'Agent error',
-  completed: 'Agent completed',
-};
-
 export function AgentStatusIndicator({
   status,
   className,
   disableTooltip,
 }: AgentStatusIndicatorProps) {
+  const { t } = useTranslation();
   if (!status || status === 'idle') return null;
+  const statusLabel = t(`agentStatus.${status}`);
 
   const renderIndicator = () => {
     switch (status) {
@@ -33,24 +29,24 @@ export function AgentStatusIndicator({
         return (
           <span
             className={cn('rounded-full bg-primary border size-2 border-primary', className)}
-            aria-label="Agent is awaiting input"
-            title="Agent is awaiting input"
+            aria-label={statusLabel}
+            title={statusLabel}
           />
         );
       case 'error':
         return (
           <span
             className={cn('rounded-full bg-red-200 border size-2 border-red-500', className)}
-            aria-label="Agent error"
-            title="Agent error"
+            aria-label={statusLabel}
+            title={statusLabel}
           />
         );
       case 'completed':
         return (
           <span
             className={cn('rounded-full bg-green-200 border size-2 border-green-500', className)}
-            aria-label="Agent completed"
-            title="Agent completed"
+            aria-label={statusLabel}
+            title={statusLabel}
           />
         );
       default:
@@ -67,7 +63,7 @@ export function AgentStatusIndicator({
   return (
     <Tooltip>
       <TooltipTrigger render={indicator} />
-      <TooltipContent>{STATUS_LABELS[status]}</TooltipContent>
+      <TooltipContent>{statusLabel}</TooltipContent>
     </Tooltip>
   );
 }

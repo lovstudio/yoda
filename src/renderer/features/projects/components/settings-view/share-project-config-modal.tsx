@@ -1,5 +1,7 @@
+import type { TFunction } from 'i18next';
 import { Check, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   ProjectSettingsPage,
   ProjectSettingsWriteTarget,
@@ -57,8 +59,12 @@ function parseTargetValue(
   return { type: 'workspace', workspaceId: target.workspaceId };
 }
 
-export function projectConfigWriteFieldLabel(field: ShareableProjectSettingsWriteField): string {
-  return SHAREABLE_FIELD_DESCRIPTOR_BY_ID[field].modalLabel;
+export function projectConfigWriteFieldLabel(
+  field: ShareableProjectSettingsWriteField,
+  t?: TFunction
+): string {
+  if (!t) return SHAREABLE_FIELD_DESCRIPTOR_BY_ID[field].modalLabel;
+  return t(`projects.settings.shareable.fields.${field}.modalLabel`);
 }
 
 function unknownErrorMessage(error: unknown): string {
@@ -74,6 +80,7 @@ export function ShareProjectConfigModal({
   onSuccess,
   onClose,
 }: Props) {
+  const { t } = useTranslation();
   const firstTarget = targets[0] ?? null;
   const initialTargetOption = targets.find(
     (target) => projectConfigTargetValue(target) === initialTarget
@@ -87,7 +94,7 @@ export function ShareProjectConfigModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const selectedTargetValue = selectedTarget ? projectConfigTargetValue(selectedTarget) : '';
-  const selectedTargetLabel = selectedTarget?.label ?? 'Select a working copy';
+  const selectedTargetLabel = selectedTarget?.label ?? t('projects.settings.selectWorkingCopy');
 
   const disabled = status === 'writing' || selectedFields.length === 0 || !selectedTarget;
 
@@ -123,7 +130,9 @@ export function ShareProjectConfigModal({
     }
 
     setErrorMessage(
-      result.error.type === 'write-config-failed' ? result.error.message : 'Failed to write config.'
+      result.error.type === 'write-config-failed'
+        ? result.error.message
+        : t('projects.settings.writeConfigFailed')
     );
     setStatus('error');
   }
@@ -131,16 +140,15 @@ export function ShareProjectConfigModal({
   return (
     <>
       <DialogHeader showCloseButton={false}>
-        <DialogTitle>Share settings with your team</DialogTitle>
+        <DialogTitle>{t('projects.settings.shareWithTeam')}</DialogTitle>
       </DialogHeader>
       <DialogContentArea className="pt-0">
         <FieldGroup>
           <p className="text-sm text-foreground-muted">
-            This writes the selected settings to .yoda.json in the chosen working directory. Commit
-            that file so teammates get the same project defaults after pulling.
+            {t('projects.settings.shareConfigDescription')}
           </p>
           <Field>
-            <FieldTitle>Write to</FieldTitle>
+            <FieldTitle>{t('projects.settings.writeTo')}</FieldTitle>
             <Select
               value={selectedTargetValue}
               onValueChange={(value) => {
@@ -177,7 +185,7 @@ export function ShareProjectConfigModal({
           </Field>
 
           <Field>
-            <FieldTitle>Settings to share</FieldTitle>
+            <FieldTitle>{t('projects.settings.settingsToShare')}</FieldTitle>
             <div className="grid grid-cols-2 gap-2">
               {availableFields.map((field) => (
                 <label key={field} className="flex items-center gap-2 rounded-md py-2 text-sm">
@@ -185,7 +193,7 @@ export function ShareProjectConfigModal({
                     checked={selectedFields.includes(field)}
                     onCheckedChange={(checked) => toggleField(field, checked === true)}
                   />
-                  <span>{projectConfigWriteFieldLabel(field)}</span>
+                  <span>{projectConfigWriteFieldLabel(field, t)}</span>
                 </label>
               ))}
             </div>
@@ -195,17 +203,17 @@ export function ShareProjectConfigModal({
       </DialogContentArea>
       <DialogFooter>
         <Button variant="outline" onClick={onClose} disabled={status === 'writing'}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <ConfirmButton onClick={() => void handleWrite()} disabled={disabled}>
           <span className="inline-flex min-w-20 items-center justify-center gap-1.5">
             {status === 'writing' && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
             {status === 'written' && <Check className="size-4" aria-hidden="true" />}
             {status === 'writing'
-              ? 'Writing...'
+              ? t('projects.settings.writing')
               : status === 'written'
-                ? 'Wrote .yoda.json'
-                : 'Write .yoda.json'}
+                ? t('projects.settings.wroteConfig')
+                : t('projects.settings.writeConfig')}
           </span>
         </ConfirmButton>
       </DialogFooter>

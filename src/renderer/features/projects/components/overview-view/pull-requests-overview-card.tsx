@@ -1,5 +1,6 @@
 import { ArrowRight, GitPullRequest } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { usePullRequests } from '@renderer/features/projects/components/pr-view/usePullRequests';
 import {
   asMounted,
@@ -18,6 +19,7 @@ export const PullRequestsOverviewCard = observer(function PullRequestsOverviewCa
 }: {
   projectId: string;
 }) {
+  const { t } = useTranslation();
   const project = asMounted(getProjectStore(projectId));
   const repo = getRepositoryStore(projectId);
   const repositoryUrl = repo?.repositoryUrl ?? null;
@@ -40,21 +42,25 @@ export const PullRequestsOverviewCard = observer(function PullRequestsOverviewCa
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-medium text-foreground inline-flex items-center gap-2">
             <GitPullRequest className="size-3.5" />
-            Pull Requests
+            {t('pullRequests.title')}
           </h2>
-          <span className="text-xs text-foreground-muted">{prs.length} open</span>
+          <span className="text-xs text-foreground-muted">
+            {t('pullRequests.openCount', { count: prs.length })}
+          </span>
         </div>
         <Button variant="ghost" size="sm" onClick={goToPrs} disabled={!repositoryUrl}>
-          View all
+          {t('projects.viewAll')}
           <ArrowRight className="size-3.5" />
         </Button>
       </header>
       {!repositoryUrl ? (
-        <p className="text-xs text-foreground-muted">No GitHub remote configured.</p>
+        <p className="text-xs text-foreground-muted">
+          {t('pullRequests.noGitHubRemoteConfigured')}
+        </p>
       ) : loading && prs.length === 0 ? (
-        <p className="text-xs text-foreground-muted">Loading…</p>
+        <p className="text-xs text-foreground-muted">{t('common.loading')}</p>
       ) : recent.length === 0 ? (
-        <p className="text-xs text-foreground-muted">No open pull requests.</p>
+        <p className="text-xs text-foreground-muted">{t('pullRequests.noOpenPullRequests')}</p>
       ) : (
         <ul className="space-y-1">
           {recent.map((pr) => (

@@ -1,6 +1,6 @@
 import { Loader2, Plus, RefreshCw, Search } from 'lucide-react';
 import React from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
@@ -79,36 +79,35 @@ const SkillsView: React.FC = () => {
 
         <div className="mb-4 flex items-start gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Skills from the{' '}
-            <a
-              href="https://github.com/openai/skills"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-foreground underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-foreground"
-            >
-              OpenAI
-            </a>{' '}
-            and{' '}
-            <a
-              href="https://github.com/anthropics/skills"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-foreground underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-foreground"
-            >
-              Anthropic
-            </a>{' '}
-            catalogs. Install a skill to make it available across all your coding agents. Skills
-            follow the open{' '}
-            <a
-              href="https://agentskills.io"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-foreground underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-foreground"
-            >
-              Agent Skills
-            </a>{' '}
-            standard. If you want to use skills from another library, feel free to let us know
-            through the feedback modal.
+            <Trans
+              i18nKey="skills.catalogDescription"
+              components={{
+                openai: (
+                  <a
+                    href="https://github.com/openai/skills"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-foreground underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-foreground"
+                  />
+                ),
+                anthropic: (
+                  <a
+                    href="https://github.com/anthropics/skills"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-foreground underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-foreground"
+                  />
+                ),
+                standard: (
+                  <a
+                    href="https://agentskills.io"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-foreground underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-foreground"
+                  />
+                ),
+              }}
+            />
           </p>
         </div>
 

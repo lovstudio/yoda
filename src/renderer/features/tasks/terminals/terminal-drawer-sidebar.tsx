@@ -1,6 +1,7 @@
 import { Pause, Play, Plus, Settings, Terminal, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { type LifecycleScriptsStore } from '@renderer/features/tasks/stores/lifecycle-scripts';
 import { type TerminalTabViewStore } from '@renderer/features/tasks/terminals/terminal-tab-view-store';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -40,6 +41,7 @@ export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
   projectId,
   className,
 }: TerminalDrawerSidebarProps) {
+  const { t } = useTranslation();
   const scripts = lifecycleScriptsMgr?.tabs ?? [];
   const terminals = terminalTabView.tabs;
 
@@ -48,7 +50,7 @@ export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
   return (
     <div className={cn('flex flex-col overflow-y-auto text-sm', className)}>
       <Section
-        label="Terminals"
+        label={t('tasks.terminals.title')}
         action={
           <Tooltip>
             <TooltipTrigger
@@ -61,7 +63,7 @@ export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
                 </button>
               }
             />
-            <TooltipContent>New terminal</TooltipContent>
+            <TooltipContent>{t('tasks.terminals.newTerminal')}</TooltipContent>
           </Tooltip>
         }
       >
@@ -88,7 +90,7 @@ export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
                     </button>
                   }
                 />
-                <TooltipContent>Close terminal</TooltipContent>
+                <TooltipContent>{t('tasks.terminals.closeTerminal')}</TooltipContent>
               </Tooltip>
             }
           />
@@ -96,7 +98,7 @@ export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
       </Section>
       {scripts.length > 0 && lifecycleScriptsMgr && (
         <Section
-          label="Scripts"
+          label={t('tasks.terminals.scripts')}
           action={
             <Tooltip>
               <TooltipTrigger
@@ -109,7 +111,7 @@ export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
                   </button>
                 }
               />
-              <TooltipContent>Configure in project settings</TooltipContent>
+              <TooltipContent>{t('tasks.terminals.configureInProjectSettings')}</TooltipContent>
             </Tooltip>
           }
         >
@@ -146,7 +148,9 @@ export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
                           </button>
                         }
                       />
-                      <TooltipContent>{script.isRunning ? 'Stop' : 'Run'}</TooltipContent>
+                      <TooltipContent>
+                        {script.isRunning ? t('common.stop') : t('common.run')}
+                      </TooltipContent>
                     </Tooltip>
                   ) : null
                 }

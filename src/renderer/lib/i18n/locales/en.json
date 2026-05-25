@@ -29,7 +29,35 @@
     "more": "More",
     "settings": "Settings",
     "comingSoon": "Coming soon",
-    "untitled": "Untitled"
+    "untitled": "Untitled",
+    "saving": "Saving...",
+    "saved": "Saved",
+    "creating": "Creating...",
+    "adding": "Adding...",
+    "required": "Required",
+    "optional": "Optional",
+    "stop": "Stop",
+    "run": "Run",
+    "noResults": "No results",
+    "now": "now",
+    "ago": "{{time}} ago",
+    "somethingWentWrong": "Something went wrong",
+    "reload": "Reload",
+    "errorOccurred": "An error occurred",
+    "unexpectedError": "An unexpected error occurred.",
+    "description": "Description",
+    "title": "Title",
+    "repository": "Repository",
+    "path": "Path",
+    "name": "Name",
+    "selectAllLabel": "Select all",
+    "see": "See",
+    "loadMore": "Load more",
+    "loadingMore": "Loading more...",
+    "resume": "Resume",
+    "unknownError": "Unknown error",
+    "dismiss": "Dismiss",
+    "navigateWithArrowKeys": "Navigate with arrow keys"
   },
   "language": {
     "label": "Language",
@@ -109,7 +137,8 @@
       "saving": "Saving…",
       "loadFailed": "Failed to load project settings.",
       "saveFailed": "Failed to save project settings."
-    }
+    },
+    "needsReview": "Needs review"
   },
   "settings": {
     "title": "Settings",
@@ -423,7 +452,13 @@
   "tasks": {
     "task": "Task",
     "changes": "Changes",
-    "conversations": "Conversations",
+    "conversations": {
+      "createConversation": "New conversation",
+      "emptyTitle": "No conversations",
+      "emptyDescription": "Create a conversation to start working with an agent.",
+      "deleteTitle": "Delete conversation",
+      "deleteDescription": "\"{{title}}\" will be permanently deleted. This action cannot be undone."
+    },
     "files": "Files",
     "toggleTerminal": "Toggle terminal",
     "rename": {
@@ -489,12 +524,80 @@
       "publishBranch": "Publish branch",
       "createdFrom": "Created from"
     },
-    "createTask": "Create task"
+    "createTask": "Create task",
+    "creatingTask": "Creating task...",
+    "errorCreatingTask": "Error creating task",
+    "settingUpWorkspace": "Setting up workspace...",
+    "failedSetUpWorkspace": "Failed to set up workspace",
+    "failedTearDownWorkspace": "Failed to tear down workspace",
+    "devServerRunningAt": "Dev server running at {{url}}",
+    "selectTask": "Select task",
+    "lifecycle": {
+      "inProgress": "In Progress",
+      "review": "Review",
+      "done": "Done",
+      "cancelled": "Cancelled",
+      "searchStatus": "Search status..."
+    },
+    "create": {
+      "fromIssue": "From issue",
+      "fromPullRequest": "From pull request",
+      "fromBranch": "From branch",
+      "useByoi": "Use my own branch",
+      "checkoutBranchForReview": "Check out branch for review",
+      "createTaskBranchAndWorktree": "Create task branch and worktree",
+      "initialCommitRequired": "Create an initial commit first.",
+      "dangerouslySkipPermissions": "Dangerously skip permissions",
+      "initialConversation": "Initial conversation",
+      "initialPromptPlaceholder": "Describe what you want the agent to do.",
+      "pushBranchToRemote": "Push branch to remote",
+      "selectAnotherIssue": "Select another issue",
+      "selectAnotherPr": "Select another pull request"
+    },
+    "terminals": {
+      "title": "Terminals",
+      "newTerminal": "New terminal",
+      "closeTerminal": "Close terminal",
+      "emptyTitle": "No terminals",
+      "emptyDescription": "Create a terminal to run commands in this task workspace.",
+      "scripts": "Scripts",
+      "configureInProjectSettings": "Configure scripts in project settings."
+    },
+    "panel": {
+      "agent": "Agent",
+      "summary": "Summary",
+      "todos": "Todos",
+      "noSummary": "No summary yet",
+      "noTodos": "No todos yet",
+      "emptyHint": "Select or create a conversation.",
+      "noActiveConversation": "No active conversation",
+      "claudeOnly": "Available for Claude conversations only."
+    },
+    "context": {
+      "unpinTask": "Unpin task",
+      "pinTask": "Pin task",
+      "unmarkReview": "Unmark review",
+      "markForReview": "Mark for review",
+      "copyBranchName": "Copy branch name",
+      "branchNameCopied": "Branch name copied",
+      "copyBranchNameFailed": "The branch name could not be copied to the clipboard."
+    }
   },
   "commandPalette": {
     "placeholder": "Search tasks, projects, actions…",
     "noResults": "No results",
-    "noResultsFor": "No results for \"{{query}}\""
+    "noResultsFor": "No results for \"{{query}}\"",
+    "sessionsRequiresProject": "Sessions require an open project",
+    "sessionsToggleTitle": "Search task sessions",
+    "inSessions": "in sessions",
+    "sessionsEmptyHint": "No matching task sessions",
+    "searchingTranscripts": "Searching transcripts...",
+    "tasksSessions": "Tasks & sessions",
+    "lovcode": {
+      "title": "Install LovCode",
+      "description": "LovCode is required to run this command.",
+      "install": "Install LovCode"
+    }
   },
   "mcp": {
     "title": "MCP",
@@ -508,7 +611,25 @@
     "noServers": "No servers available.",
     "removeServerTitle": "Remove MCP server?",
     "removeServerDescription": "This will remove \"{{name}}\" from all agents. This action cannot be undone.",
-    "removeServerConfirm": "Remove"
+    "removeServerConfirm": "Remove",
+    "syncToAgents": "Sync to agents",
+    "httpUnsupportedTitle": "{{name}} does not support HTTP servers",
+    "httpUnsupported": "Some agents don't support HTTP servers and are disabled.",
+    "valuePlaceholder": "value",
+    "modal": {
+      "editTitle": "Edit MCP Server",
+      "addCatalogTitle": "Add {{name}}",
+      "addCustomTitle": "Add Custom MCP Server",
+      "serverName": "Server Name",
+      "transport": "Transport",
+      "command": "Command",
+      "arguments": "Arguments (one per line)",
+      "url": "URL",
+      "environmentVariables": "Environment Variables",
+      "addEnvVar": "+ Add env var",
+      "headers": "Headers",
+      "addHeader": "+ Add header"
+    }
   },
   "skills": {
     "title": "Skills",
@@ -519,7 +640,25 @@
     "installed": "Installed",
     "recommended": "Recommended",
     "noMatches": "No skills match your search.",
-    "noSkills": "No skills available."
+    "noSkills": "No skills available.",
+    "catalogDescription": "Skills from the <openai>OpenAI</openai> and <anthropic>Anthropic</anthropic> catalogs. Install a skill to make it available across all your coding agents. Skills follow the open <standard>Agent Skills</standard> standard. If you want to use skills from another library, feel free to let us know through the feedback modal.",
+    "create": {
+      "validation": {
+        "name": "Name must be lowercase letters, numbers, and hyphens (2-64 chars).",
+        "description": "Description is required."
+      },
+      "failed": "Failed to create skill",
+      "nameHint": "Lowercase letters, numbers, and hyphens",
+      "descriptionPlaceholder": "What does this skill do?",
+      "instructions": "Instructions",
+      "instructionsPlaceholder": "Write the skill instructions here. The YAML frontmatter (name and description) will be added automatically.",
+      "instructionsHint": "Define what this skill does and how agents should use it"
+    },
+    "fromLibrary": "From {{source}} skill library",
+    "examplePrompt": "Example prompt",
+    "uninstall": "Uninstall",
+    "installing": "Installing...",
+    "install": "Install"
   },
   "agents": {
     "title": "Agents",
@@ -577,6 +716,608 @@
       "configTitle": "Config files",
       "configDescription": "Open the agent's local config directory or file in Finder.",
       "noConfig": "No default config path for {{name}}."
+    },
+    "compareAgents": "Compare agents",
+    "copyInstallCommandFor": "Copy install command for {{name}}",
+    "copyCommand": "Copy command",
+    "searchAgents": "Search agents...",
+    "noAgentInstalled": "No agent installed"
+  },
+  "editor": {
+    "fileNotFound": "File not found",
+    "fileTooLarge": "File is too large to preview",
+    "fileExtension": "File extension: {{extension}}",
+    "binaryNoPreview": "Binary file preview is not available.",
+    "viewRendered": "View rendered",
+    "editSource": "Edit source",
+    "preview": "Preview",
+    "noFiles": "No files",
+    "conflict": {
+      "title": "File Modified Externally",
+      "description": "<code>{{path}}</code> was changed outside the editor while you have unsaved edits. What would you like to do?",
+      "keepMine": "Keep Mine",
+      "acceptIncoming": "Accept Incoming"
     }
+  },
+  "markdown": {
+    "imageNotFound": "[Image not found: {{src}}]",
+    "loadingImage": "Loading image..."
+  },
+  "auth": {
+    "codeExpired": "Code expired",
+    "codeCopied": "Code copied",
+    "copyFailed": "Copy failed",
+    "copyFailedDescription": "Copy the code manually and paste it in the browser.",
+    "yourCode": "Your code",
+    "copyCode": "Copy code",
+    "alreadyCopied": "Copied",
+    "openingService": "Opening service...",
+    "waiting": "Waiting for authorization...",
+    "codeExpiresIn": "Code expires in {{time}}",
+    "openService": "Open service",
+    "shortcutCopy": "Copy code",
+    "shortcutReopen": "Reopen browser",
+    "shortcutCancel": "Cancel",
+    "having": "Having",
+    "trouble": "trouble?",
+    "signedIn": "Signed in",
+    "lovstudio": {
+      "signInTitle": "Sign in to Yoda",
+      "signInFailed": "Sign in failed",
+      "signedInWelcome": "Welcome back.",
+      "authorize": "Authorize Yoda",
+      "pasteCodeDescription": "Paste this code in the browser to finish signing in.",
+      "stepSignIn": "Sign in",
+      "stepConfirm": "Confirm"
+    },
+    "github": {
+      "connectTitle": "Connect GitHub",
+      "authenticationFailed": "GitHub authentication failed",
+      "connected": "GitHub connected",
+      "authorize": "Authorize GitHub",
+      "pasteCodeDescription": "Paste this code in GitHub to finish connecting your account.",
+      "stepAuthorize": "Authorize",
+      "stepPaste": "Paste code"
+    }
+  },
+  "ssh": {
+    "validation": {
+      "nameRequired": "Connection name is required.",
+      "hostRequired": "Host is required.",
+      "hostInvalid": "Enter a valid host.",
+      "portMin": "Port must be at least 1.",
+      "portMax": "Port must be 65535 or lower.",
+      "usernameRequired": "Username is required.",
+      "passwordRequired": "Password is required.",
+      "privateKeyRequired": "Private key path is required."
+    },
+    "editConnection": "Edit SSH connection",
+    "addConnection": "Add SSH connection",
+    "testing": "Testing...",
+    "testConnection": "Test connection",
+    "connectionName": "Connection name",
+    "connectionNamePlaceholder": "Production server",
+    "host": "Host",
+    "port": "Port",
+    "username": "Username",
+    "authentication": "Authentication",
+    "authType": {
+      "password": "Password",
+      "key": "Private key",
+      "agent": "SSH agent"
+    },
+    "password": "Password",
+    "leaveBlankKeepExisting": "Leave blank to keep existing value.",
+    "privateKeyPath": "Private key path",
+    "passphrase": "Passphrase",
+    "passphraseHint": "Optional passphrase for the private key.",
+    "agentAuthHint": "The local SSH agent will provide credentials.",
+    "testingConnection": "Testing connection...",
+    "connected": "Connected",
+    "connectedWithLatency": "Connected in {{latency}} ms",
+    "connectionFailed": "Connection failed",
+    "logs": "Logs",
+    "changeConnection": "Change SSH connection",
+    "connection": "Connection",
+    "selectOrAddConnection": "Select or add an SSH connection."
+  },
+  "feedback": {
+    "title": "Send feedback",
+    "removeAttachment": "Remove attachment",
+    "signInTitle": "Sign in to send feedback",
+    "signInDescription": "Sign in to your Yoda account so we can follow up if needed.",
+    "dropImageHere": "Drop image here",
+    "sendingAs": "Sending as {{email}}",
+    "category": {
+      "label": "Category",
+      "idea": "Idea",
+      "bug": "Bug",
+      "contact": "Contact"
+    },
+    "detailsLabel": "Details",
+    "detailsPlaceholder": "Tell us what happened or what you would like to see.",
+    "attachImage": "Attach image",
+    "sending": "Sending...",
+    "send": "Send feedback"
+  },
+  "branchSelector": {
+    "selectBranch": "Select branch",
+    "searchBranches": "Search branches...",
+    "refreshBranches": "Refresh branches",
+    "noBranches": "No branches found"
+  },
+  "navigation": {
+    "goBack": "Go back",
+    "goForward": "Go forward",
+    "toggleLeftSidebar": "Toggle left sidebar"
+  },
+  "openIn": {
+    "failed": "Failed to open",
+    "unavailable": "No apps available",
+    "openIn": "Open in",
+    "editor": "Editor",
+    "options": "Options",
+    "selectApp": "Select app"
+  },
+  "integrations": {
+    "githubNotConnected": "GitHub is not connected.",
+    "openAccountSettings": "Open account settings",
+    "setup": {
+      "linear": {
+        "title": "Linear API key",
+        "step1": "Create a Linear API key.",
+        "step2": "Paste the key below.",
+        "placeholder": "lin_api_..."
+      },
+      "plain": {
+        "title": "Plain API key",
+        "step1": "Create a Plain API key.",
+        "step2": "Paste the key below.",
+        "placeholder": "plain_api_..."
+      },
+      "featurebase": {
+        "title": "Featurebase API key",
+        "step1": "Create a Featurebase API key.",
+        "step2": "Paste the key below.",
+        "placeholder": "fb_..."
+      },
+      "gitlab": {
+        "descriptionBefore": "Create a personal access token from",
+        "descriptionAfter": "with API access, then paste it below.",
+        "tokenPlaceholder": "glpat-..."
+      },
+      "jira": {
+        "description": "Create an Atlassian API token and paste it below with your Jira email.",
+        "emailPlaceholder": "you@example.com",
+        "tokenPlaceholder": "ATATT..."
+      },
+      "forgejo": {
+        "description": "Create a Forgejo access token and paste it below.",
+        "tokenPlaceholder": "forgejo token"
+      }
+    },
+    "connectFailed": "Failed to connect.",
+    "connect": "Connect",
+    "setupModal": {
+      "linear": {
+        "title": "Connect Linear",
+        "subtitle": "Enter your Linear API key to connect your workspace."
+      },
+      "jira": {
+        "title": "Connect Jira",
+        "subtitle": "Enter your Jira site URL, email, and API token to connect."
+      },
+      "gitlab": {
+        "title": "Connect GitLab",
+        "subtitle": "Enter your GitLab instance URL and personal access token."
+      },
+      "plain": {
+        "title": "Connect Plain",
+        "subtitle": "Enter your Plain API key to connect your workspace."
+      },
+      "forgejo": {
+        "title": "Connect Forgejo",
+        "subtitle": "Enter your Forgejo instance URL and API token."
+      },
+      "featurebase": {
+        "title": "Connect Featurebase",
+        "subtitle": "Enter your Featurebase API key to connect your workspace."
+      }
+    }
+  },
+  "agentStatus": {
+    "working": "Working",
+    "awaiting-input": "Awaiting input",
+    "error": "Error",
+    "completed": "Completed"
+  },
+  "issues": {
+    "alreadyLinkedToTask": "Already linked to {{taskName}}",
+    "clickToLink": "Click to link",
+    "searchPlaceholder": "Search issues...",
+    "issues": "Issues",
+    "noIssuesFound": "No issues found",
+    "providerIssue": "{{provider}} issue",
+    "connectIntegrationDescription": "Connect an integration to search issues.",
+    "configureIntegrations": "Configure integrations",
+    "noProviderIssues": "No provider issues available.",
+    "selectIssue": "Select issue"
+  },
+  "pullRequests": {
+    "draft": "Draft",
+    "title": "Pull Requests",
+    "open": "Open",
+    "closed": "Closed",
+    "from": "from",
+    "openOnGitHub": "Open on GitHub",
+    "unavailable": "Pull requests unavailable",
+    "unavailableDescription": "Connect GitHub to view pull requests for this repository.",
+    "noPullRequests": "No pull requests",
+    "noPullRequestsDescription": "Pull requests for this repository will appear here.",
+    "alreadyOpen": "Already open",
+    "createPullRequest": "Create pull request",
+    "refresh": "Refresh pull requests",
+    "createPr": "Create PR",
+    "createDraftPr": "Create draft PR",
+    "createDraft": "Create draft",
+    "markReady": "Mark ready",
+    "merging": "Merging...",
+    "noChecks": "No checks",
+    "noChecksDescription": "Checks will appear here when GitHub reports them.",
+    "noCommits": "No commits",
+    "noCommitsDescription": "Commits will appear here after sync.",
+    "loadFailed": "Failed to load pull requests",
+    "searchPlaceholder": "Search pull requests...",
+    "noPullRequestsFound": "No pull requests found",
+    "noOpenPullRequestsToShow": "No open pull requests to show.",
+    "noClosedPullRequestsToShow": "No closed pull requests to show.",
+    "selectPr": "Select pull request",
+    "headBranch": "Head branch",
+    "baseBranch": "Base branch",
+    "selectBaseBranch": "Select base branch",
+    "prTitle": "Pull request title",
+    "createFailed": "Failed to create pull request",
+    "pushAndCreateDraft": "Push and create draft",
+    "pushAndCreatePr": "Push and create PR",
+    "skipPushDescription": "Skip push if the branch is already available on the remote.",
+    "noGitHubRemote": "No GitHub remote",
+    "noGitHubRemoteConfigured": "No GitHub remote is configured for this project.",
+    "noOpenPullRequests": "No open pull requests",
+    "openCount": "{{count}} open",
+    "unavailableWithSettings": "Pull request sync is unavailable. Check repository settings.",
+    "githubAuthRequired": "GitHub authentication required",
+    "connectUserAccount": "Connect user account",
+    "searchByTitleBranchNumber": "Search by title, branch, or number",
+    "searchFilterPlaceholder": "Search filters...",
+    "forceFullSync": "Force full sync",
+    "sort": {
+      "label": "Sort",
+      "newest": "Newest",
+      "oldest": "Oldest",
+      "recentlyUpdated": "Recently updated"
+    },
+    "filters": {
+      "label": "Labels",
+      "searchLabels": "Search labels...",
+      "filterBy": "Filter by",
+      "author": "Author",
+      "assignee": "Assignee",
+      "removeFilter": "Remove filter"
+    },
+    "noPullRequestsMatchingFilter": "No pull requests match the current filters.",
+    "reviewInTask": "Review in task",
+    "sync": {
+      "syncing": "Syncing pull requests...",
+      "syncingProgress": "Syncing pull requests {{current}}/{{total}}",
+      "complete": "Pull requests synced",
+      "failed": "Pull request sync failed",
+      "cancelled": "Pull request sync cancelled",
+      "kind": {
+        "full": "full",
+        "incremental": "incremental",
+        "single": "single"
+      }
+    },
+    "mergeLine": {
+      "mergedInto": "merged into",
+      "closedWithoutMergingInto": "closed without merging into",
+      "wantsToMergeInto": "wants to merge into"
+    },
+    "mergeMode": {
+      "merge": {
+        "label": "Merge pull request",
+        "description": "All commits from this branch will be added to the base branch via a merge commit."
+      },
+      "squash": {
+        "label": "Squash and merge",
+        "description": "All commits from this branch will be combined into one commit in the base branch."
+      },
+      "rebase": {
+        "label": "Rebase and merge",
+        "description": "All commits from this branch will be rebased and added to the base branch."
+      }
+    },
+    "mergeState": {
+      "unknown": {
+        "title": "Merge status unknown",
+        "detailWithStatus": "Refresh PR status and try again.",
+        "detail": "Refresh to try again."
+      },
+      "draft": {
+        "title": "Draft pull request",
+        "detail": "Mark ready for review to enable merging."
+      },
+      "ready": {
+        "title": "Ready to merge",
+        "detail": "No conflicts or required reviews."
+      },
+      "conflicts": {
+        "title": "Merge conflicts",
+        "detail": "Resolve conflicts before merging."
+      },
+      "behind": {
+        "title": "Branch is out-of-date",
+        "detail": "Update branch before merging."
+      },
+      "blocked": {
+        "title": "Merging is blocked",
+        "detail": "Required reviews or branch protections not satisfied."
+      },
+      "checksBlocked": {
+        "detail": "Required checks are not satisfied."
+      },
+      "unstable": {
+        "title": "Checks not passing",
+        "detail": "Review failing checks before merging."
+      }
+    },
+    "mergeAnywayTitle": "Merge anyway?",
+    "mergeAnywayDescription": "{{reason}} Are you sure you want to proceed?",
+    "mergeAnywayConfirm": "Merge anyway",
+    "tabs": {
+      "files": "Files",
+      "commits": "Commits",
+      "checks": "Checks"
+    }
+  },
+  "diff": {
+    "noChanges": "No changes",
+    "noChangesDescription": "There are no file changes to show.",
+    "binaryFile": "Binary file",
+    "largeDiff": "Large diff",
+    "loadAnyway": "Load anyway",
+    "selectFile": "Select a file",
+    "selectFileDescription": "Choose a file from the changes list to view its diff.",
+    "binaryNoDiff": "Binary files cannot be diffed.",
+    "image": {
+      "original": "Original",
+      "modified": "Modified",
+      "fileAdded": "Image added",
+      "fileDeleted": "Image deleted",
+      "decodeFailed": "Failed to decode image",
+      "unavailableGeneric": "Image preview is unavailable.",
+      "unavailableLfs": "Image content is stored in Git LFS and is not available locally.",
+      "unavailableSsh": "Image preview is unavailable over SSH.",
+      "unavailableTooLarge": "Image is too large to preview.",
+      "unavailableUnsupported": "Unsupported image format."
+    }
+  },
+  "comments": {
+    "editComment": "Edit comment",
+    "comment": "Comment",
+    "line": "Line {{line}}",
+    "cancelEsc": "Esc to cancel",
+    "cancelEdit": "Cancel edit",
+    "saveShortcut": "Cmd/Ctrl+Enter to save",
+    "saveComment": "Save comment",
+    "deleteComment": "Delete comment",
+    "updatePlaceholder": "Update your comment...",
+    "addComment": "Add comment",
+    "cancelComment": "Cancel comment",
+    "submitShortcut": "Cmd/Ctrl+Enter to submit",
+    "submitComment": "Submit comment",
+    "addPlaceholder": "Add a comment..."
+  },
+  "changes": {
+    "staged": "Staged",
+    "nothingStaged": "Nothing staged",
+    "nothingStagedDescription": "Stage files to include them in your next commit.",
+    "unstageSelectedFiles": "Unstage selected files",
+    "unstage": "Unstage",
+    "unstageAllFiles": "Unstage all files",
+    "unstageAll": "Unstage all",
+    "changed": "Changed",
+    "discardSelectedTitle": "Discard selected changes?",
+    "discardSelectedDescription": "This will permanently discard the selected working tree changes.",
+    "discardAllTitle": "Discard all changes?",
+    "discardAllDescription": "This will permanently discard all working tree changes.",
+    "workingTreeClean": "Working tree clean",
+    "noUncommittedChanges": "No uncommitted changes.",
+    "discardSelectedFiles": "Discard selected files",
+    "discard": "Discard",
+    "stageSelectedFiles": "Stage selected files",
+    "stage": "Stage",
+    "discardAllChanges": "Discard all changes",
+    "discardAll": "Discard all",
+    "stageAllChanges": "Stage all changes",
+    "stageAll": "Stage all",
+    "commit": "Commit",
+    "commitAndPush": "Commit and push",
+    "commitMessage": "Commit message",
+    "committing": "Committing...",
+    "committed": "Committed",
+    "pushing": "Pushing...",
+    "pushed": "Pushed",
+    "initialCommitFirst": "Create an initial commit first.",
+    "createOrLinkRemoteThenPublish": "Create or link a remote, then publish the branch.",
+    "filesSelected": "{{count}} file selected",
+    "filesSelected_plural": "{{count}} files selected",
+    "allFiles": "All files"
+  },
+  "projects": {
+    "selectProject": "Select project",
+    "noProject": "No project",
+    "selectLocalProject": "Select local project",
+    "selectProjectDirectory": "Select project directory",
+    "cannotAddProject": "Cannot add project",
+    "pickFolderDescription": "Pick a folder containing a Git repository.",
+    "notGitRepository": "Not a Git repository",
+    "failedAddSelectedFolder": "Failed to add selected folder",
+    "searchProjects": "Search projects...",
+    "opening": "Opening...",
+    "browseForFolder": "Browse for folder",
+    "settingUpProject": "Setting up project...",
+    "failedSetUpProject": "Failed to set up project",
+    "sshNotConnected": "SSH connection is not connected.",
+    "sshUnavailable": "SSH is unavailable.",
+    "projectNotFound": "Project not found",
+    "projectDirectoryMissing": "Project directory is missing.",
+    "removeProject": "Remove Project",
+    "deleteProjectTitle": "Delete project",
+    "deleteProjectDescription": "\"{{name}}\" will be deleted. The project folder and worktrees will stay on the filesystem.",
+    "overview": "Overview",
+    "openOnGitHub": "Open on GitHub",
+    "currentBranch": "Current branch",
+    "defaultBranch": "Default branch",
+    "remote": "Remote",
+    "taskCounts": "Task counts",
+    "viewAll": "View all",
+    "noActiveTasks": "No active tasks",
+    "projectNotReady": "Project is not ready",
+    "addProject": {
+      "title": "Add project",
+      "choose": "Choose",
+      "clone": "Clone",
+      "new": "New",
+      "pick": "Pick folder",
+      "directory": "Directory",
+      "projectDirectory": "Project directory",
+      "selectDirectory": "Select directory",
+      "remoteDirectory": "Remote directory",
+      "selectSshConnectionToBrowse": "Select an SSH connection to browse remote directories.",
+      "repositoryUrl": "Repository URL",
+      "enterRepositoryUrl": "Enter repository URL",
+      "repositoryName": "Repository name",
+      "enterRepositoryName": "Enter repository name",
+      "owner": "Owner",
+      "projectName": "Project name",
+      "enterProjectName": "Enter project name",
+      "privacy": "Privacy",
+      "initializeGitRepository": "Initialize Git repository",
+      "emptyDirectory": "Directory is empty",
+      "notGitRepository": "Directory is not a Git repository",
+      "failedListDirectory": "Failed to list directory"
+    },
+    "quickActions": {
+      "title": "Quick actions",
+      "manage": "Manage quick actions",
+      "empty": "No quick actions configured.",
+      "addAction": "Add action",
+      "labelPlaceholder": "Label",
+      "running": "Running...",
+      "usingDefaults": "Using default quick actions",
+      "resetToGlobalDefault": "Reset to global default",
+      "descriptionBefore": "Quick actions are saved in project settings.",
+      "descriptionAfter": "Use them for common commands."
+    },
+    "settings": {
+      "title": "Project settings",
+      "saveSettings": "Save settings",
+      "saveFailed": "Failed to save settings",
+      "resetChanges": "Reset changes",
+      "docs": "Docs",
+      "fullConfigReference": "Full config reference",
+      "teamSettings": "Team settings",
+      "shareWithTeam": "Share with team",
+      "shareWithTeamTooltip": "Write selected project settings to the repository config.",
+      "shareConfigDescription": "Choose which settings to write to the repository config.",
+      "settingsToShare": "Settings to share",
+      "writeTo": "Write to",
+      "writeConfig": "Write config",
+      "writing": "Writing...",
+      "wroteConfig": "Config written",
+      "writeConfigFailed": "Failed to write config.",
+      "selectWorkingCopy": "Select working copy",
+      "useTeamSettings": "Use team settings",
+      "useTeamSettingsFor": "Use team settings for {{label}}",
+      "overriding": "Overriding",
+      "overridesTooltip": "This value overrides {{teamSettings}} in {{count}}.",
+      "workingDirectoryCount": "{{count}} working directory",
+      "workingDirectoryCount_plural": "{{count}} working directories",
+      "defaultBranchDescription": "Default branch used when creating task branches.",
+      "remoteDescription": "Remote used for pull requests and branch publishing.",
+      "workspaceProvider": "Workspace provider",
+      "workspaceProviderDescription": "Choose how task workspaces are created.",
+      "worktreeDirectory": "Worktree directory",
+      "worktreeDirectoryDescription": "Directory where task worktrees are created.",
+      "lifecycleScripts": "Lifecycle scripts",
+      "lifecycleScriptsDescription": "Commands that run when setting up or tearing down task workspaces.",
+      "provisionCommand": "Provision command",
+      "terminateCommand": "Terminate command",
+      "enableTmuxDescription": "Use tmux for task terminals when available.",
+      "shareable": {
+        "fields": {
+          "preservePatterns": {
+            "modalLabel": "Preserve patterns",
+            "leafLabel": "preserve patterns",
+            "description": "Gitignored and untracked files matching these glob patterns are copied from the main repo into each worktree. One pattern per line."
+          },
+          "shellSetup": {
+            "modalLabel": "Shell setup",
+            "leafLabel": "shell setup",
+            "description": "Shell commands run before the agent starts in each worktree session."
+          },
+          "scripts": {
+            "setup": {
+              "modalLabel": "Setup script",
+              "leafLabel": "setup"
+            },
+            "run": {
+              "modalLabel": "Run script",
+              "leafLabel": "run"
+            },
+            "teardown": {
+              "modalLabel": "Teardown script",
+              "leafLabel": "teardown"
+            }
+          }
+        }
+      }
+    },
+    "tasks": {
+      "activeWithCount": "Active ({{count}})",
+      "archivedWithCount": "Archived ({{count}})",
+      "selectedCount": "{{count}} selected",
+      "clearSelection": "Clear selection",
+      "onlyWithNotes": "Only with notes",
+      "onlyWithNotesAria": "Show only tasks with archive notes",
+      "searchPlaceholder": "Search tasks...",
+      "noTasks": "No tasks",
+      "noTasksFound": "No tasks found",
+      "restore": "Restore",
+      "deleteTitle": "Delete tasks?",
+      "deleteDescription": "Selected tasks will be permanently deleted. This action cannot be undone.",
+      "deleteConfirm": "Delete tasks"
+    }
+  },
+  "terminalSearch": {
+    "placeholder": "Search terminal",
+    "aria": "Terminal search",
+    "previous": "Previous match",
+    "next": "Next match",
+    "close": "Close search"
+  },
+  "github": {
+    "connectedToGitHub": "Connected to GitHub",
+    "signedInAs": "Signed in as {{user}}",
+    "userFallback": "user",
+    "authenticationFailed": "Authentication Failed",
+    "connectingViaAccount": "Connecting via Yoda account...",
+    "connectionFailed": "Connection Failed",
+    "connectionFailedDescription": "Failed to connect to GitHub. Please try again.",
+    "oauthFlow": "OAuth flow",
+    "deviceFlow": "Device flow",
+    "connectionUnsuccessful": "GitHub connection unsuccessful",
+    "flowCanceled": "{{flow}} was canceled"
   }
 }

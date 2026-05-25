@@ -1,6 +1,7 @@
 import { observer } from 'mobx-react-lite';
 import type * as monaco from 'monaco-editor';
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { HEAD_REF, STAGED_REF } from '@shared/git';
 import { useDiffEditorComments } from '@renderer/features/tasks/diff-view/comments/use-diff-editor-comments';
 import { ImageDiffView } from '@renderer/features/tasks/diff-view/main-panel/image-diff-view';
@@ -13,6 +14,7 @@ import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { getLanguageFromPath } from '@renderer/utils/languageUtils';
 
 export const FileDiffView = observer(function FileDiffView() {
+  const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
   const { workspaceId } = provisioned;
@@ -186,17 +188,14 @@ export const FileDiffView = observer(function FileDiffView() {
           />
         )}
         {!activeFile && (
-          <EmptyState
-            label="Select a file to view changes"
-            description="Select a file to view changes"
-          />
+          <EmptyState label={t('diff.selectFile')} description={t('diff.selectFileDescription')} />
         )}
         {activeFile && isImage && (
           <ImageDiffView projectId={projectId} workspaceId={workspaceId} activeFile={activeFile} />
         )}
         {isBinary && !isImage && (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            Binary file — no diff available
+            {t('diff.binaryNoDiff')}
           </div>
         )}
       </div>

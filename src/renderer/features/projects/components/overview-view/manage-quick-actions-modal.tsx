@@ -1,6 +1,7 @@
 import { Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { QuickAction } from '@shared/project-settings';
 import { getProjectSettingsStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -37,6 +38,7 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
   onSuccess,
   onClose,
 }: Props) {
+  const { t } = useTranslation();
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
   const globalDefaults: QuickAction[] = useMemo(
     () => homeDraft?.defaultQuickActions ?? [],
@@ -54,7 +56,7 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
     let cancelled = false;
     const settingsStore = getProjectSettingsStore(projectId);
     if (!settingsStore) {
-      setError('Project not ready');
+      setError(t('projects.projectNotReady'));
       setLoading(false);
       return;
     }
@@ -69,7 +71,7 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, t]);
 
   const displayList: QuickAction[] = override ?? globalDefaults;
   const usingDefaults = override === null;
@@ -106,7 +108,7 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
     const settingsStore = getProjectSettingsStore(projectId);
     const currentSettings = settingsStore?.settings;
     if (!settingsStore || !currentSettings) {
-      setError('Project not ready');
+      setError(t('projects.projectNotReady'));
       return;
     }
     setSubmitting(true);
@@ -120,7 +122,7 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
     ) as typeof currentSettings;
     const updateRes = await settingsStore.save(nextSettings);
     if (!updateRes.success) {
-      setError('Failed to save project settings');
+      setError(t('projects.settings.saveFailed'));
       setSubmitting(false);
       return;
     }
@@ -130,17 +132,17 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Quick Actions</DialogTitle>
+        <DialogTitle>{t('projects.quickActions.title')}</DialogTitle>
       </DialogHeader>
       <DialogContentArea>
         <p className="text-xs text-foreground-muted">
-          Quick actions appear on the project overview. Clicking one spawns a new task that runs the
-          command in a fresh conversation. Use slash commands like{' '}
-          <code className="font-mono">/release-via-cicd</code> or any prompt text.
+          {t('projects.quickActions.descriptionBefore')}{' '}
+          <code className="font-mono">/release-via-cicd</code>{' '}
+          {t('projects.quickActions.descriptionAfter')}
         </p>
         {usingDefaults && (
           <p className="text-xs text-foreground-muted">
-            Using global defaults. Edit any row to create a project-specific override.
+            {t('projects.quickActions.usingDefaults')}
           </p>
         )}
         <div className="flex flex-col gap-2">
@@ -148,7 +150,7 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
             <div key={action.id} className="flex items-center gap-2">
               <Input
                 className="w-32"
-                placeholder="Label"
+                placeholder={t('projects.quickActions.labelPlaceholder')}
                 value={action.label}
                 disabled={loading}
                 onChange={(e) => updateRow(action.id, { label: e.target.value })}
@@ -165,7 +167,7 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
                 size="icon-sm"
                 disabled={loading}
                 onClick={() => deleteRow(action.id)}
-                aria-label="Remove"
+                aria-label={t('common.remove')}
               >
                 <Trash2 className="size-3.5" />
               </Button>
@@ -174,12 +176,12 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" disabled={loading} onClick={addRow}>
               <Plus className="size-3.5" />
-              Add action
+              {t('projects.quickActions.addAction')}
             </Button>
             {!usingDefaults && (
               <Button variant="ghost" size="sm" disabled={loading} onClick={resetToGlobal}>
                 <RotateCcw className="size-3.5" />
-                Reset to global default
+                {t('projects.quickActions.resetToGlobalDefault')}
               </Button>
             )}
           </div>
@@ -188,13 +190,13 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
       </DialogContentArea>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <ConfirmButton
           onClick={() => void handleSubmit()}
           disabled={loading || submitting || !dirty}
         >
-          {submitting ? 'Saving…' : 'Save'}
+          {submitting ? t('common.saving') : t('common.save')}
         </ConfirmButton>
       </DialogFooter>
     </>

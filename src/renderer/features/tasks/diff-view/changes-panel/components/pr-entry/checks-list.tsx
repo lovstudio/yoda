@@ -1,6 +1,7 @@
 import { CheckCircle2, ExternalLink, Loader2, MinusCircle, XCircle } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { PullRequest } from '@shared/pull-requests';
 import { useCheckRuns } from '@renderer/features/tasks/diff-view/state/use-check-runs';
 import { rpc } from '@renderer/lib/ipc';
@@ -77,6 +78,7 @@ export function CheckRunItem({ check }: { check: CheckRun }) {
 }
 
 export function ChecksList({ checks }: { checks: CheckRun[] }) {
+  const { t } = useTranslation();
   const sorted = useMemo(
     () =>
       [...checks].sort(
@@ -86,7 +88,12 @@ export function ChecksList({ checks }: { checks: CheckRun[] }) {
   );
 
   if (sorted.length === 0) {
-    return <EmptyState label="No checks" description="No checks available" />;
+    return (
+      <EmptyState
+        label={t('pullRequests.noChecks')}
+        description={t('pullRequests.noChecksDescription')}
+      />
+    );
   }
 
   return (

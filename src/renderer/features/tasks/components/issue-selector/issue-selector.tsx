@@ -1,6 +1,7 @@
 import { ExternalLink, Link2, Loader2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { forwardRef, useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Issue } from '@shared/tasks';
 import {
   ISSUE_PROVIDER_META,
@@ -78,6 +79,8 @@ export function ProviderLogo({
 }
 
 export function LinkedIssueIndicator({ linkedTo }: { linkedTo: LinkedIssueInfo }) {
+  const { t } = useTranslation();
+
   return (
     <Tooltip>
       <TooltipTrigger
@@ -87,7 +90,9 @@ export function LinkedIssueIndicator({ linkedTo }: { linkedTo: LinkedIssueInfo }
           </span>
         }
       />
-      <TooltipContent>Already linked to task: {linkedTo.taskName}</TooltipContent>
+      <TooltipContent>
+        {t('issues.alreadyLinkedToTask', { name: linkedTo.taskName })}
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -124,6 +129,7 @@ export const IssueSelector = observer(function IssueSelector({
   onValueChange,
   excludeTaskId,
 }: IssueSelectorProps) {
+  const { t } = useTranslation();
   const linkedIssueMap = getLinkedIssueMap(projectId, excludeTaskId);
   const {
     issues,
@@ -221,7 +227,7 @@ export const IssueSelector = observer(function IssueSelector({
                 <ComboboxValue
                   placeholder={
                     <div className="text-foreground-passive justify-center w-full text-sm text-center flex items-center gap-1 h-6">
-                      Click to link an issue
+                      {t('issues.clickToLink')}
                     </div>
                   }
                 >
@@ -240,11 +246,13 @@ export const IssueSelector = observer(function IssueSelector({
               inputRef={inputRef}
               showClear={!!value}
               showTrigger={false}
-              placeholder={`Search ${issueProvider ?? 'issues'}…`}
+              placeholder={t('issues.searchPlaceholder', {
+                provider: issueProvider ?? t('issues.issues'),
+              })}
               disabled={!hasAnyIntegration}
             />
             <ComboboxEmpty>
-              <span className="text-muted-foreground">No issues found</span>
+              <span className="text-muted-foreground">{t('issues.noIssuesFound')}</span>
             </ComboboxEmpty>
             <ComboboxList>
               {(issue: Issue) => {
@@ -266,12 +274,18 @@ export const IssueSelector = observer(function IssueSelector({
 });
 
 export function SelectedIssueValue({ issue }: { issue: Issue }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-col gap-2 w-full">
       <div className="flex items-center justify-between w-full ">
         <div className="flex items-center gap-2">
           <ProviderLogo provider={issue.provider} className="h-3.5 w-3.5" />
-          <span>{`${ISSUE_PROVIDER_META[issue.provider].displayName} issue`}</span>
+          <span>
+            {t('issues.providerIssue', {
+              provider: ISSUE_PROVIDER_META[issue.provider].displayName,
+            })}
+          </span>
           <IssueIdentifier identifier={issue.identifier} />
         </div>
         <Button
@@ -297,6 +311,7 @@ export function SelectedIssueValue({ issue }: { issue: Issue }) {
 }
 
 export function ConnectIssueIntegrationPlaceholder() {
+  const { t } = useTranslation();
   const { navigate } = useNavigate();
 
   return (
@@ -312,8 +327,7 @@ export function ConnectIssueIntegrationPlaceholder() {
         ))}
       </div>
       <p className="text-foreground-muted font-nomral text-sm text-center">
-        Connect with one of our issue integrations to link your issues to your tasks and use them as
-        context in your conversations.
+        {t('issues.connectIntegrationDescription')}
       </p>
       <Button
         variant="outline"
@@ -321,7 +335,7 @@ export function ConnectIssueIntegrationPlaceholder() {
         className="w-fit"
         onClick={() => navigate('settings', { tab: 'integrations' })}
       >
-        Configure integrations
+        {t('issues.configureIntegrations')}
       </Button>
     </div>
   );

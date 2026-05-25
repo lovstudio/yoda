@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { Activity, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { HEAD_REF, STAGED_REF } from '@shared/git';
 import {
   StackedDiffPanelStore,
@@ -44,6 +45,7 @@ interface StackedDiffPanelProps {
 }
 
 const StackedDiffPanel = observer(function StackedDiffPanel({ panelStore }: StackedDiffPanelProps) {
+  const { t } = useTranslation();
   const provisioned = useProvisionedTask();
   const diffView = provisioned.taskView.diffView;
   const { visibleSlots } = panelStore;
@@ -113,9 +115,7 @@ const StackedDiffPanel = observer(function StackedDiffPanel({ panelStore }: Stac
   }
 
   if (visibleSlots.length === 0) {
-    return (
-      <EmptyState label="No changes" description="Select or make changes to files to see diffs." />
-    );
+    return <EmptyState label={t('diff.noChanges')} description={t('diff.noChangesDescription')} />;
   }
 
   return (
@@ -146,6 +146,7 @@ const StackedFileSlot = observer(function StackedFileSlot({
   panelStore,
   diffView,
 }: StackedFileSlotProps) {
+  const { t } = useTranslation();
   const [contentHeight, setContentHeight] = useState<number | null>(null);
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -286,18 +287,16 @@ const StackedFileSlot = observer(function StackedFileSlot({
         <div style={{ height: isBinary || (isLarge && !forceLoad) ? 80 : editorHeight }}>
           {isBinary ? (
             <div className="flex h-full items-center justify-center text-sm text-foreground-passive">
-              Binary file
+              {t('diff.binaryFile')}
             </div>
           ) : isLarge && !forceLoad ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-foreground-passive">
-              <span>
-                Large diff ({formatDiffLineCount(totalDiffLines)} lines). Loading may be slow.
-              </span>
+              <span>{t('diff.largeDiff', { count: formatDiffLineCount(totalDiffLines) })}</span>
               <button
                 className="rounded-md border border-border px-3 py-1 text-xs font-medium hover:bg-background-1"
                 onClick={() => panelStore.setForceLoad(file.path)}
               >
-                Load anyway
+                {t('diff.loadAnyway')}
               </button>
             </div>
           ) : (

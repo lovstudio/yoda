@@ -1,5 +1,6 @@
 import { ChevronUp, FileCode, Folder, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { FileEntry } from '@shared/ssh';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
@@ -18,6 +19,7 @@ export function RemoteDirectorySelector({
   value,
   onChange,
 }: RemoteDirectorySelectorProps) {
+  const { t } = useTranslation();
   const [currentPath, setCurrentPath] = useState<undefined | string>(value);
   const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
   const [isBrowsing, setIsBrowsing] = useState(false);
@@ -37,7 +39,7 @@ export function RemoteDirectorySelector({
       const entries = await rpc.ssh.listFiles({ connectionId, path });
       setFileEntries(entries);
     } catch (e) {
-      setBrowseError(e instanceof Error ? e.message : 'Failed to list directory');
+      setBrowseError(e instanceof Error ? e.message : t('projects.addProject.failedListDirectory'));
       setFileEntries([]);
     } finally {
       setIsBrowsing(false);
@@ -124,7 +126,9 @@ export function RemoteDirectorySelector({
             ) : browseError ? (
               <div className="py-4 text-center text-sm text-destructive">{browseError}</div>
             ) : fileEntries.length === 0 ? (
-              <div className="py-6 text-center text-sm text-muted-foreground">Empty directory</div>
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                {t('projects.addProject.emptyDirectory')}
+              </div>
             ) : (
               <div className="divide-y">
                 {fileEntries.map((entry) => (
@@ -159,7 +163,7 @@ export function RemoteDirectorySelector({
       </Popover>
       {!connectionId && (
         <p className="text-xs text-muted-foreground">
-          Select an SSH connection to browse remote directories.
+          {t('projects.addProject.selectSshConnectionToBrowse')}
         </p>
       )}
     </div>

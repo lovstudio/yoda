@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { getPrSyncStore } from '@renderer/features/projects/stores/project-selectors';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -14,6 +15,7 @@ export const PullRequestsSection = observer(function PullRequestsSection({
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }) {
+  const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
   const { pr } = provisioned.workspace;
@@ -66,13 +68,13 @@ export const PullRequestsSection = observer(function PullRequestsSection({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {!repositoryUrl ? (
           <EmptyState
-            label="Pull requests unavailable"
-            description="Pull requests are currently available only for configured GitHub remotes."
+            label={t('pullRequests.unavailable')}
+            description={t('pullRequests.unavailableDescription')}
           />
         ) : pullRequests.length === 0 ? (
           <EmptyState
-            label="No pull requests"
-            description="Push your branch and create a PR to start a review."
+            label={t('pullRequests.noPullRequests')}
+            description={t('pullRequests.noPullRequestsDescription')}
           />
         ) : null}
         {repositoryUrl && currentPr && <PullRequestEntry key={currentPr.url} pr={currentPr} />}

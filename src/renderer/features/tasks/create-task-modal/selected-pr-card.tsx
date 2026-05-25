@@ -1,4 +1,5 @@
 import { GitPullRequest } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { PullRequest } from '@shared/pull-requests';
 
 interface SelectedPrCardProps {
@@ -7,6 +8,8 @@ interface SelectedPrCardProps {
 }
 
 export function SelectedPrCard({ pr, onDeselect }: SelectedPrCardProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="rounded-md border border-border overflow-hidden flex flex-col gap-2">
       <div className="flex flex-col gap-2 p-2">
@@ -19,7 +22,7 @@ export function SelectedPrCard({ pr, onDeselect }: SelectedPrCardProps) {
               </span>
               {pr.isDraft && (
                 <span className="text-xs text-foreground-muted border border-border rounded px-1 shrink-0">
-                  Draft
+                  {t('pullRequests.draft')}
                 </span>
               )}
               <span className="text-sm truncate font-medium">{pr.title}</span>
@@ -40,7 +43,7 @@ export function SelectedPrCard({ pr, onDeselect }: SelectedPrCardProps) {
         <div className="text-foreground-muted"></div>
         <div className="text-foreground-muted">
           <button className="flex items-center gap-2" onClick={onDeselect}>
-            Select another PR
+            {t('tasks.create.selectAnotherPr')}
           </button>
         </div>
       </div>

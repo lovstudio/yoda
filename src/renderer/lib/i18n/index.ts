@@ -9,6 +9,12 @@ export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 export const LANGUAGE_STORAGE_KEY = 'yoda:language';
 
+export function normalizeSupportedLanguage(language?: string | null): SupportedLanguage {
+  if (language?.toLowerCase().startsWith('zh')) return 'zh-CN';
+  if (language?.toLowerCase().startsWith('en')) return 'en';
+  return 'zh-CN';
+}
+
 void i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -19,7 +25,7 @@ void i18n
     },
     fallbackLng: 'en',
     supportedLngs: [...SUPPORTED_LANGUAGES],
-    nonExplicitSupportedLngs: true,
+    nonExplicitSupportedLngs: false,
     load: 'currentOnly',
     interpolation: { escapeValue: false },
     detection: {

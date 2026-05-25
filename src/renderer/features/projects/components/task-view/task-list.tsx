@@ -2,6 +2,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Archive, FileText, RotateCcw, Trash2, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
 import { ListPopoverCard } from '@renderer/lib/components/list-popover-card';
@@ -26,6 +27,7 @@ function TaskVirtualList({
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement>(null);
 
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -40,7 +42,12 @@ function TaskVirtualList({
   const virtualItems = virtualizer.getVirtualItems();
 
   if (tasks.length === 0) {
-    return <EmptyState label="No tasks" description="No tasks found" />;
+    return (
+      <EmptyState
+        label={t('projects.tasks.noTasks')}
+        description={t('projects.tasks.noTasksFound')}
+      />
+    );
   }
 
   return (
@@ -94,29 +101,37 @@ function SelectionBar({
   onRestore: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation();
   if (count === 0) return null;
 
   return (
     <ListPopoverCard className="justify-between">
-      <span className="text-foreground-muted whitespace-nowrap">{count} selected</span>
+      <span className="text-foreground-muted whitespace-nowrap">
+        {t('projects.tasks.selectedCount', { count })}
+      </span>
       <div className="flex items-center gap-2">
         {tab === 'active' && (
           <Button variant="outline" size="sm" onClick={onArchive}>
             <Archive className="size-3.5" />
-            Archive
+            {t('sidebar.archiveTask')}
           </Button>
         )}
         {tab === 'archived' && (
           <Button variant="outline" size="sm" onClick={onRestore}>
             <RotateCcw className="size-3.5" />
-            Restore
+            {t('projects.tasks.restore')}
           </Button>
         )}
         <Button variant="destructive" size="sm" onClick={onDelete}>
           <Trash2 className="size-3.5" />
-          Delete
+          {t('common.delete')}
         </Button>
-        <Button variant="ghost" size="icon-sm" onClick={onClear} aria-label="Clear selection">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onClear}
+          aria-label={t('projects.tasks.clearSelection')}
+        >
           <X className="size-3.5" />
         </Button>
       </div>
@@ -125,6 +140,7 @@ function SelectionBar({
 }
 
 export const TaskList = observer(function TaskList() {
+  const { t } = useTranslation();
   const {
     params: { projectId },
   } = useParams('project');
@@ -177,9 +193,9 @@ export const TaskList = observer(function TaskList() {
   const bulkDelete = () => {
     const count = taskView.selectedIds.size;
     showConfirm({
-      title: `Delete ${count} task${count === 1 ? '' : 's'}`,
-      description: 'The selected tasks will be permanently deleted. This action cannot be undone.',
-      confirmLabel: `Delete ${count} task${count === 1 ? '' : 's'}`,
+      title: t('projects.tasks.deleteTitle', { count }),
+      description: t('projects.tasks.deleteDescription'),
+      confirmLabel: t('projects.tasks.deleteConfirm', { count }),
       onSuccess: () => {
         const ids = [...taskView.selectedIds];
         ids.forEach((id) => void taskManager?.deleteTask(id));
@@ -199,12 +215,16 @@ export const TaskList = observer(function TaskList() {
               if (value) taskView.setTab(value as 'active' | 'archived');
             }}
           >
-            <ToggleGroupItem value="active">Active ({activeTasks.length})</ToggleGroupItem>
-            <ToggleGroupItem value="archived">Archived ({archivedTasks.length})</ToggleGroupItem>
+            <ToggleGroupItem value="active">
+              {t('projects.tasks.activeWithCount', { count: activeTasks.length })}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="archived">
+              {t('projects.tasks.archivedWithCount', { count: archivedTasks.length })}
+            </ToggleGroupItem>
           </ToggleGroup>
           <div className="flex items-center gap-2">
             <SearchInput
-              placeholder="Search tasks… (↵ for full search)"
+              placeholder={t('projects.tasks.searchPlaceholder')}
               value={taskView.searchQuery}
               onChange={(e) => taskView.setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -227,17 +247,17 @@ export const TaskList = observer(function TaskList() {
                       size="sm"
                       pressed={taskView.archivedOnlyWithNote}
                       onPressedChange={(pressed) => taskView.setArchivedOnlyWithNote(pressed)}
-                      aria-label="Only show tasks with a note"
+                      aria-label={t('projects.tasks.onlyWithNotesAria')}
                     >
                       <FileText className="size-3.5" />
                     </Toggle>
                   }
                 />
-                <TooltipContent>Only with notes</TooltipContent>
+                <TooltipContent>{t('projects.tasks.onlyWithNotes')}</TooltipContent>
               </Tooltip>
             )}
             <Button onClick={() => showCreateTaskModal({ projectId })}>
-              Create Task <ShortcutHint settingsKey="newTask" />
+              {t('tasks.createTask')} <ShortcutHint settingsKey="newTask" />
             </Button>
           </div>
         </div>

@@ -6,6 +6,7 @@ import {
   XCircle,
   type LucideIcon,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@renderer/lib/ui/button';
 import { SplitButton, type SplitButtonAction } from '@renderer/lib/ui/split-button';
 import { cn } from '@renderer/utils/utils';
@@ -31,6 +32,7 @@ export function MergeFooter({
   isMerging: boolean;
   onMarkReady: () => void;
 }) {
+  const { t } = useTranslation();
   const isDraft = uiState.kind === 'draft';
   const { icon: MergeStatusIcon, iconClass } = severityConfig[uiState.severity];
 
@@ -45,14 +47,14 @@ export function MergeFooter({
           <div className="flex items-center gap-1.5">
             {isDraft ? (
               <Button variant="outline" size="xs" onClick={onMarkReady}>
-                Mark ready
+                {t('pullRequests.markReady')}
               </Button>
             ) : (
               <SplitButton
                 size="xs"
                 variant="outline"
                 loading={isMerging}
-                loadingLabel="Merging..."
+                loadingLabel={t('pullRequests.merging')}
                 icon={<GitMerge className="size-3" />}
                 actions={mergeActions}
                 disabled={!uiState.canMerge && !isMerging}

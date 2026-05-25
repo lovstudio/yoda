@@ -3,6 +3,7 @@ import { autorun, reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import type * as monacoNS from 'monaco-editor';
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { registerActiveCodeEditor } from '@renderer/lib/editor/activeCodeEditor';
 import { MarkdownEditorRenderer } from '@renderer/lib/editor/markdown-renderer';
@@ -152,6 +153,7 @@ interface SourceToggleOverlayProps {
 }
 
 function SourceToggleOverlay({ filePath }: SourceToggleOverlayProps) {
+  const { t } = useTranslation();
   const { taskView } = useProvisionedTask();
   const { tabManager } = taskView;
 
@@ -166,10 +168,10 @@ function SourceToggleOverlay({ filePath }: SourceToggleOverlayProps) {
       size="sm"
       className="absolute right-3 top-3 z-10"
     >
-      <ToggleGroupItem value="markdown" aria-label="Preview">
+      <ToggleGroupItem value="markdown" aria-label={t('editor.preview')}>
         <Eye className="h-3.5 w-3.5" />
       </ToggleGroupItem>
-      <ToggleGroupItem value="markdown-source" aria-label="Edit source">
+      <ToggleGroupItem value="markdown-source" aria-label={t('editor.editSource')}>
         <Pencil className="h-3.5 w-3.5" />
       </ToggleGroupItem>
     </ToggleGroup>

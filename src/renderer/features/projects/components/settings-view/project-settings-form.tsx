@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import type { Remote } from '@shared/git';
 import type {
   ProjectSettings,
@@ -42,6 +43,7 @@ export const ProjectSettingsForm = observer(function ProjectSettingsForm({
   save,
   writeConfigToRepo,
 }: ProjectSettingsFormProps) {
+  const { t } = useTranslation();
   const repo = getRepositoryStore(projectId);
   const remotes = repo?.remotes ?? EMPTY_REMOTES;
   const configuredRemote = repo?.configuredRemote.name ?? 'origin';
@@ -59,7 +61,7 @@ export const ProjectSettingsForm = observer(function ProjectSettingsForm({
 
   return (
     <div className="flex flex-col max-w-3xl mx-auto w-full h-full overflow-hidden">
-      <h1 className="text-lg font-medium pt-10 pb-5 px-10">Project Settings</h1>
+      <h1 className="text-lg font-medium pt-10 pb-5 px-10">{t('projects.settings.title')}</h1>
       <div
         className="flex-1 overflow-y-auto overflow-x-hidden px-10 py-2"
         style={{ scrollbarWidth: 'none' }}

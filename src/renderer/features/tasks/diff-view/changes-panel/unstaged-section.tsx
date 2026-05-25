@@ -1,5 +1,6 @@
 import { Plus, Undo2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { commitRef, HEAD_REF, type GitChange } from '@shared/git';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -12,6 +13,7 @@ import { VirtualizedChangesList } from './components/virtualized-changes-list';
 import { usePrefetchDiffModels } from './hooks/use-prefetch-diff-models';
 
 export const UnstagedSection = observer(function UnstagedSection() {
+  const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
   const git = provisioned.workspace.git;
@@ -50,10 +52,9 @@ export const UnstagedSection = observer(function UnstagedSection() {
   const handleDiscardSelection = () => {
     const paths = [...selectedPaths];
     showConfirmActionModal({
-      title: 'Discard Files Changes',
+      title: t('changes.discardSelectedTitle'),
       variant: 'destructive',
-      description:
-        'Are you sure you want to discard the changes to the selected files? This can not be undone.',
+      description: t('changes.discardSelectedDescription'),
       onSuccess: () => {
         void (async () => {
           await git.discardFiles(paths);
@@ -65,9 +66,9 @@ export const UnstagedSection = observer(function UnstagedSection() {
 
   const handleDiscardAll = () => {
     showConfirmActionModal({
-      title: 'Discard All Changes',
+      title: t('changes.discardAllTitle'),
       variant: 'destructive',
-      description: 'Are you sure you want to discard all changes? This can not be undone.',
+      description: t('changes.discardAllDescription'),
       onSuccess: () => void git.discardAllFiles(),
     });
   };
@@ -85,7 +86,7 @@ export const UnstagedSection = observer(function UnstagedSection() {
   return (
     <>
       <SectionHeader
-        label="Changed"
+        label={t('changes.changed')}
         collapsed={!changesView.expandedSections.unstaged}
         onToggleCollapsed={() => changesView.toggleExpanded('unstaged')}
         count={changes.length}
@@ -95,7 +96,10 @@ export const UnstagedSection = observer(function UnstagedSection() {
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {!hasChanges && (
-          <EmptyState label="Working tree clean" description="No uncommitted file changes." />
+          <EmptyState
+            label={t('changes.workingTreeClean')}
+            description={t('changes.noUncommittedChanges')}
+          />
         )}
         {hasChanges && (
           <ActionCard
@@ -106,20 +110,20 @@ export const UnstagedSection = observer(function UnstagedSection() {
                   variant="link"
                   size="xs"
                   onClick={handleDiscardSelection}
-                  title="Discard selected files"
+                  title={t('changes.discardSelectedFiles')}
                   className="text-foreground-destructive"
                 >
                   <Undo2 className="size-3" />
-                  Discard
+                  {t('changes.discard')}
                 </Button>
                 <Button
                   variant="outline"
                   size="xs"
                   onClick={handleStageSelection}
-                  title="Stage selected files"
+                  title={t('changes.stageSelectedFiles')}
                 >
                   <Plus className="size-3" />
-                  Stage
+                  {t('changes.stage')}
                 </Button>
               </>
             }
@@ -130,21 +134,21 @@ export const UnstagedSection = observer(function UnstagedSection() {
                   size="xs"
                   disabled={!hasChanges}
                   onClick={handleDiscardAll}
-                  title="Discard all changes"
+                  title={t('changes.discardAllChanges')}
                   className="text-foreground-destructive"
                 >
                   <Undo2 className="size-3" />
-                  Discard all
+                  {t('changes.discardAll')}
                 </Button>
                 <Button
                   variant="outline"
                   size="xs"
                   disabled={!hasChanges}
                   onClick={handleStageAll}
-                  title="Stage all changes"
+                  title={t('changes.stageAllChanges')}
                 >
                   <Plus className="size-3" />
-                  Stage all
+                  {t('changes.stageAll')}
                 </Button>
               </>
             }

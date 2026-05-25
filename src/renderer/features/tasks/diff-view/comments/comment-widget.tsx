@@ -1,5 +1,6 @@
 import { Check, Pencil, Trash2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@renderer/lib/ui/button';
 import type { DraftComment } from '../stores/draft-comments-store';
 import { Comment, useTextareaAutoFocus } from './comment-card';
@@ -11,6 +12,7 @@ interface CommentWidgetProps {
 }
 
 export const CommentWidget: React.FC<CommentWidgetProps> = ({ comment, onEdit, onDelete }) => {
+  const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(comment.content);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -54,8 +56,10 @@ export const CommentWidget: React.FC<CommentWidgetProps> = ({ comment, onEdit, o
     <Comment.Root>
       <Comment.Header>
         <Comment.Title>
-          {isEditing ? 'Edit comment' : 'Comment'}
-          <Comment.Meta className="ml-2">(Line {comment.lineNumber})</Comment.Meta>
+          {isEditing ? t('comments.editComment') : t('comments.comment')}
+          <Comment.Meta className="ml-2">
+            {t('comments.line', { line: comment.lineNumber })}
+          </Comment.Meta>
         </Comment.Title>
         <Comment.Actions>
           {isEditing ? (
@@ -65,8 +69,8 @@ export const CommentWidget: React.FC<CommentWidgetProps> = ({ comment, onEdit, o
                 size="icon-sm"
                 className="h-8 w-8"
                 onClick={handleCancel}
-                title="Cancel (Esc)"
-                aria-label="Cancel edit comment"
+                title={t('comments.cancelEsc')}
+                aria-label={t('comments.cancelEdit')}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -76,8 +80,8 @@ export const CommentWidget: React.FC<CommentWidgetProps> = ({ comment, onEdit, o
                 className="h-8 w-8"
                 onClick={handleSave}
                 disabled={!editContent.trim()}
-                title="Save (Cmd/Ctrl+Enter)"
-                aria-label="Save comment"
+                title={t('comments.saveShortcut')}
+                aria-label={t('comments.saveComment')}
               >
                 <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               </Button>
@@ -89,8 +93,8 @@ export const CommentWidget: React.FC<CommentWidgetProps> = ({ comment, onEdit, o
                 size="icon-sm"
                 className="h-8 w-8"
                 onClick={handleStartEditing}
-                title="Edit"
-                aria-label="Edit comment"
+                title={t('common.edit')}
+                aria-label={t('comments.editComment')}
               >
                 <Pencil className="h-4 w-4" />
               </Button>
@@ -99,8 +103,8 @@ export const CommentWidget: React.FC<CommentWidgetProps> = ({ comment, onEdit, o
                 size="icon-sm"
                 className="h-8 w-8 text-destructive hover:text-destructive"
                 onClick={() => void onDelete()}
-                title="Delete"
-                aria-label="Delete comment"
+                title={t('common.delete')}
+                aria-label={t('comments.deleteComment')}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -125,7 +129,7 @@ export const CommentWidget: React.FC<CommentWidgetProps> = ({ comment, onEdit, o
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Update the note..."
+            placeholder={t('comments.updatePlaceholder')}
           />
         )}
       </Comment.Body>

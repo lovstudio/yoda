@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type {
   ProjectSettingsOverrideState,
   ShareableProjectSettingsWriteField,
@@ -23,10 +24,6 @@ type ShareableSettingsSectionProps = {
   ) => ProjectSettingsOverrideState[ShareableProjectSettingsWriteField];
 };
 
-function titleCase(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
 function ShareableField({
   descriptor,
   form,
@@ -38,18 +35,21 @@ function ShareableField({
   update: FormUpdate;
   getOverrideSources: ShareableSettingsSectionProps['getOverrideSources'];
 }) {
+  const { t } = useTranslation();
+  const fieldKey = `projects.settings.shareable.fields.${descriptor.id}`;
+
   return (
     <Field>
       <ShareableSettingTitle
-        leafLabel={descriptor.leafLabel}
+        leafLabel={t(`${fieldKey}.leafLabel`)}
         overrideSources={getOverrideSources(descriptor.id)}
         onRestore={() => update(descriptor.formKey, '')}
       >
-        {descriptor.group ? titleCase(descriptor.leafLabel) : descriptor.modalLabel}
+        {descriptor.group ? t(`${fieldKey}.leafLabel`) : t(`${fieldKey}.modalLabel`)}
       </ShareableSettingTitle>
       {descriptor.description ? (
         <FieldDescription className="text-foreground-muted">
-          {descriptor.description}
+          {t(`${fieldKey}.description`)}
         </FieldDescription>
       ) : null}
       {descriptor.multiline ? (
@@ -75,6 +75,7 @@ export function ShareableSettingsSection({
   update,
   getOverrideSources,
 }: ShareableSettingsSectionProps) {
+  const { t } = useTranslation();
   const topLevelFields = SHAREABLE_FIELD_DESCRIPTORS.filter((descriptor) => !descriptor.group);
   const lifecycleFields = SHAREABLE_FIELD_DESCRIPTORS.filter(
     (descriptor) => descriptor.group === 'lifecycle'
@@ -98,10 +99,10 @@ export function ShareableSettingsSection({
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <FieldTitle>Lifecycle scripts</FieldTitle>
+          <FieldTitle>{t('projects.settings.lifecycleScripts')}</FieldTitle>
           <FieldDescription className="text-foreground-muted">
-            Shell commands run at each stage of the worktree lifecycle. One command per line.
-            <span> See </span>
+            {t('projects.settings.lifecycleScriptsDescription')}
+            <span> {t('common.see')} </span>
             <Button
               type="button"
               variant="link"
@@ -110,13 +111,13 @@ export function ShareableSettingsSection({
               onClick={() => rpc.app.openExternal('https://lovstudio.ai/yoda/docs/project-config')}
             >
               <span className="font-mono text-xs transition-colors group-hover:text-foreground">
-                docs
+                {t('projects.settings.docs')}
               </span>
               <span className="text-sm text-muted-foreground transition-colors group-hover:text-foreground">
                 ↗
               </span>
             </Button>
-            <span> for the full project config reference.</span>
+            <span> {t('projects.settings.fullConfigReference')}</span>
           </FieldDescription>
         </div>
 

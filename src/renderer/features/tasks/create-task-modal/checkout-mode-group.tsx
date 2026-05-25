@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Field, FieldLabel } from '@renderer/lib/ui/field';
 import { RadioGroup, RadioGroupItem } from '@renderer/lib/ui/radio-group';
 import { Switch } from '@renderer/lib/ui/switch';
@@ -18,6 +19,7 @@ export function CheckoutModeGroup({
   onPushBranchChange,
   disabled,
 }: CheckoutModeGroupProps) {
+  const { t } = useTranslation();
   const createBranchAndWorktree = value === 'new-branch';
 
   return (
@@ -25,17 +27,17 @@ export function CheckoutModeGroup({
       <RadioGroup value={value} onValueChange={(v) => onValueChange(v as CheckoutMode)}>
         <Field orientation="horizontal">
           <RadioGroupItem value="checkout" disabled={disabled} />
-          <FieldLabel>Checkout branch for review</FieldLabel>
+          <FieldLabel>{t('tasks.create.checkoutBranchForReview')}</FieldLabel>
         </Field>
         <Field orientation="horizontal">
           <RadioGroupItem value="new-branch" disabled={disabled} />
-          <FieldLabel>Create task branch and worktree</FieldLabel>
+          <FieldLabel>{t('tasks.create.createTaskBranchAndWorktree')}</FieldLabel>
         </Field>
       </RadioGroup>
       {createBranchAndWorktree && (
         <Field orientation="horizontal">
           <Switch checked={pushBranch} onCheckedChange={onPushBranchChange} disabled={disabled} />
-          <FieldLabel>Push branch to remote</FieldLabel>
+          <FieldLabel>{t('tasks.create.pushBranchToRemote')}</FieldLabel>
         </Field>
       )}
     </div>

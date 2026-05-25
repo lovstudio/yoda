@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import Markdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -39,6 +40,7 @@ const ResolvedImage: React.FC<{
   alt: string;
   resolveImage: (src: string) => Promise<string | null>;
 }> = ({ src, alt, resolveImage }) => {
+  const { t } = useTranslation();
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
 
@@ -64,13 +66,15 @@ const ResolvedImage: React.FC<{
   if (error) {
     return (
       <span className="my-3 inline-block text-xs text-muted-foreground">
-        [Image not found: {src}]
+        {t('markdown.imageNotFound', { src })}
       </span>
     );
   }
   if (!dataUrl) {
     return (
-      <span className="my-3 inline-block text-xs text-muted-foreground">Loading image...</span>
+      <span className="my-3 inline-block text-xs text-muted-foreground">
+        {t('markdown.loadingImage')}
+      </span>
     );
   }
   return <img src={dataUrl} alt={alt} className="my-3 max-w-full rounded" />;

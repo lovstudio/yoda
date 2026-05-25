@@ -1,6 +1,7 @@
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { Input } from '@renderer/lib/ui/input';
 import { SplitButton, type SplitButtonAction } from '@renderer/lib/ui/split-button';
@@ -13,6 +14,7 @@ interface CommitCardProps {
 }
 
 export const CommitCard = observer(function CommitCard({ autoStage = false }: CommitCardProps) {
+  const { t } = useTranslation();
   const provisioned = useProvisionedTask();
   const git = provisioned.workspace.git;
   const changesView = provisioned.taskView.diffView.changesView;
@@ -72,8 +74,12 @@ export const CommitCard = observer(function CommitCard({ autoStage = false }: Co
   };
 
   const actions: SplitButtonAction[] = [
-    { value: 'commit', label: 'Commit', action: () => void doCommit() },
-    { value: 'commit-push', label: 'Commit & Push', action: () => void doCommitAndPush() },
+    { value: 'commit', label: t('changes.commit'), action: () => void doCommit() },
+    {
+      value: 'commit-push',
+      label: t('changes.commitAndPush'),
+      action: () => void doCommitAndPush(),
+    },
   ];
 
   const diffView = provisioned.taskView.diffView;
@@ -81,7 +87,7 @@ export const CommitCard = observer(function CommitCard({ autoStage = false }: Co
   return (
     <div className="shrink-0 mx-2 mb-2 flex flex-col gap-2 items-center justify-between rounded-xl border border-border bg-background-1 p-2">
       <Input
-        placeholder="Commit message"
+        placeholder={t('changes.commitMessage')}
         autoFocus
         className="w-full bg-background"
         value={commitMessage}
@@ -89,7 +95,7 @@ export const CommitCard = observer(function CommitCard({ autoStage = false }: Co
         disabled={isInFlight}
       />
       <Textarea
-        placeholder="Description"
+        placeholder={t('common.description')}
         className="w-full bg-background"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
@@ -106,16 +112,28 @@ export const CommitCard = observer(function CommitCard({ autoStage = false }: Co
         />
       )}
       {phase === 'committing' && (
-        <StatusRow icon={<Loader2 className="size-4 animate-spin" />} label="Committing…" />
+        <StatusRow
+          icon={<Loader2 className="size-4 animate-spin" />}
+          label={t('changes.committing')}
+        />
       )}
       {(phase === 'commit-only-done' || phase === 'committed') && (
-        <StatusRow icon={<CheckCircle className="size-4 text-green-500" />} label="Committed" />
+        <StatusRow
+          icon={<CheckCircle className="size-4 text-green-500" />}
+          label={t('changes.committed')}
+        />
       )}
       {phase === 'pushing' && (
-        <StatusRow icon={<Loader2 className="size-4 animate-spin" />} label="Pushing…" />
+        <StatusRow
+          icon={<Loader2 className="size-4 animate-spin" />}
+          label={t('changes.pushing')}
+        />
       )}
       {phase === 'pushed' && (
-        <StatusRow icon={<CheckCircle className="size-4 text-green-500" />} label="Pushed" />
+        <StatusRow
+          icon={<CheckCircle className="size-4 text-green-500" />}
+          label={t('changes.pushed')}
+        />
       )}
     </div>
   );

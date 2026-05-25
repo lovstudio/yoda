@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronUp, Search, X } from 'lucide-react';
 import React, { type RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { cn } from '@renderer/utils/utils';
@@ -26,6 +27,7 @@ export function TerminalSearchOverlay({
   onStep,
   onClose,
 }: Props) {
+  const { t } = useTranslation();
   if (!isOpen) return null;
 
   return (
@@ -53,9 +55,9 @@ export function TerminalSearchOverlay({
               onClose();
             }
           }}
-          placeholder="Find in terminal..."
+          placeholder={t('terminalSearch.placeholder')}
           className="h-8 min-w-0 border-0 bg-transparent pl-8 pr-2 text-xs shadow-none focus-visible:ring-0"
-          aria-label="Find in terminal"
+          aria-label={t('terminalSearch.aria')}
         />
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-0.5">
@@ -69,7 +71,7 @@ export function TerminalSearchOverlay({
           onClick={() => onStep('prev')}
           disabled={!searchQuery || searchStatus.total === 0}
           className="shrink-0 text-foreground-muted"
-          aria-label="Previous terminal match"
+          aria-label={t('terminalSearch.previous')}
         >
           <ChevronUp className="size-3.5" />
         </Button>
@@ -80,7 +82,7 @@ export function TerminalSearchOverlay({
           onClick={() => onStep('next')}
           disabled={!searchQuery || searchStatus.total === 0}
           className="shrink-0 text-foreground-muted"
-          aria-label="Next terminal match"
+          aria-label={t('terminalSearch.next')}
         >
           <ChevronDown className="size-3.5" />
         </Button>
@@ -90,7 +92,7 @@ export function TerminalSearchOverlay({
           size="icon-xs"
           onClick={onClose}
           className="shrink-0 text-foreground-muted"
-          aria-label="Close terminal search"
+          aria-label={t('terminalSearch.close')}
         >
           <X className="size-3.5" />
         </Button>

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@renderer/lib/ui/button';
 import { Field, FieldLabel } from '@renderer/lib/ui/field';
 import { Input } from '@renderer/lib/ui/input';
@@ -27,6 +28,8 @@ export const KeyValueSection: React.FC<KeyValueSectionProps> = ({
   makeId,
   credentialKeys,
 }) => {
+  const { t } = useTranslation();
+
   return (
     <Field>
       <FieldLabel>{label}</FieldLabel>
@@ -58,7 +61,13 @@ export const KeyValueSection: React.FC<KeyValueSectionProps> = ({
                     ? 'border-amber-400/60 bg-amber-50/10'
                     : ''
                 }`}
-                placeholder={isCredential ? (isRequired ? 'Required' : 'Optional') : 'value'}
+                placeholder={
+                  isCredential
+                    ? isRequired
+                      ? t('common.required')
+                      : t('common.optional')
+                    : t('mcp.valuePlaceholder')
+                }
               />
               <Button
                 type="button"

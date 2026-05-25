@@ -1,6 +1,7 @@
 import { MessageSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useIsActiveTask } from '@renderer/features/tasks/hooks/use-is-active-task';
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -16,6 +17,7 @@ import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import type { ConversationStore } from './conversation-manager';
 
 export const ConversationsPanel = observer(function ConversationsPanel() {
+  const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
   const { conversations } = provisioned;
@@ -124,8 +126,8 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
             {!hasConversationTabs ? (
               <EmptyState
                 icon={<MessageSquare className="h-5 w-5 text-muted-foreground" />}
-                label="No conversations yet"
-                description="Create one to open a terminal session for this task and work with an agent."
+                label={t('tasks.conversations.emptyTitle')}
+                description={t('tasks.conversations.emptyDescription')}
                 action={
                   <Button
                     size="sm"
@@ -133,7 +135,7 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
                     onClick={handleCreate}
                     className="flex items-center gap-2"
                   >
-                    Create conversation
+                    {t('tasks.conversations.createConversation')}
                     <ShortcutHint settingsKey="newConversation" />
                   </Button>
                 }

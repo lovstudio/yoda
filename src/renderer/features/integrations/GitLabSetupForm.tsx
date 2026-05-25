@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Input } from '@renderer/lib/ui/input';
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
 }
 
 const GitLabSetupForm: React.FC<Props> = ({ instanceUrl, token, onChange, error }) => {
+  const { t } = useTranslation();
+
   return (
     <div className="grid gap-2">
       <Input
@@ -22,14 +25,15 @@ const GitLabSetupForm: React.FC<Props> = ({ instanceUrl, token, onChange, error 
       />
       <Input
         type="password"
-        placeholder="Personal access token"
+        placeholder={t('integrations.setup.gitlab.tokenPlaceholder')}
         value={token}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ token: e.target.value })}
         className="h-9 w-full"
       />
       <p className="text-xs text-muted-foreground">
-        Create a personal access token with <span className="font-medium">read_api</span> scope in
-        GitLab settings.
+        {t('integrations.setup.gitlab.descriptionBefore')}{' '}
+        <span className="font-medium">read_api</span>{' '}
+        {t('integrations.setup.gitlab.descriptionAfter')}
       </p>
       {error ? (
         <p className="text-xs text-destructive" role="alert">

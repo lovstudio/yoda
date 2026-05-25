@@ -2,6 +2,7 @@ import { CheckIcon, ChevronDownIcon, Github, RefreshCw, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { motion } from 'motion/react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { PrSortField } from '@shared/pull-requests';
 import {
   usePrViewState,
@@ -33,10 +34,10 @@ import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { PrSyncStatusCard } from './pr-sync-status-card';
 import { PrVirtualList } from './pr-virtual-list';
 
-const SORT_OPTIONS: { value: PrSortField; label: string }[] = [
-  { value: 'newest', label: 'Newest' },
-  { value: 'oldest', label: 'Oldest' },
-  { value: 'recently-updated', label: 'Recently Updated' },
+const SORT_OPTIONS: { value: PrSortField; labelKey: string }[] = [
+  { value: 'newest', labelKey: 'pullRequests.sort.newest' },
+  { value: 'oldest', labelKey: 'pullRequests.sort.oldest' },
+  { value: 'recently-updated', labelKey: 'pullRequests.sort.recentlyUpdated' },
 ];
 
 function FilterButton({
@@ -80,6 +81,7 @@ function UserFilterPopover({
   selected: string | null;
   onChange: (value: string | null) => void;
 }) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const filtered = items.filter((i) => i.label.toLowerCase().includes(search.toLowerCase()));
 
@@ -87,7 +89,7 @@ function UserFilterPopover({
     <FilterButton label={label} active={selected !== null} disabled={items.length === 0}>
       <Input
         className="mb-1 h-7 text-xs"
-        placeholder={`Search ${label.toLowerCase()}…`}
+        placeholder={t('pullRequests.searchFilterPlaceholder', { label: label.toLowerCase() })}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         autoFocus
@@ -116,7 +118,9 @@ function UserFilterPopover({
           </li>
         ))}
         {filtered.length === 0 && (
-          <li className="px-2 py-3 text-xs text-center text-muted-foreground">No results</li>
+          <li className="px-2 py-3 text-xs text-center text-muted-foreground">
+            {t('common.noResults')}
+          </li>
         )}
       </ul>
     </FilterButton>
@@ -132,6 +136,7 @@ function LabelFilterPopover({
   selected: string[];
   onChange: (values: string[]) => void;
 }) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const filtered = items.filter((i) => i.label.toLowerCase().includes(search.toLowerCase()));
 
@@ -139,10 +144,14 @@ function LabelFilterPopover({
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
 
   return (
-    <FilterButton label="Label" active={selected.length > 0} disabled={items.length === 0}>
+    <FilterButton
+      label={t('pullRequests.filters.label')}
+      active={selected.length > 0}
+      disabled={items.length === 0}
+    >
       <Input
         className="mb-1 h-7 text-xs"
-        placeholder="Search labels…"
+        placeholder={t('pullRequests.filters.searchLabels')}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         autoFocus
@@ -170,7 +179,9 @@ function LabelFilterPopover({
           </li>
         ))}
         {filtered.length === 0 && (
-          <li className="px-2 py-3 text-xs text-center text-muted-foreground">No results</li>
+          <li className="px-2 py-3 text-xs text-center text-muted-foreground">
+            {t('common.noResults')}
+          </li>
         )}
       </ul>
     </FilterButton>
@@ -188,6 +199,7 @@ function FilterPill({
   label: string;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs">
       {avatarUrl && <img src={avatarUrl} alt={label} className="size-3.5 rounded-full" />}
@@ -198,7 +210,7 @@ function FilterPill({
       <button
         className="ml-0.5 rounded-full text-muted-foreground hover:text-foreground"
         onClick={onRemove}
-        aria-label={`Remove ${label} filter`}
+        aria-label={t('pullRequests.filters.removeFilter', { label })}
       >
         <X className="size-2.5" />
       </button>
@@ -207,6 +219,7 @@ function FilterPill({
 }
 
 export const PullRequestView = observer(function PullRequestView() {
+  const { t } = useTranslation();
   const {
     params: { projectId },
   } = useParams('project');
@@ -249,8 +262,7 @@ export const PullRequestView = observer(function PullRequestView() {
     return (
       <div className="flex flex-col max-w-3xl mx-auto w-full h-full pt-6 px-6 min-h-0">
         <p className="text-sm text-muted-foreground text-center py-4">
-          Pull requests are currently available only for configured GitHub remotes. You can change
-          the remote in the project settings.
+          {t('pullRequests.unavailableWithSettings')}
         </p>
       </div>
     );
@@ -264,8 +276,7 @@ export const PullRequestView = observer(function PullRequestView() {
             <Github className="size-4 text-foreground-muted" />
           </span>
           <p className="text-center text-sm font-normal text-foreground-muted">
-            GitHub is not connected. Create a user account and connect your GitHub account to view
-            pull requests.
+            {t('pullRequests.githubAuthRequired')}
           </p>
           <Button
             type="button"
@@ -277,7 +288,7 @@ export const PullRequestView = observer(function PullRequestView() {
               })
             }
           >
-            Connect User Account
+            {t('pullRequests.connectUserAccount')}
           </Button>
         </div>
       </div>
@@ -296,13 +307,13 @@ export const PullRequestView = observer(function PullRequestView() {
               handleStatusChange(next as StatusFilter);
             }}
           >
-            <ToggleGroupItem value="open">Open</ToggleGroupItem>
-            <ToggleGroupItem value="not-open">Closed</ToggleGroupItem>
+            <ToggleGroupItem value="open">{t('pullRequests.open')}</ToggleGroupItem>
+            <ToggleGroupItem value="not-open">{t('pullRequests.closed')}</ToggleGroupItem>
           </ToggleGroup>
 
           <div className="flex items-center gap-2">
             <SearchInput
-              placeholder="Search by title, branch, or number..."
+              placeholder={t('pullRequests.searchByTitleBranchNumber')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -320,7 +331,7 @@ export const PullRequestView = observer(function PullRequestView() {
               <ContextMenuContent>
                 <ContextMenuItem onClick={handleForceFullSync} disabled={syncing}>
                   <RefreshCw className="size-4" />
-                  Force full sync
+                  {t('pullRequests.forceFullSync')}
                 </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
@@ -331,7 +342,9 @@ export const PullRequestView = observer(function PullRequestView() {
         <div className="flex gap-2 flex-wrap flex-col">
           <div className="flex items-center gap-2 flex-wrap justify-between">
             <div className="flex items-center gap-1.5">
-              <span className="text-sm text-foreground-passive">Sort</span>
+              <span className="text-sm text-foreground-passive">
+                {t('pullRequests.sort.label')}
+              </span>
               <Select value={sortFilter} onValueChange={handleSortChange}>
                 <SelectTrigger
                   size="sm"
@@ -340,9 +353,9 @@ export const PullRequestView = observer(function PullRequestView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SORT_OPTIONS.map(({ value, label }) => (
+                  {SORT_OPTIONS.map(({ value, labelKey }) => (
                     <SelectItem key={value} value={value}>
-                      {label}
+                      {t(labelKey)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -350,9 +363,11 @@ export const PullRequestView = observer(function PullRequestView() {
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="text-sm text-foreground-passive">Filter by</span>
+              <span className="text-sm text-foreground-passive">
+                {t('pullRequests.filters.filterBy')}
+              </span>
               <UserFilterPopover
-                label="Author"
+                label={t('pullRequests.filters.author')}
                 items={authorItems}
                 selected={selectedAuthorLogin}
                 onChange={setSelectedAuthorLogin}
@@ -363,7 +378,7 @@ export const PullRequestView = observer(function PullRequestView() {
                 onChange={setSelectedLabelNames}
               />
               <UserFilterPopover
-                label="Assignee"
+                label={t('pullRequests.filters.assignee')}
                 items={assigneeItems}
                 selected={selectedAssigneeLogin}
                 onChange={setSelectedAssigneeLogin}

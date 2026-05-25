@@ -1,5 +1,6 @@
 import { ArrowUpRight, Check, Copy } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   getDescriptionForProvider,
   getDocUrlForProvider,
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export const AgentInfoCard: React.FC<Props> = ({ id }) => {
+  const { t } = useTranslation();
   const provider = getProvider(id);
   const config = agentConfig[id];
   const description = getDescriptionForProvider(id);
@@ -85,7 +87,7 @@ export const AgentInfoCard: React.FC<Props> = ({ id }) => {
             rel="noreferrer noopener"
             className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-background-1"
           >
-            <span>Docs</span>
+            <span>{t('agents.docs')}</span>
             <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
           </a>
         </div>
@@ -98,7 +100,7 @@ export const AgentInfoCard: React.FC<Props> = ({ id }) => {
           rel="noreferrer noopener"
           className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-background-1"
         >
-          <span>Compare agents</span>
+          <span>{t('agents.compareAgents')}</span>
           <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
         </a>
       </div>
@@ -114,8 +116,8 @@ export const AgentInfoCard: React.FC<Props> = ({ id }) => {
             void handleCopyClick();
           }}
           className="ml-2 text-foreground-muted"
-          aria-label={`Copy install command for ${title}`}
-          title={copied ? 'Copied' : 'Copy command'}
+          aria-label={t('agents.copyInstallCommandFor', { name: title })}
+          title={copied ? t('common.copied') : t('agents.copyCommand')}
         >
           <CopyIndicatorIcon className="h-3.5 w-3.5" aria-hidden="true" />
         </Button>

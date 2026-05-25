@@ -36,6 +36,7 @@ export type SettingsPageTab =
   | 'docs';
 
 interface SectionConfig {
+  id: string;
   title?: string;
   action?: React.ReactNode;
   component: React.ReactNode;
@@ -76,27 +77,35 @@ export function SettingsPage({
       description: t('settings.general.description'),
       sections: [
         {
+          id: 'language',
           component: <LanguageCard />,
         },
         {
+          id: 'telemetry',
           component: <TelemetryCard />,
         },
         {
+          id: 'auto-generate-task-names',
           component: <AutoGenerateTaskNamesRow />,
         },
         {
+          id: 'auto-trust-worktrees',
           component: <AutoTrustWorktreesRow />,
         },
         {
+          id: 'enable-tmux',
           component: <EnableTmuxRow />,
         },
         {
+          id: 'pre-archive-command',
           component: <PreArchiveCommandRow />,
         },
         {
+          id: 'notifications',
           component: <NotificationSettingsCard />,
         },
         {
+          id: 'update',
           component: <UpdateCard />,
         },
       ],
@@ -104,19 +113,21 @@ export function SettingsPage({
     account: {
       title: t('settings.tabs.account'),
       description: t('settings.account.description'),
-      sections: [{ component: <AccountTab /> }],
+      sections: [{ id: 'account', component: <AccountTab /> }],
     },
     'clis-models': {
       title: t('settings.tabs.agents'),
       description: t('settings.agentsTab.description'),
       sections: [
-        { component: <DefaultAgentSettingsCard /> },
+        { id: 'default-agent', component: <DefaultAgentSettingsCard /> },
         {
+          id: 'review-prompt',
           title: t('settings.agentsTab.reviewPrompt'),
           action: <ReviewPromptResetButton />,
           component: <ReviewPromptSettingsCard />,
         },
         {
+          id: 'cli-agents',
           title: t('settings.agentsTab.cliAgents'),
           component: (
             <div className="rounded-xl border border-border/60 bg-muted/10 p-2">
@@ -129,14 +140,25 @@ export function SettingsPage({
     integrations: {
       title: t('settings.tabs.integrations'),
       description: t('settings.integrationsTab.description'),
-      sections: [{ title: t('settings.integrationsTab.title'), component: <IntegrationsCard /> }],
+      sections: [
+        {
+          id: 'integrations',
+          title: t('settings.integrationsTab.title'),
+          component: <IntegrationsCard />,
+        },
+      ],
     },
     repository: {
       title: t('settings.tabs.repository'),
       description: t('settings.repositoryTab.description'),
       sections: [
-        { title: t('settings.repositoryTab.branchPrefix'), component: <RepositorySettingsCard /> },
         {
+          id: 'repository-settings',
+          title: t('settings.repositoryTab.branchPrefix'),
+          component: <RepositorySettingsCard />,
+        },
+        {
+          id: 'archived-projects',
           title: t('settings.archivedProjects.title'),
           component: <ArchivedProjectsCard />,
         },
@@ -146,13 +168,15 @@ export function SettingsPage({
       title: t('settings.tabs.interface'),
       description: t('settings.interfaceTab.description'),
       sections: [
-        { component: <ThemeCard /> },
-        { component: <TerminalSettingsCard /> },
+        { id: 'theme', component: <ThemeCard /> },
+        { id: 'terminal', component: <TerminalSettingsCard /> },
         {
+          id: 'keyboard-shortcuts',
           title: t('settings.interfaceTab.keyboardShortcuts'),
           component: <KeyboardSettingsCard />,
         },
         {
+          id: 'tools',
           title: t('settings.interfaceTab.tools'),
           component: <HiddenToolsSettingsCard />,
         },
@@ -206,7 +230,7 @@ export function SettingsPage({
                   <Separator />
                 </div>
                 {currentContent.sections.map((section) => (
-                  <div key={section.title} className="flex flex-col gap-3">
+                  <div key={section.id} className="flex flex-col gap-3">
                     {section.title && (
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-normal text-foreground">{section.title}</h3>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { captureComponentError } from '../../_legacy/errorTracking';
 import { rpc } from '../ipc';
 import { Button } from '../ui/button';
@@ -14,13 +15,15 @@ type ErrorBoundaryProps = {
 };
 
 function ErrorFallback({ message, onReload }: { message: string; onReload: () => void }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-background p-6">
       <div className="max-w-xl rounded-md border border-border bg-card p-6 text-card-foreground shadow-sm">
-        <h1 className="mb-2 text-lg font-semibold">Something went wrong</h1>
+        <h1 className="mb-2 text-lg font-semibold">{t('common.somethingWentWrong')}</h1>
         <p className="mb-4 break-all text-sm text-muted-foreground">{message}</p>
         <Button variant="default" onClick={onReload}>
-          Reload
+          {t('common.reload')}
         </Button>
       </div>
     </div>

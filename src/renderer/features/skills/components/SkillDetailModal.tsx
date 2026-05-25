@@ -1,5 +1,6 @@
 import { FolderOpen, Trash2 } from 'lucide-react';
 import React, { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { CatalogSkill } from '@shared/skills/types';
 import { parseFrontmatter } from '@shared/skills/validation';
 import { Button } from '@renderer/lib/ui/button';
@@ -32,6 +33,7 @@ const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
   onUninstall,
   onOpenTerminal,
 }) => {
+  const { t } = useTranslation();
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleInstall = useCallback(async () => {
@@ -88,7 +90,9 @@ const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
                     className="h-4 w-4 rounded-sm"
                   />
                   <span>
-                    From {skill.source === 'openai' ? 'OpenAI' : 'Anthropic'} skill library
+                    {t('skills.fromLibrary', {
+                      source: skill.source === 'openai' ? 'OpenAI' : 'Anthropic',
+                    })}
                   </span>
                 </div>
               )}
@@ -98,7 +102,9 @@ const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
         <DialogContentArea>
           {skill.defaultPrompt && (
             <div className="space-y-1 rounded-md bg-muted/40 pb-2">
-              <p className="text-xs font-medium text-muted-foreground">Example prompt</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                {t('skills.examplePrompt')}
+              </p>
               <pre className="whitespace-pre-wrap wrap-break-word text-xs text-foreground">
                 {skill.defaultPrompt}
               </pre>
@@ -125,19 +131,19 @@ const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
                 className="text-destructive hover:text-destructive"
               >
                 <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                Uninstall
+                {t('skills.uninstall')}
               </Button>
               {skill.localPath && onOpenTerminal && (
                 <Button variant="outline" size="sm" onClick={handleOpen}>
                   <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-                  Open
+                  {t('common.open')}
                 </Button>
               )}
             </>
           )}
           {!skill.installed && (
             <ConfirmButton size="sm" onClick={() => void handleInstall()} disabled={isProcessing}>
-              {isProcessing ? 'Installing...' : 'Install'}
+              {isProcessing ? t('skills.installing') : t('skills.install')}
             </ConfirmButton>
           )}
         </DialogFooter>

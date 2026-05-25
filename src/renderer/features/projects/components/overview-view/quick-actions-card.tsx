@@ -1,6 +1,7 @@
 import { Play, Settings2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { QuickAction } from '@shared/project-settings';
 import { runProjectCommand } from '@renderer/features/projects/run-project-command';
 import {
@@ -22,6 +23,7 @@ export const QuickActionsCard = observer(function QuickActionsCard({
 }: {
   projectId: string;
 }) {
+  const { t } = useTranslation();
   const { navigate } = useNavigate();
   const project = asMounted(getProjectStore(projectId));
   const settingsStore = getProjectSettingsStore(projectId);
@@ -61,21 +63,19 @@ export const QuickActionsCard = observer(function QuickActionsCard({
   return (
     <section className="rounded-lg border border-border bg-background-elevated p-4">
       <header className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-medium text-foreground">Quick Actions</h2>
+        <h2 className="text-sm font-medium text-foreground">{t('projects.quickActions.title')}</h2>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => showManage({ projectId })}
-          aria-label="Manage quick actions"
+          aria-label={t('projects.quickActions.manage')}
         >
           <Settings2 className="size-3.5" />
-          Manage
+          {t('projects.quickActions.manage')}
         </Button>
       </header>
       {actions.length === 0 ? (
-        <p className="text-xs text-foreground-muted">
-          No quick actions configured. Click Manage to add one (e.g. /release-via-cicd).
-        </p>
+        <p className="text-xs text-foreground-muted">{t('projects.quickActions.empty')}</p>
       ) : (
         <div className="flex flex-wrap gap-2">
           {actions.map((action) => (
@@ -87,7 +87,9 @@ export const QuickActionsCard = observer(function QuickActionsCard({
               onClick={() => void handleRun(action)}
             >
               <Play className="size-3.5" />
-              {runningId === action.id ? `Running ${action.label}…` : action.label}
+              {runningId === action.id
+                ? t('projects.quickActions.running', { label: action.label })
+                : action.label}
             </Button>
           ))}
         </div>

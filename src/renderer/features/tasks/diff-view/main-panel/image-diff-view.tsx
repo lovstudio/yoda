@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import type { TFunction } from 'i18next';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   gitRefToString,
   HEAD_REF,
@@ -29,18 +31,18 @@ type SideState =
 
 type Side = 'original' | 'modified';
 
-function unavailableMessage(reason: ImageUnavailableReason): string {
+function unavailableMessage(reason: ImageUnavailableReason, t: TFunction): string {
   switch (reason) {
     case 'ssh':
-      return 'Preview unavailable on SSH workspaces';
+      return t('diff.image.unavailableSsh');
     case 'unsupported':
-      return 'Preview unavailable for this format';
+      return t('diff.image.unavailableUnsupported');
     case 'too-large':
-      return 'Preview unavailable — file is too large';
+      return t('diff.image.unavailableTooLarge');
     case 'lfs-pointer':
-      return 'Preview unavailable — Git LFS smudge filter not applied';
+      return t('diff.image.unavailableLfs');
     case 'git-error':
-      return 'Preview unavailable';
+      return t('diff.image.unavailableGeneric');
   }
 }
 
@@ -64,7 +66,7 @@ type ImageRpcResult = Result<{ result: ImageReadResult }, unknown>;
 
 async function loadGitImage(call: () => Promise<ImageRpcResult>): Promise<SideState> {
   const res = await call();
-  if (!res.success) return { status: 'error', message: 'Failed to load image' };
+  if (!res.success) return { status: 'unavailable', reason: 'git-error' };
   return fromImageReadResult(res.data.result);
 }
 
@@ -179,18 +181,20 @@ function ImageSidePanel({ label, state, side }: { label: string; state: SideStat
 }
 
 function ImageSideContent({ state, side }: { state: SideState; side: Side }) {
+  const { t } = useTranslation();
+
   switch (state.status) {
     case 'loading':
-      return <div className="text-xs text-foreground-passive">Loading…</div>;
+      return <div className="text-xs text-foreground-passive">{t('common.loading')}</div>;
     case 'missing':
       return (
         <div className="text-xs text-foreground-passive">
-          {side === 'original' ? 'File added' : 'File deleted'}
+          {side === 'original' ? t('diff.image.fileAdded') : t('diff.image.fileDeleted')}
         </div>
       );
     case 'unavailable':
       return (
-        <div className="text-xs text-foreground-passive">{unavailableMessage(state.reason)}</div>
+        <div className="text-xs text-foreground-passive">{unavailableMessage(state.reason, t)}</div>
       );
     case 'error':
       return <div className="text-xs text-foreground-passive">{state.message}</div>;
@@ -206,10 +210,11 @@ function PreviewImage({
   state: Extract<SideState, { status: 'ready' }>;
   alt: string;
 }) {
+  const { t } = useTranslation();
   const [decodeFailed, setDecodeFailed] = useState(false);
 
   if (decodeFailed) {
-    return <div className="text-xs text-foreground-passive">Failed to decode image</div>;
+    return <div className="text-xs text-foreground-passive">{t('diff.image.decodeFailed')}</div>;
   }
 
   return (
@@ -228,6 +233,7 @@ export const ImageDiffView = observer(function ImageDiffView({
   workspaceId,
   activeFile,
 }: ImageDiffViewProps) {
+  const { t } = useTranslation();
   const provisioned = useProvisionedTask();
   const git = provisioned.workspace.git;
 
@@ -260,9 +266,9 @@ export const ImageDiffView = observer(function ImageDiffView({
 
   return (
     <div className="flex h-full min-h-0 w-full">
-      <ImageSidePanel label="Original" state={original} side="original" />
+      <ImageSidePanel label={t('diff.image.original')} state={original} side="original" />
       <div className="w-px shrink-0 bg-border" />
-      <ImageSidePanel label="Modified" state={modified} side="modified" />
+      <ImageSidePanel label={t('diff.image.modified')} state={modified} side="modified" />
     </div>
   );
 });

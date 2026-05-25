@@ -1,4 +1,5 @@
 import { useForm } from '@tanstack/react-form';
+import type { TFunction } from 'i18next';
 import {
   ArrowLeftIcon,
   CheckCircle2,
@@ -7,7 +8,8 @@ import {
   LoaderCircle,
   XCircle,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import * as z from 'zod';
 import type { ConnectionTestResult, SshConfig } from '@shared/ssh';
 import type { BaseModalProps } from '@renderer/lib/modal/modal-provider';
@@ -37,48 +39,52 @@ export interface AddSshConnModalProps extends BaseModalProps<{ connectionId: str
   initialConfig?: SshConfig;
 }
 
-const formSchema = z
-  .object({
-    name: z.string().min(1, 'Name is required'),
-    host: z
-      .string()
-      .min(1, 'Host is required')
-      .regex(/^[a-zA-Z0-9._\-[\]:]+$/, 'Invalid hostname or IP address'),
-    port: z
-      .number()
-      .int()
-      .min(1, 'Port must be at least 1')
-      .max(65535, 'Port must be at most 65535'),
-    username: z.string().min(1, 'Username is required'),
-    authType: z.enum(['password', 'key', 'agent']),
-    password: z.string(),
-    privateKeyPath: z.string(),
-    passphrase: z.string(),
-    isEditing: z.boolean(),
-  })
-  .superRefine((val, ctx) => {
-    if (val.authType === 'password' && !val.password && !val.isEditing) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Password is required',
-        path: ['password'],
-      });
-    }
-    if (val.authType === 'key' && !val.privateKeyPath) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Private key path is required',
-        path: ['privateKeyPath'],
-      });
-    }
-  });
+function createFormSchema(t: TFunction) {
+  return z
+    .object({
+      name: z.string().min(1, t('ssh.validation.nameRequired')),
+      host: z
+        .string()
+        .min(1, t('ssh.validation.hostRequired'))
+        .regex(/^[a-zA-Z0-9._\-[\]:]+$/, t('ssh.validation.hostInvalid')),
+      port: z
+        .number()
+        .int()
+        .min(1, t('ssh.validation.portMin'))
+        .max(65535, t('ssh.validation.portMax')),
+      username: z.string().min(1, t('ssh.validation.usernameRequired')),
+      authType: z.enum(['password', 'key', 'agent']),
+      password: z.string(),
+      privateKeyPath: z.string(),
+      passphrase: z.string(),
+      isEditing: z.boolean(),
+    })
+    .superRefine((val, ctx) => {
+      if (val.authType === 'password' && !val.password && !val.isEditing) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t('ssh.validation.passwordRequired'),
+          path: ['password'],
+        });
+      }
+      if (val.authType === 'key' && !val.privateKeyPath) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t('ssh.validation.privateKeyRequired'),
+          path: ['privateKeyPath'],
+        });
+      }
+    });
+}
 
 type AuthType = 'password' | 'key' | 'agent';
 type TestState = 'idle' | 'testing' | 'success' | 'error';
 
 export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshConnModalProps) {
+  const { t } = useTranslation();
   const sshConnections = appState.sshConnections;
   const isEditing = !!initialConfig;
+  const formSchema = useMemo(() => createFormSchema(t), [t]);
 
   const [testState, setTestState] = useState<TestState>('idle');
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
@@ -165,7 +171,9 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
             <Button variant="ghost" size="icon-sm" onClick={onClose}>
               <ArrowLeftIcon className="w-4 h-4" />
             </Button>
-            <DialogTitle>{isEditing ? 'Edit SSH Connection' : 'Add SSH Connection'}</DialogTitle>
+            <DialogTitle>
+              {isEditing ? t('ssh.editConnection') : t('ssh.addConnection')}
+            </DialogTitle>
           </div>
         </DialogHeader>
       }
@@ -180,10 +188,10 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
             {testState === 'testing' ? (
               <>
                 <LoaderCircle className="size-4 animate-spin" />
-                Testing…
+                {t('ssh.testing')}
               </>
             ) : (
-              'Test Connection'
+              t('ssh.testConnection')
             )}
           </Button>
           <div className="flex gap-2">
@@ -191,10 +199,10 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
               {isSubmitting ? (
                 <>
                   <LoaderCircle className="size-4 animate-spin" />
-                  Saving…
+                  {t('common.saving')}
                 </>
               ) : (
-                'Save'
+                t('common.save')
               )}
             </ConfirmButton>
           </div>
@@ -216,7 +224,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                 const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={isInvalid}>
-                    <FieldLabel htmlFor={field.name}>Connection Name</FieldLabel>
+                    <FieldLabel htmlFor={field.name}>{t('ssh.connectionName')}</FieldLabel>
                     <Input
                       id={field.name}
                       name={field.name}
@@ -224,7 +232,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
                       aria-invalid={isInvalid}
-                      placeholder="My Server"
+                      placeholder={t('ssh.connectionNamePlaceholder')}
                     />
                     {isInvalid && <FieldError errors={field.state.meta.errors} />}
                   </Field>
@@ -239,7 +247,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                   const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
                   return (
                     <Field data-invalid={isInvalid}>
-                      <FieldLabel htmlFor={field.name}>Host</FieldLabel>
+                      <FieldLabel htmlFor={field.name}>{t('ssh.host')}</FieldLabel>
                       <Input
                         id={field.name}
                         name={field.name}
@@ -259,7 +267,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                   const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
                   return (
                     <Field data-invalid={isInvalid}>
-                      <FieldLabel htmlFor={field.name}>Port</FieldLabel>
+                      <FieldLabel htmlFor={field.name}>{t('ssh.port')}</FieldLabel>
                       <Input
                         id={field.name}
                         name={field.name}
@@ -282,7 +290,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                 const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={isInvalid}>
-                    <FieldLabel htmlFor={field.name}>Username</FieldLabel>
+                    <FieldLabel htmlFor={field.name}>{t('ssh.username')}</FieldLabel>
                     <Input
                       id={field.name}
                       name={field.name}
@@ -303,7 +311,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
             <form.Field name="authType">
               {(field) => (
                 <FieldSet>
-                  <FieldLegend variant="label">Authentication</FieldLegend>
+                  <FieldLegend variant="label">{t('ssh.authentication')}</FieldLegend>
                   <RadioGroup
                     value={field.state.value}
                     onValueChange={(v) => field.handleChange(v as AuthType)}
@@ -315,7 +323,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                         className="flex cursor-pointer items-center gap-2 text-sm font-normal"
                       >
                         <RadioGroupItem value={type} />
-                        {type === 'password' ? 'Password' : type === 'key' ? 'SSH Key' : 'Agent'}
+                        {t(`ssh.authType.${type}`)}
                       </label>
                     ))}
                   </RadioGroup>
@@ -333,7 +341,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                         const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
                         return (
                           <Field data-invalid={isInvalid}>
-                            <FieldLabel htmlFor={field.name}>Password</FieldLabel>
+                            <FieldLabel htmlFor={field.name}>{t('ssh.password')}</FieldLabel>
                             <Input
                               id={field.name}
                               name={field.name}
@@ -343,7 +351,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                               onChange={(e) => field.handleChange(e.target.value)}
                               aria-invalid={isInvalid}
                               autoComplete="current-password"
-                              placeholder={isEditing ? 'Leave blank to keep existing' : undefined}
+                              placeholder={isEditing ? t('ssh.leaveBlankKeepExisting') : undefined}
                             />
                             {isInvalid && <FieldError errors={field.state.meta.errors} />}
                           </Field>
@@ -361,7 +369,9 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                           const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
                           return (
                             <Field data-invalid={isInvalid}>
-                              <FieldLabel htmlFor={field.name}>Private Key Path</FieldLabel>
+                              <FieldLabel htmlFor={field.name}>
+                                {t('ssh.privateKeyPath')}
+                              </FieldLabel>
                               <Input
                                 id={field.name}
                                 name={field.name}
@@ -379,7 +389,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                       <form.Field name="passphrase">
                         {(field) => (
                           <Field>
-                            <FieldLabel htmlFor={field.name}>Passphrase</FieldLabel>
+                            <FieldLabel htmlFor={field.name}>{t('ssh.passphrase')}</FieldLabel>
                             <Input
                               id={field.name}
                               name={field.name}
@@ -387,13 +397,13 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                               value={field.state.value ?? ''}
                               onBlur={field.handleBlur}
                               onChange={(e) => field.handleChange(e.target.value)}
-                              placeholder={isEditing ? 'Leave blank to keep existing' : 'Optional'}
+                              placeholder={
+                                isEditing ? t('ssh.leaveBlankKeepExisting') : t('common.optional')
+                              }
                               autoComplete="off"
                             />
                             {!isEditing && (
-                              <FieldDescription>
-                                Leave empty if your key has no passphrase.
-                              </FieldDescription>
+                              <FieldDescription>{t('ssh.passphraseHint')}</FieldDescription>
                             )}
                           </Field>
                         )}
@@ -402,12 +412,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                   );
                 }
 
-                return (
-                  <FieldDescription>
-                    The SSH agent running on this machine will be used for authentication. Make sure
-                    your key is loaded into the agent.
-                  </FieldDescription>
-                );
+                return <FieldDescription>{t('ssh.agentAuthHint')}</FieldDescription>;
               }}
             </form.Subscribe>
           </FieldGroup>
@@ -422,10 +427,12 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
               {testState === 'success' && <CheckCircle2 className="size-4 text-green-500" />}
               {testState === 'error' && <XCircle className="size-4 text-destructive" />}
               <span className="flex-1 font-medium">
-                {testState === 'testing' && 'Testing connection…'}
+                {testState === 'testing' && t('ssh.testingConnection')}
                 {testState === 'success' &&
-                  'Connected' + (testResult?.latency ? ' (' + testResult.latency + 'ms)' : '')}
-                {testState === 'error' && (testResult?.error ?? 'Connection failed')}
+                  (testResult?.latency
+                    ? t('ssh.connectedWithLatency', { latency: testResult.latency })
+                    : t('ssh.connected'))}
+                {testState === 'error' && (testResult?.error ?? t('ssh.connectionFailed'))}
               </span>
               {testState === 'error' &&
                 testResult?.debugLogs &&
@@ -440,7 +447,7 @@ export function AddSshConnModal({ onSuccess, onClose, initialConfig }: AddSshCon
                     ) : (
                       <ChevronDown className="size-3" />
                     )}
-                    Logs
+                    {t('ssh.logs')}
                   </button>
                 )}
             </div>

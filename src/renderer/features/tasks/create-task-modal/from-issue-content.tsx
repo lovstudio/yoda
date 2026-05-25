@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { InlineIssueSelector } from '../components/issue-selector/inline-issue-selector';
 import { SelectedIssueValue } from '../components/issue-selector/issue-selector';
 import { BranchPickerField } from './branch-picker-field';
@@ -32,6 +33,7 @@ export function FromIssueContent({
   initialConversation,
   connectionId,
 }: FromIssueContentProps) {
+  const { t } = useTranslation();
   const [isSelecting, setIsSelecting] = useState(!state.linkedIssue);
 
   const handleValueChange = (issue: Parameters<typeof state.setLinkedIssue>[0]) => {
@@ -59,7 +61,7 @@ export function FromIssueContent({
             <div className="text-foreground-muted"></div>
             <div className="text-foreground-muted">
               <button className="flex items-center gap-2" onClick={() => setIsSelecting(true)}>
-                Select another Issue
+                {t('tasks.create.selectAnotherIssue')}
               </button>
             </div>
           </div>

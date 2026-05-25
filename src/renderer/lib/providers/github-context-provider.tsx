@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   githubAuthErrorChannel,
   githubAuthSuccessChannel,
@@ -39,6 +40,7 @@ const ISSUE_CONNECTION_STATUS_QUERY_KEY = ['issues:connection-status'] as const;
 const GithubContext = createContext<GithubContextValue | null>(null);
 
 export function GithubContextProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { showModal } = useModalContext();
@@ -114,22 +116,24 @@ export function GithubContextProvider({ children }: { children: React.ReactNode 
       setTimeout(() => void checkStatus(), 500);
       void queryClient.invalidateQueries({ queryKey: ISSUE_CONNECTION_STATUS_QUERY_KEY });
       toast({
-        title: 'Connected to GitHub',
-        description: `Signed in as ${flowUser?.login || flowUser?.name || 'user'}`,
+        title: t('github.connectedToGitHub'),
+        description: t('github.signedInAs', {
+          user: flowUser?.login || flowUser?.name || t('github.userFallback'),
+        }),
       });
     },
-    [checkStatus, queryClient, toast]
+    [checkStatus, queryClient, t, toast]
   );
 
   const handleDeviceFlowError = useCallback(
     (error: string) => {
       toast({
-        title: 'Authentication Failed',
+        title: t('github.authenticationFailed'),
         description: error,
         variant: 'destructive',
       });
     },
-    [toast]
+    [t, toast]
   );
 
   // Subscribe to GitHub auth IPC events from the main process
@@ -172,15 +176,17 @@ export function GithubContextProvider({ children }: { children: React.ReactNode 
 
       const isServerUp = hasAccount && (await fetchAccountHealth());
       if (hasAccount && isServerUp) {
-        setGithubStatusMessage('Connecting via Yoda account...');
+        setGithubStatusMessage(t('github.connectingViaAccount'));
         const oauthResult = await rpc.github.connectOAuth();
         if (oauthResult?.success) {
           await checkStatus();
           void queryClient.invalidateQueries({ queryKey: ISSUE_CONNECTION_STATUS_QUERY_KEY });
           if (oauthResult.user) {
             toast({
-              title: 'Connected to GitHub',
-              description: `Signed in as ${oauthResult.user.login || oauthResult.user.name || 'user'}`,
+              title: t('github.connectedToGitHub'),
+              description: t('github.signedInAs', {
+                user: oauthResult.user.login || oauthResult.user.name || t('github.userFallback'),
+              }),
             });
           }
           setGithubLoading(false);
@@ -201,8 +207,8 @@ export function GithubContextProvider({ children }: { children: React.ReactNode 
       setGithubLoading(false);
       setGithubStatusMessage(undefined);
       toast({
-        title: 'Connection Failed',
-        description: 'Failed to connect to GitHub. Please try again.',
+        title: t('github.connectionFailed'),
+        description: t('github.connectionFailedDescription'),
         variant: 'destructive',
       });
     }
@@ -215,18 +221,19 @@ export function GithubContextProvider({ children }: { children: React.ReactNode 
     hasAccount,
     fetchAccountHealth,
     queryClient,
+    t,
   ]);
 
   const cancelGithubConnect = useCallback(() => {
-    const flowLabel = githubStatusMessage ? 'OAuth flow' : 'Device flow';
+    const flowLabel = githubStatusMessage ? t('github.oauthFlow') : t('github.deviceFlow');
     setGithubLoading(false);
     setGithubStatusMessage(undefined);
     void rpc.github.authCancel();
     toast({
-      title: 'GitHub connection unsuccessful',
-      description: `${flowLabel} was canceled`,
+      title: t('github.connectionUnsuccessful'),
+      description: t('github.flowCanceled', { flow: flowLabel }),
     });
-  }, [githubStatusMessage, toast]);
+  }, [githubStatusMessage, t, toast]);
 
   const value: GithubContextValue = {
     authenticated,

@@ -1,5 +1,6 @@
 import { ArrowRight, ListTodo } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import type { ReadyTask } from '@renderer/features/projects/components/task-view/task-row';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import type { ProjectView } from '@renderer/features/projects/stores/project-view';
@@ -15,6 +16,7 @@ export const TasksOverviewCard = observer(function TasksOverviewCard({
 }: {
   projectId: string;
 }) {
+  const { t } = useTranslation();
   const { navigate } = useNavigate();
   const project = asMounted(getProjectStore(projectId));
   const taskManager = getTaskManagerStore(projectId);
@@ -45,19 +47,19 @@ export const TasksOverviewCard = observer(function TasksOverviewCard({
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-medium text-foreground inline-flex items-center gap-2">
             <ListTodo className="size-3.5" />
-            Tasks
+            {t('tasks.task')}
           </h2>
           <span className="text-xs text-foreground-muted">
-            {active.length} active · {archived.length} archived
+            {t('projects.taskCounts', { active: active.length, archived: archived.length })}
           </span>
         </div>
         <Button variant="ghost" size="sm" onClick={goToTasks}>
-          View all
+          {t('projects.viewAll')}
           <ArrowRight className="size-3.5" />
         </Button>
       </header>
       {recent.length === 0 ? (
-        <p className="text-xs text-foreground-muted">No active tasks.</p>
+        <p className="text-xs text-foreground-muted">{t('projects.noActiveTasks')}</p>
       ) : (
         <ul className="space-y-1">
           {recent.map((task) => (

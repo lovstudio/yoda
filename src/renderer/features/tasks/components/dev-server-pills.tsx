@@ -1,5 +1,6 @@
 import { ExternalLink, Globe } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { rpc } from '@renderer/lib/ipc';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { useProvisionedTask } from '../task-view-context';
@@ -20,6 +21,7 @@ export const DevServerPills = observer(function DevServerPills({
   projectId: string;
   taskId: string;
 }) {
+  const { t } = useTranslation();
   const urls = useProvisionedTask().devServers.urls;
 
   if (urls.length === 0) return null;
@@ -42,7 +44,7 @@ export const DevServerPills = observer(function DevServerPills({
             }
           />
           <TooltipContent side="bottom" className="text-xs">
-            Dev server running at {url}
+            {t('tasks.devServerRunningAt', { url })}
           </TooltipContent>
         </Tooltip>
       ))}

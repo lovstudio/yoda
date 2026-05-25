@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Field, FieldDescription, FieldTitle } from '@renderer/lib/ui/field';
 import { Separator } from '@renderer/lib/ui/separator';
 import { Textarea } from '@renderer/lib/ui/textarea';
@@ -20,6 +21,7 @@ export function WorkspaceProviderSettingsSection({
   errors,
   update,
 }: WorkspaceProviderSettingsSectionProps) {
+  const { t } = useTranslation();
   if (!enabled) return null;
 
   return (
@@ -27,14 +29,14 @@ export function WorkspaceProviderSettingsSection({
       <Separator />
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <FieldTitle>Workspace provider</FieldTitle>
+          <FieldTitle>{t('projects.settings.workspaceProvider')}</FieldTitle>
           <FieldDescription className="text-foreground-muted">
-            Commands used to provision and terminate BYOI infrastructure for tasks.
+            {t('projects.settings.workspaceProviderDescription')}
           </FieldDescription>
         </div>
 
         <Field>
-          <FieldTitle>Provision command</FieldTitle>
+          <FieldTitle>{t('projects.settings.provisionCommand')}</FieldTitle>
           <Textarea
             aria-invalid={errors.provisionCommand ? true : undefined}
             rows={3}
@@ -47,7 +49,7 @@ export function WorkspaceProviderSettingsSection({
           ) : null}
         </Field>
         <Field>
-          <FieldTitle>Terminate command</FieldTitle>
+          <FieldTitle>{t('projects.settings.terminateCommand')}</FieldTitle>
           <Textarea
             aria-invalid={errors.terminateCommand ? true : undefined}
             rows={3}

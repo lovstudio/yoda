@@ -1,5 +1,6 @@
 import { Minus } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { commitRef, HEAD_REF, type GitChange } from '@shared/git';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { Button } from '@renderer/lib/ui/button';
@@ -11,6 +12,7 @@ import { VirtualizedChangesList } from './components/virtualized-changes-list';
 import { usePrefetchDiffModels } from './hooks/use-prefetch-diff-models';
 
 export const StagedSection = observer(function StagedSection() {
+  const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
   const git = provisioned.workspace.git;
@@ -56,7 +58,7 @@ export const StagedSection = observer(function StagedSection() {
   return (
     <>
       <SectionHeader
-        label="Staged"
+        label={t('changes.staged')}
         count={changes.length}
         selectionState={selectionState}
         onToggleAll={() => changesView.toggleAllStaged()}
@@ -66,8 +68,8 @@ export const StagedSection = observer(function StagedSection() {
       />
       {!hasChanges && (
         <EmptyState
-          label="Nothing staged"
-          description="Stage files above to include them in a commit."
+          label={t('changes.nothingStaged')}
+          description={t('changes.nothingStagedDescription')}
         />
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -79,10 +81,10 @@ export const StagedSection = observer(function StagedSection() {
                 variant="outline"
                 size="xs"
                 onClick={handleUnstageSelection}
-                title="Unstage selected files"
+                title={t('changes.unstageSelectedFiles')}
               >
                 <Minus className="size-3" />
-                Unstage
+                {t('changes.unstage')}
               </Button>
             }
             generalActions={
@@ -91,10 +93,10 @@ export const StagedSection = observer(function StagedSection() {
                 size="xs"
                 disabled={!hasChanges}
                 onClick={handleUnstageAll}
-                title="Unstage all files"
+                title={t('changes.unstageAllFiles')}
               >
                 <Minus className="size-3" />
-                Unstage all
+                {t('changes.unstageAll')}
               </Button>
             }
           />

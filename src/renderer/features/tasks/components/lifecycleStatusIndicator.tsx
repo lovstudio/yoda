@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { type TaskLifecycleStatus } from '@shared/tasks';
 import {
   Combobox,
@@ -11,13 +12,13 @@ import {
 } from '@renderer/lib/ui/combobox';
 import { cn } from '@renderer/utils/utils';
 
-type StatusOption = { value: TaskLifecycleStatus; label: string };
+type StatusOption = { value: TaskLifecycleStatus; labelKey: string };
 
 const STATUS_OPTIONS: StatusOption[] = [
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'review', label: 'Review' },
-  { value: 'done', label: 'Done' },
-  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'in_progress', labelKey: 'tasks.lifecycle.inProgress' },
+  { value: 'review', labelKey: 'tasks.lifecycle.review' },
+  { value: 'done', labelKey: 'tasks.lifecycle.done' },
+  { value: 'cancelled', labelKey: 'tasks.lifecycle.cancelled' },
 ];
 
 function StatusIcon({ status, className }: { status: TaskLifecycleStatus; className?: string }) {
@@ -108,6 +109,7 @@ export function LifecycleStatusIndicator({
   lifecycleStatus: TaskLifecycleStatus;
   onLifecycleStatusChange: (lifecycleStatus: TaskLifecycleStatus) => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const selectedOption =
     STATUS_OPTIONS.find((o) => o.value === lifecycleStatus) ?? STATUS_OPTIONS[0];
@@ -125,7 +127,9 @@ export function LifecycleStatusIndicator({
       open={open}
       onOpenChange={setOpen}
       isItemEqualToValue={(a: StatusOption, b: StatusOption) => a.value === b.value}
-      filter={(item: StatusOption, query) => item.label.toLowerCase().includes(query.toLowerCase())}
+      filter={(item: StatusOption, query) =>
+        t(item.labelKey).toLowerCase().includes(query.toLowerCase())
+      }
       autoHighlight
     >
       <ComboboxTrigger
@@ -135,13 +139,13 @@ export function LifecycleStatusIndicator({
         <StatusIcon status={lifecycleStatus} />
       </ComboboxTrigger>
       <ComboboxContent className="w-40" align="start">
-        <ComboboxInput showTrigger={false} placeholder="Search status..." />
+        <ComboboxInput showTrigger={false} placeholder={t('tasks.lifecycle.searchStatus')} />
         <ComboboxList className="py-1">
           <ComboboxCollection>
             {(item: StatusOption) => (
               <ComboboxItem key={item.value} value={item}>
                 <StatusIcon status={item.value} className="shrink-0" />
-                {item.label}
+                {t(item.labelKey)}
               </ComboboxItem>
             )}
           </ComboboxCollection>

@@ -1,6 +1,7 @@
 import { ChevronRight, FolderOpen } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getPrNumber, isForkPr, type PullRequest } from '@shared/pull-requests';
 import {
   getProjectManagerStore,
@@ -48,6 +49,7 @@ export const CreateTaskModal = observer(function CreateTaskModal({
   strategy?: CreateTaskStrategy;
   initialPR?: PullRequest;
 }) {
+  const { t } = useTranslation();
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(() => {
     if (projectId) return projectId;
     const nav = appState.navigation;
@@ -228,12 +230,12 @@ export const CreateTaskModal = observer(function CreateTaskModal({
           trigger={
             <ComboboxTrigger className="h-6 flex items-center gap-2 border border-border rounded-md px-2.5 py-1 text-sm outline-none">
               <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
-              <ComboboxValue placeholder="Select a project" />
+              <ComboboxValue placeholder={t('projects.selectProject')} />
             </ComboboxTrigger>
           }
         />
         <ChevronRight className="size-3.5 text-foreground-passive" />
-        <DialogTitle>Create Task</DialogTitle>
+        <DialogTitle>{t('tasks.createTask')}</DialogTitle>
       </DialogHeader>
       <DialogContentArea className="gap-4">
         <ToggleGroup
@@ -246,19 +248,19 @@ export const CreateTaskModal = observer(function CreateTaskModal({
           }}
         >
           <ToggleGroupItem className="flex-1" value="from-branch">
-            From Branch
+            {t('tasks.create.fromBranch')}
           </ToggleGroupItem>
           <ToggleGroupItem className="flex-1" value="from-issue">
-            From Issue
+            {t('tasks.create.fromIssue')}
           </ToggleGroupItem>
           <ToggleGroupItem className="flex-1" value="from-pull-request">
-            From Pull Request
+            {t('tasks.create.fromPullRequest')}
           </ToggleGroupItem>
         </ToggleGroup>
         {isWorkspaceProviderEnabled && (
           <div className="flex items-center gap-2">
             <Switch size="sm" checked={useBYOI} onCheckedChange={setUseBYOI} />
-            <span className="text-sm text-muted-foreground">Use BYOI infrastructure</span>
+            <span className="text-sm text-muted-foreground">{t('tasks.create.useByoi')}</span>
           </div>
         )}
         <AnimatedHeight onAnimatingChange={setIsTransitioning}>
@@ -289,7 +291,7 @@ export const CreateTaskModal = observer(function CreateTaskModal({
             <div className="flex flex-col gap-3">
               {!repositoryUrl && (
                 <p className="text-sm text-muted-foreground">
-                  Pull requests are currently available only for configured GitHub remotes.
+                  {t('pullRequests.unavailableDescription')}
                 </p>
               )}
               <FromPrContent
@@ -306,7 +308,7 @@ export const CreateTaskModal = observer(function CreateTaskModal({
       </DialogContentArea>
       <DialogFooter>
         <ConfirmButton size="sm" onClick={handleCreateTask} disabled={!canCreate}>
-          Create
+          {t('common.create')}
         </ConfirmButton>
       </DialogFooter>
     </>

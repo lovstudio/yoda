@@ -1,5 +1,6 @@
 import { GitBranch, RefreshCw } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { type Branch } from '@shared/git';
 import { Badge } from '@renderer/lib/ui/badge';
 import {
@@ -42,6 +43,7 @@ export function BranchSelector({
   onRefresh,
   isRefreshing = false,
 }: BranchSelectorProps) {
+  const { t } = useTranslation();
   const valueKey =
     value?.type === 'remote'
       ? `${value.type}:${value.remote.name}/${value.branch}`
@@ -94,7 +96,7 @@ export function BranchSelector({
         <ComboboxTrigger className="border flex border-border h-9 hover:bg-muted/30 rounded-md px-2.5 py-1 text-left text-sm outline-none items-center justify-between">
           <div className="flex items-center gap-2 text-muted-foreground">
             <GitBranch />
-            <ComboboxValue placeholder="Select a branch" />
+            <ComboboxValue placeholder={t('branchSelector.selectBranch')} />
           </div>
         </ComboboxTrigger>
       )}
@@ -115,7 +117,7 @@ export function BranchSelector({
               className="group flex-1 flex items-center gap-1 hover:bg-background-quaternary-1 data-pressed:bg-background-quaternary-2"
               disabled={localCount === 0}
             >
-              Local
+              {t('home.localMode')}
               <Badge
                 variant="secondary"
                 className="shrink-0 bg-background-2 transition-colors hover:bg-background-quaternary-1 group-data-pressed:bg-background-quaternary-3"
@@ -128,7 +130,7 @@ export function BranchSelector({
               className="group flex-1 flex items-center gap-1 hover:bg-background-quaternary-1 data-pressed:bg-background-quaternary-2"
               disabled={remoteCount === 0}
             >
-              Remote
+              {t('home.remoteMode')}
               <Badge variant="secondary" className="shrink-0 bg-background-2 transition-colors">
                 {remoteCount}
               </Badge>
@@ -137,7 +139,7 @@ export function BranchSelector({
         )}
         <ComboboxInput
           showTrigger={false}
-          placeholder="Search branches"
+          placeholder={t('branchSelector.searchBranches')}
           inputRef={inputRef}
           rightAddon={
             onRefresh && (
@@ -149,13 +151,13 @@ export function BranchSelector({
                       className="text-foreground-muted hover:text-foreground"
                       onClick={onRefresh}
                       disabled={isRefreshing}
-                      aria-label="Refresh branches"
+                      aria-label={t('branchSelector.refreshBranches')}
                     >
                       <RefreshCw className={cn('size-3', isRefreshing && 'animate-spin')} />
                     </InputGroupButton>
                   }
                 />
-                <TooltipContent>Refresh branches</TooltipContent>
+                <TooltipContent>{t('branchSelector.refreshBranches')}</TooltipContent>
               </Tooltip>
             )
           }
@@ -167,7 +169,9 @@ export function BranchSelector({
             </ComboboxItem>
           )}
         </ComboboxList>
-        <ComboboxEmpty>{branches.length === 0 ? 'no branches exist' : 'no results'}</ComboboxEmpty>
+        <ComboboxEmpty>
+          {branches.length === 0 ? t('branchSelector.noBranches') : t('common.noResults')}
+        </ComboboxEmpty>
       </ComboboxContent>
     </Combobox>
   );

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Folder, FolderOpen } from 'lucide-react';
 import { runInAction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import React, { useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { FileNode } from '@shared/fs';
 import { buildVisibleRows } from '@renderer/features/tasks/editor/stores/files-store-utils';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
@@ -121,6 +122,7 @@ const FileTreeRow = observer(function FileTreeRow({
 });
 
 export const EditorFileTree = observer(function EditorFileTree() {
+  const { t } = useTranslation();
   const taskState = useProvisionedTask();
   const files = taskState.workspace.files;
   const editorView = taskState.taskView.editorView;
@@ -141,7 +143,7 @@ export const EditorFileTree = observer(function EditorFileTree() {
   if (files?.isLoading) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-        Loading...
+        {t('common.loading')}
       </div>
     );
   }
@@ -157,7 +159,7 @@ export const EditorFileTree = observer(function EditorFileTree() {
   if (visibleRows.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-        No files
+        {t('editor.noFiles')}
       </div>
     );
   }

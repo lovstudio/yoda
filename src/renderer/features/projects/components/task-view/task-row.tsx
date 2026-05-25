@@ -1,6 +1,7 @@
 import { FileText } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { selectCurrentPr } from '@shared/pull-requests';
 import { type Task } from '@shared/tasks';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -34,6 +35,7 @@ export const TaskRow = observer(function TaskRow({
   isSelected: boolean;
   onToggleSelect: () => void;
 }) {
+  const { t } = useTranslation();
   const { navigate } = useNavigate();
   const showRename = useShowModal('renameTaskModal');
   const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
@@ -66,9 +68,9 @@ export const TaskRow = observer(function TaskRow({
   const handleProvision = () => void taskManager?.provisionTask(task.data.id);
   const handleDelete = () =>
     showConfirm({
-      title: 'Delete task',
-      description: `"${task.data.name}" will be permanently deleted. This action cannot be undone.`,
-      confirmLabel: 'Delete',
+      title: t('sidebar.deleteTask.title'),
+      description: t('sidebar.deleteTask.description', { name: task.data.name }),
+      confirmLabel: t('common.delete'),
       onSuccess: () => void taskManager?.deleteTask(task.data.id),
     });
   const handleRename = () =>
@@ -121,7 +123,7 @@ export const TaskRow = observer(function TaskRow({
           <Checkbox
             checked={isSelected}
             onCheckedChange={onToggleSelect}
-            aria-label="Select task"
+            aria-label={t('tasks.selectTask')}
           />
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">

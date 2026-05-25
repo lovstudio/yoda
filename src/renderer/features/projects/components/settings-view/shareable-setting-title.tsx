@@ -1,4 +1,5 @@
 import { RotateCcw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type {
   ProjectSettingsOverrideState,
   ShareableProjectSettingsWriteField,
@@ -16,10 +17,11 @@ type Props = {
 };
 
 export function ShareableSettingTitle({ children, leafLabel, overrideSources, onRestore }: Props) {
-  const overrideWorkingDirectoryCount = `${overrideSources.length} ${
-    overrideSources.length === 1 ? 'working directory' : 'working directories'
-  }`;
-  const teamConfigLabel = overrideSources.length === 1 ? 'team settings' : 'team settings';
+  const { t } = useTranslation();
+  const overrideWorkingDirectoryCount = t('projects.settings.workingDirectoryCount', {
+    count: overrideSources.length,
+  });
+  const teamConfigLabel = t('projects.settings.teamSettings');
 
   return (
     <div className="flex min-h-5 items-center justify-between gap-3">
@@ -33,11 +35,14 @@ export function ShareableSettingTitle({ children, leafLabel, overrideSources, on
                   variant="outline"
                   className="rounded-xs h-4.5 border-amber-200 bg-amber-50 leading-none text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-400"
                 >
-                  Overriding
+                  {t('projects.settings.overriding')}
                 </Badge>
               </TooltipTrigger>
               <TooltipContent side="top" align="start" className="max-w-sm">
-                This overrides {teamConfigLabel} in {overrideWorkingDirectoryCount}.
+                {t('projects.settings.overridesTooltip', {
+                  teamSettings: teamConfigLabel,
+                  count: overrideWorkingDirectoryCount,
+                })}
               </TooltipContent>
             </Tooltip>
             <Tooltip>
@@ -49,7 +54,7 @@ export function ShareableSettingTitle({ children, leafLabel, overrideSources, on
                     variant="ghost"
                     size="icon-xs"
                     className="size-4.5 rounded-full p-0 text-muted-foreground hover:text-foreground"
-                    aria-label={`Use team settings for ${leafLabel}`}
+                    aria-label={t('projects.settings.useTeamSettingsFor', { label: leafLabel })}
                     onClick={onRestore}
                   >
                     <RotateCcw className="size-3" aria-hidden="true" />
@@ -57,7 +62,7 @@ export function ShareableSettingTitle({ children, leafLabel, overrideSources, on
                 }
               />
               <TooltipContent side="top" align="end">
-                Use team settings
+                {t('projects.settings.useTeamSettings')}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

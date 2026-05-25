@@ -22,6 +22,11 @@ const NotificationSettingsCard: React.FC = () => {
     isFieldOverridden,
     resetField,
   } = useAppSettingsKey('notifications');
+  const soundFocusMode = notifications?.soundFocusMode ?? 'always';
+  const renderSoundFocusModeLabel = (value: unknown) =>
+    value === 'unfocused'
+      ? t('settings.notifications.unfocused')
+      : t('settings.notifications.always');
 
   return (
     <div className="flex flex-col gap-4">
@@ -82,11 +87,11 @@ const NotificationSettingsCard: React.FC = () => {
                 disabled={loading}
               />
               <Select
-                value={notifications?.soundFocusMode ?? 'always'}
+                value={soundFocusMode}
                 onValueChange={(next) => update({ soundFocusMode: next as 'always' | 'unfocused' })}
               >
                 <SelectTrigger className="w-auto shrink-0 gap-2 [&>span]:line-clamp-none">
-                  <SelectValue />
+                  <SelectValue>{renderSoundFocusModeLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent className="min-w-max">
                   <SelectItem value="always">{t('settings.notifications.always')}</SelectItem>

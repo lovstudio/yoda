@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { OverviewPanel } from '@renderer/features/projects/components/overview-view/overview-panel';
 import { PullRequestView } from '@renderer/features/projects/components/pr-view/pr-view';
 import { SettingsPanel } from '@renderer/features/projects/components/settings-view/settings-panel';
@@ -9,6 +10,7 @@ import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 
 export const ActiveProject = observer(function ActiveProject() {
+  const { t } = useTranslation();
   const {
     params: { projectId },
   } = useParams('project');
@@ -31,16 +33,16 @@ export const ActiveProject = observer(function ActiveProject() {
           }}
         >
           <ToggleGroupItem value="overview" size="sm">
-            Overview
+            {t('projects.overview')}
           </ToggleGroupItem>
           <ToggleGroupItem value="tasks" size="sm">
-            Tasks
+            {t('tasks.task')}
           </ToggleGroupItem>
           <ToggleGroupItem value="pull-request" size="sm">
-            Pull Requests
+            {t('pullRequests.title')}
           </ToggleGroupItem>
           <ToggleGroupItem value="settings" size="sm">
-            Settings
+            {t('common.settings')}
           </ToggleGroupItem>
         </ToggleGroup>
       </div>

@@ -2,6 +2,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import AgentLogo from '@renderer/lib/components/agent-logo';
@@ -27,6 +28,7 @@ const ConversationRow = observer(function ConversationRow({
 }: {
   conversationId: string;
 }) {
+  const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const provisioned = useProvisionedTask();
   const { tabManager } = provisioned.taskView;
@@ -50,9 +52,9 @@ const ConversationRow = observer(function ConversationRow({
 
   const handleDelete = () => {
     showConfirm({
-      title: 'Delete conversation',
-      description: `"${displayTitle}" will be permanently deleted. This action cannot be undone.`,
-      confirmLabel: 'Delete',
+      title: t('tasks.conversations.deleteTitle'),
+      description: t('tasks.conversations.deleteDescription', { title: displayTitle }),
+      confirmLabel: t('common.delete'),
       variant: 'destructive',
       onSuccess: () => {
         void provisioned.conversations.deleteConversation(conversationId);

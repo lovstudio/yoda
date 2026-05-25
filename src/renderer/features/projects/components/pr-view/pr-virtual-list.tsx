@@ -1,6 +1,7 @@
 import type { FetchNextPageOptions, InfiniteQueryObserverResult } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { PullRequest } from '@shared/pull-requests';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { cn } from '@renderer/utils/utils';
@@ -23,6 +24,7 @@ export function PrVirtualList({
   isFetchingNextPage,
   fetchNextPage,
 }: PrVirtualListProps) {
+  const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement>(null);
 
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -46,14 +48,14 @@ export function PrVirtualList({
   }, [virtualItems, prs.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   if (loading && prs.length === 0) {
-    return <p className="text-sm text-muted-foreground text-center py-4">Loading…</p>;
+    return <p className="text-sm text-muted-foreground text-center py-4">{t('common.loading')}</p>;
   }
 
   if (prs.length === 0) {
     return (
       <EmptyState
-        label="No pull requests"
-        description="No pull requests available or none that match this filter"
+        label={t('pullRequests.noPullRequests')}
+        description={t('pullRequests.noPullRequestsMatchingFilter')}
       />
     );
   }
@@ -87,7 +89,7 @@ export function PrVirtualList({
         ))}
       </div>
       {isFetchingNextPage && (
-        <p className="text-xs text-muted-foreground text-center py-2">Loading more…</p>
+        <p className="text-xs text-muted-foreground text-center py-2">{t('common.loadingMore')}</p>
       )}
     </div>
   );

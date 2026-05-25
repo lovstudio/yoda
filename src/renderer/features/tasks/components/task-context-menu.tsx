@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import {
   Activity,
   Archive,
@@ -108,17 +109,23 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
             key: 'unpin',
             group: 2,
             icon: PinOff,
-            label: 'Unpin task',
+            label: t('tasks.context.unpinTask'),
             onSelect: actions.onUnpin,
           }
-        : { key: 'pin', group: 2, icon: Pin, label: 'Pin task', onSelect: actions.onPin }
+        : {
+            key: 'pin',
+            group: 2,
+            icon: Pin,
+            label: t('tasks.context.pinTask'),
+            onSelect: actions.onPin,
+          }
     );
   }
   items.push({
     key: 'rename',
     group: 2,
     icon: Pencil,
-    label: 'Rename',
+    label: t('common.rename'),
     onSelect: actions.onRename,
   });
   if (actions.canMarkReview) {
@@ -128,14 +135,14 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
             key: 'unmark-review',
             group: 2,
             icon: CircleSlash,
-            label: 'Unmark review',
+            label: t('tasks.context.unmarkReview'),
             onSelect: actions.onUnmarkNeedsReview,
           }
         : {
             key: 'mark-review',
             group: 2,
             icon: CircleDot,
-            label: 'Mark for review',
+            label: t('tasks.context.markForReview'),
             onSelect: actions.onMarkNeedsReview,
           }
     );
@@ -145,7 +152,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       key: 'reconnect',
       group: 2,
       icon: RotateCcw,
-      label: 'Reconnect',
+      label: t('sidebar.reconnect'),
       onSelect: actions.onReconnect,
     });
   }
@@ -183,7 +190,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       key: 'restore',
       group: 3,
       icon: RotateCcw,
-      label: 'Restore',
+      label: t('projects.tasks.restore'),
       onSelect: actions.onRestore,
     });
   }
@@ -195,9 +202,9 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       key: 'copy-branch',
       group: 4,
       icon: Copy,
-      label: 'Copy branch name',
+      label: t('tasks.context.copyBranchName'),
       onSelect: () => {
-        void copyBranchName(branch);
+        void copyBranchName(branch, t);
       },
     });
   }
@@ -207,7 +214,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     key: 'delete',
     group: 5,
     icon: Trash2,
-    label: 'Delete',
+    label: t('common.delete'),
     onSelect: actions.onDelete,
     variant: 'destructive',
   });
@@ -215,14 +222,14 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   return items;
 }
 
-async function copyBranchName(branchName: string) {
+async function copyBranchName(branchName: string, t: TFunction) {
   try {
     await navigator.clipboard.writeText(branchName);
-    toast({ title: 'Branch name copied' });
+    toast({ title: t('tasks.context.branchNameCopied') });
   } catch {
     toast({
-      title: 'Copy failed',
-      description: 'The branch name could not be copied to the clipboard.',
+      title: t('auth.copyFailed'),
+      description: t('tasks.context.copyBranchNameFailed'),
       variant: 'destructive',
     });
   }

@@ -1,4 +1,5 @@
 import { ExternalLink } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { getPrNumber, type PullRequest } from '@shared/pull-requests';
 import { PrMergeLine } from '@renderer/lib/components/pr-merge-line';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
@@ -17,6 +18,7 @@ interface PrBadgeProps {
 }
 
 export function PrBadge({ variant = 'default', pr, className }: PrBadgeProps) {
+  const { t } = useTranslation();
   const renderBadge = () => {
     switch (variant) {
       case 'default':
@@ -66,7 +68,7 @@ export function PrBadge({ variant = 'default', pr, className }: PrBadgeProps) {
                     </Button>
                   }
                 />
-                <TooltipContent>Open PR on github</TooltipContent>
+                <TooltipContent>{t('pullRequests.openOnGitHub')}</TooltipContent>
               </Tooltip>
             </div>
             <RelativeTime

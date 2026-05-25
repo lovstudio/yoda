@@ -29,18 +29,46 @@
     "more": "更多",
     "settings": "设置",
     "comingSoon": "即将推出",
-    "untitled": "未命名"
+    "untitled": "未命名",
+    "saving": "保存中…",
+    "saved": "已保存",
+    "creating": "创建中…",
+    "adding": "添加中…",
+    "required": "必填",
+    "optional": "可选",
+    "stop": "停止",
+    "run": "运行",
+    "noResults": "无结果",
+    "now": "刚刚",
+    "ago": "{{time}}前",
+    "somethingWentWrong": "出了点问题",
+    "reload": "重新加载",
+    "errorOccurred": "发生错误",
+    "unexpectedError": "发生了意外错误。",
+    "description": "描述",
+    "title": "标题",
+    "repository": "仓库",
+    "path": "路径",
+    "name": "名称",
+    "selectAllLabel": "全选",
+    "see": "查看",
+    "loadMore": "加载更多",
+    "loadingMore": "加载更多中…",
+    "resume": "继续",
+    "unknownError": "未知错误",
+    "dismiss": "关闭",
+    "navigateWithArrowKeys": "使用方向键导航"
   },
   "language": {
     "label": "语言",
     "zh-CN": "简体中文",
-    "en": "English"
+    "en": "英文"
   },
   "sidebar": {
     "newSession": "新建会话",
     "searchSession": "搜索会话",
-    "agents": "Agents",
-    "skills": "Skills",
+    "agents": "代理",
+    "skills": "技能",
     "automation": "自动化",
     "settings": "设置",
     "giveFeedback": "反馈建议",
@@ -108,7 +136,9 @@
       "saving": "保存中…",
       "loadFailed": "加载项目设置失败。",
       "saveFailed": "保存项目设置失败。"
-    }
+    },
+    "needsReview": "需要审查",
+    "expressMode": "快捷模式"
   },
   "settings": {
     "title": "设置",
@@ -422,7 +452,13 @@
   "tasks": {
     "task": "任务",
     "changes": "变更",
-    "conversations": "对话",
+    "conversations": {
+      "createConversation": "新建会话",
+      "emptyTitle": "没有会话",
+      "emptyDescription": "创建会话以开始使用代理。",
+      "deleteTitle": "删除会话",
+      "deleteDescription": "“{{title}}” 将被永久删除，此操作无法撤销。"
+    },
     "files": "文件",
     "toggleTerminal": "切换终端",
     "rename": {
@@ -488,12 +524,80 @@
       "publishBranch": "发布分支",
       "createdFrom": "创建自"
     },
-    "createTask": "创建任务"
+    "createTask": "创建任务",
+    "creatingTask": "创建任务中…",
+    "errorCreatingTask": "创建任务出错",
+    "settingUpWorkspace": "正在设置工作区…",
+    "failedSetUpWorkspace": "设置工作区失败",
+    "failedTearDownWorkspace": "清理工作区失败",
+    "devServerRunningAt": "开发服务器运行在 {{url}}",
+    "selectTask": "选择任务",
+    "lifecycle": {
+      "inProgress": "进行中",
+      "review": "待审查",
+      "done": "已完成",
+      "cancelled": "已取消",
+      "searchStatus": "搜索状态…"
+    },
+    "create": {
+      "fromIssue": "从 Issue 创建",
+      "fromPullRequest": "从 Pull Request 创建",
+      "fromBranch": "从分支创建",
+      "useByoi": "使用我自己的分支",
+      "checkoutBranchForReview": "检出分支进行审查",
+      "createTaskBranchAndWorktree": "创建任务分支和 worktree",
+      "initialCommitRequired": "请先创建初始提交。",
+      "dangerouslySkipPermissions": "跳过权限检查（危险）",
+      "initialConversation": "初始会话",
+      "initialPromptPlaceholder": "描述你希望代理完成的工作。",
+      "pushBranchToRemote": "将分支 push 到远端",
+      "selectAnotherIssue": "选择其他 Issue",
+      "selectAnotherPr": "选择其他 Pull Request"
+    },
+    "terminals": {
+      "title": "终端",
+      "newTerminal": "新建终端",
+      "closeTerminal": "关闭终端",
+      "emptyTitle": "没有终端",
+      "emptyDescription": "创建终端以在此任务工作区运行命令。",
+      "scripts": "脚本",
+      "configureInProjectSettings": "在项目设置中配置脚本。"
+    },
+    "panel": {
+      "agent": "代理",
+      "summary": "摘要",
+      "todos": "待办",
+      "noSummary": "暂无摘要",
+      "noTodos": "暂无待办",
+      "emptyHint": "选择或创建一个会话。",
+      "noActiveConversation": "没有活动会话",
+      "claudeOnly": "仅 Claude 会话可用。"
+    },
+    "context": {
+      "unpinTask": "取消固定任务",
+      "pinTask": "固定任务",
+      "unmarkReview": "取消审查标记",
+      "markForReview": "标记为待审查",
+      "copyBranchName": "复制分支名",
+      "branchNameCopied": "分支名已复制",
+      "copyBranchNameFailed": "无法将分支名复制到剪贴板。"
+    }
   },
   "commandPalette": {
     "placeholder": "搜索任务、项目、动作…",
     "noResults": "未找到结果",
-    "noResultsFor": "“{{query}}”没有结果"
+    "noResultsFor": "“{{query}}”没有结果",
+    "sessionsRequiresProject": "需要先打开项目才能搜索会话",
+    "sessionsToggleTitle": "搜索任务会话",
+    "inSessions": "在会话中",
+    "sessionsEmptyHint": "没有匹配的任务会话",
+    "searchingTranscripts": "正在搜索会话记录…",
+    "tasksSessions": "任务与会话",
+    "lovcode": {
+      "title": "安装 LovCode",
+      "description": "运行此命令需要安装 LovCode。",
+      "install": "安装 LovCode"
+    }
   },
   "mcp": {
     "title": "MCP",
@@ -507,22 +611,58 @@
     "noServers": "暂无可用 server。",
     "removeServerTitle": "移除 MCP server？",
     "removeServerDescription": "这将从所有代理中移除 “{{name}}”，此操作无法撤销。",
-    "removeServerConfirm": "移除"
+    "removeServerConfirm": "移除",
+    "syncToAgents": "同步到代理",
+    "httpUnsupportedTitle": "{{name}} 不支持 HTTP server",
+    "httpUnsupported": "部分代理不支持 HTTP server，已被禁用。",
+    "valuePlaceholder": "value",
+    "modal": {
+      "editTitle": "编辑 MCP Server",
+      "addCatalogTitle": "添加 {{name}}",
+      "addCustomTitle": "添加自定义 MCP Server",
+      "serverName": "Server 名称",
+      "transport": "Transport",
+      "command": "命令",
+      "arguments": "参数（每行一个）",
+      "url": "URL",
+      "environmentVariables": "环境变量",
+      "addEnvVar": "+ 添加环境变量",
+      "headers": "Headers",
+      "addHeader": "+ 添加 header"
+    }
   },
   "skills": {
-    "title": "Skills",
-    "subtitle": "通过可复用的 skill 模块扩展代理能力",
-    "searchPlaceholder": "搜索 skill…",
+    "title": "技能",
+    "subtitle": "通过可复用的技能模块扩展代理能力",
+    "searchPlaceholder": "搜索技能…",
     "refreshAria": "刷新目录",
-    "newSkill": "新建 Skill",
+    "newSkill": "新建技能",
     "installed": "已安装",
     "recommended": "推荐",
-    "noMatches": "没有匹配的 skill。",
-    "noSkills": "暂无可用 skill。"
+    "noMatches": "没有匹配的技能。",
+    "noSkills": "暂无可用技能。",
+    "catalogDescription": "技能来自 <openai>OpenAI</openai> 和 <anthropic>Anthropic</anthropic> 目录。安装技能后，它会在所有编码代理中可用。技能遵循开放的 <standard>Agent Skills</standard> 标准。如果你想使用其他库中的技能，欢迎通过反馈弹窗告诉我们。",
+    "create": {
+      "validation": {
+        "name": "名称必须为小写字母、数字和连字符（2-64 个字符）。",
+        "description": "描述不能为空。"
+      },
+      "failed": "创建技能失败",
+      "nameHint": "小写字母、数字和连字符",
+      "descriptionPlaceholder": "这个 skill 是做什么的？",
+      "instructions": "说明",
+      "instructionsPlaceholder": "在这里编写技能说明。YAML frontmatter（name 和 description）会自动添加。",
+      "instructionsHint": "定义这个技能做什么，以及代理应如何使用它"
+    },
+    "fromLibrary": "来自 {{source}} 技能库",
+    "examplePrompt": "示例 prompt",
+    "uninstall": "卸载",
+    "installing": "安装中…",
+    "install": "安装"
   },
   "agents": {
-    "title": "Agents 管理",
-    "subtitle": "为每个 CLI 代理配置 MaaS、记忆、Hooks 与 Skills",
+    "title": "代理管理",
+    "subtitle": "为每个 CLI 代理配置 MaaS、记忆、Hooks 与技能",
     "detected": "已检测",
     "notDetected": "未检测",
     "notFound": "未找到该代理",
@@ -533,7 +673,7 @@
       "maas": "MaaS",
       "memory": "记忆",
       "hooks": "Hooks",
-      "skills": "Skills",
+      "skills": "技能",
       "settings": "设置"
     },
     "maas": {
@@ -564,10 +704,10 @@
       "noPath": "未找到 Hooks 配置文件路径。"
     },
     "skills": {
-      "title": "Skills",
-      "description": "{{name}} 读取 skill 的目录。统一管理请前往 Skills 视图。",
-      "manage": "管理 Skills",
-      "noPath": "{{name}} 暂未配置 skills 目录。"
+      "title": "技能",
+      "description": "{{name}} 读取技能的目录。统一管理请前往技能视图。",
+      "manage": "管理技能",
+      "noPath": "{{name}} 暂未配置技能目录。"
     },
     "settings": {
       "execTitle": "执行参数",
@@ -576,6 +716,608 @@
       "configTitle": "配置文件",
       "configDescription": "在 Finder 中打开代理的本地配置目录或文件。",
       "noConfig": "暂未为 {{name}} 配置默认路径。"
+    },
+    "compareAgents": "对比代理",
+    "copyInstallCommandFor": "复制 {{name}} 的安装命令",
+    "copyCommand": "复制命令",
+    "searchAgents": "搜索代理…",
+    "noAgentInstalled": "未安装代理"
+  },
+  "editor": {
+    "fileNotFound": "文件未找到",
+    "fileTooLarge": "文件过大，无法预览",
+    "fileExtension": "文件扩展名：{{extension}}",
+    "binaryNoPreview": "二进制文件无法预览。",
+    "viewRendered": "查看渲染结果",
+    "editSource": "编辑源码",
+    "preview": "预览",
+    "noFiles": "没有文件",
+    "conflict": {
+      "title": "文件已在外部修改",
+      "description": "<code>{{path}}</code> 在编辑器外被修改，而你还有未保存的编辑。要如何处理？",
+      "keepMine": "保留我的版本",
+      "acceptIncoming": "接受外部版本"
     }
+  },
+  "markdown": {
+    "imageNotFound": "[图片未找到：{{src}}]",
+    "loadingImage": "图片加载中…"
+  },
+  "auth": {
+    "codeExpired": "验证码已过期",
+    "codeCopied": "验证码已复制",
+    "copyFailed": "复制失败",
+    "copyFailedDescription": "请手动复制验证码并粘贴到浏览器中。",
+    "yourCode": "你的验证码",
+    "copyCode": "复制验证码",
+    "alreadyCopied": "已复制",
+    "openingService": "正在打开服务…",
+    "waiting": "等待授权中…",
+    "codeExpiresIn": "验证码将在 {{time}} 后过期",
+    "openService": "打开服务",
+    "shortcutCopy": "复制验证码",
+    "shortcutReopen": "重新打开浏览器",
+    "shortcutCancel": "取消",
+    "having": "遇到",
+    "trouble": "问题？",
+    "signedIn": "已登录",
+    "lovstudio": {
+      "signInTitle": "登录 Yoda",
+      "signInFailed": "登录失败",
+      "signedInWelcome": "欢迎回来。",
+      "authorize": "授权 Yoda",
+      "pasteCodeDescription": "在浏览器中粘贴此验证码以完成登录。",
+      "stepSignIn": "登录",
+      "stepConfirm": "确认"
+    },
+    "github": {
+      "connectTitle": "连接 GitHub",
+      "authenticationFailed": "GitHub 认证失败",
+      "connected": "GitHub 已连接",
+      "authorize": "授权 GitHub",
+      "pasteCodeDescription": "在 GitHub 中粘贴此验证码以完成账号连接。",
+      "stepAuthorize": "授权",
+      "stepPaste": "粘贴验证码"
+    }
+  },
+  "ssh": {
+    "validation": {
+      "nameRequired": "连接名称不能为空。",
+      "hostRequired": "Host 不能为空。",
+      "hostInvalid": "请输入有效的 host。",
+      "portMin": "端口必须大于等于 1。",
+      "portMax": "端口不能超过 65535。",
+      "usernameRequired": "用户名不能为空。",
+      "passwordRequired": "密码不能为空。",
+      "privateKeyRequired": "私钥路径不能为空。"
+    },
+    "editConnection": "编辑 SSH 连接",
+    "addConnection": "添加 SSH 连接",
+    "testing": "测试中…",
+    "testConnection": "测试连接",
+    "connectionName": "连接名称",
+    "connectionNamePlaceholder": "生产服务器",
+    "host": "Host",
+    "port": "端口",
+    "username": "用户名",
+    "authentication": "认证方式",
+    "authType": {
+      "password": "密码",
+      "key": "私钥",
+      "agent": "SSH agent"
+    },
+    "password": "密码",
+    "leaveBlankKeepExisting": "留空则保留现有值。",
+    "privateKeyPath": "私钥路径",
+    "passphrase": "Passphrase",
+    "passphraseHint": "私钥的可选 passphrase。",
+    "agentAuthHint": "将使用本机 SSH agent 提供凭证。",
+    "testingConnection": "正在测试连接…",
+    "connected": "已连接",
+    "connectedWithLatency": "已连接，用时 {{latency}} ms",
+    "connectionFailed": "连接失败",
+    "logs": "日志",
+    "changeConnection": "更换 SSH 连接",
+    "connection": "连接",
+    "selectOrAddConnection": "请选择或添加一个 SSH 连接。"
+  },
+  "feedback": {
+    "title": "发送反馈",
+    "removeAttachment": "移除附件",
+    "signInTitle": "登录后发送反馈",
+    "signInDescription": "请登录 Yoda 账号，方便我们必要时与你跟进。",
+    "dropImageHere": "将图片拖到这里",
+    "sendingAs": "将以 {{email}} 发送",
+    "category": {
+      "label": "类型",
+      "idea": "想法",
+      "bug": "Bug",
+      "contact": "联系"
+    },
+    "detailsLabel": "详情",
+    "detailsPlaceholder": "告诉我们发生了什么，或你希望看到什么。",
+    "attachImage": "附加图片",
+    "sending": "发送中…",
+    "send": "发送反馈"
+  },
+  "branchSelector": {
+    "selectBranch": "选择分支",
+    "searchBranches": "搜索分支…",
+    "refreshBranches": "刷新分支",
+    "noBranches": "没有找到分支"
+  },
+  "navigation": {
+    "goBack": "后退",
+    "goForward": "前进",
+    "toggleLeftSidebar": "切换左侧边栏"
+  },
+  "openIn": {
+    "failed": "打开失败",
+    "unavailable": "没有可用应用",
+    "openIn": "打开方式",
+    "editor": "编辑器",
+    "options": "选项",
+    "selectApp": "选择应用"
+  },
+  "integrations": {
+    "githubNotConnected": "GitHub 尚未连接。",
+    "openAccountSettings": "打开账户设置",
+    "setup": {
+      "linear": {
+        "title": "Linear API Key",
+        "step1": "创建 Linear API Key。",
+        "step2": "将 key 粘贴到下方。",
+        "placeholder": "lin_api_..."
+      },
+      "plain": {
+        "title": "Plain API Key",
+        "step1": "创建 Plain API Key。",
+        "step2": "将 key 粘贴到下方。",
+        "placeholder": "plain_api_..."
+      },
+      "featurebase": {
+        "title": "Featurebase API Key",
+        "step1": "创建 Featurebase API Key。",
+        "step2": "将 key 粘贴到下方。",
+        "placeholder": "fb_..."
+      },
+      "gitlab": {
+        "descriptionBefore": "请在",
+        "descriptionAfter": "创建具备 API 权限的个人访问令牌，然后粘贴到下方。",
+        "tokenPlaceholder": "glpat-..."
+      },
+      "jira": {
+        "description": "创建 Atlassian API Token，并和 Jira 邮箱一起填写到下方。",
+        "emailPlaceholder": "you@example.com",
+        "tokenPlaceholder": "ATATT..."
+      },
+      "forgejo": {
+        "description": "创建 Forgejo access token 并粘贴到下方。",
+        "tokenPlaceholder": "forgejo token"
+      }
+    },
+    "connectFailed": "连接失败。",
+    "connect": "连接",
+    "setupModal": {
+      "linear": {
+        "title": "连接 Linear",
+        "subtitle": "输入 Linear API Key 以连接工作区。"
+      },
+      "jira": {
+        "title": "连接 Jira",
+        "subtitle": "输入 Jira 站点 URL、邮箱和 API token 以连接。"
+      },
+      "gitlab": {
+        "title": "连接 GitLab",
+        "subtitle": "输入 GitLab 实例 URL 和个人访问令牌。"
+      },
+      "plain": {
+        "title": "连接 Plain",
+        "subtitle": "输入 Plain API Key 以连接工作区。"
+      },
+      "forgejo": {
+        "title": "连接 Forgejo",
+        "subtitle": "输入 Forgejo 实例 URL 和 API token。"
+      },
+      "featurebase": {
+        "title": "连接 Featurebase",
+        "subtitle": "输入 Featurebase API Key 以连接工作区。"
+      }
+    }
+  },
+  "agentStatus": {
+    "working": "工作中",
+    "awaiting-input": "等待输入",
+    "error": "错误",
+    "completed": "已完成"
+  },
+  "issues": {
+    "alreadyLinkedToTask": "已关联到 {{taskName}}",
+    "clickToLink": "点击关联",
+    "searchPlaceholder": "搜索 Issue…",
+    "issues": "Issues",
+    "noIssuesFound": "没有找到 Issue",
+    "providerIssue": "{{provider}} Issue",
+    "connectIntegrationDescription": "连接集成后即可搜索 Issue。",
+    "configureIntegrations": "配置集成",
+    "noProviderIssues": "暂无 provider issue。",
+    "selectIssue": "选择 Issue"
+  },
+  "pullRequests": {
+    "draft": "草稿",
+    "title": "Pull Requests",
+    "open": "打开",
+    "closed": "已关闭",
+    "from": "来自",
+    "openOnGitHub": "在 GitHub 打开",
+    "unavailable": "Pull Request 不可用",
+    "unavailableDescription": "连接 GitHub 后即可查看此仓库的 Pull Request。",
+    "noPullRequests": "没有 Pull Request",
+    "noPullRequestsDescription": "此仓库的 Pull Request 会显示在这里。",
+    "alreadyOpen": "已打开",
+    "createPullRequest": "创建 Pull Request",
+    "refresh": "刷新 Pull Request",
+    "createPr": "创建 PR",
+    "createDraftPr": "创建草稿 PR",
+    "createDraft": "创建草稿",
+    "markReady": "标记为就绪",
+    "merging": "合并中…",
+    "noChecks": "没有检查",
+    "noChecksDescription": "GitHub 报告检查后会显示在这里。",
+    "noCommits": "没有提交",
+    "noCommitsDescription": "同步后提交会显示在这里。",
+    "loadFailed": "加载 Pull Request 失败",
+    "searchPlaceholder": "搜索 Pull Request…",
+    "noPullRequestsFound": "没有找到 Pull Request",
+    "noOpenPullRequestsToShow": "没有可显示的打开 Pull Request。",
+    "noClosedPullRequestsToShow": "没有可显示的已关闭 Pull Request。",
+    "selectPr": "选择 Pull Request",
+    "headBranch": "Head 分支",
+    "baseBranch": "Base 分支",
+    "selectBaseBranch": "选择 base 分支",
+    "prTitle": "Pull Request 标题",
+    "createFailed": "创建 Pull Request 失败",
+    "pushAndCreateDraft": "Push 并创建草稿",
+    "pushAndCreatePr": "Push 并创建 PR",
+    "skipPushDescription": "如果分支已存在于远端，则跳过 push。",
+    "noGitHubRemote": "没有 GitHub remote",
+    "noGitHubRemoteConfigured": "此项目尚未配置 GitHub remote。",
+    "noOpenPullRequests": "没有打开的 Pull Request",
+    "openCount": "{{count}} 个打开",
+    "unavailableWithSettings": "Pull Request 同步不可用，请检查仓库设置。",
+    "githubAuthRequired": "需要 GitHub 认证",
+    "connectUserAccount": "连接用户账号",
+    "searchByTitleBranchNumber": "按标题、分支或编号搜索",
+    "searchFilterPlaceholder": "搜索筛选项…",
+    "forceFullSync": "强制完整同步",
+    "sort": {
+      "label": "排序",
+      "newest": "最新",
+      "oldest": "最旧",
+      "recentlyUpdated": "最近更新"
+    },
+    "filters": {
+      "label": "标签",
+      "searchLabels": "搜索标签…",
+      "filterBy": "筛选方式",
+      "author": "作者",
+      "assignee": "负责人",
+      "removeFilter": "移除筛选"
+    },
+    "noPullRequestsMatchingFilter": "没有 Pull Request 匹配当前筛选条件。",
+    "reviewInTask": "在任务中审查",
+    "sync": {
+      "syncing": "正在同步 Pull Request…",
+      "syncingProgress": "正在同步 Pull Request {{current}}/{{total}}",
+      "complete": "Pull Request 已同步",
+      "failed": "Pull Request 同步失败",
+      "cancelled": "Pull Request 同步已取消",
+      "kind": {
+        "full": "完整",
+        "incremental": "增量",
+        "single": "单个"
+      }
+    },
+    "mergeLine": {
+      "mergedInto": "已合并到",
+      "closedWithoutMergingInto": "未合并即关闭，目标为",
+      "wantsToMergeInto": "想要合并到"
+    },
+    "mergeMode": {
+      "merge": {
+        "label": "合并 Pull Request",
+        "description": "此分支的所有提交将通过一个 merge commit 添加到 base 分支。"
+      },
+      "squash": {
+        "label": "Squash 并合并",
+        "description": "此分支的所有提交将合并为一个提交后加入 base 分支。"
+      },
+      "rebase": {
+        "label": "Rebase 并合并",
+        "description": "此分支的所有提交将 rebase 后加入 base 分支。"
+      }
+    },
+    "mergeState": {
+      "unknown": {
+        "title": "合并状态未知",
+        "detailWithStatus": "请刷新 PR 状态后重试。",
+        "detail": "请刷新后重试。"
+      },
+      "draft": {
+        "title": "草稿 Pull Request",
+        "detail": "标记为 ready for review 后才能合并。"
+      },
+      "ready": {
+        "title": "可以合并",
+        "detail": "没有冲突或必需审查。"
+      },
+      "conflicts": {
+        "title": "存在合并冲突",
+        "detail": "请先解决冲突再合并。"
+      },
+      "behind": {
+        "title": "分支已落后",
+        "detail": "请先更新分支再合并。"
+      },
+      "blocked": {
+        "title": "合并被阻止",
+        "detail": "必需审查或分支保护尚未满足。"
+      },
+      "checksBlocked": {
+        "detail": "必需检查尚未满足。"
+      },
+      "unstable": {
+        "title": "检查未通过",
+        "detail": "请先查看失败的检查再合并。"
+      }
+    },
+    "mergeAnywayTitle": "仍要合并？",
+    "mergeAnywayDescription": "{{reason}} 确定要继续吗？",
+    "mergeAnywayConfirm": "仍然合并",
+    "tabs": {
+      "files": "文件",
+      "commits": "提交",
+      "checks": "检查"
+    }
+  },
+  "diff": {
+    "noChanges": "没有变更",
+    "noChangesDescription": "没有可显示的文件变更。",
+    "binaryFile": "二进制文件",
+    "largeDiff": "大型 diff",
+    "loadAnyway": "仍然加载",
+    "selectFile": "选择文件",
+    "selectFileDescription": "从变更列表中选择文件以查看 diff。",
+    "binaryNoDiff": "二进制文件无法显示 diff。",
+    "image": {
+      "original": "原图",
+      "modified": "修改后",
+      "fileAdded": "图片已添加",
+      "fileDeleted": "图片已删除",
+      "decodeFailed": "图片解码失败",
+      "unavailableGeneric": "图片预览不可用。",
+      "unavailableLfs": "图片内容存储在 Git LFS 中，本地不可用。",
+      "unavailableSsh": "SSH 环境下图片预览不可用。",
+      "unavailableTooLarge": "图片过大，无法预览。",
+      "unavailableUnsupported": "不支持的图片格式。"
+    }
+  },
+  "comments": {
+    "editComment": "编辑评论",
+    "comment": "评论",
+    "line": "第 {{line}} 行",
+    "cancelEsc": "按 Esc 取消",
+    "cancelEdit": "取消编辑",
+    "saveShortcut": "Cmd/Ctrl+Enter 保存",
+    "saveComment": "保存评论",
+    "deleteComment": "删除评论",
+    "updatePlaceholder": "更新你的评论…",
+    "addComment": "添加评论",
+    "cancelComment": "取消评论",
+    "submitShortcut": "Cmd/Ctrl+Enter 提交",
+    "submitComment": "提交评论",
+    "addPlaceholder": "添加评论…"
+  },
+  "changes": {
+    "staged": "已暂存",
+    "nothingStaged": "没有暂存内容",
+    "nothingStagedDescription": "暂存文件后即可加入下一次提交。",
+    "unstageSelectedFiles": "取消暂存选中文件",
+    "unstage": "取消暂存",
+    "unstageAllFiles": "取消暂存所有文件",
+    "unstageAll": "全部取消暂存",
+    "changed": "已更改",
+    "discardSelectedTitle": "丢弃选中的变更？",
+    "discardSelectedDescription": "这将永久丢弃选中的工作区变更。",
+    "discardAllTitle": "丢弃所有变更？",
+    "discardAllDescription": "这将永久丢弃所有工作区变更。",
+    "workingTreeClean": "工作区干净",
+    "noUncommittedChanges": "没有未提交的变更。",
+    "discardSelectedFiles": "丢弃选中文件",
+    "discard": "丢弃",
+    "stageSelectedFiles": "暂存选中文件",
+    "stage": "暂存",
+    "discardAllChanges": "丢弃所有变更",
+    "discardAll": "全部丢弃",
+    "stageAllChanges": "暂存所有变更",
+    "stageAll": "全部暂存",
+    "commit": "提交",
+    "commitAndPush": "提交并 push",
+    "commitMessage": "提交信息",
+    "committing": "提交中…",
+    "committed": "已提交",
+    "pushing": "Push 中…",
+    "pushed": "已 push",
+    "initialCommitFirst": "请先创建初始提交。",
+    "createOrLinkRemoteThenPublish": "创建或关联 remote 后再发布分支。",
+    "filesSelected": "已选择 {{count}} 个文件",
+    "filesSelected_plural": "已选择 {{count}} 个文件",
+    "allFiles": "所有文件"
+  },
+  "projects": {
+    "selectProject": "选择项目",
+    "noProject": "没有项目",
+    "selectLocalProject": "选择本地项目",
+    "selectProjectDirectory": "选择项目目录",
+    "cannotAddProject": "无法添加项目",
+    "pickFolderDescription": "选择包含 Git 仓库的文件夹。",
+    "notGitRepository": "不是 Git 仓库",
+    "failedAddSelectedFolder": "添加所选文件夹失败",
+    "searchProjects": "搜索项目…",
+    "opening": "打开中…",
+    "browseForFolder": "浏览文件夹",
+    "settingUpProject": "正在设置项目…",
+    "failedSetUpProject": "设置项目失败",
+    "sshNotConnected": "SSH 连接未连接。",
+    "sshUnavailable": "SSH 不可用。",
+    "projectNotFound": "项目未找到",
+    "projectDirectoryMissing": "项目目录缺失。",
+    "removeProject": "移除项目",
+    "deleteProjectTitle": "删除项目",
+    "deleteProjectDescription": "“{{name}}” 将被删除。项目文件夹和 worktree 会保留在文件系统中。",
+    "overview": "概览",
+    "openOnGitHub": "在 GitHub 打开",
+    "currentBranch": "当前分支",
+    "defaultBranch": "默认分支",
+    "remote": "Remote",
+    "taskCounts": "任务数量",
+    "viewAll": "查看全部",
+    "noActiveTasks": "没有活动任务",
+    "projectNotReady": "项目尚未就绪",
+    "addProject": {
+      "title": "添加项目",
+      "choose": "选择",
+      "clone": "克隆",
+      "new": "新建",
+      "pick": "选择文件夹",
+      "directory": "目录",
+      "projectDirectory": "项目目录",
+      "selectDirectory": "选择目录",
+      "remoteDirectory": "远程目录",
+      "selectSshConnectionToBrowse": "选择 SSH 连接以浏览远程目录。",
+      "repositoryUrl": "仓库 URL",
+      "enterRepositoryUrl": "输入仓库 URL",
+      "repositoryName": "仓库名称",
+      "enterRepositoryName": "输入仓库名称",
+      "owner": "Owner",
+      "projectName": "项目名称",
+      "enterProjectName": "输入项目名称",
+      "privacy": "可见性",
+      "initializeGitRepository": "初始化 Git 仓库",
+      "emptyDirectory": "目录为空",
+      "notGitRepository": "目录不是 Git 仓库",
+      "failedListDirectory": "列出目录失败"
+    },
+    "quickActions": {
+      "title": "快捷操作",
+      "manage": "管理快捷操作",
+      "empty": "尚未配置快捷操作。",
+      "addAction": "添加操作",
+      "labelPlaceholder": "标签",
+      "running": "运行中…",
+      "usingDefaults": "正在使用默认快捷操作",
+      "resetToGlobalDefault": "重置为全局默认",
+      "descriptionBefore": "快捷操作会保存在项目设置中。",
+      "descriptionAfter": "可用于常用命令。"
+    },
+    "settings": {
+      "title": "项目设置",
+      "saveSettings": "保存设置",
+      "saveFailed": "保存设置失败",
+      "resetChanges": "重置变更",
+      "docs": "文档",
+      "fullConfigReference": "完整配置参考",
+      "teamSettings": "团队设置",
+      "shareWithTeam": "与团队共享",
+      "shareWithTeamTooltip": "将所选项目设置写入仓库配置。",
+      "shareConfigDescription": "选择要写入仓库配置的设置。",
+      "settingsToShare": "要共享的设置",
+      "writeTo": "写入到",
+      "writeConfig": "写入配置",
+      "writing": "写入中…",
+      "wroteConfig": "配置已写入",
+      "writeConfigFailed": "写入配置失败。",
+      "selectWorkingCopy": "选择工作副本",
+      "useTeamSettings": "使用团队设置",
+      "useTeamSettingsFor": "对 {{label}} 使用团队设置",
+      "overriding": "正在覆盖",
+      "overridesTooltip": "此值在 {{count}} 中覆盖了 {{teamSettings}}。",
+      "workingDirectoryCount": "{{count}} 个工作目录",
+      "workingDirectoryCount_plural": "{{count}} 个工作目录",
+      "defaultBranchDescription": "创建任务分支时使用的默认分支。",
+      "remoteDescription": "用于 Pull Request 和分支发布的 remote。",
+      "workspaceProvider": "工作区 provider",
+      "workspaceProviderDescription": "选择任务工作区的创建方式。",
+      "worktreeDirectory": "Worktree 目录",
+      "worktreeDirectoryDescription": "创建任务 worktree 的目录。",
+      "lifecycleScripts": "生命周期脚本",
+      "lifecycleScriptsDescription": "任务工作区创建或清理时运行的命令。",
+      "provisionCommand": "Provision 命令",
+      "terminateCommand": "Terminate 命令",
+      "enableTmuxDescription": "可用时为任务终端使用 tmux。",
+      "shareable": {
+        "fields": {
+          "preservePatterns": {
+            "modalLabel": "保留模式",
+            "leafLabel": "保留模式",
+            "description": "匹配这些 glob 模式的 gitignored 和未跟踪文件，会从主仓库复制到每个 worktree。每行一个模式。"
+          },
+          "shellSetup": {
+            "modalLabel": "Shell 设置",
+            "leafLabel": "shell 设置",
+            "description": "每个 worktree 会话中代理启动前运行的 shell 命令。"
+          },
+          "scripts": {
+            "setup": {
+              "modalLabel": "Setup 脚本",
+              "leafLabel": "setup"
+            },
+            "run": {
+              "modalLabel": "Run 脚本",
+              "leafLabel": "run"
+            },
+            "teardown": {
+              "modalLabel": "Teardown 脚本",
+              "leafLabel": "teardown"
+            }
+          }
+        }
+      }
+    },
+    "tasks": {
+      "activeWithCount": "活动 ({{count}})",
+      "archivedWithCount": "已归档 ({{count}})",
+      "selectedCount": "已选择 {{count}} 个",
+      "clearSelection": "清除选择",
+      "onlyWithNotes": "仅显示带备注",
+      "onlyWithNotesAria": "仅显示带归档备注的任务",
+      "searchPlaceholder": "搜索任务…",
+      "noTasks": "没有任务",
+      "noTasksFound": "没有找到任务",
+      "restore": "恢复",
+      "deleteTitle": "删除任务？",
+      "deleteDescription": "所选任务将被永久删除，此操作无法撤销。",
+      "deleteConfirm": "删除任务"
+    }
+  },
+  "terminalSearch": {
+    "placeholder": "搜索终端",
+    "aria": "终端搜索",
+    "previous": "上一个匹配项",
+    "next": "下一个匹配项",
+    "close": "关闭搜索"
+  },
+  "github": {
+    "connectedToGitHub": "已连接 GitHub",
+    "signedInAs": "已登录为 {{user}}",
+    "userFallback": "用户",
+    "authenticationFailed": "认证失败",
+    "connectingViaAccount": "正在通过 Yoda 账户连接…",
+    "connectionFailed": "连接失败",
+    "connectionFailedDescription": "连接 GitHub 失败，请重试。",
+    "oauthFlow": "OAuth 流程",
+    "deviceFlow": "设备授权流程",
+    "connectionUnsuccessful": "GitHub 连接未完成",
+    "flowCanceled": "{{flow}} 已取消"
   }
 }

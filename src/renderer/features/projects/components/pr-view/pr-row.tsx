@@ -1,5 +1,6 @@
 import { ExternalLink, ScanSearch } from 'lucide-react';
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getPrNumber, type PullRequest } from '@shared/pull-requests';
 import { PrMergeLine } from '@renderer/lib/components/pr-merge-line';
 import { PrNumberBadge } from '@renderer/lib/components/pr-number-badge';
@@ -17,6 +18,7 @@ export const PrRow = memo(function PrRow({
   pr: PullRequest;
   projectId: string;
 }) {
+  const { t } = useTranslation();
   const showCreateTaskModal = useShowModal('taskModal');
 
   return (
@@ -44,7 +46,7 @@ export const PrRow = memo(function PrRow({
                   </Button>
                 }
               />
-              <TooltipContent>Open PR on github</TooltipContent>
+              <TooltipContent>{t('pullRequests.openOnGitHub')}</TooltipContent>
             </Tooltip>
           </div>
           <RelativeTime value={pr.createdAt} className="text-xs text-foreground-passive" compact />
@@ -60,7 +62,7 @@ export const PrRow = memo(function PrRow({
           }
         >
           <ScanSearch className="size-3.5" />
-          Review in Task
+          {t('pullRequests.reviewInTask')}
         </Button>
       </div>
     </div>

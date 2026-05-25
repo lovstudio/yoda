@@ -1,4 +1,5 @@
 import { FileX } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface TooLargeRendererProps {
   file: { path: string; totalSize?: number | null };
@@ -12,6 +13,7 @@ function formatBytes(bytes: number): string {
 
 /** Shown when a file exceeds the editor's read limit. */
 export function TooLargeRenderer({ file }: TooLargeRendererProps) {
+  const { t } = useTranslation();
   const fileName = file.path.split('/').pop() ?? file.path;
 
   return (
@@ -19,7 +21,7 @@ export function TooLargeRenderer({ file }: TooLargeRendererProps) {
       <FileX className="h-10 w-10 opacity-30" />
       <div className="text-center">
         <p className="text-sm font-medium">{fileName}</p>
-        <p className="mt-1 text-xs opacity-70">File too large to display in the editor</p>
+        <p className="mt-1 text-xs opacity-70">{t('editor.fileTooLarge')}</p>
         {file.totalSize != null && (
           <p className="mt-0.5 text-xs opacity-50">{formatBytes(file.totalSize)}</p>
         )}

@@ -1,5 +1,6 @@
 import { Loader2, TriangleAlert, Unplug } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { isUnregisteredProject } from '../../stores/project';
@@ -48,20 +49,24 @@ export const ProjectMainPanel = observer(function ProjectMainPanel() {
 });
 
 function ProjectBootstrappingPanel() {
+  const { t } = useTranslation();
+
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-3">
       <Loader2 className="h-5 w-5 animate-spin text-foreground-passive" />
-      <p className="text-xs font-mono text-foreground-passive">Setting up project…</p>
+      <p className="text-xs font-mono text-foreground-passive">{t('projects.settingUpProject')}</p>
     </div>
   );
 }
 
 function ProjectBootstrapErrorPanel({ message }: { message: string }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex h-full w-full flex-col items-center justify-center p-8">
       <div className="flex max-w-xs flex-col items-center text-center gap-2">
         <p className="text-sm font-medium font-mono text-foreground-destructive">
-          Failed to set up project
+          {t('projects.failedSetUpProject')}
         </p>
         <p className="text-xs font-mono text-foreground-passive">{message}</p>
       </div>
@@ -76,6 +81,7 @@ function ProjectSshDisconnectedPanel({
   connectionId: string;
   projectId: string;
 }) {
+  const { t } = useTranslation();
   const handleReconnect = () => {
     void appState.sshConnections
       .connect(connectionId)
@@ -87,16 +93,16 @@ function ProjectSshDisconnectedPanel({
     <div className="flex h-full w-full flex-col items-center justify-center p-8">
       <div className="flex max-w-sm flex-col items-center text-center gap-3">
         <Unplug className="h-6 w-6 text-foreground-passive" />
-        <p className="text-sm font-medium font-mono text-foreground">SSH not connected</p>
-        <p className="text-xs text-foreground-passive">
-          The SSH connection for this project is unavailable.
+        <p className="text-sm font-medium font-mono text-foreground">
+          {t('projects.sshNotConnected')}
         </p>
+        <p className="text-xs text-foreground-passive">{t('projects.sshUnavailable')}</p>
         <button
           type="button"
           className="mt-2 text-xs text-foreground underline underline-offset-2 hover:text-foreground/80 transition-colors"
           onClick={handleReconnect}
         >
-          Reconnect
+          {t('sidebar.reconnect')}
         </button>
       </div>
     </div>
@@ -104,23 +110,23 @@ function ProjectSshDisconnectedPanel({
 }
 
 function ProjectPathNotFoundPanel({ path, projectId }: { path: string; projectId: string }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex h-full w-full flex-col items-center justify-center p-8">
       <div className="flex max-w-sm flex-col items-center text-center gap-3">
         <TriangleAlert className="h-6 w-6 text-foreground-destructive" />
         <p className="text-sm font-medium font-mono text-foreground-destructive">
-          Project not found
+          {t('projects.projectNotFound')}
         </p>
         {path && <p className="text-xs font-mono text-foreground-passive break-all">{path}</p>}
-        <p className="text-xs text-foreground-passive">
-          The project directory no longer exists at the configured path.
-        </p>
+        <p className="text-xs text-foreground-passive">{t('projects.projectDirectoryMissing')}</p>
         <button
           type="button"
           className="mt-2 text-xs text-foreground-destructive underline underline-offset-2 hover:text-foreground-destructive/80 transition-colors"
           onClick={() => void getProjectManagerStore().deleteProject(projectId)}
         >
-          Remove Project
+          {t('projects.removeProject')}
         </button>
       </div>
     </div>

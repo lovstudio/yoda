@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Check, ChevronDown } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { pullRequestErrorMessage, type PullRequest } from '@shared/pull-requests';
 import { rpc } from '@renderer/lib/ipc';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/lib/ui/input-group';
@@ -19,6 +20,8 @@ export interface InlinePrSelectorProps {
 }
 
 function PrRow({ pr }: { pr: PullRequest }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-col min-w-0 gap-0.5">
       <div className="flex items-center gap-1.5 min-w-0">
@@ -27,7 +30,7 @@ function PrRow({ pr }: { pr: PullRequest }) {
         </span>
         {pr.isDraft && (
           <span className="text-xs text-foreground-muted border border-border rounded px-1 shrink-0">
-            Draft
+            {t('pullRequests.draft')}
           </span>
         )}
         <span className="truncate text-sm">{pr.title}</span>
@@ -52,6 +55,7 @@ export function InlinePrSelector({
   repositoryUrl = '',
   disabled,
 }: InlinePrSelectorProps) {
+  const { t } = useTranslation();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
 
   const { data } = useQuery({
@@ -65,7 +69,7 @@ export function InlinePrSelector({
       });
       if (!response?.success) {
         throw new Error(
-          response ? pullRequestErrorMessage(response.error) : 'Failed to load pull requests'
+          response ? pullRequestErrorMessage(response.error) : t('pullRequests.loadFailed')
         );
       }
       return response.data.prs;
@@ -146,13 +150,13 @@ export function InlinePrSelector({
           value={query}
           onChange={handleQueryChange}
           onKeyDown={handleKeyDown}
-          placeholder="Search pull requests…"
+          placeholder={t('pullRequests.searchPlaceholder')}
           autoFocus
         />
         <InputGroupAddon align="inline-end">
           <Popover>
             <PopoverTrigger className="flex items-center gap-1 text-sm text-foreground-muted hover:text-foreground">
-              {statusFilter === 'open' ? 'Open' : 'Closed'}
+              {statusFilter === 'open' ? t('pullRequests.open') : t('pullRequests.closed')}
               <ChevronDown className="size-3.5" />
             </PopoverTrigger>
             <PopoverContent align="end" className="w-36 p-1">
@@ -167,7 +171,9 @@ export function InlinePrSelector({
                     setHighlightedIndex(0);
                   }}
                 >
-                  <span className="flex-1 text-left">{s === 'open' ? 'Open' : 'Closed'}</span>
+                  <span className="flex-1 text-left">
+                    {s === 'open' ? t('pullRequests.open') : t('pullRequests.closed')}
+                  </span>
                   {statusFilter === s && <Check className="size-3.5 shrink-0 text-foreground" />}
                 </button>
               ))}
@@ -180,10 +186,10 @@ export function InlinePrSelector({
         {filteredPrs.length === 0 ? (
           <div className="py-6 text-center text-sm text-muted-foreground">
             {query
-              ? 'No pull requests found'
+              ? t('pullRequests.noPullRequestsFound')
               : statusFilter === 'open'
-                ? 'No open pull requests to show'
-                : 'No closed pull requests to show'}
+                ? t('pullRequests.noOpenPullRequestsToShow')
+                : t('pullRequests.noClosedPullRequestsToShow')}
           </div>
         ) : (
           filteredPrs.map((pr, index) => {
@@ -212,10 +218,10 @@ export function InlinePrSelector({
       </div>
 
       <div className="flex items-center justify-between h-6 px-2 text-xs bg-background-1 border-t border-border">
-        <div className="text-foreground-muted">Navigate with arrow keys</div>
+        <div className="text-foreground-muted">{t('common.navigateWithArrowKeys')}</div>
         <div className="text-foreground-muted">
           <button className="flex items-center gap-2">
-            Select PR <Kbd>↵</Kbd>
+            {t('pullRequests.selectPr')} <Kbd>↵</Kbd>
           </button>
         </div>
       </div>

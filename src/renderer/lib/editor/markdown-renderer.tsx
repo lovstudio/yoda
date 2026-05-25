@@ -1,6 +1,7 @@
 import { Eye, Pencil } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
 import { modelRegistry } from '@renderer/lib/monaco/monaco-model-registry';
@@ -19,6 +20,7 @@ interface MarkdownEditorRendererProps {
 export const MarkdownEditorRenderer = observer(function MarkdownEditorRenderer({
   filePath,
 }: MarkdownEditorRendererProps) {
+  const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
   const { workspaceId } = provisioned;
@@ -52,10 +54,10 @@ export const MarkdownEditorRenderer = observer(function MarkdownEditorRenderer({
         size="sm"
         className="sticky top-3 z-10 float-right mr-3"
       >
-        <ToggleGroupItem value="markdown" aria-label="Preview">
+        <ToggleGroupItem value="markdown" aria-label={t('editor.preview')}>
           <Eye className="h-3.5 w-3.5" />
         </ToggleGroupItem>
-        <ToggleGroupItem value="markdown-source" aria-label="Edit source">
+        <ToggleGroupItem value="markdown-source" aria-label={t('editor.editSource')}>
           <Pencil className="h-3.5 w-3.5" />
         </ToggleGroupItem>
       </ToggleGroup>

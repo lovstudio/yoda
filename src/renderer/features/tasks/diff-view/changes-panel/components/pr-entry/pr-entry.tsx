@@ -1,6 +1,8 @@
+import type { TFunction } from 'i18next';
 import { ExternalLink } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getPrNumber, type PullRequest } from '@shared/pull-requests';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { PrMergeLine } from '@renderer/lib/components/pr-merge-line';
@@ -28,25 +30,25 @@ export type MergeUiState = {
   canMerge: boolean;
 };
 
-const mergeLabels: Record<MergeMode, string> = {
-  merge: 'Merge pull request',
-  squash: 'Squash and merge',
-  rebase: 'Rebase and merge',
+const mergeLabelKeys: Record<MergeMode, string> = {
+  merge: 'pullRequests.mergeMode.merge.label',
+  squash: 'pullRequests.mergeMode.squash.label',
+  rebase: 'pullRequests.mergeMode.rebase.label',
 };
 
-const mergeDescriptions: Record<MergeMode, string> = {
-  merge: 'All commits from this branch will be added to the base branch via a merge commit.',
-  squash: 'All commits from this branch will be combined into one commit in the base branch.',
-  rebase: 'All commits from this branch will be rebased and added to the base branch.',
+const mergeDescriptionKeys: Record<MergeMode, string> = {
+  merge: 'pullRequests.mergeMode.merge.description',
+  squash: 'pullRequests.mergeMode.squash.description',
+  rebase: 'pullRequests.mergeMode.rebase.description',
 };
 
-function computeMergeUiState(pr: PullRequest): MergeUiState {
+function computeMergeUiState(pr: PullRequest, t: TFunction): MergeUiState {
   if (pr.status !== 'open') {
     return {
       kind: 'unknown',
       severity: 'neutral',
-      title: 'Merge status unknown',
-      detail: 'Refresh PR status and try again.',
+      title: t('pullRequests.mergeState.unknown.title'),
+      detail: t('pullRequests.mergeState.unknown.detailWithStatus'),
       canMerge: false,
     };
   }
@@ -54,8 +56,8 @@ function computeMergeUiState(pr: PullRequest): MergeUiState {
     return {
       kind: 'draft',
       severity: 'neutral',
-      title: 'Draft pull request',
-      detail: 'Mark ready for review to enable merging.',
+      title: t('pullRequests.mergeState.draft.title'),
+      detail: t('pullRequests.mergeState.draft.detail'),
       canMerge: false,
     };
   }
@@ -64,62 +66,63 @@ function computeMergeUiState(pr: PullRequest): MergeUiState {
       return {
         kind: 'ready',
         severity: 'success',
-        title: 'Ready to merge',
-        detail: 'No conflicts or required reviews.',
+        title: t('pullRequests.mergeState.ready.title'),
+        detail: t('pullRequests.mergeState.ready.detail'),
         canMerge: true,
       };
     case 'DIRTY':
       return {
         kind: 'conflicts',
         severity: 'error',
-        title: 'Merge conflicts',
-        detail: 'Resolve conflicts before merging.',
+        title: t('pullRequests.mergeState.conflicts.title'),
+        detail: t('pullRequests.mergeState.conflicts.detail'),
         canMerge: false,
       };
     case 'BEHIND':
       return {
         kind: 'behind',
         severity: 'warning',
-        title: 'Branch is out-of-date',
-        detail: 'Update branch before merging.',
+        title: t('pullRequests.mergeState.behind.title'),
+        detail: t('pullRequests.mergeState.behind.detail'),
         canMerge: false,
       };
     case 'BLOCKED':
       return {
         kind: 'blocked',
         severity: 'error',
-        title: 'Merging is blocked',
-        detail: 'Required reviews or branch protections not satisfied.',
+        title: t('pullRequests.mergeState.blocked.title'),
+        detail: t('pullRequests.mergeState.blocked.detail'),
         canMerge: false,
       };
     case 'HAS_HOOKS':
       return {
         kind: 'blocked',
         severity: 'error',
-        title: 'Merging is blocked',
-        detail: 'Required checks are not satisfied.',
+        title: t('pullRequests.mergeState.blocked.title'),
+        detail: t('pullRequests.mergeState.checksBlocked.detail'),
         canMerge: false,
       };
     case 'UNSTABLE':
       return {
         kind: 'unstable',
         severity: 'warning',
-        title: 'Checks not passing',
-        detail: 'Review failing checks before merging.',
+        title: t('pullRequests.mergeState.unstable.title'),
+        detail: t('pullRequests.mergeState.unstable.detail'),
         canMerge: false,
       };
     default:
       return {
         kind: 'unknown',
         severity: 'neutral',
-        title: 'Merge status unknown',
-        detail: 'Refresh to try again.',
+        title: t('pullRequests.mergeState.unknown.title'),
+        detail: t('pullRequests.mergeState.unknown.detail'),
         canMerge: false,
       };
   }
 }
 
 export const PullRequestEntry = observer(function PullRequestEntry({ pr }: { pr: PullRequest }) {
+  const { t } = useTranslation();
   const task = useProvisionedTask();
   const prStatus = pr.status;
   const prStore = task.workspace.pr;
@@ -129,7 +132,7 @@ export const PullRequestEntry = observer(function PullRequestEntry({ pr }: { pr:
   const tab = diffView.effectivePrTab;
   const isOpen = pr.status === 'open';
 
-  const uiState = computeMergeUiState(pr);
+  const uiState = computeMergeUiState(pr, t);
 
   const doMerge = async (strategy: MergeMode) => {
     setIsMerging(true);
@@ -145,9 +148,11 @@ export const PullRequestEntry = observer(function PullRequestEntry({ pr }: { pr:
       void doMerge(strategy);
     } else {
       showConfirm({
-        title: 'Merge anyway?',
-        description: (uiState.detail ?? uiState.title) + ' Are you sure you want to proceed?',
-        confirmLabel: 'Merge anyway',
+        title: t('pullRequests.mergeAnywayTitle'),
+        description: t('pullRequests.mergeAnywayDescription', {
+          reason: uiState.detail ?? uiState.title,
+        }),
+        confirmLabel: t('pullRequests.mergeAnywayConfirm'),
         variant: 'destructive',
         onSuccess: () => void doMerge(strategy),
       });
@@ -157,8 +162,8 @@ export const PullRequestEntry = observer(function PullRequestEntry({ pr }: { pr:
   const mergeActions: SplitButtonAction[] = (['merge', 'squash', 'rebase'] as const).map(
     (strategy) => ({
       value: strategy,
-      label: mergeLabels[strategy],
-      description: mergeDescriptions[strategy],
+      label: t(mergeLabelKeys[strategy]),
+      description: t(mergeDescriptionKeys[strategy]),
       action: () => handleMergeClick(strategy),
     })
   );
@@ -193,13 +198,13 @@ export const PullRequestEntry = observer(function PullRequestEntry({ pr }: { pr:
           }}
         >
           <ToggleGroupItem className="flex-1" value="files" disabled={!isOpen}>
-            Files
+            {t('pullRequests.tabs.files')}
           </ToggleGroupItem>
           <ToggleGroupItem className="flex-1" value="commits">
-            Commits
+            {t('pullRequests.tabs.commits')}
           </ToggleGroupItem>
           <ToggleGroupItem className="flex-1" value="checks">
-            Checks
+            {t('pullRequests.tabs.checks')}
           </ToggleGroupItem>
         </ToggleGroup>
         <div className="min-h-0 flex-1 overflow-y-auto">

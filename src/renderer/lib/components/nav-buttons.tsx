@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useTranslation } from 'react-i18next';
 import { getTaskView } from '@renderer/features/tasks/stores/task-selectors';
 import { appState } from '@renderer/lib/stores/app-state';
 import type { HistoryEntry } from '@renderer/lib/stores/navigation-history-store';
@@ -20,6 +21,7 @@ export function applyHistoryEntry(entry: HistoryEntry): void {
 }
 
 export const NavButtons = observer(function NavButtons() {
+  const { t } = useTranslation();
   const { canGoBack, canGoForward } = appState.history;
   return (
     <div className="[-webkit-app-region:no-drag] flex items-center gap-0.5">
@@ -38,7 +40,7 @@ export const NavButtons = observer(function NavButtons() {
           <ArrowLeft className="h-4 w-4" />
         </TooltipTrigger>
         <TooltipContent>
-          Go Back
+          {t('navigation.goBack')}
           <ShortcutHint settingsKey="navigateBack" />
         </TooltipContent>
       </Tooltip>
@@ -57,7 +59,7 @@ export const NavButtons = observer(function NavButtons() {
           <ArrowRight className="h-4 w-4" />
         </TooltipTrigger>
         <TooltipContent>
-          Go Forward
+          {t('navigation.goForward')}
           <ShortcutHint settingsKey="navigateForward" />
         </TooltipContent>
       </Tooltip>

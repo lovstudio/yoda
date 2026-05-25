@@ -1,4 +1,5 @@
 import { ChevronDown, Plus, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { type SelectionState } from '@renderer/features/tasks/diff-view/stores/changes-view-store';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
@@ -26,6 +27,8 @@ export function SectionHeader({
   collapsed,
   onToggleCollapsed,
 }: SectionHeaderProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="shrink-0 flex items-center justify-between px-3.5 h-10">
       <div className="flex items-center gap-2 justify-between w-full">
@@ -46,7 +49,7 @@ export function SectionHeader({
           checked={selectionState === 'all'}
           indeterminate={selectionState === 'partial'}
           onCheckedChange={onToggleAll}
-          aria-label={`Select all ${label.toLowerCase()}`}
+          aria-label={t('common.selectAllLabel', { label: label.toLowerCase() })}
           className="mr-0.5"
         />
       </div>
@@ -74,15 +77,16 @@ export function PullRequestSectionHeader({
   onRefresh?: () => void;
   isRefreshing?: boolean;
 }) {
+  const { t } = useTranslation();
   const prActions: SplitButtonAction[] = [
     {
       value: 'create-pr',
-      label: 'Create PR',
+      label: t('pullRequests.createPr'),
       action: () => onCreatePr?.(),
     },
     {
       value: 'create-draft-pr',
-      label: 'Create draft PR',
+      label: t('pullRequests.createDraftPr'),
       action: () => onCreateDraftPr?.(),
     },
   ];
@@ -92,7 +96,7 @@ export function PullRequestSectionHeader({
       <div className="flex items-center gap-2 justify-between w-full min-w-0">
         <button onClick={onToggleCollapsed} className="min-w-0">
           <span className="text-sm text-foreground-muted flex items-center gap-2 min-w-0">
-            <span className="truncate">Pull Requests</span>{' '}
+            <span className="truncate">{t('pullRequests.title')}</span>{' '}
             <Badge variant="secondary" className="shrink-0">
               {count}
             </Badge>
@@ -118,7 +122,7 @@ export function PullRequestSectionHeader({
               />
             </TooltipTrigger>
             <TooltipContent>
-              {hasOpenPr ? 'A pull request is already open' : 'Create a pull request'}
+              {hasOpenPr ? t('pullRequests.alreadyOpen') : t('pullRequests.createPullRequest')}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -134,7 +138,7 @@ export function PullRequestSectionHeader({
                 </Button>
               }
             />
-            <TooltipContent>Refresh pull requests</TooltipContent>
+            <TooltipContent>{t('pullRequests.refresh')}</TooltipContent>
           </Tooltip>
         </div>
       </div>

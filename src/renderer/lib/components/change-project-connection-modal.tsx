@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SshConnectionSelector } from '@renderer/features/projects/components/add-project-modal/ssh-connection-selector';
 import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
 import { useShowModal, type BaseModalProps } from '@renderer/lib/modal/modal-provider';
@@ -25,6 +26,7 @@ export function ChangeProjectConnectionModal({
   onSuccess,
   onClose,
 }: ChangeProjectConnectionModalProps & BaseModalProps<void>) {
+  const { t } = useTranslation();
   const [selectedConnectionId, setSelectedConnectionId] = useState(currentConnectionId);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -75,26 +77,26 @@ export function ChangeProjectConnectionModal({
     <ModalLayout
       header={
         <DialogHeader>
-          <DialogTitle>Change SSH Connection</DialogTitle>
+          <DialogTitle>{t('ssh.changeConnection')}</DialogTitle>
         </DialogHeader>
       }
       footer={
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isSaving}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <ConfirmButton
             onClick={() => void handleSave()}
             disabled={isSaving || !selectedConnectionId}
           >
-            {isSaving ? 'Saving…' : 'Save'}
+            {isSaving ? t('common.saving') : t('common.save')}
           </ConfirmButton>
         </DialogFooter>
       }
     >
       <DialogContentArea>
         <Field>
-          <FieldLabel>SSH Connection</FieldLabel>
+          <FieldLabel>{t('ssh.connection')}</FieldLabel>
           <SshConnectionSelector
             connectionId={selectedConnectionId}
             onConnectionIdChange={setSelectedConnectionId}

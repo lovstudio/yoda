@@ -1,6 +1,7 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { ChevronDown } from 'lucide-react';
 import React, { useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getAppById, isValidOpenInAppId, type OpenInAppId } from '@shared/openInApps';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -30,6 +31,7 @@ export const OpenInMenu: React.FC<OpenInMenuProps> = ({
   sshConnectionId = null,
   borderless = false,
 }) => {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { icons, labels, installedApps, availability, loading } = useOpenInApps();
   const { value: openIn, update } = useAppSettingsKey('openIn');
@@ -58,20 +60,20 @@ export const OpenInMenu: React.FC<OpenInMenuProps> = ({
         });
         if (!res?.success) {
           toast({
-            title: `Open in ${label} failed`,
-            description: res?.error || 'Application not available.',
+            title: t('openIn.failed', { label }),
+            description: res?.error || t('openIn.unavailable'),
             variant: 'destructive',
           });
         }
       } catch (e: unknown) {
         toast({
-          title: `Open in ${label} failed`,
+          title: t('openIn.failed', { label }),
           description: e instanceof Error ? e.message : String(e),
           variant: 'destructive',
         });
       }
     },
-    [labels, path, isRemote, sshConnectionId, toast]
+    [labels, path, isRemote, sshConnectionId, toast, t]
   );
 
   const sortedApps = useMemo(() => {
@@ -130,7 +132,9 @@ export const OpenInMenu: React.FC<OpenInMenuProps> = ({
                   void triggerOpenIn(buttonAppId);
                 }}
                 disabled={!buttonAppId || loading}
-                aria-label={buttonAppLabel ? `Open in ${buttonAppLabel}` : 'Open'}
+                aria-label={
+                  buttonAppLabel ? t('openIn.openIn', { label: buttonAppLabel }) : t('common.open')
+                }
               >
                 {buttonAppId && icons[buttonAppId] && (
                   <img
@@ -146,7 +150,7 @@ export const OpenInMenu: React.FC<OpenInMenuProps> = ({
           />
           <TooltipContent side="bottom">
             <div className="flex flex-col gap-1">
-              <span>Open in {buttonAppLabel || 'editor'}</span>
+              <span>{t('openIn.openIn', { label: buttonAppLabel || t('openIn.editor') })}</span>
               <ShortcutHint settingsKey="openInEditor" />
             </div>
           </TooltipContent>
@@ -166,13 +170,13 @@ export const OpenInMenu: React.FC<OpenInMenuProps> = ({
               <SelectTrigger
                 showChevron={false}
                 className="group shrink-0 size-6 border-none bg-transparent flex items-center justify-center transition-colors hover:bg-background-1 hover:text-foreground"
-                aria-label="Open in options"
+                aria-label={t('openIn.options')}
               >
                 <ChevronDown className="size-3.5" />
               </SelectTrigger>
             }
           ></TooltipTrigger>
-          <TooltipContent side="bottom">Select open in app</TooltipContent>
+          <TooltipContent side="bottom">{t('openIn.selectApp')}</TooltipContent>
         </Tooltip>
         <SelectContent align="end" alignItemWithTrigger={false} sideOffset={6}>
           {menuApps.map((app) => {
