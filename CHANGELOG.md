@@ -6,6 +6,15 @@ This project resets to **0.1.0** with the rebrand from `emdash` to `yoda`. Older
 release history (`v0.4.x`, `v1.1.x`) belongs to the upstream `emdash` codebase
 and is preserved in git tags only.
 
+## 0.3.4 — 2026-05-25
+
+### Fixed
+
+- Route stable auto-update checks through GitHub Releases and publish the
+  generated update manifests and blockmaps with production release artifacts.
+- Merge macOS x64 and arm64 update manifests so both architectures can discover
+  the latest release from the same feed.
+
 ## 0.3.3 — 2026-05-25
 
 ### Added
