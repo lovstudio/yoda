@@ -3,8 +3,8 @@ import {
   APP_ID,
   ARTIFACT_PREFIX,
   PRODUCT_NAME,
-  R2_BASE_URL,
   UPDATE_CHANNEL,
+  UPDATE_FEED_BASE_URL,
 } from './src/shared/app-identity.canary';
 
 const config: Configuration = {
@@ -15,7 +15,7 @@ const config: Configuration = {
   publish: [
     {
       provider: 'generic',
-      url: R2_BASE_URL,
+      url: UPDATE_FEED_BASE_URL,
       channel: UPDATE_CHANNEL,
     },
   ],

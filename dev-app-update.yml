@@ -1,3 +1,3 @@
 provider: generic
-url: https://releases.lovstudio.ai/yoda
+url: https://github.com/lovstudio/yoda/releases/latest/download
 channel: v1-stable
