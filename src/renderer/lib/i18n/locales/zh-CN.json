@@ -21,6 +21,9 @@
     "search": "搜索",
     "copy": "复制",
     "copied": "已复制",
+    "copyFailed": "复制失败",
+    "copyDebugInfo": "复制调试信息",
+    "debugInfoCopied": "调试信息已复制",
     "retry": "重试",
     "open": "打开",
     "remove": "移除",
@@ -85,6 +88,8 @@
     "filterAll": "全部项目",
     "filterLocal": "仅本地",
     "filterSsh": "仅 SSH",
+    "hideProjectsWithoutActiveTasks": "隐藏无活动任务的项目",
+    "hideProjectsWithoutActiveTasksDescription": "仅在侧边栏保留至少包含一个可见、未归档任务的项目，让项目导航聚焦于当前需要推进的工作。",
     "expandAll": "全部展开",
     "collapseAll": "全部折叠",
     "clearManualOrder": "重置任务顺序",
@@ -107,6 +112,7 @@
       "failed": "重命名项目失败"
     },
     "archiveTask": "归档任务",
+    "archiveTaskSkipPre": "归档（跳过归档前命令）",
     "archiveTaskWithNote": "归档任务（附备注）…",
     "configurePreArchive": "配置归档前命令…",
     "phase": {

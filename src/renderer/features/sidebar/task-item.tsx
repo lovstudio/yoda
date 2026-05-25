@@ -72,13 +72,15 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     void taskManager?.provisionTask(taskId);
   };
 
-  const handleArchive = () => {
+  const handleArchive = (options?: { skipPreCommand?: boolean }) => {
     if (isArchiving) return;
     if (isActive) navigate('project', { projectId });
     setIsArchiving(true);
     void (async () => {
       try {
-        await runPreArchiveCommand(projectId, taskId, preArchiveCommand);
+        if (!options?.skipPreCommand) {
+          await runPreArchiveCommand(projectId, taskId, preArchiveCommand);
+        }
         await taskManager?.archiveTask(taskId);
       } finally {
         setIsArchiving(false);
@@ -164,7 +166,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     onMarkNeedsReview: () => void task.setNeedsReview(true),
     onUnmarkNeedsReview: () => void task.setNeedsReview(false),
     onRename: handleRename,
-    onArchive: handleArchive,
+    onArchive: () => handleArchive(),
+    onArchiveSkipPreCommand: preArchiveCommand.trim()
+      ? () => handleArchive({ skipPreCommand: true })
+      : undefined,
     onArchiveWithNote: handleArchiveWithNote,
     onConfigurePreArchive: () => showEditPreArchive({}),
     onReconnect: handleReconnect,

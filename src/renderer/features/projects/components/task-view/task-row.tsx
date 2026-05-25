@@ -46,12 +46,14 @@ export const TaskRow = observer(function TaskRow({
   const preArchiveCommand = homeDraft?.preArchiveCommand ?? '';
   const [isArchiving, setIsArchiving] = useState(false);
 
-  const handleArchive = () => {
+  const handleArchive = (options?: { skipPreCommand?: boolean }) => {
     if (isArchiving) return;
     setIsArchiving(true);
     void (async () => {
       try {
-        await runPreArchiveCommand(task.data.projectId, task.data.id, preArchiveCommand);
+        if (!options?.skipPreCommand) {
+          await runPreArchiveCommand(task.data.projectId, task.data.id, preArchiveCommand);
+        }
         await taskManager?.archiveTask(task.data.id);
       } finally {
         setIsArchiving(false);
@@ -99,7 +101,10 @@ export const TaskRow = observer(function TaskRow({
       onMarkNeedsReview={() => void task.setNeedsReview(true)}
       onUnmarkNeedsReview={() => void task.setNeedsReview(false)}
       onRename={handleRename}
-      onArchive={handleArchive}
+      onArchive={() => handleArchive()}
+      onArchiveSkipPreCommand={
+        preArchiveCommand.trim() ? () => handleArchive({ skipPreCommand: true }) : undefined
+      }
       onArchiveWithNote={handleArchiveWithNote}
       onConfigurePreArchive={() => showEditPreArchive({})}
       onRestore={handleRestore}

@@ -21,6 +21,9 @@
     "search": "Search",
     "copy": "Copy",
     "copied": "Copied",
+    "copyFailed": "Copy failed",
+    "copyDebugInfo": "Copy debug info",
+    "debugInfoCopied": "Debug info copied",
     "retry": "Retry",
     "open": "Open",
     "remove": "Remove",
@@ -85,6 +88,8 @@
     "filterAll": "All projects",
     "filterLocal": "Local only",
     "filterSsh": "SSH only",
+    "hideProjectsWithoutActiveTasks": "Hide projects without active tasks",
+    "hideProjectsWithoutActiveTasksDescription": "Filters the sidebar to projects with at least one visible, non-archived task, keeping project navigation focused on current work.",
     "expandAll": "Expand all",
     "collapseAll": "Collapse all",
     "clearManualOrder": "Reset task order",
@@ -109,6 +114,7 @@
       "failed": "Failed to rename project"
     },
     "archiveTask": "Archive task",
+    "archiveTaskSkipPre": "Archive without pre-command",
     "archiveTaskWithNote": "Archive task with note…",
     "configurePreArchive": "Configure pre-archive command…",
     "phase": {

@@ -2,6 +2,7 @@ import type { TFunction } from 'i18next';
 import {
   Activity,
   Archive,
+  ArchiveX,
   CircleDot,
   CircleSlash,
   Copy,
@@ -46,6 +47,7 @@ interface TaskMenuActions {
   onUnmarkNeedsReview: () => void;
   onRename: () => void;
   onArchive: () => void;
+  onArchiveSkipPreCommand?: () => void;
   onArchiveWithNote?: () => void;
   onConfigurePreArchive?: () => void;
   onRestore?: () => void;
@@ -166,6 +168,15 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       label: t('sidebar.archiveTask'),
       onSelect: actions.onArchive,
     });
+    if (actions.onArchiveSkipPreCommand) {
+      items.push({
+        key: 'archive-skip-pre',
+        group: 3,
+        icon: ArchiveX,
+        label: t('sidebar.archiveTaskSkipPre'),
+        onSelect: actions.onArchiveSkipPreCommand,
+      });
+    }
     if (actions.onArchiveWithNote) {
       items.push({
         key: 'archive-with-note',
