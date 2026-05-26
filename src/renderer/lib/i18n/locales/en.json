@@ -102,6 +102,8 @@
     "reconnect": "Reconnect",
     "changeSshConnection": "Change SSH connection",
     "archiveProject": "Archive project",
+    "pinProject": "Pin project",
+    "unpinProject": "Unpin project",
     "renameProject": {
       "menuLabel": "Rename project…",
       "title": "Rename project",

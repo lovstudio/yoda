@@ -35,12 +35,28 @@ export type SidebarRow =
   | { kind: 'project'; projectId: string }
   | { kind: 'task'; projectId: string; taskId: string };
 
+export type PinnedSidebarEntry =
+  | { kind: 'project'; projectId: string }
+  | { kind: 'project-task'; projectId: string; taskId: string }
+  | { kind: 'task'; projectId: string; taskId: string };
+
 export type ProjectTypeFilter = 'all' | 'local' | 'ssh';
+
+function isActiveSidebarTask(task: TaskStore): boolean {
+  return task.state === 'unregistered' || !('archivedAt' in task.data && task.data.archivedAt);
+}
+
+type RegisteredProjectStore = ProjectStore & { data: LocalProject | SshProject };
+
+function isRegisteredProject(project: ProjectStore): project is RegisteredProjectStore {
+  return project.state !== 'unregistered' && project.data !== null;
+}
 
 export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   projectOrder: string[] = [];
   taskOrderByProject: Record<string, string[]> = {};
   expandedProjectIds = observable.set<string>();
+  pinnedProjectIds = observable.set<string>();
   taskSortBy: SidebarTaskSortBy = 'created-at';
   pinnedCollapsed = false;
   projectsCollapsed = false;
@@ -49,6 +65,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   constructor(private readonly projectManager: ProjectManagerStore) {
     makeAutoObservable(this, {
       expandedProjectIds: false,
+      pinnedProjectIds: false,
       sidebarRows: computed,
       pinnedSidebarEntries: computed,
     });
@@ -83,23 +100,14 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     const all = Array.from(this.projectManager.projects.values());
 
     const unregistered = all.filter((p): p is UnregisteredProject => p.state === 'unregistered');
-    const real = all.filter(
-      (p): p is ProjectStore & { data: LocalProject | SshProject } => p.state !== 'unregistered'
-    );
+    const real = all.filter(isRegisteredProject);
 
     const typeFiltered =
       this.projectTypeFilter === 'all'
         ? real
         : real.filter((p) => p.data.type === this.projectTypeFilter);
 
-    const sorted = [...typeFiltered].sort((a, b) => {
-      const ai = this.projectOrder.indexOf(a.data.id);
-      const bi = this.projectOrder.indexOf(b.data.id);
-      if (ai === -1 && bi === -1) return 0;
-      if (ai === -1) return 1;
-      if (bi === -1) return -1;
-      return ai - bi;
-    });
+    const sorted = this.sortProjectsForSidebar(typeFiltered);
 
     return [...unregistered, ...sorted];
   }
@@ -108,10 +116,11 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     const rows: SidebarRow[] = [];
     for (const project of this.orderedProjects) {
       const projectId = project.state === 'unregistered' ? project.id : project.data!.id;
+      if (project.state !== 'unregistered' && this.isProjectPinned(projectId)) continue;
       rows.push({ kind: 'project', projectId });
       if (this.expandedProjectIds.has(projectId) && project.mountedProject) {
         const tasks = Array.from(project.mountedProject.taskManager.tasks.values()).filter(
-          (t) => t.state === 'unregistered' || !('archivedAt' in t.data && t.data.archivedAt)
+          isActiveSidebarTask
         );
         const manualOrder = this.taskOrderByProject[projectId];
         const ordered = manualOrder?.length
@@ -126,22 +135,51 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     return rows;
   }
 
-  /** Flat list of pinned tasks (all mounted projects), same sort rules as project tree tasks. */
-  get pinnedSidebarEntries(): { projectId: string; taskId: string }[] {
+  /** Pinned projects plus pinned tasks that are not already under a pinned project. */
+  get pinnedSidebarEntries(): PinnedSidebarEntry[] {
+    const entries: PinnedSidebarEntry[] = [];
+    const pinnedProjectIds = new Set(this.pinnedProjectIds);
+    const pinnedProjects = this.sortProjectsForSidebar(
+      Array.from(this.projectManager.projects.values()).filter(isRegisteredProject)
+    ).filter((project) => pinnedProjectIds.has(project.data.id));
+
+    for (const project of pinnedProjects) {
+      const projectId = project.data.id;
+      entries.push({ kind: 'project', projectId });
+      if (!this.expandedProjectIds.has(projectId) || !project.mountedProject) continue;
+
+      const tasks = Array.from(project.mountedProject.taskManager.tasks.values()).filter(
+        isActiveSidebarTask
+      );
+      const manualOrder = this.taskOrderByProject[projectId];
+      const ordered = manualOrder?.length
+        ? this.mergeTaskOrder(projectId, tasks)
+        : this.sortTasksForSidebar(tasks);
+      for (const task of ordered) {
+        entries.push({ kind: 'project-task', projectId, taskId: task.data.id });
+      }
+    }
+
     const pairs: { projectId: string; task: TaskStore }[] = [];
     for (const project of this.projectManager.projects.values()) {
       if (!project.mountedProject) continue;
       const projectId = project.state === 'unregistered' ? project.id : project.data?.id;
       if (!projectId) continue;
+      if (pinnedProjectIds.has(projectId) && this.expandedProjectIds.has(projectId)) continue;
       for (const task of project.mountedProject.taskManager.tasks.values()) {
-        const visible =
-          task.state === 'unregistered' || !('archivedAt' in task.data && task.data.archivedAt);
-        if (!visible || !task.data.isPinned) continue;
+        if (!isActiveSidebarTask(task) || !task.data.isPinned) continue;
         pairs.push({ projectId, task });
       }
     }
     pairs.sort((a, b) => this.compareSidebarTasks(a.task, b.task));
-    return pairs.map(({ projectId, task }) => ({ projectId, taskId: task.data.id }));
+    return [
+      ...entries,
+      ...pairs.map(({ projectId, task }) => ({
+        kind: 'task' as const,
+        projectId,
+        taskId: task.data.id,
+      })),
+    ];
   }
 
   get isEmpty(): boolean {
@@ -154,6 +192,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       projectOrder: [...this.projectOrder],
       taskOrderByProject: { ...this.taskOrderByProject },
       taskSortBy: this.taskSortBy,
+      pinnedProjectIds: this.validPinnedProjectIds(),
       pinnedCollapsed: this.pinnedCollapsed,
       projectsCollapsed: this.projectsCollapsed,
     };
@@ -172,6 +211,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (snapshot.taskSortBy !== undefined) {
       const v = parseSidebarTaskSortBy(snapshot.taskSortBy);
       if (v !== undefined) this.taskSortBy = v;
+    }
+    if (snapshot.pinnedProjectIds !== undefined) {
+      this.pinnedProjectIds.replace(snapshot.pinnedProjectIds);
     }
     if (snapshot.pinnedCollapsed !== undefined) {
       this.pinnedCollapsed = snapshot.pinnedCollapsed;
@@ -203,6 +245,24 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   setProjectTypeFilter(filter: ProjectTypeFilter): void {
     this.projectTypeFilter = filter;
+  }
+
+  isProjectPinned(projectId: string): boolean {
+    return this.pinnedProjectIds.has(projectId);
+  }
+
+  setProjectPinned(projectId: string, isPinned: boolean): void {
+    if (!isPinned) {
+      this.pinnedProjectIds.delete(projectId);
+      return;
+    }
+    const project = this.projectManager.projects.get(projectId);
+    if (!project || project.state === 'unregistered') return;
+    this.pinnedProjectIds.add(projectId);
+  }
+
+  toggleProjectPinned(projectId: string): void {
+    this.setProjectPinned(projectId, !this.isProjectPinned(projectId));
   }
 
   clearManualTaskOrder(): void {
@@ -275,5 +335,23 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   private sortTasksForSidebar(tasks: TaskStore[]): TaskStore[] {
     return [...tasks].sort((a, b) => this.compareSidebarTasks(a, b));
+  }
+
+  private sortProjectsForSidebar(projects: RegisteredProjectStore[]): RegisteredProjectStore[] {
+    return [...projects].sort((a, b) => {
+      const ai = this.projectOrder.indexOf(a.data.id);
+      const bi = this.projectOrder.indexOf(b.data.id);
+      if (ai === -1 && bi === -1) return 0;
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+  }
+
+  private validPinnedProjectIds(): string[] {
+    return [...this.pinnedProjectIds].filter((id) => {
+      const project = this.projectManager.projects.get(id);
+      return project !== undefined && project.state !== 'unregistered';
+    });
   }
 }

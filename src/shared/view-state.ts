@@ -90,6 +90,7 @@ export type SidebarSnapshot = {
   projectOrder?: string[];
   taskOrderByProject?: Record<string, string[]>;
   taskSortBy?: SidebarTaskSortBy;
+  pinnedProjectIds?: string[];
   pinnedCollapsed?: boolean;
   projectsCollapsed?: boolean;
 };

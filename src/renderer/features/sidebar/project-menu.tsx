@@ -1,4 +1,4 @@
-import { Archive, CableIcon, PencilLine, RotateCcw, Settings2 } from 'lucide-react';
+import { Archive, CableIcon, PencilLine, Pin, PinOff, RotateCcw, Settings2 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -17,8 +17,12 @@ import {
 } from '@renderer/lib/ui/dropdown-menu';
 
 interface ProjectMenuActions {
+  isPinned: boolean;
+  canPin: boolean;
   isSsh: boolean;
   canReconnect: boolean;
+  onPin: () => void;
+  onUnpin: () => void;
   onReconnect?: () => void;
   onChangeSshConnection?: () => void;
   onConfigureScripts?: () => void;
@@ -41,6 +45,25 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   const items: MenuItemDescriptor[] = [];
 
   // group 1 — configuration
+  if (actions.canPin) {
+    items.push(
+      actions.isPinned
+        ? {
+            key: 'unpin',
+            group: 1,
+            icon: PinOff,
+            label: t('sidebar.unpinProject'),
+            onSelect: actions.onUnpin,
+          }
+        : {
+            key: 'pin',
+            group: 1,
+            icon: Pin,
+            label: t('sidebar.pinProject'),
+            onSelect: actions.onPin,
+          }
+    );
+  }
   if (actions.onRename) {
     items.push({
       key: 'rename',

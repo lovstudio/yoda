@@ -4,6 +4,7 @@ import {
   FolderInput,
   Loader2,
   MoreHorizontal,
+  Pin,
   Plus,
   TriangleAlert,
 } from 'lucide-react';
@@ -171,6 +172,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     ? appState.sshConnections.stateFor(sshConnectionId)
     : null;
   const canReconnect = sshConnectionState !== 'connected';
+  const canPin = project.state !== 'unregistered';
+  const isPinned = sidebarStore.isProjectPinned(projectId);
   const ProjectIcon = isSshProject ? FolderInput : FolderClosed;
 
   const renderSpinnerWithTooltip = () => {
@@ -196,8 +199,12 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   };
 
   const menuActions = {
+    isPinned,
+    canPin,
     isSsh: isSshProject,
     canReconnect,
+    onPin: () => sidebarStore.setProjectPinned(projectId, true),
+    onUnpin: () => sidebarStore.setProjectPinned(projectId, false),
     onReconnect: sshConnectionId
       ? () => {
           void appState.sshConnections.connect(sshConnectionId).catch(() => {});
@@ -277,6 +284,23 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
           </span>
         </div>
         <div className="flex items-center gap-0.5">
+          <SidebarItemMiniButton
+            type="button"
+            className={cn(
+              'transition-opacity duration-150',
+              isPinned || isMenuOpen
+                ? 'opacity-100 text-foreground-tertiary'
+                : 'opacity-0 group-hover/row:opacity-100'
+            )}
+            aria-label={isPinned ? t('sidebar.unpinProject') : t('sidebar.pinProject')}
+            disabled={!canPin}
+            onClick={(e) => {
+              e.stopPropagation();
+              sidebarStore.toggleProjectPinned(projectId);
+            }}
+          >
+            <Pin className="h-4 w-4" fill={isPinned ? 'currentColor' : 'none'} />
+          </SidebarItemMiniButton>
           <ProjectActionsMenu
             {...menuActions}
             open={isMenuOpen}

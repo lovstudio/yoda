@@ -100,6 +100,8 @@
     "reconnect": "重新连接",
     "changeSshConnection": "更换 SSH 连接",
     "archiveProject": "归档项目",
+    "pinProject": "固定项目",
+    "unpinProject": "取消固定项目",
     "renameProject": {
       "menuLabel": "重命名项目…",
       "title": "重命名项目",
