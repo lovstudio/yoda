@@ -162,7 +162,12 @@ export class FrontendPty {
     if (this.pendingWrites.length === 0) return;
     const buffered = this.pendingWrites.join('');
     this.pendingWrites = [];
-    this.terminal.write(buffered);
+    this.terminal.write(buffered, () => {
+      try {
+        this.terminal.scrollToBottom();
+        this.terminal.refresh(0, this.terminal.rows - 1);
+      } catch {}
+    });
   }
 
   /**

@@ -49,6 +49,12 @@ describe('measureDimensions', () => {
     expect(measureDimensions(container, CW, CH)).toBeNull();
   });
 
+  it('returns null when computed width is 0', () => {
+    // width: 0 is the width-chain failure mode during hidden/transitioning panes.
+    container = makeContainer('0px', '400px');
+    expect(measureDimensions(container, CW, CH)).toBeNull();
+  });
+
   it('returns null when container has no explicit size (auto / 0)', () => {
     container = document.createElement('div');
     document.body.appendChild(container);

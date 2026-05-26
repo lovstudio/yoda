@@ -53,8 +53,19 @@ function getCellMetrics(terminal: Terminal): { width: number; height: number } |
 const PTY_RESIZE_DEBOUNCE_MS = 120;
 const MIN_TERMINAL_COLS = 2;
 const MIN_TERMINAL_ROWS = 1;
+const MAX_LAYOUT_READY_RETRIES = 8;
+const LAYOUT_READY_RETRY_MS = 50;
+const MIN_READY_TERMINAL_COLS = 10;
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+
+function isMeasureTargetReady(
+  element: HTMLElement,
+  cell: { width: number; height: number }
+): boolean {
+  const rect = element.getBoundingClientRect();
+  return rect.width >= cell.width * MIN_READY_TERMINAL_COLS && rect.height >= cell.height;
+}
 
 export interface UsePtyOptions {
   /** Deterministic PTY session ID: makePtySessionId(projectId, scopeId, leafId). */
@@ -186,12 +197,17 @@ export function usePty(
   const queuePtyResizeRef = useRef(queuePtyResize);
   queuePtyResizeRef.current = queuePtyResize;
 
+  const retryMeasureAndResize = useCallback((retries: number) => {
+    if (retries >= MAX_LAYOUT_READY_RETRIES) return false;
+    setTimeout(() => measureAndResizeRef.current(retries + 1), LAYOUT_READY_RETRY_MS);
+    return true;
+  }, []);
+
   // measureAndResize is the single entry point for all DOM measurement + PTY
-  // resize work.  Mirrors xterm's FitAddon.proposeDimensions() by measuring
-  // terminal.element.parentElement (the FrontendPty's ownedContainer) — the
-  // exact space the terminal occupies — rather than a distant ancestor div.
-  // Reports to PaneSizingContext (which broadcasts to ALL sessions in the pane)
-  // or directly via queuePtyResize for standalone terminals.
+  // resize work. Prefer the pane wrapper when available, then fall back to the
+  // terminal's owned container. Reports to PaneSizingContext (which broadcasts
+  // to ALL sessions in the pane) or directly via queuePtyResize for standalone
+  // terminals.
   const measureAndResize = useCallback(
     (retries = 0) => {
       if (!termRef.current) return;
@@ -204,22 +220,32 @@ export function usePty(
           const cell = getCellMetrics(term);
           if (!cell) {
             // Cold-path: terminal was opened off-DOM so xterm's font measurement
-            // hasn't populated yet.  Retry up to 5 times to avoid an infinite loop.
-            if (retries < 5) {
-              setTimeout(() => measureAndResizeRef.current(retries + 1), 100);
-            }
+            // hasn't populated yet.  Retry a bounded number of times to avoid
+            // flushing scrollback at stale constructor dimensions.
+            retryMeasureAndResize(retries);
             return;
           }
 
-          // Measure the terminal's immediate parent (the FrontendPty's ownedContainer),
-          // matching FitAddon.proposeDimensions().  Fall back to the mount-target
-          // container for standalone terminals not using the pool.
+          // Prefer the pane wrapper: it is stable before the terminal's owned
+          // container has fully settled after being reparented from the off-screen host.
           const termParent = (term as unknown as { element?: HTMLElement }).element?.parentElement;
-          const measureTarget = termParent ?? (containerRef.current as HTMLElement | null);
+          const measureTarget =
+            pane?.containerRef.current ??
+            termParent ??
+            (containerRef.current as HTMLElement | null);
           if (!measureTarget) return;
 
-          const dims = measureDimensions(measureTarget, cell.width, cell.height);
-          if (!dims) return;
+          if (!isMeasureTargetReady(measureTarget, cell) && retryMeasureAndResize(retries)) {
+            return;
+          }
+
+          const dims =
+            pane?.measureCurrentDimensions(cell.width, cell.height) ??
+            measureDimensions(measureTarget, cell.width, cell.height);
+          if (!dims) {
+            retryMeasureAndResize(retries);
+            return;
+          }
           const { cols: targetCols, rows: targetRows } = dims;
 
           if (term.cols !== targetCols || term.rows !== targetRows) {
@@ -240,7 +266,7 @@ export function usePty(
         }
       });
     },
-    [sessionId, containerRef, pty]
+    [sessionId, containerRef, pty, retryMeasureAndResize]
   );
 
   // Stable ref so the retry setTimeout inside measureAndResize always calls

@@ -34,7 +34,7 @@ export function measureDimensions(
   const style = window.getComputedStyle(container);
   const width = Math.max(0, Number.parseInt(style.width));
   const height = Number.parseInt(style.height);
-  if (Number.isNaN(width) || Number.isNaN(height) || height === 0) return null;
+  if (Number.isNaN(width) || Number.isNaN(height) || width === 0 || height === 0) return null;
   return {
     cols: Math.max(MINIMUM_COLS, Math.floor((width - scrollbarWidth) / cellWidth)),
     rows: Math.max(MINIMUM_ROWS, Math.floor(height / cellHeight)),
