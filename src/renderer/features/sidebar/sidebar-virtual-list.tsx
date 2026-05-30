@@ -19,7 +19,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef, useState } from 'react';
-import { type SidebarRow } from '@renderer/features/sidebar/sidebar-store';
+import { useTranslation } from 'react-i18next';
+import { type SidebarGroupKey, type SidebarRow } from '@renderer/features/sidebar/sidebar-store';
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { useParams, useWorkspaceSlots } from '@renderer/lib/layout/navigation-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
@@ -46,6 +47,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     ? rows.filter((r) => !(r.kind === 'task' && r.projectId === draggingProjectId))
     : rows;
 
+  const dndEnabled = sidebarStore.taskGroupBy === 'project';
   const allDndIds = displayRows.map(rowToDndId);
 
   const virtualizer = useVirtualizer({
@@ -176,16 +178,44 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
                 width: '100%',
                 height: `${vItem.size}px`,
               };
+              if (row.kind === 'group') {
+                return (
+                  <div key={dndId} style={vStyle}>
+                    <SidebarGroupHeader group={row.group} />
+                  </div>
+                );
+              }
               if (row.kind === 'project') {
+                if (!dndEnabled) {
+                  return (
+                    <div key={row.projectId} style={vStyle}>
+                      <SidebarProjectItem projectId={row.projectId} />
+                    </div>
+                  );
+                }
                 return (
                   <SortableRow key={row.projectId} dndId={dndId} style={vStyle}>
                     <SidebarProjectItem projectId={row.projectId} />
                   </SortableRow>
                 );
               }
+              const taskNode = (
+                <SidebarTaskItem
+                  projectId={row.projectId}
+                  taskId={row.taskId}
+                  rowVariant={row.showProjectTag ? 'flat' : 'underProject'}
+                />
+              );
+              if (!dndEnabled) {
+                return (
+                  <div key={`${row.projectId}:${row.taskId}`} style={vStyle}>
+                    {taskNode}
+                  </div>
+                );
+              }
               return (
                 <SortableRow key={`${row.projectId}:${row.taskId}`} dndId={dndId} style={vStyle}>
-                  <SidebarTaskItem projectId={row.projectId} taskId={row.taskId} />
+                  {taskNode}
                 </SortableRow>
               );
             })}
@@ -207,10 +237,28 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
 
 const toProjectDndId = (id: string) => `proj::${id}`;
 const toTaskDndId = (projectId: string, taskId: string) => `task::${projectId}::${taskId}`;
+const toGroupDndId = (group: SidebarGroupKey) =>
+  group.kind === 'type' ? `group::type::${group.type}` : `group::activity::${group.bucket}`;
 
 function rowToDndId(row: SidebarRow): string {
   if (row.kind === 'project') return toProjectDndId(row.projectId);
+  if (row.kind === 'group') return toGroupDndId(row.group);
   return toTaskDndId(row.projectId, row.taskId);
+}
+
+function SidebarGroupHeader({ group }: { group: SidebarGroupKey }) {
+  const { t } = useTranslation();
+  const label =
+    group.kind === 'type'
+      ? group.type === 'local'
+        ? t('sidebar.filterLocal')
+        : t('sidebar.filterSsh')
+      : t(`sidebar.activityBucket.${group.bucket}`);
+  return (
+    <div className="flex h-8 items-center px-2 text-xs font-medium uppercase tracking-wide text-foreground-tertiary-muted select-none">
+      {label}
+    </div>
+  );
 }
 
 // Only allow dropping a project onto another project, and a task onto a task

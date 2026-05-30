@@ -1,4 +1,4 @@
-import { ChevronsDownUp, ChevronsUpDown, ListRestart, Settings2, Zap } from 'lucide-react';
+import { ChevronsDownUp, ChevronsUpDown, EyeOff, ListRestart, Settings2, Zap } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -26,6 +26,8 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
   const customized =
     sidebarStore.projectTypeFilter !== 'all' ||
     sidebarStore.taskSortBy !== 'created-at' ||
+    sidebarStore.taskGroupBy !== 'project' ||
+    sidebarStore.hideProjectsWithoutActiveTasks ||
     expressMode;
 
   return (
@@ -54,7 +56,37 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
             </TooltipTrigger>
             <TooltipContent>{t('sidebar.more')}</TooltipContent>
           </Tooltip>
-          <DropdownMenuContent align="end" className="min-w-48">
+          <DropdownMenuContent align="end" className="min-w-72">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>{t('sidebar.groupBy')}</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={sidebarStore.taskGroupBy}>
+                <DropdownMenuRadioItem
+                  value="project"
+                  onClick={() => sidebarStore.applyGroupBy('project')}
+                >
+                  {t('sidebar.groupByProject')}
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem
+                  value="none"
+                  onClick={() => sidebarStore.applyGroupBy('none')}
+                >
+                  {t('sidebar.groupByNone')}
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem
+                  value="type"
+                  onClick={() => sidebarStore.applyGroupBy('type')}
+                >
+                  {t('sidebar.groupByType')}
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem
+                  value="activity"
+                  onClick={() => sidebarStore.applyGroupBy('activity')}
+                >
+                  {t('sidebar.groupByActivity')}
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuLabel>{t('sidebar.sortBy')}</DropdownMenuLabel>
               <DropdownMenuRadioGroup value={sidebarStore.taskSortBy}>
@@ -95,6 +127,27 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
                   {t('sidebar.filterSsh')}
                 </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <DropdownMenuCheckboxItem
+                      checked={sidebarStore.hideProjectsWithoutActiveTasks}
+                      onCheckedChange={(checked) =>
+                        sidebarStore.setHideProjectsWithoutActiveTasks(checked === true)
+                      }
+                    >
+                      <EyeOff className="size-3.5" />
+                      {t('sidebar.hideProjectsWithoutActiveTasks')}
+                    </DropdownMenuCheckboxItem>
+                  }
+                />
+                <TooltipContent side="left" align="start" className="max-w-72">
+                  {t('sidebar.hideProjectsWithoutActiveTasksDescription')}
+                </TooltipContent>
+              </Tooltip>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>

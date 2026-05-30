@@ -31,8 +31,12 @@ import { SidebarItemMiniButton, SidebarMenuRow } from './sidebar-primitives';
 interface SidebarTaskItemProps {
   taskId: string;
   projectId: string;
-  /** Pinned strip uses tighter padding than tasks nested under a project. */
-  rowVariant?: 'underProject' | 'pinned';
+  /**
+   * - `underProject` (default): nested under a project header, deeper indent.
+   * - `pinned`: tight padding for the pinned strip.
+   * - `flat`: top-level row in the no-grouping / type / activity views; shows the project tag.
+   */
+  rowVariant?: 'underProject' | 'pinned' | 'flat';
 }
 
 export const SidebarTaskItem = observer(function SidebarTaskItem({
@@ -74,7 +78,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
 
   const handleArchive = (options?: { skipPreCommand?: boolean }) => {
     if (isArchiving) return;
-    if (isActive) navigate('project', { projectId });
     setIsArchiving(true);
     void (async () => {
       try {
@@ -93,9 +96,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       projectId,
       taskId,
       taskName,
-      onSuccess: () => {
-        if (isActive) navigate('project', { projectId });
-      },
     });
   };
 
@@ -185,7 +185,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       <SidebarMenuRow
         className={cn(
           'group/row flex items-center justify-between px-1 h-8 gap-1',
-          rowVariant === 'pinned' ? 'pl-2' : 'pl-8'
+          rowVariant === 'pinned' ? 'pl-2' : rowVariant === 'flat' ? 'pl-2' : 'pl-8'
         )}
         isActive={isActive}
         onMouseDown={(e) => e.preventDefault()}
@@ -208,6 +208,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           >
             {taskName}
           </span>
+          {rowVariant === 'flat' && (
+            <span className="shrink-0 truncate max-w-[8rem] rounded-sm bg-background-tertiary-2 px-1 text-[10px] uppercase tracking-wide text-foreground-tertiary">
+              {projectName}
+            </span>
+          )}
           <RenderPrBadge task={task} />
         </div>
         <div
