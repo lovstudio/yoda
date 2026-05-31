@@ -9,6 +9,7 @@ import { conversations, tasks } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { ClaudeSessionTitleSource } from './claude-title-source';
+import { CodexSessionTitleSource } from './codex-title-source';
 import type { SessionTitleContext, SessionTitleSource, SessionTitleWatcher } from './types';
 
 class SessionTitleManager {
@@ -17,6 +18,7 @@ class SessionTitleManager {
 
   constructor() {
     this.register(new ClaudeSessionTitleSource());
+    this.register(new CodexSessionTitleSource());
   }
 
   register(source: SessionTitleSource): void {

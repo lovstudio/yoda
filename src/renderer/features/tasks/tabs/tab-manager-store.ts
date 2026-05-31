@@ -87,6 +87,11 @@ export type ResolvedDiffTab = {
 
 export type ResolvedTab = ResolvedConversationTab | ResolvedFileTab | ResolvedDiffTab;
 
+interface OpenFileOptions {
+  line?: number;
+  column?: number;
+}
+
 // ---------------------------------------------------------------------------
 // TabManagerStore
 // ---------------------------------------------------------------------------
@@ -396,14 +401,16 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   // Actions — opening file tabs
   // ---------------------------------------------------------------------------
 
-  openFile(path: string): void {
+  openFile(path: string, options?: OpenFileOptions): void {
     const existing = this._findFileEntryByPath(path);
     if (existing) {
       existing.isPreview = false;
+      existing.revealLocation(options?.line, options?.column);
       this.activeTabId = existing.tabId;
       return;
     }
     const tab = new FileTabStore(path, false);
+    tab.revealLocation(options?.line, options?.column);
     this.entries.set(tab.tabId, tab);
     addTabId(this, tab.tabId);
     this.activeTabId = tab.tabId;

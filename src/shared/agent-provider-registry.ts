@@ -61,6 +61,12 @@ export type AgentProviderDefinition = {
   newConversationFlag?: string;
   sessionIdOnResumeOnly?: boolean;
   defaultArgs?: string[];
+  /** Prefix used for agent-native commands or skills inside the TUI. */
+  commandPrefix?: string;
+  /** Extra input sent before Enter when submitting compact agent-native commands. */
+  commandSubmitSuffix?: string;
+  /** Delay before submit after prompt injection, used to avoid TUI paste-burst handling. */
+  commandSubmitDelayMs?: number;
   planActivateCommand?: string;
   autoStartCommand?: string;
   icon?: string;
@@ -86,6 +92,8 @@ export const AGENT_PROVIDERS: AgentProviderDefinition[] = [
     autoApproveFlag: '--dangerously-bypass-approvals-and-sandbox',
     initialPromptFlag: '',
     resumeFlag: 'resume --last',
+    commandPrefix: '$',
+    commandSubmitDelayMs: 200,
     icon: 'openai.svg',
     alt: 'Codex',
     terminalOnly: true,
@@ -105,6 +113,7 @@ export const AGENT_PROVIDERS: AgentProviderDefinition[] = [
     initialPromptFlag: '',
     resumeFlag: '--resume',
     sessionIdFlag: '--session-id',
+    commandPrefix: '/',
     planActivateCommand: '/plan',
     icon: 'claude.png',
     alt: 'Claude Code',

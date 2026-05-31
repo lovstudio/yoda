@@ -24,7 +24,8 @@ export class ConversationManagerStore {
   constructor(
     private readonly projectId: string,
     private readonly taskId: string,
-    preloaded?: Conversation[]
+    preloaded?: Conversation[],
+    private readonly onUserPromptAt?: (lastInteractedAt: string) => void
   ) {
     makeObservable(this, {
       conversations: observable,
@@ -195,7 +196,22 @@ export class ConversationManagerStore {
     runInAction(() => {
       store.data.lastInteractedAt = now;
     });
+    this.onUserPromptAt?.(now);
     await rpc.conversations.touchConversation(conversationId, now);
+  }
+
+  async resumeConversation(conversationId: string): Promise<void> {
+    if (!this.conversations.has(conversationId)) return;
+    try {
+      await rpc.conversations.resumeConversation(this.projectId, this.taskId, conversationId);
+    } catch (error) {
+      log.warn('ConversationManagerStore: failed to resume conversation', {
+        projectId: this.projectId,
+        taskId: this.taskId,
+        conversationId,
+        error,
+      });
+    }
   }
 
   dispose(): void {
@@ -263,8 +279,12 @@ export class ConversationStore {
     this.setStatus('awaiting-input');
   }
 
-  setWorking() {
-    if (this.status === 'awaiting-input' && this.lastNotificationType === 'permission_prompt') {
+  setWorking(options: { force?: boolean } = {}) {
+    if (
+      !options.force &&
+      this.status === 'awaiting-input' &&
+      this.lastNotificationType === 'permission_prompt'
+    ) {
       return;
     }
     this.lastNotificationType = null;

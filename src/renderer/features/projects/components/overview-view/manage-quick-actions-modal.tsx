@@ -137,6 +137,8 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
       <DialogContentArea>
         <p className="text-xs text-foreground-muted">
           {t('projects.quickActions.descriptionBefore')}{' '}
+          <code className="font-mono">$release-via-cicd</code>
+          {' / '}
           <code className="font-mono">/release-via-cicd</code>{' '}
           {t('projects.quickActions.descriptionAfter')}
         </p>
@@ -157,7 +159,7 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
               />
               <Input
                 className="flex-1"
-                placeholder="/release-via-cicd"
+                placeholder="$release-via-cicd or /release-via-cicd"
                 value={action.command}
                 disabled={loading}
                 onChange={(e) => updateRow(action.id, { command: e.target.value })}

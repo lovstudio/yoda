@@ -13,6 +13,41 @@ export function resolveLogLevel(args?: { envLevel?: string; debugFlag?: boolean 
   return parseLogLevel(args?.envLevel) ?? (args?.debugFlag ? 'debug' : undefined) ?? 'warn';
 }
 
+type ConsolePipeStream = object & {
+  on(event: 'error', listener: (error: unknown) => void): unknown;
+};
+
+const handledConsolePipeStreams = new WeakSet<object>();
+
+function isBrokenConsolePipe(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+
+  const code = 'code' in error ? (error as { code?: unknown }).code : undefined;
+  if (code === 'EPIPE' || code === 'EIO') return true;
+
+  const message = error instanceof Error ? error.message : '';
+  return /\b(?:EPIPE|EIO)\b/.test(message) && /\bwrite\b/i.test(message);
+}
+
+export function installBrokenConsolePipeHandler(stream: ConsolePipeStream | undefined): void {
+  if (!stream || handledConsolePipeStreams.has(stream)) return;
+  handledConsolePipeStreams.add(stream);
+
+  stream.on('error', (error) => {
+    if (isBrokenConsolePipe(error)) return;
+    throw error;
+  });
+}
+
+function writeConsole(writer: () => void): void {
+  try {
+    writer();
+  } catch (error) {
+    if (isBrokenConsolePipe(error)) return;
+    throw error;
+  }
+}
+
 export function createLogger(args?: { envLevel?: string; debugFlag?: boolean }) {
   const level = resolveLogLevel({
     envLevel: args?.envLevel ?? import.meta.env.VITE_LOG_LEVEL,
@@ -26,16 +61,16 @@ export function createLogger(args?: { envLevel?: string; debugFlag?: boolean }) 
   return {
     level,
     debug: (...input: unknown[]) => {
-      if (enabled('debug')) console.debug(...input);
+      if (enabled('debug')) writeConsole(() => console.debug(...input));
     },
     info: (...input: unknown[]) => {
-      if (enabled('info')) console.info(...input);
+      if (enabled('info')) writeConsole(() => console.info(...input));
     },
     warn: (...input: unknown[]) => {
-      if (enabled('warn')) console.warn(...input);
+      if (enabled('warn')) writeConsole(() => console.warn(...input));
     },
     error: (...input: unknown[]) => {
-      console.error(...input);
+      writeConsole(() => console.error(...input));
     },
   };
 }

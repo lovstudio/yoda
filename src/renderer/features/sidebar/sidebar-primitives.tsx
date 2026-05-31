@@ -67,7 +67,7 @@ SidebarMenu.displayName = 'SidebarMenu';
 export const SidebarItemMiniButton = React.forwardRef<
   HTMLButtonElement,
   React.ButtonHTMLAttributes<HTMLButtonElement>
->(({ className, ...props }, ref) => (
+>(({ className, onKeyDown, ...props }, ref) => (
   <button
     ref={ref}
     className={cn(
@@ -76,6 +76,12 @@ export const SidebarItemMiniButton = React.forwardRef<
     )}
     onMouseDown={(e) => e.preventDefault()}
     onPointerDown={(e) => e.stopPropagation()}
+    onKeyDown={(e) => {
+      onKeyDown?.(e);
+      if (!e.defaultPrevented && (e.key === 'Enter' || e.key === ' ')) {
+        e.stopPropagation();
+      }
+    }}
     {...props}
   />
 ));

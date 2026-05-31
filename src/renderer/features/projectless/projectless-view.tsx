@@ -2,11 +2,12 @@ import { Terminal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { AgentProviderId } from '@shared/agent-provider-registry';
+import { projectlessSessionStore } from '@renderer/features/projectless/projectless-session-store';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import { PtyPane } from '@renderer/lib/pty/pty-pane';
-import { PtySession } from '@renderer/lib/pty/pty-session';
 import { TerminalSearchOverlay } from '@renderer/lib/pty/terminal-search-overlay';
 import { useTerminalSearch } from '@renderer/lib/pty/use-terminal-search';
 
@@ -21,6 +22,7 @@ export function ProjectlessViewWrapper({
   sessionId: string;
   title: string;
   cwd: string;
+  providerId?: AgentProviderId;
 }) {
   return <>{children}</>;
 }
@@ -30,12 +32,23 @@ export const ProjectlessMainPanel = observer(function ProjectlessMainPanel() {
   const { params } = useParams('projectless');
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<{ focus: () => void }>(null);
-  const session = useMemo(() => new PtySession(params.sessionId), [params.sessionId]);
+  const session = useMemo(
+    () => projectlessSessionStore.ensurePtySession(params.sessionId),
+    [params.sessionId]
+  );
   const sessionIds = useMemo(() => [params.sessionId], [params.sessionId]);
 
   useEffect(() => {
+    projectlessSessionStore.registerNavigatedSession({
+      sessionId: params.sessionId,
+      title: params.title || t('projects.noProject'),
+      cwd: params.cwd,
+      providerId: params.providerId,
+    });
+  }, [params.cwd, params.providerId, params.sessionId, params.title, t]);
+
+  useEffect(() => {
     void session.connect();
-    return () => session.dispose();
   }, [session]);
 
   useEffect(() => {

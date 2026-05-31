@@ -71,12 +71,14 @@
     "newSession": "New session",
     "searchSession": "Search session",
     "agents": "Agents",
+    "maas": "MaaS",
     "skills": "Skills",
     "automation": "Automation",
     "settings": "Settings",
     "giveFeedback": "Give feedback",
     "dropToAddProject": "Drop to add project",
     "projects": "Projects",
+    "conversations": "Conversations",
     "pinned": "Pinned",
     "sortBy": "Sort by",
     "sortByCreatedAt": "Created at",
@@ -112,9 +114,16 @@
     "projectNotFound": "Project not found at path",
     "reconnect": "Reconnect",
     "changeSshConnection": "Change SSH connection",
+    "openProjectDetails": "Open project details",
+    "openSessionDetails": "Open session details",
+    "openTaskDetails": "Open task details",
     "archiveProject": "Archive project",
     "pinProject": "Pin project",
     "unpinProject": "Unpin project",
+    "copyProjectPath": "Copy project path",
+    "projectPathCopied": "Project path copied",
+    "copyProjectPathFailed": "The project path could not be copied to the clipboard.",
+    "openProjectPath": "Open in Finder",
     "renameProject": {
       "menuLabel": "Rename project…",
       "title": "Rename project",
@@ -127,6 +136,7 @@
       "failed": "Failed to rename project"
     },
     "archiveTask": "Archive task",
+    "interruptPreArchive": "Interrupt pre-archive command",
     "archiveTaskSkipPre": "Archive without pre-command",
     "archiveTaskWithNote": "Archive task with note…",
     "configurePreArchive": "Configure pre-archive command…",
@@ -167,6 +177,7 @@
       "account": "Account",
       "agents": "Agents",
       "integrations": "Integrations",
+      "mcp": "MCP",
       "repository": "Repository",
       "interface": "Interface",
       "docs": "Docs"
@@ -458,6 +469,34 @@
     "skillShortcutAria": "Insert skill",
     "skillShortcutLabel": "Skills",
     "searchSkills": "Search skills...",
+    "modeAria": "Choose run mode",
+    "modeNormal": "Standard",
+    "modeNormalDesc": "One agent in one session.",
+    "modeCompare": "Compare",
+    "modeCompareDesc": "Start several agents on isolated branches.",
+    "modeReview": "Review",
+    "modeReviewDesc": "Implementation agent and reviewer agent loop on one branch.",
+    "modeTeam": "Agent team",
+    "modeTeamDesc": "CEO agent decomposes work for specialist agents.",
+    "compareAgent": "Agent {{index}}",
+    "addCompareAgent": "Add agent",
+    "removeCompareAgent": "Remove agent",
+    "reviewImplementer": "A agent",
+    "reviewReviewer": "B reviewer",
+    "reviewRoundLimit": "Review loop stops after {{count}} rounds if issues remain.",
+    "agentSystemPromptAria": "Edit {{label}} system prompt",
+    "agentSystemPromptTitle": "{{label}} system prompt",
+    "agentSystemPromptPlaceholder": "Describe this agent's role, constraints, and operating style.",
+    "agentSystemPromptDefault": "Default prompt",
+    "agentSystemPromptCustom": "Custom prompt",
+    "agentSystemPromptEmpty": "No system prompt",
+    "agentSystemPromptReset": "Reset",
+    "agentSystemPromptSave": "Save",
+    "teamRoleCeo": "CEO · Musk",
+    "teamRoleProduct": "PM · Jobs",
+    "teamRoleEngineering": "R&D · Linus",
+    "teamRoleUiux": "UIUX · Jony Ive",
+    "teamRoleOperations": "User ops · Tim Cook",
     "selectProjectPlaceholder": "Select project",
     "remoteMode": "Remote",
     "localMode": "Local",
@@ -694,6 +733,45 @@
       "addHeader": "+ Add header"
     }
   },
+  "automation": {
+    "title": "Automation",
+    "new": "New automation",
+    "current": "Current",
+    "paused": "Paused",
+    "emptyCurrent": "No active automations.",
+    "emptyPaused": "No paused automations.",
+    "pausedStatus": "Paused",
+    "scheduleManual": "Manual",
+    "runFailed": "Automation failed",
+    "status": {
+      "active": "Active",
+      "paused": "Paused"
+    },
+    "actions": {
+      "run": "Run",
+      "edit": "Edit",
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete"
+    },
+    "form": {
+      "title": "Name",
+      "titlePlaceholder": "Daily maker trend research",
+      "workspace": "Workspace",
+      "workspacePlaceholder": "Lovstudio Web",
+      "agent": "Agent",
+      "schedule": "Schedule",
+      "schedulePlaceholder": "Every day 10:00",
+      "status": "Status",
+      "prompt": "Prompt",
+      "promptPlaceholder": "Describe what the agent should do when this automation runs."
+    },
+    "delete": {
+      "title": "Delete automation?",
+      "description": "\"{{name}}\" will be deleted. This action cannot be undone.",
+      "confirmLabel": "Delete"
+    }
+  },
   "skills": {
     "title": "Skills",
     "subtitle": "Extend your agents with reusable skill modules",
@@ -786,6 +864,77 @@
     "copyCommand": "Copy command",
     "searchAgents": "Search agents...",
     "noAgentInstalled": "No agent installed"
+  },
+  "maas": {
+    "title": "MaaS",
+    "subtitle": "Connect model platforms and inspect real usage statistics.",
+    "platformsTitle": "Platforms",
+    "connected": "Connected",
+    "notConnected": "Not connected",
+    "connectedCount": "{{count}} connected",
+    "platforms": {
+      "zenmux": {
+        "description": "Unified routing, observability, and billing across model providers."
+      },
+      "openrouter": {
+        "description": "OpenAI-compatible model routing with provider fallback."
+      },
+      "siliconflow": {
+        "description": "Hosted open model APIs for text, image, and embedding workloads."
+      },
+      "custom": {
+        "description": "Any OpenAI-compatible MaaS endpoint managed by your team."
+      }
+    },
+    "connection": {
+      "displayName": "Name",
+      "endpoint": "Endpoint",
+      "apiKey": "API key",
+      "apiKeyPlaceholder": "Paste API or management key",
+      "managementApiKey": "Management API key",
+      "zenmuxManagementKeyPlaceholder": "Paste ZenMux Management API Key",
+      "apiKeyStoredPlaceholder": "Saved {{fingerprint}} - leave blank to keep it",
+      "save": "Save",
+      "saving": "Saving",
+      "disconnect": "Disconnect",
+      "openDocs": "Docs",
+      "apiKeyRequired": "API key is required for the first connection.",
+      "keyFingerprint": "Key {{fingerprint}}",
+      "noKey": "No key stored",
+      "lastChecked": "Checked {{time}}",
+      "neverChecked": "Not checked yet"
+    },
+    "records": {
+      "title": "Usage statistics",
+      "subtitle": "ZenMux Management API aggregates: {{count}} loaded of {{total}} ({{range}})",
+      "loading": "Loading ZenMux statistics...",
+      "emptyNoConnectionTitle": "No platform connected",
+      "emptyNoConnection": "Connect a MaaS platform to load ZenMux Management API aggregates.",
+      "emptyNoRecords": "No usage statistics.",
+      "errorTitle": "Could not load usage statistics",
+      "reload": "Reload",
+      "openZenmuxLogs": "Open Logs",
+      "scrollHint": "Scroll to load more",
+      "end": "End of records",
+      "input": "Tokens",
+      "output": "Output",
+      "latency": "Latency",
+      "duration": "Duration",
+      "cost": "Cost",
+      "assets": "{{count}} assets",
+      "filters": {
+        "all": "All",
+        "text": "Text",
+        "image": "Image",
+        "embedding": "Embeddings",
+        "video": "Video"
+      },
+      "status": {
+        "succeeded": "Succeeded",
+        "failed": "Failed",
+        "streaming": "Streaming"
+      }
+    }
   },
   "editor": {
     "fileNotFound": "File not found",
@@ -1221,7 +1370,7 @@
   "projects": {
     "selectProject": "Select project",
     "noProject": "Do not use a project",
-    "noProjectTooltip": "Runs without creating a project task or worktree. The agent starts in your home folder and this session is not attached to any project.",
+    "noProjectTooltip": "Runs without creating a project task or worktree. The agent starts in ~/Documents/Yoda/<date>/<title> and this session is not attached to any project.",
     "selectLocalProject": "Select local project",
     "selectProjectDirectory": "Select project directory",
     "cannotAddProject": "Cannot add project",

@@ -23,6 +23,7 @@ type Props = {
   onExit?: (info: { exitCode: number | undefined; signal?: number }) => void;
   onFirstMessage?: (message: string) => void;
   onEnterPress?: (message: string) => void;
+  onSubmittedInput?: (message: string, isTaskInput: boolean) => void;
   onInterruptPress?: () => void;
   fileLinks?: TerminalFileLinkOptions | null;
 };
@@ -41,6 +42,7 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
       onExit,
       onFirstMessage,
       onEnterPress,
+      onSubmittedInput,
       onInterruptPress,
       fileLinks,
     },
@@ -60,6 +62,7 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
         onExit,
         onFirstMessage,
         onEnterPress,
+        onSubmittedInput,
         onInterruptPress,
         fileLinks,
       },

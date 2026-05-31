@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { mapConversationRowToConversation } from '@main/core/conversations/utils';
 import { projectManager } from '@main/core/projects/project-manager';
 import { formatProvisionTaskError } from '@main/core/tasks/provision-task-error';
@@ -57,7 +57,6 @@ export async function provisionTask(taskId: string) {
   await db
     .update(tasks)
     .set({
-      lastInteractedAt: sql`CURRENT_TIMESTAMP`,
       workspaceId: persistData.workspaceId,
       workspaceProviderData: persistData.workspaceProviderData
         ? JSON.stringify(persistData.workspaceProviderData)

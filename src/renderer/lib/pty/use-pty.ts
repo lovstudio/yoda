@@ -19,6 +19,12 @@ import {
   shouldMapShiftEnterToCtrlJ,
   shouldPasteToTerminal,
 } from './pty-keybindings';
+import {
+  registerTerminalFileLinkProvider,
+  type TerminalFileLinkOptions,
+} from './terminal-file-links';
+import { registerTerminalImeDiagnostics } from './terminal-ime-diagnostics';
+import { registerTerminalImeNativePunctuation } from './terminal-ime-native-punctuation';
 
 // xterm's proposed API and internal fields are not in the public TypeScript
 // types. Both code paths are necessary: the proposed `dimensions` API works in
@@ -59,12 +65,27 @@ const MIN_READY_TERMINAL_COLS = 10;
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 
+interface MeasureAndResizeOptions {
+  forceRefresh?: boolean;
+  resetResizeDedup?: boolean;
+}
+
 function isMeasureTargetReady(
   element: HTMLElement,
   cell: { width: number; height: number }
 ): boolean {
   const rect = element.getBoundingClientRect();
   return rect.width >= cell.width * MIN_READY_TERMINAL_COLS && rect.height >= cell.height;
+}
+
+function refreshTerminal(terminal: Terminal): void {
+  try {
+    terminal.refresh(0, Math.max(0, terminal.rows - 1));
+  } catch {}
+}
+
+function hasEnterSubmit(data: string): boolean {
+  return data.includes('\r') || /\x1b\[13(?:;[0-9]+)?u/.test(data);
 }
 
 export interface UsePtyOptions {
@@ -78,7 +99,9 @@ export interface UsePtyOptions {
   onExit?: (info: { exitCode: number | undefined; signal?: number }) => void;
   onFirstMessage?: (message: string) => void;
   onEnterPress?: (message: string) => void;
+  onSubmittedInput?: (message: string, isTaskInput: boolean) => void;
   onInterruptPress?: () => void;
+  fileLinks?: TerminalFileLinkOptions | null;
 }
 
 export interface UseTerminalReturn {
@@ -118,7 +141,9 @@ export function usePty(
     onExit,
     onFirstMessage,
     onEnterPress,
+    onSubmittedInput,
     onInterruptPress,
+    fileLinks,
   } = options;
 
   // Stable refs for callbacks so the effect doesn't re-run on every render.
@@ -130,8 +155,12 @@ export function usePty(
   onFirstMessageRef.current = onFirstMessage;
   const onEnterPressRef = useRef(onEnterPress);
   onEnterPressRef.current = onEnterPress;
+  const onSubmittedInputRef = useRef(onSubmittedInput);
+  onSubmittedInputRef.current = onSubmittedInput;
   const onInterruptPressRef = useRef(onInterruptPress);
   onInterruptPressRef.current = onInterruptPress;
+  const fileLinksRef = useRef(fileLinks ?? null);
+  fileLinksRef.current = fileLinks ?? null;
   const themeRef = useRef(theme);
   themeRef.current = theme;
 
@@ -197,11 +226,14 @@ export function usePty(
   const queuePtyResizeRef = useRef(queuePtyResize);
   queuePtyResizeRef.current = queuePtyResize;
 
-  const retryMeasureAndResize = useCallback((retries: number) => {
-    if (retries >= MAX_LAYOUT_READY_RETRIES) return false;
-    setTimeout(() => measureAndResizeRef.current(retries + 1), LAYOUT_READY_RETRY_MS);
-    return true;
-  }, []);
+  const retryMeasureAndResize = useCallback(
+    (retries: number, options?: MeasureAndResizeOptions) => {
+      if (retries >= MAX_LAYOUT_READY_RETRIES) return false;
+      setTimeout(() => measureAndResizeRef.current(retries + 1, options), LAYOUT_READY_RETRY_MS);
+      return true;
+    },
+    []
+  );
 
   // measureAndResize is the single entry point for all DOM measurement + PTY
   // resize work. Prefer the pane wrapper when available, then fall back to the
@@ -209,8 +241,11 @@ export function usePty(
   // to ALL sessions in the pane) or directly via queuePtyResize for standalone
   // terminals.
   const measureAndResize = useCallback(
-    (retries = 0) => {
+    (retries = 0, options: MeasureAndResizeOptions = {}) => {
       if (!termRef.current) return;
+      if (options.resetResizeDedup) {
+        lastSentResizeRef.current = null;
+      }
       requestAnimationFrame(() => {
         try {
           const term = termRef.current;
@@ -222,7 +257,7 @@ export function usePty(
             // Cold-path: terminal was opened off-DOM so xterm's font measurement
             // hasn't populated yet.  Retry a bounded number of times to avoid
             // flushing scrollback at stale constructor dimensions.
-            retryMeasureAndResize(retries);
+            retryMeasureAndResize(retries, options);
             return;
           }
 
@@ -235,7 +270,10 @@ export function usePty(
             (containerRef.current as HTMLElement | null);
           if (!measureTarget) return;
 
-          if (!isMeasureTargetReady(measureTarget, cell) && retryMeasureAndResize(retries)) {
+          if (
+            !isMeasureTargetReady(measureTarget, cell) &&
+            retryMeasureAndResize(retries, options)
+          ) {
             return;
           }
 
@@ -243,13 +281,19 @@ export function usePty(
             pane?.measureCurrentDimensions(cell.width, cell.height) ??
             measureDimensions(measureTarget, cell.width, cell.height);
           if (!dims) {
-            retryMeasureAndResize(retries);
+            retryMeasureAndResize(retries, options);
             return;
           }
           const { cols: targetCols, rows: targetRows } = dims;
 
+          let didResize = false;
           if (term.cols !== targetCols || term.rows !== targetRows) {
             term.resize(targetCols, targetRows);
+            didResize = true;
+          }
+
+          if (options.forceRefresh && !didResize) {
+            refreshTerminal(term);
           }
 
           // Now that the terminal is sized to the real pane width, drain any
@@ -303,8 +347,13 @@ export function usePty(
       const shouldTrack = options?.track ?? true;
       if (shouldTrack) {
         const submittedMessages = submittedInputBufferRef.current.feed(data);
+        if (submittedMessages.length === 0 && hasEnterSubmit(data)) {
+          onSubmittedInputRef.current?.('', false);
+        }
         for (const message of submittedMessages) {
-          if (isRealTaskInput(message)) {
+          const isTaskInput = isRealTaskInput(message);
+          onSubmittedInputRef.current?.(message, isTaskInput);
+          if (isTaskInput) {
             onEnterPressRef.current?.(message);
           }
         }
@@ -418,8 +467,15 @@ export function usePty(
       }
 
       // ── Keyboard shortcuts ─────────────────────────────────────────────────
+      const imeNativePunctuationBridge = registerTerminalImeNativePunctuation(terminal);
+      cleanups.push(() => imeNativePunctuationBridge.dispose());
+
       terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
         if (document.querySelector('[role="dialog"]')) return false;
+
+        if (imeNativePunctuationBridge.shouldDeferToNativeInput(event)) {
+          return false;
+        }
 
         if (shouldCopySelectionFromTerminal(event, IS_MAC_PLATFORM, terminal.hasSelection())) {
           event.preventDefault();
@@ -511,6 +567,15 @@ export function usePty(
       const inputDisposable = terminal.onData((data) => handleTerminalInput(data));
       cleanups.push(() => inputDisposable.dispose());
 
+      const imeDiagnosticsDisposable = registerTerminalImeDiagnostics(terminal);
+      cleanups.push(() => imeDiagnosticsDisposable.dispose());
+
+      const fileLinkProviderDisposable = registerTerminalFileLinkProvider(
+        terminal,
+        () => fileLinksRef.current
+      );
+      cleanups.push(() => fileLinkProviderDisposable.dispose());
+
       // ── ptyStartedRef — detect first PTY output ────────────────────────────
       // FrontendPty owns the data subscription and writes directly to the
       // terminal.  We add a lightweight IPC listener here solely to flip the
@@ -592,13 +657,26 @@ export function usePty(
       // Clearing the dedup ref guarantees the broadcast goes through even when
       // measured dims round to the same integer cols/rows as before.
       if (import.meta.hot) {
-        const onHmrUpdate = () => {
-          lastSentResizeRef.current = null;
-          measureAndResizeRef.current();
-        };
+        const onHmrUpdate = () =>
+          measureAndResizeRef.current(0, { forceRefresh: true, resetResizeDedup: true });
         import.meta.hot.on('vite:afterUpdate', onHmrUpdate);
         cleanups.push(() => import.meta.hot?.off('vite:afterUpdate', onHmrUpdate));
       }
+
+      // Chromium can resume a previously backgrounded canvas without changing
+      // the observed element size, so redraw the visible terminal explicitly.
+      const refreshVisibleTerminal = () => {
+        measureAndResizeRef.current(0, { forceRefresh: true });
+      };
+      const refreshOnVisible = () => {
+        if (document.visibilityState === 'visible') refreshVisibleTerminal();
+      };
+      window.addEventListener('focus', refreshVisibleTerminal);
+      document.addEventListener('visibilitychange', refreshOnVisible);
+      cleanups.push(
+        () => window.removeEventListener('focus', refreshVisibleTerminal),
+        () => document.removeEventListener('visibilitychange', refreshOnVisible)
+      );
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────

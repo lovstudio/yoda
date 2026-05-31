@@ -1,30 +1,15 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { patchDevElectronBundleMetadata } from './lib/dev-electron-bundle.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '..');
 
-patchDevElectronBundleName();
+patchDevElectronBundleMetadata(repoRoot);
 
 if (process.env.CI || process.env.YODA_SKIP_ELECTRON_REBUILD === '1') {
   process.exit(0);
-}
-
-function patchDevElectronBundleName() {
-  if (process.platform !== 'darwin') return;
-  const plist = path.resolve(
-    __dirname,
-    '..',
-    'node_modules',
-    'electron',
-    'dist',
-    'Electron.app',
-    'Contents',
-    'Info.plist'
-  );
-  for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
-    spawnSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} Yoda`, plist], { stdio: 'ignore' });
-  }
 }
 
 function getElectronRebuildBin() {

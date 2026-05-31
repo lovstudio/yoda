@@ -19,6 +19,7 @@ export const AgentTabMaaS: React.FC<{ agentId: AgentProviderId }> = observer(fun
     { key: t('agents.maas.resume'), value: provider.resumeFlag },
     { key: t('agents.maas.sessionId'), value: provider.sessionIdFlag },
     { key: t('agents.maas.newConversation'), value: provider.newConversationFlag },
+    { key: t('agents.maas.commandPrefix'), value: provider.commandPrefix },
     { key: t('agents.maas.planActivate'), value: provider.planActivateCommand },
     { key: t('agents.maas.autoStart'), value: provider.autoStartCommand },
     { key: t('agents.maas.defaultArgs'), value: provider.defaultArgs?.join(' ') },

@@ -88,7 +88,8 @@ export class ProvisionedTask {
     this.conversations = new ConversationManagerStore(
       taskData.projectId,
       taskData.id,
-      preloadedConversations
+      preloadedConversations,
+      (lastInteractedAt) => taskStore.recordUserPromptAt(lastInteractedAt)
     );
     this.terminals = new TerminalManagerStore(taskData.projectId, taskData.id);
     this.draftComments = new DraftCommentsStore(taskData.id);
@@ -225,6 +226,11 @@ export class TaskStore {
   dispose(): void {
     this.provisionedTask?.dispose();
     this.provisionedTask = null;
+  }
+
+  recordUserPromptAt(lastInteractedAt: string): void {
+    if (this.state === 'unregistered') return;
+    this.data.lastInteractedAt = lastInteractedAt;
   }
 
   get conversationStats(): Record<string, number> {

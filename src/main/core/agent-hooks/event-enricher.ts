@@ -5,11 +5,8 @@ import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import type { RawHookRequest } from './hook-server';
 
-function normalizePayload(
-  providerId: string,
-  body: Record<string, unknown>
-): AgentEvent['payload'] {
-  const payload: AgentEvent['payload'] = {
+function normalizePayload(body: Record<string, unknown>): AgentEvent['payload'] {
+  return {
     notificationType: (body.notification_type ??
       body.notificationType) as AgentEvent['payload']['notificationType'],
     lastAssistantMessage: (body.last_assistant_message ?? body.lastAssistantMessage) as
@@ -18,12 +15,17 @@ function normalizePayload(
     title: body.title as string | undefined,
     message: body.message as string | undefined,
   };
+}
 
-  if (!payload.notificationType && providerId === 'codex' && body.type === 'agent-turn-complete') {
-    payload.notificationType = 'idle_prompt';
+function normalizeEventType(
+  providerId: string,
+  body: Record<string, unknown>,
+  rawType: string
+): AgentEvent['type'] {
+  if (providerId === 'codex' && body.type === 'agent-turn-complete') {
+    return 'stop';
   }
-
-  return payload;
+  return rawType as AgentEvent['type'];
 }
 
 export async function enrichEvent(raw: RawHookRequest): Promise<AgentEvent> {
@@ -41,10 +43,10 @@ export async function enrichEvent(raw: RawHookRequest): Promise<AgentEvent> {
   const taskId = convRows.taskId;
   const projectId = convRows.projectId;
   const body = raw.body ? JSON.parse(raw.body) : {};
-  const payload = normalizePayload(parsed.providerId, body);
+  const payload = normalizePayload(body);
 
   return {
-    type: raw.type as AgentEvent['type'],
+    type: normalizeEventType(parsed.providerId, body, raw.type),
     ptyId: raw.ptyId,
     providerId: parsed.providerId,
     projectId,

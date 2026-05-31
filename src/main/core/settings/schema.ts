@@ -1,5 +1,6 @@
 import z from 'zod';
 import { AGENT_PROVIDER_IDS, AGENT_PROVIDERS } from '@shared/agent-provider-registry';
+import { MAAS_PLATFORM_IDS } from '@shared/maas';
 import { openInAppIdSchema } from '@shared/openInApps';
 import { quickActionSchema } from '@shared/project-settings';
 import { DEFAULT_AGENT_ID, DEFAULT_REVIEW_PROMPT } from './settings-registry';
@@ -32,6 +33,41 @@ export const taskSettingsSchema = z.object({
 export const agentAutoApproveDefaultsSchema = z
   .partialRecord(z.enum(AGENT_PROVIDER_IDS), z.boolean())
   .default({});
+
+export const automationStatusSchema = z.enum(['active', 'paused']);
+
+export const automationEntrySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  workspaceName: z.string(),
+  prompt: z.string(),
+  provider: z.enum(AGENT_PROVIDER_IDS),
+  scheduleLabel: z.string(),
+  status: automationStatusSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastRunAt: z.string().nullable(),
+});
+
+export const automationsSettingsSchema = z.object({
+  items: z.array(automationEntrySchema),
+});
+
+export const maasPlatformIdSchema = z.enum(MAAS_PLATFORM_IDS);
+
+export const maasConnectionSchema = z.object({
+  platformId: maasPlatformIdSchema,
+  displayName: z.string(),
+  endpoint: z.string(),
+  keyFingerprint: z.string().nullable(),
+  connectedAt: z.string().nullable(),
+  lastCheckedAt: z.string().nullable(),
+});
+
+export const maasSettingsSchema = z.object({
+  selectedPlatformId: maasPlatformIdSchema,
+  connections: z.array(maasConnectionSchema),
+});
 
 export const terminalSettingsSchema = z.object({
   fontFamily: z.string().optional(),
@@ -128,18 +164,34 @@ export const interfaceSettingsSchema = z.object({
 
 export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });
 
+const homeRunModeSchema = z.enum(['normal', 'compare', 'review', 'team']);
+const teamProviderSelectionSchema = z.object({
+  ceo: z.enum(AGENT_PROVIDER_IDS),
+  product: z.enum(AGENT_PROVIDER_IDS),
+  engineering: z.enum(AGENT_PROVIDER_IDS),
+  uiux: z.enum(AGENT_PROVIDER_IDS),
+  operations: z.enum(AGENT_PROVIDER_IDS),
+});
+
 export const homeDraftSchema = z.object({
   prompt: z.string(),
   selectedProjectId: z.string().nullable(),
   strategyKind: z.enum(['new-branch', 'no-worktree']),
   providerOverride: z.enum(AGENT_PROVIDER_IDS).nullable(),
+  runMode: homeRunModeSchema,
+  compareProviders: z.array(z.enum(AGENT_PROVIDER_IDS)),
+  reviewReviewerProvider: z.enum(AGENT_PROVIDER_IDS),
+  teamProviders: teamProviderSelectionSchema,
+  agentSystemPrompts: z.record(z.string(), z.string().nullable()),
   /** When true, the sidebar "+" button creates a task immediately using the
    *  last home-draft agent runtime config instead of opening the home view. */
   expressMode: z.boolean(),
   /** When non-empty, archiving a task first sends this text to the task's
    *  most-recently-used conversation and waits for the agent to finish
-   *  before performing the actual archive. Typical value: a slash command
-   *  like "/lovstudio-git-commit-with-context". */
+   *  before performing the actual archive. Bare command names are prefixed
+   *  for the target agent, e.g. "lovstudio-git-commit-with-context" becomes
+   *  "$lovstudio-git-commit-with-context" for Codex or
+   *  "/lovstudio-git-commit-with-context" for Claude. */
   preArchiveCommand: z.string(),
   /** Global default quick-action commands shown on each project's overview.
    *  Projects can override via ShareableProjectSettings.quickActions. */
@@ -156,6 +208,8 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   project: projectSettingsSchema,
   tasks: taskSettingsSchema,
   agentAutoApproveDefaults: agentAutoApproveDefaultsSchema,
+  automations: automationsSettingsSchema,
+  maas: maasSettingsSchema,
   defaultAgent: defaultAgentSchema,
   reviewPrompt: reviewPromptSchema,
   keyboard: keyboardSettingsSchema,
@@ -173,6 +227,8 @@ export const appSettingsSchema = z.object({
   project: projectSettingsSchema,
   tasks: taskSettingsSchema,
   agentAutoApproveDefaults: agentAutoApproveDefaultsSchema,
+  automations: automationsSettingsSchema,
+  maas: maasSettingsSchema,
   defaultAgent: defaultAgentSchema,
   reviewPrompt: reviewPromptSchema,
   keyboard: keyboardSettingsSchema,

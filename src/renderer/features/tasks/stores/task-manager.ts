@@ -352,7 +352,7 @@ export class TaskManagerStore {
           const current = this.tasks.get(taskId);
           if (current && isUnprovisioned(current)) {
             current.transitionToProvisioned(
-              { ...current.data, lastInteractedAt: new Date().toISOString() },
+              { ...current.data },
               result.path,
               result.workspaceId,
               this._settingsStore,

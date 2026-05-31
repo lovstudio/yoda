@@ -1,6 +1,7 @@
 import {
   Bot,
   FolderInput,
+  Layers,
   MessageSquareShare,
   Puzzle,
   Search,
@@ -22,6 +23,7 @@ import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { cn } from '@renderer/utils/utils';
 import { SidebarPinnedTaskList } from './pinned-task-list';
+import { SidebarProjectlessSessionList } from './projectless-session-list';
 import { ProjectsGroupLabel } from './projects-group-label';
 import {
   SidebarContainer,
@@ -108,7 +110,12 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         </SidebarFooter>
         <SidebarContent className="flex flex-col">
           <SidebarPinnedTaskList />
-          <SidebarGroup className="mb-0 min-h-0 flex-1 flex flex-col">
+          <SidebarGroup
+            className={cn(
+              'mb-0 flex flex-col',
+              sidebarStore.projectsCollapsed ? 'shrink-0' : 'min-h-0 flex-1'
+            )}
+          >
             <ProjectsGroupLabel />
             {!sidebarStore.projectsCollapsed && (
               <SidebarGroupContent className="min-h-0 flex-1 flex flex-col">
@@ -118,6 +125,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               </SidebarGroupContent>
             )}
           </SidebarGroup>
+          <SidebarProjectlessSessionList />
         </SidebarContent>
         <div className="flex flex-col border-t border-border">
           <SidebarMenu className="px-2 pt-2">
@@ -131,6 +139,15 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               {t('sidebar.agents')}
             </SidebarMenuButton>
             <SidebarMenuButton
+              isActive={isCurrentView(currentView, 'maas')}
+              onClick={() => navigate('maas')}
+              aria-label={t('sidebar.maas')}
+              className="w-full justify-start"
+            >
+              <Layers className="h-5 w-5 sm:h-4 sm:w-4" />
+              {t('sidebar.maas')}
+            </SidebarMenuButton>
+            <SidebarMenuButton
               isActive={isCurrentView(currentView, 'skills')}
               onClick={() => navigate('skills')}
               aria-label={t('sidebar.skills')}
@@ -140,8 +157,8 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               {t('sidebar.skills')}
             </SidebarMenuButton>
             <SidebarMenuButton
-              isActive={isCurrentView(currentView, 'mcp')}
-              onClick={() => navigate('mcp')}
+              isActive={isCurrentView(currentView, 'automation')}
+              onClick={() => navigate('automation')}
               aria-label={t('sidebar.automation')}
               className="w-full justify-start"
             >

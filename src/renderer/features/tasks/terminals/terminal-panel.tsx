@@ -13,6 +13,7 @@ import {
 import { useTabShortcuts } from '@renderer/lib/hooks/useTabShortcuts';
 import { rpc } from '@renderer/lib/ipc';
 import { panelDragStore } from '@renderer/lib/layout/panel-drag-store';
+import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
@@ -131,6 +132,17 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
     conflictBehavior: 'replace',
   });
 
+  const fileLinks = useMemo<TerminalFileLinkOptions>(
+    () => ({
+      workspaceRoot: provisionedTask.path,
+      onOpen: ({ filePath, line, column }) => {
+        provisionedTask.taskView.tabManager.openFile(filePath, { line, column });
+        provisionedTask.taskView.setFocusedRegion('main');
+      },
+    }),
+    [provisionedTask.path, provisionedTask.taskView]
+  );
+
   const emptyState = (
     <EmptyState
       icon={<Terminal className="h-5 w-5 text-muted-foreground" />}
@@ -174,6 +186,7 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
           autoFocus={autoFocus}
           emptyState={emptyState}
           remoteConnectionId={remoteConnectionId}
+          fileLinks={fileLinks}
         />
       </ResizablePanel>
       <ResizableHandle

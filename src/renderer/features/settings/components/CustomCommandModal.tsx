@@ -222,6 +222,23 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
                 />
               </div>
 
+              {provider.commandPrefix && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="commandPrefix" className="text-sm font-medium">
+                      {t('settings.customCommand.commandPrefix')}
+                    </Label>
+                    <FieldTooltip content={t('settings.customCommand.commandPrefixTooltip')} />
+                  </div>
+                  <Input
+                    id="commandPrefix"
+                    value={provider.commandPrefix}
+                    readOnly
+                    className="font-mono text-sm"
+                  />
+                </div>
+              )}
+
               {/* Resume Flag */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2">

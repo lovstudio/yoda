@@ -83,6 +83,11 @@ export const TaskRow = observer(function TaskRow({
     });
 
   const isArchived = Boolean(task.data.archivedAt);
+  const handleOpenDetails = () => {
+    if (isArchived) return;
+    handleProvision();
+    navigate('task', { projectId: task.data.projectId, taskId: task.data.id });
+  };
   const canPin = task.state !== 'unregistered';
   const agentAttention = taskAgentStatus(task);
   const currentPr = task.data.prs ? selectCurrentPr(task.data.prs) : undefined;
@@ -96,6 +101,8 @@ export const TaskRow = observer(function TaskRow({
       needsReview={task.data.needsReview}
       canMarkReview={task.state !== 'unregistered'}
       branchName={branchName}
+      openDetailsLabel={t('sidebar.openTaskDetails')}
+      onOpenDetails={isArchived ? undefined : handleOpenDetails}
       onPin={() => void task.setPinned(true)}
       onUnpin={() => void task.setPinned(false)}
       onMarkNeedsReview={() => void task.setNeedsReview(true)}
@@ -111,11 +118,7 @@ export const TaskRow = observer(function TaskRow({
       onDelete={handleDelete}
     >
       <button
-        onClick={() => {
-          if (isArchived) return;
-          handleProvision();
-          navigate('task', { projectId: task.data.projectId, taskId: task.data.id });
-        }}
+        onClick={handleOpenDetails}
         className="group flex items-center gap-2 rounded-lg p-3  hover:bg-background-1 transition-colors w-full"
       >
         <div

@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { AppSettings, AppSettingsKey } from '@shared/app-settings';
+import { MAAS_PLATFORMS } from '@shared/maas';
 import type { OpenInAppId } from '@shared/openInApps';
 import { getDefaultLocalWorktreeDirectory } from './worktree-defaults';
 
@@ -29,6 +30,13 @@ export const SETTINGS_DEFAULTS = {
     autoTrustWorktrees: true,
   },
   agentAutoApproveDefaults: {},
+  automations: {
+    items: [],
+  },
+  maas: {
+    selectedPlatformId: MAAS_PLATFORMS.zenmux.id,
+    connections: [],
+  },
   notifications: {
     enabled: true,
     sound: true,
@@ -58,6 +66,17 @@ export const SETTINGS_DEFAULTS = {
     selectedProjectId: null,
     strategyKind: 'new-branch' as const,
     providerOverride: null,
+    runMode: 'normal' as const,
+    compareProviders: ['claude', 'codex'],
+    reviewReviewerProvider: 'claude' as const,
+    teamProviders: {
+      ceo: 'claude' as const,
+      product: 'claude' as const,
+      engineering: 'codex' as const,
+      uiux: 'claude' as const,
+      operations: 'codex' as const,
+    },
+    agentSystemPrompts: {},
     expressMode: false,
     preArchiveCommand: '',
     defaultQuickActions: [{ id: 'release', label: 'Release', command: '/release-via-cicd' }],

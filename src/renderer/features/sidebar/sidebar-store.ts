@@ -48,7 +48,7 @@ export function getSortInstant(task: TaskStore, kind: 'created' | 'updated'): st
   const reg = registeredTaskData(task);
   if (reg) {
     if (kind === 'created') return reg.createdAt;
-    return reg.lastInteractedAt ?? reg.updatedAt;
+    return reg.lastInteractedAt ?? '';
   }
   const u = unregisteredTaskData(task);
   if (u) {
@@ -499,9 +499,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   private sortProjectsForSidebar(projects: RegisteredProjectStore[]): RegisteredProjectStore[] {
     if (this.taskSortBy === 'updated-at') {
-      // When sorting by recent activity, project order follows each project's
-      // most-recently-touched task. Manual DnD order is ignored in this mode
-      // — picking "Last used" implies you want recency to drive the layout.
+      // When sorting by recent activity, project order follows the latest
+      // submitted user prompt in each project. Manual DnD order is ignored in
+      // this mode — picking "Last used" implies recency should drive layout.
       return [...projects].sort((a, b) => {
         const ra = this.mostRecentTaskInstant(a);
         const rb = this.mostRecentTaskInstant(b);

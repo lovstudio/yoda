@@ -26,8 +26,9 @@ const TabManagerVisibilitySync = observer(function TabManagerVisibilitySync({
 }: {
   taskId: string;
 }) {
-  const { taskView } = useProvisionedTask();
+  const { conversations, taskView } = useProvisionedTask();
   const isActive = useIsActiveTask(taskId);
+  const activeConversationId = taskView.tabManager.activeConversationId;
 
   useEffect(() => {
     taskView.tabManager.setVisible(isActive);
@@ -35,6 +36,11 @@ const TabManagerVisibilitySync = observer(function TabManagerVisibilitySync({
       taskView.tabManager.setVisible(false);
     };
   }, [taskView.tabManager, isActive]);
+
+  useEffect(() => {
+    if (!isActive || !activeConversationId) return;
+    void conversations.resumeConversation(activeConversationId);
+  }, [activeConversationId, conversations, isActive]);
 
   return null;
 });

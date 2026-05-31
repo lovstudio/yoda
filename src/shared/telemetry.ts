@@ -1,4 +1,5 @@
 import type { AgentProviderId } from '@shared/agent-provider-registry';
+import type { MaasPlatformId } from '@shared/maas';
 import type { OpenInAppId } from '@shared/openInApps';
 import type { TaskLifecycleStatus } from '@shared/tasks';
 
@@ -12,7 +13,9 @@ export type FocusView =
   | 'settings'
   | 'skills'
   | 'mcp'
-  | 'agents';
+  | 'agents'
+  | 'maas'
+  | 'automation';
 export type FocusMainPanel = 'agents' | 'editor' | 'diff';
 export type FocusedRegion = 'main' | 'bottom';
 
@@ -56,6 +59,8 @@ export type TelemetryEventProperties = {
   skills_viewed: { from_view: FocusView | null };
   mcp_viewed: { from_view: FocusView | null };
   agents_viewed: { from_view: FocusView | null };
+  maas_viewed: { from_view: FocusView | null };
+  automation_viewed: { from_view: FocusView | null };
 
   project_added: { type: 'local' | 'ssh'; strategy: 'open' | 'create' | 'clone'; success: boolean };
   project_deleted: EmptyProps;
@@ -109,6 +114,9 @@ export type TelemetryEventProperties = {
 
   mcp_server_added: { source: 'catalog' | 'custom' };
   mcp_server_removed: EmptyProps;
+
+  maas_platform_connected: { platform: MaasPlatformId };
+  maas_platform_disconnected: { platform: MaasPlatformId };
 
   skill_installed: { source?: string };
   skill_uninstalled: EmptyProps;

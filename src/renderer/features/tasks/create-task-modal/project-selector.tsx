@@ -18,7 +18,6 @@ import {
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
-  ComboboxSeparator,
   ComboboxTrigger,
   ComboboxValue,
 } from '@renderer/lib/ui/combobox';
@@ -38,13 +37,20 @@ interface ProjectlessOption {
   description: string;
 }
 
-type ProjectSelectorOption = ProjectOption | ProjectlessOption;
+interface BrowseOption {
+  kind: 'browse';
+  value: '__browse__';
+  label: string;
+}
+
+type ProjectSelectorOption = ProjectOption | ProjectlessOption | BrowseOption;
 
 interface ProjectSelectorProps {
   value: string | undefined;
   onChange: (projectId: string | undefined) => void;
   trigger?: React.ReactNode;
   allowProjectless?: boolean;
+  initializeGitRepositoryOnPick?: boolean;
 }
 
 export const ProjectSelector = observer(function ProjectSelector({
@@ -52,6 +58,7 @@ export const ProjectSelector = observer(function ProjectSelector({
   onChange,
   trigger,
   allowProjectless = false,
+  initializeGitRepositoryOnPick = false,
 }: ProjectSelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -72,16 +79,17 @@ export const ProjectSelector = observer(function ProjectSelector({
     label: t('projects.noProject'),
     description: t('projects.noProjectTooltip'),
   };
+  const browseOption: BrowseOption = {
+    kind: 'browse',
+    value: '__browse__',
+    label: browsing ? t('projects.opening') : t('projects.browseForFolder'),
+  };
   const optionGroups: Array<{ value: string; items: ProjectSelectorOption[] }> = [
-    ...(allowProjectless
-      ? [
-          {
-            value: 'projectless',
-            items: [projectlessOption],
-          },
-        ]
-      : []),
     { value: 'options', items: options },
+    {
+      value: 'actions',
+      items: [browseOption, ...(allowProjectless ? [projectlessOption] : [])],
+    },
   ];
 
   const selectedOption =
@@ -90,7 +98,17 @@ export const ProjectSelector = observer(function ProjectSelector({
   const isProjectlessSelected = allowProjectless && !value;
 
   function handleValueChange(item: ProjectSelectorOption | null) {
-    if (!item || item.kind === 'projectless') {
+    if (!item) {
+      onChange(undefined);
+      setOpen(false);
+      return;
+    }
+    if (item.kind === 'browse') {
+      setOpen(false);
+      void handleBrowse();
+      return;
+    }
+    if (item.kind === 'projectless') {
       onChange(undefined);
       setOpen(false);
       return;
@@ -123,7 +141,7 @@ export const ProjectSelector = observer(function ProjectSelector({
         setOpen(false);
         return;
       }
-      if (!status.isGitRepo) {
+      if (!status.isGitRepo && !initializeGitRepositoryOnPick) {
         toast({
           title: t('projects.cannotAddProject'),
           description: t('projects.notGitRepository', { name: basenameFromAnyPath(path) }),
@@ -138,7 +156,7 @@ export const ProjectSelector = observer(function ProjectSelector({
           mode: 'pick',
           name: basenameFromAnyPath(path),
           path,
-          initGitRepository: false,
+          initGitRepository: !status.isGitRepo,
         }
       );
       if (projectId) {
@@ -186,7 +204,7 @@ export const ProjectSelector = observer(function ProjectSelector({
         a.kind === b.kind && a.value === b.value
       }
       filter={(item: ProjectSelectorOption, query) =>
-        item.label.toLowerCase().includes(query.toLowerCase())
+        item.kind === 'browse' || item.label.toLowerCase().includes(query.toLowerCase())
       }
       autoHighlight
     >
@@ -199,19 +217,33 @@ export const ProjectSelector = observer(function ProjectSelector({
         />
         <ComboboxList className="pb-0">
           {(group: { value: string; items: ProjectSelectorOption[] }) => (
-            <ComboboxGroup key={group.value} items={group.items} className="py-1">
+            <ComboboxGroup
+              key={group.value}
+              items={group.items}
+              className={
+                group.value === 'actions'
+                  ? 'sticky bottom-0 -mx-1 border-t border-border bg-background-quaternary px-1 py-1'
+                  : 'py-1'
+              }
+            >
               <ComboboxCollection>
                 {(item: ProjectSelectorOption) => (
                   <ComboboxItem
                     key={item.value}
                     value={item}
+                    disabled={item.kind === 'browse' && browsing}
                     aria-label={
                       item.kind === 'projectless'
                         ? `${item.label}: ${item.description}`
                         : item.label
                     }
                   >
-                    {item.kind === 'projectless' ? (
+                    {item.kind === 'browse' ? (
+                      <>
+                        <FolderPlus className="size-4 text-foreground-muted" />
+                        <span className="min-w-0 truncate">{item.label}</span>
+                      </>
+                    ) : item.kind === 'projectless' ? (
                       <Tooltip>
                         <TooltipTrigger render={<span className="min-w-0 truncate" />}>
                           {item.label}
@@ -229,19 +261,6 @@ export const ProjectSelector = observer(function ProjectSelector({
             </ComboboxGroup>
           )}
         </ComboboxList>
-        <ComboboxSeparator />
-        <button
-          type="button"
-          disabled={browsing}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            void handleBrowse();
-          }}
-          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-foreground outline-hidden hover:bg-background-quaternary-1 disabled:pointer-events-none disabled:opacity-50"
-        >
-          <FolderPlus className="size-4 text-foreground-muted" />
-          {browsing ? t('projects.opening') : t('projects.browseForFolder')}
-        </button>
       </ComboboxContent>
     </Combobox>
   );

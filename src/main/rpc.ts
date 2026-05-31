@@ -15,6 +15,7 @@ import { issueController } from './core/issues/controller';
 import { jiraController } from './core/jira/controller';
 import { linearController } from './core/linear/controller';
 import { lovcodeController } from './core/lovcode/controller';
+import { maasController } from './core/maas/controller';
 import { mcpController } from './core/mcp/controller';
 import { plainController } from './core/plain/controller';
 import { projectlessController } from './core/projectless/controller';
@@ -53,6 +54,7 @@ export const rpcRouter = createRPCRouter({
   jira: jiraController,
   linear: linearController,
   lovcode: lovcodeController,
+  maas: maasController,
   plain: plainController,
   projectless: projectlessController,
   skills: skillsController,

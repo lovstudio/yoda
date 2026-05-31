@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { BranchDisplay } from '@renderer/lib/components/branch-display';
 import { ProjectBranchSelector } from '@renderer/lib/components/project-branch-selector';
 import { ComboboxTrigger, ComboboxValue } from '@renderer/lib/ui/combobox';
+import { Field, FieldLabel } from '@renderer/lib/ui/field';
 import { Switch } from '@renderer/lib/ui/switch';
 import { cn } from '@renderer/utils/utils';
 import { type BranchSelectionState } from './use-branch-selection';
@@ -58,25 +59,28 @@ export function BranchPickerField({
       ) : null}
       {!isUnborn && (
         <div className="border-t border-border p-2 flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-sm text-foreground-muted select-none">
+          <Field orientation="horizontal" className="text-sm text-foreground-muted select-none">
             <Switch
               checked={createBranchAndWorktree}
               onCheckedChange={setCreateBranchAndWorktree}
             />
-            <span
-              className="cursor-pointer"
+            <FieldLabel
+              className="cursor-pointer font-normal text-foreground-muted"
               onClick={() => setCreateBranchAndWorktree(!createBranchAndWorktree)}
             >
               {t('tasks.create.createTaskBranchAndWorktree')}
-            </span>
-          </div>
+            </FieldLabel>
+          </Field>
           {createBranchAndWorktree && (
-            <div className="flex items-center gap-2 text-sm text-foreground-muted select-none">
+            <Field orientation="horizontal" className="text-sm text-foreground-muted select-none">
               <Switch checked={pushBranch} onCheckedChange={setPushBranch} />
-              <span className="cursor-pointer" onClick={() => setPushBranch(!pushBranch)}>
+              <FieldLabel
+                className="cursor-pointer font-normal text-foreground-muted"
+                onClick={() => setPushBranch(!pushBranch)}
+              >
                 {t('tasks.create.pushBranchToRemote')}
-              </span>
-            </div>
+              </FieldLabel>
+            </Field>
           )}
         </div>
       )}

@@ -1,3 +1,4 @@
+import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import type { AgentProviderId } from '@shared/agent-provider-registry';
 import type { Branch } from '@shared/git';
 import type { QuickAction } from '@shared/project-settings';
@@ -30,7 +31,7 @@ export async function runProjectCommand(args: {
   autoApprove: boolean | undefined;
 }): Promise<string | null> {
   const { project, action, providerId, defaultBranch, autoApprove } = args;
-  const command = action.command.trim();
+  const command = providerId ? applyAgentCommandPrefix(providerId, action.command) : '';
   if (!command || !providerId || !defaultBranch) return null;
 
   const baseName = `ops-${slugifyLabel(action.label)}-${timestampSuffix(new Date())}`;

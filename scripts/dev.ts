@@ -9,12 +9,18 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { prepareDevElectronBundle } from './lib/dev-electron-bundle.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const electronVite = path.join(repoRoot, 'node_modules', '.bin', 'electron-vite');
 
 const verbose = process.env.YODA_DEV_VERBOSE === '1';
+const devElectronExecutable = prepareDevElectronBundle(repoRoot);
+const env = {
+  ...process.env,
+  ...(devElectronExecutable ? { ELECTRON_EXEC_PATH: devElectronExecutable } : {}),
+};
 
 // Lines we drop unless YODA_DEV_VERBOSE=1. These come from Electron / macOS
 // and are not actionable in app code.
@@ -45,7 +51,7 @@ const child = spawn(electronVite, ['dev', ...args], {
   cwd: repoRoot,
   stdio: verbose ? 'inherit' : ['inherit', 'inherit', 'pipe'],
   detached: true, // own process group so we can signal the whole tree
-  env: process.env,
+  env,
 });
 
 if (!verbose && child.stderr) {

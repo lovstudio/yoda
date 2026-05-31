@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { getProvider, type AgentProviderId } from '@shared/agent-provider-registry';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import { createRPCController } from '@shared/ipc/rpc';
+import { PROJECTLESS_PROJECT_ID } from '@shared/projectless';
 import { makePtyId } from '@shared/ptyId';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { agentHookService } from '@main/core/agent-hooks/agent-hook-service';
@@ -17,10 +18,14 @@ import { providerOverrideSettings } from '@main/core/settings/provider-settings-
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
+import {
+  createProjectlessDefaultDirectory,
+  resolveProjectlessDefaultDirectory,
+} from './projectless-directory';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
-const PROJECTLESS_PROJECT_ID = 'projectless';
+const activeProjectlessSessionCwds = new Map<string, string>();
 
 type StartProjectlessSessionParams = {
   taskId: string;
@@ -41,14 +46,20 @@ function buildPromptInjectionPayload(providerId: AgentProviderId, text: string):
 
 export const projectlessController = createRPCController({
   startSession: async (params: StartProjectlessSessionParams) => {
-    const cwd = homedir();
     const sessionId = makePtySessionId(
       PROJECTLESS_PROJECT_ID,
       params.taskId,
       params.conversationId
     );
+    const homeDir = homedir();
 
     if (ptySessionRegistry.get(sessionId)) {
+      const cwd =
+        activeProjectlessSessionCwds.get(sessionId) ??
+        resolveProjectlessDefaultDirectory({
+          homeDir,
+          title: params.title,
+        });
       return {
         sessionId,
         cwd,
@@ -57,6 +68,11 @@ export const projectlessController = createRPCController({
         conversationId: params.conversationId,
       };
     }
+
+    const cwd = await createProjectlessDefaultDirectory({
+      homeDir,
+      title: params.title,
+    });
 
     const providerConfig = await providerOverrideSettings.getItem(params.provider);
     const { command, args } = buildAgentCommand({
@@ -87,6 +103,7 @@ export const projectlessController = createRPCController({
     const ptyId = makePtyId(params.provider, params.conversationId);
     const port = agentHookService.getPort();
     const token = agentHookService.getToken();
+    const sessionStartedAtMs = Date.now();
     const pty = spawnLocalPty({
       id: sessionId,
       command: resolved.command,
@@ -112,6 +129,7 @@ export const projectlessController = createRPCController({
 
     pty.onExit(({ exitCode }) => {
       ptySessionRegistry.unregister(sessionId);
+      activeProjectlessSessionCwds.delete(sessionId);
       sessionTitleManager.stop(params.conversationId);
       telemetryService.capture('agent_run_finished', {
         provider: params.provider,
@@ -130,12 +148,15 @@ export const projectlessController = createRPCController({
     });
 
     ptySessionRegistry.register(sessionId, pty);
+    activeProjectlessSessionCwds.set(sessionId, cwd);
     sessionTitleManager.start({
       providerId: params.provider,
       conversationId: params.conversationId,
       projectId: PROJECTLESS_PROJECT_ID,
       taskId: params.taskId,
       cwd,
+      startedAtMs: sessionStartedAtMs,
+      isResuming: false,
     });
     telemetryService.capture('agent_run_started', {
       provider: params.provider,

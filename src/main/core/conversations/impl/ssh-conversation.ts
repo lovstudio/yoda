@@ -22,12 +22,10 @@ import { resolveProviderEnv } from './provider-env';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
-const MAX_RESPAWNS = 2;
 
 export class SshConversationProvider implements ConversationProvider {
   private sessions = new Map<string, Pty>();
   private knownSessionIds = new Set<string>();
-  private respawnCounts = new Map<string, number>();
   private readonly projectId: string;
   private readonly taskPath: string;
   private readonly taskId: string;
@@ -150,7 +148,6 @@ export class SshConversationProvider implements ConversationProvider {
 
     pty.onExit(({ exitCode }) => {
       ptySessionRegistry.unregister(sessionId);
-      const shouldRespawn = this.sessions.has(sessionId);
       this.sessions.delete(sessionId);
       telemetryService.capture('agent_run_finished', {
         provider: conversation.providerId,
@@ -166,30 +163,6 @@ export class SshConversationProvider implements ConversationProvider {
         taskId: conversation.taskId,
         exitCode,
       });
-      if (shouldRespawn && !this.tmux) {
-        const count = (this.respawnCounts.get(sessionId) ?? 0) + 1;
-        this.respawnCounts.set(sessionId, count);
-
-        if (count > MAX_RESPAWNS && !isResuming) {
-          log.error('SshConversationProvider: respawn limit reached, giving up', {
-            conversationId: conversation.id,
-          });
-          this.respawnCounts.delete(sessionId);
-          return;
-        }
-
-        const resumeNext = isResuming && count <= MAX_RESPAWNS;
-        if (count > MAX_RESPAWNS) this.respawnCounts.set(sessionId, 0);
-
-        setTimeout(() => {
-          this.startSession(conversation, initialSize, resumeNext, initialPrompt).catch((e) => {
-            log.error('SshConversationProvider: respawn failed', {
-              conversationId: conversation.id,
-              error: String(e),
-            });
-          });
-        }, 500);
-      }
     });
 
     ptySessionRegistry.register(sessionId, pty);

@@ -1,6 +1,20 @@
-import { Archive, CableIcon, PencilLine, Pin, PinOff, RotateCcw, Settings2 } from 'lucide-react';
+import type { TFunction } from 'i18next';
+import {
+  Archive,
+  CableIcon,
+  Copy,
+  FolderOpen,
+  Info,
+  PencilLine,
+  Pin,
+  PinOff,
+  RotateCcw,
+  Settings2,
+} from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from '@renderer/lib/hooks/use-toast';
+import { rpc } from '@renderer/lib/ipc';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -21,8 +35,10 @@ interface ProjectMenuActions {
   canPin: boolean;
   isSsh: boolean;
   canReconnect: boolean;
+  projectPath?: string;
   onPin: () => void;
   onUnpin: () => void;
+  onOpenDetails?: () => void;
   onReconnect?: () => void;
   onChangeSshConnection?: () => void;
   onConfigureScripts?: () => void;
@@ -44,20 +60,56 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   const { t } = useTranslation();
   const items: MenuItemDescriptor[] = [];
 
-  // group 1 — configuration
+  // group 0 — primary navigation
+  if (actions.onOpenDetails) {
+    items.push({
+      key: 'open-details',
+      group: 0,
+      icon: Info,
+      label: t('sidebar.openProjectDetails'),
+      onSelect: actions.onOpenDetails,
+    });
+  }
+
+  // group 1 — path utilities
+  if (actions.projectPath) {
+    const path = actions.projectPath;
+    items.push({
+      key: 'copy-project-path',
+      group: 1,
+      icon: Copy,
+      label: t('sidebar.copyProjectPath'),
+      onSelect: () => {
+        void copyProjectPath(path, t);
+      },
+    });
+    if (!actions.isSsh) {
+      items.push({
+        key: 'open-project-path',
+        group: 1,
+        icon: FolderOpen,
+        label: t('sidebar.openProjectPath'),
+        onSelect: () => {
+          void openProjectPath(path, t);
+        },
+      });
+    }
+  }
+
+  // group 2 — configuration
   if (actions.canPin) {
     items.push(
       actions.isPinned
         ? {
             key: 'unpin',
-            group: 1,
+            group: 2,
             icon: PinOff,
             label: t('sidebar.unpinProject'),
             onSelect: actions.onUnpin,
           }
         : {
             key: 'pin',
-            group: 1,
+            group: 2,
             icon: Pin,
             label: t('sidebar.pinProject'),
             onSelect: actions.onPin,
@@ -67,7 +119,7 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   if (actions.onRename) {
     items.push({
       key: 'rename',
-      group: 1,
+      group: 2,
       icon: PencilLine,
       label: t('sidebar.renameProject.menuLabel'),
       onSelect: actions.onRename,
@@ -76,19 +128,19 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   if (actions.onConfigureScripts) {
     items.push({
       key: 'configure-scripts',
-      group: 1,
+      group: 2,
       icon: Settings2,
       label: t('sidebar.runScripts.configure'),
       onSelect: actions.onConfigureScripts,
     });
   }
 
-  // group 2 — ssh
+  // group 3 — ssh
   if (actions.isSsh) {
     if (actions.onReconnect) {
       items.push({
         key: 'reconnect',
-        group: 2,
+        group: 3,
         icon: RotateCcw,
         label: t('sidebar.reconnect'),
         onSelect: actions.onReconnect,
@@ -98,7 +150,7 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
     if (actions.onChangeSshConnection) {
       items.push({
         key: 'change-ssh',
-        group: 2,
+        group: 3,
         icon: CableIcon,
         label: t('sidebar.changeSshConnection'),
         onSelect: actions.onChangeSshConnection,
@@ -106,16 +158,43 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
     }
   }
 
-  // group 3 — archive
+  // group 4 — archive
   items.push({
     key: 'archive',
-    group: 3,
+    group: 4,
     icon: Archive,
     label: t('sidebar.archiveProject'),
     onSelect: actions.onArchive,
   });
 
   return items;
+}
+
+async function copyProjectPath(path: string, t: TFunction) {
+  try {
+    const res = await rpc.app.clipboardWriteText(path);
+    if (!res?.success) throw new Error(res?.error ?? t('common.unknownError'));
+    toast({ title: t('sidebar.projectPathCopied') });
+  } catch {
+    toast({
+      title: t('common.copyFailed'),
+      description: t('sidebar.copyProjectPathFailed'),
+      variant: 'destructive',
+    });
+  }
+}
+
+async function openProjectPath(path: string, t: TFunction) {
+  try {
+    const res = await rpc.app.openIn({ app: 'finder', path });
+    if (!res?.success) throw new Error(res?.error ?? t('common.unknownError'));
+  } catch (error) {
+    toast({
+      title: t('openIn.failed'),
+      description: error instanceof Error ? error.message : String(error),
+      variant: 'destructive',
+    });
+  }
 }
 
 interface ProjectContextMenuProps extends ProjectMenuActions {

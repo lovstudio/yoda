@@ -72,6 +72,7 @@ export type AgentMeta = {
   cli?: string;
   planActivate?: string;
   autoStartCommand?: string;
+  commandPrefix?: string;
   autoApproveFlag?: string;
   initialPromptFlag?: string;
   useKeystrokeInjection?: boolean;
@@ -90,6 +91,7 @@ export const agentMeta: Record<UiAgent, AgentMeta> = Object.fromEntries(
       cli: p.cli,
       planActivate: p.planActivateCommand,
       autoStartCommand: p.autoStartCommand,
+      commandPrefix: p.commandPrefix,
       autoApproveFlag: p.autoApproveFlag,
       initialPromptFlag: p.initialPromptFlag,
       useKeystrokeInjection: p.useKeystrokeInjection,

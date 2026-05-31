@@ -4,11 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { useModalContext, useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
+import { cn } from '@renderer/utils/utils';
 import { McpCard } from './McpCard';
 import type { McpModalMode } from './McpModal';
 import { useMcps } from './useMcps';
 
-export const McpView: React.FC = () => {
+export const McpView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const { t } = useTranslation();
   const {
     installed,
@@ -62,20 +63,32 @@ export const McpView: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center bg-background text-foreground">
+      <div
+        className={cn(
+          'flex items-center justify-center bg-background text-foreground',
+          embedded ? 'h-48' : 'h-full'
+        )}
+      >
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto bg-background text-foreground">
-      <div className="mx-auto w-full max-w-3xl px-8 py-8">
+    <div
+      className={cn(
+        'flex flex-col bg-background text-foreground',
+        embedded ? 'w-full' : 'h-full overflow-y-auto'
+      )}
+    >
+      <div className={cn('w-full', !embedded && 'mx-auto max-w-3xl px-8 py-8')}>
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-lg font-semibold">{t('mcp.title')}</h1>
-          <p className="mt-1 text-xs text-muted-foreground">{t('mcp.subtitle')}</p>
-        </div>
+        {!embedded && (
+          <div className="mb-6">
+            <h1 className="text-lg font-semibold">{t('mcp.title')}</h1>
+            <p className="mt-1 text-xs text-muted-foreground">{t('mcp.subtitle')}</p>
+          </div>
+        )}
 
         {/* Toolbar */}
         <div className="mb-6 flex items-center gap-2">

@@ -94,11 +94,14 @@ describe('TerminalInputBuffer', () => {
     expect(onCapture).toHaveBeenCalledWith('hello');
   });
 
-  it('skips slash commands', () => {
+  it('skips agent commands', () => {
     const onCapture = vi.fn();
     const buffer = new TerminalInputBuffer(onCapture);
 
     buffer.feed('/help\r');
+    buffer.confirmSubmit();
+
+    buffer.feed('$release-via-cicd\r');
     buffer.confirmSubmit();
 
     expect(onCapture).not.toHaveBeenCalled();

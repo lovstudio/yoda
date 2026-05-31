@@ -1,7 +1,12 @@
-import { Archive, Loader2, MoreHorizontal } from 'lucide-react';
+import { Archive, CircleStop, Loader2, MoreHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  AGENT_PROVIDER_IDS,
+  isValidProviderId,
+  type AgentProviderId,
+} from '@shared/agent-provider-registry';
 import { selectCurrentPr } from '@shared/pull-requests';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -16,7 +21,9 @@ import {
   asProvisioned,
   getTaskManagerStore,
   getTaskStore,
+  taskAgentStatus,
 } from '@renderer/features/tasks/stores/task-selectors';
+import AgentLogo from '@renderer/lib/components/agent-logo';
 import { rpc } from '@renderer/lib/ipc';
 import {
   useNavigate,
@@ -24,6 +31,7 @@ import {
   useWorkspaceSlots,
 } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
 import { SidebarItemMiniButton, SidebarMenuRow } from './sidebar-primitives';
@@ -62,14 +70,20 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const taskManager = getTaskManagerStore(projectId);
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
   const preArchiveCommand = homeDraft?.preArchiveCommand ?? '';
-  const [isArchiving, setIsArchiving] = useState(false);
+  const [archivePhase, setArchivePhase] = useState<'idle' | 'pre-command' | 'archive'>('idle');
+  const preArchiveAbortRef = useRef<AbortController | null>(null);
+  const isArchiving = archivePhase !== 'idle';
+  const canInterruptArchive = archivePhase === 'pre-command';
 
   const isBootstrapping =
     task.state === 'unregistered' ||
     (task.state === 'unprovisioned' &&
       (task.phase === 'provision' || task.phase === 'provision-error'));
+  const isAgentWorking = taskAgentStatus(task) === 'working';
 
   const taskName = task.data.name;
+  const agentBadges = getSidebarAgentBadges(task.conversationStats);
+  const taskIndentClass = rowVariant === 'underProject' ? 'pl-8' : 'pl-2';
 
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
@@ -77,16 +91,33 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   };
 
   const handleArchive = (options?: { skipPreCommand?: boolean }) => {
+    if (canInterruptArchive) {
+      preArchiveAbortRef.current?.abort();
+      return;
+    }
     if (isArchiving) return;
-    setIsArchiving(true);
     void (async () => {
+      const shouldRunPreCommand = !options?.skipPreCommand && preArchiveCommand.trim().length > 0;
+      const abortController = shouldRunPreCommand ? new AbortController() : null;
       try {
-        if (!options?.skipPreCommand) {
-          await runPreArchiveCommand(projectId, taskId, preArchiveCommand);
+        if (abortController) {
+          preArchiveAbortRef.current = abortController;
+          setArchivePhase('pre-command');
+          await runPreArchiveCommand(projectId, taskId, preArchiveCommand, {
+            signal: abortController.signal,
+          });
+          if (abortController.signal.aborted) return;
         }
+        if (preArchiveAbortRef.current === abortController) {
+          preArchiveAbortRef.current = null;
+        }
+        setArchivePhase('archive');
         await taskManager?.archiveTask(taskId);
       } finally {
-        setIsArchiving(false);
+        if (preArchiveAbortRef.current === abortController) {
+          preArchiveAbortRef.current = null;
+        }
+        setArchivePhase('idle');
       }
     })();
   };
@@ -154,6 +185,12 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     void provisionedTask.conversations.resumeConversation(conversationId);
   };
 
+  const handleOpenDetails = () => {
+    handleProvision();
+    navigate('task', { projectId, taskId });
+    resumeActiveConversation();
+  };
+
   const menuActions = {
     isPinned: task.data.isPinned,
     canPin,
@@ -161,6 +198,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     needsReview,
     canMarkReview,
     branchName,
+    openDetailsLabel: t('sidebar.openSessionDetails'),
+    onOpenDetails: handleOpenDetails,
     onPin: () => void task.setPinned(true),
     onUnpin: () => void task.setPinned(false),
     onMarkNeedsReview: () => void task.setNeedsReview(true),
@@ -185,21 +224,18 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       <SidebarMenuRow
         className={cn(
           'group/row flex items-center justify-between px-1 h-8 gap-1',
-          rowVariant === 'pinned' ? 'pl-2' : rowVariant === 'flat' ? 'pl-2' : 'pl-8'
+          taskIndentClass
         )}
         isActive={isActive}
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => {
-          handleProvision();
-          navigate('task', { projectId, taskId });
-          resumeActiveConversation();
-        }}
+        onClick={handleOpenDetails}
         onDoubleClick={(e) => {
           e.stopPropagation();
           handleRename();
         }}
       >
         <div className="flex min-w-0 flex-1 items-center gap-1 self-stretch overflow-hidden">
+          <SidebarTaskAgentBadges badges={agentBadges} />
           <span
             className={cn(
               'min-w-0 truncate text-left transition-colors',
@@ -218,7 +254,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         <div
           className={cn(
             'items-center gap-0.5',
-            isMenuOpen || isArchiving ? 'flex' : 'hidden group-hover/row:flex'
+            isMenuOpen || isArchiving
+              ? 'flex'
+              : isAgentWorking
+                ? 'hidden'
+                : 'hidden group-hover/row:flex'
           )}
         >
           <TaskActionsMenu
@@ -237,14 +277,22 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           />
           <SidebarItemMiniButton
             type="button"
-            aria-label={t('sidebar.archiveTask')}
-            disabled={isArchiving}
+            aria-label={
+              canInterruptArchive ? t('sidebar.interruptPreArchive') : t('sidebar.archiveTask')
+            }
+            className={canInterruptArchive ? 'group/archive-action' : undefined}
+            disabled={archivePhase === 'archive'}
             onClick={(e) => {
               e.stopPropagation();
               handleArchive();
             }}
           >
-            {isArchiving ? (
+            {canInterruptArchive ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin group-hover/archive-action:hidden" />
+                <CircleStop className="hidden h-4 w-4 text-destructive group-hover/archive-action:block" />
+              </>
+            ) : isArchiving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Archive className="h-4 w-4" />
@@ -254,7 +302,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         <div
           className={cn(
             'items-center',
-            isMenuOpen || isArchiving ? 'hidden' : 'flex group-hover/row:hidden'
+            isMenuOpen || isArchiving
+              ? 'hidden'
+              : isAgentWorking
+                ? 'flex'
+                : 'flex group-hover/row:hidden'
           )}
         >
           <TaskSidebarAgentStatus task={task} needsReview={needsReview} />
@@ -269,3 +321,53 @@ const RenderPrBadge = observer(function RenderPrBadge({ task }: { task: TaskStor
   const pr = selectCurrentPr(task.data.prs);
   return pr ? <PrBadge variant="compact" pr={pr} /> : null;
 });
+
+type SidebarAgentBadge = {
+  providerId: AgentProviderId;
+  count: number;
+};
+
+function getSidebarAgentBadges(stats: Record<string, number>): SidebarAgentBadge[] {
+  const counts = new Map<AgentProviderId, number>();
+  for (const [providerId, count] of Object.entries(stats)) {
+    if (!isValidProviderId(providerId) || count <= 0) continue;
+    counts.set(providerId, count);
+  }
+
+  return AGENT_PROVIDER_IDS.flatMap((providerId) => {
+    const count = counts.get(providerId);
+    return count === undefined ? [] : [{ providerId, count }];
+  });
+}
+
+function SidebarTaskAgentBadges({ badges }: { badges: SidebarAgentBadge[] }) {
+  if (badges.length === 0) return null;
+
+  return (
+    <div className="flex shrink-0 items-center [&>span:not(:first-child)]:-ml-1">
+      {badges.map(({ providerId, count }) => {
+        const config = agentConfig[providerId];
+        return (
+          <span
+            key={providerId}
+            className="relative flex size-4 items-center justify-center overflow-hidden rounded-sm bg-background-2 ring-1 ring-background"
+            title={`${config.name}: ${String(count)}`}
+          >
+            <AgentLogo
+              logo={config.logo}
+              alt={config.alt}
+              isSvg={config.isSvg}
+              invertInDark={config.invertInDark}
+              className="size-3"
+            />
+            {count > 1 && (
+              <span className="absolute -bottom-px -right-px rounded-tl bg-background px-px text-[8px] font-semibold leading-none text-foreground-passive">
+                {count}
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}

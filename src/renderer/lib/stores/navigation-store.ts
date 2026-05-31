@@ -20,6 +20,8 @@ export const viewEvents: Record<
   | 'skills_viewed'
   | 'mcp_viewed'
   | 'agents_viewed'
+  | 'maas_viewed'
+  | 'automation_viewed'
 > = {
   home: 'home_viewed',
   project: 'project_viewed',
@@ -29,6 +31,8 @@ export const viewEvents: Record<
   skills: 'skills_viewed',
   mcp: 'mcp_viewed',
   agents: 'agents_viewed',
+  maas: 'maas_viewed',
+  automation: 'automation_viewed',
 };
 
 export class NavigationStore implements Snapshottable<NavigationSnapshot> {

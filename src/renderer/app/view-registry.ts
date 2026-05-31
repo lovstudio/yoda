@@ -1,6 +1,8 @@
 import type { ComponentType, ReactNode } from 'react';
 import { homeView } from '@renderer/app/home-view';
 import { agentsView } from '@renderer/features/agents/agents-view';
+import { automationView } from '@renderer/features/automation/automation-view';
+import { maasView } from '@renderer/features/maas/maas-view';
 import { mcpView } from '@renderer/features/mcp/mcp-view';
 import { projectlessView } from '@renderer/features/projectless/projectless-view';
 import { projectView } from '@renderer/features/projects/view';
@@ -13,6 +15,8 @@ import type { CommandProvider } from '@renderer/lib/commands/types';
 export const views = {
   home: homeView,
   agents: agentsView,
+  automation: automationView,
+  maas: maasView,
   skills: skillsView,
   mcp: mcpView,
   projectless: projectlessView,

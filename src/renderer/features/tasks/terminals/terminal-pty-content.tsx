@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import { PtyPane } from '@renderer/lib/pty/pty-pane';
 import { type PtySession } from '@renderer/lib/pty/pty-session';
+import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
 import { TerminalSearchOverlay } from '@renderer/lib/pty/terminal-search-overlay';
 import { useTerminalSearch } from '@renderer/lib/pty/use-terminal-search';
 import { cssVar } from '@renderer/utils/cssVars';
@@ -19,6 +20,7 @@ export interface TerminalPtyContentProps {
   mapShiftEnterToCtrlJ?: boolean;
   emptyState: ReactNode;
   remoteConnectionId?: string;
+  fileLinks?: TerminalFileLinkOptions | null;
   className?: string;
 }
 
@@ -33,6 +35,7 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
   mapShiftEnterToCtrlJ,
   emptyState,
   remoteConnectionId,
+  fileLinks,
   className,
 }: TerminalPtyContentProps) {
   const activeSessionId = activeSession?.sessionId ?? null;
@@ -123,6 +126,7 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
                   onInterruptPress={onInterruptPress}
                   mapShiftEnterToCtrlJ={mapShiftEnterToCtrlJ}
                   remoteConnectionId={remoteConnectionId}
+                  fileLinks={fileLinks}
                 />
               </div>
             ) : null}

@@ -26,7 +26,6 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
   const showCreateConversationModal = useShowModal('createConversationModal');
   const isActive = useIsActiveTask(taskId);
   const mountedProject = asMounted(getProjectStore(projectId));
-  const shouldSetWorkingOnEnter = mountedProject?.data.type !== 'ssh';
   const remoteConnectionId =
     mountedProject?.data.type === 'ssh' ? mountedProject.data.connectionId : undefined;
 
@@ -95,13 +94,23 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
     }
   }, [sessionStatus]);
 
+  const markConversationSubmitted = (forceWorking = false) => {
+    if (!activeConversation) return;
+    activeConversation.setWorking({ force: forceWorking });
+    void conversations.touchConversation(activeConversation.data.id);
+    void getTaskStore(projectId, taskId)?.setNeedsReview(false);
+  };
+
+  const onSubmittedInput = activeConversation
+    ? (_message: string, isTaskInput: boolean) => {
+        if (isTaskInput || activeConversation.status !== 'awaiting-input') return;
+        markConversationSubmitted(true);
+      }
+    : undefined;
+
   const onEnterPress = activeConversation
     ? () => {
-        if (shouldSetWorkingOnEnter) {
-          activeConversation.setWorking();
-          void conversations.touchConversation(activeConversation.data.id);
-        }
-        void getTaskStore(projectId, taskId)?.setNeedsReview(false);
+        markConversationSubmitted(activeConversation.status === 'awaiting-input');
       }
     : undefined;
 
@@ -109,8 +118,8 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
   const fileLinks = useMemo<TerminalFileLinkOptions>(
     () => ({
       workspaceRoot: provisioned.path,
-      onOpen: ({ filePath }) => {
-        provisioned.taskView.tabManager.openFile(filePath);
+      onOpen: ({ filePath, line, column }) => {
+        provisioned.taskView.tabManager.openFile(filePath, { line, column });
         provisioned.taskView.setFocusedRegion('main');
       },
     }),
@@ -118,12 +127,12 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
   );
 
   return (
-    <div className="flex h-full flex-col p-2">
-      <div className="min-h-0 flex-1">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-2">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div
           ref={containerRef}
           tabIndex={-1}
-          className="flex h-full flex-col outline-none"
+          className="flex min-h-0 min-w-0 flex-1 flex-col outline-none"
           onFocus={() => {
             if (isActive) provisioned.taskView.setFocusedRegion('main');
           }}
@@ -171,6 +180,7 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
                       pty={activeSession.pty}
                       className="h-full w-full"
                       onEnterPress={onEnterPress}
+                      onSubmittedInput={onSubmittedInput}
                       onInterruptPress={onInterruptPress}
                       mapShiftEnterToCtrlJ
                       remoteConnectionId={remoteConnectionId}

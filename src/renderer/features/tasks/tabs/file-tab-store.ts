@@ -4,6 +4,12 @@ import { getFileKind } from '@renderer/lib/editor/fileKind';
 import { getDefaultRenderer } from '@renderer/lib/editor/renderer-utils';
 import type { ManagedFileKind } from '@renderer/lib/editor/types';
 
+export interface FileRevealTarget {
+  requestId: number;
+  lineNumber: number;
+  column: number;
+}
+
 /**
  * Observable store for a single open file tab.
  * Owns all file-specific display state: path, renderer kind, image content, size.
@@ -21,6 +27,8 @@ export class FileTabStore {
   /** True only for image files while the data-URL is being fetched. */
   isLoading: boolean;
   totalSize: number | null;
+  pendingReveal: FileRevealTarget | null;
+  private revealRequestId = 0;
 
   constructor(path: string, isPreview: boolean, tabId?: string) {
     const fileKind = getFileKind(path);
@@ -32,6 +40,7 @@ export class FileTabStore {
     this.content = '';
     this.isLoading = fileKind === 'image';
     this.totalSize = null;
+    this.pendingReveal = null;
 
     makeObservable(this, {
       path: observable,
@@ -41,9 +50,12 @@ export class FileTabStore {
       content: observable,
       isLoading: observable,
       totalSize: observable,
+      pendingReveal: observable,
       updateRenderer: action,
       setImageContent: action,
       setTotalSize: action,
+      revealLocation: action,
+      consumePendingReveal: action,
       pin: action,
       resetForPath: action,
     });
@@ -62,6 +74,23 @@ export class FileTabStore {
     this.totalSize = size;
   }
 
+  revealLocation(line?: number, column?: number): void {
+    if (!line || !Number.isFinite(line)) return;
+    const lineNumber = Math.max(1, Math.floor(line));
+    const columnNumber = column && Number.isFinite(column) ? Math.max(1, Math.floor(column)) : 1;
+    this.pendingReveal = {
+      requestId: ++this.revealRequestId,
+      lineNumber,
+      column: columnNumber,
+    };
+  }
+
+  consumePendingReveal(): FileRevealTarget | null {
+    const reveal = this.pendingReveal;
+    this.pendingReveal = null;
+    return reveal;
+  }
+
   pin(): void {
     this.isPreview = false;
   }
@@ -78,5 +107,6 @@ export class FileTabStore {
     this.content = '';
     this.isLoading = fileKind === 'image';
     this.totalSize = null;
+    this.pendingReveal = null;
   }
 }

@@ -120,8 +120,16 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
   }, [taskView.isSidebarCollapsed, sidebarPanelRef]);
 
   return (
-    <ResizablePanelGroup orientation="horizontal" id="task-sidebar-layout">
-      <ResizablePanel id="task-main-area" data-yoda-animate={isHandleDragging ? 'false' : 'true'}>
+    <ResizablePanelGroup
+      orientation="horizontal"
+      id="task-sidebar-layout"
+      className="min-h-0 min-w-0 overflow-hidden"
+    >
+      <ResizablePanel
+        id="task-main-area"
+        className="min-h-0 min-w-0 overflow-hidden"
+        data-yoda-animate={isHandleDragging ? 'false' : 'true'}
+      >
         <TaskMainColumn />
       </ResizablePanel>
       <ResizableHandle
@@ -137,6 +145,7 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
         maxSize="50%"
         collapsible
         collapsedSize={SIDEBAR_COLLAPSED_SIZE}
+        className="min-h-0 min-w-0 overflow-hidden"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
         onResize={() => {
           const wantCollapsed = sidebarPanelRef.current?.isCollapsed() ?? false;
@@ -169,10 +178,15 @@ const TaskMainColumn = observer(function TaskMainColumn() {
   }, [taskView.isTerminalDrawerOpen, bottomPanelRef]);
 
   return (
-    <ResizablePanelGroup orientation="vertical" id="task-main-vertical">
+    <ResizablePanelGroup
+      orientation="vertical"
+      id="task-main-vertical"
+      className="min-h-0 min-w-0 overflow-hidden"
+    >
       <ResizablePanel
         id="task-main-content"
         minSize="30%"
+        className="min-h-0 min-w-0 overflow-hidden"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
       >
         <UnifiedMainContent />
@@ -209,6 +223,7 @@ const TaskMainColumn = observer(function TaskMainColumn() {
         collapsedSize="0%"
         defaultSize="25%"
         minSize="15%"
+        className="min-h-0 min-w-0 overflow-hidden"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
         onResize={() => {
           const wantOpen = !(bottomPanelRef.current?.isCollapsed() ?? false);

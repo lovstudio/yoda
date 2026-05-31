@@ -8,6 +8,9 @@ export interface SessionTitleContext {
   taskId: string;
   /** Absolute path of the worktree the agent runs in. */
   cwd: string;
+  /** Timestamp captured immediately before spawning the agent process. */
+  startedAtMs?: number;
+  isResuming?: boolean;
 }
 
 export type TitleListener = (title: string) => void;

@@ -1,6 +1,7 @@
 import { ExternalLink } from 'lucide-react';
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { McpView } from '@renderer/features/mcp/components/McpView';
 import { rpc } from '@renderer/lib/ipc';
 import { Separator } from '@renderer/lib/ui/separator';
 import { cn } from '@renderer/utils/utils';
@@ -31,6 +32,7 @@ export type SettingsPageTab =
   | 'account'
   | 'clis-models'
   | 'integrations'
+  | 'mcp'
   | 'repository'
   | 'interface'
   | 'docs';
@@ -63,6 +65,7 @@ export function SettingsPage({
     { id: 'account', label: t('settings.tabs.account') },
     { id: 'clis-models', label: t('settings.tabs.agents') },
     { id: 'integrations', label: t('settings.tabs.integrations') },
+    { id: 'mcp', label: t('settings.tabs.mcp') },
     { id: 'repository', label: t('settings.tabs.repository') },
     { id: 'interface', label: t('settings.tabs.interface') },
     { id: 'docs', label: t('settings.tabs.docs'), isExternal: true },
@@ -147,6 +150,11 @@ export function SettingsPage({
           component: <IntegrationsCard />,
         },
       ],
+    },
+    mcp: {
+      title: t('settings.tabs.mcp'),
+      description: t('mcp.subtitle'),
+      sections: [{ id: 'mcp', component: <McpView embedded /> }],
     },
     repository: {
       title: t('settings.tabs.repository'),

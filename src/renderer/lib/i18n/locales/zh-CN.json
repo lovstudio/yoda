@@ -70,13 +70,15 @@
   "sidebar": {
     "newSession": "新建会话",
     "searchSession": "搜索会话",
-    "agents": "代理",
+    "agents": "Agents",
+    "maas": "MaaS",
     "skills": "技能",
     "automation": "自动化",
     "settings": "设置",
     "giveFeedback": "反馈建议",
     "dropToAddProject": "拖入以添加项目",
     "projects": "项目",
+    "conversations": "对话",
     "pinned": "已固定",
     "sortBy": "排序方式",
     "sortByCreatedAt": "创建时间",
@@ -110,9 +112,16 @@
     "projectNotFound": "项目路径未找到",
     "reconnect": "重新连接",
     "changeSshConnection": "更换 SSH 连接",
+    "openProjectDetails": "打开项目详情",
+    "openSessionDetails": "打开会话详情",
+    "openTaskDetails": "打开任务详情",
     "archiveProject": "归档项目",
     "pinProject": "固定项目",
     "unpinProject": "取消固定项目",
+    "copyProjectPath": "复制项目路径",
+    "projectPathCopied": "项目路径已复制",
+    "copyProjectPathFailed": "无法将项目路径复制到剪贴板。",
+    "openProjectPath": "在 Finder 中打开",
     "renameProject": {
       "menuLabel": "重命名项目…",
       "title": "重命名项目",
@@ -125,6 +134,7 @@
       "failed": "重命名项目失败"
     },
     "archiveTask": "归档任务",
+    "interruptPreArchive": "打断归档前命令",
     "archiveTaskSkipPre": "归档（跳过归档前命令）",
     "archiveTaskWithNote": "归档任务（附备注）…",
     "configurePreArchive": "配置归档前命令…",
@@ -167,6 +177,7 @@
       "account": "账户",
       "agents": "代理",
       "integrations": "集成",
+      "mcp": "MCP",
       "repository": "仓库",
       "interface": "界面",
       "docs": "文档"
@@ -458,6 +469,34 @@
     "skillShortcutAria": "插入 skill",
     "skillShortcutLabel": "Skills",
     "searchSkills": "搜索 skills…",
+    "modeAria": "选择运行模式",
+    "modeNormal": "标准",
+    "modeNormalDesc": "单 agent、单 session。",
+    "modeCompare": "对比",
+    "modeCompareDesc": "多个 agent 在隔离分支内同时运行。",
+    "modeReview": "Review",
+    "modeReviewDesc": "A agent 实现，B agent review 并循环反馈。",
+    "modeTeam": "Agent team",
+    "modeTeamDesc": "CEO agent 拆解后分派给专业角色。",
+    "compareAgent": "Agent {{index}}",
+    "addCompareAgent": "添加 agent",
+    "removeCompareAgent": "移除 agent",
+    "reviewImplementer": "A agent",
+    "reviewReviewer": "B reviewer",
+    "reviewRoundLimit": "如仍有问题，review loop 最多运行 {{count}} 轮。",
+    "agentSystemPromptAria": "编辑 {{label}} 的 system prompt",
+    "agentSystemPromptTitle": "{{label}} system prompt",
+    "agentSystemPromptPlaceholder": "描述这个 agent 的角色、约束和工作方式。",
+    "agentSystemPromptDefault": "默认 prompt",
+    "agentSystemPromptCustom": "自定义 prompt",
+    "agentSystemPromptEmpty": "无 system prompt",
+    "agentSystemPromptReset": "重置",
+    "agentSystemPromptSave": "保存",
+    "teamRoleCeo": "CEO · 马斯克",
+    "teamRoleProduct": "产品 · 乔布斯",
+    "teamRoleEngineering": "研发 · Linus",
+    "teamRoleUiux": "UIUX · 乔尼·艾夫",
+    "teamRoleOperations": "用户运营 · 蒂姆库克",
     "selectProjectPlaceholder": "选择项目",
     "remoteMode": "远程模式",
     "localMode": "本地模式",
@@ -694,6 +733,45 @@
       "addHeader": "+ 添加 header"
     }
   },
+  "automation": {
+    "title": "自动化",
+    "new": "新建自动化",
+    "current": "当前",
+    "paused": "已暂停",
+    "emptyCurrent": "暂无启用中的自动化。",
+    "emptyPaused": "暂无已暂停的自动化。",
+    "pausedStatus": "已暂停",
+    "scheduleManual": "手动",
+    "runFailed": "自动化运行失败",
+    "status": {
+      "active": "启用",
+      "paused": "暂停"
+    },
+    "actions": {
+      "run": "运行",
+      "edit": "编辑",
+      "pause": "暂停",
+      "resume": "恢复",
+      "delete": "删除"
+    },
+    "form": {
+      "title": "名称",
+      "titlePlaceholder": "Daily maker trend research",
+      "workspace": "工作区",
+      "workspacePlaceholder": "Lovstudio Web",
+      "agent": "代理",
+      "schedule": "计划",
+      "schedulePlaceholder": "每天 10:00",
+      "status": "状态",
+      "prompt": "Prompt",
+      "promptPlaceholder": "描述这个自动化运行时要让 agent 做什么。"
+    },
+    "delete": {
+      "title": "删除自动化？",
+      "description": "“{{name}}” 将被删除，此操作无法撤销。",
+      "confirmLabel": "删除"
+    }
+  },
   "skills": {
     "title": "技能",
     "subtitle": "通过可复用的技能模块扩展代理能力",
@@ -786,6 +864,77 @@
     "copyCommand": "复制命令",
     "searchAgents": "搜索代理…",
     "noAgentInstalled": "未安装代理"
+  },
+  "maas": {
+    "title": "MaaS",
+    "subtitle": "连接模型平台并查看真实用量统计。",
+    "platformsTitle": "平台",
+    "connected": "已连接",
+    "notConnected": "未连接",
+    "connectedCount": "已连接 {{count}} 个",
+    "platforms": {
+      "zenmux": {
+        "description": "统一模型路由、可观测性与多 Provider 计费。"
+      },
+      "openrouter": {
+        "description": "兼容 OpenAI 协议的模型路由与 Provider 兜底。"
+      },
+      "siliconflow": {
+        "description": "面向文本、图像与 Embedding 的开放模型托管 API。"
+      },
+      "custom": {
+        "description": "团队自管的任意 OpenAI 兼容 MaaS 端点。"
+      }
+    },
+    "connection": {
+      "displayName": "名称",
+      "endpoint": "端点",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "粘贴 API Key 或管理 Key",
+      "managementApiKey": "Management API Key",
+      "zenmuxManagementKeyPlaceholder": "粘贴 ZenMux Management API Key",
+      "apiKeyStoredPlaceholder": "已保存 {{fingerprint}}，留空则继续使用",
+      "save": "保存",
+      "saving": "保存中",
+      "disconnect": "断开连接",
+      "openDocs": "文档",
+      "apiKeyRequired": "首次连接需要输入 API Key。",
+      "keyFingerprint": "Key {{fingerprint}}",
+      "noKey": "未保存 Key",
+      "lastChecked": "检查于 {{time}}",
+      "neverChecked": "尚未检查"
+    },
+    "records": {
+      "title": "用量统计",
+      "subtitle": "ZenMux Management API 聚合统计：已加载 {{count}} / {{total}} 条（{{range}}）",
+      "loading": "正在加载 ZenMux 统计数据…",
+      "emptyNoConnectionTitle": "未连接平台",
+      "emptyNoConnection": "连接 MaaS 平台后即可加载 ZenMux Management API 聚合统计。",
+      "emptyNoRecords": "暂无用量统计。",
+      "errorTitle": "无法加载用量统计",
+      "reload": "刷新",
+      "openZenmuxLogs": "打开 Logs",
+      "scrollHint": "继续滚动加载更多",
+      "end": "统计已到末尾",
+      "input": "Token",
+      "output": "输出",
+      "latency": "延迟",
+      "duration": "耗时",
+      "cost": "费用",
+      "assets": "{{count}} 个资产",
+      "filters": {
+        "all": "全部",
+        "text": "文本",
+        "image": "图像",
+        "embedding": "Embedding",
+        "video": "视频"
+      },
+      "status": {
+        "succeeded": "成功",
+        "failed": "失败",
+        "streaming": "流式中"
+      }
+    }
   },
   "editor": {
     "fileNotFound": "文件未找到",
@@ -1221,7 +1370,7 @@
   "projects": {
     "selectProject": "选择项目",
     "noProject": "不使用项目",
-    "noProjectTooltip": "不会创建项目任务或 worktree。Agent 会在你的主目录中启动，这次会话不会关联任何项目。",
+    "noProjectTooltip": "不会创建项目任务或 worktree。Agent 会在 ~/Documents/Yoda/<date>/<title> 中启动，这次会话不会关联任何项目。",
     "selectLocalProject": "选择本地项目",
     "selectProjectDirectory": "选择项目目录",
     "cannotAddProject": "无法添加项目",

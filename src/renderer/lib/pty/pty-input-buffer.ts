@@ -6,9 +6,10 @@
  * passes validation. After firing, the buffer disables itself.
  */
 
-/** Strings that look like non-task-related input (confirmations, slash commands, etc.) */
+/** Strings that look like non-task-related input (confirmations, agent commands, etc.) */
 const SKIP_PATTERNS = [
   /^\//,
+  /^\$\S/,
   /^y(es)?$/i,
   /^n(o)?$/i,
   /^ok$/i,

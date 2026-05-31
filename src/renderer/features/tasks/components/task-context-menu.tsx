@@ -7,6 +7,7 @@ import {
   CircleSlash,
   Copy,
   FileText,
+  Info,
   Pencil,
   Pin,
   PinOff,
@@ -41,6 +42,8 @@ interface TaskMenuActions {
   needsReview: boolean;
   canMarkReview: boolean;
   branchName?: string;
+  openDetailsLabel?: string;
+  onOpenDetails?: () => void;
   onPin: () => void;
   onUnpin: () => void;
   onMarkNeedsReview: () => void;
@@ -72,6 +75,17 @@ interface MenuItemDescriptor {
 function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   const { t } = useTranslation();
   const items: MenuItemDescriptor[] = [];
+
+  // group 0 — primary navigation
+  if (actions.onOpenDetails) {
+    items.push({
+      key: 'open-details',
+      group: 0,
+      icon: Info,
+      label: actions.openDetailsLabel ?? t('sidebar.openSessionDetails'),
+      onSelect: actions.onOpenDetails,
+    });
+  }
 
   // group 1 — run scripts
   if (actions.onRunScript) {

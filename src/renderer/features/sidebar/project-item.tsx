@@ -9,7 +9,7 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
 import {
@@ -61,28 +61,6 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const showManageRunScripts = useShowModal('manageRunScriptsModal');
   const showRenameProject = useShowModal('renameProjectModal');
   const [isMenuOpen, setMenuOpen] = useState(false);
-  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const canRename = getProjectStore(projectId)?.state !== 'unregistered';
-  useEffect(
-    () => () => {
-      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-    },
-    []
-  );
-  const handleRowClick = useCallback(() => {
-    if (clickTimerRef.current) {
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-      if (canRename) showRenameProject({ projectId });
-      else navigate('project', { projectId });
-      return;
-    }
-    clickTimerRef.current = setTimeout(() => {
-      clickTimerRef.current = null;
-      navigate('project', { projectId });
-    }, 220);
-  }, [canRename, navigate, projectId, showRenameProject]);
 
   const project = getProjectStore(projectId);
 
@@ -91,6 +69,25 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     void repo?.localData.load();
     void repo?.remoteData.load();
   }, [projectId]);
+
+  const handleOpenDetails = useCallback(() => {
+    prefetchRepository();
+    navigate('project', { projectId });
+  }, [navigate, prefetchRepository, projectId]);
+
+  const handleToggleExpanded = useCallback(() => {
+    sidebarStore.toggleProjectExpanded(projectId);
+  }, [projectId]);
+
+  const handleRowKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      e.stopPropagation();
+      handleToggleExpanded();
+    },
+    [handleToggleExpanded]
+  );
 
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
   const expressMode = homeDraft?.expressMode ?? false;
@@ -174,6 +171,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const canReconnect = sshConnectionState !== 'connected';
   const canPin = project.state !== 'unregistered';
   const isPinned = sidebarStore.isProjectPinned(projectId);
+  const projectPath =
+    project.data?.path ?? (project.errorCode === 'path-not-found' ? project.error : undefined);
   const ProjectIcon = isSshProject ? FolderInput : FolderClosed;
 
   const renderSpinnerWithTooltip = () => {
@@ -203,6 +202,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     canPin,
     isSsh: isSshProject,
     canReconnect,
+    projectPath,
+    onOpenDetails: handleOpenDetails,
     onPin: () => sidebarStore.setProjectPinned(projectId, true),
     onUnpin: () => sidebarStore.setProjectPinned(projectId, false),
     onReconnect: sshConnectionId
@@ -232,8 +233,12 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         className={cn('group/row h-8 justify-between flex px-1')}
         data-active={isProjectActive || undefined}
         isActive={isProjectActive}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
         onMouseDown={(e) => e.preventDefault()}
-        onClick={handleRowClick}
+        onClick={handleToggleExpanded}
+        onKeyDown={handleRowKeyDown}
       >
         <div className="flex items-center gap-1 flex-1 min-w-0">
           {project.state === 'unregistered' ? (
@@ -244,7 +249,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
               className="relative"
               onClick={(e) => {
                 e.stopPropagation();
-                sidebarStore.toggleProjectExpanded(projectId);
+                handleToggleExpanded();
               }}
             >
               <ProjectIcon className="absolute h-4 w-4 transition-opacity duration-150 opacity-100 group-hover/row:opacity-0" />
@@ -287,10 +292,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
           <SidebarItemMiniButton
             type="button"
             className={cn(
-              'transition-opacity duration-150',
-              isPinned || isMenuOpen
-                ? 'opacity-100 text-foreground-tertiary'
-                : 'opacity-0 group-hover/row:opacity-100'
+              'transition-opacity duration-150 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100',
+              isPinned && 'text-foreground-tertiary'
             )}
             aria-label={isPinned ? t('sidebar.unpinProject') : t('sidebar.pinProject')}
             disabled={!canPin}
@@ -299,7 +302,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
               sidebarStore.toggleProjectPinned(projectId);
             }}
           >
-            <Pin className="h-4 w-4" fill={isPinned ? 'currentColor' : 'none'} />
+            <Pin className="h-4 w-4" fill={isPinned ? 'currentColor' : 'none'} fillOpacity={0.18} />
           </SidebarItemMiniButton>
           <ProjectActionsMenu
             {...menuActions}
@@ -312,8 +315,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
                   'transition-opacity duration-150',
                   isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'
                 )}
-                aria-label={t('sidebar.runScripts.menuLabel')}
-                disabled={project.state === 'unregistered'}
+                aria-label={t('sidebar.more')}
                 onClick={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="h-4 w-4" />
