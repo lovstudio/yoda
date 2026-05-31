@@ -6,6 +6,38 @@ This project resets to **0.1.0** with the rebrand from `emdash` to `yoda`. Older
 release history (`v0.4.x`, `v1.1.x`) belongs to the upstream `emdash` codebase
 and is preserved in git tags only.
 
+## 0.3.5 — 2026-05-31
+
+### Added
+
+- Add richer projectless workflows from the home view, including compare,
+  review, team, path mention autocomplete, skill shortcuts, and resumable
+  projectless sidebar sessions.
+- Add the MaaS dashboard and ZenMux usage integration, with encrypted API key
+  storage and invocation history views.
+- Add task review markers, archive-without-command handling, Claude context
+  inspection, and Codex title generation support.
+- Add sidebar grouping modes, pinned projects, projectless session rows, and
+  expanded tests around the new task, conversation, terminal, and logger flows.
+
+### Changed
+
+- Remove the task titlebar conversation switcher and shift conversation
+  navigation into the updated task surface.
+- Improve the development Electron bundle preparation so the local macOS app
+  keeps Yoda metadata without repeatedly patching the installed Electron app.
+- Surface copyable debug information on toasts and route more failures through
+  structured logger metadata.
+
+### Fixed
+
+- Stabilize PTY first-layout measurement, restored views, bottom spacing, and
+  dark Codex input readability.
+- Improve terminal file links and optional IME diagnostics/native punctuation
+  handling.
+- Tighten projectless default directory creation, conversation resume behavior,
+  and path completion safety checks.
+
 ## 0.3.4 — 2026-05-25
 
 ### Fixed
