@@ -1,3 +1,4 @@
+import type { DeepLinkTarget } from '@shared/deep-links';
 import type { DependencyStatusUpdatedEvent } from '@shared/dependencies';
 import { defineEvent } from '@shared/ipc/events';
 
@@ -23,6 +24,8 @@ export const notificationFocusTaskChannel = defineEvent<{
   taskId: string;
   conversationId?: string;
 }>('notification:focus-task');
+
+export const deepLinkOpenChannel = defineEvent<DeepLinkTarget>('deep-link:open');
 
 export const ptyStartedChannel = defineEvent<{
   id: string;

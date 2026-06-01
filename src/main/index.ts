@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import dockIcon from '@/assets/images/yoda/icon-dock.png?asset';
 import { PRODUCT_NAME } from '@shared/app-identity';
 import { registerRPCRouter } from '@shared/ipc/rpc';
+import { deepLinkService } from './app/deep-link';
 import { setupApplicationMenu } from './app/menu';
 import { registerAppScheme, setupAppProtocol } from './app/protocol';
 import { createMainWindow } from './app/window';
@@ -35,6 +36,7 @@ if (process.platform === 'linux') {
 }
 
 registerAppScheme();
+deepLinkService.register();
 
 app.setName(PRODUCT_NAME);
 
@@ -55,10 +57,18 @@ function migrateLegacyEmdashUserData(legacyPath: string, newPath: string): void 
   }
 }
 
-app.on('second-instance', () => {
+function createMainWindowWithDeepLinkReset(): BrowserWindow {
+  deepLinkService.markRendererNotReady();
+  const win = createMainWindow();
+  win.webContents.on('did-start-loading', () => deepLinkService.markRendererNotReady());
+  return win;
+}
+
+app.on('second-instance', (_event, argv) => {
   const win = BrowserWindow.getAllWindows()[0];
   if (win?.isMinimized()) win.restore();
   win?.focus();
+  deepLinkService.enqueueArgv(argv);
 });
 
 if (!import.meta.env.DEV && !app.requestSingleInstanceLock()) {
@@ -82,7 +92,7 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createMainWindow();
+    createMainWindowWithDeepLinkReset();
   }
 });
 
@@ -133,11 +143,12 @@ void app.whenReady().then(async () => {
   // RPC router must be registered before the renderer fires its first IPC call.
   registerRPCRouter(rpcRouter, ipcMain);
   __bootMark('registerRPCRouter done');
+  deepLinkService.start();
 
   setupAppProtocol(join(app.getAppPath(), 'out', 'renderer'));
   setupApplicationMenu();
   __bootMark('protocol + menu done');
-  const __win = createMainWindow();
+  const __win = createMainWindowWithDeepLinkReset();
   __bootMark('createMainWindow returned');
   __win.webContents.once('did-start-loading', () => __bootMark('webContents did-start-loading'));
   __win.webContents.once('dom-ready', () => __bootMark('webContents dom-ready'));

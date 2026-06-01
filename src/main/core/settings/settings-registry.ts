@@ -65,6 +65,7 @@ export const SETTINGS_DEFAULTS = {
     prompt: '',
     selectedProjectId: null,
     strategyKind: 'new-branch' as const,
+    reviewStrategyKind: 'no-worktree' as const,
     providerOverride: null,
     runMode: 'normal' as const,
     compareProviders: ['claude', 'codex'],

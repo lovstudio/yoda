@@ -177,6 +177,7 @@ export const homeDraftSchema = z.object({
   prompt: z.string(),
   selectedProjectId: z.string().nullable(),
   strategyKind: z.enum(['new-branch', 'no-worktree']),
+  reviewStrategyKind: z.enum(['new-branch', 'no-worktree']),
   providerOverride: z.enum(AGENT_PROVIDER_IDS).nullable(),
   runMode: homeRunModeSchema,
   compareProviders: z.array(z.enum(AGENT_PROVIDER_IDS)),

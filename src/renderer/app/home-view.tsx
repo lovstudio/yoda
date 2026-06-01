@@ -113,6 +113,7 @@ import {
 
 type TaskStrategyKind = 'new-branch' | 'no-worktree';
 type HomeRunMode = 'normal' | 'compare' | 'review' | 'team';
+type RunHostKind = 'local' | 'ssh';
 type SkillShortcutPrefix = '/' | '$';
 type TeamRoleId = 'ceo' | 'product' | 'engineering' | 'uiux' | 'operations';
 type TeamProviderSelection = Record<TeamRoleId, AgentProviderId>;
@@ -671,6 +672,29 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const defaultBranch = repo?.defaultBranch;
   const isUnborn = repo?.isUnborn ?? false;
   const branchLabel = defaultBranch?.branch ?? repo?.currentBranch ?? 'main';
+  const runHostKind: RunHostKind = projectData?.type === 'ssh' ? 'ssh' : 'local';
+  const strategyLabels = useMemo(
+    () => ({
+      chipNewBranch: t('home.strategyChipNewBranch', { branch: branchLabel }),
+      chipNoWorktree: t('home.strategyChipNoWorktree', { branch: branchLabel }),
+      newBranchTitle: t('home.strategyNewBranchTitle', { branch: branchLabel }),
+      newBranchDesc: t('home.strategyNewBranchDesc', { branch: branchLabel }),
+      noWorktreeTitle: t('home.strategyNoWorktreeTitle', { branch: branchLabel }),
+      noWorktreeDesc: t('home.strategyNoWorktreeDesc'),
+    }),
+    [branchLabel, t]
+  );
+  const reviewStrategyLabels = useMemo(
+    () => ({
+      chipNewBranch: t('home.reviewStrategyChipNewBranch', { branch: branchLabel }),
+      chipNoWorktree: t('home.reviewStrategyChipSameBranch', { branch: branchLabel }),
+      newBranchTitle: t('home.reviewStrategyNewBranchTitle', { branch: branchLabel }),
+      newBranchDesc: t('home.reviewStrategyNewBranchDesc', { branch: branchLabel }),
+      noWorktreeTitle: t('home.reviewStrategySameBranchTitle', { branch: branchLabel }),
+      noWorktreeDesc: t('home.reviewStrategySameBranchDesc'),
+    }),
+    [branchLabel, t]
+  );
 
   const providerOverrideValue = draft?.providerOverride ?? null;
   const setProviderOverridePersisted = useCallback(
@@ -917,12 +941,21 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     },
     [updateDraft]
   );
-  const modeRequiresWorktree = runMode !== 'normal';
-  const effectiveStrategyKind: TaskStrategyKind = modeRequiresWorktree
-    ? 'new-branch'
-    : isUnborn
-      ? 'no-worktree'
-      : strategyKind;
+  const reviewStrategyKind: TaskStrategyKind = draft?.reviewStrategyKind ?? 'no-worktree';
+  const setReviewStrategyKind = useCallback(
+    (next: TaskStrategyKind) => {
+      updateDraft({ reviewStrategyKind: next });
+    },
+    [updateDraft]
+  );
+  const effectiveStandardStrategyKind: TaskStrategyKind = isUnborn ? 'no-worktree' : strategyKind;
+  const effectiveReviewStrategyKind: TaskStrategyKind = isUnborn
+    ? 'no-worktree'
+    : reviewStrategyKind;
+  const modeRequiresWorktree =
+    runMode === 'compare' ||
+    runMode === 'team' ||
+    (runMode === 'review' && effectiveReviewStrategyKind === 'new-branch');
   const trimmed = prompt.trim();
   const modeHasAgents =
     runMode === 'compare'
@@ -935,9 +968,9 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const canSubmit =
     !submitting &&
     modeHasAgents &&
-    (modeRequiresWorktree
-      ? !!mounted && !!defaultBranch && !isUnborn
-      : !mounted || !!defaultBranch);
+    (runMode === 'normal'
+      ? !mounted || !!defaultBranch
+      : !!mounted && !!defaultBranch && (!modeRequiresWorktree || !isUnborn));
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || submitting) return;
@@ -1002,13 +1035,13 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
         provider: AgentProviderId;
         nameSeed: string;
         initialPrompt: string | undefined;
-        forceWorktree: boolean;
+        strategyKind: TaskStrategyKind;
       }) => {
         const taskId = crypto.randomUUID();
         const conversationId = crypto.randomUUID();
         const taskName = reserveTaskName(args.nameSeed);
         const strategy =
-          !args.forceWorktree && effectiveStrategyKind === 'no-worktree'
+          args.strategyKind === 'no-worktree'
             ? ({ kind: 'no-worktree' } as const)
             : ({ kind: 'new-branch', taskBranch: taskName, pushBranch: false } as const);
         const promise = mounted.taskManager.createTask({
@@ -1034,7 +1067,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
         const launches = compareProviders.map((provider, index) =>
           createProjectTask({
             provider,
-            nameSeed: `${baseName}-${provider}`,
+            nameSeed: `${baseName}-agent-${index + 1}-${provider}`,
             initialPrompt: buildRequirementPrompt({
               requirement: trimmed,
               systemPrompt: getSystemPrompt(
@@ -1042,7 +1075,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                 defaultCompareSystemPrompt(index)
               ),
             }),
-            forceWorktree: true,
+            strategyKind: 'new-branch',
           })
         );
         const first = launches[0];
@@ -1065,7 +1098,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
               defaultReviewImplementerSystemPrompt()
             ),
           }),
-          forceWorktree: true,
+          strategyKind: effectiveReviewStrategyKind,
         });
         navigate('task', { projectId: mounted.data.id, taskId: implementation.taskId });
         void runReviewOrchestration({
@@ -1100,7 +1133,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
               defaultTeamSystemPrompt(ceoRole)
             ),
           }),
-          forceWorktree: true,
+          strategyKind: 'new-branch',
         });
         navigate('task', { projectId: mounted.data.id, taskId: ceo.taskId });
         void (async () => {
@@ -1122,7 +1155,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                   defaultTeamSystemPrompt(role)
                 ),
               }),
-              forceWorktree: true,
+              strategyKind: 'new-branch',
             })
           );
           reportFailures(await Promise.allSettled(workerLaunches.map((launch) => launch.promise)));
@@ -1139,7 +1172,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
         provider: providerId,
         nameSeed: baseName,
         initialPrompt: trimmed || undefined,
-        forceWorktree: false,
+        strategyKind: effectiveStandardStrategyKind,
       });
       navigate('task', { projectId: mounted.data.id, taskId: task.taskId });
       void task.promise.catch(() => {
@@ -1155,7 +1188,8 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     mounted,
     providerId,
     defaultBranch,
-    effectiveStrategyKind,
+    effectiveReviewStrategyKind,
+    effectiveStandardStrategyKind,
     trimmed,
     submitting,
     runMode,
@@ -1451,12 +1485,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
               </ComboboxTrigger>
             }
           />
-          {projectData && (
-            <Chip icon={projectData.type === 'ssh' ? Server : Monitor}>
-              {projectData.type === 'ssh' ? t('home.remoteMode') : t('home.localMode')}
-            </Chip>
-          )}
-          <RunModeChip mode={runMode} onChange={setRunMode} />
+          <RunHostSelector kind={runHostKind} />
           {runMode === 'normal' && (
             <div className="w-40 min-w-36">
               <AgentSelector
@@ -1469,24 +1498,33 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
           )}
           {mounted && runMode === 'normal' && (
             <StrategyChip
-              strategyKind={effectiveStrategyKind}
+              strategyKind={effectiveStandardStrategyKind}
               disabled={isUnborn}
               onChange={setStrategyKind}
               ariaLabel={t('home.strategyAria')}
-              labels={{
-                chipNewBranch: t('home.strategyChipNewBranch', { branch: branchLabel }),
-                chipNoWorktree: t('home.strategyChipNoWorktree', { branch: branchLabel }),
-                newBranchTitle: t('home.strategyNewBranchTitle', { branch: branchLabel }),
-                newBranchDesc: t('home.strategyNewBranchDesc', { branch: branchLabel }),
-                noWorktreeTitle: t('home.strategyNoWorktreeTitle', { branch: branchLabel }),
-                noWorktreeDesc: t('home.strategyNoWorktreeDesc'),
-              }}
+              labels={strategyLabels}
             />
           )}
-          {mounted && runMode !== 'normal' && (
-            <Chip icon={GitFork}>{t('home.strategyChipNewBranch', { branch: branchLabel })}</Chip>
+          {mounted && runMode === 'compare' && (
+            <Chip icon={GitFork}>
+              {t('home.compareBranchPolicy', { count: compareProviders.length })}
+            </Chip>
+          )}
+          {mounted && runMode === 'review' && (
+            <StrategyChip
+              strategyKind={effectiveReviewStrategyKind}
+              disabled={isUnborn}
+              onChange={setReviewStrategyKind}
+              ariaLabel={t('home.reviewStrategyAria')}
+              labels={reviewStrategyLabels}
+            />
+          )}
+          {mounted && runMode === 'team' && (
+            <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
           )}
         </div>
+
+        <RunModeTabs mode={runMode} onChange={setRunMode} />
 
         <ModeConfigurationPanel
           mode={runMode}
@@ -1535,6 +1573,10 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
 interface ChipProps {
   icon: ComponentType<{ className?: string }>;
   children: ReactNode;
+}
+
+interface RunHostSelectorProps {
+  kind: RunHostKind;
 }
 
 interface PathCompletionMenuProps {
@@ -1800,12 +1842,12 @@ function SkillShortcutSelector({
   );
 }
 
-interface RunModeChipProps {
+interface RunModeTabsProps {
   mode: HomeRunMode;
   onChange: (mode: HomeRunMode) => void;
 }
 
-function RunModeChip({ mode, onChange }: RunModeChipProps) {
+function RunModeTabs({ mode, onChange }: RunModeTabsProps) {
   const { t } = useTranslation();
   const options: Array<{
     mode: HomeRunMode;
@@ -1838,46 +1880,50 @@ function RunModeChip({ mode, onChange }: RunModeChipProps) {
       description: t('home.modeTeamDesc'),
     },
   ];
-  const current = options.find((option) => option.mode === mode) ?? options[0];
-  const CurrentIcon = current.icon;
-
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
+    <div
+      role="tablist"
+      aria-label={t('home.modeAria')}
+      className="mt-2 grid h-10 w-full shrink-0 grid-cols-4 overflow-hidden rounded-lg border border-border bg-background-1 p-1 shadow-sm"
+    >
+      {options.map((option) => {
+        const Icon = option.icon;
+        const active = option.mode === mode;
+        return (
           <button
+            key={option.mode}
             type="button"
-            aria-label={t('home.modeAria')}
-            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
+            role="tab"
+            aria-selected={active}
+            aria-label={`${option.label}: ${option.description}`}
+            title={option.description}
+            onClick={() => onChange(option.mode)}
+            className={cn(
+              'flex h-full min-w-0 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground',
+              active && 'bg-background text-foreground shadow-sm ring-1 ring-border/60'
+            )}
           >
-            <CurrentIcon className="size-3.5 text-foreground-muted" />
-            <span>{current.label}</span>
-            <ChevronDown className="size-3 text-foreground-muted" />
+            <Icon
+              className={cn(
+                'size-3.5 shrink-0',
+                active ? 'text-foreground' : 'text-foreground-muted'
+              )}
+            />
+            <span className="truncate whitespace-nowrap leading-none">{option.label}</span>
           </button>
-        }
-      />
-      <DropdownMenuContent align="start" className="w-80 p-1.5">
-        {options.map((option) => {
-          const Icon = option.icon;
-          return (
-            <DropdownMenuItem
-              key={option.mode}
-              onClick={() => onChange(option.mode)}
-              className="items-start gap-3 rounded-md px-2.5 py-2"
-            >
-              <Icon className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-sm font-medium text-foreground">{option.label}</span>
-                <span className="text-xs leading-snug text-foreground-muted">
-                  {option.description}
-                </span>
-              </div>
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        );
+      })}
+    </div>
   );
+}
+
+interface StrategyChipLabels {
+  chipNewBranch: string;
+  chipNoWorktree: string;
+  newBranchTitle: string;
+  newBranchDesc: string;
+  noWorktreeTitle: string;
+  noWorktreeDesc: string;
 }
 
 interface ModeConfigurationPanelProps {
@@ -2138,19 +2184,69 @@ function Chip({ icon: Icon, children }: ChipProps) {
   );
 }
 
+function RunHostSelector({ kind }: RunHostSelectorProps) {
+  const { t } = useTranslation();
+  const options: Array<{
+    kind: RunHostKind;
+    icon: ComponentType<{ className?: string }>;
+    label: string;
+  }> = [
+    { kind: 'local', icon: Monitor, label: t('home.runHostLocal') },
+    { kind: 'ssh', icon: Server, label: t('home.runHostSsh') },
+  ];
+  const current = options.find((option) => option.kind === kind) ?? options[0];
+  const CurrentIcon = current.icon;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label={t('home.runHostAria')}
+            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
+          >
+            <CurrentIcon className="size-3.5 text-foreground-muted" />
+            <span>{current.label}</span>
+            <ChevronDown className="size-3 text-foreground-muted" />
+          </button>
+        }
+      />
+      <DropdownMenuContent align="start" className="w-56 p-1.5">
+        {options.map((option) => {
+          const Icon = option.icon;
+          const active = option.kind === kind;
+          return (
+            <DropdownMenuItem
+              key={option.kind}
+              disabled={!active}
+              className="gap-2 rounded-md px-2.5 py-2"
+            >
+              <Icon className="size-4 shrink-0 text-foreground-muted" />
+              <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                {option.label}
+              </span>
+              {active ? (
+                <Check className="size-3.5 shrink-0 text-foreground-muted" />
+              ) : option.kind === 'ssh' ? (
+                <span className="shrink-0 rounded-sm bg-background-2 px-1.5 py-0.5 text-[10px] text-foreground-muted">
+                  {t('common.comingSoon')}
+                </span>
+              ) : null}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 interface StrategyChipProps {
   strategyKind: TaskStrategyKind;
   disabled: boolean;
   onChange: (next: TaskStrategyKind) => void;
   ariaLabel: string;
-  labels: {
-    chipNewBranch: string;
-    chipNoWorktree: string;
-    newBranchTitle: string;
-    newBranchDesc: string;
-    noWorktreeTitle: string;
-    noWorktreeDesc: string;
-  };
+  labels: StrategyChipLabels;
 }
 
 function StrategyChip({ strategyKind, disabled, onChange, ariaLabel, labels }: StrategyChipProps) {

@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { createRPCController } from '@shared/ipc/rpc';
 import type { OpenInAppId } from '@shared/openInApps';
+import { deepLinkService } from '@main/app/deep-link';
 import { telemetryService } from '@main/lib/telemetry';
 import { appService } from './service';
 
@@ -47,4 +48,5 @@ export const appController = createRPCController({
   getElectronVersion: () => process.versions.electron,
   getPlatform: () => process.platform,
   getHomeDir: () => homedir(),
+  consumePendingDeepLinks: () => deepLinkService.consumePendingTargets(),
 });

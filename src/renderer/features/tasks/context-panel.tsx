@@ -11,6 +11,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   ClaudeMemoryFile,
@@ -18,6 +19,10 @@ import type {
   ClaudeSessionPrompt,
 } from '@shared/conversations';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import {
+  contextPanelFocusStore,
+  type ContextPromptFocusTarget,
+} from '@renderer/features/tasks/context-panel-focus';
 import {
   buildDraftCommentsContextAction,
   buildLinkedIssueContextAction,
@@ -40,6 +45,7 @@ export const ContextPanel = observer(function ContextPanel() {
   const activeConversation = tabManager.activeConversation;
   const draftComments = provisioned.draftComments;
   const { value: reviewPrompt } = useAppSettingsKey('reviewPrompt');
+  const promptFocusTarget = contextPanelFocusStore.promptTarget;
 
   const isClaude = activeConversation?.data.providerId === 'claude';
 
@@ -62,7 +68,11 @@ export const ContextPanel = observer(function ContextPanel() {
             <Empty>{t('tasks.panel.noActiveConversation')}</Empty>
           </Section>
         ) : isClaude ? (
-          <ClaudeContextSections cwd={provisioned.path} sessionId={activeConversation.data.id} />
+          <ClaudeContextSections
+            cwd={provisioned.path}
+            sessionId={activeConversation.data.id}
+            promptFocusTarget={promptFocusTarget}
+          />
         ) : (
           <Section title={t('tasks.panel.llmContext')}>
             <Empty>{t('tasks.panel.claudeOnly')}</Empty>
@@ -103,7 +113,15 @@ export const ContextPanel = observer(function ContextPanel() {
   );
 });
 
-function ClaudeContextSections({ cwd, sessionId }: { cwd: string; sessionId: string }) {
+function ClaudeContextSections({
+  cwd,
+  sessionId,
+  promptFocusTarget,
+}: {
+  cwd: string;
+  sessionId: string;
+  promptFocusTarget: ContextPromptFocusTarget | null;
+}) {
   const { t } = useTranslation();
   const { data, isPending } = useQuery<ClaudeSessionContext | null>({
     queryKey: ['claudeSessionContext', cwd, sessionId],
@@ -144,7 +162,11 @@ function ClaudeContextSections({ cwd, sessionId }: { cwd: string; sessionId: str
       <McpSection servers={data.mcpServers} />
       <SkillsSection content={data.skillsListing} />
       <AgentsSection agents={data.agents} />
-      <SessionPromptsSection prompts={data.prompts} />
+      <SessionPromptsSection
+        prompts={data.prompts}
+        sessionId={sessionId}
+        focusTarget={promptFocusTarget}
+      />
     </>
   );
 }
@@ -257,24 +279,69 @@ function AgentsSection({ agents }: { agents: string[] }) {
   );
 }
 
-function SessionPromptsSection({ prompts }: { prompts: ClaudeSessionPrompt[] }) {
+function SessionPromptsSection({
+  prompts,
+  sessionId,
+  focusTarget,
+}: {
+  prompts: ClaudeSessionPrompt[];
+  sessionId: string;
+  focusTarget: ContextPromptFocusTarget | null;
+}) {
   const { t } = useTranslation();
+  const targetIndex = resolvePromptTargetIndex(prompts, sessionId, focusTarget);
   return (
     <Section title={t('tasks.panel.sessionPrompts')} count={prompts.length}>
       {prompts.length === 0 ? (
         <Empty>{t('tasks.panel.noPrompts')}</Empty>
       ) : (
-        prompts.map((p, i) => <PromptItem key={p.id} index={i + 1} prompt={p} />)
+        prompts.map((p, i) => (
+          <PromptItem
+            key={p.id}
+            index={i + 1}
+            prompt={p}
+            isTarget={i === targetIndex}
+            focusRequestId={focusTarget?.requestId}
+          />
+        ))
       )}
     </Section>
   );
 }
 
-function PromptItem({ index, prompt }: { index: number; prompt: ClaudeSessionPrompt }) {
+function PromptItem({
+  index,
+  prompt,
+  isTarget,
+  focusRequestId,
+}: {
+  index: number;
+  prompt: ClaudeSessionPrompt;
+  isTarget?: boolean;
+  focusRequestId?: string;
+}) {
+  const ref = useRef<HTMLDetailsElement>(null);
   const preview = prompt.text.replace(/\s+/g, ' ').slice(0, 80);
   const timestamp = prompt.timestamp ? new Date(prompt.timestamp).toLocaleTimeString() : null;
+
+  useEffect(() => {
+    if (!isTarget) return;
+    const el = ref.current;
+    if (!el) return;
+    el.open = true;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.focus({ preventScroll: true });
+  }, [focusRequestId, isTarget]);
+
   return (
-    <details className="min-w-0 overflow-hidden rounded-sm border border-dashed border-border p-1.5">
+    <details
+      ref={ref}
+      tabIndex={-1}
+      className={cn(
+        'min-w-0 overflow-hidden rounded-sm border border-dashed border-border p-1.5 outline-none',
+        isTarget && 'border-accent ring-2 ring-accent/30'
+      )}
+    >
       <summary className="flex min-w-0 cursor-pointer select-none items-center gap-1.5 text-xs">
         <span className="shrink-0 font-mono text-[10px] text-foreground-passive">#{index}</span>
         <span className="min-w-0 flex-1 truncate" title={prompt.text}>
@@ -292,6 +359,22 @@ function PromptItem({ index, prompt }: { index: number; prompt: ClaudeSessionPro
       </pre>
     </details>
   );
+}
+
+function resolvePromptTargetIndex(
+  prompts: ClaudeSessionPrompt[],
+  sessionId: string,
+  focusTarget: ContextPromptFocusTarget | null
+): number {
+  if (!focusTarget || focusTarget.sessionId !== sessionId) return -1;
+  if (focusTarget.promptId) {
+    return prompts.findIndex((prompt) => prompt.id === focusTarget.promptId);
+  }
+  if (focusTarget.promptIndex) {
+    const idx = focusTarget.promptIndex - 1;
+    return idx >= 0 && idx < prompts.length ? idx : -1;
+  }
+  return -1;
 }
 
 function ChipList({ items, mono }: { items: string[]; mono?: boolean }) {

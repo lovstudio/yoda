@@ -1,6 +1,7 @@
 import type { Configuration } from 'electron-builder';
 import {
   APP_ID,
+  APP_NAME_LOWER,
   ARTIFACT_PREFIX,
   PRODUCT_NAME,
   UPDATE_CHANNEL,
@@ -12,6 +13,7 @@ const config: Configuration = {
   productName: PRODUCT_NAME,
   directories: { output: 'release' },
   artifactName: `${ARTIFACT_PREFIX}-\${arch}.\${ext}`,
+  protocols: [{ name: PRODUCT_NAME, schemes: [APP_NAME_LOWER] }],
   publish: [
     {
       provider: 'generic',
