@@ -6,6 +6,21 @@ This project resets to **0.1.0** with the rebrand from `emdash` to `yoda`. Older
 release history (`v0.4.x`, `v1.1.x`) belongs to the upstream `emdash` codebase
 and is preserved in git tags only.
 
+## 0.3.6 — 2026-06-02
+
+### Added
+
+- Add `yoda://` and `yoda-canary://` deep links for opening a specific task
+  session from another app, including anchors for a prompt id or prompt index
+  in the Claude context panel.
+- Register the production and canary app protocol handlers in packaged builds
+  and route cold-start or already-running deep links into the renderer.
+
+### Changed
+
+- Refresh the home run controls with inline run-mode tabs, explicit local/SSH
+  host display, and review-mode branch strategy selection.
+
 ## 0.3.5 — 2026-05-31
 
 ### Added
