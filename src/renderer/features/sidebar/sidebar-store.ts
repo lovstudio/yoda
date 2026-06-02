@@ -134,7 +134,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     const all = Array.from(this.projectManager.projects.values());
 
     const unregistered = all.filter((p): p is UnregisteredProject => p.state === 'unregistered');
-    const real = all.filter(isRegisteredProject);
+    const real = all.filter(isRegisteredProject).filter((p) => !p.data.isInternal);
 
     const typeFiltered =
       this.projectTypeFilter === 'all'
@@ -278,7 +278,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     const entries: PinnedSidebarEntry[] = [];
     const pinnedProjectIds = new Set(this.pinnedProjectIds);
     const pinnedProjects = this.sortProjectsForSidebar(
-      Array.from(this.projectManager.projects.values()).filter(isRegisteredProject)
+      Array.from(this.projectManager.projects.values())
+        .filter(isRegisteredProject)
+        .filter((p) => !p.data.isInternal)
     ).filter((project) => pinnedProjectIds.has(project.data.id));
 
     for (const project of pinnedProjects) {
@@ -321,7 +323,11 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   get isEmpty(): boolean {
-    return this.projectManager.projects.size === 0;
+    for (const project of this.projectManager.projects.values()) {
+      if (!isRegisteredProject(project)) return false;
+      if (!project.data.isInternal) return false;
+    }
+    return true;
   }
 
   get snapshot(): SidebarSnapshot {

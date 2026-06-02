@@ -69,6 +69,7 @@ export async function createLocalProject(params: CreateLocalProjectParams): Prom
     alias: row.alias,
     path: row.path,
     baseRef: row.baseRef ?? baseRef,
+    isInternal: row.isInternal === 1,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

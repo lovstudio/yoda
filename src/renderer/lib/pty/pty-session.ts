@@ -30,6 +30,15 @@ export class PtySession {
     });
   }
 
+  async reconnect() {
+    this.pty?.dispose();
+    runInAction(() => {
+      this.pty = null;
+      this.status = 'disconnected';
+    });
+    await this.connect();
+  }
+
   dispose() {
     this.pty?.dispose();
     runInAction(() => {

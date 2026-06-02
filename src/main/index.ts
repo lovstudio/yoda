@@ -15,6 +15,7 @@ import { appService } from './core/app/service';
 import { localDependencyManager } from './core/dependencies/dependency-manager';
 import { editorBufferService } from './core/editor/editor-buffer-service';
 import { gitWatcherRegistry } from './core/git/git-watcher-registry';
+import { ensureInternalProject } from './core/projects/operations/ensureInternalProject';
 import { projectManager } from './core/projects/project-manager';
 import { prSyncScheduler } from './core/pull-requests/pr-sync-scheduler';
 import { searchService } from './core/search/search-service';
@@ -139,6 +140,13 @@ void app.whenReady().then(async () => {
   // App settings must be ready before the renderer queries them on first paint.
   await appSettingsService.initialize();
   __bootMark('appSettingsService.initialize done');
+
+  // Bootstrap the internal "Drafts" project (hosts no-project agent sessions).
+  // Must run before RPC so the renderer's first project list query sees it.
+  await ensureInternalProject().catch((e) => {
+    log.warn('ensureInternalProject failed:', e);
+  });
+  __bootMark('ensureInternalProject done');
 
   // RPC router must be registered before the renderer fires its first IPC call.
   registerRPCRouter(rpcRouter, ipcMain);

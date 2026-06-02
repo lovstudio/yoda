@@ -82,6 +82,7 @@ export async function createSshProject(params: CreateSshProjectParams): Promise<
     path: row.path,
     connectionId: params.connectionId,
     baseRef: row.baseRef ?? baseRef,
+    isInternal: row.isInternal === 1,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

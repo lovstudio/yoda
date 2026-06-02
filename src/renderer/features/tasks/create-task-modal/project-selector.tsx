@@ -68,9 +68,8 @@ export const ProjectSelector = observer(function ProjectSelector({
   const options: ProjectOption[] = Array.from(getProjectManagerStore().projects.entries()).flatMap(
     ([id, store]) => {
       const mounted = asMounted(store);
-      return mounted
-        ? [{ kind: 'project', value: id, label: projectDisplayName(mounted.data) }]
-        : [];
+      if (!mounted || mounted.data.isInternal) return [];
+      return [{ kind: 'project', value: id, label: projectDisplayName(mounted.data) }];
     }
   );
   const projectlessOption: ProjectlessOption = {

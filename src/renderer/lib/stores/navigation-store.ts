@@ -14,7 +14,6 @@ export const viewEvents: Record<
   ViewId,
   | 'home_viewed'
   | 'project_viewed'
-  | 'projectless_viewed'
   | 'task_viewed'
   | 'settings_viewed'
   | 'skills_viewed'
@@ -25,7 +24,6 @@ export const viewEvents: Record<
 > = {
   home: 'home_viewed',
   project: 'project_viewed',
-  projectless: 'projectless_viewed',
   task: 'task_viewed',
   settings: 'settings_viewed',
   skills: 'skills_viewed',

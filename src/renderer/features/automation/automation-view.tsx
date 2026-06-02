@@ -19,12 +19,16 @@ import {
   type AgentProviderId,
 } from '@shared/agent-provider-registry';
 import type { AutomationEntry } from '@shared/app-settings';
-import { projectlessSessionStore } from '@renderer/features/projectless/projectless-session-store';
+import { INTERNAL_PROJECT_ID } from '@shared/projects';
+import { ensureUniqueTaskSlug } from '@shared/task-name';
+import {
+  asMounted,
+  getProjectManagerStore,
+} from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useAgentAutoApproveDefaults } from '@renderer/features/tasks/hooks/useAgentAutoApproveDefaults';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useToast } from '@renderer/lib/hooks/use-toast';
-import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -178,33 +182,37 @@ export const AutomationMainPanel = observer(function AutomationMainPanel() {
     if (runningId) return;
     setRunningId(entry.id);
     try {
+      const projectManager = getProjectManagerStore();
+      await projectManager.mountProject(INTERNAL_PROJECT_ID).catch(() => {});
+      const internalProject = asMounted(projectManager.projects.get(INTERNAL_PROJECT_ID));
+      if (!internalProject) {
+        throw new Error('Internal project not available');
+      }
+      const existingNames = Array.from(
+        internalProject.taskManager.tasks.values(),
+        (t) => t.data.name
+      );
+      const taskName = ensureUniqueTaskSlug(entry.title, existingNames);
       const taskId = crypto.randomUUID();
       const conversationId = crypto.randomUUID();
-      const result = await rpc.projectless.startSession({
-        taskId,
-        conversationId,
-        provider: entry.provider,
-        title: entry.title,
-        initialPrompt: entry.prompt,
-        autoApprove: autoApproveDefaults.getDefault(entry.provider),
-      });
-
-      projectlessSessionStore.registerSession({
-        sessionId: result.sessionId,
-        taskId,
-        conversationId,
-        title: entry.title,
-        cwd: result.cwd,
-        providerId: entry.provider,
+      await internalProject.taskManager.createTask({
+        id: taskId,
+        projectId: INTERNAL_PROJECT_ID,
+        name: taskName,
+        sourceBranch: { type: 'local', branch: 'main' },
+        strategy: { kind: 'no-worktree' },
+        initialConversation: {
+          id: conversationId,
+          projectId: INTERNAL_PROJECT_ID,
+          taskId,
+          provider: entry.provider,
+          title: taskName,
+          initialPrompt: entry.prompt,
+          autoApprove: autoApproveDefaults.getDefault(entry.provider),
+        },
       });
       updateEntry(entry, { lastRunAt: new Date().toISOString() });
-      void projectlessSessionStore.ensurePtySession(result.sessionId).connect();
-      navigate('projectless', {
-        sessionId: result.sessionId,
-        title: entry.title,
-        cwd: result.cwd,
-        providerId: entry.provider,
-      });
+      navigate('task', { projectId: INTERNAL_PROJECT_ID, taskId });
     } catch (error) {
       toast({
         title: t('automation.runFailed'),

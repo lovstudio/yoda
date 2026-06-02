@@ -3,6 +3,13 @@ export type ProjectPathStatus = {
   isGitRepo: boolean;
 };
 
+/**
+ * Fixed ID of the singleton internal "Drafts" project (no git, hidden from
+ * the project list, hosts standalone agent sessions started from the home
+ * input with no project selected). Bootstrapped at app start.
+ */
+export const INTERNAL_PROJECT_ID = 'yoda-internal-drafts';
+
 export type LocalProject = {
   type: 'local';
   id: string;
@@ -10,6 +17,7 @@ export type LocalProject = {
   alias: string | null;
   path: string;
   baseRef: string;
+  isInternal: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -22,6 +30,7 @@ export type SshProject = {
   path: string;
   baseRef: string;
   connectionId: string;
+  isInternal: boolean;
   createdAt: string;
   updatedAt: string;
 };

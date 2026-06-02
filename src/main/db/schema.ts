@@ -47,6 +47,7 @@ export const projects = sqliteTable(
       onDelete: 'set null',
     }),
     archivedAt: text('archived_at'), // null = active, timestamp = archived
+    isInternal: integer('is_internal').notNull().default(0), // 1 = internal Yoda-managed project (no git, hidden from project list)
     createdAt: text('created_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),

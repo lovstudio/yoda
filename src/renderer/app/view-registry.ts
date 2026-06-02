@@ -4,7 +4,6 @@ import { agentsView } from '@renderer/features/agents/agents-view';
 import { automationView } from '@renderer/features/automation/automation-view';
 import { maasView } from '@renderer/features/maas/maas-view';
 import { mcpView } from '@renderer/features/mcp/mcp-view';
-import { projectlessView } from '@renderer/features/projectless/projectless-view';
 import { projectView } from '@renderer/features/projects/view';
 import { settingsView } from '@renderer/features/settings/settings-view';
 import { skillsView } from '@renderer/features/skills/skills-view';
@@ -19,7 +18,6 @@ export const views = {
   maas: maasView,
   skills: skillsView,
   mcp: mcpView,
-  projectless: projectlessView,
   project: projectView,
   task: taskView,
   settings: settingsView,

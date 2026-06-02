@@ -1,5 +1,7 @@
 import { observer } from 'mobx-react-lite';
 import { useEffect, type ReactNode } from 'react';
+import { agentSessionExitedChannel } from '@shared/events/agentEvents';
+import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { type ViewDefinition } from '@renderer/app/view-registry';
 import {
   getTaskManagerStore,
@@ -11,6 +13,8 @@ import {
   TaskViewWrapper,
   useProvisionedTask,
 } from '@renderer/features/tasks/task-view-context';
+import { events } from '@renderer/lib/ipc';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { createTaskCommandProvider } from './commands';
 import { EditorProvider } from './editor/editor-provider';
 import { useIsActiveTask } from './hooks/use-is-active-task';
@@ -22,13 +26,16 @@ import { TaskTitlebar } from './task-titlebar';
  * Controls telemetry conversation scope.
  */
 const TabManagerVisibilitySync = observer(function TabManagerVisibilitySync({
+  projectId,
   taskId,
 }: {
+  projectId: string;
   taskId: string;
 }) {
   const { conversations, taskView } = useProvisionedTask();
   const isActive = useIsActiveTask(taskId);
   const activeConversationId = taskView.tabManager.activeConversationId;
+  const { navigate } = useNavigate();
 
   useEffect(() => {
     taskView.tabManager.setVisible(isActive);
@@ -41,6 +48,18 @@ const TabManagerVisibilitySync = observer(function TabManagerVisibilitySync({
     if (!isActive || !activeConversationId) return;
     void conversations.resumeConversation(activeConversationId);
   }, [activeConversationId, conversations, isActive]);
+
+  // Drafts tasks replace the old projectless view; when their active agent
+  // process exits, return to home instead of leaving an empty task shell open.
+  useEffect(() => {
+    if (!isActive || projectId !== INTERNAL_PROJECT_ID || !activeConversationId) return;
+    return events.on(agentSessionExitedChannel, (event) => {
+      if (event.projectId !== projectId) return;
+      if (event.taskId !== taskId) return;
+      if (event.conversationId !== activeConversationId) return;
+      navigate('home');
+    });
+  }, [activeConversationId, isActive, navigate, projectId, taskId]);
 
   return null;
 });
@@ -80,7 +99,7 @@ const TaskViewWrapperWithProviders = observer(function TaskViewWrapperWithProvid
   return (
     <TaskViewWrapper projectId={projectId} taskId={taskId}>
       <ProvisionedTaskProvider projectId={projectId} taskId={taskId}>
-        <TabManagerVisibilitySync taskId={taskId} />
+        <TabManagerVisibilitySync projectId={projectId} taskId={taskId} />
         <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
           {children}
         </EditorProvider>

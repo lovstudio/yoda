@@ -51,10 +51,9 @@ import {
   getAgentCommandSubmitDelayMs,
 } from '@shared/agent-command-prefix';
 import { AGENT_PROVIDER_IDS, type AgentProviderId } from '@shared/agent-provider-registry';
-import { projectDisplayName } from '@shared/projects';
+import { INTERNAL_PROJECT_ID, projectDisplayName } from '@shared/projects';
 import type { CatalogIndex } from '@shared/skills/types';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
-import { projectlessSessionStore } from '@renderer/features/projectless/projectless-session-store';
 import {
   asMounted,
   getProjectManagerStore,
@@ -1079,31 +1078,40 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
 
       if (!mounted) {
         if (!providerId) return;
+        await projectManager.mountProject(INTERNAL_PROJECT_ID).catch(() => {});
+        const internalProject = asMounted(projectManager.projects.get(INTERNAL_PROJECT_ID));
+        if (!internalProject) {
+          toast.error('Could not open the internal drafts project.');
+          return;
+        }
+        const existingDraftNames = Array.from(
+          internalProject.taskManager.tasks.values(),
+          (t) => t.data.name
+        );
+        const taskName = ensureUniqueTaskSlug(baseName, existingDraftNames);
         const taskId = crypto.randomUUID();
         const conversationId = crypto.randomUUID();
-        const result = await rpc.projectless.startSession({
-          taskId,
-          conversationId,
-          provider: providerId,
-          title: baseName,
-          initialPrompt: trimmed || undefined,
-          autoApprove: autoApproveDefaults.getDefault(providerId),
-        });
-        projectlessSessionStore.registerSession({
-          sessionId: result.sessionId,
-          taskId,
-          conversationId,
-          title: baseName,
-          cwd: result.cwd,
-          providerId,
-        });
-        void projectlessSessionStore.ensurePtySession(result.sessionId).connect();
-        navigate('projectless', {
-          sessionId: result.sessionId,
-          title: baseName,
-          cwd: result.cwd,
-          providerId,
-        });
+        void internalProject.taskManager
+          .createTask({
+            id: taskId,
+            projectId: INTERNAL_PROJECT_ID,
+            name: taskName,
+            sourceBranch: { type: 'local', branch: 'main' },
+            strategy: { kind: 'no-worktree' },
+            initialConversation: {
+              id: conversationId,
+              projectId: INTERNAL_PROJECT_ID,
+              taskId,
+              provider: providerId,
+              title: taskName,
+              initialPrompt: trimmed || undefined,
+              autoApprove: autoApproveDefaults.getDefault(providerId),
+            },
+          })
+          .catch(() => {
+            toast.error('Agent task failed to start.');
+          });
+        navigate('task', { projectId: INTERNAL_PROJECT_ID, taskId });
         setPrompt('');
         updateDraft({ prompt: '' });
         return;
@@ -1288,6 +1296,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     agentSystemPrompts,
     autoApproveDefaults,
     navigate,
+    projectManager,
     updateDraft,
   ]);
 
