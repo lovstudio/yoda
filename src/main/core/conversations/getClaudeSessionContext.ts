@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import type { ClaudeSessionContext, ClaudeSessionPrompt } from '@shared/conversations';
 import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
 import { log } from '@main/lib/logger';
+import { scanClaudeAgents } from './scanClaudeAgents';
+import { scanClaudeSkills } from './scanClaudeSkills';
 
 /**
  * Aggregates everything that ends up in the LLM prompt for a Claude session:
@@ -27,9 +29,8 @@ export async function getClaudeSessionContext(
   }
 
   const tools = new Set<string>();
-  const agents = new Set<string>();
+  const transcriptAgents = new Set<string>();
   const mcpServers = new Map<string, string>();
-  let skillsListing: string | null = null;
   const prompts: ClaudeSessionPrompt[] = [];
 
   for (const line of raw.split('\n')) {
@@ -38,9 +39,7 @@ export async function getClaudeSessionContext(
     if (!parsed) continue;
 
     if (parsed.type === 'attachment') {
-      collectAttachment(parsed.attachment, { tools, agents, mcpServers });
-      const listing = pickSkillListing(parsed.attachment);
-      if (listing) skillsListing = listing;
+      collectAttachment(parsed.attachment, { tools, agents: transcriptAgents, mcpServers });
       continue;
     }
 
@@ -50,13 +49,17 @@ export async function getClaudeSessionContext(
     }
   }
 
-  const memoryFiles = await loadMemoryFiles(cwd);
+  const [memoryFiles, skillsListing, scannedAgents] = await Promise.all([
+    loadMemoryFiles(cwd),
+    scanClaudeSkills(cwd),
+    scanClaudeAgents(cwd),
+  ]);
 
   return {
     transcriptPath,
     memoryFiles,
     tools: [...tools].sort(),
-    agents: [...agents].sort(),
+    agents: scannedAgents,
     mcpServers: [...mcpServers.entries()].map(([name, instructions]) => ({ name, instructions })),
     skillsListing,
     prompts,
@@ -80,9 +83,11 @@ function collectAttachment(
   if (!attachment || typeof attachment !== 'object') return;
   const a = attachment as Record<string, unknown>;
   if (a.type === 'deferred_tools_delta') {
-    pushStrings(a.addedNames, sink.tools);
+    addStrings(a.addedNames, sink.tools);
+    removeStrings(a.removedNames, sink.tools);
   } else if (a.type === 'agent_listing_delta') {
-    pushStrings(a.addedTypes, sink.agents);
+    addStrings(a.addedTypes, sink.agents);
+    removeStrings(a.removedTypes, sink.agents);
   } else if (a.type === 'mcp_instructions_delta') {
     const names = Array.isArray(a.addedNames) ? a.addedNames : [];
     const blocks = Array.isArray(a.addedBlocks) ? a.addedBlocks : [];
@@ -92,19 +97,22 @@ function collectAttachment(
       if (typeof name !== 'string') continue;
       sink.mcpServers.set(name, typeof block === 'string' ? block : '');
     }
+    if (Array.isArray(a.removedNames)) {
+      for (const name of a.removedNames) {
+        if (typeof name === 'string') sink.mcpServers.delete(name);
+      }
+    }
   }
 }
 
-function pickSkillListing(attachment: unknown): string | null {
-  if (!attachment || typeof attachment !== 'object') return null;
-  const a = attachment as Record<string, unknown>;
-  if (a.type !== 'skill_listing') return null;
-  return typeof a.content === 'string' ? a.content : null;
-}
-
-function pushStrings(value: unknown, sink: Set<string>): void {
+function addStrings(value: unknown, sink: Set<string>): void {
   if (!Array.isArray(value)) return;
   for (const v of value) if (typeof v === 'string') sink.add(v);
+}
+
+function removeStrings(value: unknown, sink: Set<string>): void {
+  if (!Array.isArray(value)) return;
+  for (const v of value) if (typeof v === 'string') sink.delete(v);
 }
 
 function extractPrompt(row: Record<string, unknown>, index: number): ClaudeSessionPrompt | null {
