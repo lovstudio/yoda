@@ -108,6 +108,11 @@ export function PaneSizingProvider({ paneId, sessionIds, children }: PaneSizingP
   const containerRef = useRef<HTMLDivElement>(null);
   const sessionsRef = useRef<string[]>([]);
   const lastDimensionsRef = useRef<{ cols: number; rows: number } | null>(null);
+  const lastBroadcastRef = useRef<{
+    cols: number;
+    rows: number;
+    sessionIdsKey: string;
+  } | null>(null);
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDimsRef = useRef<{ cols: number; rows: number } | null>(null);
 
@@ -149,6 +154,16 @@ export function PaneSizingProvider({ paneId, sessionIds, children }: PaneSizingP
     pendingDimsRef.current = null;
     if (!dims) return;
     lastDimensionsRef.current = dims;
+    const sessionIdsKey = sessionsRef.current.join('\0');
+    const last = lastBroadcastRef.current;
+    if (
+      last?.cols === dims.cols &&
+      last.rows === dims.rows &&
+      last.sessionIdsKey === sessionIdsKey
+    ) {
+      return;
+    }
+    lastBroadcastRef.current = { ...dims, sessionIdsKey };
     for (const id of sessionsRef.current) {
       void rpc.pty.resize(id, dims.cols, dims.rows);
     }
@@ -158,9 +173,8 @@ export function PaneSizingProvider({ paneId, sessionIds, children }: PaneSizingP
     (cols: number, rows: number) => {
       const c = Math.max(MIN_TERMINAL_COLS, cols);
       const r = Math.max(MIN_TERMINAL_ROWS, rows);
-      // No dedup here: a newly active session's PTY may not have received the
-      // resize yet even if the pane dimensions are unchanged, so we always
-      // broadcast.  The debounce timer coalesces rapid calls.
+      // Newly added sessions are handled by the sessionIds effect above; this
+      // path only needs to coalesce repeated reports for the same session set.
       pendingDimsRef.current = { cols: c, rows: r };
       if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
       pendingTimerRef.current = setTimeout(() => {

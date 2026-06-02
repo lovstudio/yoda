@@ -1,6 +1,31 @@
 import { listDetectableProviders } from '@shared/agent-provider-registry';
 import type { DependencyStatus } from '@shared/dependencies';
+import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { DependencyDescriptor, ProbeResult } from './types';
+
+async function resolveTmuxInstallCommand(ctx: IExecutionContext): Promise<string | undefined> {
+  if (ctx.supportsLocalSpawn) {
+    switch (process.platform) {
+      case 'darwin':
+        return 'brew install tmux';
+      case 'linux':
+        return 'sudo apt update && sudo apt install -y tmux';
+      default:
+        return undefined;
+    }
+  }
+
+  try {
+    const result = await ctx.exec('uname', ['-s'], { timeout: 2_000, maxBuffer: 1_024 });
+    const os = result.stdout.trim().toLowerCase();
+    if (os.includes('darwin')) return 'brew install tmux';
+    if (os.includes('linux')) return 'sudo apt update && sudo apt install -y tmux';
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
 
 const CORE_DEPENDENCIES: DependencyDescriptor[] = [
   {
@@ -40,7 +65,8 @@ const CORE_DEPENDENCIES: DependencyDescriptor[] = [
     commands: ['tmux'],
     versionArgs: ['-V'],
     docUrl: 'https://github.com/tmux/tmux',
-    installHint: 'Run: brew install tmux',
+    installHint: 'Run: brew install tmux or sudo apt install tmux',
+    resolveInstallCommand: resolveTmuxInstallCommand,
   },
   {
     id: 'ssh',

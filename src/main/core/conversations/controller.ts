@@ -3,6 +3,7 @@ import { createConversation } from './createConversation';
 import { deleteConversation } from './deleteConversation';
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getClaudeSessionMetadata } from './getClaudeSessionMetadata';
+import { getCodexSessionContext } from './getCodexSessionContext';
 import { getConversations } from './getConversations';
 import { getConversationsForTask } from './getConversationsForTask';
 import { renameConversation } from './renameConversation';
@@ -19,4 +20,5 @@ export const conversationController = createRPCController({
   touchConversation,
   getClaudeSessionMetadata,
   getClaudeSessionContext,
+  getCodexSessionContext,
 });

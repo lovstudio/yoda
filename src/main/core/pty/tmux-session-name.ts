@@ -8,8 +8,9 @@ export function buildTmuxShellLine(sessionName: string, commandLine: string): st
   const quotedCmd = JSON.stringify(commandLine);
   const checkExists = `tmux has-session -t ${quotedName} 2>/dev/null`;
   const newSession = `tmux new-session -d -s ${quotedName} ${quotedCmd}`;
+  const hideStatus = `tmux set-option -t ${quotedName} status off`;
   const attach = `tmux attach-session -t ${quotedName}`;
-  return `(${checkExists} && ${attach}) || (${newSession} && ${attach})`;
+  return `(${checkExists} && ${hideStatus} && ${attach}) || (${newSession} && ${hideStatus} && ${attach})`;
 }
 
 export function makeTmuxSessionName(sessionId: string): string {

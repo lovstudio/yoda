@@ -129,6 +129,7 @@ export class ConversationManagerStore {
       this.conversations.set(conversation.id, store);
       void store.session.connect();
     });
+    this.onUserPromptAt?.(conversation.lastInteractedAt ?? new Date().toISOString());
     return conversation;
   }
 
@@ -200,10 +201,22 @@ export class ConversationManagerStore {
     await rpc.conversations.touchConversation(conversationId, now);
   }
 
-  async resumeConversation(conversationId: string): Promise<void> {
+  async resumeConversation(
+    conversationId: string,
+    initialSize?: { cols: number; rows: number }
+  ): Promise<void> {
     if (!this.conversations.has(conversationId)) return;
     try {
-      await rpc.conversations.resumeConversation(this.projectId, this.taskId, conversationId);
+      await rpc.conversations.resumeConversation(
+        this.projectId,
+        this.taskId,
+        conversationId,
+        initialSize
+      );
+      if (initialSize) {
+        const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+        void rpc.pty.resize(sessionId, initialSize.cols, initialSize.rows);
+      }
     } catch (error) {
       log.warn('ConversationManagerStore: failed to resume conversation', {
         projectId: this.projectId,
@@ -225,12 +238,22 @@ export class ConversationManagerStore {
   }
 }
 
+/**
+ * Suppress classifier-derived awaiting-input notifications that fire within
+ * this window after a user-confirmed working transition. Classifiers scan the
+ * tail of PTY output for permission/approve/confirm keywords and easily
+ * re-trigger on the echoed prompt right after the user answers, which would
+ * otherwise immediately flip the sidebar back to awaiting-input.
+ */
+const POST_SUBMIT_NOTIFICATION_GRACE_MS = 3000;
+
 export class ConversationStore {
   data: Conversation;
   session: PtySession;
   status: AgentStatus = 'idle';
   seen = true;
   lastNotificationType: NotificationType | null = null;
+  private lastForceWorkingAt = 0;
 
   constructor(conversation: Conversation) {
     this.data = conversation;
@@ -275,6 +298,14 @@ export class ConversationStore {
   }
 
   setAwaitingInput(notificationType: NotificationType) {
+    // Ignore classifier-driven awaiting-input echoes that fire right after the
+    // user submitted a reply — the agent is still working, not waiting again.
+    if (
+      this.status === 'working' &&
+      Date.now() - this.lastForceWorkingAt < POST_SUBMIT_NOTIFICATION_GRACE_MS
+    ) {
+      return;
+    }
     this.lastNotificationType = notificationType;
     this.setStatus('awaiting-input');
   }
@@ -286,6 +317,9 @@ export class ConversationStore {
       this.lastNotificationType === 'permission_prompt'
     ) {
       return;
+    }
+    if (options.force) {
+      this.lastForceWorkingAt = Date.now();
     }
     this.lastNotificationType = null;
     this.setStatus('working');

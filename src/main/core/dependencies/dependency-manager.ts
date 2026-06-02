@@ -188,13 +188,16 @@ export class DependencyManager implements IInitializable {
     if (!descriptor) {
       return err({ type: 'unknown-dependency', id });
     }
-    if (!descriptor.installCommand) {
+    const installCommand = descriptor.resolveInstallCommand
+      ? await descriptor.resolveInstallCommand(this.ctx)
+      : descriptor.installCommand;
+    if (!installCommand) {
       return err({ type: 'no-install-command', id });
     }
 
-    log.info(`[DependencyManager] Installing ${id}: ${descriptor.installCommand}`);
+    log.info(`[DependencyManager] Installing ${id}: ${installCommand}`);
 
-    const installResult = await this.runInstallCommand(descriptor.installCommand);
+    const installResult = await this.runInstallCommand(installCommand);
     if (!installResult.success) {
       return err(installResult.error);
     }

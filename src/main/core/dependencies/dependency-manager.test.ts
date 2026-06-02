@@ -60,6 +60,28 @@ describe('DependencyManager install', () => {
     });
   });
 
+  it('resolves tmux install commands from the execution target', async () => {
+    const runInstallCommand = vi.fn(async () => ok<void>());
+    const ctx = makeCtx(async (command, args = []) => {
+      if (command === 'uname' && args[0] === '-s') {
+        return { stdout: 'Linux\n', stderr: '' };
+      }
+      throw new Error('missing');
+    });
+    const manager = new DependencyManager(ctx, {
+      emitEvents: false,
+      runInstallCommand,
+    });
+
+    const result = await manager.install('tmux');
+
+    expect(runInstallCommand).toHaveBeenCalledWith('sudo apt update && sudo apt install -y tmux');
+    expect(result).toEqual({
+      success: false,
+      error: { type: 'not-detected-after-install', id: 'tmux' },
+    });
+  });
+
   it('returns an error result for unknown dependency ids', async () => {
     const manager = new DependencyManager(missingCtx, { emitEvents: false });
 

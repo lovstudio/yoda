@@ -11,6 +11,7 @@ import { registerAppScheme, setupAppProtocol } from './app/protocol';
 import { createMainWindow } from './app/window';
 import { yodaAccountService } from './core/account/services/yoda-account-service';
 import { agentHookService } from './core/agent-hooks/agent-hook-service';
+import { resolveQuitAgentSessionsDecision } from './core/app/quit-agent-sessions';
 import { appService } from './core/app/service';
 import { localDependencyManager } from './core/dependencies/dependency-manager';
 import { editorBufferService } from './core/editor/editor-buffer-service';
@@ -20,6 +21,7 @@ import { projectManager } from './core/projects/project-manager';
 import { prSyncScheduler } from './core/pull-requests/pr-sync-scheduler';
 import { searchService } from './core/search/search-service';
 import { appSettingsService } from './core/settings/settings-service';
+import { taskManager } from './core/tasks/task-manager';
 import { updateService } from './core/updates/update-service';
 import { viewStateService } from './core/view-state/view-state-service';
 import { initializeDatabase } from './db/initialize';
@@ -207,17 +209,43 @@ void app.whenReady().then(async () => {
 process.on('SIGTERM', () => app.quit());
 process.on('SIGINT', () => app.quit());
 
+let shutdownStarted = false;
+
 app.on('before-quit', (event) => {
   event.preventDefault();
+  if (shutdownStarted) return;
+
+  const shutdownDecision = resolveQuitAgentSessionsDecision(
+    taskManager.getActiveAgentSessionSummary(),
+    (options) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      return win ? dialog.showMessageBoxSync(win, options) : dialog.showMessageBoxSync(options);
+    }
+  );
+
+  if (shutdownDecision.action === 'cancel') return;
+
+  shutdownStarted = true;
   telemetryService.capture('app_closed');
   void telemetryService.dispose().finally(() => {
-    agentHookService.dispose();
-    updateService.dispose();
-    prSyncScheduler.dispose();
-    void gitWatcherRegistry.dispose();
-    void projectManager.dispose().catch((e) => {
-      log.error('Failed to shutdown project manager:', e);
-    });
-    app.exit(0);
+    void (async () => {
+      try {
+        agentHookService.dispose();
+        updateService.dispose();
+        prSyncScheduler.dispose();
+        const [gitWatcherResult, projectManagerResult] = await Promise.allSettled([
+          gitWatcherRegistry.dispose(),
+          projectManager.dispose({ mode: shutdownDecision.mode }),
+        ]);
+        if (gitWatcherResult.status === 'rejected') {
+          log.error('Failed to shutdown git watcher registry:', gitWatcherResult.reason);
+        }
+        if (projectManagerResult.status === 'rejected') {
+          log.error('Failed to detach project manager:', projectManagerResult.reason);
+        }
+      } finally {
+        app.exit(0);
+      }
+    })();
   });
 });

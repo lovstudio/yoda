@@ -193,16 +193,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     navigate('task', { projectId, taskId });
   };
 
-  const resumeActiveConversation = () => {
-    const conversationId = provisionedTask?.taskView.tabManager.activeConversationId;
-    if (!conversationId) return;
-    void provisionedTask.conversations.resumeConversation(conversationId);
-  };
-
   const handleOpenDetails = () => {
     handleProvision();
     navigate('task', { projectId, taskId });
-    resumeActiveConversation();
   };
 
   const menuActions = {

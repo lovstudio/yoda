@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { type Conversation, type CreateConversationParams } from '@shared/conversations';
 import { db } from '@main/db/client';
-import { conversations } from '@main/db/schema';
+import { conversations, tasks } from '@main/db/schema';
 import { telemetryService } from '@main/lib/telemetry';
 import { resolveTask } from '../projects/utils';
 import { conversationEvents } from './conversation-events';
@@ -20,6 +20,7 @@ export async function createConversation(params: CreateConversationParams): Prom
     params.autoApprove === undefined
       ? undefined
       : JSON.stringify({ autoApprove: params.autoApprove });
+  const lastInteractedAt = new Date().toISOString();
 
   const [row] = await db
     .insert(conversations)
@@ -33,9 +34,11 @@ export async function createConversation(params: CreateConversationParams): Prom
       isInitialConversation: params.isInitialConversation ?? false,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
-      lastInteractedAt: new Date().toISOString(),
+      lastInteractedAt,
     })
     .returning();
+
+  await db.update(tasks).set({ lastInteractedAt }).where(eq(tasks.id, params.taskId));
 
   const task = resolveTask(params.projectId, params.taskId);
   if (!task) {

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   logWarn: vi.fn(),
   maybeAutoTrustLocal: vi.fn(),
   prepareHookConfig: vi.fn(),
+  resolveAvailableTmuxSessionName: vi.fn(),
   resolveLocalPtySpawn: vi.fn(),
   spawnLocalPty: vi.fn(),
   startTitle: vi.fn(),
@@ -64,6 +65,10 @@ vi.mock('@main/core/pty/pty-env', () => ({
 vi.mock('@main/core/pty/pty-spawn-platform', () => ({
   logLocalPtySpawnWarnings: () => {},
   resolveLocalPtySpawn: mocks.resolveLocalPtySpawn,
+}));
+
+vi.mock('@main/core/pty/tmux-availability', () => ({
+  resolveAvailableTmuxSessionName: mocks.resolveAvailableTmuxSessionName,
 }));
 
 vi.mock('@main/core/pty/tmux-session-name', () => ({
@@ -183,6 +188,7 @@ describe('LocalConversationProvider', () => {
     mocks.appSettingsGet.mockResolvedValue({ writeAgentConfigToGitIgnore: false });
     mocks.maybeAutoTrustLocal.mockResolvedValue(undefined);
     mocks.prepareHookConfig.mockResolvedValue(undefined);
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue(undefined);
     mocks.resolveLocalPtySpawn.mockImplementation(
       ({
         intent,
@@ -233,5 +239,45 @@ describe('LocalConversationProvider', () => {
 
     expect(spawned).toHaveLength(2);
     expect(spawned[1].options.args).toEqual(['--resume', 'conv-1']);
+  });
+
+  it('passes an available tmux session name to the PTY spawn resolver', async () => {
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    const provider = createProvider();
+
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.resolveAvailableTmuxSessionName).toHaveBeenCalledWith({
+      auto: false,
+      ctx: expect.anything(),
+      requested: false,
+      sessionId,
+      source: 'LocalConversationProvider',
+    });
+    expect(mocks.resolveLocalPtySpawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({
+          tmuxSessionName: 'tmux-session',
+        }),
+      })
+    );
+  });
+
+  it('reports active and detachable agent session counts', async () => {
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    const provider = createProvider();
+
+    expect(provider.getActiveSessionCount()).toBe(0);
+    expect(provider.getDetachableSessionCount()).toBe(0);
+
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(provider.getActiveSessionCount()).toBe(1);
+    expect(provider.getDetachableSessionCount()).toBe(1);
+
+    spawned[0].pty.emitExit({ exitCode: 0 });
+
+    expect(provider.getActiveSessionCount()).toBe(0);
+    expect(provider.getDetachableSessionCount()).toBe(0);
   });
 });

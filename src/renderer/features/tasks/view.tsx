@@ -32,7 +32,7 @@ const TabManagerVisibilitySync = observer(function TabManagerVisibilitySync({
   projectId: string;
   taskId: string;
 }) {
-  const { conversations, taskView } = useProvisionedTask();
+  const { taskView } = useProvisionedTask();
   const isActive = useIsActiveTask(taskId);
   const activeConversationId = taskView.tabManager.activeConversationId;
   const { navigate } = useNavigate();
@@ -43,11 +43,6 @@ const TabManagerVisibilitySync = observer(function TabManagerVisibilitySync({
       taskView.tabManager.setVisible(false);
     };
   }, [taskView.tabManager, isActive]);
-
-  useEffect(() => {
-    if (!isActive || !activeConversationId) return;
-    void conversations.resumeConversation(activeConversationId);
-  }, [activeConversationId, conversations, isActive]);
 
   // Drafts tasks replace the old projectless view; when their active agent
   // process exits, return to home instead of leaving an empty task shell open.

@@ -11,7 +11,8 @@ import type { Pty } from '@main/core/pty/pty';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { resolveSshCommand } from '@main/core/pty/spawn-utils';
 import { openSsh2Pty } from '@main/core/pty/ssh2-pty';
-import { killTmuxSession, makeTmuxSessionName } from '@main/core/pty/tmux-session-name';
+import { resolveAvailableTmuxSessionName } from '@main/core/pty/tmux-availability';
+import { killTmuxSession } from '@main/core/pty/tmux-session-name';
 import { providerOverrideSettings } from '@main/core/settings/provider-settings-service';
 import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { events } from '@main/lib/events';
@@ -34,6 +35,8 @@ export class SshConversationProvider implements ConversationProvider {
   private readonly shellSetup?: string;
   private readonly ctx: IExecutionContext;
   private readonly proxy: SshClientProxy;
+  private readonly connectionId: string;
+  private readonly tmuxSessionNames = new Map<string, string>();
 
   constructor({
     projectId,
@@ -44,6 +47,7 @@ export class SshConversationProvider implements ConversationProvider {
     shellSetup,
     ctx,
     proxy,
+    connectionId,
   }: {
     projectId: string;
     taskPath: string;
@@ -53,6 +57,7 @@ export class SshConversationProvider implements ConversationProvider {
     shellSetup?: string;
     ctx: IExecutionContext;
     proxy: SshClientProxy;
+    connectionId: string;
   }) {
     this.projectId = projectId;
     this.taskPath = taskPath;
@@ -62,6 +67,7 @@ export class SshConversationProvider implements ConversationProvider {
     this.shellSetup = shellSetup;
     this.ctx = ctx;
     this.proxy = proxy;
+    this.connectionId = connectionId;
   }
 
   async startSession(
@@ -97,7 +103,7 @@ export class SshConversationProvider implements ConversationProvider {
     });
     const providerEnv = resolveProviderEnv(providerConfig);
 
-    const tmuxSessionName = this.tmux ? makeTmuxSessionName(sessionId) : undefined;
+    const tmuxSessionName = await this.resolveTmuxSessionName(sessionId);
 
     const cfg: AgentSessionConfig = {
       taskId: this.taskId,
@@ -167,12 +173,36 @@ export class SshConversationProvider implements ConversationProvider {
 
     ptySessionRegistry.register(sessionId, pty);
     this.sessions.set(sessionId, pty);
+    if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
     telemetryService.capture('agent_run_started', {
       provider: conversation.providerId,
       project_id: conversation.projectId,
       task_id: conversation.taskId,
       conversation_id: conversation.id,
     });
+  }
+
+  private resolveTmuxSessionName(sessionId: string): Promise<string | undefined> {
+    return resolveAvailableTmuxSessionName({
+      auto: false,
+      connectionId: this.connectionId,
+      ctx: this.ctx,
+      requested: this.tmux,
+      sessionId,
+      source: 'SshConversationProvider',
+    });
+  }
+
+  getActiveSessionCount(): number {
+    return this.sessions.size;
+  }
+
+  getDetachableSessionCount(): number {
+    let count = 0;
+    for (const sessionId of this.sessions.keys()) {
+      if (this.tmuxSessionNames.has(sessionId)) count += 1;
+    }
+    return count;
   }
 
   async stopSession(conversationId: string): Promise<void> {
@@ -188,18 +218,23 @@ export class SshConversationProvider implements ConversationProvider {
       this.sessions.delete(sessionId);
       ptySessionRegistry.unregister(sessionId);
     }
-    if (this.tmux) {
-      await killTmuxSession(this.ctx, makeTmuxSessionName(sessionId));
+    const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
+    this.tmuxSessionNames.delete(sessionId);
+    if (tmuxSessionName) {
+      await killTmuxSession(this.ctx, tmuxSessionName);
     }
   }
 
   async destroyAll(): Promise<void> {
     const sessionIds = Array.from(this.knownSessionIds);
+    const tmuxSessionNames = sessionIds.flatMap((id) => {
+      const name = this.tmuxSessionNames.get(id);
+      return name ? [name] : [];
+    });
     await this.detachAll();
-    if (this.tmux) {
-      await Promise.all(sessionIds.map((id) => killTmuxSession(this.ctx, makeTmuxSessionName(id))));
-    }
+    await Promise.all(tmuxSessionNames.map((name) => killTmuxSession(this.ctx, name)));
     this.knownSessionIds.clear();
+    this.tmuxSessionNames.clear();
   }
 
   async detachAll(): Promise<void> {

@@ -36,6 +36,17 @@ function availableAgent(id: AgentProviderId): DependencyState {
   };
 }
 
+function availableTmux(): DependencyState {
+  return {
+    id: 'tmux',
+    category: 'core' as const,
+    status: 'available' as const,
+    version: '3.5',
+    path: '/bin/tmux',
+    checkedAt: 1,
+  };
+}
+
 describe('DependenciesStore install', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -116,6 +127,14 @@ describe('DependenciesStore install', () => {
     expect(rpc.dependencies.getAll).toHaveBeenCalledWith('ssh-1');
     expect(store.getRemote('ssh-1').data?.codex?.status).toBe('available');
     expect(store.getRemote('ssh-1').data?.claude?.status).toBe('available');
+  });
+
+  it('does not include remote core dependencies in installed agent ids', async () => {
+    const store = new DependenciesStore();
+    const remote = store.getRemote('ssh-1');
+    remote.setValue({ codex: availableAgent('codex'), tmux: availableTmux() });
+
+    expect(store.remoteInstalledAgents('ssh-1')).toEqual(['codex']);
   });
 
   it('refreshes an existing remote dependency resource on reconnect', async () => {

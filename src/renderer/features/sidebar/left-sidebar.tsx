@@ -57,6 +57,13 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         ? projectParams.projectId
         : undefined;
   const currentTaskId = currentView === 'task' ? taskParams.taskId : undefined;
+  const handleNewSession = React.useCallback(() => {
+    if (currentProjectId) {
+      navigate('home', { projectId: currentProjectId });
+      return;
+    }
+    navigate('home');
+  }, [currentProjectId, navigate]);
 
   return (
     <div
@@ -83,7 +90,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
           <SidebarMenu>
             <SidebarMenuButton
               isActive={isCurrentView(currentView, 'home')}
-              onClick={() => navigate('home')}
+              onClick={handleNewSession}
               aria-label={t('sidebar.newSession')}
               className="w-full justify-between"
             >

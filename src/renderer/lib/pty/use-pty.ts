@@ -8,7 +8,7 @@ import { panelDragStore } from '@renderer/lib/layout/panel-drag-store';
 import { log } from '@renderer/utils/logger';
 import { usePaneSizingContext } from './pane-sizing-context';
 import { buildTheme, type FrontendPty, type SessionTheme } from './pty';
-import { measureDimensions } from './pty-dimensions';
+import { getCellMetrics, measureDimensions } from './pty-dimensions';
 import { isRealTaskInput, SubmittedInputBuffer } from './pty-input-buffer';
 import {
   CTRL_J_ASCII,
@@ -25,36 +25,6 @@ import {
 } from './terminal-file-links';
 import { registerTerminalImeDiagnostics } from './terminal-ime-diagnostics';
 import { registerTerminalImeNativePunctuation } from './terminal-ime-native-punctuation';
-
-// xterm's proposed API and internal fields are not in the public TypeScript
-// types. Both code paths are necessary: the proposed `dimensions` API works in
-// xterm 5.x, while xterm 6.x exposes cell metrics only via `_core`.
-interface XtermCellDimensions {
-  css: { cell: { width: number; height: number } };
-}
-interface XtermInternals {
-  dimensions?: XtermCellDimensions;
-  _core?: {
-    _renderService?: { dimensions?: XtermCellDimensions };
-    renderService?: { dimensions?: XtermCellDimensions };
-  };
-}
-
-function getCellMetrics(terminal: Terminal): { width: number; height: number } | null {
-  const t = terminal as unknown as XtermInternals;
-  // Proposed API (xterm 5.x). Undefined on the public Terminal in xterm 6.x.
-  const dims = t.dimensions;
-  if (dims && dims.css.cell.width !== 0 && dims.css.cell.height !== 0) {
-    return { width: dims.css.cell.width, height: dims.css.cell.height };
-  }
-  // xterm 6.x: the public Terminal delegates to `_core` (the internal Terminal instance).
-  // FitAddon receives this same internal object via addon.activate(terminal).
-  const coreDims = t._core?._renderService?.dimensions ?? t._core?.renderService?.dimensions;
-  if (coreDims?.css?.cell?.width && coreDims.css.cell.height) {
-    return { width: coreDims.css.cell.width, height: coreDims.css.cell.height };
-  }
-  return null;
-}
 
 const PTY_RESIZE_DEBOUNCE_MS = 120;
 const MIN_TERMINAL_COLS = 2;

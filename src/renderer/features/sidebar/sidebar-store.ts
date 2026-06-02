@@ -25,10 +25,26 @@ function parseSidebarTaskGroupBy(value: unknown): SidebarTaskGroupBy | undefined
 
 export type ActivityBucket = 'today' | 'thisWeek' | 'thisMonth' | 'earlier';
 
+const SQLITE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+
+function parseSidebarInstant(instant: string): number {
+  if (!instant) return Number.NEGATIVE_INFINITY;
+  const normalized = SQLITE_TIMESTAMP_RE.test(instant) ? `${instant.replace(' ', 'T')}Z` : instant;
+  const ts = Date.parse(normalized);
+  return Number.isNaN(ts) ? Number.NEGATIVE_INFINITY : ts;
+}
+
+export function compareSidebarInstantsDesc(a: string, b: string): number {
+  const at = parseSidebarInstant(a);
+  const bt = parseSidebarInstant(b);
+  if (at !== bt) return bt - at;
+  return b.localeCompare(a);
+}
+
 function activityBucketFor(instant: string, now: Date = new Date()): ActivityBucket {
   if (!instant) return 'earlier';
-  const ts = Date.parse(instant);
-  if (Number.isNaN(ts)) return 'earlier';
+  const ts = parseSidebarInstant(instant);
+  if (!Number.isFinite(ts)) return 'earlier';
   const then = new Date(ts);
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   if (then.getTime() >= startOfToday) return 'today';
@@ -48,7 +64,7 @@ export function getSortInstant(task: TaskStore, kind: 'created' | 'updated'): st
   const reg = registeredTaskData(task);
   if (reg) {
     if (kind === 'created') return reg.createdAt;
-    return reg.lastInteractedAt ?? '';
+    return reg.lastInteractedAt ?? reg.createdAt;
   }
   const u = unregisteredTaskData(task);
   if (u) {
@@ -233,8 +249,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     const now = new Date();
     const buckets = new Map<ActivityBucket, { projectId: string; task: TaskStore }[]>();
     for (const pair of pairs) {
-      const kind: 'created' | 'updated' = this.taskSortBy === 'created-at' ? 'created' : 'updated';
-      const bucket = activityBucketFor(getSortInstant(pair.task, kind), now);
+      const bucket = activityBucketFor(getSortInstant(pair.task, 'updated'), now);
       const arr = buckets.get(bucket) ?? [];
       arr.push(pair);
       buckets.set(bucket, arr);
@@ -243,7 +258,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     for (const bucket of ACTIVITY_ORDER) {
       const arr = buckets.get(bucket);
       if (!arr || arr.length === 0) continue;
-      arr.sort((a, b) => this.compareSidebarTasks(a.task, b.task));
+      arr.sort((a, b) => this.compareSidebarTasksBy(a.task, b.task, 'updated'));
       rows.push({ kind: 'group', group: { kind: 'activity', bucket } });
       for (const { projectId, task } of arr) {
         rows.push({
@@ -492,9 +507,13 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   private compareSidebarTasks(a: TaskStore, b: TaskStore): number {
     const kind: 'created' | 'updated' = this.taskSortBy === 'created-at' ? 'created' : 'updated';
+    return this.compareSidebarTasksBy(a, b, kind);
+  }
+
+  private compareSidebarTasksBy(a: TaskStore, b: TaskStore, kind: 'created' | 'updated'): number {
     const ia = getSortInstant(a, kind);
     const ib = getSortInstant(b, kind);
-    const d = ib.localeCompare(ia);
+    const d = compareSidebarInstantsDesc(ia, ib);
     if (d !== 0) return d;
     return a.data.id.localeCompare(b.data.id);
   }
@@ -511,7 +530,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       return [...projects].sort((a, b) => {
         const ra = this.mostRecentTaskInstant(a);
         const rb = this.mostRecentTaskInstant(b);
-        const d = rb.localeCompare(ra);
+        const d = compareSidebarInstantsDesc(ra, rb);
         if (d !== 0) return d;
         return a.data.id.localeCompare(b.data.id);
       });

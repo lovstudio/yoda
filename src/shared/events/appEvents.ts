@@ -67,3 +67,11 @@ export const shellSessionStartedChannel = defineEvent<{
 export const dependencyStatusUpdatedChannel = defineEvent<DependencyStatusUpdatedEvent>(
   'dependency:status-updated'
 );
+
+export const tmuxUnavailableChannel = defineEvent<{
+  source: string;
+  sessionId: string;
+  requested: boolean;
+  auto: boolean;
+  connectionId?: string;
+}>('tmux:unavailable');

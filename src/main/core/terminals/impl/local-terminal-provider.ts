@@ -11,7 +11,8 @@ import {
   type PtyCommandSpec,
   type PtySpawnIntent,
 } from '@main/core/pty/pty-spawn-platform';
-import { killTmuxSession, makeTmuxSessionName } from '@main/core/pty/tmux-session-name';
+import { resolveAvailableTmuxSessionName } from '@main/core/pty/tmux-availability';
+import { killTmuxSession } from '@main/core/pty/tmux-session-name';
 import { log } from '@main/lib/logger';
 import { wireTerminalDevServerWatcher } from '../dev-server-watcher';
 import { type LifecycleScriptSpawnRequest, type TerminalProvider } from '../terminal-provider';
@@ -37,6 +38,7 @@ export class LocalTerminalProvider implements TerminalProvider {
   private readonly shellSetup?: string;
   private readonly ctx: IExecutionContext;
   private readonly taskEnvVars: Record<string, string>;
+  private readonly tmuxSessionNames = new Map<string, string>();
 
   constructor({
     projectId,
@@ -110,6 +112,7 @@ export class LocalTerminalProvider implements TerminalProvider {
     const sessionId = makePtySessionId(terminal.projectId, terminal.taskId, terminal.id);
     this.knownSessionIds.add(sessionId);
     if (this.sessions.has(sessionId)) return;
+    const tmuxSessionName = await this.resolveTmuxSessionName(sessionId);
 
     const intent: PtySpawnIntent = command
       ? {
@@ -117,13 +120,13 @@ export class LocalTerminalProvider implements TerminalProvider {
           cwd: this.taskPath,
           command,
           shellSetup: this.shellSetup,
-          tmuxSessionName: this.tmux ? makeTmuxSessionName(sessionId) : undefined,
+          tmuxSessionName,
         }
       : {
           kind: 'interactive-shell',
           cwd: this.taskPath,
           shellSetup: this.shellSetup,
-          tmuxSessionName: this.tmux ? makeTmuxSessionName(sessionId) : undefined,
+          tmuxSessionName,
         };
     const resolved = resolveLocalPtySpawn({
       platform: process.platform,
@@ -184,6 +187,17 @@ export class LocalTerminalProvider implements TerminalProvider {
       preserveBufferOnExit: policy.preserveBufferOnExit,
     });
     this.sessions.set(sessionId, pty);
+    if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+  }
+
+  private resolveTmuxSessionName(sessionId: string): Promise<string | undefined> {
+    return resolveAvailableTmuxSessionName({
+      auto: false,
+      ctx: this.ctx,
+      requested: this.tmux,
+      sessionId,
+      source: 'LocalTerminalProvider',
+    });
   }
 
   async killTerminal(terminalId: string): Promise<void> {
@@ -197,18 +211,23 @@ export class LocalTerminalProvider implements TerminalProvider {
       this.sessions.delete(sessionId);
       ptySessionRegistry.unregister(sessionId);
     }
-    if (this.tmux) {
-      await killTmuxSession(this.ctx, makeTmuxSessionName(sessionId));
+    const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
+    this.tmuxSessionNames.delete(sessionId);
+    if (tmuxSessionName) {
+      await killTmuxSession(this.ctx, tmuxSessionName);
     }
   }
 
   async destroyAll(): Promise<void> {
     const sessionIds = Array.from(this.knownSessionIds);
+    const tmuxSessionNames = sessionIds.flatMap((id) => {
+      const name = this.tmuxSessionNames.get(id);
+      return name ? [name] : [];
+    });
     await this.detachAll();
-    if (this.tmux) {
-      await Promise.all(sessionIds.map((id) => killTmuxSession(this.ctx, makeTmuxSessionName(id))));
-    }
+    await Promise.all(tmuxSessionNames.map((name) => killTmuxSession(this.ctx, name)));
     this.knownSessionIds.clear();
+    this.tmuxSessionNames.clear();
   }
 
   async detachAll(): Promise<void> {

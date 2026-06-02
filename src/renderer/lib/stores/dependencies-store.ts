@@ -95,7 +95,7 @@ export class DependenciesStore {
     const data = this.getRemote(connectionId).data;
     if (!data) return [];
     return Object.entries(data)
-      .filter(([, s]) => s.status === 'available')
+      .filter(([, s]) => s.category === 'agent' && s.status === 'available')
       .map(([id]) => id);
   }
 

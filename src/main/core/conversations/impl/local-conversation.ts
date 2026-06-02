@@ -16,7 +16,8 @@ import type { Pty } from '@main/core/pty/pty';
 import { buildAgentEnv } from '@main/core/pty/pty-env';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { logLocalPtySpawnWarnings, resolveLocalPtySpawn } from '@main/core/pty/pty-spawn-platform';
-import { killTmuxSession, makeTmuxSessionName } from '@main/core/pty/tmux-session-name';
+import { resolveAvailableTmuxSessionName } from '@main/core/pty/tmux-availability';
+import { killTmuxSession } from '@main/core/pty/tmux-session-name';
 import { sessionTitleManager } from '@main/core/session-title/session-title-manager';
 import { providerOverrideSettings } from '@main/core/settings/provider-settings-service';
 import { appSettingsService } from '@main/core/settings/settings-service';
@@ -41,6 +42,7 @@ export class LocalConversationProvider implements ConversationProvider {
   private readonly taskEnvVars: Record<string, string>;
   private readonly hookConfigWriter: HookConfigWriter;
   private readonly preparedHookProviders = new Map<string, boolean>();
+  private readonly tmuxSessionNames = new Map<string, string>();
 
   constructor({
     projectId,
@@ -101,7 +103,7 @@ export class LocalConversationProvider implements ConversationProvider {
     });
     const providerEnv = resolveProviderEnv(providerConfig);
 
-    const tmuxSessionName = this.tmux ? makeTmuxSessionName(sessionId) : undefined;
+    const tmuxSessionName = await this.resolveTmuxSessionName(sessionId);
 
     const resolved = resolveLocalPtySpawn({
       platform: process.platform,
@@ -175,6 +177,7 @@ export class LocalConversationProvider implements ConversationProvider {
 
     ptySessionRegistry.register(sessionId, pty);
     this.sessions.set(sessionId, pty);
+    if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
     sessionTitleManager.start({
       providerId: conversation.providerId,
       conversationId: conversation.id,
@@ -190,6 +193,28 @@ export class LocalConversationProvider implements ConversationProvider {
       task_id: conversation.taskId,
       conversation_id: conversation.id,
     });
+  }
+
+  private resolveTmuxSessionName(sessionId: string): Promise<string | undefined> {
+    return resolveAvailableTmuxSessionName({
+      auto: false,
+      ctx: this.ctx,
+      requested: this.tmux,
+      sessionId,
+      source: 'LocalConversationProvider',
+    });
+  }
+
+  getActiveSessionCount(): number {
+    return this.sessions.size;
+  }
+
+  getDetachableSessionCount(): number {
+    let count = 0;
+    for (const sessionId of this.sessions.keys()) {
+      if (this.tmuxSessionNames.has(sessionId)) count += 1;
+    }
+    return count;
   }
 
   private async prepareHookConfig(providerId: Conversation['providerId']): Promise<void> {
@@ -229,18 +254,23 @@ export class LocalConversationProvider implements ConversationProvider {
       this.sessions.delete(sessionId);
       ptySessionRegistry.unregister(sessionId);
     }
-    if (this.tmux) {
-      await killTmuxSession(this.ctx, makeTmuxSessionName(sessionId));
+    const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
+    this.tmuxSessionNames.delete(sessionId);
+    if (tmuxSessionName) {
+      await killTmuxSession(this.ctx, tmuxSessionName);
     }
   }
 
   async destroyAll(): Promise<void> {
     const sessionIds = Array.from(this.knownSessionIds);
+    const tmuxSessionNames = sessionIds.flatMap((id) => {
+      const name = this.tmuxSessionNames.get(id);
+      return name ? [name] : [];
+    });
     await this.detachAll();
-    if (this.tmux) {
-      await Promise.all(sessionIds.map((id) => killTmuxSession(this.ctx, makeTmuxSessionName(id))));
-    }
+    await Promise.all(tmuxSessionNames.map((name) => killTmuxSession(this.ctx, name)));
     this.knownSessionIds.clear();
+    this.tmuxSessionNames.clear();
   }
 
   async detachAll(): Promise<void> {

@@ -8,6 +8,12 @@ import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
+import type { FrontendPty } from '@renderer/lib/pty/pty';
+import {
+  getCellMetrics,
+  measureDimensions,
+  type TerminalDimensions,
+} from '@renderer/lib/pty/pty-dimensions';
 import { PtyPane } from '@renderer/lib/pty/pty-pane';
 import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
 import { TerminalSearchOverlay } from '@renderer/lib/pty/terminal-search-overlay';
@@ -16,6 +22,21 @@ import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import type { ConversationStore } from './conversation-manager';
+
+function getResumeInitialSize(
+  pty: FrontendPty,
+  container: HTMLElement | null
+): TerminalDimensions | undefined {
+  const cell = getCellMetrics(pty.terminal);
+  if (container && cell) {
+    const measured = measureDimensions(container, cell.width, cell.height);
+    if (measured) return measured;
+  }
+  if (pty.terminal.cols > 0 && pty.terminal.rows > 0) {
+    return { cols: pty.terminal.cols, rows: pty.terminal.rows };
+  }
+  return undefined;
+}
 
 export const ConversationsPanel = observer(function ConversationsPanel() {
   const { t } = useTranslation();
@@ -59,6 +80,7 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<{ focus: () => void }>(null);
   const focusPendingRef = useRef(false);
+  const lastAutoResumeSessionRef = useRef<string | null>(null);
 
   const {
     isSearchOpen,
@@ -87,6 +109,25 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
   }, [autoFocus, activeSessionId]);
 
   const sessionStatus = activeSession?.status;
+  useEffect(() => {
+    if (!isActive) {
+      lastAutoResumeSessionRef.current = null;
+      return;
+    }
+    if (
+      !activeConversation ||
+      !activeSessionId ||
+      activeSession?.status !== 'ready' ||
+      !activeSession.pty
+    ) {
+      return;
+    }
+    if (lastAutoResumeSessionRef.current === activeSessionId) return;
+    lastAutoResumeSessionRef.current = activeSessionId;
+    const initialSize = getResumeInitialSize(activeSession.pty, terminalContainerRef.current);
+    void conversations.resumeConversation(activeConversation.data.id, initialSize);
+  }, [activeConversation, activeSession, activeSessionId, conversations, isActive, sessionStatus]);
+
   useEffect(() => {
     if (sessionStatus === 'ready' && focusPendingRef.current) {
       focusPendingRef.current = false;

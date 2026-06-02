@@ -17,6 +17,10 @@ import type {
   ClaudeMemoryFile,
   ClaudeSessionContext,
   ClaudeSessionPrompt,
+  CodexDynamicTool,
+  CodexMemoryFile,
+  CodexSessionContext,
+  CodexTurnContext,
 } from '@shared/conversations';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
@@ -48,7 +52,7 @@ export const ContextPanel = observer(function ContextPanel() {
   const { value: reviewPrompt } = useAppSettingsKey('reviewPrompt');
   const promptFocusTarget = contextPanelFocusStore.promptTarget;
 
-  const isClaude = activeConversation?.data.providerId === 'claude';
+  const providerId = activeConversation?.data.providerId;
 
   const linkedIssueAction = buildLinkedIssueContextAction(taskPayload?.linkedIssue);
   const draftCommentsAction = buildDraftCommentsContextAction({
@@ -68,15 +72,22 @@ export const ContextPanel = observer(function ContextPanel() {
           <Section title={t('tasks.panel.llmContext')}>
             <Empty>{t('tasks.panel.noActiveConversation')}</Empty>
           </Section>
-        ) : isClaude ? (
+        ) : providerId === 'claude' ? (
           <ClaudeContextSections
             cwd={provisioned.path}
             sessionId={activeConversation.data.id}
             promptFocusTarget={promptFocusTarget}
           />
+        ) : providerId === 'codex' ? (
+          <CodexContextSections
+            cwd={provisioned.path}
+            conversationId={activeConversation.data.id}
+            conversationTitle={activeConversation.data.title}
+            promptFocusTarget={promptFocusTarget}
+          />
         ) : (
           <Section title={t('tasks.panel.llmContext')}>
-            <Empty>{t('tasks.panel.claudeOnly')}</Empty>
+            <Empty>{t('tasks.panel.contextUnsupported')}</Empty>
           </Section>
         )}
 
@@ -175,7 +186,165 @@ function ClaudeContextSections({
   );
 }
 
-function MemorySection({ files }: { files: ClaudeMemoryFile[] }) {
+function CodexContextSections({
+  cwd,
+  conversationId,
+  conversationTitle,
+  promptFocusTarget,
+}: {
+  cwd: string;
+  conversationId: string;
+  conversationTitle: string;
+  promptFocusTarget: ContextPromptFocusTarget | null;
+}) {
+  const { t } = useTranslation();
+  const { data, isPending } = useQuery<CodexSessionContext | null>({
+    queryKey: ['codexSessionContext', cwd, conversationId, conversationTitle],
+    queryFn: () => rpc.conversations.getCodexSessionContext(cwd, conversationId, conversationTitle),
+    refetchInterval: CONTEXT_REFRESH_MS,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: false,
+    staleTime: 0,
+  });
+
+  if (!data && isPending) {
+    return (
+      <Section title={t('tasks.panel.llmContext')}>
+        <Empty>{t('common.loading')}</Empty>
+      </Section>
+    );
+  }
+
+  if (!data) {
+    return (
+      <Section title={t('tasks.panel.llmContext')}>
+        <Empty>{t('tasks.panel.noTranscript')}</Empty>
+      </Section>
+    );
+  }
+
+  return (
+    <>
+      <CodexRuntimeSection data={data} />
+      <CodexSystemPromptSection
+        baseInstructions={data.baseInstructions}
+        developerMessages={data.developerMessages}
+      />
+      <MemorySection files={data.memoryFiles} />
+      <CodexDynamicToolsSection tools={data.dynamicTools} />
+      <SkillsSection content={data.skillsListing} />
+      <CodexTurnContextsSection turnContexts={data.turnContexts} />
+      <SessionPromptsSection
+        prompts={data.prompts}
+        sessionId={conversationId}
+        focusTarget={promptFocusTarget}
+      />
+    </>
+  );
+}
+
+function CodexRuntimeSection({ data }: { data: CodexSessionContext }) {
+  const { t } = useTranslation();
+  return (
+    <Section title={t('tasks.panel.runtimeContext')}>
+      <div className="grid grid-cols-[auto,minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
+        <MetaRow label={t('tasks.panel.provider')} value={data.modelProvider} />
+        <MetaRow label={t('tasks.panel.model')} value={data.model} />
+        <MetaRow label={t('tasks.panel.approvalMode')} value={data.approvalMode} />
+        <MetaRow label={t('tasks.panel.sandboxPolicy')} value={data.sandboxPolicy} />
+        <MetaRow label={t('tasks.panel.memoryMode')} value={data.memoryMode} />
+        <MetaRow label={t('tasks.panel.cliVersion')} value={data.cliVersion} />
+      </div>
+    </Section>
+  );
+}
+
+function CodexSystemPromptSection({
+  baseInstructions,
+  developerMessages,
+}: {
+  baseInstructions: string | null;
+  developerMessages: ClaudeSessionPrompt[];
+}) {
+  const { t } = useTranslation();
+  return (
+    <Section title={t('tasks.panel.systemPrompt')} count={developerMessages.length}>
+      <div className="flex items-start gap-1.5 text-xs text-foreground-passive">
+        <Info className="size-3.5 shrink-0 mt-0.5" />
+        <span>{t('tasks.panel.codexSystemPromptHint')}</span>
+      </div>
+      {baseInstructions ? (
+        <ContextItem
+          icon={<Info className="size-3.5" />}
+          label={t('tasks.panel.baseInstructions')}
+          meta={formatBytes(baseInstructions.length)}
+          text={baseInstructions}
+        />
+      ) : null}
+      {developerMessages.length > 0 ? (
+        developerMessages.map((message, index) => (
+          <ContextItem
+            key={message.id}
+            icon={<FileText className="size-3.5" />}
+            label={`${t('tasks.panel.developerMessage')} #${index + 1}`}
+            meta={formatBytes(message.text.length)}
+            text={message.text}
+          />
+        ))
+      ) : baseInstructions ? null : (
+        <Empty>{t('tasks.panel.noSystemPrompt')}</Empty>
+      )}
+    </Section>
+  );
+}
+
+function CodexDynamicToolsSection({ tools }: { tools: CodexDynamicTool[] }) {
+  const { t } = useTranslation();
+  return (
+    <Section
+      title={t('tasks.panel.tools')}
+      count={tools.length}
+      icon={<Wrench className="size-3.5" />}
+      scrollable={tools.length > 0}
+    >
+      {tools.length === 0 ? (
+        <Empty>{t('tasks.panel.noTools')}</Empty>
+      ) : (
+        tools.map((tool) => (
+          <ContextItem
+            key={`${tool.namespace ?? ''}:${tool.name}`}
+            icon={<Wrench className="size-3.5" />}
+            label={tool.namespace ? `${tool.namespace}:${tool.name}` : tool.name}
+            meta={tool.deferLoading ? t('tasks.panel.deferred') : undefined}
+            text={formatCodexTool(tool)}
+          />
+        ))
+      )}
+    </Section>
+  );
+}
+
+function CodexTurnContextsSection({ turnContexts }: { turnContexts: CodexTurnContext[] }) {
+  const { t } = useTranslation();
+  return (
+    <Section title={t('tasks.panel.turnContexts')} count={turnContexts.length}>
+      {turnContexts.length === 0 ? (
+        <Empty>{t('tasks.panel.noTurnContexts')}</Empty>
+      ) : (
+        turnContexts.map((ctx, index) => (
+          <ContextItem
+            key={ctx.turnId ?? `${index}`}
+            icon={<Info className="size-3.5" />}
+            label={ctx.turnId ?? `${t('tasks.panel.turn')} #${index + 1}`}
+            text={formatTurnContext(ctx, t)}
+          />
+        ))
+      )}
+    </Section>
+  );
+}
+
+function MemorySection({ files }: { files: Array<ClaudeMemoryFile | CodexMemoryFile> }) {
   const { t } = useTranslation();
   return (
     <Section title={t('tasks.panel.memoryFiles')} scrollable={files.length > 0}>
@@ -196,14 +365,30 @@ function MemorySection({ files }: { files: ClaudeMemoryFile[] }) {
   );
 }
 
-function memoryFileLabel(file: ClaudeMemoryFile, t: (k: string) => string): string {
-  const kindLabel =
-    file.kind === 'global-claude'
-      ? t('tasks.panel.memoryGlobal')
-      : file.kind === 'project-claude'
-        ? t('tasks.panel.memoryProjectClaude')
-        : t('tasks.panel.memoryProjectAgents');
+function memoryFileLabel(
+  file: ClaudeMemoryFile | CodexMemoryFile,
+  t: (k: string) => string
+): string {
+  const kindLabel = memoryFileKindLabel(file.kind, t);
   return `${kindLabel} · ${file.path}`;
+}
+
+function memoryFileKindLabel(
+  kind: (ClaudeMemoryFile | CodexMemoryFile)['kind'],
+  t: (k: string) => string
+): string {
+  switch (kind) {
+    case 'global-claude':
+      return t('tasks.panel.memoryGlobal');
+    case 'project-claude':
+      return t('tasks.panel.memoryProjectClaude');
+    case 'project-agents':
+      return t('tasks.panel.memoryProjectAgents');
+    case 'global-codex-agents':
+      return t('tasks.panel.memoryGlobalCodexAgents');
+    case 'project-codex-agents':
+      return t('tasks.panel.memoryProjectCodexAgents');
+  }
 }
 
 function ToolsSection({ tools }: { tools: string[] }) {
@@ -494,6 +679,35 @@ function ChipList({ items, mono }: { items: string[]; mono?: boolean }) {
       ))}
     </div>
   );
+}
+
+function MetaRow({ label, value }: { label: string; value: string | null }) {
+  return (
+    <>
+      <span className="text-foreground-passive">{label}</span>
+      <span className="min-w-0 truncate font-mono text-foreground" title={value ?? undefined}>
+        {value ?? '—'}
+      </span>
+    </>
+  );
+}
+
+function formatCodexTool(tool: CodexDynamicTool): string {
+  const parts: string[] = [];
+  if (tool.description) parts.push(tool.description);
+  if (tool.inputSchema) parts.push(`Input schema:\n${tool.inputSchema}`);
+  return parts.join('\n\n') || tool.name;
+}
+
+function formatTurnContext(ctx: CodexTurnContext, t: (key: string) => string): string {
+  return [
+    [t('tasks.panel.model'), ctx.model],
+    [t('tasks.panel.approvalMode'), ctx.approvalPolicy],
+    [t('tasks.panel.sandboxPolicy'), ctx.sandboxPolicy],
+    [t('tasks.panel.effort'), ctx.effort],
+  ]
+    .map(([label, value]) => `${label}: ${value ?? '—'}`)
+    .join('\n');
 }
 
 function Section({

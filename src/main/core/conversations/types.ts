@@ -8,6 +8,8 @@ export interface ConversationProvider {
     initialPrompt?: string
   ): Promise<void>;
   stopSession(conversationId: string): Promise<void>;
+  getActiveSessionCount(): number;
+  getDetachableSessionCount(): number;
   destroyAll(): Promise<void>;
   detachAll(): Promise<void>;
 }

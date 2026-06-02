@@ -26,6 +26,11 @@ const NEW_SESSION_THREAD_CREATE_MAX_DRIFT_MS = 60_000;
 
 const activeCodexThreadTitlePollers = new Set<CodexThreadTitlePoller>();
 const claimedCodexThreadOwners = new Map<string, string>();
+const claimedCodexThreadsByOwner = new Map<string, string>();
+
+export function getClaimedCodexThreadId(conversationId: string): string | undefined {
+  return claimedCodexThreadsByOwner.get(conversationId);
+}
 
 export class CodexSessionTitleSource implements SessionTitleSource {
   readonly providerId = 'codex' as const;
@@ -248,6 +253,7 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
     if (!this.options.isResuming && bestFreshOwnerFor(row) !== this) return false;
 
     claimedCodexThreadOwners.set(row.id, this.options.conversationId);
+    claimedCodexThreadsByOwner.set(this.options.conversationId, row.id);
     this.threadId = row.id;
     return true;
   }

@@ -9,6 +9,7 @@ import {
   SidebarMenu,
   SidebarSectionHeader,
 } from './sidebar-primitives';
+import { compareSidebarInstantsDesc } from './sidebar-store';
 import { SidebarTaskItem } from './task-item';
 
 const MAX_TASKS_RENDERED = 50;
@@ -25,7 +26,7 @@ export const SidebarProjectlessSessionList = observer(function SidebarProjectles
     .sort((a, b) => {
       const aTime = a.data.lastInteractedAt ?? a.data.createdAt;
       const bTime = b.data.lastInteractedAt ?? b.data.createdAt;
-      return bTime.localeCompare(aTime);
+      return compareSidebarInstantsDesc(aTime, bTime);
     })
     .slice(0, MAX_TASKS_RENDERED);
 

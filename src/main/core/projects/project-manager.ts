@@ -5,7 +5,7 @@ import type { IDisposable } from '@main/lib/lifecycle';
 import { LifecycleMap } from '@main/lib/lifecycle-map';
 import { log } from '@main/lib/logger';
 import { createProvider } from './create-project-provider';
-import type { ProjectProvider } from './project-provider';
+import type { ProjectDisposeOptions, ProjectProvider } from './project-provider';
 import { TimeoutSignal, withTimeout } from './utils';
 
 const SSH_PROVIDER_TIMEOUT_MS = 60_000;
@@ -31,7 +31,7 @@ function toTeardownError(e: unknown): ProviderLifecycleError {
   return { type: 'error', message: e instanceof Error ? e.message : String(e) };
 }
 
-class ProjectManager implements Hookable<ProjectManagerHooks>, IDisposable {
+export class ProjectManager implements Hookable<ProjectManagerHooks>, IDisposable {
   private readonly _hooks = new HookCore<ProjectManagerHooks>((name, e) =>
     log.error(`ProjectManager: ${String(name)} hook error`, e)
   );
@@ -65,11 +65,14 @@ class ProjectManager implements Hookable<ProjectManagerHooks>, IDisposable {
     });
   }
 
-  async closeProject(projectId: string): Promise<Result<void, ProviderLifecycleError>> {
+  async closeProject(
+    projectId: string,
+    options: ProjectDisposeOptions = {}
+  ): Promise<Result<void, ProviderLifecycleError>> {
     return (
       this._lifecycle.teardown(projectId, async (provider) => {
         try {
-          await withTimeout(provider.dispose(), TEARDOWN_PROVIDER_TIMEOUT_MS);
+          await withTimeout(provider.dispose(options), TEARDOWN_PROVIDER_TIMEOUT_MS);
           return ok();
         } catch (e) {
           const error = toTeardownError(e);
@@ -84,9 +87,9 @@ class ProjectManager implements Hookable<ProjectManagerHooks>, IDisposable {
     return this._lifecycle.get(projectId);
   }
 
-  async dispose(): Promise<void> {
+  async dispose(options: ProjectDisposeOptions = {}): Promise<void> {
     const ids = Array.from(this._lifecycle.keys());
-    await Promise.allSettled(ids.map((id) => this.closeProject(id)));
+    await Promise.allSettled(ids.map((id) => this.closeProject(id, options)));
   }
 }
 

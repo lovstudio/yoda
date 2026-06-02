@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   eventOnMock: vi.fn(),
   ptyConnectMock: vi.fn(),
   ptyDisposeMock: vi.fn(),
+  ptyResizeMock: vi.fn(),
+  resumeConversationMock: vi.fn(),
   soundPlayMock: vi.fn(),
   touchConversationMock: vi.fn(),
 }));
@@ -16,7 +18,11 @@ vi.mock('@renderer/lib/ipc', () => ({
   },
   rpc: {
     conversations: {
+      resumeConversation: mocks.resumeConversationMock,
       touchConversation: mocks.touchConversationMock,
+    },
+    pty: {
+      resize: mocks.ptyResizeMock,
     },
   },
 }));
@@ -53,6 +59,7 @@ describe('ConversationManagerStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.eventOnMock.mockReturnValue(vi.fn());
+    mocks.resumeConversationMock.mockResolvedValue(undefined);
     mocks.touchConversationMock.mockResolvedValue(undefined);
   });
 
@@ -82,5 +89,19 @@ describe('ConversationManagerStore', () => {
 
     item?.setWorking({ force: true });
     expect(item?.status).toBe('working');
+  });
+
+  it('passes current terminal size when resuming and reapplies it after spawn', async () => {
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+
+    await store.resumeConversation('conversation-1', { cols: 132, rows: 37 });
+
+    expect(mocks.resumeConversationMock).toHaveBeenCalledWith(
+      'project-1',
+      'task-1',
+      'conversation-1',
+      { cols: 132, rows: 37 }
+    );
+    expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 132, 37);
   });
 });

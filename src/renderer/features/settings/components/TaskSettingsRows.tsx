@@ -1,8 +1,12 @@
-import { Info } from 'lucide-react';
-import React from 'react';
+import { Download, Info } from 'lucide-react';
+import { observer } from 'mobx-react-lite';
+import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
+import { useInstallTmux } from '@renderer/lib/components/tmux-install';
+import { appState } from '@renderer/lib/stores/app-state';
+import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
@@ -142,8 +146,9 @@ export const PreArchiveCommandRow: React.FC = () => {
   );
 };
 
-export const EnableTmuxRow: React.FC = () => {
+export const EnableTmuxRow: React.FC = observer(() => {
   const { t } = useTranslation();
+  const installTmux = useInstallTmux();
   const {
     value: projects,
     update,
@@ -154,13 +159,38 @@ export const EnableTmuxRow: React.FC = () => {
   } = useAppSettingsKey('project');
 
   const tmuxByDefault = projects?.tmuxByDefault ?? false;
+  const tmuxState = appState.dependencies.allStatuses['tmux'];
+  const tmuxMissing = tmuxState?.status === 'missing';
+  const installingTmux = appState.dependencies.isInstalling('tmux');
+  const handleInstallTmux = useCallback(() => {
+    void installTmux();
+  }, [installTmux]);
 
   return (
     <SettingRow
       title={t('settings.tasks.enableTmux')}
-      description={t('settings.tasks.enableTmuxDescription')}
+      description={
+        <span className="flex flex-col gap-1">
+          <span>{t('settings.tasks.enableTmuxDescription')}</span>
+          {tmuxMissing && <span className="text-amber-500">{t('settings.tasks.tmuxMissing')}</span>}
+        </span>
+      }
       control={
         <>
+          {tmuxMissing && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={installingTmux}
+              onClick={handleInstallTmux}
+            >
+              <Download className="h-3.5 w-3.5" />
+              {installingTmux
+                ? t('settings.tasks.installingTmux')
+                : t('settings.tasks.installTmux')}
+            </Button>
+          )}
           <ResetToDefaultButton
             visible={isFieldOverridden('tmuxByDefault')}
             defaultLabel="off"
@@ -176,4 +206,4 @@ export const EnableTmuxRow: React.FC = () => {
       }
     />
   );
-};
+});

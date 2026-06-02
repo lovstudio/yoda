@@ -5,7 +5,7 @@ import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { FileSystemProvider } from '@main/core/fs/types';
 import type { GitFetchService } from '@main/core/git/git-fetch-service';
 import type { GitRepositoryService } from '@main/core/git/repository-service';
-import { workspaceRegistry } from '@main/core/workspaces/workspace-registry';
+import { workspaceRegistry, type TeardownMode } from '@main/core/workspaces/workspace-registry';
 import type { IDisposable } from '@main/lib/lifecycle';
 import type { ConversationProvider } from '../conversations/types';
 import { taskManager } from '../tasks/task-manager';
@@ -29,6 +29,12 @@ export type ProvisionResult = {
     sshConnectionId?: string;
     worktreeGitDir?: string;
   };
+};
+
+export type ProjectDisposeMode = TeardownMode | 'project-settings';
+
+export type ProjectDisposeOptions = {
+  mode?: ProjectDisposeMode;
 };
 
 export interface TaskProvider {
@@ -113,12 +119,17 @@ export class ProjectProvider implements IDisposable {
     return this.gitFetchService.fetch();
   }
 
-  async dispose(): Promise<void> {
+  async dispose(options: ProjectDisposeOptions = {}): Promise<void> {
     this._dispose();
     this.gitFetchService.stop();
-    const projectSettings = await this.settings.get();
-    const mode = projectSettings.tmux ? 'detach' : 'terminate';
+    const mode = await this.resolveDisposeMode(options.mode ?? 'project-settings');
     await taskManager.teardownAllForProject(this.projectId, mode);
     await workspaceRegistry.releaseAllForProject(this.projectId, mode);
+  }
+
+  private async resolveDisposeMode(mode: ProjectDisposeMode): Promise<TeardownMode> {
+    if (mode !== 'project-settings') return mode;
+    const projectSettings = await this.settings.get();
+    return projectSettings.tmux ? 'detach' : 'terminate';
   }
 }

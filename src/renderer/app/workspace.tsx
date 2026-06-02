@@ -2,6 +2,7 @@ import { LeftSidebar } from '@renderer/features/sidebar/left-sidebar';
 import { CommandShortcutBinder } from '@renderer/lib/commands/command-shortcut-binder';
 import { AppKeyboardShortcuts } from '@renderer/lib/components/app-keyboard-shortcuts';
 import { MonacoKeyboardBridge } from '@renderer/lib/components/monaco-keyboard-bridge';
+import { TmuxUnavailableNotifier } from '@renderer/lib/components/tmux-unavailable-notifier';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import {
   useWorkspaceSlots,
@@ -21,6 +22,7 @@ export function Workspace() {
       <AppKeyboardShortcuts />
       <CommandShortcutBinder />
       <MonacoKeyboardBridge />
+      <TmuxUnavailableNotifier />
       <WorkspaceLayout
         leftSidebar={<LeftSidebar />}
         mainContent={

@@ -29,6 +29,11 @@ import { provisionLocalTask } from './task-builder';
 
 type StoredTask = ProvisionResult & { projectId: string; ctx: IExecutionContext };
 
+export type ActiveAgentSessionSummary = {
+  running: number;
+  keepable: number;
+};
+
 export type TaskManagerHooks = {
   'task:provisioned': (info: {
     projectId: string;
@@ -265,6 +270,18 @@ class TaskManager {
 
   getWorkspaceId(taskId: string): string | undefined {
     return this._lifecycle.get(taskId)?.persistData.workspaceId;
+  }
+
+  getActiveAgentSessionSummary(): ActiveAgentSessionSummary {
+    let running = 0;
+    let keepable = 0;
+
+    for (const stored of this._lifecycle.values()) {
+      running += stored.taskProvider.conversations.getActiveSessionCount();
+      keepable += stored.taskProvider.conversations.getDetachableSessionCount();
+    }
+
+    return { running, keepable };
   }
 
   getBootstrapStatus(taskId: string): TaskBootstrapStatus {
