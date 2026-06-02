@@ -31,6 +31,11 @@ import {
   listInstalledFontsAll,
   resolveAppVersion,
 } from './utils';
+import {
+  triggerVoiceInput,
+  type TriggerVoiceInputArgs,
+  type TriggerVoiceInputResult,
+} from './voice-input';
 
 const FONT_CACHE_TTL_MS = 5 * 60 * 1_000;
 
@@ -170,6 +175,10 @@ class AppService implements IInitializable, IDisposable {
   clipboardWriteText(text: string): void {
     if (typeof text !== 'string') throw new Error('Invalid clipboard text');
     clipboard.writeText(text);
+  }
+
+  triggerVoiceInput(args?: TriggerVoiceInputArgs): Promise<TriggerVoiceInputResult> {
+    return triggerVoiceInput(args);
   }
 
   async openIn(args: {

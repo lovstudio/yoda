@@ -4,6 +4,7 @@ import type { OpenInAppId } from '@shared/openInApps';
 import { deepLinkService } from '@main/app/deep-link';
 import { telemetryService } from '@main/lib/telemetry';
 import { appService } from './service';
+import type { TriggerVoiceInputArgs } from './voice-input';
 
 export const appController = createRPCController({
   openExternal: async (url: string) => {
@@ -21,6 +22,17 @@ export const appController = createRPCController({
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  triggerVoiceInput: async (args?: TriggerVoiceInputArgs) => {
+    try {
+      const result = await appService.triggerVoiceInput(args);
+      return { success: true as const, ...result };
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   },
   openIn: async (args: {

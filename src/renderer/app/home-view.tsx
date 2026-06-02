@@ -7,6 +7,7 @@ import {
   Check,
   ChevronDown,
   Code2,
+  Copy,
   Crown,
   FileText,
   Folder,
@@ -806,6 +807,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptSelection, setPromptSelection] = useState({ start: 0, end: 0 });
+  const promptSelectionRef = useRef(promptSelection);
   const [pathCompletionItems, setPathCompletionItems] = useState<PathCompletionItem[]>([]);
   const [pathCompletionOpen, setPathCompletionOpen] = useState(false);
   const [pathCompletionLoading, setPathCompletionLoading] = useState(false);
@@ -858,6 +860,9 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
       current.start === next.start && current.end === next.end ? current : next
     );
   }, []);
+  useEffect(() => {
+    promptSelectionRef.current = promptSelection;
+  }, [promptSelection]);
   const hydratedPromptRef = useRef(false);
   useEffect(() => {
     if (hydratedPromptRef.current) return;
@@ -877,6 +882,90 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
       if (promptWriteRef.current) clearTimeout(promptWriteRef.current);
     };
   }, [prompt, persistedPrompt, updateDraft]);
+
+  const focusPromptForVoiceInput = useCallback(() => {
+    const textarea = promptTextareaRef.current;
+    if (!textarea) return;
+    const selection = promptSelectionRef.current;
+    const start = Math.max(0, Math.min(selection.start, textarea.value.length));
+    const end = Math.max(start, Math.min(selection.end, textarea.value.length));
+    textarea.focus({ preventScroll: true });
+    textarea.setSelectionRange(start, end);
+    setPromptFocused(true);
+    updatePromptSelection(textarea);
+  }, [updatePromptSelection]);
+
+  const [voiceInputTriggering, setVoiceInputTriggering] = useState(false);
+  const copyVoiceInputError = useCallback(
+    async (message: string) => {
+      const result = await rpc.app.clipboardWriteText(message);
+      if (result.success) {
+        toast.success(t('common.copied'));
+        return;
+      }
+      toast.error(result.error ?? t('common.copyFailed'));
+    },
+    [t]
+  );
+  const showVoiceInputErrorToast = useCallback(
+    (error: string) => {
+      const title = t('home.voiceTriggerFailedToast');
+      const copyLabel = t('common.copy');
+      const copyText = `${title}\n${error}`;
+      toast.error(
+        <div className="flex w-full min-w-0 items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">{title}</span>
+          <button
+            type="button"
+            aria-label={copyLabel}
+            title={copyLabel}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void copyVoiceInputError(copyText);
+            }}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Copy className="size-3.5" />
+          </button>
+        </div>,
+        {
+          icon: null,
+          classNames: {
+            content: 'w-full min-w-0',
+            title: 'w-full',
+            description: 'w-full',
+          },
+          description: (
+            <div className="mt-2 max-h-28 w-full overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-background-1/80 px-2.5 py-2 text-xs leading-relaxed text-foreground-muted">
+              {error}
+            </div>
+          ),
+        }
+      );
+    },
+    [copyVoiceInputError, t]
+  );
+  const handleVoiceInput = useCallback(async () => {
+    if (voiceInputTriggering) return;
+    focusPromptForVoiceInput();
+    setVoiceInputTriggering(true);
+
+    try {
+      const result = await rpc.app.triggerVoiceInput({ provider: 'typeless' });
+      if (!result.success) {
+        showVoiceInputErrorToast(result.error ?? t('common.unknownError'));
+        return;
+      }
+      toast.success(t('home.voiceTriggeredToast', { shortcut: result.shortcut }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showVoiceInputErrorToast(message);
+    } finally {
+      setVoiceInputTriggering(false);
+      focusPromptForVoiceInput();
+    }
+  }, [focusPromptForVoiceInput, showVoiceInputErrorToast, t, voiceInputTriggering]);
 
   useEffect(() => {
     if (!activePathMention) {
@@ -1447,9 +1536,18 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                 <button
                   type="button"
                   aria-label={t('home.voiceAria')}
-                  className="flex size-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+                  aria-busy={voiceInputTriggering}
+                  title={t('home.voiceTooltip')}
+                  disabled={voiceInputTriggering}
+                  onClick={() => void handleVoiceInput()}
+                  className={cn(
+                    'flex size-8 shrink-0 items-center justify-center rounded-full transition-colors',
+                    voiceInputTriggering
+                      ? 'bg-primary/10 text-primary hover:bg-primary/15'
+                      : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
+                  )}
                 >
-                  <Mic className="size-4" />
+                  <Mic className={cn('size-4', voiceInputTriggering && 'animate-pulse')} />
                 </button>
                 <button
                   type="button"
