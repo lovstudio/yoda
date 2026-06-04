@@ -5,6 +5,33 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.3.8 — 2026-06-04
+
+### Added
+
+- Add Codex session recovery support that can restore rollout terminal history
+  and reuse the original Codex session id when reopening or unarchiving
+  historical conversations.
+- Add richer task/session context actions, including copyable basic session
+  info, resolved resume commands, project paths, working directories, and
+  provider details from task menus.
+- Add task tab-strip coverage for task sessions so terminal and conversation
+  navigation state is easier to preserve across task views.
+
+### Changed
+
+- Default tmux task settings to enabled for new project settings so long-running
+  agent sessions are protected by default.
+- Clarify Yoda's independent project branding and remove the legacy automatic
+  Emdash data-directory migration path.
+
+### Fixed
+
+- Improve PTY drag selection auto-copy reliability, including terminals running
+  in mouse mode.
+- Harden Codex session title extraction and session info resolution across
+  mounted projects and archived task states.
+
 ## 0.3.7 — 2026-06-02
 
 ### Added
