@@ -177,7 +177,7 @@ export const interfaceSettingsSchema = z.object({
 
 export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });
 
-const homeRunModeSchema = z.enum(['normal', 'compare', 'review', 'team']);
+const homeRunModeSchema = z.enum(['normal', 'brainstorm', 'compare', 'review', 'team']);
 const teamProviderSelectionSchema = z.object({
   ceo: z.enum(AGENT_PROVIDER_IDS),
   product: z.enum(AGENT_PROVIDER_IDS),

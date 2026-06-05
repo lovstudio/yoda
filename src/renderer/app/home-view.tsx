@@ -15,6 +15,7 @@ import {
   GitBranch,
   GitCompare,
   GitFork,
+  Lightbulb,
   Loader2,
   Megaphone,
   Mic,
@@ -53,7 +54,7 @@ import {
 import { AGENT_PROVIDER_IDS, type AgentProviderId } from '@shared/agent-provider-registry';
 import { INTERNAL_PROJECT_ID, projectDisplayName } from '@shared/projects';
 import type { CatalogIndex } from '@shared/skills/types';
-import { ensureUniqueTaskSlug } from '@shared/task-name';
+import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
 import {
   asMounted,
   getProjectManagerStore,
@@ -118,7 +119,7 @@ import {
 } from './path-mention-autocomplete';
 
 type TaskStrategyKind = 'new-branch' | 'no-worktree';
-type HomeRunMode = 'normal' | 'compare' | 'review' | 'team';
+type HomeRunMode = 'normal' | 'brainstorm' | 'compare' | 'review' | 'team';
 type RunHostKind = 'local' | 'ssh';
 type SkillShortcutPrefix = '/' | '$';
 type TeamRoleId = 'ceo' | 'product' | 'engineering' | 'uiux' | 'operations';
@@ -141,6 +142,7 @@ const DEFAULT_TEAM_PROVIDERS: TeamProviderSelection = {
 
 const REVIEW_IMPLEMENTER_PROMPT_KEY = 'review:implementer';
 const REVIEW_REVIEWER_PROMPT_KEY = 'review:reviewer';
+const BRAINSTORM_PROMPT_KEY = 'brainstorm:agent';
 
 const TEAM_ROLES = [
   {
@@ -331,6 +333,16 @@ function defaultReviewReviewerSystemPrompt(): string {
   ].join('\n');
 }
 
+function defaultBrainstormSystemPrompt(): string {
+  return [
+    `You are a brainstorming and requirements discovery agent.`,
+    `Use a Socratic questioning style: ask concise, high-leverage questions that expose user goals, constraints, workflows, edge cases, success metrics, and tradeoffs.`,
+    `Do not implement, edit files, or start coding in this mode.`,
+    `Work interactively. Start by restating the rough need and asking the next best batch of clarifying questions, then iterate from the user's answers.`,
+    `When the requirement is specific enough, produce a compact handoff package with a PRD, workflow/user journey, assumptions, natural-language acceptance tests, edge cases, and remaining open questions.`,
+  ].join('\n');
+}
+
 function defaultTeamSystemPrompt(role: (typeof TEAM_ROLES)[number]): string {
   if (role.id === 'ceo') {
     return [
@@ -366,6 +378,18 @@ function buildRequirementPrompt(args: { requirement: string; systemPrompt: strin
   return withSystemPrompt(
     args.systemPrompt,
     [`User requirement:`, args.requirement || '(No explicit requirement was provided.)'].join('\n')
+  );
+}
+
+function buildBrainstormPrompt(args: { requirement: string; systemPrompt: string }): string {
+  return withSystemPrompt(
+    args.systemPrompt,
+    [
+      `Rough user requirement:`,
+      args.requirement || '(No explicit requirement was provided.)',
+      '',
+      `Start the discovery session now. Ask clarifying questions before drafting final artifacts unless the user explicitly asks you to draft from the current information.`,
+    ].join('\n')
   );
 }
 
@@ -714,15 +738,16 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     set: setProviderOverridePersisted,
   });
   const persistedRunMode: HomeRunMode = draft?.runMode ?? 'normal';
-  const [pendingRunMode, setPendingRunMode] = useState<HomeRunMode | null>(null);
-  const runMode = pendingRunMode ?? persistedRunMode;
+  const [runMode, setRunModeState] = useState<HomeRunMode>('normal');
+  const hasManualRunModeRef = useRef(false);
   useEffect(() => {
-    if (pendingRunMode === null) return;
-    if (draft?.runMode === pendingRunMode) setPendingRunMode(null);
-  }, [draft?.runMode, pendingRunMode]);
+    if (draft === undefined || hasManualRunModeRef.current) return;
+    setRunModeState(persistedRunMode);
+  }, [draft, persistedRunMode]);
   const setRunMode = useCallback(
     (next: HomeRunMode) => {
-      setPendingRunMode(next);
+      hasManualRunModeRef.current = true;
+      setRunModeState(next);
       updateDraft({ runMode: next });
     },
     [updateDraft]
@@ -1046,6 +1071,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const effectiveReviewStrategyKind: TaskStrategyKind = isUnborn
     ? 'no-worktree'
     : reviewStrategyKind;
+  const modeCanRunWithoutProject = runMode === 'normal' || runMode === 'brainstorm';
   const modeRequiresWorktree =
     runMode === 'compare' ||
     runMode === 'team' ||
@@ -1062,7 +1088,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const canSubmit =
     !submitting &&
     modeHasAgents &&
-    (runMode === 'normal'
+    (modeCanRunWithoutProject
       ? !mounted || !!defaultBranch
       : !!mounted && !!defaultBranch && (!modeRequiresWorktree || !isUnborn));
 
@@ -1070,7 +1096,9 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     if (!canSubmit || submitting) return;
     setSubmitting(true);
     try {
-      const baseName = await rpc.tasks.generateTaskName(trimmed ? { title: trimmed } : {});
+      const promptDisplayName = trimmed ? taskNameFromPrompt(trimmed) : '';
+      const baseName =
+        promptDisplayName || (await rpc.tasks.generateTaskName(trimmed ? { title: trimmed } : {}));
       const reportFailures = (results: PromiseSettledResult<unknown>[]) => {
         const failures = results.filter((result) => result.status === 'rejected');
         if (failures.length > 0) {
@@ -1081,6 +1109,8 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
           );
         }
       };
+      const getSystemPrompt = (key: string, defaultPrompt: string) =>
+        resolveAgentSystemPrompt(agentSystemPrompts, key, defaultPrompt);
 
       if (!mounted) {
         if (!providerId) return;
@@ -1094,9 +1124,19 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
           internalProject.taskManager.tasks.values(),
           (t) => t.data.name
         );
-        const taskName = ensureUniqueTaskSlug(baseName, existingDraftNames);
+        const taskName = ensureUniqueTaskDisplayName(baseName, existingDraftNames);
         const taskId = crypto.randomUUID();
         const conversationId = crypto.randomUUID();
+        const initialPrompt =
+          runMode === 'brainstorm'
+            ? buildBrainstormPrompt({
+                requirement: trimmed,
+                systemPrompt: getSystemPrompt(
+                  BRAINSTORM_PROMPT_KEY,
+                  defaultBrainstormSystemPrompt()
+                ),
+              })
+            : trimmed || undefined;
         void internalProject.taskManager
           .createTask({
             id: taskId,
@@ -1110,7 +1150,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
               taskId,
               provider: providerId,
               title: initialConversationTitle(providerId, trimmed || undefined, []),
-              initialPrompt: trimmed || undefined,
+              initialPrompt,
               autoApprove: autoApproveDefaults.getDefault(providerId),
             },
           })
@@ -1128,12 +1168,10 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
       const existingNames = Array.from(mounted.taskManager.tasks.values(), (t) => t.data.name);
       const reservedNames = [...existingNames];
       const reserveTaskName = (seed: string) => {
-        const taskName = ensureUniqueTaskSlug(seed, reservedNames);
+        const taskName = ensureUniqueTaskDisplayName(seed, reservedNames);
         reservedNames.push(taskName);
         return taskName;
       };
-      const getSystemPrompt = (key: string, defaultPrompt: string) =>
-        resolveAgentSystemPrompt(agentSystemPrompts, key, defaultPrompt);
       const createProjectTask = (args: {
         provider: AgentProviderId;
         nameSeed: string;
@@ -1170,6 +1208,27 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
         });
         return { taskId, taskName, conversationId, provider: args.provider, promise };
       };
+
+      if (runMode === 'brainstorm') {
+        if (!providerId) return;
+        const task = createProjectTask({
+          provider: providerId,
+          nameSeed: `${baseName}-brainstorm`,
+          initialPrompt: buildBrainstormPrompt({
+            requirement: trimmed,
+            systemPrompt: getSystemPrompt(BRAINSTORM_PROMPT_KEY, defaultBrainstormSystemPrompt()),
+          }),
+          titlePrompt: trimmed || undefined,
+          strategyKind: 'no-worktree',
+        });
+        navigate('task', { projectId: mounted.data.id, taskId: task.taskId });
+        void task.promise.catch(() => {
+          toast.error('Agent task failed to start.');
+        });
+        setPrompt('');
+        updateDraft({ prompt: '' });
+        return;
+      }
 
       if (runMode === 'compare') {
         const launches = compareProviders.map((provider, index) =>
@@ -1655,76 +1714,83 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <ProjectSelector
-            value={selectedProjectId}
-            onChange={setSelectedProjectId}
-            allowProjectless
-            initializeGitRepositoryOnPick
-            trigger={
-              <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
-                <FolderOpen className="size-3.5 text-foreground-muted" />
-                <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
-              </ComboboxTrigger>
-            }
-          />
-          <RunHostSelector kind={runHostKind} />
-          {runMode === 'normal' && (
-            <div className="w-40 min-w-36">
-              <AgentSelector
-                value={providerId}
-                onChange={setProviderOverride}
-                connectionId={connectionId}
-                className="h-7 rounded-md border border-border bg-background-1 px-2.5 text-xs transition-colors hover:bg-background-2"
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="overflow-x-auto pb-1">
+            <div className="flex min-w-max flex-wrap items-center gap-2">
+              <ProjectSelector
+                value={selectedProjectId}
+                onChange={setSelectedProjectId}
+                allowProjectless
+                initializeGitRepositoryOnPick
+                trigger={
+                  <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+                    <FolderOpen className="size-3.5 text-foreground-muted" />
+                    <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
+                  </ComboboxTrigger>
+                }
               />
+              <RunHostSelector kind={runHostKind} />
+              {runMode === 'normal' && (
+                <div className="w-40 min-w-36">
+                  <AgentSelector
+                    value={providerId}
+                    onChange={setProviderOverride}
+                    connectionId={connectionId}
+                    className="h-7 rounded-md border border-border bg-background-1 px-2.5 text-xs transition-colors hover:bg-background-2"
+                  />
+                </div>
+              )}
+              {mounted && runMode === 'normal' && (
+                <StrategyChip
+                  strategyKind={effectiveStandardStrategyKind}
+                  disabled={isUnborn}
+                  onChange={setStrategyKind}
+                  ariaLabel={t('home.strategyAria')}
+                  labels={strategyLabels}
+                />
+              )}
+              {runMode === 'brainstorm' && (
+                <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>
+              )}
+              {mounted && runMode === 'compare' && (
+                <Chip icon={GitFork}>
+                  {t('home.compareBranchPolicy', { count: compareProviders.length })}
+                </Chip>
+              )}
+              {mounted && runMode === 'review' && (
+                <StrategyChip
+                  strategyKind={effectiveReviewStrategyKind}
+                  disabled={isUnborn}
+                  onChange={setReviewStrategyKind}
+                  ariaLabel={t('home.reviewStrategyAria')}
+                  labels={reviewStrategyLabels}
+                />
+              )}
+              {mounted && runMode === 'team' && (
+                <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
+              )}
             </div>
-          )}
-          {mounted && runMode === 'normal' && (
-            <StrategyChip
-              strategyKind={effectiveStandardStrategyKind}
-              disabled={isUnborn}
-              onChange={setStrategyKind}
-              ariaLabel={t('home.strategyAria')}
-              labels={strategyLabels}
-            />
-          )}
-          {mounted && runMode === 'compare' && (
-            <Chip icon={GitFork}>
-              {t('home.compareBranchPolicy', { count: compareProviders.length })}
-            </Chip>
-          )}
-          {mounted && runMode === 'review' && (
-            <StrategyChip
-              strategyKind={effectiveReviewStrategyKind}
-              disabled={isUnborn}
-              onChange={setReviewStrategyKind}
-              ariaLabel={t('home.reviewStrategyAria')}
-              labels={reviewStrategyLabels}
-            />
-          )}
-          {mounted && runMode === 'team' && (
-            <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
-          )}
+          </div>
+
+          <RunModeTabs mode={runMode} onChange={setRunMode} />
+
+          <ModeConfigurationPanel
+            mode={runMode}
+            providerId={providerId}
+            onProviderChange={setProviderOverride}
+            compareProviders={compareProviders}
+            onCompareProviderChange={setCompareProvider}
+            onAddCompareProvider={addCompareProvider}
+            onRemoveCompareProvider={removeCompareProvider}
+            reviewerProvider={reviewerProvider}
+            onReviewerProviderChange={setReviewerProvider}
+            teamProviders={teamProviders}
+            onTeamProviderChange={setTeamProvider}
+            agentSystemPrompts={agentSystemPrompts}
+            onAgentSystemPromptChange={setAgentSystemPrompt}
+            connectionId={connectionId}
+          />
         </div>
-
-        <RunModeTabs mode={runMode} onChange={setRunMode} />
-
-        <ModeConfigurationPanel
-          mode={runMode}
-          providerId={providerId}
-          onProviderChange={setProviderOverride}
-          compareProviders={compareProviders}
-          onCompareProviderChange={setCompareProvider}
-          onAddCompareProvider={addCompareProvider}
-          onRemoveCompareProvider={removeCompareProvider}
-          reviewerProvider={reviewerProvider}
-          onReviewerProviderChange={setReviewerProvider}
-          teamProviders={teamProviders}
-          onTeamProviderChange={setTeamProvider}
-          agentSystemPrompts={agentSystemPrompts}
-          onAgentSystemPromptChange={setAgentSystemPrompt}
-          connectionId={connectionId}
-        />
 
         {recentTasks.length > 0 && (
           <div className="mt-10 flex flex-col">
@@ -2045,6 +2111,12 @@ function RunModeTabs({ mode, onChange }: RunModeTabsProps) {
       description: t('home.modeNormalDesc'),
     },
     {
+      mode: 'brainstorm',
+      icon: Lightbulb,
+      label: t('home.modeBrainstorm'),
+      description: t('home.modeBrainstormDesc'),
+    },
+    {
       mode: 'compare',
       icon: GitCompare,
       label: t('home.modeCompare'),
@@ -2064,38 +2136,40 @@ function RunModeTabs({ mode, onChange }: RunModeTabsProps) {
     },
   ];
   return (
-    <div
-      role="tablist"
-      aria-label={t('home.modeAria')}
-      className="mt-2 grid h-10 w-full shrink-0 grid-cols-4 overflow-hidden rounded-lg border border-border bg-background-1 p-1 shadow-sm"
-    >
-      {options.map((option) => {
-        const Icon = option.icon;
-        const active = option.mode === mode;
-        return (
-          <button
-            key={option.mode}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            aria-label={`${option.label}: ${option.description}`}
-            title={option.description}
-            onClick={() => onChange(option.mode)}
-            className={cn(
-              'flex h-full min-w-0 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground',
-              active && 'bg-background text-foreground shadow-sm ring-1 ring-border/60'
-            )}
-          >
-            <Icon
+    <div className="w-full overflow-x-auto pb-1">
+      <div
+        role="tablist"
+        aria-label={t('home.modeAria')}
+        className="grid h-10 min-w-[34rem] shrink-0 grid-cols-5 overflow-hidden rounded-lg border border-border bg-background-1 p-1 shadow-sm sm:min-w-0"
+      >
+        {options.map((option) => {
+          const Icon = option.icon;
+          const active = option.mode === mode;
+          return (
+            <button
+              key={option.mode}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              aria-label={`${option.label}: ${option.description}`}
+              title={option.description}
+              onClick={() => onChange(option.mode)}
               className={cn(
-                'size-3.5 shrink-0',
-                active ? 'text-foreground' : 'text-foreground-muted'
+                'flex h-full min-w-0 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground',
+                active && 'bg-background text-foreground shadow-sm ring-1 ring-border/60'
               )}
-            />
-            <span className="truncate whitespace-nowrap leading-none">{option.label}</span>
-          </button>
-        );
-      })}
+            >
+              <Icon
+                className={cn(
+                  'size-3.5 shrink-0',
+                  active ? 'text-foreground' : 'text-foreground-muted'
+                )}
+              />
+              <span className="truncate whitespace-nowrap leading-none">{option.label}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2157,7 +2231,23 @@ function ModeConfigurationPanel({
   };
 
   return (
-    <div className="mt-3 border-t border-border/60 pt-3">
+    <div className="border-t border-border/60 pt-3">
+      {mode === 'brainstorm' && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Agent
+            icon={Lightbulb}
+            label={t('home.brainstormAgent')}
+            value={providerId}
+            onChange={onProviderChange}
+            connectionId={connectionId}
+            {...getPromptProps(BRAINSTORM_PROMPT_KEY, defaultBrainstormSystemPrompt())}
+          />
+          <div className="flex min-h-24 items-center rounded-md border border-border/70 bg-background px-3 py-2 text-xs leading-relaxed text-foreground-muted">
+            {t('home.brainstormGuide')}
+          </div>
+        </div>
+      )}
+
       {mode === 'compare' && (
         <div className="grid gap-2 sm:grid-cols-2">
           {compareProviders.map((agent, index) => (
