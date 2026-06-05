@@ -352,7 +352,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       taskOrderByProject: { ...this.taskOrderByProject },
       taskSortBy: this.taskSortBy,
       taskGroupBy: this.taskGroupBy,
-      pinnedProjectIds: this.validPinnedProjectIds(),
+      pinnedProjectIds: [...this.pinnedProjectIds],
       pinnedCollapsed: this.pinnedCollapsed,
       projectsCollapsed: this.projectsCollapsed,
       hideProjectsWithoutActiveTasks: this.hideProjectsWithoutActiveTasks,
@@ -561,10 +561,4 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     return Array.from(project.mountedProject.taskManager.tasks.values()).some(isActiveSidebarTask);
   }
 
-  private validPinnedProjectIds(): string[] {
-    return [...this.pinnedProjectIds].filter((id) => {
-      const project = this.projectManager.projects.get(id);
-      return project !== undefined && project.state !== 'unregistered';
-    });
-  }
 }
