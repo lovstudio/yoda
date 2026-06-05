@@ -1,4 +1,5 @@
 import { type AgentProviderId } from '@shared/agent-provider-registry';
+import { taskNameFromPrompt } from '@shared/task-name';
 import { agentConfig } from '@renderer/utils/agentConfig';
 
 type ConversationTitleInput = {
@@ -62,4 +63,13 @@ export function nextDefaultConversationTitle(
 
   const name = agentDisplayName(providerId);
   return next === 1 ? name : `${name} (${next})`;
+}
+
+export function initialConversationTitle(
+  providerId: AgentProviderId,
+  initialPrompt: string | undefined,
+  conversations: ConversationTitleInput[]
+): string {
+  const promptTitle = initialPrompt ? taskNameFromPrompt(initialPrompt) : '';
+  return promptTitle || nextDefaultConversationTitle(providerId, conversations);
 }

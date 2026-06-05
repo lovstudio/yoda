@@ -61,7 +61,7 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import type { ConversationStore } from '@renderer/features/tasks/conversations/conversation-manager';
-import { nextDefaultConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
+import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useEffectiveProvider } from '@renderer/features/tasks/conversations/use-effective-provider';
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
 import { useAgentAutoApproveDefaults } from '@renderer/features/tasks/hooks/useAgentAutoApproveDefaults';
@@ -575,7 +575,7 @@ async function runReviewOrchestration(args: {
       projectId: args.projectId,
       taskId: args.taskId,
       provider: args.reviewerProvider,
-      title: `review-${round}`,
+      title: initialConversationTitle(args.reviewerProvider, args.requirement, []),
       initialPrompt: buildReviewPrompt({
         requirement: args.requirement,
         round,
@@ -1109,7 +1109,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
               projectId: INTERNAL_PROJECT_ID,
               taskId,
               provider: providerId,
-              title: nextDefaultConversationTitle(providerId, []),
+              title: initialConversationTitle(providerId, trimmed || undefined, []),
               initialPrompt: trimmed || undefined,
               autoApprove: autoApproveDefaults.getDefault(providerId),
             },
@@ -1138,6 +1138,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
         provider: AgentProviderId;
         nameSeed: string;
         initialPrompt: string | undefined;
+        titlePrompt?: string;
         strategyKind: TaskStrategyKind;
       }) => {
         const taskId = crypto.randomUUID();
@@ -1158,7 +1159,11 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
             projectId: mounted.data.id,
             taskId,
             provider: args.provider,
-            title: nextDefaultConversationTitle(args.provider, []),
+            title: initialConversationTitle(
+              args.provider,
+              args.titlePrompt ?? args.initialPrompt,
+              []
+            ),
             initialPrompt: args.initialPrompt,
             autoApprove: autoApproveDefaults.getDefault(args.provider),
           },
@@ -1178,6 +1183,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                 defaultCompareSystemPrompt(index)
               ),
             }),
+            titlePrompt: trimmed || undefined,
             strategyKind: 'new-branch',
           })
         );
@@ -1201,6 +1207,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
               defaultReviewImplementerSystemPrompt()
             ),
           }),
+          titlePrompt: trimmed || undefined,
           strategyKind: effectiveReviewStrategyKind,
         });
         navigate('task', { projectId: mounted.data.id, taskId: implementation.taskId });
@@ -1236,6 +1243,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
               defaultTeamSystemPrompt(ceoRole)
             ),
           }),
+          titlePrompt: trimmed || undefined,
           strategyKind: 'new-branch',
         });
         navigate('task', { projectId: mounted.data.id, taskId: ceo.taskId });
@@ -1258,6 +1266,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                   defaultTeamSystemPrompt(role)
                 ),
               }),
+              titlePrompt: trimmed || undefined,
               strategyKind: 'new-branch',
             })
           );

@@ -26,6 +26,7 @@ import {
   getProjectManagerStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useAgentAutoApproveDefaults } from '@renderer/features/tasks/hooks/useAgentAutoApproveDefaults';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -206,7 +207,7 @@ export const AutomationMainPanel = observer(function AutomationMainPanel() {
           projectId: INTERNAL_PROJECT_ID,
           taskId,
           provider: entry.provider,
-          title: taskName,
+          title: initialConversationTitle(entry.provider, entry.prompt, []),
           initialPrompt: entry.prompt,
           autoApprove: autoApproveDefaults.getDefault(entry.provider),
         },

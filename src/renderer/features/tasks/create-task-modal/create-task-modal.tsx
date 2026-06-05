@@ -9,7 +9,7 @@ import {
   getRepositoryStore,
   mountedProjectData,
 } from '@renderer/features/projects/stores/project-selectors';
-import { nextDefaultConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
+import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
 import { useAgentAutoApproveDefaults } from '@renderer/features/tasks/hooks/useAgentAutoApproveDefaults';
 import { useFeatureFlag } from '@renderer/lib/hooks/useFeatureFlag';
@@ -141,7 +141,11 @@ export const CreateTaskModal = observer(function CreateTaskModal({
           projectId: selectedProjectId,
           taskId: id,
           provider: initialConversation.provider,
-          title: nextDefaultConversationTitle(initialConversation.provider, []),
+          title: initialConversationTitle(
+            initialConversation.provider,
+            initialConversation.prompt,
+            []
+          ),
           initialPrompt: initialConversation.prompt.trim() || undefined,
           autoApprove: autoApproveDefaults.getDefault(initialConversation.provider),
         }

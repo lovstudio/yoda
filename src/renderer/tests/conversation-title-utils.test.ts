@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatConversationTitleForDisplay,
+  initialConversationTitle,
   nextDefaultConversationTitle,
 } from '@renderer/features/tasks/conversations/conversation-title-utils';
 
@@ -80,5 +81,22 @@ describe('formatConversationTitleForDisplay', () => {
 
   it('leaves custom conversation titles unchanged', () => {
     expect(formatConversationTitleForDisplay('codex', 'release-triage')).toBe('release-triage');
+  });
+});
+
+describe('initialConversationTitle', () => {
+  it('uses the first non-empty prompt line for the initial conversation title', () => {
+    expect(
+      initialConversationTitle('codex', '\n  Fix the onboarding crash on mobile  \nDetails', [])
+    ).toBe('Fix the onboarding crash on mobile');
+  });
+
+  it('falls back to the provider default when the prompt is empty', () => {
+    expect(
+      initialConversationTitle('codex', '   ', [
+        { providerId: 'codex', title: 'Codex' },
+        { providerId: 'codex', title: 'Codex (2)' },
+      ])
+    ).toBe('Codex (3)');
   });
 });
