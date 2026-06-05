@@ -59,7 +59,9 @@ export interface ActiveFile {
 }
 
 export type TaskViewSnapshot = {
+  /** @deprecated Sidebar chrome is now stored globally in TaskSidebarViewSnapshot. */
   sidebarTab?: string;
+  /** @deprecated Sidebar chrome is now stored globally in TaskSidebarViewSnapshot. */
   isSidebarCollapsed?: boolean;
   focusedRegion: 'main' | 'bottom';
   isTerminalDrawerOpen?: boolean;
@@ -69,6 +71,11 @@ export type TaskViewSnapshot = {
   terminals?: TabViewSnapshot;
   editor?: EditorViewSnapshot;
   diffView?: DiffViewSnapshot;
+};
+
+export type TaskSidebarViewSnapshot = {
+  sidebarTab?: string;
+  isSidebarCollapsed?: boolean;
 };
 
 export type ProjectViewSnapshot = {

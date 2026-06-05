@@ -1,7 +1,7 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
 import type { Conversation } from '@shared/conversations';
 import type { Issue, Task, TaskLifecycleStatus } from '@shared/tasks';
-import type { TaskViewSnapshot } from '@shared/view-state';
+import type { TaskSidebarViewSnapshot, TaskViewSnapshot } from '@shared/view-state';
 import type { ProjectSettingsStore } from '@renderer/features/projects/stores/project-settings-store';
 import type { RepositoryStore } from '@renderer/features/projects/stores/repository-store';
 import { ConversationManagerStore } from '@renderer/features/tasks/conversations/conversation-manager';
@@ -67,6 +67,7 @@ export class ProvisionedTask {
     settingsStore: ProjectSettingsStore,
     baseRef: string,
     savedSnapshot?: TaskViewSnapshot,
+    sharedSidebarSnapshot?: TaskSidebarViewSnapshot,
     sshConnectionId?: string,
     preloadedConversations?: Conversation[]
   ) {
@@ -104,7 +105,8 @@ export class ProvisionedTask {
         taskId: taskData.id,
         workspaceId: this.workspaceId,
       },
-      savedSnapshot
+      savedSnapshot,
+      sharedSidebarSnapshot
     );
 
     makeAutoObservable(this, {
@@ -181,6 +183,7 @@ export class TaskStore {
     settingsStore: ProjectSettingsStore,
     baseRef: string,
     savedSnapshot?: TaskViewSnapshot,
+    sharedSidebarSnapshot?: TaskSidebarViewSnapshot,
     sshConnectionId?: string,
     preloadedConversations?: Conversation[]
   ): void {
@@ -192,6 +195,7 @@ export class TaskStore {
       settingsStore,
       baseRef,
       savedSnapshot,
+      sharedSidebarSnapshot,
       sshConnectionId,
       preloadedConversations
     );

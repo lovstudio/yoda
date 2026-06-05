@@ -1,5 +1,5 @@
 import { computed, makeAutoObservable, reaction } from 'mobx';
-import type { TaskViewSnapshot } from '@shared/view-state';
+import type { TaskSidebarViewSnapshot, TaskViewSnapshot } from '@shared/view-state';
 import type { ConversationManagerStore } from '@renderer/features/tasks/conversations/conversation-manager';
 import { DiffTabLifecycleStore } from '@renderer/features/tasks/diff-view/stores/diff-tab-lifecycle-store';
 import { DiffViewStore } from '@renderer/features/tasks/diff-view/stores/diff-view-store';
@@ -12,6 +12,7 @@ import { TerminalTabViewStore } from '@renderer/features/tasks/terminals/termina
 import { type SidebarTab } from '@renderer/features/tasks/types';
 import { appState } from '@renderer/lib/stores/app-state';
 import { focusTracker } from '@renderer/utils/focus-tracker';
+import { taskSidebarPreferenceStore } from './task-sidebar-preferences';
 
 /**
  * Identifies which content renderer is active in the main panel.
@@ -34,8 +35,6 @@ interface TaskViewResources {
 }
 
 export class TaskViewStore {
-  sidebarTab: SidebarTab;
-  isSidebarCollapsed: boolean;
   focusedRegion: 'main' | 'bottom';
   isTerminalDrawerOpen: boolean;
 
@@ -48,10 +47,13 @@ export class TaskViewStore {
   private readonly disposers: (() => void)[] = [];
   private readonly taskId: string;
 
-  constructor(resources: TaskViewResources, savedSnapshot?: TaskViewSnapshot) {
+  constructor(
+    resources: TaskViewResources,
+    savedSnapshot?: TaskViewSnapshot,
+    sharedSidebarSnapshot?: TaskSidebarViewSnapshot
+  ) {
     this.taskId = resources.taskId;
-    this.sidebarTab = (savedSnapshot?.sidebarTab as SidebarTab) ?? 'conversations';
-    this.isSidebarCollapsed = savedSnapshot?.isSidebarCollapsed ?? true;
+    taskSidebarPreferenceStore.hydrate(sharedSidebarSnapshot ?? null, savedSnapshot ?? null);
     this.focusedRegion = savedSnapshot?.focusedRegion === 'bottom' ? 'bottom' : 'main';
     this.isTerminalDrawerOpen = savedSnapshot?.isTerminalDrawerOpen ?? false;
     this.terminalsMgr = resources.terminals;
@@ -135,6 +137,14 @@ export class TaskViewStore {
     });
   }
 
+  get sidebarTab(): SidebarTab {
+    return taskSidebarPreferenceStore.sidebarTab;
+  }
+
+  get isSidebarCollapsed(): boolean {
+    return taskSidebarPreferenceStore.isSidebarCollapsed;
+  }
+
   get activeRenderer(): RendererKind {
     const desc = this.tabManager.activeDescriptor;
     if (desc?.kind === 'diff') return 'diff';
@@ -154,8 +164,6 @@ export class TaskViewStore {
 
   get snapshot(): TaskViewSnapshot {
     return {
-      sidebarTab: this.sidebarTab,
-      isSidebarCollapsed: this.isSidebarCollapsed,
       focusedRegion: this.focusedRegion,
       isTerminalDrawerOpen: this.isTerminalDrawerOpen,
       tabManager: this.tabManager.snapshot,
@@ -176,11 +184,11 @@ export class TaskViewStore {
   }
 
   setSidebarTab(v: SidebarTab): void {
-    this.sidebarTab = v;
+    taskSidebarPreferenceStore.setSidebarTab(v);
   }
 
   setSidebarCollapsed(collapsed: boolean): void {
-    this.isSidebarCollapsed = collapsed;
+    taskSidebarPreferenceStore.setSidebarCollapsed(collapsed);
   }
 
   setFocusedRegion(region: 'main' | 'bottom'): void {
