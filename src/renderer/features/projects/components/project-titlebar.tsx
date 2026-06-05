@@ -23,6 +23,18 @@ import {
 } from '@renderer/lib/ui/dropdown-menu';
 import { Separator } from '@renderer/lib/ui/separator';
 
+function browsableRemoteUrl(
+  remoteUrl: string | undefined,
+  repositoryUrl: string | null
+): string | null {
+  if (repositoryUrl) return repositoryUrl;
+
+  const trimmed = remoteUrl?.trim();
+  if (!trimmed) return null;
+
+  return /^https?:\/\//i.test(trimmed) ? trimmed : null;
+}
+
 const MountedProjectTitlebarLeft = observer(function ProjectTitlebarLeft({
   projectId,
 }: {
@@ -37,7 +49,8 @@ const MountedProjectTitlebarLeft = observer(function ProjectTitlebarLeft({
   const repo = getRepositoryStore(projectId);
   const configuredRemote = repo?.configuredRemote;
   const remoteUrl = configuredRemote?.url;
-  const repositoryUrl = repo?.repositoryUrl;
+  const repositoryUrl = repo?.repositoryUrl ?? null;
+  const remoteExternalUrl = browsableRemoteUrl(remoteUrl, repositoryUrl);
   const repository = parseGitHubRepository(repositoryUrl);
 
   const isGithubUrl = Boolean(repository);
@@ -82,16 +95,30 @@ const MountedProjectTitlebarLeft = observer(function ProjectTitlebarLeft({
             orientation="vertical"
             className="h-4 data-[orientation=vertical]:self-center"
           />
-          <button
-            className="flex items-center gap-1.5 text-foreground-muted text-sm hover:text-foreground group transition-colors"
-            onClick={() => void rpc.app.openExternal(remoteUrl ?? '')}
-          >
-            <div className="text-sm flex items-center gap-1">
-              {isGithubUrl ? <GithubIcon className="size-3.5" /> : <Globe className="size-3.5" />}
-              <span className="truncate">{repoLabel}</span>
+          {remoteExternalUrl ? (
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-foreground-muted text-sm hover:text-foreground group transition-colors"
+              title={remoteExternalUrl}
+              onClick={() => void rpc.app.openExternal(remoteExternalUrl)}
+            >
+              <div className="text-sm flex items-center gap-1">
+                {isGithubUrl ? <GithubIcon className="size-3.5" /> : <Globe className="size-3.5" />}
+                <span className="truncate">{repoLabel}</span>
+              </div>
+              <ExternalLink className="size-3.5 shrink-0 opacity-0 group-hover:opacity-100 text-foreground-muted hover:text-foreground transition-opacity" />
+            </button>
+          ) : (
+            <div
+              className="flex items-center gap-1.5 text-foreground-muted text-sm"
+              title={remoteUrl}
+            >
+              <div className="text-sm flex items-center gap-1">
+                {isGithubUrl ? <GithubIcon className="size-3.5" /> : <Globe className="size-3.5" />}
+                <span className="truncate">{repoLabel}</span>
+              </div>
             </div>
-            <ExternalLink className="size-3.5 shrink-0 opacity-0 group-hover:opacity-100 text-foreground-muted hover:text-foreground transition-opacity" />
-          </button>
+          )}
         </>
       )}
     </div>

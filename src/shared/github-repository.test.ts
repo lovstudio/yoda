@@ -26,6 +26,7 @@ describe('parseGitHubRepository', () => {
     expect(parseGitHubRepository('https://github.com/owner/repo')).toEqual(expected);
     expect(parseGitHubRepository('https://github.com/owner/repo.git')).toEqual(expected);
     expect(parseGitHubRepository('git@github.com:owner/repo.git')).toEqual(expected);
+    expect(parseGitHubRepository('ssh://git@github.com/owner/repo.git')).toEqual(expected);
   });
 
   it('returns null for non-GitHub and malformed values', () => {

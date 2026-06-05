@@ -39,6 +39,10 @@ export function parseGitHubRepository(input?: string | null): GitHubRepositoryRe
   const sshMatch = /^git@github\.com:([^/\s]+)\/([^/\s?#]+?)(?:\.git)?$/i.exec(value);
   if (sshMatch) return toRepositoryRef(sshMatch[1], sshMatch[2]);
 
+  const sshUrlMatch =
+    /^ssh:\/\/git@github\.com\/([^/\s]+)\/([^/\s?#]+?)(?:\.git)?(?:[/?#].*)?$/i.exec(value);
+  if (sshUrlMatch) return toRepositoryRef(sshUrlMatch[1], sshUrlMatch[2]);
+
   const urlMatch =
     /^https?:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s?#]+?)(?:\.git)?(?:[/?#].*)?$/i.exec(
       value
