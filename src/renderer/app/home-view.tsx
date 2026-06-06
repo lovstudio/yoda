@@ -2414,7 +2414,10 @@ function Agent({
             </button>
           }
         />
-        <PopoverContent align="start" className="w-96 max-w-[calc(100vw-2rem)] gap-3 p-3">
+        <PopoverContent
+          align="start"
+          className="max-h-(--available-height) w-96 max-w-[calc(100vw-2rem)] gap-3 overflow-y-auto overscroll-contain p-3"
+        >
           <PopoverHeader>
             <PopoverTitle>{t('home.agentSystemPromptTitle', { label })}</PopoverTitle>
           </PopoverHeader>
@@ -2422,7 +2425,7 @@ function Agent({
             value={promptDraft}
             onChange={(event) => setPromptDraft(event.target.value)}
             placeholder={t('home.agentSystemPromptPlaceholder')}
-            className="min-h-48 resize-y rounded-md border border-border bg-background px-3 py-2 font-mono text-xs leading-relaxed focus-visible:ring-1"
+            className="h-64 max-h-[40dvh] min-h-48 resize-y overflow-y-auto rounded-md border border-border bg-background px-3 py-2 font-mono text-xs field-sizing-fixed leading-relaxed focus-visible:ring-1"
           />
           <div className="flex items-center justify-between gap-2">
             <button
