@@ -80,6 +80,12 @@
     "mobile": "Mobile",
     "settings": "Settings",
     "giveFeedback": "Give feedback",
+    "account": {
+      "openMenu": "Open account menu",
+      "manage": "Manage account",
+      "signInPrompt": "Sign in",
+      "signInHint": "Connect your Yoda account"
+    },
     "dropToAddProject": "Drop to add project",
     "projects": "Projects",
     "tasks": "Tasks",
@@ -107,6 +113,8 @@
     "filterSsh": "SSH only",
     "hideProjectsWithoutActiveTasks": "Hide projects without active tasks",
     "hideProjectsWithoutActiveTasksDescription": "Filters the sidebar to projects with at least one visible, non-archived task, keeping project navigation focused on current work.",
+    "showMoreGroupItems": "Show {{count}} remaining tasks",
+    "collapseGroupItems": "Show less",
     "expandAll": "Expand all",
     "collapseAll": "Collapse all",
     "clearManualOrder": "Reset task order",
@@ -210,6 +218,7 @@
       "general": "General",
       "account": "Account",
       "agents": "Agents",
+      "tasks": "Tasks",
       "integrations": "Integrations",
       "mcp": "MCP",
       "repository": "Repository",
@@ -218,6 +227,9 @@
     },
     "general": {
       "description": "Manage your account, privacy settings, notifications, and app updates."
+    },
+    "tasksTab": {
+      "description": "Configure how new tasks are created, named, and run."
     },
     "account": {
       "description": "Manage your Yoda account.",
@@ -377,13 +389,17 @@
     "tasks": {
       "autoGenerateName": "Auto-generate task names",
       "autoGenerateNameDescription": "Generate readable task names and professional branch names when creating a new task.",
+      "namingConfigTitle": "Naming",
+      "namingConfigDescription": "Model, target language, and the context sources used to name tasks.",
       "namingSettings": "Fallback naming model",
       "namingSettingsDescription": "Optional fallback model id for agent-based task naming when inference does not return a candidate.",
       "namingModelPlaceholder": "Leave empty to infer from the agent",
+      "namingLanguageLabel": "Target language",
       "namingLanguageApp": "App language",
       "namingLanguagePrompt": "Prompt language",
       "namingLanguageZh": "Chinese",
       "namingLanguageEn": "English",
+      "namingContextLabel": "Context sources",
       "namingContextPrompt": "First prompt",
       "namingContextProject": "Project path",
       "namingContextReadme": "README",
@@ -642,6 +658,8 @@
     "rename": {
       "title": "Rename task",
       "panelTitle": "Task naming",
+      "configure": "Configure",
+      "configureHint": "These settings apply to all tasks. Adjust, then regenerate.",
       "label": "Task name",
       "currentTaskName": "Current title",
       "generatedTaskName": "Generated title",

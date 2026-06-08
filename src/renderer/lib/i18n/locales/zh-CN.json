@@ -80,6 +80,12 @@
     "mobile": "移动端",
     "settings": "设置",
     "giveFeedback": "反馈建议",
+    "account": {
+      "openMenu": "打开账户菜单",
+      "manage": "管理账户",
+      "signInPrompt": "登录",
+      "signInHint": "连接你的 Yoda 账户"
+    },
     "dropToAddProject": "拖入以添加项目",
     "projects": "项目",
     "tasks": "任务",
@@ -107,6 +113,8 @@
     "filterSsh": "仅 SSH",
     "hideProjectsWithoutActiveTasks": "隐藏无活动任务的项目",
     "hideProjectsWithoutActiveTasksDescription": "仅在侧边栏保留至少包含一个可见、未归档任务的项目，让项目导航聚焦于当前需要推进的工作。",
+    "showMoreGroupItems": "展开剩余 {{count}} 个任务",
+    "collapseGroupItems": "收起",
     "expandAll": "全部展开",
     "collapseAll": "全部折叠",
     "clearManualOrder": "重置任务顺序",
@@ -210,6 +218,7 @@
       "general": "通用",
       "account": "账户",
       "agents": "代理",
+      "tasks": "任务",
       "integrations": "集成",
       "mcp": "MCP",
       "repository": "仓库",
@@ -218,6 +227,9 @@
     },
     "general": {
       "description": "管理你的账户、隐私设置、通知与应用更新。"
+    },
+    "tasksTab": {
+      "description": "配置新任务的创建、命名与运行方式。"
     },
     "account": {
       "description": "管理你的 Yoda 账户。",
@@ -377,13 +389,17 @@
     "tasks": {
       "autoGenerateName": "自动生成任务名",
       "autoGenerateNameDescription": "创建新任务时生成可读任务名和专业分支名。",
+      "namingConfigTitle": "命名",
+      "namingConfigDescription": "用于命名任务的模型、目标语言和上下文来源。",
       "namingSettings": "兜底命名模型",
       "namingSettingsDescription": "当自动推断没有候选时，可选用作基于 Agent 命名的兜底模型 ID。",
       "namingModelPlaceholder": "留空则从 Agent 自动推断",
+      "namingLanguageLabel": "目标语言",
       "namingLanguageApp": "应用语言",
       "namingLanguagePrompt": "Prompt 语言",
       "namingLanguageZh": "中文",
       "namingLanguageEn": "英文",
+      "namingContextLabel": "上下文来源",
       "namingContextPrompt": "首条 Prompt",
       "namingContextProject": "项目路径",
       "namingContextReadme": "README",
@@ -642,6 +658,8 @@
     "rename": {
       "title": "重命名任务",
       "panelTitle": "任务命名",
+      "configure": "配置",
+      "configureHint": "这些设置对所有任务生效。调整后重新生成。",
       "label": "任务名",
       "currentTaskName": "当前标题",
       "generatedTaskName": "生成标题",

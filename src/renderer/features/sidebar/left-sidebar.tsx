@@ -3,10 +3,8 @@ import {
   Bot,
   FolderInput,
   Layers,
-  MessageSquareShare,
   Puzzle,
   Search,
-  Settings,
   Smartphone,
   SquarePen,
   Workflow,
@@ -31,6 +29,7 @@ import { cn } from '@renderer/utils/utils';
 import { SidebarPinnedTaskList } from './pinned-task-list';
 import { SidebarProjectlessTaskList } from './projectless-task-list';
 import { ProjectsGroupLabel } from './projects-group-label';
+import { SidebarAccount } from './sidebar-account';
 import {
   SidebarContainer,
   SidebarContent,
@@ -51,7 +50,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const { navigate } = useNavigate();
   const { currentView } = useWorkspaceSlots();
 
-  const showFeedbackModal = useShowModal('feedbackModal');
   const showCommandPalette = useShowModal('commandPaletteModal');
   const showMobileConnection = useShowModal('mobileConnectionModal');
   const { count: skillIssueCount, firstIssue: firstSkillIssue } = useSkillValidationIssues();
@@ -216,29 +214,12 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               <Smartphone className="h-5 w-5 sm:h-4 sm:w-4" />
               {t('sidebar.mobile')}
             </SidebarMenuButton>
-            <SidebarMenuButton
-              isActive={isCurrentView(currentView, 'settings')}
-              onClick={() => navigate('settings')}
-              aria-label={t('sidebar.settings')}
-              className="w-full justify-between"
-            >
-              <span className="flex items-center gap-2">
-                <Settings className="h-5 w-5 sm:h-4 sm:w-4" />
-                {t('sidebar.settings')}
-              </span>
-              <ShortcutHint settingsKey="settings" />
-            </SidebarMenuButton>
           </SidebarMenu>
-          <div className="flex items-center gap-2 justify-between px-3 py-2 border-t border-border">
-            <button
-              type="button"
-              className="flex h-6 items-center min-w-0 w-full cursor-pointer gap-2 rounded-lg px-3 text-sm text-foreground-muted focus:outline-none focus-visible:outline-none"
-              onClick={() => showFeedbackModal({})}
-            >
-              <MessageSquareShare className="size-4 shrink-0" />
-              <span className="truncate">{t('sidebar.giveFeedback')}</span>
-            </button>
+          <div className="flex items-center justify-end px-3 py-2 border-t border-border">
             <UpdateSection />
+          </div>
+          <div className="border-t border-border">
+            <SidebarAccount />
           </div>
         </div>
       </SidebarContainer>
