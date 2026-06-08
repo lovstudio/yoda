@@ -1,53 +1,6 @@
-import { createHash } from 'node:crypto';
 import type BetterSqlite3 from 'better-sqlite3';
-import journal from '@root/drizzle/meta/_journal.json';
 import { sqlite } from './client';
-
-// Vite bundles all migration SQL files at build time — no runtime path resolution needed.
-// Each value is the raw SQL string content of the file.
-const sqlFiles = import.meta.glob('@root/drizzle/*.sql', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
-
-type JournalEntry = { idx: number; when: number; tag: string; breakpoints: boolean };
-
-function runBundledMigrations(connection: BetterSqlite3.Database): void {
-  connection.exec(`
-    CREATE TABLE IF NOT EXISTS __drizzle_migrations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      hash TEXT NOT NULL,
-      created_at NUMERIC
-    )
-  `);
-
-  const lastRow = connection
-    .prepare('SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1')
-    .get() as { created_at: number } | undefined;
-  const lastTimestamp = lastRow?.created_at ?? 0;
-
-  connection.transaction(() => {
-    for (const entry of (journal as { entries: JournalEntry[] }).entries) {
-      if (entry.when <= lastTimestamp) continue;
-
-      const sqlKey = Object.keys(sqlFiles).find((k) => k.includes(entry.tag));
-      if (!sqlKey) throw new Error(`Missing bundled SQL for migration: ${entry.tag}`);
-
-      const sql = sqlFiles[sqlKey];
-      const hash = createHash('sha256').update(sql).digest('hex');
-
-      for (const stmt of sql.split('--> statement-breakpoint')) {
-        const trimmed = stmt.trim();
-        if (trimmed) connection.exec(trimmed);
-      }
-
-      connection
-        .prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)')
-        .run(hash, entry.when);
-    }
-  })();
-}
+import { runBundledMigrations } from './migrations';
 
 /**
  * Creates the FTS5 full-text search virtual table used by the command palette.
@@ -56,7 +9,7 @@ function runBundledMigrations(connection: BetterSqlite3.Database): void {
  * table so it can be safely dropped and recreated when the schema changes.
  */
 function ensureSearchIndex(connection: BetterSqlite3.Database): void {
-  const SEARCH_INDEX_VERSION = '2';
+  const SEARCH_INDEX_VERSION = '4';
 
   const row = connection.prepare(`SELECT value FROM kv WHERE key = 'fts_version'`).get() as
     | { value: string }
@@ -70,9 +23,10 @@ function ensureSearchIndex(connection: BetterSqlite3.Database): void {
         item_id    UNINDEXED,
         project_id UNINDEXED,
         task_id    UNINDEXED,
+        archived   UNINDEXED,
         title,
         keywords,
-        tokenize = 'unicode61 remove_diacritics 1'
+        tokenize = 'trigram remove_diacritics 1'
       )
     `);
     connection

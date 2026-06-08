@@ -11,6 +11,17 @@ type HistoryEntry = {
   body: string;
 };
 
+export type CodexRolloutTranscriptEntryRole = 'user' | 'assistant' | 'tool' | 'status';
+
+export type CodexRolloutTranscriptEntry = {
+  id: string;
+  timestamp: string | null;
+  role: CodexRolloutTranscriptEntryRole;
+  title?: string;
+  format: 'markdown' | 'code' | 'plain';
+  content: string;
+};
+
 type HistoryOptions = {
   threadId: string;
   title: string;
@@ -47,6 +58,34 @@ export async function loadCodexRolloutTerminalHistoryForConversation({
     rolloutPath: context.rolloutPath,
   });
   return history.trim() ? history : null;
+}
+
+export async function loadCodexRolloutTranscriptForConversation({
+  conversation,
+  cwd,
+}: {
+  conversation: Conversation;
+  cwd: string;
+}): Promise<CodexRolloutTranscriptEntry[] | null> {
+  if (conversation.providerId !== 'codex') return null;
+
+  const context = await getCodexSessionContext(
+    cwd,
+    conversation.id,
+    conversation.title,
+    conversation.createdAt
+  );
+  if (!context?.rolloutPath) return null;
+
+  let raw: string;
+  try {
+    raw = await readFile(context.rolloutPath, 'utf8');
+  } catch {
+    return null;
+  }
+
+  const transcript = parseCodexRolloutTranscript(raw);
+  return transcript.length > 0 ? transcript : null;
 }
 
 export function formatCodexRolloutTerminalHistory(raw: string, options: HistoryOptions): string {
@@ -88,6 +127,57 @@ export function formatCodexRolloutTerminalHistory(raw: string, options: HistoryO
   return limitHistory(`${header.join('\n')}${body}\n`);
 }
 
+export function parseCodexRolloutTranscript(raw: string): CodexRolloutTranscriptEntry[] {
+  const eventEntries: CodexRolloutTranscriptEntry[] = [];
+  const responseEntries: CodexRolloutTranscriptEntry[] = [];
+
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    const parsed = safeParse(line);
+    if (!parsed) continue;
+    const timestamp = nullableString(parsed.timestamp);
+
+    if (parsed.type === 'event_msg') {
+      const entry = parseEventTranscriptEntry(parsed.payload, timestamp, eventEntries.length);
+      if (entry) eventEntries.push(entry);
+      continue;
+    }
+
+    if (parsed.type === 'response_item') {
+      const entry = parseResponseTranscriptEntry(parsed.payload, timestamp, responseEntries.length);
+      if (entry) responseEntries.push(entry);
+    }
+  }
+
+  const messageCount = eventEntries.filter(
+    (entry) => entry.role === 'user' || entry.role === 'assistant'
+  ).length;
+  return compactIncrementalAssistantBlocks(messageCount > 0 ? eventEntries : responseEntries);
+}
+
+function compactIncrementalAssistantBlocks(
+  blocks: CodexRolloutTranscriptEntry[]
+): CodexRolloutTranscriptEntry[] {
+  const compacted: CodexRolloutTranscriptEntry[] = [];
+  for (const block of blocks) {
+    const previous = compacted.at(-1);
+    if (
+      previous &&
+      previous.role === 'assistant' &&
+      block.role === 'assistant' &&
+      (previous.format === 'markdown' || previous.format === 'plain') &&
+      (block.format === 'markdown' || block.format === 'plain')
+    ) {
+      previous.content = `${previous.content}\n\n${block.content}`;
+      previous.format =
+        previous.format === 'markdown' || block.format === 'markdown' ? 'markdown' : 'plain';
+    } else {
+      compacted.push({ ...block });
+    }
+  }
+  return compacted;
+}
+
 function parseEventHistoryEntry(
   payloadValue: unknown,
   timestamp: string | null
@@ -127,6 +217,78 @@ function parseEventHistoryEntry(
   return null;
 }
 
+function parseEventTranscriptEntry(
+  payloadValue: unknown,
+  timestamp: string | null,
+  index: number
+): CodexRolloutTranscriptEntry | null {
+  const payload = objectValue(payloadValue);
+  if (!payload) return null;
+
+  if (payload.type === 'user_message') {
+    const message = nullableString(payload.message);
+    return message
+      ? transcriptEntry({ index, timestamp, role: 'user', title: 'You', content: message })
+      : null;
+  }
+
+  if (payload.type === 'agent_message') {
+    const message = nullableString(payload.message);
+    return message
+      ? transcriptEntry({
+          index,
+          timestamp,
+          role: 'assistant',
+          title: 'Codex',
+          content: message,
+        })
+      : null;
+  }
+
+  if (payload.type === 'exec_command_end') {
+    const command = formatCommand(payload.command);
+    const output = extractCommandOutput(payload);
+    const status = formatExitStatus(payload);
+    const parts = [
+      command ? `$ ${command}` : '$ command',
+      output ? truncate(output, MAX_COMMAND_OUTPUT_CHARS) : null,
+      status,
+    ].filter(Boolean);
+    return transcriptEntry({
+      index,
+      timestamp,
+      role: 'tool',
+      title: 'Command',
+      format: 'code',
+      content: parts.join('\n'),
+    });
+  }
+
+  if (payload.type === 'task_started') {
+    return transcriptEntry({
+      index,
+      timestamp,
+      role: 'status',
+      title: 'Status',
+      format: 'plain',
+      content: 'Task started',
+    });
+  }
+
+  if (payload.type === 'task_complete') {
+    return transcriptEntry({
+      index,
+      timestamp,
+      role: 'status',
+      title: 'Status',
+      format: 'plain',
+      content: 'Task complete',
+    });
+  }
+
+  return null;
+}
+
 function parseResponseHistoryEntry(
   payloadValue: unknown,
   timestamp: string | null
@@ -158,6 +320,84 @@ function parseResponseHistoryEntry(
   }
 
   return null;
+}
+
+function parseResponseTranscriptEntry(
+  payloadValue: unknown,
+  timestamp: string | null,
+  index: number
+): CodexRolloutTranscriptEntry | null {
+  const payload = objectValue(payloadValue);
+  if (!payload) return null;
+
+  if (payload.type === 'message') {
+    const role = nullableString(payload.role);
+    if (role !== 'user' && role !== 'assistant') return null;
+
+    const content = extractContentText(payload.content)?.trim();
+    if (!content || isCodexEnvironmentMessage(content)) return null;
+    return transcriptEntry({
+      index,
+      timestamp,
+      role: role === 'user' ? 'user' : 'assistant',
+      title: role === 'user' ? 'You' : 'Codex',
+      content,
+    });
+  }
+
+  if (payload.type === 'function_call') {
+    const name = nullableString(payload.name) ?? 'tool';
+    const args = nullableString(payload.arguments);
+    return transcriptEntry({
+      index,
+      timestamp,
+      role: 'tool',
+      title: `Tool call · ${name}`,
+      format: 'code',
+      content: args ? truncate(args, MAX_COMMAND_OUTPUT_CHARS) : name,
+    });
+  }
+
+  if (payload.type === 'function_call_output') {
+    const output = nullableString(payload.output);
+    return output
+      ? transcriptEntry({
+          index,
+          timestamp,
+          role: 'tool',
+          title: 'Tool output',
+          format: 'code',
+          content: truncate(output, MAX_COMMAND_OUTPUT_CHARS),
+        })
+      : null;
+  }
+
+  return null;
+}
+
+function transcriptEntry({
+  index,
+  timestamp,
+  role,
+  title,
+  format = 'markdown',
+  content,
+}: {
+  index: number;
+  timestamp: string | null;
+  role: CodexRolloutTranscriptEntryRole;
+  title?: string;
+  format?: CodexRolloutTranscriptEntry['format'];
+  content: string;
+}): CodexRolloutTranscriptEntry {
+  return {
+    id: `${timestamp ?? 'no-time'}-${role}-${index}`,
+    timestamp,
+    role,
+    title,
+    format,
+    content: content.trimEnd(),
+  };
 }
 
 function formatEntry(entry: HistoryEntry): string {

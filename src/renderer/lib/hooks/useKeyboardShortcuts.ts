@@ -38,9 +38,15 @@ function defineShortcuts<T extends Record<string, AppShortcutDef>>(
 
 export const APP_SHORTCUTS = defineShortcuts({
   commandPalette: {
-    defaultHotkey: 'Mod+Shift+K',
+    defaultHotkey: 'Mod+Shift+P',
     label: 'Command Palette',
     description: 'Open the command palette to quickly search and navigate',
+    category: 'Navigation',
+  },
+  commandPaletteTasks: {
+    defaultHotkey: 'Mod+Shift+K',
+    label: 'Search Tasks',
+    description: 'Open the command palette scoped to tasks (in:tasks)',
     category: 'Navigation',
   },
   settings: {

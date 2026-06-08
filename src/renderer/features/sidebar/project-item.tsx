@@ -10,6 +10,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { buildProjectDeepLink } from '@shared/deep-links';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
 import {
   isUnregisteredProject,
@@ -24,6 +25,7 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useArchiveTask } from '@renderer/features/tasks/archive-task';
+import { copyTaskLink } from '@renderer/features/tasks/components/task-context-menu';
 import { nextDefaultConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useEffectiveProvider } from '@renderer/features/tasks/conversations/use-effective-provider';
 import { useAgentAutoApproveDefaults } from '@renderer/features/tasks/hooks/useAgentAutoApproveDefaults';
@@ -233,6 +235,10 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     isSsh: isSshProject,
     canReconnect,
     projectPath,
+    onCopyYodaLink:
+      project.state === 'unregistered'
+        ? undefined
+        : () => void copyTaskLink(buildProjectDeepLink({ projectId }), t),
     onOpenDetails: handleOpenDetails,
     onPin: () => sidebarStore.setProjectPinned(projectId, true),
     onUnpin: () => sidebarStore.setProjectPinned(projectId, false),

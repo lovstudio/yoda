@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { taskNamingUpdatedChannel } from '@shared/events/taskEvents';
 import type { TaskNamingContextSnapshot, TaskNamingSnapshot } from '@shared/task-naming';
 import { NamingConfigFields } from '@renderer/features/tasks/components/naming-config-fields';
+import { PersistedDetails } from '@renderer/features/tasks/components/persisted-disclosure';
 import {
   getRegisteredTaskData,
   getTaskManagerStore,
@@ -23,7 +24,13 @@ import { cn } from '@renderer/utils/utils';
 const NAMING_PANEL_REFRESH_MS = 3_000;
 const MAX_REASONABLE_NAMING_DURATION_MS = 10 * 60 * 1000;
 
-export const RenamePanel = observer(function RenamePanel({ active }: { active: boolean }) {
+export const RenamePanel = observer(function RenamePanel({
+  active,
+  chromeless = false,
+}: {
+  active: boolean;
+  chromeless?: boolean;
+}) {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
@@ -174,8 +181,20 @@ export const RenamePanel = observer(function RenamePanel({ active }: { active: b
   };
 
   const copyNamingError = async (errorMessage: string) => {
+    const debugReport = buildNamingDebugReport({
+      errorMessage,
+      projectId,
+      taskId,
+      taskName,
+      branchName,
+      namingModel,
+      snapshot,
+      namingContext,
+      usingContextPreview,
+      contextStats,
+    });
     try {
-      const result = await rpc.app.clipboardWriteText(errorMessage);
+      const result = await rpc.app.clipboardWriteText(debugReport);
       if (!result?.success) throw new Error(result?.error ?? t('common.copyFailed'));
       toast({ title: t('common.copied') });
     } catch {
@@ -188,11 +207,23 @@ export const RenamePanel = observer(function RenamePanel({ active }: { active: b
   };
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-background">
-      <div className="flex h-7 shrink-0 items-center justify-between gap-2 border-b border-border/70 pl-3 pr-1.5">
-        <MicroLabel className="truncate text-foreground-passive">
-          {t('tasks.rename.panelTitle')}
-        </MicroLabel>
+    <div
+      className={cn(
+        'flex w-full flex-col overflow-hidden',
+        chromeless ? 'min-h-0' : 'h-full bg-background'
+      )}
+    >
+      <div
+        className={cn(
+          'flex h-7 shrink-0 items-center gap-2 pr-1.5',
+          chromeless ? 'justify-end pl-3' : 'justify-between border-b border-border/70 pl-3'
+        )}
+      >
+        {chromeless ? null : (
+          <MicroLabel className="truncate text-foreground-passive">
+            {t('tasks.rename.panelTitle')}
+          </MicroLabel>
+        )}
         <Button
           type="button"
           size="xs"
@@ -205,10 +236,15 @@ export const RenamePanel = observer(function RenamePanel({ active }: { active: b
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        <div className="flex min-w-0 flex-col gap-3">
-          <section className="flex min-w-0 flex-col gap-2">
-            <div className="grid gap-1.5 rounded-md border border-border bg-background-1/40 p-2">
+      <div
+        className={cn(
+          'px-2.5',
+          chromeless ? 'min-w-0 py-2' : 'min-h-0 flex-1 overflow-y-auto py-3'
+        )}
+      >
+        <div className={cn('flex min-w-0 flex-col', chromeless ? 'gap-2' : 'gap-3')}>
+          <section className="flex min-w-0 flex-col gap-1.5">
+            <div className="grid gap-1 rounded-md border border-border bg-background-1/40 px-2 py-1.5">
               <NamingValue
                 label={t('tasks.rename.status')}
                 value={namingStatus}
@@ -272,19 +308,24 @@ export const RenamePanel = observer(function RenamePanel({ active }: { active: b
             </div>
           </section>
 
-          <details className="group min-w-0 rounded-md border border-border">
-            <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1.5 text-xs text-foreground-passive transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
-              <ChevronRight className="size-3 transition-transform group-open:rotate-90" />
-              <SlidersHorizontal className="size-3" />
-              <span className="font-medium">{t('tasks.rename.configure')}</span>
-            </summary>
+          <PersistedDetails
+            id="rename:configure"
+            className="group min-w-0 rounded-md border border-border"
+            summary={
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1.5 text-xs text-foreground-passive transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+                <ChevronRight className="size-3 transition-transform group-open:rotate-90" />
+                <SlidersHorizontal className="size-3" />
+                <span className="font-medium">{t('tasks.rename.configure')}</span>
+              </summary>
+            }
+          >
             <div className="flex flex-col gap-2 border-t border-border/70 px-2 pb-2 pt-2">
               <p className="text-[11px] leading-relaxed text-foreground-passive">
                 {t('tasks.rename.configureHint')}
               </p>
               <NamingConfigFields compact />
             </div>
-          </details>
+          </PersistedDetails>
 
           <section className="flex min-w-0 flex-col gap-1.5">
             <div className="min-w-0 px-0.5">
@@ -306,27 +347,30 @@ export const RenamePanel = observer(function RenamePanel({ active }: { active: b
                   </p>
                 ) : null}
                 {namingContext.sources.map((source) => (
-                  <details
+                  <PersistedDetails
                     key={source.id}
+                    id={`rename:source:${source.id}`}
                     className="rounded-md border border-dashed border-border/80 bg-background-1/40 p-2"
-                  >
-                    <summary className="cursor-pointer text-xs text-foreground">
-                      <span>{source.label}</span>
-                      <span className="ml-1 text-foreground-passive">
-                        {t('tasks.rename.sourceTokens', {
-                          count: source.estimatedTokens,
-                        })}
-                      </span>
-                      {source.truncated ? (
+                    summary={
+                      <summary className="cursor-pointer text-xs text-foreground">
+                        <span>{source.label}</span>
                         <span className="ml-1 text-foreground-passive">
-                          {t('tasks.panel.truncated')}
+                          {t('tasks.rename.sourceTokens', {
+                            count: source.estimatedTokens,
+                          })}
                         </span>
-                      ) : null}
-                    </summary>
+                        {source.truncated ? (
+                          <span className="ml-1 text-foreground-passive">
+                            {t('tasks.panel.truncated')}
+                          </span>
+                        ) : null}
+                      </summary>
+                    }
+                  >
                     <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-relaxed text-foreground-muted">
                       {source.content}
                     </pre>
-                  </details>
+                  </PersistedDetails>
                 ))}
               </div>
             ) : (
@@ -356,8 +400,10 @@ function NamingValue({
   accent?: boolean;
 }) {
   return (
-    <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2 text-xs">
-      <span className="shrink-0 text-foreground-passive">{label}</span>
+    <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)] gap-2 text-[11px] leading-tight">
+      <span className="shrink-0 truncate text-foreground-passive" title={label}>
+        {label}
+      </span>
       <span
         className={cn(
           'min-w-0 truncate text-foreground-muted',
@@ -382,6 +428,70 @@ function RenamePanelEmpty({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
+}
+
+function buildNamingDebugReport({
+  errorMessage,
+  projectId,
+  taskId,
+  taskName,
+  branchName,
+  namingModel,
+  snapshot,
+  namingContext,
+  usingContextPreview,
+  contextStats,
+}: {
+  errorMessage: string;
+  projectId: string;
+  taskId: string;
+  taskName: string;
+  branchName: string;
+  namingModel: string;
+  snapshot: TaskNamingSnapshot | null;
+  namingContext: TaskNamingContextSnapshot | null;
+  usingContextPreview: boolean;
+  contextStats: { sources: number; tokens: number; characters: number; method: string } | null;
+}): string {
+  const lines = [
+    '# Task Naming Debug Report',
+    `error: ${errorMessage}`,
+    `projectId: ${projectId}`,
+    `taskId: ${taskId}`,
+    `taskName: ${taskName}`,
+    `branchName: ${branchName}`,
+    `model: ${namingModel}`,
+    `status: ${snapshot?.status ?? 'unknown'}`,
+    `generatedTaskName: ${snapshot?.generatedTaskName ?? '-'}`,
+    `generatedBranchName: ${snapshot?.generatedBranchName ?? '-'}`,
+    `createdAt: ${snapshot?.createdAt ?? '-'}`,
+    `updatedAt: ${snapshot?.updatedAt ?? '-'}`,
+    `usingContextPreview: ${usingContextPreview}`,
+    `context.sources: ${contextStats?.sources ?? '-'}`,
+    `context.tokens: ${contextStats?.tokens ?? '-'}`,
+    `context.characters: ${contextStats?.characters ?? '-'}`,
+    `context.method: ${contextStats?.method ?? '-'}`,
+  ];
+
+  const debugTrace = snapshot?.context?.debugTrace;
+  if (debugTrace) {
+    lines.push(`trace.totalDurationMs: ${debugTrace.totalDurationMs}`);
+    for (const stage of debugTrace.stages) {
+      lines.push(`trace.stage: ${JSON.stringify(stage)}`);
+    }
+  }
+
+  if (namingContext?.sources.length) {
+    lines.push('', '## Context Sources');
+    for (const source of namingContext.sources) {
+      lines.push(
+        `### ${source.label} (tokens=${source.estimatedTokens}${source.truncated ? ', truncated' : ''})`,
+        source.content
+      );
+    }
+  }
+
+  return lines.join('\n');
 }
 
 function getNamingStatusKey(snapshot: TaskNamingSnapshot | null, isRegenerating: boolean): string {

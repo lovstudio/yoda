@@ -2,6 +2,7 @@ import { FileText } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { buildTaskDeepLink } from '@shared/deep-links';
 import { selectCurrentPr } from '@shared/pull-requests';
 import { type Task } from '@shared/tasks';
 import {
@@ -11,7 +12,10 @@ import {
 } from '@renderer/features/projects/components/issues-view/task-issue-links';
 import { useArchiveTask } from '@renderer/features/tasks/archive-task';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
-import { TaskContextMenu } from '@renderer/features/tasks/components/task-context-menu';
+import {
+  copyTaskLink,
+  TaskContextMenu,
+} from '@renderer/features/tasks/components/task-context-menu';
 import { TaskGitDiffStats } from '@renderer/features/tasks/components/task-git-diff-stats';
 import {
   buildTaskMenuSessionFields,
@@ -25,6 +29,7 @@ import {
   getTaskManagerStore,
   taskAgentStatus,
 } from '@renderer/features/tasks/stores/task-selectors';
+import { OVERVIEW_TAB_ID } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { PrBadge } from '@renderer/lib/components/pr-badge';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -50,18 +55,18 @@ export const TaskRow = observer(function TaskRow({
   const { navigate } = useNavigate();
   const showRename = useShowModal('renameTaskModal');
   const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
-  const showConfirm = useShowModal('confirmActionModal');
-  const showEditPreArchiveCommand = useShowModal('editPreArchiveCommandModal');
   const taskManager = getTaskManagerStore(task.data.projectId);
-  const { archiveTask, hasPreArchiveCommand } = useArchiveTask(task.data.projectId);
+  const { archiveTask } = useArchiveTask(task.data.projectId);
   const [isArchiving, setIsArchiving] = useState(false);
 
+  // Archiving never runs the pre-archive skill by default; running it is an
+  // explicit opt-in via the context menu.
   const handleArchive = (options?: { skipPreCommand?: boolean }) => {
     if (isArchiving) return;
     setIsArchiving(true);
     void (async () => {
       try {
-        await archiveTask(task.data.id, options);
+        await archiveTask(task.data.id, { skipPreCommand: true, ...options });
       } finally {
         setIsArchiving(false);
       }
@@ -75,13 +80,6 @@ export const TaskRow = observer(function TaskRow({
     });
   const handleRestore = () => void taskManager?.restoreTask(task.data.id);
   const handleProvision = () => void taskManager?.provisionTask(task.data.id);
-  const handleDelete = () =>
-    showConfirm({
-      title: t('sidebar.deleteTask.title'),
-      description: t('sidebar.deleteTask.description', { name: task.data.name }),
-      confirmLabel: t('common.delete'),
-      onSuccess: () => void taskManager?.deleteTask(task.data.id),
-    });
   const handleRename = () =>
     showRename({
       projectId: task.data.projectId,
@@ -131,6 +129,32 @@ export const TaskRow = observer(function TaskRow({
     openPreferredConversationIfEmpty();
     navigate('task', { projectId: task.data.projectId, taskId: task.data.id });
   };
+
+  // The context-menu "open details" entry enters the task and activates its
+  // fixed Overview tab (task info / sessions / sub-tasks), distinguishing it from
+  // a plain row click which only enters the task view on the last-active tab.
+  const handleOpenOverview = () => {
+    if (isArchived) return;
+    handleProvision();
+    navigate('task', { projectId: task.data.projectId, taskId: task.data.id });
+    asProvisioned(task)?.taskView.tabManager.setActiveTab(OVERVIEW_TAB_ID);
+  };
+  const handleRestartSession =
+    provisionedTask && menuConversation
+      ? (tmuxOverride?: boolean) =>
+          void provisionedTask.conversations.restartConversation(
+            menuConversation.id,
+            undefined,
+            tmuxOverride
+          )
+      : undefined;
+  const handleCopyYodaLink = () => {
+    const link = buildTaskDeepLink({
+      projectId: task.data.projectId,
+      taskId: task.data.id,
+    });
+    void copyTaskLink(link, t);
+  };
   const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -153,20 +177,17 @@ export const TaskRow = observer(function TaskRow({
       resolveSessionInfo={resolveSessionInfo}
       workingDirectory={provisionedTask?.path}
       openDetailsLabel={t('tasks.context.openDetails')}
-      onOpenDetails={isArchived ? undefined : handleOpenDetails}
+      onOpenDetails={isArchived ? undefined : handleOpenOverview}
       onPin={() => void task.setPinned(true)}
       onUnpin={() => void task.setPinned(false)}
       onMarkNeedsReview={() => void task.setNeedsReview(true)}
       onUnmarkNeedsReview={() => void task.setNeedsReview(false)}
       onRename={handleRename}
       onArchive={handleArchive}
-      onArchiveSkipPreCommand={
-        hasPreArchiveCommand ? () => handleArchive({ skipPreCommand: true }) : undefined
-      }
       onArchiveWithNote={handleArchiveWithNote}
-      onConfigurePreArchive={() => showEditPreArchiveCommand({})}
+      onCopyYodaLink={handleCopyYodaLink}
       onRestore={handleRestore}
-      onDelete={handleDelete}
+      onRestartSession={handleRestartSession}
     >
       <div
         role={isArchived ? undefined : 'button'}

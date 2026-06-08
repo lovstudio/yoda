@@ -98,4 +98,64 @@ describe('HookConfigWriter', () => {
     expect(fs.files.has('.opencode/plugins/yoda-notifications.js')).toBe(false);
     expect(fs.files.has('.gitignore')).toBe(false);
   });
+
+  it('registers Notification, Stop and interactive-tool PreToolUse/PostToolUse hooks', async () => {
+    mockResolveCommandPath.mockResolvedValue('/usr/local/bin/claude');
+    const fs = new MemoryFs();
+    const writer = makeWriter(fs);
+
+    await writer.writeForProvider('claude');
+
+    const settings = JSON.parse(fs.files.get('.claude/settings.local.json')!);
+    const hooks = settings.hooks;
+    expect(Object.keys(hooks).sort()).toEqual([
+      'Notification',
+      'PostToolUse',
+      'PreToolUse',
+      'Stop',
+    ]);
+
+    // Interactive-tool waits use a matcher; lifecycle hooks do not.
+    expect(hooks.PreToolUse[0].matcher).toBe('AskUserQuestion|ExitPlanMode');
+    expect(hooks.PostToolUse[0].matcher).toBe('AskUserQuestion|ExitPlanMode');
+    expect(hooks.PreToolUse[0].hooks[0].command).toContain('X-Yoda-Event-Type: awaiting-input');
+    expect(hooks.PostToolUse[0].hooks[0].command).toContain(
+      'X-Yoda-Event-Type: awaiting-input-resolved'
+    );
+    // Reads the live endpoint file, not a stale spawn-time port env.
+    expect(hooks.Stop[0].hooks[0].command).toContain('hook-endpoint.json');
+    expect(hooks.Stop[0].hooks[0].command).not.toContain('YODA_HOOK_PORT');
+  });
+
+  it('rewrites a legacy YODA_HOOK_PORT hook without duplicating', async () => {
+    mockResolveCommandPath.mockResolvedValue('/usr/local/bin/claude');
+    const fs = new MemoryFs();
+    fs.files.set(
+      '.claude/settings.local.json',
+      JSON.stringify({
+        hooks: {
+          Stop: [
+            { hooks: [{ type: 'command', command: 'curl http://127.0.0.1:$YODA_HOOK_PORT/hook' }] },
+            { hooks: [{ type: 'command', command: 'user-owned-hook.sh' }] },
+          ],
+        },
+      })
+    );
+    const writer = makeWriter(fs);
+
+    await writer.writeForProvider('claude');
+
+    const settings = JSON.parse(fs.files.get('.claude/settings.local.json')!);
+    const stop = settings.hooks.Stop;
+    // Legacy Yoda hook replaced (one Yoda entry), user hook preserved.
+    const yodaEntries = stop.filter((e: { hooks: { command: string }[] }) =>
+      e.hooks[0].command.includes('hook-endpoint.json')
+    );
+    const userEntries = stop.filter((e: { hooks: { command: string }[] }) =>
+      e.hooks[0].command.includes('user-owned-hook.sh')
+    );
+    expect(yodaEntries).toHaveLength(1);
+    expect(userEntries).toHaveLength(1);
+    expect(JSON.stringify(stop)).not.toContain('YODA_HOOK_PORT');
+  });
 });

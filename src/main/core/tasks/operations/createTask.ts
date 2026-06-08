@@ -401,7 +401,12 @@ export async function createTask(
 
   const displayName = params.name;
   const branchSeedName = branchSeed(strategy);
-  const shouldGenerate = taskSettings.autoGenerateName;
+  // Only auto-name when there is real content to name from. A blank submit has no
+  // initial prompt, so naming would otherwise run against the random placeholder
+  // name and surface that slug as the "First user prompt" — the user can trigger
+  // naming manually later once the task has content.
+  const hasInitialPrompt = Boolean(params.initialConversation?.initialPrompt?.trim());
+  const shouldGenerate = taskSettings.autoGenerateName && hasInitialPrompt;
   const includeBranchName = shouldGenerate && createTaskStrategyRequiresBranchName(strategy);
   const namingPromise = shouldGenerate
     ? generateTaskNames({

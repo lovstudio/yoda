@@ -10,6 +10,7 @@ import {
   taskViewKind,
 } from '@renderer/features/tasks/stores/task-selectors';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import { usePersistentPanelLayout } from '@renderer/lib/hooks/use-persistent-panel-layout';
 import { useTabShortcuts } from '@renderer/lib/hooks/useTabShortcuts';
 import { panelDragStore } from '@renderer/lib/layout/panel-drag-store';
 import { Button } from '@renderer/lib/ui/button';
@@ -24,6 +25,7 @@ import { MarkdownEditorPanel } from './editor/markdown-editor-panel';
 import { useIsActiveTask } from './hooks/use-is-active-task';
 import { TaskTabStrip } from './tabs/task-tab-strip';
 import { TerminalsPanel } from './terminals/terminal-panel';
+import { OverviewPanel } from './view/overview-panel';
 import { TaskSidebar } from './view/task-sidebar';
 
 export const TaskMainPanel = observer(function TaskMainPanel() {
@@ -185,6 +187,7 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
   const { taskView } = useProvisionedTask();
   const sidebarPanelRef = usePanelRef();
   const [isHandleDragging, setIsHandleDragging] = useState(false);
+  const layout = usePersistentPanelLayout('task-sidebar-layout');
 
   useEffect(() => {
     const panel = sidebarPanelRef.current;
@@ -200,12 +203,12 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
   return (
     <ResizablePanelGroup
       orientation="horizontal"
-      id="task-sidebar-layout"
-      className="min-h-0 min-w-0 overflow-hidden"
+      className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
+      {...layout}
     >
       <ResizablePanel
         id="task-main-area"
-        className="min-h-0 min-w-0 overflow-hidden"
+        className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
       >
         <TaskMainColumn />
@@ -223,7 +226,7 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
         maxSize="50%"
         collapsible
         collapsedSize={SIDEBAR_COLLAPSED_SIZE}
-        className="min-h-0 min-w-0 overflow-hidden"
+        className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
         onResize={() => {
           const wantCollapsed = sidebarPanelRef.current?.isCollapsed() ?? false;
@@ -243,6 +246,7 @@ const TaskMainColumn = observer(function TaskMainColumn() {
   const bottomPanelRef = usePanelRef();
   const draggingRef = useRef(false);
   const [isHandleDragging, setIsHandleDragging] = useState(false);
+  const layout = usePersistentPanelLayout('task-main-vertical');
 
   useEffect(() => {
     const panel = bottomPanelRef.current;
@@ -258,13 +262,13 @@ const TaskMainColumn = observer(function TaskMainColumn() {
   return (
     <ResizablePanelGroup
       orientation="vertical"
-      id="task-main-vertical"
-      className="min-h-0 min-w-0 overflow-hidden"
+      className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
+      {...layout}
     >
       <ResizablePanel
         id="task-main-content"
         minSize="30%"
-        className="min-h-0 min-w-0 overflow-hidden"
+        className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
       >
         <UnifiedMainContent />
@@ -301,7 +305,7 @@ const TaskMainColumn = observer(function TaskMainColumn() {
         collapsedSize="0%"
         defaultSize="25%"
         minSize="15%"
-        className="min-h-0 min-w-0 overflow-hidden"
+        className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
         onResize={() => {
           const wantOpen = !(bottomPanelRef.current?.isCollapsed() ?? false);
@@ -335,7 +339,7 @@ const UnifiedMainContent = observer(function UnifiedMainContent() {
 
   return (
     <div
-      className="flex h-full flex-col overflow-hidden"
+      className="flex h-full flex-col overflow-hidden bg-background text-foreground"
       onFocus={() => taskView.setFocusedRegion('main')}
       onPointerDown={() => taskView.setFocusedRegion('main')}
     >
@@ -354,6 +358,9 @@ const UnifiedMainContent = observer(function UnifiedMainContent() {
         {/* SVG source toggle — floats over the Monaco host when editing an SVG file */}
         {renderer === 'monaco' && <SvgSourceToggleOverlay />}
 
+        <Activity mode={renderer === 'overview' ? 'visible' : 'hidden'}>
+          <OverviewPanel />
+        </Activity>
         <Activity mode={renderer === 'markdown' ? 'visible' : 'hidden'}>
           <MarkdownEditorPanel />
         </Activity>

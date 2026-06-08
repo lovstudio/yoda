@@ -53,7 +53,6 @@ export const baseProjectSettingsSchema = z.object({
   worktreeDirectory: z.string().trim().optional(),
   defaultBranch: defaultBranchSettingSchema.optional(),
   remote: z.string().optional(),
-  tmux: z.boolean().optional(),
   workspaceProvider: z
     .object({
       type: z.literal('script'),

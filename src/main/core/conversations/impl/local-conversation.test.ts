@@ -54,6 +54,16 @@ vi.mock('@main/core/agent-hooks/hook-config', () => ({
   },
 }));
 
+vi.mock('@main/core/agent-hooks/inspect/hook-overrides-apply', () => ({
+  applyHookOverrides: vi.fn(async () => {}),
+}));
+
+vi.mock('@main/core/agent-hooks/inspect/hook-overrides-store', () => ({
+  hookOverridesStore: {
+    get: vi.fn(async () => ({ disabled: [], debug: false })),
+  },
+}));
+
 vi.mock('@main/core/conversations/agent-session-runtime', () => ({
   agentSessionRuntimeStore: {
     remove: mocks.removeRuntimeStatus,
@@ -318,7 +328,9 @@ describe('LocalConversationProvider', () => {
 
     expect(spawned[0].options.args[0]).toBe('-c');
     expect(spawned[0].options.args[1]).toContain('notify=["bash","-c"');
-    expect(spawned[0].options.args[1]).toContain('YODA_HOOK_PORT');
+    // Notify now reads the live hook endpoint file at fire-time (survives restarts).
+    expect(spawned[0].options.args[1]).toContain('hook-endpoint.json');
+    expect(spawned[0].options.args[1]).not.toContain('YODA_HOOK_PORT');
     expect(spawned[0].options.args.slice(2)).toEqual(['Fix this']);
   });
 

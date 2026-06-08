@@ -8,6 +8,7 @@ import {
   menuUndoChannel,
 } from '@shared/events/appEvents';
 import { YODA_DOCS_URL, YODA_RELEASES_URL } from '@shared/urls';
+import { resolveAppVersion } from '@main/core/app/utils';
 import { events } from '@main/lib/events';
 
 function restartApp(): void {
@@ -27,8 +28,18 @@ function restartApp(): void {
   app.quit();
 }
 
-export function setupApplicationMenu(): void {
+function configureAboutPanel(appVersion: string): void {
+  app.setAboutPanelOptions({
+    applicationName: app.name,
+    applicationVersion: appVersion,
+  });
+}
+
+export async function setupApplicationMenu(): Promise<void> {
   const isMac = process.platform === 'darwin';
+  const appVersion = await resolveAppVersion();
+
+  configureAboutPanel(appVersion);
 
   const template: Electron.MenuItemConstructorOptions[] = [
     // macOS app menu
@@ -38,7 +49,7 @@ export function setupApplicationMenu(): void {
             label: app.name,
             submenu: [
               {
-                label: `About ${app.name}`,
+                label: `About ${app.name} (${appVersion})`,
                 click: () => app.showAboutPanel(),
               },
               { type: 'separator' as const },

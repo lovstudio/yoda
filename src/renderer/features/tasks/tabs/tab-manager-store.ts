@@ -47,7 +47,21 @@ export class ConversationTabEntry {
   }
 }
 
-export type TabEntry = FileTabStore | DiffTabStore | ConversationTabEntry;
+/**
+ * The fixed task-overview tab. There is at most one, it is always pinned to the
+ * first position, cannot be closed/reordered, and is synthesized fresh on each
+ * mount — it is intentionally excluded from the persisted snapshot.
+ */
+export class OverviewTabEntry {
+  readonly kind = 'overview' as const;
+  readonly tabId = OVERVIEW_TAB_ID;
+  readonly isPreview = false;
+}
+
+/** Stable id for the singleton overview tab. */
+export const OVERVIEW_TAB_ID = 'overview';
+
+export type TabEntry = FileTabStore | DiffTabStore | ConversationTabEntry | OverviewTabEntry;
 
 // ---------------------------------------------------------------------------
 // Resolved tabs — enriched with live store references and derived state
@@ -85,7 +99,18 @@ export type ResolvedDiffTab = {
   isActive: boolean;
 };
 
-export type ResolvedTab = ResolvedConversationTab | ResolvedFileTab | ResolvedDiffTab;
+export type ResolvedOverviewTab = {
+  kind: 'overview';
+  tabId: string;
+  isPreview: false;
+  isActive: boolean;
+};
+
+export type ResolvedTab =
+  | ResolvedConversationTab
+  | ResolvedFileTab
+  | ResolvedDiffTab
+  | ResolvedOverviewTab;
 
 interface OpenFileOptions {
   line?: number;
@@ -164,6 +189,9 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       openDiffPreview: action,
       closeTab: action,
       closeActiveTab: action,
+      closeOtherTabs: action,
+      closeTabsToRight: action,
+      closeAllTabs: action,
       openLastConversation: action,
       openPreferredConversation: action,
       setActiveTab: action,
@@ -306,7 +334,14 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       const entry = this.entries.get(id);
       if (!entry) continue;
 
-      if (entry.kind === 'conversation') {
+      if (entry.kind === 'overview') {
+        result.push({
+          kind: 'overview',
+          tabId: entry.tabId,
+          isPreview: false,
+          isActive: effectiveActiveId === entry.tabId,
+        });
+      } else if (entry.kind === 'conversation') {
         const store = this.conversations.conversations.get(entry.conversationId);
         if (!store) continue;
         result.push({
@@ -351,6 +386,8 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     for (const id of this.tabOrder) {
       const entry = this.entries.get(id);
       if (!entry) continue;
+      // The overview tab is synthesized fresh on each mount, never persisted.
+      if (entry.kind === 'overview') continue;
       if (entry.kind === 'conversation') {
         tabs.push({
           kind: 'conversation',
@@ -555,12 +592,37 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   // ---------------------------------------------------------------------------
 
   closeTab(id: string): void {
+    // The overview tab is fixed and cannot be closed.
+    if (this.entries.get(id)?.kind === 'overview') return;
     this._removeTab(id);
   }
 
   closeActiveTab(): void {
     if (!this.activeTabId) return;
     this.closeTab(this.activeTabId);
+  }
+
+  /** Close every closeable tab except the given one (and the fixed overview tab). */
+  closeOtherTabs(keepId: string): void {
+    for (const id of [...this.tabOrder]) {
+      if (id !== keepId) this.closeTab(id);
+    }
+  }
+
+  /** Close every closeable tab positioned after the given one in display order. */
+  closeTabsToRight(fromId: string): void {
+    const fromIndex = this.tabOrder.indexOf(fromId);
+    if (fromIndex === -1) return;
+    for (const id of this.tabOrder.slice(fromIndex + 1)) {
+      this.closeTab(id);
+    }
+  }
+
+  /** Close every closeable tab (the fixed overview tab always remains). */
+  closeAllTabs(): void {
+    for (const id of [...this.tabOrder]) {
+      this.closeTab(id);
+    }
   }
 
   setActiveTab(id: string): void {
@@ -572,7 +634,12 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   }
 
   reorderTabs(fromIndex: number, toIndex: number): void {
-    reorderTabIds(this, fromIndex, toIndex);
+    // The overview tab is fixed at index 0: never move it, and never let another
+    // tab take its slot.
+    if (this.entries.get(this.tabOrder[fromIndex] ?? '')?.kind === 'overview') return;
+    const hasOverview = this.entries.get(this.tabOrder[0] ?? '')?.kind === 'overview';
+    const clampedTo = hasOverview ? Math.max(1, toIndex) : toIndex;
+    reorderTabIds(this, fromIndex, clampedTo);
   }
 
   setNextTabActive(): void {
@@ -589,7 +656,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
 
   pinTab(tabId: string): void {
     const entry = this.entries.get(tabId);
-    if (entry) entry.isPreview = false;
+    if (entry && entry.kind !== 'overview') entry.isPreview = false;
   }
 
   // ---------------------------------------------------------------------------
@@ -670,16 +737,30 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
         }
       }
     }
+    this._ensureOverviewTab();
     if (snapshot.activeTabId !== undefined) this.activeTabId = snapshot.activeTabId;
   }
 
   initializeDefault(): void {
+    this._ensureOverviewTab();
     for (const [id, store] of this.conversations.conversations) {
       if (store.isInitialConversation) {
         this.openConversation(id);
         return;
       }
     }
+  }
+
+  /**
+   * Inject the fixed overview tab at the first position if missing. Called after
+   * snapshot restore (overview is never persisted) and during default init.
+   * Active-tab selection is left untouched so the conversation stays focused.
+   */
+  private _ensureOverviewTab(): void {
+    if (this.entries.has(OVERVIEW_TAB_ID)) return;
+    const entry = new OverviewTabEntry();
+    this.entries.set(entry.tabId, entry);
+    this.tabOrder.unshift(entry.tabId);
   }
 
   dispose(): void {

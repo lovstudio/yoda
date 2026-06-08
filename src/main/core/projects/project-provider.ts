@@ -5,6 +5,7 @@ import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { FileSystemProvider } from '@main/core/fs/types';
 import type { GitFetchService } from '@main/core/git/git-fetch-service';
 import type { GitRepositoryService } from '@main/core/git/repository-service';
+import { appSettingsService } from '@main/core/settings/settings-service';
 import { workspaceRegistry, type TeardownMode } from '@main/core/workspaces/workspace-registry';
 import type { IDisposable } from '@main/lib/lifecycle';
 import type { ConversationProvider } from '../conversations/types';
@@ -129,7 +130,7 @@ export class ProjectProvider implements IDisposable {
 
   private async resolveDisposeMode(mode: ProjectDisposeMode): Promise<TeardownMode> {
     if (mode !== 'project-settings') return mode;
-    const projectSettings = await this.settings.get();
-    return projectSettings.tmux ? 'detach' : 'terminate';
+    const projectDefaults = await appSettingsService.get('project');
+    return projectDefaults.tmuxByDefault ? 'detach' : 'terminate';
   }
 }

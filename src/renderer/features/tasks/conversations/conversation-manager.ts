@@ -24,6 +24,7 @@ export class ConversationManagerStore {
   private _loaded = false;
   private _loadPromise: Promise<void> | null = null;
   private offAgentEvents: (() => void) | null = null;
+  private offAuthoritativeStatus: (() => void) | null = null;
   private offSessionExited: (() => void) | null = null;
   private offConversationRenamed: (() => void) | null = null;
   private offConversationArchived: (() => void) | null = null;
@@ -46,12 +47,14 @@ export class ConversationManagerStore {
         this.conversations.set(conversation.id, store);
         void store.session.connect();
       }
+      void this.hydrateRuntimeStatuses(preloaded.map((conversation) => conversation.id));
     }
     onBecomeObserved(this, 'conversations', () => {
       if (this._loaded) return;
       void this.load();
     });
     this.offAgentEvents = this.listenToAgentEvents();
+    this.offAuthoritativeStatus = this.listenToAuthoritativeStatus();
     this.offSessionExited = this.listenToSessionExited();
     this.offConversationRenamed = this.listenToConversationRenamed();
     this.offConversationArchived = this.listenToConversationArchived();
@@ -62,10 +65,23 @@ export class ConversationManagerStore {
       if (event.taskId !== this.taskId) return;
       const conversationStore = this.conversations.get(event.conversationId);
       if (!conversationStore) return;
+      if (event.type === 'awaiting-input') {
+        conversationStore.setAwaitingInput('elicitation_dialog', {
+          actionDescription: event.payload.message ?? event.payload.title,
+        });
+        soundPlayer.play('needs_attention', appFocused);
+        return;
+      }
+      if (event.type === 'awaiting-input-resolved') {
+        conversationStore.setWorking({ force: true });
+        return;
+      }
       if (event.type === 'notification') {
         const nt = event.payload.notificationType;
         if (!isAttentionNotification(nt)) return;
-        conversationStore.setAwaitingInput(nt);
+        conversationStore.setAwaitingInput(nt, {
+          actionDescription: event.payload.message ?? event.payload.title,
+        });
         soundPlayer.play('needs_attention', appFocused);
         return;
       }
@@ -78,6 +94,22 @@ export class ConversationManagerStore {
         conversationStore.setStatus('error');
         return;
       }
+    });
+  }
+
+  /**
+   * Authoritative run-state pushed from the main process — currently the Codex
+   * rollout tailer, which derives turn-started/completed/aborted deterministically
+   * from the rollout JSONL. This is the source of truth and overrides the
+   * renderer's optimistic predictions. Applied with `emit: false` so it does not
+   * bounce back to the main process.
+   */
+  private listenToAuthoritativeStatus(): () => void {
+    return events.on(agentSessionStatusChangedChannel, (event) => {
+      if (event.projectId !== this.projectId || event.taskId !== this.taskId) return;
+      const conversationStore = this.conversations.get(event.conversationId);
+      if (!conversationStore) return;
+      conversationStore.applyAuthoritativeStatus(event.status);
     });
   }
 
@@ -136,10 +168,11 @@ export class ConversationManagerStore {
     this._loaded = true;
     this._loadPromise = rpc.conversations
       .getConversationsForTask(this.projectId, this.taskId)
-      .then((conversations) => {
+      .then(async (conversations) => {
         runInAction(() => {
           this.mergeConversations(conversations);
         });
+        await this.hydrateRuntimeStatuses(conversations.map((conversation) => conversation.id));
       })
       .catch((error: unknown) => {
         this._loaded = false;
@@ -165,6 +198,7 @@ export class ConversationManagerStore {
       this._loaded = true;
       this.mergeConversations(conversations);
     });
+    await this.hydrateRuntimeStatuses(conversations.map((conversation) => conversation.id));
     return this.conversations.has(conversationId);
   }
 
@@ -178,6 +212,29 @@ export class ConversationManagerStore {
       const store = new ConversationStore(conversation);
       this.conversations.set(conversation.id, store);
       void store.session.connect();
+    }
+  }
+
+  private async hydrateRuntimeStatuses(conversationIds: string[]): Promise<void> {
+    if (conversationIds.length === 0) return;
+    try {
+      const statuses = await rpc.conversations.getConversationRuntimeStatuses(
+        this.projectId,
+        this.taskId,
+        conversationIds
+      );
+      runInAction(() => {
+        for (const [conversationId, status] of Object.entries(statuses)) {
+          if (status === 'idle') continue;
+          this.conversations.get(conversationId)?.hydrateStatus(status);
+        }
+      });
+    } catch (error) {
+      log.warn('ConversationManagerStore: failed to hydrate runtime statuses', {
+        projectId: this.projectId,
+        taskId: this.taskId,
+        error,
+      });
     }
   }
 
@@ -305,9 +362,46 @@ export class ConversationManagerStore {
     }
   }
 
+  async restartConversation(
+    conversationId: string,
+    initialSize?: { cols: number; rows: number },
+    tmuxOverride?: boolean
+  ): Promise<void> {
+    const store = this.conversations.get(conversationId);
+    if (!store) return;
+    // Default to the live terminal's current size so the restarted session
+    // (and, under tmux, the freshly created tmux window) is born at the real
+    // pane width instead of the 80x24 main-process fallback — otherwise tmux
+    // draws at the wrong width until the first resize and corrupts wrapping.
+    const effectiveSize = initialSize ?? store.session.pty?.lastSentDims ?? undefined;
+    try {
+      await rpc.conversations.restartConversation(
+        this.projectId,
+        this.taskId,
+        conversationId,
+        effectiveSize,
+        tmuxOverride
+      );
+      await store.session.reconnect();
+      if (effectiveSize) {
+        const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+        void rpc.pty.resize(sessionId, effectiveSize.cols, effectiveSize.rows);
+      }
+    } catch (error) {
+      log.warn('ConversationManagerStore: failed to restart conversation', {
+        projectId: this.projectId,
+        taskId: this.taskId,
+        conversationId,
+        error,
+      });
+    }
+  }
+
   dispose(): void {
     this.offAgentEvents?.();
     this.offAgentEvents = null;
+    this.offAuthoritativeStatus?.();
+    this.offAuthoritativeStatus = null;
     this.offSessionExited?.();
     this.offSessionExited = null;
     this.offConversationRenamed?.();
@@ -335,6 +429,8 @@ export class ConversationStore {
   status: AgentStatus = 'idle';
   seen = true;
   lastNotificationType: NotificationType | null = null;
+  /** Human-readable "what is it waiting on" context for `awaiting-input`. */
+  pendingActionDescription: string | null = null;
   private lastForceWorkingAt = 0;
 
   constructor(conversation: Conversation) {
@@ -348,7 +444,10 @@ export class ConversationStore {
       status: observable,
       seen: observable,
       lastNotificationType: observable,
+      pendingActionDescription: observable,
       setStatus: action,
+      hydrateStatus: action,
+      applyAuthoritativeStatus: action,
       setAwaitingInput: action,
       setWorking: action,
       clearWorking: action,
@@ -371,14 +470,15 @@ export class ConversationStore {
     return null;
   }
 
-  setStatus(status: AgentStatus) {
+  setStatus(status: AgentStatus, options: { emit?: boolean } = {}) {
     const changed = this.status !== status;
     this.status = status;
     this.seen = status === 'idle' || status === 'working';
     if (status !== 'awaiting-input') {
       this.lastNotificationType = null;
+      this.pendingActionDescription = null;
     }
-    if (changed) {
+    if (changed && options.emit !== false) {
       events.emit(agentSessionStatusChangedChannel, {
         projectId: this.data.projectId,
         taskId: this.data.taskId,
@@ -388,7 +488,25 @@ export class ConversationStore {
     }
   }
 
-  setAwaitingInput(notificationType: NotificationType) {
+  hydrateStatus(status: AgentStatus) {
+    this.setStatus(status, { emit: false });
+  }
+
+  /**
+   * Apply a deterministic status pushed from the main-process authority (the
+   * Codex rollout tailer). Overrides optimistic local predictions. Does not
+   * re-emit, since the main process is already the source.
+   */
+  applyAuthoritativeStatus(status: AgentStatus) {
+    if (status === 'working') {
+      // Refresh the post-submit grace anchor so a classifier echo right after a
+      // real turn-start doesn't immediately flip back to awaiting-input.
+      this.lastForceWorkingAt = Date.now();
+    }
+    this.setStatus(status, { emit: false });
+  }
+
+  setAwaitingInput(notificationType: NotificationType, context?: { actionDescription?: string }) {
     // Ignore classifier-driven awaiting-input echoes that fire right after the
     // user submitted a reply — the agent is still working, not waiting again.
     if (
@@ -398,6 +516,7 @@ export class ConversationStore {
       return;
     }
     this.lastNotificationType = notificationType;
+    this.pendingActionDescription = context?.actionDescription?.trim() || null;
     this.setStatus('awaiting-input');
   }
 

@@ -9,6 +9,7 @@ import { buildVisibleRows } from '@renderer/features/tasks/editor/stores/files-s
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { FileIcon } from '@renderer/lib/editor/file-icon';
 import { cn } from '@renderer/utils/utils';
+import { FileActionsContextMenu } from '../components/file-actions';
 
 const FileTreeRow = observer(function FileTreeRow({
   node,
@@ -66,58 +67,62 @@ const FileTreeRow = observer(function FileTreeRow({
     });
   };
 
+  const absolutePath = `${taskState.path.replace(/\/+$/, '')}/${node.path}`;
+
   return (
-    <div
-      style={{ ...style, paddingLeft }}
-      className={cn(
-        'flex h-7 cursor-pointer select-none items-center gap-1.5 rounded-md pr-2 hover:bg-background-1',
-        isSelected && 'bg-background-2 hover:bg-background-2',
-        node.isHidden && 'opacity-60'
-      )}
-      tabIndex={0}
-      onClick={handleClick}
-      onDoubleClick={handleDoubleClick}
-      onKeyDown={handleKeyDown}
-      role="treeitem"
-      aria-selected={isSelected}
-      aria-expanded={node.type === 'directory' ? isExpanded : undefined}
-    >
-      <span className="shrink-0 text-muted-foreground">
-        {node.type === 'directory' ? (
-          isExpanded ? (
-            <ChevronDown className="h-3.5 w-3.5" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5" />
-          )
-        ) : (
-          <span className="inline-block w-3.5" />
-        )}
-      </span>
-
-      <span className="shrink-0">
-        {node.type === 'directory' ? (
-          isExpanded ? (
-            <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-          ) : (
-            <Folder className="h-3.5 w-3.5 text-muted-foreground" />
-          )
-        ) : (
-          <FileIcon filename={node.name} size={12} />
-        )}
-      </span>
-
-      <span
+    <FileActionsContextMenu sourcePath={absolutePath} kind={node.type} mergeTrigger>
+      <div
+        style={{ ...style, paddingLeft }}
         className={cn(
-          'min-w-0 flex-1 truncate text-sm',
-          fileStatus === 'added' && 'text-green-500',
-          fileStatus === 'modified' && 'text-amber-500',
-          fileStatus === 'deleted' && 'text-red-500 line-through',
-          fileStatus === 'renamed' && 'text-blue-500'
+          'flex h-7 cursor-pointer select-none items-center gap-1.5 rounded-md pr-2 hover:bg-background-1',
+          isSelected && 'bg-background-2 hover:bg-background-2',
+          node.isHidden && 'opacity-60'
         )}
+        tabIndex={0}
+        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
+        onKeyDown={handleKeyDown}
+        role="treeitem"
+        aria-selected={isSelected}
+        aria-expanded={node.type === 'directory' ? isExpanded : undefined}
       >
-        {node.name}
-      </span>
-    </div>
+        <span className="shrink-0 text-muted-foreground">
+          {node.type === 'directory' ? (
+            isExpanded ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )
+          ) : (
+            <span className="inline-block w-3.5" />
+          )}
+        </span>
+
+        <span className="shrink-0">
+          {node.type === 'directory' ? (
+            isExpanded ? (
+              <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+            ) : (
+              <Folder className="h-3.5 w-3.5 text-muted-foreground" />
+            )
+          ) : (
+            <FileIcon filename={node.name} size={12} />
+          )}
+        </span>
+
+        <span
+          className={cn(
+            'min-w-0 flex-1 truncate text-sm',
+            fileStatus === 'added' && 'text-green-500',
+            fileStatus === 'modified' && 'text-amber-500',
+            fileStatus === 'deleted' && 'text-red-500 line-through',
+            fileStatus === 'renamed' && 'text-blue-500'
+          )}
+        >
+          {node.name}
+        </span>
+      </div>
+    </FileActionsContextMenu>
   );
 });
 

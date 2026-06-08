@@ -9,7 +9,7 @@ import {
   type ParsedDeepLink,
 } from '@shared/deep-links';
 import { deepLinkOpenChannel } from '@shared/events/appEvents';
-import { conversations, tasks } from '@main/db/schema';
+import { conversations, projects, tasks } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 
@@ -128,7 +128,7 @@ class DeepLinkService {
 
 async function resolveTaskTarget(
   parsed: ParsedDeepLink
-): Promise<{ projectId: string; taskId: string } | null> {
+): Promise<{ projectId: string; taskId?: string } | null> {
   const { db } = await import('@main/db/client');
 
   if (parsed.conversationId) {
@@ -140,7 +140,17 @@ async function resolveTaskTarget(
     return row ?? null;
   }
 
-  if (!parsed.projectId || !parsed.taskId) return null;
+  if (!parsed.projectId) return null;
+
+  // Project-only target: validate the project exists, no task to resolve.
+  if (!parsed.taskId) {
+    const [row] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.id, parsed.projectId))
+      .limit(1);
+    return row ? { projectId: parsed.projectId } : null;
+  }
 
   const [row] = await db
     .select({ id: tasks.id })

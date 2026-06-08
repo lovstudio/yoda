@@ -12,6 +12,7 @@ import { GitFetchService } from '@main/core/git/git-fetch-service';
 import { GitService } from '@main/core/git/impl/git-service';
 import { GitRepositoryService } from '@main/core/git/repository-service';
 import { githubConnectionService } from '@main/core/github/services/github-connection-service';
+import { appSettingsService } from '@main/core/settings/settings-service';
 import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { LocalTerminalProvider } from '@main/core/terminals/impl/local-terminal-provider';
 import { SshTerminalProvider } from '@main/core/terminals/impl/ssh-terminal-provider';
@@ -49,6 +50,11 @@ type WorkspaceFactoryContext = {
   };
 };
 
+async function resolveGlobalTmuxEnabled(): Promise<boolean> {
+  const projectDefaults = await appSettingsService.get('project');
+  return projectDefaults.tmuxByDefault;
+}
+
 /**
  * Returns a factory function suitable for passing to `WorkspaceRegistry.acquire`.
  * Handles all transport-specific construction (local vs SSH) and wires lifecycle
@@ -80,7 +86,7 @@ export function createWorkspaceFactory(
       defaultBranch,
       portSeed: workDir,
     });
-    const tmuxEnabled = projectSettings.tmux ?? false;
+    const tmuxEnabled = await resolveGlobalTmuxEnabled();
     const taskLevelSettings = await getEffectiveTaskSettings({
       projectSettings: context.settings,
       taskFs: workspaceFs,
@@ -310,7 +316,7 @@ export async function resolveTaskEnv(
       defaultBranch,
       portSeed: workspace.path,
     }),
-    tmuxEnabled: projectSettings.tmux ?? false,
+    tmuxEnabled: await resolveGlobalTmuxEnabled(),
     shellSetup: taskLevelSettings.shellSetup ?? projectSettings.shellSetup,
   };
 }

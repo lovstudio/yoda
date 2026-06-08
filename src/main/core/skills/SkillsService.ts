@@ -19,6 +19,17 @@ const CATALOG_INDEX_PATH = path.join(YODA_META, 'catalog-index.json');
 const SKILL_MD_FILENAME = 'SKILL.md';
 const DISABLED_SKILL_MD_FILENAME = 'SKILL.md.disabled';
 
+/**
+ * Skill directories scanned relative to a selected project root, so the picker
+ * surfaces project-local skills alongside the global ones.
+ */
+const PROJECT_SKILL_SUBDIRS = [
+  path.join('.claude', 'commands'),
+  path.join('.claude', 'skills'),
+  path.join('.codex', 'skills'),
+  path.join('.agentskills'),
+];
+
 const MAX_REDIRECTS = 5;
 
 function isPathInside(parent: string, child: string): boolean {
@@ -72,9 +83,13 @@ export class SkillsService {
     await fs.promises.mkdir(YODA_META, { recursive: true });
   }
 
-  async getCatalogIndex(): Promise<CatalogIndex> {
+  /**
+   * @param projectPath When provided (local project root), project-local skill
+   *   directories are scanned and merged in alongside the global ones.
+   */
+  async getCatalogIndex(projectPath?: string): Promise<CatalogIndex> {
     if (this.catalogCache) {
-      return this.mergeInstalledState(this.catalogCache);
+      return this.mergeInstalledState(this.catalogCache, projectPath);
     }
 
     // Try disk cache — only use if its version matches current
@@ -83,7 +98,7 @@ export class SkillsService {
       const diskCache = JSON.parse(data) as CatalogIndex;
       if (diskCache.version >= SkillsService.CATALOG_VERSION) {
         this.catalogCache = diskCache;
-        return this.mergeInstalledState(this.catalogCache);
+        return this.mergeInstalledState(this.catalogCache, projectPath);
       }
       // Stale disk cache — fall through to bundled
     } catch {
@@ -92,7 +107,13 @@ export class SkillsService {
 
     const bundled = this.loadBundledCatalog();
     this.catalogCache = bundled;
-    return this.mergeInstalledState(bundled);
+    return this.mergeInstalledState(bundled, projectPath);
+  }
+
+  /** Skill directories under a project root that may contain local skills. */
+  private projectSkillDirs(projectPath?: string): string[] {
+    if (!projectPath) return [];
+    return PROJECT_SKILL_SUBDIRS.map((subdir) => path.join(projectPath, subdir));
   }
 
   async refreshCatalog(): Promise<CatalogIndex> {
@@ -139,13 +160,14 @@ export class SkillsService {
     }
   }
 
-  async getInstalledSkills(): Promise<CatalogSkill[]> {
+  async getInstalledSkills(extraDirs: string[] = []): Promise<CatalogSkill[]> {
     await this.initialize();
     const seen = new Set<string>();
     const skills: CatalogSkill[] = [];
 
-    // Scan all known skill directories (central + agent-specific)
-    const dirsToScan = [SKILLS_ROOT, ...skillScanPaths];
+    // Scan all known skill directories (central + agent-specific + project-local).
+    // Project-local dirs go last so global skills with the same id win.
+    const dirsToScan = [SKILLS_ROOT, ...skillScanPaths, ...extraDirs];
 
     for (const dir of dirsToScan) {
       let entries: fs.Dirent[];
@@ -517,8 +539,11 @@ export class SkillsService {
     return bundledCatalog as CatalogIndex;
   }
 
-  private async mergeInstalledState(catalog: CatalogIndex): Promise<CatalogIndex> {
-    const installed = await this.getInstalledSkills();
+  private async mergeInstalledState(
+    catalog: CatalogIndex,
+    projectPath?: string
+  ): Promise<CatalogIndex> {
+    const installed = await this.getInstalledSkills(this.projectSkillDirs(projectPath));
     const installedMap = new Map(installed.map((s) => [s.id, s]));
 
     // Deduplicate catalog skills by id (first occurrence wins)

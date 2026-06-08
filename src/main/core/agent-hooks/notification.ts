@@ -12,6 +12,7 @@ import { log } from '@main/lib/logger';
 
 function getNotificationBody(event: AgentEvent): string | null {
   if (event.type === 'stop') return 'Your agent has finished working';
+  if (event.type === 'awaiting-input') return 'Your agent is waiting for input';
   if (event.type === 'notification') {
     const { notificationType } = event.payload;
     if (!notificationType) return null;

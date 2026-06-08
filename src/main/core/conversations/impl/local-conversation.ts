@@ -9,7 +9,17 @@ import { makeCodexNotifyCommand } from '@main/core/agent-hooks/agent-notify-comm
 import { wireAgentClassifier } from '@main/core/agent-hooks/classifier-wiring';
 import { claudeTrustService } from '@main/core/agent-hooks/claude-trust-service';
 import { HookConfigWriter } from '@main/core/agent-hooks/hook-config';
+import { applyHookOverrides } from '@main/core/agent-hooks/inspect/hook-overrides-apply';
+import { hookOverridesStore } from '@main/core/agent-hooks/inspect/hook-overrides-store';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
+import {
+  watchClaudeRunState,
+  type ClaudeRunStateWatcher,
+} from '@main/core/conversations/claude-run-state-source';
+import {
+  watchCodexRunState,
+  type CodexRunStateWatcher,
+} from '@main/core/conversations/codex-run-state-source';
 import type {
   ActiveConversationSession,
   ConversationProvider,
@@ -41,7 +51,7 @@ export class LocalConversationProvider implements ConversationProvider {
   private sessions = new Map<string, Pty>();
   private knownSessionIds = new Set<string>();
   private readonly projectId: string;
-  private readonly taskPath: string;
+  readonly taskPath: string;
   private readonly taskId: string;
   private readonly tmux: boolean;
   private readonly shellSetup?: string;
@@ -51,6 +61,10 @@ export class LocalConversationProvider implements ConversationProvider {
   private readonly preparedHookProviders = new Map<string, boolean>();
   private readonly tmuxSessionNames = new Map<string, string>();
   private readonly sessionInfos = new Map<string, Omit<ActiveConversationSession, 'detachable'>>();
+  private readonly runStateWatchers = new Map<
+    string,
+    CodexRunStateWatcher | ClaudeRunStateWatcher
+  >();
 
   constructor({
     projectId,
@@ -83,7 +97,8 @@ export class LocalConversationProvider implements ConversationProvider {
     conversation: Conversation,
     initialSize: { cols: number; rows: number } = { cols: DEFAULT_COLS, rows: DEFAULT_ROWS },
     isResuming: boolean = false,
-    initialPrompt?: string
+    initialPrompt?: string,
+    tmuxOverride?: boolean
   ): Promise<void> {
     const sessionId = makePtySessionId(
       conversation.projectId,
@@ -99,6 +114,11 @@ export class LocalConversationProvider implements ConversationProvider {
       homedir: homedir(),
     });
     await this.prepareHookConfig(conversation.providerId);
+    await applyHookOverrides(
+      this.taskPath,
+      conversation.providerId,
+      await hookOverridesStore.get(conversation.taskId)
+    );
 
     const providerConfig = await providerOverrideSettings.getItem(conversation.providerId);
     const agentSessionId = isResuming
@@ -125,7 +145,7 @@ export class LocalConversationProvider implements ConversationProvider {
     });
     const args = withCodexRuntimeNotifyArgs(conversation.providerId, baseArgs, port);
 
-    const tmuxSessionName = await this.resolveTmuxSessionName(sessionId);
+    const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
     const providerEnv = resolveProviderEnv(providerConfig, {
       providerId: conversation.providerId,
       tmuxEnabled: Boolean(tmuxSessionName),
@@ -140,6 +160,7 @@ export class LocalConversationProvider implements ConversationProvider {
         command: { kind: 'argv', command, args },
         shellSetup: this.shellSetup,
         tmuxSessionName,
+        tmuxSize: initialSize,
         tmuxEnv: resolveProviderTmuxEnv(providerEnv),
       },
     });
@@ -182,9 +203,11 @@ export class LocalConversationProvider implements ConversationProvider {
     }
 
     pty.onExit(({ exitCode }) => {
+      if (this.sessions.get(sessionId) !== pty) return;
       ptySessionRegistry.unregister(sessionId);
       this.sessions.delete(sessionId);
       this.sessionInfos.delete(sessionId);
+      this.stopRunStateWatcher(conversation.id);
       agentSessionRuntimeStore.remove({
         projectId: conversation.projectId,
         taskId: conversation.taskId,
@@ -234,6 +257,7 @@ export class LocalConversationProvider implements ConversationProvider {
       startedAtMs: sessionStartedAtMs,
       isResuming,
     });
+    this.startRunStateWatcher(conversation, sessionStartedAtMs);
     telemetryService.capture('agent_run_started', {
       provider: conversation.providerId,
       project_id: conversation.projectId,
@@ -242,11 +266,54 @@ export class LocalConversationProvider implements ConversationProvider {
     });
   }
 
-  private resolveTmuxSessionName(sessionId: string): Promise<string | undefined> {
+  /**
+   * Attach a deterministic run-state source that tails the transcript the CLI
+   * writes itself — the authoritative turn-started/ended signal, independent of
+   * how the user submits and of hook delivery. Codex tails its rollout JSONL;
+   * Claude tails its session transcript. No-op for other providers (they fall
+   * back to the classifier).
+   */
+  private startRunStateWatcher(conversation: Conversation, startedAtMs: number): void {
+    this.stopRunStateWatcher(conversation.id);
+    const session = {
+      projectId: conversation.projectId,
+      taskId: conversation.taskId,
+      conversationId: conversation.id,
+    };
+    if (conversation.providerId === 'codex') {
+      const watcher = watchCodexRunState(
+        { conversationId: conversation.id, cwd: this.taskPath, startedAtMs },
+        (event) => agentSessionRuntimeStore.dispatch(session, event, 'codex-rollout')
+      );
+      this.runStateWatchers.set(conversation.id, watcher);
+      return;
+    }
+    if (conversation.providerId === 'claude') {
+      const watcher = watchClaudeRunState(
+        { conversationId: conversation.id, cwd: this.taskPath },
+        (event) => agentSessionRuntimeStore.dispatch(session, event, 'claude-transcript')
+      );
+      this.runStateWatchers.set(conversation.id, watcher);
+    }
+  }
+
+  private stopRunStateWatcher(conversationId: string): void {
+    const watcher = this.runStateWatchers.get(conversationId);
+    if (!watcher) return;
+    try {
+      watcher.stop();
+    } catch {}
+    this.runStateWatchers.delete(conversationId);
+  }
+
+  private resolveTmuxSessionName(
+    sessionId: string,
+    tmuxOverride?: boolean
+  ): Promise<string | undefined> {
     return resolveAvailableTmuxSessionName({
       auto: false,
       ctx: this.ctx,
-      requested: this.tmux,
+      requested: tmuxOverride ?? this.tmux,
       sessionId,
       source: 'LocalConversationProvider',
     });
@@ -299,6 +366,7 @@ export class LocalConversationProvider implements ConversationProvider {
     const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
     this.knownSessionIds.delete(sessionId);
     sessionTitleManager.stop(conversationId);
+    this.stopRunStateWatcher(conversationId);
     const pty = this.sessions.get(sessionId);
     if (pty) {
       try {
@@ -338,7 +406,10 @@ export class LocalConversationProvider implements ConversationProvider {
   async detachAll(): Promise<void> {
     for (const [sessionId, pty] of this.sessions) {
       const conversationId = sessionId.split(':').pop();
-      if (conversationId) sessionTitleManager.stop(conversationId);
+      if (conversationId) {
+        sessionTitleManager.stop(conversationId);
+        this.stopRunStateWatcher(conversationId);
+      }
       try {
         pty.kill();
       } catch {}

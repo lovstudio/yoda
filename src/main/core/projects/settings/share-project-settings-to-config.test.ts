@@ -55,7 +55,6 @@ describe('shareProjectSettingsToConfig', () => {
         get: vi.fn().mockResolvedValue({
           defaultBranch: 'origin/main',
           remote: 'origin',
-          tmux: true,
           preservePatterns: ['.env', '.env.local'],
           shellSetup: 'nvm use',
           scripts: {

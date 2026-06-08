@@ -965,14 +965,19 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     selectedAgentIdsByMode,
     t,
   ]);
+  // Local project root, so the skill picker can surface project-local skills
+  // alongside the global ones. SSH projects have no local path to scan.
+  const skillProjectPath = projectData?.type === 'local' ? projectData.path : undefined;
   const {
     data: skillCatalog = null,
     isPending: skillsLoading,
     isError: skillsError,
   } = useQuery<CatalogIndex>({
-    queryKey: ['skills', 'catalog'],
+    queryKey: ['skills', 'catalog', skillProjectPath ?? null],
     queryFn: async () => {
-      const result = await rpc.skills.getCatalog();
+      const result = await rpc.skills.getCatalog(
+        skillProjectPath ? { projectPath: skillProjectPath } : undefined
+      );
       if (result.success && result.data) return result.data;
       throw new Error(result.error ?? 'Failed to load catalog');
     },

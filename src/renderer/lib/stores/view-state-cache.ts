@@ -32,6 +32,15 @@ class ViewStateCache {
     return value;
   }
 
+  /**
+   * Synchronous cache-only read. Returns `undefined` on a miss without falling
+   * back to IPC. Safe to call after the bootstrap `populate()`, where every
+   * persisted key is already present.
+   */
+  peek(key: string): unknown {
+    return this.map.get(key);
+  }
+
   /** Write a value to the cache (called by SnapshotRegistry on every save). */
   set(key: string, value: unknown): void {
     this.map.set(key, value);

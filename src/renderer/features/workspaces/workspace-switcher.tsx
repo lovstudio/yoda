@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, FolderInput, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Check, FolderInput, Pencil, Plus, Trash2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -90,18 +90,13 @@ export const WorkspaceSwitcher = observer(function WorkspaceSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          'group/ws flex h-8 w-full min-w-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm text-foreground-tertiary-muted transition-colors outline-none',
-          'hover:bg-background-tertiary-1 hover:text-foreground-tertiary',
-          'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-          'data-popup-open:bg-background-tertiary-1 data-popup-open:text-foreground-tertiary'
+          'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg pl-3 text-sm text-inherit outline-none',
+          'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
         )}
         aria-label={t('workspaces.switch')}
       >
-        <span className="flex min-w-0 items-center gap-2">
-          <FolderInput className="h-4 w-4 shrink-0" />
-          <span className="truncate">{currentLabel}</span>
-        </span>
-        <ChevronsUpDown className="size-3.5 shrink-0 text-foreground-tertiary-passive transition-colors group-hover/ws:text-foreground-tertiary" />
+        <FolderInput className="h-4 w-4 shrink-0" />
+        <span className="truncate">{currentLabel}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={6} className="w-(--anchor-width) min-w-56">
         <DropdownMenuGroup>
@@ -191,7 +186,7 @@ function WorkspaceNameInput({
         if (e.key === 'Enter') onSubmit(value);
         else if (e.key === 'Escape') onCancel();
       }}
-      className="h-8 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     />
   );
 }

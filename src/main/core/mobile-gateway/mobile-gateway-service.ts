@@ -1,20 +1,29 @@
+import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { networkInterfaces } from 'node:os';
 import { URL } from 'node:url';
 import { AGENT_PROVIDER_IDS, type AgentProviderId } from '@shared/agent-provider-registry';
+import type { Conversation } from '@shared/conversations';
+import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import {
   createExpoGoPairingUrl,
   createMobilePairingUrl,
   MOBILE_APP_DEFAULT_INSTALL_URL,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_GATEWAY_DEFAULT_PORT,
+  MOBILE_SESSION_CONTENT_MAX_CHARS,
   type MobileApiError,
   type MobileCreateDemandRequest,
   type MobileCreateDemandResponse,
   type MobileDashboardSnapshot,
   type MobileGatewayConnectionInfo,
   type MobileProjectSummary,
+  type MobileSessionContentSource,
+  type MobileSessionDetail,
+  type MobileSessionSummary,
+  type MobileSessionTranscriptBlock,
+  type MobileTaskSessionsResponse,
   type MobileTaskSummary,
 } from '@shared/mobile-api';
 import {
@@ -23,19 +32,40 @@ import {
   type OpenProjectError,
   type Project,
 } from '@shared/projects';
+import { makePtySessionId } from '@shared/ptySessionId';
 import { ensureUniqueTaskSlug, taskNameFromPrompt } from '@shared/task-name';
 import type { CreateTaskError, CreateTaskWarning, Task } from '@shared/tasks';
+import { loadClaudeTranscript } from '@main/core/conversations/claude-transcript';
+import {
+  loadCodexRolloutTerminalHistoryForConversation,
+  loadCodexRolloutTranscriptForConversation,
+} from '@main/core/conversations/codex-rollout-terminal-history';
+import { getConversationRuntimeStatuses } from '@main/core/conversations/getConversationRuntimeStatuses';
+import { getConversationSessionInfo } from '@main/core/conversations/getConversationSessionInfo';
+import { getConversationsForTask } from '@main/core/conversations/getConversationsForTask';
 import { getProjectById, getProjects } from '@main/core/projects/operations/getProjects';
 import { openProject } from '@main/core/projects/operations/openProject';
 import { projectManager } from '@main/core/projects/project-manager';
+import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { generateTaskName } from '@main/core/tasks/name-generation/generateTaskName';
 import { createTask } from '@main/core/tasks/operations/createTask';
 import { getTasks } from '@main/core/tasks/operations/getTasks';
 import { taskManager } from '@main/core/tasks/task-manager';
+import { workspaceRegistry } from '@main/core/workspaces/workspace-registry';
 import { log } from '@main/lib/logger';
 
 const MAX_BODY_BYTES = 128 * 1024;
+const MOBILE_METRO_DEFAULT_PORT = 8081;
+const METRO_STATUS_TIMEOUT_MS = 1000;
+
+type MetroStatus = 'free' | 'occupied' | 'running';
+
+type TaskSessionData = {
+  cwd: string;
+  conversations: Conversation[];
+  sessions: MobileSessionSummary[];
+};
 
 class MobileGatewayError extends Error {
   constructor(
@@ -63,6 +93,16 @@ function shouldStartGateway(): boolean {
 
   const legacyEnabled = parseBooleanSetting(process.env.YODA_MOBILE_GATEWAY);
   return legacyEnabled !== false;
+}
+
+function isDevelopment(): boolean {
+  return process.env.NODE_ENV !== 'production';
+}
+
+function shouldAutoStartLocalMetro(): boolean {
+  if (!isDevelopment()) return false;
+  if (parseBooleanSetting(process.env.YODA_MOBILE_METRO_DISABLED) === true) return false;
+  return !process.env.YODA_MOBILE_EXPO_URL?.trim();
 }
 
 function parsePort(value: string | undefined): number {
@@ -118,6 +158,71 @@ function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
   });
 }
 
+function pathSegments(pathname: string): string[] {
+  try {
+    return pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  } catch {
+    throw new MobileGatewayError(400, 'invalid_path', 'Request path is not valid.');
+  }
+}
+
+function stripTerminalControlSequences(value: string): string {
+  return value
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1bP[\s\S]*?(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b_[\s\S]*?(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\^[\s\S]*?(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b[()*+\-./][0-9A-Za-z]/g, '')
+    .replace(/\x1b[=>78MDEHc]/g, '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/\r/g, '');
+}
+
+function removeTerminalChrome(value: string): string {
+  return value
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+      if (/^[─━╌╍┄┈\-_\s]{24,}$/.test(trimmed)) return false;
+      if (/^Tip:\s+Connect Claude to your IDE\b/.test(trimmed)) return false;
+      if (/\b(?:Musing|tokens?|bypass permissions|shift\+tab to cycle)\b/i.test(trimmed)) {
+        return false;
+      }
+      if (/\b(?:Opus|Sonnet|Haiku)\b.*\banthropic\b/i.test(trimmed)) return false;
+      if (/^[✢✳✶✻✽⏺⏵⎿◆◇●○·\s\dA-Za-z()./:@$,_-]+$/.test(trimmed) && trimmed.length > 80) {
+        return false;
+      }
+      return true;
+    })
+    .join('\n')
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim();
+}
+
+function tailSessionContent(value: string): {
+  content: string;
+  contentLength: number;
+  truncated: boolean;
+} {
+  const content = removeTerminalChrome(stripTerminalControlSequences(value));
+  const truncated = content.length > MOBILE_SESSION_CONTENT_MAX_CHARS;
+  return {
+    content: truncated ? content.slice(-MOBILE_SESSION_CONTENT_MAX_CHARS) : content,
+    contentLength: content.length,
+    truncated,
+  };
+}
+
+function compareConversations(a: Conversation, b: Conversation): number {
+  if (a.isInitialConversation === true && b.isInitialConversation !== true) return -1;
+  if (a.isInitialConversation !== true && b.isInitialConversation === true) return 1;
+  const aTime = Date.parse(a.lastInteractedAt ?? a.updatedAt ?? a.createdAt ?? '');
+  const bTime = Date.parse(b.lastInteractedAt ?? b.updatedAt ?? b.createdAt ?? '');
+  return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+}
+
 function lanUrls(port: number): string[] {
   const urls: string[] = [];
   for (const iface of Object.values(networkInterfaces())) {
@@ -137,14 +242,14 @@ function mobileInstallUrl(): string {
 function mobileGatewayToken(): string {
   const envToken = process.env.YODA_MOBILE_GATEWAY_TOKEN?.trim();
   if (envToken) return envToken;
-  if (process.env.NODE_ENV !== 'production') return MOBILE_GATEWAY_DEFAULT_DEV_TOKEN;
+  if (isDevelopment()) return MOBILE_GATEWAY_DEFAULT_DEV_TOKEN;
   return randomUUID();
 }
 
 function localExpoUrl(primaryUrl: string, token: string): string | null {
   const override = process.env.YODA_MOBILE_EXPO_URL?.trim();
   if (override) return createExpoGoPairingUrl(override, { baseUrl: primaryUrl, token });
-  if (process.env.NODE_ENV === 'production') return null;
+  if (!isDevelopment()) return null;
 
   try {
     const host = new URL(primaryUrl).hostname;
@@ -153,6 +258,77 @@ function localExpoUrl(primaryUrl: string, token: string): string | null {
   } catch {
     return null;
   }
+}
+
+function metroHostFromGatewayUrl(primaryUrl: string): string | null {
+  try {
+    const host = new URL(primaryUrl).hostname;
+    if (!host || host === 'localhost' || host === '127.0.0.1') return null;
+    return host;
+  } catch {
+    return null;
+  }
+}
+
+function getMetroStatus(port = MOBILE_METRO_DEFAULT_PORT): Promise<MetroStatus> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (status: MetroStatus) => {
+      if (settled) return;
+      settled = true;
+      resolve(status);
+    };
+
+    const req = http.get(
+      {
+        host: '127.0.0.1',
+        port,
+        path: '/status',
+        timeout: METRO_STATUS_TIMEOUT_MS,
+      },
+      (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk: string) => {
+          body += chunk;
+        });
+        res.on('end', () => {
+          settle(body.includes('packager-status:running') ? 'running' : 'occupied');
+        });
+      }
+    );
+
+    req.on('timeout', () => {
+      settle('occupied');
+      req.destroy();
+    });
+    req.on('error', (error: NodeJS.ErrnoException) => {
+      settle(error.code === 'ECONNREFUSED' ? 'free' : 'occupied');
+    });
+  });
+}
+
+function pnpmCommand(): string {
+  return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+}
+
+function pipeMetroLog(stream: NodeJS.ReadableStream, level: 'info' | 'warn', prefix: string): void {
+  let buffer = '';
+  stream.on('data', (chunk: Buffer | string) => {
+    buffer += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (level === 'warn') {
+        log.warn(prefix, { line });
+      } else {
+        log.info(prefix, { line });
+      }
+    }
+  });
 }
 
 function mapOpenProjectError(error: OpenProjectError): string {
@@ -225,6 +401,7 @@ function isAgentProviderId(value: string): value is AgentProviderId {
 
 export class MobileGatewayService {
   private server: http.Server | null = null;
+  private metroProcess: ChildProcess | null = null;
   private token = '';
   private host = '0.0.0.0';
   private port = MOBILE_GATEWAY_DEFAULT_PORT;
@@ -267,12 +444,88 @@ export class MobileGatewayService {
       urls: lanUrls(this.port),
       token: process.env.YODA_MOBILE_GATEWAY_TOKEN ? '<env>' : this.token,
     });
+
+    const primaryUrl = lanUrls(this.port)[0] ?? `http://localhost:${this.port}`;
+    void this.ensureLocalMetro(primaryUrl).catch((error: unknown) => {
+      log.warn('MobileGateway: failed to ensure Expo Metro is running', { error: String(error) });
+    });
   }
 
   dispose(): void {
+    this.disposeMetroProcess();
     if (!this.server) return;
     this.server.close();
     this.server = null;
+  }
+
+  private async ensureLocalMetro(primaryUrl: string): Promise<void> {
+    if (!shouldAutoStartLocalMetro()) return;
+    if (this.metroProcess) return;
+
+    const metroHost = metroHostFromGatewayUrl(primaryUrl);
+    if (!metroHost) return;
+
+    const status = await getMetroStatus();
+    if (status === 'running') {
+      log.info('MobileGateway: Expo Metro already running', {
+        url: `exp://${metroHost}:${MOBILE_METRO_DEFAULT_PORT}`,
+      });
+      return;
+    }
+    if (status === 'occupied') {
+      log.warn('MobileGateway: cannot auto-start Expo Metro because port is occupied', {
+        port: MOBILE_METRO_DEFAULT_PORT,
+      });
+      return;
+    }
+
+    const child = spawn(
+      pnpmCommand(),
+      ['--filter', '@yoda/mobile', 'start', '--', '--host', 'lan'],
+      {
+        cwd: process.cwd(),
+        detached: process.platform !== 'win32',
+        env: {
+          ...process.env,
+          EXPO_NO_TELEMETRY: '1',
+          REACT_NATIVE_PACKAGER_HOSTNAME: metroHost,
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+
+    this.metroProcess = child;
+    pipeMetroLog(child.stdout, 'info', 'MobileGateway: Expo Metro');
+    pipeMetroLog(child.stderr, 'warn', 'MobileGateway: Expo Metro');
+
+    child.on('error', (error) => {
+      if (this.metroProcess === child) this.metroProcess = null;
+      log.warn('MobileGateway: Expo Metro failed to start', { error: String(error) });
+    });
+    child.on('exit', (code, signal) => {
+      if (this.metroProcess === child) this.metroProcess = null;
+      log.info('MobileGateway: Expo Metro exited', { code, signal });
+    });
+
+    log.info('MobileGateway: starting Expo Metro', {
+      url: `exp://${metroHost}:${MOBILE_METRO_DEFAULT_PORT}`,
+    });
+  }
+
+  private disposeMetroProcess(): void {
+    const child = this.metroProcess;
+    if (!child) return;
+    this.metroProcess = null;
+
+    try {
+      if (process.platform !== 'win32' && child.pid) {
+        process.kill(-child.pid, 'SIGTERM');
+      } else {
+        child.kill('SIGTERM');
+      }
+    } catch (error) {
+      log.warn('MobileGateway: failed to stop Expo Metro', { error: String(error) });
+    }
   }
 
   getConnectionInfo(): MobileGatewayConnectionInfo {
@@ -316,6 +569,25 @@ export class MobileGatewayService {
 
     if (req.method === 'GET' && url.pathname === '/v1/snapshot') {
       writeJson(res, 200, await this.getSnapshot());
+      return;
+    }
+
+    const segments = pathSegments(url.pathname);
+    const isTaskSessionsRoute =
+      segments[0] === 'v1' &&
+      segments[1] === 'projects' &&
+      Boolean(segments[2]) &&
+      segments[3] === 'tasks' &&
+      Boolean(segments[4]) &&
+      segments[5] === 'sessions';
+
+    if (req.method === 'GET' && isTaskSessionsRoute && segments.length === 6) {
+      writeJson(res, 200, await this.getTaskSessions(segments[2]!, segments[4]!));
+      return;
+    }
+
+    if (req.method === 'GET' && isTaskSessionsRoute && segments.length === 7 && segments[6]) {
+      writeJson(res, 200, await this.getSessionDetail(segments[2]!, segments[4]!, segments[6]));
       return;
     }
 
@@ -387,6 +659,185 @@ export class MobileGatewayService {
       providerCounts: task.conversations,
       conversationCount: Object.values(task.conversations).reduce((sum, count) => sum + count, 0),
     };
+  }
+
+  private async getTaskSessions(
+    projectId: string,
+    taskId: string
+  ): Promise<MobileTaskSessionsResponse> {
+    const data = await this.loadTaskSessionData(projectId, taskId);
+    return {
+      projectId,
+      taskId,
+      sessions: data.sessions,
+    };
+  }
+
+  private async getSessionDetail(
+    projectId: string,
+    taskId: string,
+    conversationId: string
+  ): Promise<MobileSessionDetail> {
+    const data = await this.loadTaskSessionData(projectId, taskId);
+    const conversation = data.conversations.find((item) => item.id === conversationId);
+    const session = data.sessions.find((item) => item.id === conversationId);
+
+    if (!conversation || !session) {
+      throw new MobileGatewayError(404, 'session_not_found', 'Mobile session was not found.');
+    }
+
+    const ptySessionId = makePtySessionId(projectId, taskId, conversationId);
+    const [output, transcript] = await Promise.all([
+      this.readConversationOutput(conversation, data.cwd, ptySessionId),
+      this.readConversationTranscript(conversation, data.cwd, session.sessionId),
+    ]);
+    const tailed = tailSessionContent(output.content);
+
+    return {
+      generatedAt: new Date().toISOString(),
+      session,
+      content: tailed.content,
+      contentLength: tailed.contentLength,
+      truncated: tailed.truncated,
+      source: output.source,
+      transcript,
+    };
+  }
+
+  private async loadTaskSessionData(projectId: string, taskId: string): Promise<TaskSessionData> {
+    const project = await this.requireProject(projectId);
+    const cwd = this.resolveTaskCwd(project, taskId);
+    const conversations = (await getConversationsForTask(projectId, taskId)).sort(
+      compareConversations
+    );
+    const statuses = await getConversationRuntimeStatuses(
+      projectId,
+      taskId,
+      conversations.map((conversation) => conversation.id)
+    );
+    const sessions = await Promise.all(
+      conversations.map((conversation) =>
+        this.mapSession(conversation, statuses[conversation.id] ?? 'idle', cwd)
+      )
+    );
+
+    return { cwd, conversations, sessions };
+  }
+
+  private async requireProject(projectId: string): Promise<Project> {
+    const project = await getProjectById(projectId);
+    if (!project) {
+      throw new MobileGatewayError(404, 'project_not_found', 'Project was not found.');
+    }
+    return project;
+  }
+
+  private resolveTaskCwd(project: Project, taskId: string): string {
+    const workspaceId = taskManager.getWorkspaceId(taskId);
+    return (workspaceId ? workspaceRegistry.get(workspaceId)?.path : null) ?? project.path;
+  }
+
+  private async mapSession(
+    conversation: Conversation,
+    runtimeStatus: AgentSessionRuntimeStatus,
+    cwd: string
+  ): Promise<MobileSessionSummary> {
+    const ptySessionId = makePtySessionId(
+      conversation.projectId,
+      conversation.taskId,
+      conversation.id
+    );
+    const sessionInfo = await getConversationSessionInfo(
+      conversation.projectId,
+      conversation.taskId,
+      conversation.id,
+      cwd
+    ).catch((error: unknown) => {
+      log.warn('MobileGateway: failed to resolve session info', {
+        conversationId: conversation.id,
+        error: String(error),
+      });
+      return null;
+    });
+
+    return {
+      id: conversation.id,
+      projectId: conversation.projectId,
+      taskId: conversation.taskId,
+      title: conversation.title,
+      providerId: conversation.providerId,
+      createdAt: conversation.createdAt,
+      updatedAt: conversation.updatedAt,
+      lastInteractedAt: conversation.lastInteractedAt,
+      isInitialConversation: conversation.isInitialConversation,
+      runtimeStatus,
+      running: Boolean(sessionInfo?.running || ptySessionRegistry.get(ptySessionId)),
+      tmuxEnabled: sessionInfo?.tmuxEnabled ?? false,
+      sessionId: sessionInfo?.sessionId ?? conversation.id,
+      sessionTitle: sessionInfo?.sessionTitle,
+    };
+  }
+
+  private async readConversationOutput(
+    conversation: Conversation,
+    cwd: string,
+    ptySessionId: string
+  ): Promise<{ content: string; source: MobileSessionContentSource }> {
+    const liveBuffer = ptySessionRegistry.snapshot(ptySessionId);
+    if (liveBuffer || ptySessionRegistry.get(ptySessionId)) {
+      return { content: liveBuffer, source: 'live' };
+    }
+
+    if (conversation.providerId === 'codex') {
+      const history = await loadCodexRolloutTerminalHistoryForConversation({
+        conversation,
+        cwd,
+      }).catch((error: unknown) => {
+        log.warn('MobileGateway: failed to load session history', {
+          conversationId: conversation.id,
+          error: String(error),
+        });
+        return null;
+      });
+      if (history) return { content: history, source: 'history' };
+    }
+
+    return { content: '', source: 'empty' };
+  }
+
+  private async readConversationTranscript(
+    conversation: Conversation,
+    cwd: string,
+    sessionId: string
+  ): Promise<MobileSessionTranscriptBlock[]> {
+    if (conversation.providerId === 'claude') {
+      const transcript = await loadClaudeTranscript({
+        cwd,
+        sessionId,
+      }).catch((error: unknown) => {
+        log.warn('MobileGateway: failed to load Claude session transcript', {
+          conversationId: conversation.id,
+          error: String(error),
+        });
+        return null;
+      });
+      return transcript ?? [];
+    }
+
+    if (conversation.providerId !== 'codex') return [];
+
+    const transcript = await loadCodexRolloutTranscriptForConversation({
+      conversation,
+      cwd,
+    }).catch((error: unknown) => {
+      log.warn('MobileGateway: failed to load session transcript', {
+        conversationId: conversation.id,
+        error: String(error),
+      });
+      return null;
+    });
+
+    return transcript ?? [];
   }
 
   private async createDemand(

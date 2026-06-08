@@ -2,6 +2,7 @@ import { ExternalLink } from 'lucide-react';
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { McpView } from '@renderer/features/mcp/components/McpView';
+import { NamingConfigFields } from '@renderer/features/tasks/components/naming-config-fields';
 import { rpc } from '@renderer/lib/ipc';
 import { Separator } from '@renderer/lib/ui/separator';
 import { cn } from '@renderer/utils/utils';
@@ -21,7 +22,6 @@ import {
   AutoTrustWorktreesRow,
   EnableTmuxRow,
   PreArchiveCommandRow,
-  TaskNamingSettingsRow,
 } from './TaskSettingsRows';
 import TelemetryCard from './TelemetryCard';
 import TerminalSettingsCard from './TerminalSettingsCard';
@@ -32,6 +32,7 @@ export type SettingsPageTab =
   | 'general'
   | 'account'
   | 'clis-models'
+  | 'tasks'
   | 'integrations'
   | 'mcp'
   | 'repository'
@@ -65,6 +66,7 @@ export function SettingsPage({
     { id: 'general', label: t('settings.tabs.general') },
     { id: 'account', label: t('settings.tabs.account') },
     { id: 'clis-models', label: t('settings.tabs.agents') },
+    { id: 'tasks', label: t('settings.tabs.tasks') },
     { id: 'integrations', label: t('settings.tabs.integrations') },
     { id: 'mcp', label: t('settings.tabs.mcp') },
     { id: 'repository', label: t('settings.tabs.repository') },
@@ -89,12 +91,34 @@ export function SettingsPage({
           component: <TelemetryCard />,
         },
         {
+          id: 'notifications',
+          component: <NotificationSettingsCard />,
+        },
+        {
+          id: 'update',
+          component: <UpdateCard />,
+        },
+      ],
+    },
+    tasks: {
+      title: t('settings.tabs.tasks'),
+      description: t('settings.tasksTab.description'),
+      sections: [
+        {
           id: 'auto-generate-task-names',
           component: <AutoGenerateTaskNamesRow />,
         },
         {
-          id: 'task-naming-settings',
-          component: <TaskNamingSettingsRow />,
+          id: 'task-naming-config',
+          title: t('settings.tasks.namingConfigTitle'),
+          component: (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-foreground-passive">
+                {t('settings.tasks.namingConfigDescription')}
+              </p>
+              <NamingConfigFields />
+            </div>
+          ),
         },
         {
           id: 'auto-trust-worktrees',
@@ -107,14 +131,6 @@ export function SettingsPage({
         {
           id: 'pre-archive-command',
           component: <PreArchiveCommandRow />,
-        },
-        {
-          id: 'notifications',
-          component: <NotificationSettingsCard />,
-        },
-        {
-          id: 'update',
-          component: <UpdateCard />,
         },
       ],
     },

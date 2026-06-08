@@ -12,11 +12,15 @@ export type ActiveConversationSession = {
 };
 
 export interface ConversationProvider {
+  /** Absolute path of the worktree the agent runs in (used to locate transcripts). */
+  readonly taskPath: string;
   startSession(
     conversation: Conversation,
     initialSize?: { cols: number; rows: number },
     isResuming?: boolean,
-    initialPrompt?: string
+    initialPrompt?: string,
+    /** Override the provider's default tmux behavior for this session only. */
+    tmuxOverride?: boolean
   ): Promise<void>;
   stopSession(conversationId: string): Promise<void>;
   getActiveSessions(): ActiveConversationSession[];

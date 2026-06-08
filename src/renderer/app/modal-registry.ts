@@ -14,7 +14,6 @@ import { ArchiveTaskWithNoteModal } from '@renderer/features/tasks/archive-task-
 import { CreateConversationModal } from '@renderer/features/tasks/conversations/create-conversation-modal';
 import { CreateTaskModal } from '@renderer/features/tasks/create-task-modal/create-task-modal';
 import { CreatePrModal } from '@renderer/features/tasks/diff-view/changes-panel/components/pr-entry/create-pr-modal';
-import { EditPreArchiveCommandModal } from '@renderer/features/tasks/edit-pre-archive-command-modal';
 import { ConflictDialog } from '@renderer/features/tasks/editor/conflict-dialog';
 import { RenameTaskModal } from '@renderer/features/tasks/rename-task-modal';
 import { SessionPromptsModal } from '@renderer/features/tasks/session-prompts-modal';
@@ -63,7 +62,6 @@ export const modalRegistry = {
   sessionPromptsModal: createModal(SessionPromptsModal, { size: 'lg' }),
   renameProjectModal: createModal(RenameProjectModal, { size: 'xs' }),
   archiveTaskWithNoteModal: createModal(ArchiveTaskWithNoteModal, { size: 'xs' }),
-  editPreArchiveCommandModal: createModal(EditPreArchiveCommandModal, { size: 'xs' }),
   shareProjectConfigModal: createModal(ShareProjectConfigModal, { size: 'md' }),
   manageRunScriptsModal: createModal(ManageRunScriptsModal, { size: 'md' }),
   manageQuickActionsModal: createModal(ManageQuickActionsModal, { size: 'md' }),

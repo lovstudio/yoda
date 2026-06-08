@@ -24,6 +24,7 @@ export function AppKeyboardShortcuts() {
   const { toggleLeft } = useWorkspaceLayoutContext();
   const { toggleTheme } = useTheme();
   const commandPaletteHotkey = getEffectiveHotkey('commandPalette', keyboard);
+  const commandPaletteTasksHotkey = getEffectiveHotkey('commandPaletteTasks', keyboard);
   const toggleLeftSidebarHotkey = getEffectiveHotkey('toggleLeftSidebar', keyboard);
   const toggleThemeHotkey = getEffectiveHotkey('toggleTheme', keyboard);
 
@@ -43,6 +44,17 @@ export function AppKeyboardShortcuts() {
     getHotkeyRegistration('commandPalette', keyboard),
     () => showCommandPalette({ projectId: currentProjectId, taskId: currentTaskId }),
     { enabled: commandPaletteHotkey !== null }
+  );
+
+  useHotkey(
+    getHotkeyRegistration('commandPaletteTasks', keyboard),
+    () =>
+      showCommandPalette({
+        projectId: currentProjectId,
+        taskId: currentTaskId,
+        initialQuery: 'in:tasks ',
+      }),
+    { enabled: commandPaletteTasksHotkey !== null }
   );
 
   useHotkey(getHotkeyRegistration('toggleLeftSidebar', keyboard), () => toggleLeft(), {

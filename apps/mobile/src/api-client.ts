@@ -3,6 +3,8 @@ import type {
   MobileCreateDemandRequest,
   MobileCreateDemandResponse,
   MobileDashboardSnapshot,
+  MobileSessionDetail,
+  MobileTaskSessionsResponse,
 } from '../../../src/shared/mobile-api';
 
 export type MobileConnection = {
@@ -59,6 +61,29 @@ async function request<T>(
 
 export function fetchSnapshot(connection: MobileConnection): Promise<MobileDashboardSnapshot> {
   return request<MobileDashboardSnapshot>(connection, '/v1/snapshot');
+}
+
+export function fetchTaskSessions(
+  connection: MobileConnection,
+  projectId: string,
+  taskId: string
+): Promise<MobileTaskSessionsResponse> {
+  return request<MobileTaskSessionsResponse>(
+    connection,
+    `/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/sessions`
+  );
+}
+
+export function fetchSessionDetail(
+  connection: MobileConnection,
+  projectId: string,
+  taskId: string,
+  sessionId: string
+): Promise<MobileSessionDetail> {
+  return request<MobileSessionDetail>(
+    connection,
+    `/v1/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/sessions/${encodeURIComponent(sessionId)}`
+  );
 }
 
 export function createDemand(

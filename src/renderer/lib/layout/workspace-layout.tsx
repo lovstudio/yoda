@@ -53,7 +53,11 @@ export function WorkspaceLayout({ leftSidebar, mainContent }: WorkspaceLayoutPro
           isLeftOpen ? 'flex' : 'hidden'
         )}
       />
-      <ResizablePanel id="workspace-main" minSize={MAIN_PANEL_MIN_SIZE}>
+      <ResizablePanel
+        id="workspace-main"
+        minSize={MAIN_PANEL_MIN_SIZE}
+        className="bg-background text-foreground"
+      >
         {mainContent}
       </ResizablePanel>
     </ResizablePanelGroup>
@@ -69,8 +73,10 @@ export function WorkspaceContentLayout({ titlebarSlot, mainPanel }: WorkspaceCon
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
       {titlebarSlot}
-      <div className="flex-1 overflow-hidden">
-        <div className="flex h-full flex-col overflow-hidden">{mainPanel}</div>
+      <div className="flex-1 overflow-hidden bg-background text-foreground">
+        <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
+          {mainPanel}
+        </div>
       </div>
     </div>
   );

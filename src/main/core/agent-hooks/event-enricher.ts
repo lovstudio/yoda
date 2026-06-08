@@ -6,13 +6,16 @@ import { conversations } from '@main/db/schema';
 import type { RawHookRequest } from './hook-server';
 
 function normalizePayload(body: Record<string, unknown>): AgentEvent['payload'] {
+  const toolName = (body.tool_name ?? body.toolName) as string | undefined;
   return {
     notificationType: (body.notification_type ??
       body.notificationType) as AgentEvent['payload']['notificationType'],
     lastAssistantMessage: (body.last_assistant_message ?? body.lastAssistantMessage) as
       | string
       | undefined,
-    title: body.title as string | undefined,
+    // For interactive-tool waits, surface the tool name so the UI can show
+    // "waiting on you: AskUserQuestion".
+    title: (body.title as string | undefined) ?? toolName,
     message: body.message as string | undefined,
   };
 }
@@ -28,7 +31,7 @@ function normalizeEventType(
   return rawType as AgentEvent['type'];
 }
 
-export async function enrichEvent(raw: RawHookRequest): Promise<AgentEvent> {
+export async function enrichEvent(raw: RawHookRequest): Promise<AgentEvent | null> {
   const parsed = parsePtyId(raw.ptyId);
   if (!parsed) {
     throw new Error(`Unrecognised ptyId: ${raw.ptyId}`);
@@ -39,6 +42,11 @@ export async function enrichEvent(raw: RawHookRequest): Promise<AgentEvent> {
     .from(conversations)
     .where(eq(conversations.id, parsed.conversationId))
     .limit(1);
+
+  // The conversation may have been deleted between the agent firing the hook and
+  // us handling it. Return null so the hook server replies 200 (best-effort) and
+  // does not 500 on a benign race.
+  if (!convRows) return null;
 
   const taskId = convRows.taskId;
   const projectId = convRows.projectId;

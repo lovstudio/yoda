@@ -1,11 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+  type ReactNode,
+} from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Linking,
+  PanResponder,
   Platform,
   Pressable,
   RefreshControl,
@@ -15,15 +24,28 @@ import {
   Text,
   TextInput,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type StyleProp,
+  type TextStyle,
 } from 'react-native';
 import {
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   parseMobilePairingUrl,
   type MobileDashboardSnapshot,
   type MobileProjectSummary,
+  type MobileSessionDetail,
+  type MobileSessionSummary,
+  type MobileSessionTranscriptBlock,
   type MobileTaskSummary,
 } from '../../../src/shared/mobile-api';
-import { createDemand, fetchSnapshot, type MobileConnection } from './api-client';
+import {
+  createDemand,
+  fetchSessionDetail,
+  fetchSnapshot,
+  fetchTaskSessions,
+  type MobileConnection,
+} from './api-client';
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
 
 const COLORS = {
@@ -41,7 +63,16 @@ const COLORS = {
 };
 
 const POLL_INTERVAL_MS = 8_000;
+const SESSION_LIST_POLL_INTERVAL_MS = 4_000;
+const SESSION_DETAIL_POLL_INTERVAL_MS = 2_000;
 const DEV_GATEWAY_DEFAULT_PORT = '3879';
+const SWIPE_BACK_EDGE_WIDTH = 34;
+const SWIPE_BACK_ACTIVATION_DISTANCE = 12;
+const SWIPE_BACK_MIN_DISTANCE = 84;
+const SWIPE_BACK_MAX_VERTICAL_DISTANCE = 64;
+const SWIPE_BACK_MIN_VELOCITY = 0.45;
+const READABLE_OUTPUT_MAX_BLOCKS = 96;
+const SESSION_DETAIL_BOTTOM_THRESHOLD = 96;
 
 type ConnectDraft = {
   baseUrl: string;
@@ -49,6 +80,32 @@ type ConnectDraft = {
 };
 
 type TaskScope = 'all' | 'open' | 'inProgress' | 'review';
+type HomeTab = 'home' | 'tasks' | 'request' | 'projects';
+type SessionOutputMode = 'rendered' | 'raw';
+
+type ReadableOutputBlock = {
+  id: string;
+  kind: 'prose' | 'code';
+  text: string;
+};
+
+type ReadableOutput = {
+  blocks: ReadableOutputBlock[];
+  omittedCount: number;
+};
+
+type MarkdownBlock =
+  | { kind: 'heading'; level: number; text: string }
+  | { kind: 'paragraph'; text: string }
+  | { kind: 'quote'; text: string }
+  | { kind: 'list'; ordered: boolean; items: string[] }
+  | { kind: 'code'; language?: string; text: string };
+
+type InlineMarkdownToken =
+  | { kind: 'text'; text: string }
+  | { kind: 'bold'; text: string }
+  | { kind: 'code'; text: string }
+  | { kind: 'link'; text: string; url: string };
 
 function taskScopeLabel(scope: TaskScope): string {
   switch (scope) {
@@ -60,6 +117,35 @@ function taskScopeLabel(scope: TaskScope): string {
       return 'Review tasks';
     case 'all':
       return 'Active tasks';
+  }
+}
+
+function homeTabTitle(tab: HomeTab): { eyebrow: string; title: string; subtitle: string } {
+  switch (tab) {
+    case 'tasks':
+      return {
+        eyebrow: 'Tasks',
+        title: 'Work queue',
+        subtitle: 'Review running sessions and active branches.',
+      };
+    case 'request':
+      return {
+        eyebrow: 'New request',
+        title: 'Start work',
+        subtitle: 'Send a requirement to the desktop agent.',
+      };
+    case 'projects':
+      return {
+        eyebrow: 'Projects',
+        title: 'Project directory',
+        subtitle: 'Open workspaces and local repositories.',
+      };
+    case 'home':
+      return {
+        eyebrow: 'Yoda Mobile',
+        title: 'Command center',
+        subtitle: 'Monitor desktop work and keep requests moving.',
+      };
   }
 }
 
@@ -93,6 +179,266 @@ function statusColor(status: string): string {
     default:
       return COLORS.muted;
   }
+}
+
+function runtimeLabel(status: MobileSessionSummary['runtimeStatus']): string {
+  switch (status) {
+    case 'working':
+      return 'Working';
+    case 'awaiting-input':
+      return 'Waiting';
+    case 'error':
+      return 'Error';
+    case 'completed':
+      return 'Done';
+    case 'idle':
+      return 'Idle';
+  }
+}
+
+function runtimeColor(status: MobileSessionSummary['runtimeStatus']): string {
+  switch (status) {
+    case 'working':
+      return COLORS.blue;
+    case 'awaiting-input':
+      return COLORS.amber;
+    case 'error':
+      return COLORS.red;
+    case 'completed':
+      return COLORS.green;
+    case 'idle':
+      return COLORS.muted;
+  }
+}
+
+function contentSourceLabel(source: MobileSessionDetail['source']): string {
+  switch (source) {
+    case 'live':
+      return 'Live buffer';
+    case 'history':
+      return 'History';
+    case 'empty':
+      return 'No output';
+  }
+}
+
+function isPromptLikeLine(line: string): boolean {
+  return /^(?:[$#>]|pnpm\b|npm\b|yarn\b|bun\b|git\b|node\b|python\b|cargo\b|go\b|deno\b|npx\b|tsx\b)/.test(
+    line.trim()
+  );
+}
+
+function isCodeLikeBlock(text: string): boolean {
+  const lines = text.split('\n').filter((line) => line.trim());
+  if (lines.length === 0) return false;
+
+  const codeLikeLines = lines.filter((line) => {
+    const trimmed = line.trim();
+    return (
+      isPromptLikeLine(line) ||
+      /^\s+at\s/.test(line) ||
+      /^[A-Za-z]+Error[:\s]/.test(trimmed) ||
+      /^(?:diff --git|@@|[+-]{3}\s|import\s|export\s|const\s|let\s|function\s|class\s)/.test(
+        trimmed
+      ) ||
+      trimmed.length > 110
+    );
+  }).length;
+
+  return (
+    codeLikeLines >= Math.max(2, Math.ceil(lines.length * 0.45)) ||
+    (lines.length > 8 && codeLikeLines >= 2)
+  );
+}
+
+function splitReadableOutput(value: string): string[] {
+  const normalized = value
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+$/g, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (!normalized) return [];
+
+  const paragraphs = normalized
+    .split(/\n\s*\n/g)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+  if (paragraphs.length > 1) return paragraphs;
+
+  const chunks: string[] = [];
+  let current: string[] = [];
+  for (const line of normalized.split('\n')) {
+    const startsNewBlock =
+      current.length > 0 &&
+      (isPromptLikeLine(line) ||
+        /^(?:Error|Warning|Info|Done|Running|Started|Completed|Failed)\b/i.test(line.trim()) ||
+        current.length >= 10);
+
+    if (startsNewBlock) {
+      chunks.push(current.join('\n').trim());
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.length > 0) chunks.push(current.join('\n').trim());
+  return chunks.filter(Boolean);
+}
+
+function parseReadableOutput(value: string): ReadableOutput {
+  const chunks = splitReadableOutput(value);
+  const omittedCount = Math.max(0, chunks.length - READABLE_OUTPUT_MAX_BLOCKS);
+  const visibleChunks = chunks.slice(-READABLE_OUTPUT_MAX_BLOCKS);
+
+  return {
+    omittedCount,
+    blocks: visibleChunks.map((text, index) => ({
+      id: `${index}-${text.length}-${text.slice(0, 12)}`,
+      kind: isCodeLikeBlock(text) ? 'code' : 'prose',
+      text,
+    })),
+  };
+}
+
+function summarizeToolContent(value: string): string {
+  const compacted = value.replace(/\s+/g, ' ').trim();
+  if (!compacted) return 'No tool output.';
+  return compacted.length > 132 ? `${compacted.slice(0, 132)}...` : compacted;
+}
+
+function isAssistantTextBlock(block: MobileSessionTranscriptBlock): boolean {
+  return block.role === 'assistant' && (block.format === 'markdown' || block.format === 'plain');
+}
+
+function mergeAdjacentAssistantBlocks(
+  blocks: MobileSessionTranscriptBlock[]
+): MobileSessionTranscriptBlock[] {
+  const merged: MobileSessionTranscriptBlock[] = [];
+  for (const block of blocks) {
+    const previous = merged.at(-1);
+    if (previous && isAssistantTextBlock(previous) && isAssistantTextBlock(block)) {
+      previous.content = `${previous.content}\n\n${block.content}`;
+      previous.format =
+        previous.format === 'markdown' || block.format === 'markdown' ? 'markdown' : 'plain';
+      continue;
+    }
+    merged.push({ ...block });
+  }
+  return merged;
+}
+
+function parseMarkdownBlocks(value: string): MarkdownBlock[] {
+  const lines = value.replace(/\r/g, '').split('\n');
+  const blocks: MarkdownBlock[] = [];
+  let paragraph: string[] = [];
+  let index = 0;
+
+  const flushParagraph = () => {
+    const text = paragraph.join('\n').trim();
+    if (text) blocks.push({ kind: 'paragraph', text });
+    paragraph = [];
+  };
+
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      flushParagraph();
+      index += 1;
+      continue;
+    }
+
+    const fence = trimmed.match(/^```([A-Za-z0-9_-]+)?\s*$/);
+    if (fence) {
+      flushParagraph();
+      const codeLines: string[] = [];
+      index += 1;
+      while (index < lines.length && !(lines[index] ?? '').trim().startsWith('```')) {
+        codeLines.push(lines[index] ?? '');
+        index += 1;
+      }
+      if (index < lines.length) index += 1;
+      blocks.push({ kind: 'code', language: fence[1], text: codeLines.join('\n').trimEnd() });
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      blocks.push({ kind: 'heading', level: heading[1].length, text: heading[2].trim() });
+      index += 1;
+      continue;
+    }
+
+    if (/^>\s?/.test(trimmed)) {
+      flushParagraph();
+      const quoteLines: string[] = [];
+      while (index < lines.length && /^>\s?/.test((lines[index] ?? '').trim())) {
+        quoteLines.push((lines[index] ?? '').trim().replace(/^>\s?/, ''));
+        index += 1;
+      }
+      blocks.push({ kind: 'quote', text: quoteLines.join('\n').trim() });
+      continue;
+    }
+
+    const listMatch = trimmed.match(/^((?:[-*+])|\d+[.)])\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      const ordered = /\d+[.)]/.test(listMatch[1]);
+      const items: string[] = [];
+      while (index < lines.length) {
+        const current = (lines[index] ?? '').trim();
+        const item = current.match(/^((?:[-*+])|\d+[.)])\s+(.+)$/);
+        if (!item || /\d+[.)]/.test(item[1]) !== ordered) break;
+        items.push(item[2].trim());
+        index += 1;
+      }
+      blocks.push({ kind: 'list', ordered, items });
+      continue;
+    }
+
+    paragraph.push(line);
+    index += 1;
+  }
+
+  flushParagraph();
+  return blocks;
+}
+
+function tokenizeInlineMarkdown(value: string): InlineMarkdownToken[] {
+  const tokens: InlineMarkdownToken[] = [];
+  const pattern = /(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(value)) !== null) {
+    if (match.index > cursor) {
+      tokens.push({ kind: 'text', text: value.slice(cursor, match.index) });
+    }
+
+    const raw = match[0];
+    if (raw.startsWith('**') || raw.startsWith('__')) {
+      tokens.push({ kind: 'bold', text: raw.slice(2, -2) });
+    } else if (raw.startsWith('`')) {
+      tokens.push({ kind: 'code', text: raw.slice(1, -1) });
+    } else {
+      const link = raw.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      tokens.push(
+        link ? { kind: 'link', text: link[1], url: link[2] } : { kind: 'text', text: raw }
+      );
+    }
+
+    cursor = match.index + raw.length;
+  }
+
+  if (cursor < value.length) {
+    tokens.push({ kind: 'text', text: value.slice(cursor) });
+  }
+
+  return tokens.length > 0 ? tokens : [{ kind: 'text', text: value }];
 }
 
 function formatTimestamp(value?: string): string {
@@ -181,6 +527,38 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function SwipeBackScreen({ children, onBack }: { children: ReactNode; onBack: () => void }) {
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (event, gesture) => {
+          const startX = event.nativeEvent.pageX - gesture.dx;
+          const horizontal = gesture.dx > SWIPE_BACK_ACTIVATION_DISTANCE;
+          const mostlyHorizontal = Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.6;
+          return startX <= SWIPE_BACK_EDGE_WIDTH && horizontal && mostlyHorizontal;
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          const completedByDistance =
+            gesture.dx >= SWIPE_BACK_MIN_DISTANCE &&
+            Math.abs(gesture.dy) <= SWIPE_BACK_MAX_VERTICAL_DISTANCE;
+          const completedByVelocity =
+            gesture.dx >= SWIPE_BACK_MIN_DISTANCE / 2 && gesture.vx >= SWIPE_BACK_MIN_VELOCITY;
+          if (completedByDistance || completedByVelocity) {
+            onBack();
+          }
+        },
+        onPanResponderTerminationRequest: () => true,
+      }),
+    [onBack]
+  );
+
+  return (
+    <SafeAreaView style={styles.page} {...panResponder.panHandlers}>
+      {children}
+    </SafeAreaView>
+  );
+}
+
 export function App() {
   const [booting, setBooting] = useState(true);
   const [connection, setConnection] = useState<MobileConnection | null>(null);
@@ -189,9 +567,11 @@ export function App() {
     token: '',
   });
   const [snapshot, setSnapshot] = useState<MobileDashboardSnapshot | null>(null);
+  const [homeTab, setHomeTab] = useState<HomeTab>('home');
   const [selectedProjectId, setSelectedProjectId] = useState('all');
   const [taskScope, setTaskScope] = useState<TaskScope>('all');
-  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [demandProjectId, setDemandProjectId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
@@ -207,9 +587,11 @@ export function App() {
     setConnectDraft(next);
     setConnection(next);
     setSnapshot(null);
+    setHomeTab('home');
     setSelectedProjectId('all');
     setTaskScope('all');
-    setExpandedTaskId(null);
+    setSelectedTaskId(null);
+    setSelectedSessionId(null);
     setError(null);
     await saveConnection(next);
     return true;
@@ -300,16 +682,35 @@ export function App() {
     });
   }, [openProjectIds, selectedProjectId, snapshot, taskScope]);
 
+  const selectedTask = useMemo(
+    () => snapshot?.tasks.find((task) => task.id === selectedTaskId) ?? null,
+    [selectedTaskId, snapshot]
+  );
+
+  const recentTasks = useMemo(
+    () =>
+      [...(snapshot?.tasks ?? [])]
+        .sort((a, b) => {
+          const aTime = Date.parse(a.lastInteractedAt ?? a.updatedAt ?? '');
+          const bTime = Date.parse(b.lastInteractedAt ?? b.updatedAt ?? '');
+          return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+        })
+        .slice(0, 4),
+    [snapshot]
+  );
+
   useEffect(() => {
-    if (!expandedTaskId) return;
-    if (filteredTasks.some((task) => task.id === expandedTaskId)) return;
-    setExpandedTaskId(null);
-  }, [expandedTaskId, filteredTasks]);
+    if (!selectedTaskId || selectedTask) return;
+    setSelectedTaskId(null);
+    setSelectedSessionId(null);
+  }, [selectedTask, selectedTaskId]);
 
   const handleMetricSelect = useCallback((scope: TaskScope) => {
     setTaskScope(scope);
     setSelectedProjectId('all');
-    setExpandedTaskId(null);
+    setSelectedTaskId(null);
+    setSelectedSessionId(null);
+    setHomeTab('tasks');
   }, []);
 
   const handleConnect = useCallback(async () => {
@@ -351,6 +752,7 @@ export function App() {
       });
       setPrompt('');
       setSelectedProjectId(result.task.projectId);
+      setHomeTab('tasks');
       await loadDashboard(true);
       setError(null);
     } catch (e) {
@@ -383,6 +785,33 @@ export function App() {
     );
   }
 
+  if (selectedTask && selectedSessionId) {
+    return (
+      <SessionDetailScreen
+        connection={connection}
+        projects={snapshot?.projects ?? []}
+        sessionId={selectedSessionId}
+        task={selectedTask}
+        onBack={() => setSelectedSessionId(null)}
+      />
+    );
+  }
+
+  if (selectedTask) {
+    return (
+      <TaskSessionsScreen
+        connection={connection}
+        projects={snapshot?.projects ?? []}
+        task={selectedTask}
+        onBack={() => {
+          setSelectedTaskId(null);
+          setSelectedSessionId(null);
+        }}
+        onOpenSession={(sessionId) => setSelectedSessionId(sessionId)}
+      />
+    );
+  }
+
   return (
     <SafeAreaView style={styles.page}>
       <StatusBar style="dark" />
@@ -390,74 +819,93 @@ export function App() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              tintColor={COLORS.charcoal}
-              onRefresh={handleRefresh}
-            />
-          }
-        >
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.kicker}>Yoda Mobile</Text>
-              <Text style={styles.title}>Project control</Text>
-            </View>
-            <Pressable
-              accessibilityLabel="Disconnect"
-              style={styles.iconButton}
-              onPress={() => {
+        <View style={styles.homeShell}>
+          <ScrollView
+            style={styles.homeScroll}
+            contentContainerStyle={styles.homeScrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                tintColor={COLORS.charcoal}
+                onRefresh={handleRefresh}
+              />
+            }
+          >
+            <HomeHeader
+              tab={homeTab}
+              onDisconnect={() => {
                 void clearConnection();
                 setConnection(null);
                 setSnapshot(null);
-                setExpandedTaskId(null);
+                setSelectedTaskId(null);
+                setSelectedSessionId(null);
               }}
-            >
-              <Ionicons color={COLORS.charcoal} name="log-out-outline" size={21} />
-            </Pressable>
-          </View>
+            />
 
-          {error ? <Notice message={error} tone="error" /> : null}
-          {loading && !snapshot ? <ActivityIndicator color={COLORS.charcoal} /> : null}
+            {error ? <Notice message={error} tone="error" /> : null}
+            {loading && !snapshot ? <ActivityIndicator color={COLORS.charcoal} /> : null}
 
-          {snapshot ? (
-            <>
-              <Metrics
-                selectedScope={taskScope}
-                snapshot={snapshot}
-                onSelectScope={handleMetricSelect}
-              />
-              <ProjectRail
-                projects={visibleProjects}
-                selectedProjectId={selectedProjectId}
-                onSelect={(projectId) => {
-                  setSelectedProjectId(projectId);
-                  setExpandedTaskId(null);
-                }}
-              />
-              <DemandComposer
-                projects={visibleProjects}
-                prompt={prompt}
-                selectedProjectId={demandProjectId}
-                submitting={submitting}
-                onPromptChange={setPrompt}
-                onProjectChange={setDemandProjectId}
-                onSubmit={handleSubmitDemand}
-              />
-              <TaskList
-                expandedTaskId={expandedTaskId}
-                projects={snapshot.projects}
-                tasks={filteredTasks}
-                title={selectedProjectId === 'all' ? taskScopeLabel(taskScope) : 'Project tasks'}
-                onToggleTask={(taskId) => {
-                  setExpandedTaskId((current) => (current === taskId ? null : taskId));
-                }}
-              />
-            </>
-          ) : null}
-        </ScrollView>
+            {snapshot ? (
+              <>
+                {homeTab === 'home' ? (
+                  <HomeDashboard
+                    projects={visibleProjects}
+                    recentTasks={recentTasks}
+                    snapshot={snapshot}
+                    onNewRequest={() => setHomeTab('request')}
+                    onOpenTask={setSelectedTaskId}
+                    onOpenTasks={() => setHomeTab('tasks')}
+                    onSelectScope={handleMetricSelect}
+                  />
+                ) : null}
+
+                {homeTab === 'tasks' ? (
+                  <TasksWorkspace
+                    projects={snapshot.projects}
+                    selectedProjectId={selectedProjectId}
+                    selectedScope={taskScope}
+                    tasks={filteredTasks}
+                    visibleProjects={visibleProjects}
+                    onOpenTask={setSelectedTaskId}
+                    onSelectProject={(projectId) => {
+                      setSelectedProjectId(projectId);
+                      setSelectedTaskId(null);
+                      setSelectedSessionId(null);
+                    }}
+                    onSelectScope={setTaskScope}
+                  />
+                ) : null}
+
+                {homeTab === 'request' ? (
+                  <DemandComposer
+                    projects={visibleProjects}
+                    prompt={prompt}
+                    selectedProjectId={demandProjectId}
+                    submitting={submitting}
+                    onPromptChange={setPrompt}
+                    onProjectChange={setDemandProjectId}
+                    onSubmit={handleSubmitDemand}
+                  />
+                ) : null}
+
+                {homeTab === 'projects' ? (
+                  <ProjectDirectory
+                    projects={visibleProjects}
+                    selectedProjectId={selectedProjectId}
+                    onSelect={(projectId) => {
+                      setSelectedProjectId(projectId);
+                      setTaskScope('all');
+                      setSelectedTaskId(null);
+                      setSelectedSessionId(null);
+                      setHomeTab('tasks');
+                    }}
+                  />
+                ) : null}
+              </>
+            ) : null}
+          </ScrollView>
+          <HomeTabBar activeTab={homeTab} onSelect={setHomeTab} />
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -558,6 +1006,309 @@ function Notice({ message, tone }: { message: string; tone: 'error' | 'info' }) 
         size={18}
       />
       <Text style={styles.noticeText}>{message}</Text>
+    </View>
+  );
+}
+
+function HomeHeader({ tab, onDisconnect }: { tab: HomeTab; onDisconnect: () => void }) {
+  const copy = homeTabTitle(tab);
+  return (
+    <View style={styles.homeHeader}>
+      <View style={styles.homeHeaderTop}>
+        <View style={styles.homeBrandRow}>
+          <View style={styles.homeBrandMark}>
+            <Ionicons color={COLORS.surface} name="git-network-outline" size={18} />
+          </View>
+          <View>
+            <Text style={styles.kicker}>{copy.eyebrow}</Text>
+            <Text style={styles.homeConnection}>Desktop connected</Text>
+          </View>
+        </View>
+        <Pressable accessibilityLabel="Disconnect" style={styles.iconButton} onPress={onDisconnect}>
+          <Ionicons color={COLORS.charcoal} name="log-out-outline" size={21} />
+        </Pressable>
+      </View>
+      <Text style={styles.homeTitle}>{copy.title}</Text>
+      <Text style={styles.homeSubtitle}>{copy.subtitle}</Text>
+    </View>
+  );
+}
+
+function HomeDashboard({
+  projects,
+  recentTasks,
+  snapshot,
+  onNewRequest,
+  onOpenTask,
+  onOpenTasks,
+  onSelectScope,
+}: {
+  projects: MobileProjectSummary[];
+  recentTasks: MobileTaskSummary[];
+  snapshot: MobileDashboardSnapshot;
+  onNewRequest: () => void;
+  onOpenTask: (taskId: string) => void;
+  onOpenTasks: () => void;
+  onSelectScope: (scope: TaskScope) => void;
+}) {
+  const primaryTask = recentTasks[0];
+  return (
+    <>
+      <View style={styles.commandPanel}>
+        <View style={styles.commandPanelTop}>
+          <View>
+            <Text style={styles.commandPanelLabel}>Live workspace</Text>
+            <Text style={styles.commandPanelValue}>{snapshot.metrics.activeTaskCount}</Text>
+          </View>
+          <View style={styles.commandPanelBadge}>
+            <Ionicons color={COLORS.green} name="radio-outline" size={15} />
+            <Text style={styles.commandPanelBadgeText}>Online</Text>
+          </View>
+        </View>
+        <Text style={styles.commandPanelText}>
+          {snapshot.metrics.inProgressTaskCount} running · {snapshot.metrics.reviewTaskCount} ready
+          for review · {snapshot.metrics.openProjectCount} open projects
+        </Text>
+        <View style={styles.quickActions}>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.quickActionPrimary,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={onNewRequest}
+          >
+            <Ionicons color={COLORS.surface} name="add-outline" size={18} />
+            <Text style={styles.quickActionPrimaryText}>New request</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.quickActionSecondary,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={onOpenTasks}
+          >
+            <Ionicons color={COLORS.charcoal} name="list-outline" size={18} />
+            <Text style={styles.quickActionSecondaryText}>Tasks</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <Metrics selectedScope="all" snapshot={snapshot} onSelectScope={onSelectScope} />
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recent work</Text>
+          <Pressable accessibilityRole="button" onPress={onOpenTasks}>
+            <Text style={styles.sectionAction}>View all</Text>
+          </Pressable>
+        </View>
+        {primaryTask ? (
+          <>
+            <TaskRow
+              projectLabel={projectName(projects, primaryTask.projectId)}
+              task={primaryTask}
+              onPress={() => onOpenTask(primaryTask.id)}
+            />
+            {recentTasks.slice(1, 3).map((task) => (
+              <CompactTaskRow
+                key={task.id}
+                projectLabel={projectName(projects, task.projectId)}
+                task={task}
+                onPress={() => onOpenTask(task.id)}
+              />
+            ))}
+          </>
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons color={COLORS.muted} name="sparkles-outline" size={22} />
+            <Text style={styles.emptyText}>No active tasks yet.</Text>
+          </View>
+        )}
+      </View>
+    </>
+  );
+}
+
+function TasksWorkspace({
+  projects,
+  selectedProjectId,
+  selectedScope,
+  tasks,
+  visibleProjects,
+  onOpenTask,
+  onSelectProject,
+  onSelectScope,
+}: {
+  projects: MobileProjectSummary[];
+  selectedProjectId: string;
+  selectedScope: TaskScope;
+  tasks: MobileTaskSummary[];
+  visibleProjects: MobileProjectSummary[];
+  onOpenTask: (taskId: string) => void;
+  onSelectProject: (projectId: string) => void;
+  onSelectScope: (scope: TaskScope) => void;
+}) {
+  return (
+    <>
+      <TaskScopeControl selectedScope={selectedScope} onSelectScope={onSelectScope} />
+      <ProjectRail
+        projects={visibleProjects}
+        selectedProjectId={selectedProjectId}
+        onSelect={onSelectProject}
+      />
+      <TaskList
+        projects={projects}
+        tasks={tasks}
+        title={selectedProjectId === 'all' ? taskScopeLabel(selectedScope) : 'Project tasks'}
+        onOpenTask={onOpenTask}
+      />
+    </>
+  );
+}
+
+function TaskScopeControl({
+  selectedScope,
+  onSelectScope,
+}: {
+  selectedScope: TaskScope;
+  onSelectScope: (scope: TaskScope) => void;
+}) {
+  const scopes: Array<{ label: string; value: TaskScope }> = [
+    { label: 'All', value: 'all' },
+    { label: 'Open', value: 'open' },
+    { label: 'Running', value: 'inProgress' },
+    { label: 'Review', value: 'review' },
+  ];
+  return (
+    <View style={styles.scopeControl}>
+      {scopes.map((scope) => {
+        const active = selectedScope === scope.value;
+        return (
+          <Pressable
+            key={scope.value}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.scopeButton,
+              active ? styles.scopeButtonActive : null,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => onSelectScope(scope.value)}
+          >
+            <Text style={[styles.scopeButtonText, active ? styles.scopeButtonTextActive : null]}>
+              {scope.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function ProjectDirectory({
+  projects,
+  selectedProjectId,
+  onSelect,
+}: {
+  projects: MobileProjectSummary[];
+  selectedProjectId: string;
+  onSelect: (projectId: string) => void;
+}) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Projects</Text>
+        <Text style={styles.sectionMeta}>{projects.length}</Text>
+      </View>
+      {projects.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons color={COLORS.muted} name="folder-open-outline" size={22} />
+          <Text style={styles.emptyText}>No projects available.</Text>
+        </View>
+      ) : (
+        projects.map((project) => (
+          <Pressable
+            key={project.id}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.projectDirectoryRow,
+              selectedProjectId === project.id ? styles.projectDirectoryRowActive : null,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => onSelect(project.id)}
+          >
+            <View style={styles.projectDirectoryIcon}>
+              <Ionicons
+                color={project.isOpen ? COLORS.green : COLORS.muted}
+                name={project.isOpen ? 'desktop-outline' : 'folder-outline'}
+                size={18}
+              />
+            </View>
+            <View style={styles.projectDirectoryBody}>
+              <Text style={styles.projectDirectoryName} numberOfLines={1}>
+                {project.displayName}
+              </Text>
+              <Text style={styles.projectDirectoryPath} numberOfLines={1}>
+                {project.path}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.projectDirectoryStatus,
+                project.isOpen ? styles.projectDirectoryStatusOpen : null,
+              ]}
+            >
+              {project.isOpen ? 'Open' : 'Idle'}
+            </Text>
+          </Pressable>
+        ))
+      )}
+    </View>
+  );
+}
+
+function HomeTabBar({
+  activeTab,
+  onSelect,
+}: {
+  activeTab: HomeTab;
+  onSelect: (tab: HomeTab) => void;
+}) {
+  const tabs: Array<{
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+    value: HomeTab;
+  }> = [
+    { icon: 'grid-outline', label: 'Home', value: 'home' },
+    { icon: 'checkmark-circle-outline', label: 'Tasks', value: 'tasks' },
+    { icon: 'add-circle-outline', label: 'New', value: 'request' },
+    { icon: 'folder-open-outline', label: 'Projects', value: 'projects' },
+  ];
+
+  return (
+    <View style={styles.bottomTabBar}>
+      {tabs.map((tab) => {
+        const active = activeTab === tab.value;
+        return (
+          <Pressable
+            key={tab.value}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            style={({ pressed }) => [
+              styles.bottomTabItem,
+              active ? styles.bottomTabItemActive : null,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => onSelect(tab.value)}
+          >
+            <Ionicons color={active ? COLORS.surface : COLORS.muted} name={tab.icon} size={19} />
+            <Text style={[styles.bottomTabLabel, active ? styles.bottomTabLabelActive : null]}>
+              {tab.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -769,18 +1520,720 @@ function DemandComposer({
   );
 }
 
+function ScreenHeader({
+  eyebrow,
+  title,
+  subtitle,
+  onBack,
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  onBack: () => void;
+}) {
+  return (
+    <View style={styles.screenHeader}>
+      <Pressable
+        accessibilityLabel="Go back"
+        accessibilityRole="button"
+        style={styles.backButton}
+        onPress={onBack}
+      >
+        <Ionicons color={COLORS.charcoal} name="chevron-back-outline" size={22} />
+      </Pressable>
+      <View style={styles.screenTitleBlock}>
+        <Text style={styles.kicker}>{eyebrow}</Text>
+        <Text style={styles.screenTitle} numberOfLines={2}>
+          {title}
+        </Text>
+        <Text style={styles.screenSubtitle} numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function TaskSessionsScreen({
+  connection,
+  projects,
+  task,
+  onBack,
+  onOpenSession,
+}: {
+  connection: MobileConnection;
+  projects: MobileProjectSummary[];
+  task: MobileTaskSummary;
+  onBack: () => void;
+  onOpenSession: (sessionId: string) => void;
+}) {
+  const [sessions, setSessions] = useState<MobileSessionSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadSessions = useCallback(
+    async (quiet = false) => {
+      if (!quiet) setLoading(true);
+      try {
+        const next = await fetchTaskSessions(connection, task.projectId, task.id);
+        setSessions(next.sessions);
+        setError(null);
+      } catch (e) {
+        setError(errorMessage(e));
+      } finally {
+        if (!quiet) setLoading(false);
+      }
+    },
+    [connection, task.id, task.projectId]
+  );
+
+  useEffect(() => {
+    let active = true;
+    const run = async (quiet = false) => {
+      if (!active) return;
+      await loadSessions(quiet);
+    };
+    void run(false);
+    const timer = setInterval(() => void run(true), SESSION_LIST_POLL_INTERVAL_MS);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [loadSessions]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadSessions(false);
+    setRefreshing(false);
+  }, [loadSessions]);
+
+  return (
+    <SwipeBackScreen onBack={onBack}>
+      <StatusBar style="dark" />
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={COLORS.charcoal}
+            onRefresh={handleRefresh}
+          />
+        }
+      >
+        <ScreenHeader
+          eyebrow="Task"
+          subtitle={projectName(projects, task.projectId)}
+          title={task.name}
+          onBack={onBack}
+        />
+
+        {error ? <Notice message={error} tone="error" /> : null}
+
+        <View style={styles.summaryPanel}>
+          <DetailItem label="Status" value={statusLabel(task.status)} />
+          <DetailItem label="Branch" value={task.taskBranch ?? 'No branch'} />
+          <DetailItem
+            label="Providers"
+            value={Object.keys(task.providerCounts).join(', ') || 'None'}
+          />
+          <DetailItem label="Updated" value={formatTimestamp(task.updatedAt)} />
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Sessions</Text>
+            <Text style={styles.sectionMeta}>{sessions.length}</Text>
+          </View>
+          {loading && sessions.length === 0 ? (
+            <ActivityIndicator color={COLORS.charcoal} />
+          ) : sessions.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons color={COLORS.muted} name="chatbubbles-outline" size={22} />
+              <Text style={styles.emptyText}>No sessions yet.</Text>
+            </View>
+          ) : (
+            sessions.map((session) => (
+              <SessionRow
+                key={session.id}
+                session={session}
+                onPress={() => onOpenSession(session.id)}
+              />
+            ))
+          )}
+        </View>
+      </ScrollView>
+    </SwipeBackScreen>
+  );
+}
+
+function SessionRow({ session, onPress }: { session: MobileSessionSummary; onPress: () => void }) {
+  const color = runtimeColor(session.runtimeStatus);
+  return (
+    <Pressable
+      accessibilityLabel={`Open session ${session.title}`}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.sessionRow, pressed ? styles.buttonPressed : null]}
+      onPress={onPress}
+    >
+      <View style={styles.sessionTopLine}>
+        <Text style={styles.sessionName} numberOfLines={2}>
+          {session.title}
+        </Text>
+        <View style={[styles.statusPill, { borderColor: color }]}>
+          <Text style={[styles.statusText, { color }]}>{runtimeLabel(session.runtimeStatus)}</Text>
+        </View>
+      </View>
+      <View style={styles.taskMetaLine}>
+        <MetaItem icon="hardware-chip-outline" label={session.providerId} />
+        <MetaItem
+          icon={session.running ? 'radio-outline' : 'pause-circle-outline'}
+          label={session.running ? 'Live' : 'Stopped'}
+        />
+        <MetaItem
+          icon="time-outline"
+          label={formatTimestamp(session.lastInteractedAt ?? session.updatedAt)}
+        />
+      </View>
+      <View style={styles.rowDisclosure}>
+        <Text style={styles.rowDisclosureText}>{session.sessionTitle ?? session.sessionId}</Text>
+        <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
+      </View>
+    </Pressable>
+  );
+}
+
+function SessionDetailScreen({
+  connection,
+  projects,
+  sessionId,
+  task,
+  onBack,
+}: {
+  connection: MobileConnection;
+  projects: MobileProjectSummary[];
+  sessionId: string;
+  task: MobileTaskSummary;
+  onBack: () => void;
+}) {
+  const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const isAtBottomRef = useRef(true);
+  const [detail, setDetail] = useState<MobileSessionDetail | null>(null);
+  const [outputMode, setOutputMode] = useState<SessionOutputMode>('rendered');
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const setBottomState = useCallback((next: boolean) => {
+    isAtBottomRef.current = next;
+    setIsAtBottom((current) => (current === next ? current : next));
+  }, []);
+
+  const scrollToBottom = useCallback((animated = true) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollViewRef.current?.scrollToEnd({ animated });
+      });
+    });
+  }, []);
+
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      setBottomState(distanceFromBottom <= SESSION_DETAIL_BOTTOM_THRESHOLD);
+    },
+    [setBottomState]
+  );
+
+  const handleScrollToBottomPress = useCallback(() => {
+    setBottomState(true);
+    scrollToBottom(true);
+  }, [scrollToBottom, setBottomState]);
+
+  const loadDetail = useCallback(
+    async (quiet = false) => {
+      if (!quiet) setLoading(true);
+      try {
+        const next = await fetchSessionDetail(connection, task.projectId, task.id, sessionId);
+        setDetail(next);
+        setError(null);
+      } catch (e) {
+        setError(errorMessage(e));
+      } finally {
+        if (!quiet) setLoading(false);
+      }
+    },
+    [connection, sessionId, task.id, task.projectId]
+  );
+
+  useEffect(() => {
+    let active = true;
+    const run = async (quiet = false) => {
+      if (!active) return;
+      await loadDetail(quiet);
+    };
+    void run(false);
+    const timer = setInterval(() => void run(true), SESSION_DETAIL_POLL_INTERVAL_MS);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [loadDetail]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDetail(false);
+    setRefreshing(false);
+  }, [loadDetail]);
+
+  const session = detail?.session;
+  const output = detail?.content.trimEnd() ?? '';
+  const latestTranscriptBlockId = detail?.transcript[detail.transcript.length - 1]?.id;
+
+  useEffect(() => {
+    if (!detail) return;
+    if (isAtBottomRef.current) scrollToBottom(true);
+  }, [
+    detail,
+    detail?.contentLength,
+    detail?.generatedAt,
+    latestTranscriptBlockId,
+    outputMode,
+    scrollToBottom,
+  ]);
+
+  return (
+    <SwipeBackScreen onBack={onBack}>
+      <StatusBar style="dark" />
+      <View style={styles.sessionDetailShell}>
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              tintColor={COLORS.charcoal}
+              onRefresh={handleRefresh}
+            />
+          }
+          scrollEventThrottle={80}
+          onContentSizeChange={() => {
+            if (detail && isAtBottomRef.current) scrollToBottom(true);
+          }}
+          onScroll={handleScroll}
+        >
+          <ScreenHeader
+            eyebrow="Session"
+            subtitle={projectName(projects, task.projectId)}
+            title={session?.title ?? 'Session output'}
+            onBack={onBack}
+          />
+
+          {error ? <Notice message={error} tone="error" /> : null}
+          {loading && !detail ? <ActivityIndicator color={COLORS.charcoal} /> : null}
+
+          {detail ? (
+            <>
+              <View style={styles.summaryPanel}>
+                <DetailItem label="Provider" value={detail.session.providerId} />
+                <DetailItem label="Runtime" value={runtimeLabel(detail.session.runtimeStatus)} />
+                <DetailItem label="Source" value={contentSourceLabel(detail.source)} />
+                <DetailItem
+                  label="Updated"
+                  value={formatTimestamp(detail.session.lastInteractedAt ?? detail.generatedAt)}
+                />
+              </View>
+              <View style={styles.outputHeader}>
+                <Text style={styles.sectionTitle}>Transcript</Text>
+                <Text style={styles.sectionMeta}>
+                  {detail.truncated
+                    ? `Tail ${detail.content.length}/${detail.contentLength}`
+                    : detail.contentLength}
+                </Text>
+              </View>
+              <OutputModeToggle mode={outputMode} onChange={setOutputMode} />
+              {outputMode === 'rendered' ? (
+                <RenderedSessionTranscript detail={detail} fallbackOutput={output} />
+              ) : (
+                <RawSessionOutput output={output} />
+              )}
+            </>
+          ) : null}
+        </ScrollView>
+        {detail && !isAtBottom ? (
+          <Pressable
+            accessibilityLabel="Scroll to bottom"
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.scrollToBottomButton,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={handleScrollToBottomPress}
+          >
+            <Ionicons color={COLORS.surface} name="arrow-down-outline" size={17} />
+            <Text style={styles.scrollToBottomText}>Bottom</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </SwipeBackScreen>
+  );
+}
+
+function OutputModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: SessionOutputMode;
+  onChange: (mode: SessionOutputMode) => void;
+}) {
+  const options: Array<{ label: string; value: SessionOutputMode }> = [
+    { label: 'Rendered', value: 'rendered' },
+    { label: 'Raw', value: 'raw' },
+  ];
+
+  return (
+    <View style={styles.outputModeControl}>
+      {options.map((option) => {
+        const active = option.value === mode;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.outputModeButton,
+              active ? styles.outputModeButtonActive : null,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => onChange(option.value)}
+          >
+            <Text style={[styles.outputModeText, active ? styles.outputModeTextActive : null]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function RenderedSessionTranscript({
+  detail,
+  fallbackOutput,
+}: {
+  detail: MobileSessionDetail;
+  fallbackOutput: string;
+}) {
+  const transcript = useMemo(
+    () => mergeAdjacentAssistantBlocks(detail.transcript),
+    [detail.transcript]
+  );
+
+  if (detail.transcript.length === 0) {
+    return <ReadableSessionOutput output={fallbackOutput} />;
+  }
+
+  return (
+    <View style={styles.transcriptList}>
+      {transcript.map((block) => (
+        <TranscriptBlock key={block.id} block={block} />
+      ))}
+    </View>
+  );
+}
+
+function TranscriptBlock({ block }: { block: MobileSessionTranscriptBlock }) {
+  const [toolExpanded, setToolExpanded] = useState(false);
+  const isUser = block.role === 'user';
+  const isAssistant = block.role === 'assistant';
+  const isTool = block.role === 'tool';
+  const isStatus = block.role === 'status';
+  const title =
+    block.title ??
+    (isUser ? 'You' : isAssistant ? 'Codex' : isTool ? 'Command' : isStatus ? 'Status' : 'Message');
+  const toggleToolExpanded = useCallback(() => {
+    setToolExpanded((current) => !current);
+  }, []);
+  const showBody = !isTool || toolExpanded;
+  const headerContent = (
+    <>
+      <View style={styles.transcriptTitleRow}>
+        <View
+          style={[
+            styles.transcriptRoleDot,
+            isUser ? styles.transcriptUserDot : null,
+            isTool ? styles.transcriptToolDot : null,
+            isStatus ? styles.transcriptStatusDot : null,
+          ]}
+        />
+        <Text
+          style={[styles.transcriptTitle, isUser ? styles.transcriptUserText : null]}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
+      </View>
+      <View style={styles.transcriptHeaderMeta}>
+        {block.timestamp ? (
+          <Text style={[styles.transcriptTime, isUser ? styles.transcriptUserMeta : null]}>
+            {formatTimestamp(block.timestamp)}
+          </Text>
+        ) : null}
+        {isTool ? (
+          <Ionicons
+            color={COLORS.muted}
+            name={toolExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+            size={17}
+          />
+        ) : null}
+      </View>
+    </>
+  );
+
+  return (
+    <View
+      style={[
+        styles.transcriptBlock,
+        isUser ? styles.transcriptUserBlock : null,
+        isTool ? styles.transcriptToolBlock : null,
+        isStatus ? styles.transcriptStatusBlock : null,
+      ]}
+    >
+      {isTool ? (
+        <Pressable
+          accessibilityLabel={`${toolExpanded ? 'Collapse' : 'Expand'} ${title}`}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.transcriptHeader, pressed ? styles.buttonPressed : null]}
+          onPress={toggleToolExpanded}
+        >
+          {headerContent}
+        </Pressable>
+      ) : (
+        <View style={styles.transcriptHeader}>{headerContent}</View>
+      )}
+      {isTool && !toolExpanded ? (
+        <Pressable
+          accessibilityLabel={`Expand ${title} details`}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.toolCollapsedBody, pressed ? styles.buttonPressed : null]}
+          onPress={toggleToolExpanded}
+        >
+          <Text style={styles.toolCollapsedText} numberOfLines={2}>
+            {summarizeToolContent(block.content)}
+          </Text>
+          <Text style={styles.toolCollapsedAction}>Show details</Text>
+        </Pressable>
+      ) : null}
+      {showBody && block.format === 'code' ? (
+        <CodeText value={block.content} />
+      ) : showBody && block.format === 'plain' ? (
+        <Text
+          selectable
+          style={[styles.markdownParagraph, isUser ? styles.transcriptUserText : null]}
+        >
+          {block.content}
+        </Text>
+      ) : showBody ? (
+        <RenderedMarkdown value={block.content} inverted={isUser} />
+      ) : null}
+    </View>
+  );
+}
+
+function RenderedMarkdown({ value, inverted = false }: { value: string; inverted?: boolean }) {
+  const blocks = useMemo(() => parseMarkdownBlocks(value), [value]);
+  if (blocks.length === 0) return null;
+
+  return (
+    <View style={styles.markdownStack}>
+      {blocks.map((block, index) => {
+        if (block.kind === 'heading') {
+          return (
+            <Text
+              key={index}
+              selectable
+              style={[
+                styles.markdownHeading,
+                block.level === 2 ? styles.markdownHeading2 : null,
+                block.level >= 3 ? styles.markdownHeading3 : null,
+                inverted ? styles.transcriptUserText : null,
+              ]}
+            >
+              {block.text}
+            </Text>
+          );
+        }
+
+        if (block.kind === 'code') {
+          return <CodeText key={index} language={block.language} value={block.text} />;
+        }
+
+        if (block.kind === 'quote') {
+          return (
+            <View
+              key={index}
+              style={[styles.markdownQuote, inverted ? styles.markdownQuoteInverted : null]}
+            >
+              <MarkdownInline
+                style={[styles.markdownQuoteText, inverted ? styles.transcriptUserText : null]}
+                inverted={inverted}
+                text={block.text}
+              />
+            </View>
+          );
+        }
+
+        if (block.kind === 'list') {
+          return (
+            <View key={index} style={styles.markdownList}>
+              {block.items.map((item, itemIndex) => (
+                <View key={`${itemIndex}-${item}`} style={styles.markdownListItem}>
+                  <Text
+                    style={[styles.markdownBullet, inverted ? styles.transcriptUserText : null]}
+                  >
+                    {block.ordered ? `${itemIndex + 1}.` : '•'}
+                  </Text>
+                  <MarkdownInline
+                    style={[
+                      styles.markdownParagraph,
+                      styles.markdownListText,
+                      inverted ? styles.transcriptUserText : null,
+                    ]}
+                    inverted={inverted}
+                    text={item}
+                  />
+                </View>
+              ))}
+            </View>
+          );
+        }
+
+        return (
+          <MarkdownInline
+            key={index}
+            style={[styles.markdownParagraph, inverted ? styles.transcriptUserText : null]}
+            inverted={inverted}
+            text={block.text}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+function MarkdownInline({
+  text,
+  style,
+  inverted = false,
+}: {
+  text: string;
+  style: StyleProp<TextStyle>;
+  inverted?: boolean;
+}) {
+  return (
+    <Text selectable style={style}>
+      {tokenizeInlineMarkdown(text).map((token, index) => {
+        if (token.kind === 'bold') {
+          return (
+            <Text key={index} style={styles.inlineBold}>
+              {token.text}
+            </Text>
+          );
+        }
+        if (token.kind === 'code') {
+          return (
+            <Text
+              key={index}
+              style={[styles.inlineCode, inverted ? styles.inlineCodeInverted : null]}
+            >
+              {token.text}
+            </Text>
+          );
+        }
+        if (token.kind === 'link') {
+          return (
+            <Text
+              key={index}
+              style={[styles.inlineLink, inverted ? styles.inlineLinkInverted : null]}
+            >
+              {token.text}
+            </Text>
+          );
+        }
+        return token.text;
+      })}
+    </Text>
+  );
+}
+
+function CodeText({ language, value }: { language?: string; value: string }) {
+  return (
+    <View style={styles.renderedCodeBlock}>
+      {language ? <Text style={styles.renderedCodeLang}>{language}</Text> : null}
+      <Text selectable style={styles.renderedCodeText}>
+        {value || 'No output.'}
+      </Text>
+    </View>
+  );
+}
+
+function ReadableSessionOutput({ output }: { output: string }) {
+  const readable = useMemo(() => parseReadableOutput(output), [output]);
+
+  if (readable.blocks.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons color={COLORS.muted} name="document-text-outline" size={22} />
+        <Text style={styles.emptyText}>No output captured yet.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.readableOutput}>
+      {readable.omittedCount > 0 ? (
+        <View style={styles.outputNotice}>
+          <Text style={styles.outputNoticeText}>{readable.omittedCount} earlier blocks in Raw</Text>
+        </View>
+      ) : null}
+      {readable.blocks.map((block) => (
+        <View
+          key={block.id}
+          style={[styles.outputBlock, block.kind === 'code' ? styles.outputCodeBlock : null]}
+        >
+          <Text
+            selectable
+            style={block.kind === 'code' ? styles.outputCodeText : styles.outputProseText}
+          >
+            {block.text}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function RawSessionOutput({ output }: { output: string }) {
+  return (
+    <View style={styles.terminalBox}>
+      <Text selectable style={styles.terminalText}>
+        {output || 'No output captured yet.'}
+      </Text>
+    </View>
+  );
+}
+
 function TaskList({
-  expandedTaskId,
   projects,
   tasks,
   title,
-  onToggleTask,
+  onOpenTask,
 }: {
-  expandedTaskId: string | null;
   projects: MobileProjectSummary[];
   tasks: MobileTaskSummary[];
   title: string;
-  onToggleTask: (taskId: string) => void;
+  onOpenTask: (taskId: string) => void;
 }) {
   return (
     <View style={styles.section}>
@@ -797,10 +2250,9 @@ function TaskList({
         tasks.map((task) => (
           <TaskRow
             key={task.id}
-            expanded={expandedTaskId === task.id}
             projectLabel={projectName(projects, task.projectId)}
             task={task}
-            onPress={() => onToggleTask(task.id)}
+            onPress={() => onOpenTask(task.id)}
           />
         ))
       )}
@@ -809,12 +2261,10 @@ function TaskList({
 }
 
 function TaskRow({
-  expanded,
   projectLabel,
   task,
   onPress,
 }: {
-  expanded: boolean;
   projectLabel: string;
   task: MobileTaskSummary;
   onPress: () => void;
@@ -832,11 +2282,7 @@ function TaskRow({
     <Pressable
       accessibilityLabel={`Open task ${task.name}`}
       accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.taskRow,
-        expanded ? styles.taskRowExpanded : null,
-        pressed ? styles.buttonPressed : null,
-      ]}
+      style={({ pressed }) => [styles.taskRow, pressed ? styles.buttonPressed : null]}
       onPress={onPress}
     >
       <View style={styles.taskTopLine}>
@@ -854,23 +2300,46 @@ function TaskRow({
       </Text>
       <View style={styles.taskMetaLine}>
         <MetaItem icon="pulse-outline" label={bootstrap} />
-        <MetaItem icon="chatbubbles-outline" label={`${task.conversationCount}`} />
+        <MetaItem icon="chatbubbles-outline" label={`${task.conversationCount} sessions`} />
         <MetaItem
           icon="time-outline"
           label={formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
         />
       </View>
-      {expanded ? (
-        <View style={styles.taskDetails}>
-          <DetailItem label="Branch" value={task.taskBranch ?? 'No branch'} />
-          <DetailItem label="Updated" value={formatTimestamp(task.updatedAt)} />
-          <DetailItem
-            label="Providers"
-            value={Object.keys(task.providerCounts).join(', ') || 'None'}
-          />
-          <DetailItem label="Review" value={task.needsReview ? 'Required' : 'Not required'} />
-        </View>
-      ) : null}
+      <View style={styles.rowDisclosure}>
+        <Text style={styles.rowDisclosureText}>Sessions</Text>
+        <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
+      </View>
+    </Pressable>
+  );
+}
+
+function CompactTaskRow({
+  projectLabel,
+  task,
+  onPress,
+}: {
+  projectLabel: string;
+  task: MobileTaskSummary;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`Open task ${task.name}`}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.compactTaskRow, pressed ? styles.buttonPressed : null]}
+      onPress={onPress}
+    >
+      <View style={styles.compactTaskDot} />
+      <View style={styles.compactTaskBody}>
+        <Text style={styles.compactTaskName} numberOfLines={1}>
+          {task.name}
+        </Text>
+        <Text style={styles.compactTaskProject} numberOfLines={1}>
+          {projectLabel} · {formatTimestamp(task.lastInteractedAt ?? task.updatedAt)}
+        </Text>
+      </View>
+      <Ionicons color={COLORS.muted} name="chevron-forward-outline" size={16} />
     </Pressable>
   );
 }
@@ -915,6 +2384,37 @@ const styles = StyleSheet.create({
     paddingBottom: 34,
     gap: 18,
   },
+  sessionDetailShell: {
+    flex: 1,
+  },
+  scrollToBottomButton: {
+    position: 'absolute',
+    right: 18,
+    bottom: Platform.OS === 'ios' ? 24 : 18,
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    borderRadius: 8,
+    backgroundColor: COLORS.charcoal,
+    paddingHorizontal: 13,
+  },
+  scrollToBottomText: {
+    color: COLORS.surface,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  homeShell: {
+    flex: 1,
+  },
+  homeScroll: {
+    flex: 1,
+  },
+  homeScrollContent: {
+    padding: 18,
+    paddingBottom: 20,
+    gap: 18,
+  },
   connectionContent: {
     flexGrow: 1,
     justifyContent: 'center',
@@ -944,6 +2444,150 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  homeHeader: {
+    gap: 9,
+  },
+  homeHeaderTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  homeBrandRow: {
+    minWidth: 0,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  homeBrandMark: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: COLORS.charcoal,
+  },
+  homeConnection: {
+    color: COLORS.green,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  homeTitle: {
+    color: COLORS.ink,
+    fontSize: 33,
+    fontWeight: '800',
+    lineHeight: 37,
+  },
+  homeSubtitle: {
+    maxWidth: 330,
+    color: COLORS.muted,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '600',
+  },
+  commandPanel: {
+    borderWidth: 1,
+    borderColor: COLORS.charcoal,
+    borderRadius: 8,
+    backgroundColor: COLORS.charcoal,
+    padding: 16,
+    gap: 14,
+  },
+  commandPanelTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  commandPanelLabel: {
+    color: '#D8D4CB',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  commandPanelValue: {
+    color: COLORS.surface,
+    fontSize: 42,
+    fontWeight: '800',
+    lineHeight: 46,
+  },
+  commandPanelBadge: {
+    minHeight: 31,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: '#555A60',
+    borderRadius: 8,
+    paddingHorizontal: 9,
+  },
+  commandPanelBadgeText: {
+    color: '#D8D4CB',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  commandPanelText: {
+    color: '#E7E4DC',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  quickActionPrimary: {
+    minHeight: 44,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 8,
+    backgroundColor: COLORS.blue,
+  },
+  quickActionPrimaryText: {
+    color: COLORS.surface,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  quickActionSecondary: {
+    minHeight: 44,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#555A60',
+    borderRadius: 8,
+    backgroundColor: '#F7F7F2',
+  },
+  quickActionSecondaryText: {
+    color: COLORS.charcoal,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  screenHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  backButton: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+  },
+  screenTitleBlock: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+  },
   kicker: {
     color: COLORS.muted,
     fontSize: 13,
@@ -954,6 +2598,17 @@ const styles = StyleSheet.create({
     color: COLORS.ink,
     fontSize: 31,
     fontWeight: '700',
+  },
+  screenTitle: {
+    color: COLORS.ink,
+    fontSize: 24,
+    fontWeight: '700',
+    lineHeight: 29,
+  },
+  screenSubtitle: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '600',
   },
   iconButton: {
     width: 42,
@@ -1061,6 +2716,14 @@ const styles = StyleSheet.create({
   section: {
     gap: 12,
   },
+  summaryPanel: {
+    gap: 8,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    padding: 13,
+  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1075,6 +2738,37 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 13,
     fontWeight: '600',
+  },
+  sectionAction: {
+    color: COLORS.blue,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  scopeControl: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: '#EFEEE7',
+    padding: 3,
+  },
+  scopeButton: {
+    minHeight: 36,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+  },
+  scopeButtonActive: {
+    backgroundColor: COLORS.surface,
+  },
+  scopeButtonText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  scopeButtonTextActive: {
+    color: COLORS.ink,
   },
   rail: {
     gap: 9,
@@ -1119,15 +2813,110 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
   },
-  taskRowExpanded: {
+  compactTaskRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  compactTaskDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.blue,
+  },
+  compactTaskBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+  },
+  compactTaskName: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  compactTaskProject: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  projectDirectoryRow: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    padding: 13,
+  },
+  projectDirectoryRowActive: {
     borderColor: COLORS.charcoal,
+  },
+  projectDirectoryIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#EFEEE7',
+  },
+  projectDirectoryBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+  },
+  projectDirectoryName: {
+    color: COLORS.ink,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  projectDirectoryPath: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  projectDirectoryStatus: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  projectDirectoryStatusOpen: {
+    color: COLORS.green,
+  },
+  sessionRow: {
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    padding: 14,
+    gap: 10,
   },
   taskTopLine: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
   },
+  sessionTopLine: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
   taskName: {
+    flex: 1,
+    color: COLORS.ink,
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 21,
+  },
+  sessionName: {
     flex: 1,
     color: COLORS.ink,
     fontSize: 16,
@@ -1144,11 +2933,20 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
   },
-  taskDetails: {
+  rowDisclosure: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
     borderTopWidth: 1,
     borderTopColor: COLORS.faint,
-    paddingTop: 10,
-    gap: 8,
+    paddingTop: 9,
+  },
+  rowDisclosureText: {
+    flex: 1,
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '700',
   },
   detailItem: {
     flexDirection: 'row',
@@ -1203,5 +3001,305 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 14,
     fontWeight: '600',
+  },
+  transcriptList: {
+    gap: 12,
+  },
+  transcriptBlock: {
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    padding: 14,
+    gap: 12,
+  },
+  transcriptUserBlock: {
+    borderColor: COLORS.charcoal,
+    backgroundColor: COLORS.charcoal,
+  },
+  transcriptToolBlock: {
+    borderColor: '#D0CCC2',
+    backgroundColor: '#F1F0EA',
+  },
+  transcriptStatusBlock: {
+    borderColor: COLORS.faint,
+    backgroundColor: '#EFEEE7',
+    paddingVertical: 10,
+  },
+  transcriptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  transcriptHeaderMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  transcriptTitleRow: {
+    minWidth: 0,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  transcriptRoleDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.blue,
+  },
+  transcriptUserDot: {
+    backgroundColor: COLORS.surface,
+  },
+  transcriptToolDot: {
+    backgroundColor: COLORS.amber,
+  },
+  transcriptStatusDot: {
+    backgroundColor: COLORS.muted,
+  },
+  transcriptTitle: {
+    minWidth: 0,
+    flex: 1,
+    color: COLORS.ink,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  transcriptTime: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  transcriptUserText: {
+    color: COLORS.surface,
+  },
+  transcriptUserMeta: {
+    color: '#D8D4CB',
+  },
+  toolCollapsedBody: {
+    gap: 7,
+    borderTopWidth: 1,
+    borderTopColor: '#D8D4CB',
+    paddingTop: 10,
+  },
+  toolCollapsedText: {
+    color: COLORS.muted,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  toolCollapsedAction: {
+    color: COLORS.charcoal,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  markdownStack: {
+    gap: 10,
+  },
+  markdownHeading: {
+    color: COLORS.ink,
+    fontSize: 21,
+    lineHeight: 27,
+    fontWeight: '800',
+  },
+  markdownHeading2: {
+    fontSize: 18,
+    lineHeight: 24,
+  },
+  markdownHeading3: {
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  markdownParagraph: {
+    color: COLORS.ink,
+    fontSize: 15,
+    lineHeight: 23,
+    fontWeight: '500',
+  },
+  markdownQuote: {
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.line,
+    paddingLeft: 10,
+  },
+  markdownQuoteInverted: {
+    borderLeftColor: '#D8D4CB',
+  },
+  markdownQuoteText: {
+    color: COLORS.muted,
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: '600',
+  },
+  markdownList: {
+    gap: 7,
+  },
+  markdownListItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  markdownBullet: {
+    width: 24,
+    color: COLORS.muted,
+    fontSize: 15,
+    lineHeight: 23,
+    fontWeight: '800',
+  },
+  markdownListText: {
+    minWidth: 0,
+    flex: 1,
+  },
+  inlineBold: {
+    fontWeight: '800',
+  },
+  inlineCode: {
+    color: COLORS.charcoal,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 13,
+    backgroundColor: '#EFEEE7',
+  },
+  inlineCodeInverted: {
+    color: COLORS.surface,
+    backgroundColor: '#4A4E52',
+  },
+  inlineLink: {
+    color: COLORS.blue,
+    fontWeight: '700',
+  },
+  inlineLinkInverted: {
+    color: '#D8E6FF',
+  },
+  renderedCodeBlock: {
+    borderWidth: 1,
+    borderColor: '#D0CCC2',
+    borderRadius: 8,
+    backgroundColor: '#111315',
+    padding: 11,
+    gap: 7,
+  },
+  renderedCodeLang: {
+    color: '#B9B4AA',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  renderedCodeText: {
+    color: '#F0EEE6',
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  outputHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  outputModeControl: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: '#EFEEE7',
+    padding: 3,
+  },
+  outputModeButton: {
+    minHeight: 36,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+  },
+  outputModeButtonActive: {
+    backgroundColor: COLORS.surface,
+  },
+  outputModeText: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  outputModeTextActive: {
+    color: COLORS.ink,
+  },
+  readableOutput: {
+    gap: 10,
+  },
+  outputNotice: {
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: '#EFEEE7',
+    padding: 10,
+  },
+  outputNoticeText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  outputBlock: {
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    padding: 14,
+  },
+  outputCodeBlock: {
+    borderColor: '#D0CCC2',
+    backgroundColor: '#F1F0EA',
+  },
+  outputProseText: {
+    color: COLORS.ink,
+    fontSize: 15,
+    lineHeight: 23,
+    fontWeight: '500',
+  },
+  outputCodeText: {
+    color: COLORS.charcoal,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  terminalBox: {
+    minHeight: 360,
+    borderWidth: 1,
+    borderColor: '#1F2328',
+    borderRadius: 8,
+    backgroundColor: '#111315',
+    padding: 12,
+  },
+  terminalText: {
+    color: '#F0EEE6',
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  bottomTabBar: {
+    flexDirection: 'row',
+    gap: 6,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.line,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 10,
+  },
+  bottomTabItem: {
+    minHeight: 50,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    borderRadius: 8,
+  },
+  bottomTabItemActive: {
+    backgroundColor: COLORS.charcoal,
+  },
+  bottomTabLabel: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  bottomTabLabelActive: {
+    color: COLORS.surface,
   },
 });

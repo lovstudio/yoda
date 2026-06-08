@@ -84,6 +84,10 @@ type WithChildren = { children?: React.ReactNode };
 type WithChildrenAndClass = { children?: React.ReactNode; className?: string };
 type AnchorProps = { href?: string; children?: React.ReactNode };
 type ImgProps = { src?: string; alt?: string };
+type TableCellProps = {
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+};
 
 function useFullComponents(
   isDark: boolean,
@@ -172,18 +176,22 @@ function useFullComponents(
         </blockquote>
       ),
       table: ({ children }: WithChildren) => (
-        <div className="mb-3 overflow-x-auto">
-          <table className="w-full border-collapse text-sm">{children}</table>
+        <div className="mb-3 min-w-0 max-w-full overflow-x-auto">
+          <table className="w-max min-w-full border-collapse text-sm">{children}</table>
         </div>
       ),
       thead: ({ children }: WithChildren) => (
         <thead className="border-b border-border bg-muted/30">{children}</thead>
       ),
-      th: ({ children }: WithChildren) => (
-        <th className="px-3 py-2 text-left font-semibold text-foreground">{children}</th>
+      th: ({ children, style }: TableCellProps) => (
+        <th className="px-3 py-2 text-left font-semibold text-foreground" style={style}>
+          {children}
+        </th>
       ),
-      td: ({ children }: WithChildren) => (
-        <td className="border-t border-border px-3 py-2 text-foreground">{children}</td>
+      td: ({ children, style }: TableCellProps) => (
+        <td className="border-t border-border px-3 py-2 text-foreground" style={style}>
+          {children}
+        </td>
       ),
       hr: () => <hr className="my-6 border-border" />,
       img: ({ src, alt }: ImgProps) => {
@@ -241,6 +249,24 @@ function useCompactComponents() {
         );
       },
       pre: ({ children }: WithChildren) => <pre className="mb-2 overflow-x-auto">{children}</pre>,
+      table: ({ children }: WithChildren) => (
+        <div className="mb-2 min-w-0 max-w-full overflow-x-auto">
+          <table className="w-max min-w-full border-collapse text-[11px]">{children}</table>
+        </div>
+      ),
+      thead: ({ children }: WithChildren) => (
+        <thead className="border-b border-border bg-muted/30">{children}</thead>
+      ),
+      th: ({ children, style }: TableCellProps) => (
+        <th className="px-2 py-1.5 text-left font-semibold text-foreground" style={style}>
+          {children}
+        </th>
+      ),
+      td: ({ children, style }: TableCellProps) => (
+        <td className="border-t border-border px-2 py-1.5 text-foreground" style={style}>
+          {children}
+        </td>
+      ),
       strong: ({ children }: WithChildren) => (
         <strong className="font-semibold text-foreground">{children}</strong>
       ),

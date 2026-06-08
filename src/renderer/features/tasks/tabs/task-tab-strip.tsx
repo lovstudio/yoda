@@ -1,9 +1,26 @@
-import { Archive, ArchiveX, GitCompare, Loader2, MessageSquare, Plus, X } from 'lucide-react';
+import {
+  Archive,
+  ArchiveX,
+  Copy,
+  GitCompare,
+  LayoutDashboard,
+  Loader2,
+  MessageSquare,
+  Pin,
+  Plus,
+  X,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { buildTaskDeepLink } from '@shared/deep-links';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import {
+  FileActionsMenuItems,
+  useFileActions,
+} from '@renderer/features/tasks/components/file-actions';
+import { copyTaskLink } from '@renderer/features/tasks/components/task-context-menu';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { GitChangeStatusIcon } from '@renderer/features/tasks/diff-view/changes-panel/components/changes-list-item';
 import { runPreArchiveCommand } from '@renderer/features/tasks/run-pre-archive-command';
@@ -13,6 +30,7 @@ import { splitPath } from '@renderer/features/tasks/utils';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { ReorderList } from '@renderer/lib/components/reorder-list';
 import { FileIcon } from '@renderer/lib/editor/file-icon';
+import i18n from '@renderer/lib/i18n';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import {
   ContextMenu,
@@ -110,10 +128,20 @@ export const TaskTabStrip = observer(function TaskTabStrip() {
           {(tabId) => {
             const tab = tabsById.get(tabId);
             if (!tab) return null;
+            const index = tabIds.indexOf(tab.tabId);
+            // Closeable tabs are every tab except the fixed overview tab.
+            const closeableCount = tabs.filter((other) => other.kind !== 'overview').length;
+            const canCloseOthers = tab.kind !== 'overview' && closeableCount > 1;
+            const canCloseToRight = index >= 0 && index < tabIds.length - 1;
+            const tabPath = tab.kind === 'file' || tab.kind === 'diff' ? tab.path : undefined;
+            const absolutePath = tabPath
+              ? `${provisioned.path.replace(/\/+$/, '')}/${tabPath}`
+              : undefined;
             return (
               <TaskTab
                 tab={tab}
                 isActive={activeTabId === tab.tabId}
+                fileSourcePath={absolutePath}
                 closeLabel={t('tasks.tabs.close')}
                 previewLabel={t('tasks.tabs.preview')}
                 onSelect={() => {
@@ -122,6 +150,13 @@ export const TaskTabStrip = observer(function TaskTabStrip() {
                 }}
                 onClose={() => tabManager.closeTab(tab.tabId)}
                 onPin={() => tabManager.pinTab(tab.tabId)}
+                onCloseOthers={
+                  canCloseOthers ? () => tabManager.closeOtherTabs(tab.tabId) : undefined
+                }
+                onCloseToRight={
+                  canCloseToRight ? () => tabManager.closeTabsToRight(tab.tabId) : undefined
+                }
+                onCloseAll={closeableCount > 0 ? () => tabManager.closeAllTabs() : undefined}
                 archiveLabel={t('tasks.tabs.archiveConversation')}
                 archiveSkipPreLabel={t('tasks.tabs.archiveConversationSkipPre')}
                 isArchiving={
@@ -131,6 +166,19 @@ export const TaskTabStrip = observer(function TaskTabStrip() {
                 onArchiveConversation={
                   tab.kind === 'conversation'
                     ? (options) => handleArchiveConversation(tab.conversationId, options)
+                    : undefined
+                }
+                onCopyYodaLink={
+                  tab.kind === 'conversation'
+                    ? () =>
+                        void copyTaskLink(
+                          buildTaskDeepLink({
+                            projectId,
+                            taskId,
+                            conversationId: tab.conversationId,
+                          }),
+                          t
+                        )
                     : undefined
                 }
               />
@@ -160,6 +208,7 @@ export const TaskTabStrip = observer(function TaskTabStrip() {
 function TaskTab({
   tab,
   isActive,
+  fileSourcePath,
   closeLabel,
   previewLabel,
   archiveLabel,
@@ -169,10 +218,16 @@ function TaskTab({
   onSelect,
   onClose,
   onPin,
+  onCloseOthers,
+  onCloseToRight,
+  onCloseAll,
   onArchiveConversation,
+  onCopyYodaLink,
 }: {
   tab: ResolvedTab;
   isActive: boolean;
+  /** Absolute path of the file/diff this tab targets, for file-action items. */
+  fileSourcePath?: string;
   closeLabel: string;
   previewLabel: string;
   archiveLabel: string;
@@ -182,7 +237,11 @@ function TaskTab({
   onSelect: () => void;
   onClose: () => void;
   onPin: () => void;
+  onCloseOthers?: () => void;
+  onCloseToRight?: () => void;
+  onCloseAll?: () => void;
   onArchiveConversation?: (options?: { skipPreCommand?: boolean }) => void;
+  onCopyYodaLink?: () => void;
 }) {
   const meta = getTabMeta(tab);
   const title = tab.isPreview ? `${meta.title} (${previewLabel})` : meta.title;
@@ -190,7 +249,7 @@ function TaskTab({
   const tabContent = (
     <div
       className={cn(
-        'group/tab relative flex h-full w-48 min-w-32 max-w-56 items-stretch border-r border-border text-foreground-muted',
+        'group/tab relative flex h-full w-fit max-w-56 items-stretch border-r border-border text-foreground-muted',
         'bg-background-secondary hover:bg-background-secondary-1/70',
         isActive && 'bg-background text-foreground hover:bg-background',
         isArchiving && 'text-foreground/40'
@@ -233,54 +292,124 @@ function TaskTab({
           <Loader2 className="m-auto size-3.5 animate-spin" />
         </span>
       )}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              aria-label={closeLabel}
-              className={cn(
-                'mr-1 flex size-6 shrink-0 self-center rounded-md text-foreground-passive opacity-0 outline-none transition-colors hover:bg-background-2 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring group-hover/tab:opacity-100 group-focus-within/tab:opacity-100',
-                isArchiving && 'hidden'
-              )}
-              onClick={(event) => {
-                event.stopPropagation();
-                onClose();
-              }}
-            >
-              <X className="m-auto size-3.5" />
-            </button>
-          }
-        />
-        <TooltipContent>{closeLabel}</TooltipContent>
-      </Tooltip>
+      {/* The fixed overview tab cannot be closed, so it has no close button. */}
+      {tab.kind !== 'overview' && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                aria-label={closeLabel}
+                className={cn(
+                  'flex h-6 w-0 shrink-0 self-center overflow-hidden rounded-md text-foreground-passive opacity-0 outline-none transition-all hover:bg-background-2 hover:text-foreground focus-visible:w-6 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring group-hover/tab:mr-1 group-hover/tab:w-6 group-hover/tab:opacity-100 group-focus-within/tab:mr-1 group-focus-within/tab:w-6 group-focus-within/tab:opacity-100',
+                  isArchiving && 'hidden'
+                )}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onClose();
+                }}
+              >
+                <X className="m-auto size-3.5" />
+              </button>
+            }
+          />
+          <TooltipContent>{closeLabel}</TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 
-  if (tab.kind !== 'conversation' || !onArchiveConversation) return tabContent;
+  const isCloseable = tab.kind !== 'overview';
+  const isPreview = tab.kind !== 'overview' && tab.isPreview;
+  const fileActions = useFileActions(fileSourcePath ?? '');
 
   return (
     <ContextMenu>
       <ContextMenuTrigger className="flex h-full shrink-0">{tabContent}</ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
-        <ContextMenuItem onClick={() => onArchiveConversation()} disabled={isArchiving}>
-          {isArchiving ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Archive className="size-4" />
-          )}
-          {archiveLabel}
-        </ContextMenuItem>
-        {hasPreArchiveCommand && (
+      <ContextMenuContent className="w-max overflow-x-visible">
+        {isCloseable && (
+          <ContextMenuItem className="whitespace-nowrap" onClick={onClose}>
+            <X className="size-4" />
+            {closeLabel}
+          </ContextMenuItem>
+        )}
+        {onCloseOthers && (
+          <ContextMenuItem className="whitespace-nowrap" onClick={onCloseOthers}>
+            <X className="size-4" />
+            {i18n.t('tasks.tabs.closeOthers')}
+          </ContextMenuItem>
+        )}
+        {onCloseToRight && (
+          <ContextMenuItem className="whitespace-nowrap" onClick={onCloseToRight}>
+            <X className="size-4" />
+            {i18n.t('tasks.tabs.closeToRight')}
+          </ContextMenuItem>
+        )}
+        {onCloseAll && (
+          <ContextMenuItem className="whitespace-nowrap" onClick={onCloseAll}>
+            <X className="size-4" />
+            {i18n.t('tasks.tabs.closeAll')}
+          </ContextMenuItem>
+        )}
+        {isPreview && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem className="whitespace-nowrap" onClick={onPin}>
+              <Pin className="size-4" />
+              {i18n.t('tasks.tabs.pin')}
+            </ContextMenuItem>
+          </>
+        )}
+        {fileSourcePath && (
+          <>
+            <ContextMenuSeparator />
+            <FileActionsMenuItems
+              t={fileActions.t}
+              relativePath={fileActions.relativePath}
+              isRemote={fileActions.isRemote}
+              kind="file"
+              openInEditor={fileActions.openInEditor}
+              revealInFileTree={fileActions.revealInFileTree}
+              openFile={fileActions.openFile}
+              revealFile={fileActions.revealFile}
+              copyPath={fileActions.copyPath}
+            />
+          </>
+        )}
+        {onCopyYodaLink && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem className="whitespace-nowrap" onClick={onCopyYodaLink}>
+              <Copy className="size-4" />
+              {i18n.t('tasks.tabs.copyYodaLink')}
+            </ContextMenuItem>
+          </>
+        )}
+        {onArchiveConversation && (
           <>
             <ContextMenuSeparator />
             <ContextMenuItem
-              onClick={() => onArchiveConversation({ skipPreCommand: true })}
+              className="whitespace-nowrap"
+              onClick={() => onArchiveConversation()}
               disabled={isArchiving}
             >
-              <ArchiveX className="size-4" />
-              {archiveSkipPreLabel}
+              {isArchiving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Archive className="size-4" />
+              )}
+              {archiveLabel}
             </ContextMenuItem>
+            {hasPreArchiveCommand && (
+              <ContextMenuItem
+                className="whitespace-nowrap"
+                onClick={() => onArchiveConversation({ skipPreCommand: true })}
+                disabled={isArchiving}
+              >
+                <ArchiveX className="size-4" />
+                {archiveSkipPreLabel}
+              </ContextMenuItem>
+            )}
           </>
         )}
       </ContextMenuContent>
@@ -294,6 +423,11 @@ function getTabMeta(tab: ResolvedTab): {
   detail?: string;
   title: string;
 } {
+  if (tab.kind === 'overview') {
+    const label = i18n.t('tasks.tabs.overview');
+    return { icon: <LayoutDashboard className="size-3.5" />, label, title: label };
+  }
+
   if (tab.kind === 'conversation') {
     const providerId = tab.store.data.providerId;
     const config = agentConfig[providerId];

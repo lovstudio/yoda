@@ -3,9 +3,9 @@ import { skillsService } from '@main/core/skills/SkillsService';
 import { log } from '@main/lib/logger';
 
 export const skillsController = createRPCController({
-  getCatalog: async () => {
+  getCatalog: async (args?: { projectPath?: string }) => {
     try {
-      const catalog = await skillsService.getCatalogIndex();
+      const catalog = await skillsService.getCatalogIndex(args?.projectPath);
       return { success: true, data: catalog };
     } catch (error) {
       log.error('Failed to get skills catalog:', error);

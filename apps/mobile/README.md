@@ -30,6 +30,7 @@ YODA_MOBILE_GATEWAY_HOST=0.0.0.0
 YODA_MOBILE_GATEWAY_PORT=3879
 YODA_MOBILE_INSTALL_URL=https://example.com/yoda-mobile
 YODA_MOBILE_EXPO_URL=exp://192.168.1.10:8081
+YODA_MOBILE_METRO_DISABLED=1
 ```
 
 Disable the gateway:
@@ -54,7 +55,8 @@ native app yet; it runs the current mobile code from the local Expo development 
 pnpm run dev
 ```
 
-3. Start the mobile development server:
+3. Desktop startup auto-starts the local Expo development server on port `8081` when needed. Start
+   it manually only when you want a separate terminal, tunnel mode, or custom flags:
 
 ```bash
 pnpm mobile

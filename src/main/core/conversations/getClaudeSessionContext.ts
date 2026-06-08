@@ -1,7 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { ClaudeSessionContext, ClaudeSessionPrompt } from '@shared/conversations';
+import type {
+  ClaudeSessionContext,
+  ClaudeSessionPrompt,
+  SessionSummary,
+} from '@shared/conversations';
 import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
 import { log } from '@main/lib/logger';
 import { scanClaudeAgents } from './scanClaudeAgents';
@@ -32,6 +36,8 @@ export async function getClaudeSessionContext(
   const transcriptAgents = new Set<string>();
   const mcpServers = new Map<string, string>();
   const prompts: ClaudeSessionPrompt[] = [];
+  // Keep only the latest compaction summary — later compactions supersede earlier ones.
+  let summary: SessionSummary | null = null;
 
   for (const line of raw.split('\n')) {
     if (!line) continue;
@@ -44,6 +50,13 @@ export async function getClaudeSessionContext(
     }
 
     if (parsed.type === 'user') {
+      // Compaction-summary rows are runtime-authored "user" messages; surface
+      // them as the session summary, not as a user prompt.
+      const compactSummary = extractCompactSummary(parsed);
+      if (compactSummary) {
+        summary = compactSummary;
+        continue;
+      }
       const prompt = extractPrompt(parsed, prompts.length);
       if (prompt) prompts.push(prompt);
     }
@@ -64,7 +77,24 @@ export async function getClaudeSessionContext(
     skills,
     skillsListing: formatSkillListing(skills),
     prompts,
+    summary,
   };
+}
+
+/**
+ * Claude Code writes a compaction summary back into the transcript as a
+ * `user` row flagged `isCompactSummary`. The message content holds the full
+ * handoff summary ("This session is being continued from a previous
+ * conversation…"). We surface it verbatim — never re-summarize.
+ */
+function extractCompactSummary(row: Record<string, unknown>): SessionSummary | null {
+  if (row.isCompactSummary !== true) return null;
+  const message = row.message;
+  if (!message || typeof message !== 'object') return null;
+  const text = extractUserText((message as Record<string, unknown>).content);
+  if (!text) return null;
+  const timestamp = typeof row.timestamp === 'string' ? row.timestamp : null;
+  return { text, timestamp };
 }
 
 function formatSkillListing(skills: Array<{ name: string; description: string }>): string {

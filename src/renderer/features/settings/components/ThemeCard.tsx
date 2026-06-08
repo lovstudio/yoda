@@ -1,9 +1,11 @@
-import { Download, Monitor, Moon, Sun, Trash2, Upload } from 'lucide-react';
+import { Download, FileJson, Monitor, Moon, Sun, Trash2, Upload } from 'lucide-react';
 import React, { useCallback, useMemo, useRef, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '@shared/app-settings';
 import {
   createCustomThemeCollection,
+  CUSTOM_THEME_EXAMPLE,
+  CUSTOM_THEME_EXAMPLE_FILE_NAME,
   getCustomThemeId,
   parseCustomThemePackageText,
   toCustomThemeSelection,
@@ -13,6 +15,7 @@ import {
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
+import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
@@ -163,6 +166,57 @@ const ThemeCard: React.FC = () => {
     downloadJson(`${safeFileName(item.id)}.yoda-theme.json`, item);
   }, []);
 
+  const revealSavedFile = useCallback(
+    async (filePath: string) => {
+      try {
+        const result = await rpc.app.openIn({ app: 'finder', path: filePath, reveal: true });
+        if (!result?.success) throw new Error(result?.error ?? t('common.unknownError'));
+      } catch (error) {
+        toast({
+          title: t('settings.theme.revealSavedFileFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+        });
+      }
+    },
+    [t, toast]
+  );
+
+  const exportExampleTheme = useCallback(async () => {
+    try {
+      const filePath = await saveJsonFile({
+        title: t('settings.theme.saveExampleJsonTitle'),
+        fileName: CUSTOM_THEME_EXAMPLE_FILE_NAME,
+        data: CUSTOM_THEME_EXAMPLE,
+      });
+      if (!filePath) return;
+
+      toast({
+        title: t('settings.theme.themeJsonSaved'),
+        description: filePath,
+        action: {
+          label: t('settings.theme.revealSavedFile'),
+          onClick: () => void revealSavedFile(filePath),
+        },
+      });
+    } catch (error) {
+      if (isMissingSaveTextFileHandler(error)) {
+        downloadJson(CUSTOM_THEME_EXAMPLE_FILE_NAME, CUSTOM_THEME_EXAMPLE);
+        toast({
+          title: t('settings.theme.themeJsonDownloadStarted'),
+          description: t('settings.theme.restartForSaveReveal'),
+        });
+        return;
+      }
+
+      toast({
+        title: t('settings.theme.saveJsonFailed'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    }
+  }, [revealSavedFile, t, toast]);
+
   const exportAllThemes = useCallback(() => {
     if (customThemes.length === 0) return;
     downloadJson('yoda-custom-themes.json', createCustomThemeCollection(customThemes));
@@ -183,6 +237,15 @@ const ThemeCard: React.FC = () => {
             className="hidden"
             onChange={(event) => void handleImportFile(event)}
           />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void exportExampleTheme()}
+          >
+            <FileJson className="h-3.5 w-3.5" aria-hidden="true" />
+            {t('settings.theme.exampleJson')}
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -368,6 +431,33 @@ function downloadJson(fileName: string, data: unknown): void {
   link.download = fileName;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function saveJsonFile({
+  title,
+  fileName,
+  data,
+}: {
+  title: string;
+  fileName: string;
+  data: unknown;
+}): Promise<string | null> {
+  const result = await rpc.app.saveTextFileDialog({
+    title,
+    defaultPath: fileName,
+    content: `${JSON.stringify(data, null, 2)}\n`,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (!result.success) {
+    throw new Error(result.error);
+  }
+  if (result.canceled) return null;
+  return result.filePath;
+}
+
+function isMissingSaveTextFileHandler(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("No handler registered for 'app.saveTextFileDialog'");
 }
 
 function safeFileName(value: string): string {

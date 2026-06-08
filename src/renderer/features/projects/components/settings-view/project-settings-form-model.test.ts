@@ -18,7 +18,6 @@ function makeForm(overrides: Partial<FormState> = {}): FormState {
   return {
     preservePatterns: '',
     shellSetup: '',
-    tmux: true,
     scriptSetup: '',
     scriptRun: '',
     scriptTeardown: '',
@@ -37,7 +36,6 @@ describe('project settings form model', () => {
       {
         preservePatterns: ['.env', '.env.local'],
         shellSetup: 'source .envrc',
-        tmux: true,
         scripts: {
           setup: 'pnpm install',
           run: 'pnpm dev',
@@ -59,7 +57,6 @@ describe('project settings form model', () => {
     expect(form).toEqual({
       preservePatterns: '.env\n.env.local',
       shellSetup: 'source .envrc',
-      tmux: true,
       scriptSetup: 'pnpm install',
       scriptRun: 'pnpm dev',
       scriptTeardown: 'docker compose down',
@@ -76,10 +73,6 @@ describe('project settings form model', () => {
       settingsToForm({ defaultBranch: { name: 'develop', remote: true } }, 'origin', [origin])
         .defaultBranch
     ).toEqual({ type: 'remote', branch: 'develop', remote: origin });
-  });
-
-  it('defaults missing tmux project settings to enabled', () => {
-    expect(settingsToForm({}, 'origin', [origin]).tmux).toBe(true);
   });
 
   it('preserves legacy script arrays as newline separated commands', () => {
@@ -100,7 +93,6 @@ describe('project settings form model', () => {
         makeForm({
           preservePatterns: ' .env \n\n.env.local ',
           shellSetup: 'source .envrc',
-          tmux: true,
           scriptRun: 'pnpm dev',
           worktreeDirectory: '../worktrees',
           defaultBranch: { type: 'remote', branch: 'main', remote: origin },
@@ -112,7 +104,6 @@ describe('project settings form model', () => {
     ).toEqual({
       preservePatterns: ['.env', '.env.local'],
       shellSetup: 'source .envrc',
-      tmux: true,
       scripts: {
         setup: undefined,
         run: 'pnpm dev',

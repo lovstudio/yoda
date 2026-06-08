@@ -9,6 +9,7 @@ import type {
   CodexMemoryFile,
   CodexSessionContext,
   CodexTurnContext,
+  SessionSummary,
 } from '@shared/conversations';
 import {
   findClosestCodexThreadTitleByCreatedAt,
@@ -41,7 +42,15 @@ type ParsedCodexRollout = {
   completedTurnCount: number;
   cliVersion: string | null;
   modelProvider: string | null;
+  summary: SessionSummary | null;
 };
+
+/**
+ * Codex wraps each compaction summary with this prefix and reinjects it as a
+ * `user` message (`prompts/templates/compact/summary_prefix.md`). We match on
+ * the prefix to surface the summary instead of treating it as a user prompt.
+ */
+const CODEX_SUMMARY_PREFIX = 'Another language model started to solve this problem';
 
 type CodexRolloutMeta = {
   id: string;
@@ -111,6 +120,7 @@ export async function getCodexSessionContext(
     prompts: parsed.prompts,
     turnContexts: parsed.turnContexts,
     completedTurnCount: parsed.completedTurnCount,
+    summary: parsed.summary,
   };
 }
 
@@ -462,6 +472,8 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
   const responseUserPrompts: ClaudeSessionPrompt[] = [];
   const turnContexts: CodexTurnContext[] = [];
   let completedTurnCount = 0;
+  // Keep only the latest compaction summary — later compactions supersede earlier ones.
+  let summary: SessionSummary | null = null;
 
   for (const line of raw.split('\n')) {
     if (!line) continue;
@@ -516,6 +528,8 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
           text,
           timestamp,
         });
+      } else if (payload.role === 'user' && text.startsWith(CODEX_SUMMARY_PREFIX)) {
+        summary = { text, timestamp };
       } else if (payload.role === 'user' && !isCodexEnvironmentMessage(text)) {
         responseUserPrompts.push({
           id: timestamp ?? `response-user-${responseUserPrompts.length}`,
@@ -544,6 +558,7 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
     completedTurnCount,
     cliVersion,
     modelProvider,
+    summary,
   };
 }
 
@@ -622,6 +637,7 @@ function emptyRollout(): ParsedCodexRollout {
     completedTurnCount: 0,
     cliVersion: null,
     modelProvider: null,
+    summary: null,
   };
 }
 

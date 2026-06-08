@@ -2,21 +2,22 @@ import type { TFunction } from 'i18next';
 import {
   Activity,
   Archive,
-  ArchiveX,
+  ArchiveRestore,
   CircleDot,
   CircleSlash,
+  ClipboardList,
   Copy,
   FileText,
   FolderInput,
   Info,
+  Link2,
   Pencil,
   Pin,
   PinOff,
   PlayCircle,
+  RefreshCw,
   RotateCcw,
   Settings2,
-  Terminal,
-  Trash2,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
@@ -84,15 +85,14 @@ interface TaskMenuActions extends TaskMenuInfoFields {
   onMarkNeedsReview: () => void;
   onUnmarkNeedsReview: () => void;
   onRename: () => void;
+  /** Archive the task. The pre-archive skill is session-level only and never runs here. */
   onArchive: () => void;
-  onArchiveSkipPreCommand?: () => void;
   onArchiveWithNote?: () => void;
-  onConfigurePreArchive?: () => void;
+  onCopyYodaLink?: () => void;
   onRestore?: () => void;
   onReconnect?: () => void;
   /** Restart the session. Pass a tmux override to force tmux on/off for this restart only. */
   onRestartSession?: (tmuxOverride?: boolean) => void;
-  onDelete: () => void;
   onRunScript?: () => void;
   canRunScript?: boolean;
   onConfigureScripts?: () => void;
@@ -102,9 +102,6 @@ interface TaskMenuActions extends TaskMenuInfoFields {
   /** Assign this task to a sidebar workspace, or null for the default. */
   onAssignWorkspace?: (workspaceId: string | null) => void;
 }
-
-/** Session-management group; restart is rendered inline after the last item in it. */
-const TASK_MANAGEMENT_GROUP = 2;
 
 interface MenuItemDescriptor {
   key: string;
@@ -120,18 +117,63 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   const { t } = useTranslation();
   const items: MenuItemDescriptor[] = [];
 
-  // group 0 — primary navigation
-  if (actions.onOpenDetails) {
+  // group 0 — task management: pin, rename, mark-review
+  if (actions.canPin) {
+    items.push(
+      actions.isPinned
+        ? {
+            key: 'unpin',
+            group: 0,
+            icon: PinOff,
+            label: t('tasks.context.unpinTask'),
+            onSelect: actions.onUnpin,
+          }
+        : {
+            key: 'pin',
+            group: 0,
+            icon: Pin,
+            label: t('tasks.context.pinTask'),
+            onSelect: actions.onPin,
+          }
+    );
+  }
+  items.push({
+    key: 'rename',
+    group: 0,
+    icon: Pencil,
+    label: t('common.rename'),
+    onSelect: actions.onRename,
+  });
+  if (actions.canMarkReview) {
+    items.push(
+      actions.needsReview
+        ? {
+            key: 'unmark-review',
+            group: 0,
+            icon: CircleSlash,
+            label: t('tasks.context.unmarkReview'),
+            onSelect: actions.onUnmarkNeedsReview,
+          }
+        : {
+            key: 'mark-review',
+            group: 0,
+            icon: CircleDot,
+            label: t('tasks.context.markForReview'),
+            onSelect: actions.onMarkNeedsReview,
+          }
+    );
+  }
+  if (actions.onRestartSession) {
     items.push({
-      key: 'open-details',
+      key: 'reopen',
       group: 0,
-      icon: Info,
-      label: actions.openDetailsLabel ?? t('tasks.context.openDetails'),
-      onSelect: actions.onOpenDetails,
+      icon: RefreshCw,
+      label: t('tasks.context.reopenTask'),
+      onSelect: () => actions.onRestartSession?.(),
     });
   }
 
-  // group 1 — copy
+  // group 1 — copy (ID first)
   if (actions.taskId) {
     items.push({
       key: 'copy-task-id',
@@ -147,123 +189,60 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     items.push({
       key: 'copy-task-basic-info',
       group: 1,
-      icon: Copy,
+      icon: ClipboardList,
       label: t('tasks.context.copyTaskBasicInfo'),
       onSelect: () => {
         void copyTaskBasicInfo(actions, t);
       },
     });
   }
-
-  // group 2 — task management
-  if (actions.canPin) {
-    items.push(
-      actions.isPinned
-        ? {
-            key: 'unpin',
-            group: 2,
-            icon: PinOff,
-            label: t('tasks.context.unpinTask'),
-            onSelect: actions.onUnpin,
-          }
-        : {
-            key: 'pin',
-            group: 2,
-            icon: Pin,
-            label: t('tasks.context.pinTask'),
-            onSelect: actions.onPin,
-          }
-    );
-  }
-  items.push({
-    key: 'rename',
-    group: 2,
-    icon: Pencil,
-    label: t('common.rename'),
-    onSelect: actions.onRename,
-  });
-  if (actions.canMarkReview) {
-    items.push(
-      actions.needsReview
-        ? {
-            key: 'unmark-review',
-            group: 2,
-            icon: CircleSlash,
-            label: t('tasks.context.unmarkReview'),
-            onSelect: actions.onUnmarkNeedsReview,
-          }
-        : {
-            key: 'mark-review',
-            group: 2,
-            icon: CircleDot,
-            label: t('tasks.context.markForReview'),
-            onSelect: actions.onMarkNeedsReview,
-          }
-    );
-  }
-  if (actions.onReconnect) {
+  if (actions.onCopyYodaLink) {
     items.push({
-      key: 'reconnect',
-      group: 2,
-      icon: RotateCcw,
-      label: t('sidebar.reconnect'),
-      onSelect: actions.onReconnect,
+      key: 'copy-yoda-link',
+      group: 1,
+      icon: Link2,
+      label: t('tasks.context.copyYodaLink'),
+      onSelect: actions.onCopyYodaLink,
     });
   }
-  // Restart is rendered as a submenu (tmux / no-tmux) directly in the menu bodies.
 
-  // group 3 — archive / restore
+  // group 2 — archive / restore. The pre-archive skill only makes sense at the
+  // session (conversation) level, where it runs against a specific session before
+  // archiving it. A task spans many sessions, so it is offered only in the
+  // conversation tab context menu — never here.
   if (!actions.isArchived) {
     items.push({
       key: 'archive',
-      group: 3,
+      group: 2,
       icon: Archive,
       label: t('tasks.context.archive'),
       onSelect: actions.onArchive,
     });
-    if (actions.onArchiveSkipPreCommand) {
-      items.push({
-        key: 'archive-skip-pre',
-        group: 3,
-        icon: ArchiveX,
-        label: t('tasks.context.archiveSkipPre'),
-        onSelect: actions.onArchiveSkipPreCommand,
-      });
-    }
     if (actions.onArchiveWithNote) {
       items.push({
         key: 'archive-with-note',
-        group: 3,
+        group: 2,
         icon: FileText,
         label: t('tasks.context.archiveWithNote'),
         onSelect: actions.onArchiveWithNote,
-      });
-    }
-    if (actions.onConfigurePreArchive) {
-      items.push({
-        key: 'configure-pre-archive',
-        group: 3,
-        icon: Terminal,
-        label: t('sidebar.configurePreArchive'),
-        onSelect: actions.onConfigurePreArchive,
       });
     }
   }
   if (actions.isArchived && actions.onRestore) {
     items.push({
       key: 'restore',
-      group: 3,
-      icon: RotateCcw,
+      group: 2,
+      icon: ArchiveRestore,
       label: t('projects.tasks.restore'),
       onSelect: actions.onRestore,
     });
   }
 
-  // group 4 — run scripts
+  // group 3 — run scripts
   if (actions.onRunScript) {
     items.push({
       key: 'run-script',
-      group: 4,
+      group: 3,
       icon: PlayCircle,
       label: t('sidebar.runScripts.runScript'),
       onSelect: actions.onRunScript,
@@ -273,7 +252,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   if (actions.onViewStatus) {
     items.push({
       key: 'view-status',
-      group: 4,
+      group: 3,
       icon: Activity,
       label: t('sidebar.runScripts.scriptStatus'),
       onSelect: actions.onViewStatus,
@@ -282,22 +261,32 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   if (actions.onConfigureScripts) {
     items.push({
       key: 'configure-scripts',
-      group: 4,
+      group: 3,
       icon: Settings2,
       label: t('sidebar.runScripts.configure'),
       onSelect: actions.onConfigureScripts,
     });
   }
 
-  // group 5 — destructive
-  items.push({
-    key: 'delete',
-    group: 5,
-    icon: Trash2,
-    label: t('common.delete'),
-    onSelect: actions.onDelete,
-    variant: 'destructive',
-  });
+  // group 4 — session: open details, reconnect
+  if (actions.onOpenDetails) {
+    items.push({
+      key: 'open-details',
+      group: 4,
+      icon: Info,
+      label: actions.openDetailsLabel ?? t('tasks.context.openDetails'),
+      onSelect: actions.onOpenDetails,
+    });
+  }
+  if (actions.onReconnect) {
+    items.push({
+      key: 'reconnect',
+      group: 4,
+      icon: RotateCcw,
+      label: t('sidebar.reconnect'),
+      onSelect: actions.onReconnect,
+    });
+  }
 
   return items;
 }
@@ -337,6 +326,13 @@ async function copyTaskBasicInfo(actions: TaskMenuActions, t: TFunction): Promis
   } catch {
     showCopyFailure(t);
   }
+}
+
+export async function copyTaskLink(link: string, t: TFunction): Promise<void> {
+  await copyText(link, t, {
+    success: t('tasks.context.yodaLinkCopied'),
+    failure: t('tasks.context.copyFailed'),
+  });
 }
 
 async function copyTaskId(actions: TaskMenuActions, t: TFunction): Promise<void> {
@@ -469,54 +465,6 @@ const TaskWorkspaceContextSubmenu = observer(function TaskWorkspaceContextSubmen
   );
 });
 
-function RestartSessionContextSubmenu({
-  onRestart,
-}: {
-  onRestart: (tmuxOverride?: boolean) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <ContextMenuSub>
-      <ContextMenuSubTrigger className="whitespace-nowrap">
-        <RotateCcw className="size-4" />
-        {t('tasks.context.restartSession')}
-      </ContextMenuSubTrigger>
-      <ContextMenuSubContent>
-        <ContextMenuItem className="whitespace-nowrap" onClick={() => onRestart(true)}>
-          {t('tasks.context.restartSessionWithTmux')}
-        </ContextMenuItem>
-        <ContextMenuItem className="whitespace-nowrap" onClick={() => onRestart(false)}>
-          {t('tasks.context.restartSessionWithoutTmux')}
-        </ContextMenuItem>
-      </ContextMenuSubContent>
-    </ContextMenuSub>
-  );
-}
-
-function RestartSessionDropdownSubmenu({
-  onRestart,
-}: {
-  onRestart: (tmuxOverride?: boolean) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger className="whitespace-nowrap">
-        <RotateCcw className="size-4" />
-        {t('tasks.context.restartSession')}
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent>
-        <DropdownMenuItem className="whitespace-nowrap" onClick={() => onRestart(true)}>
-          {t('tasks.context.restartSessionWithTmux')}
-        </DropdownMenuItem>
-        <DropdownMenuItem className="whitespace-nowrap" onClick={() => onRestart(false)}>
-          {t('tasks.context.restartSessionWithoutTmux')}
-        </DropdownMenuItem>
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  );
-}
-
 const TaskWorkspaceDropdownSubmenu = observer(function TaskWorkspaceDropdownSubmenu({
   currentWorkspaceId,
   onAssign,
@@ -569,12 +517,6 @@ export function TaskContextMenu({ children, ...actions }: TaskContextMenuProps) 
           const prev = items[index - 1];
           const showSeparator = prev && prev.group !== item.group;
           const Icon = item.icon;
-          // Restart sits with the session-management group (2); render it inline
-          // right after that group rather than dangling below the destructive item.
-          const showRestartAfter =
-            actions.onRestartSession &&
-            item.group === TASK_MANAGEMENT_GROUP &&
-            items[index + 1]?.group !== TASK_MANAGEMENT_GROUP;
           return (
             <React.Fragment key={item.key}>
               {showSeparator && <ContextMenuSeparator />}
@@ -590,9 +532,6 @@ export function TaskContextMenu({ children, ...actions }: TaskContextMenuProps) 
                 <Icon className="size-4" />
                 {item.label}
               </ContextMenuItem>
-              {showRestartAfter && actions.onRestartSession && (
-                <RestartSessionContextSubmenu onRestart={actions.onRestartSession} />
-              )}
             </React.Fragment>
           );
         })}
@@ -630,12 +569,6 @@ export function TaskActionsMenu({
           const prev = items[index - 1];
           const showSeparator = prev && prev.group !== item.group;
           const Icon = item.icon;
-          // Restart sits with the session-management group (2); render it inline
-          // right after that group rather than dangling below the destructive item.
-          const showRestartAfter =
-            actions.onRestartSession &&
-            item.group === TASK_MANAGEMENT_GROUP &&
-            items[index + 1]?.group !== TASK_MANAGEMENT_GROUP;
           return (
             <React.Fragment key={item.key}>
               {showSeparator && <DropdownMenuSeparator />}
@@ -651,9 +584,6 @@ export function TaskActionsMenu({
                 <Icon className="size-4" />
                 {item.label}
               </DropdownMenuItem>
-              {showRestartAfter && actions.onRestartSession && (
-                <RestartSessionDropdownSubmenu onRestart={actions.onRestartSession} />
-              )}
             </React.Fragment>
           );
         })}

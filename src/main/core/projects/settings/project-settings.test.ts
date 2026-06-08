@@ -111,6 +111,34 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
     await expect(provider.getWorktreeDirectory()).resolves.toBe('/tmp/yoda/worktrees');
   });
 
+  it('ignores legacy tmux values stored in project settings', async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
+    tempDirs.push(projectPath);
+    const row = {
+      baseProjectSettingsJson: JSON.stringify({
+        defaultBranch: 'main',
+        tmux: false,
+      }),
+      shareableProjectSettingsJson: '{}',
+      legacyConfigMigratedAt: new Date().toISOString(),
+    };
+    const settingsStorage: ProjectSettingsStorage = {
+      get: async () => row,
+      insertIfMissing: vi.fn(),
+      update: async (_projectId, settings) => {
+        Object.assign(row, settings);
+      },
+    };
+    const provider = new LocalProjectSettingsProvider(
+      projectId(),
+      projectPath,
+      'main',
+      settingsStorage
+    );
+
+    await expect(provider.get()).resolves.not.toHaveProperty('tmux');
+  });
+
   it('keeps computed worktreeDirectory default separate from configured overrides', async () => {
     const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);

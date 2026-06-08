@@ -1,7 +1,10 @@
+import type { AgentProviderId } from './agent-provider-registry';
+
 export const MOBILE_GATEWAY_DEFAULT_PORT = 3879;
 export const MOBILE_GATEWAY_DEFAULT_DEV_TOKEN = 'dev-mobile-token';
 export const MOBILE_APP_SCHEME = 'yodamobile';
 export const MOBILE_APP_DEFAULT_INSTALL_URL = 'https://lovstudio.ai/yoda/mobile';
+export const MOBILE_SESSION_CONTENT_MAX_CHARS = 120_000;
 
 export type MobilePairingConnection = {
   baseUrl: string;
@@ -107,6 +110,60 @@ export type MobileCreateDemandRequest = {
 export type MobileCreateDemandResponse = {
   task: MobileTaskSummary;
   warning?: string;
+};
+
+export type MobileSessionRuntimeStatus =
+  | 'idle'
+  | 'working'
+  | 'awaiting-input'
+  | 'error'
+  | 'completed';
+
+export type MobileSessionSummary = {
+  id: string;
+  projectId: string;
+  taskId: string;
+  title: string;
+  providerId: AgentProviderId;
+  createdAt?: string;
+  updatedAt?: string;
+  lastInteractedAt: string | null;
+  isInitialConversation: boolean | null;
+  runtimeStatus: MobileSessionRuntimeStatus;
+  running: boolean;
+  tmuxEnabled: boolean;
+  sessionId: string;
+  sessionTitle?: string;
+};
+
+export type MobileTaskSessionsResponse = {
+  projectId: string;
+  taskId: string;
+  sessions: MobileSessionSummary[];
+};
+
+export type MobileSessionContentSource = 'live' | 'history' | 'empty';
+
+export type MobileSessionTranscriptRole = 'user' | 'assistant' | 'tool' | 'status';
+export type MobileSessionTranscriptFormat = 'markdown' | 'code' | 'plain';
+
+export type MobileSessionTranscriptBlock = {
+  id: string;
+  role: MobileSessionTranscriptRole;
+  title?: string;
+  timestamp: string | null;
+  format: MobileSessionTranscriptFormat;
+  content: string;
+};
+
+export type MobileSessionDetail = {
+  generatedAt: string;
+  session: MobileSessionSummary;
+  content: string;
+  contentLength: number;
+  truncated: boolean;
+  source: MobileSessionContentSource;
+  transcript: MobileSessionTranscriptBlock[];
 };
 
 export type MobileGatewayConnectionInfo = {

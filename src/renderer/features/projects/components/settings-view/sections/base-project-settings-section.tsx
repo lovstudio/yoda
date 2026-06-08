@@ -5,7 +5,6 @@ import { Field, FieldDescription, FieldTitle } from '@renderer/lib/ui/field';
 import { Input } from '@renderer/lib/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@renderer/lib/ui/select';
 import { Separator } from '@renderer/lib/ui/separator';
-import { Switch } from '@renderer/lib/ui/switch';
 import { cn } from '@renderer/utils/utils';
 import type { FormState, FormUpdate } from '../project-settings-form-model';
 
@@ -104,18 +103,6 @@ export function BaseProjectSettingsSection({
             )}
           </SelectContent>
         </Select>
-      </Field>
-
-      <Separator />
-
-      <Field orientation="horizontal">
-        <div className="flex flex-1 flex-col gap-1">
-          <FieldTitle>{t('settings.tasks.enableTmux')}</FieldTitle>
-          <FieldDescription className="text-foreground-muted">
-            {t('projects.settings.enableTmuxDescription')}
-          </FieldDescription>
-        </div>
-        <Switch checked={form.tmux} onCheckedChange={(checked) => update('tmux', checked)} />
       </Field>
     </>
   );

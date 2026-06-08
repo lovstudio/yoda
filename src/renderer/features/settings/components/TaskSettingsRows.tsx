@@ -7,15 +7,7 @@ import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings'
 import { useInstallTmux } from '@renderer/lib/components/tmux-install';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
-import { Checkbox } from '@renderer/lib/ui/checkbox';
 import { Input } from '@renderer/lib/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { ResetToDefaultButton } from './ResetToDefaultButton';
@@ -66,79 +58,6 @@ export const AutoGenerateTaskNamesRow: React.FC = () => {
             onCheckedChange={taskSettings.updateAutoGenerateName}
           />
         </>
-      }
-    />
-  );
-};
-
-export const TaskNamingSettingsRow: React.FC = () => {
-  const { t } = useTranslation();
-  const taskSettings = useTaskSettings();
-  const disabled = taskSettings.loading || taskSettings.saving || !taskSettings.autoGenerateName;
-
-  return (
-    <SettingRow
-      title={t('settings.tasks.namingSettings')}
-      description={t('settings.tasks.namingSettingsDescription')}
-      control={
-        <div className="flex w-full max-w-xl flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Input
-              key={taskSettings.namingModel}
-              defaultValue={taskSettings.namingModel}
-              disabled={disabled}
-              placeholder={t('settings.tasks.namingModelPlaceholder')}
-              onBlur={(e) => {
-                const next = e.target.value.trim();
-                if (next !== taskSettings.namingModel) {
-                  taskSettings.updateNamingModel(next);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.currentTarget.blur();
-              }}
-              className="h-8 min-w-64"
-            />
-            <Select
-              value={taskSettings.namingLanguage}
-              onValueChange={(value) =>
-                taskSettings.updateNamingLanguage(value as typeof taskSettings.namingLanguage)
-              }
-              disabled={disabled}
-            >
-              <SelectTrigger size="sm" className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="app">{t('settings.tasks.namingLanguageApp')}</SelectItem>
-                <SelectItem value="prompt">{t('settings.tasks.namingLanguagePrompt')}</SelectItem>
-                <SelectItem value="zh-CN">{t('settings.tasks.namingLanguageZh')}</SelectItem>
-                <SelectItem value="en">{t('settings.tasks.namingLanguageEn')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-xs text-foreground-muted">
-            {(
-              [
-                ['prompt', t('settings.tasks.namingContextPrompt')],
-                ['project', t('settings.tasks.namingContextProject')],
-                ['readme', t('settings.tasks.namingContextReadme')],
-                ['recentTasks', t('settings.tasks.namingContextRecentTasks')],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2">
-                <Checkbox
-                  checked={taskSettings.namingContext[key]}
-                  disabled={disabled}
-                  onCheckedChange={(checked) =>
-                    taskSettings.updateNamingContext({ [key]: checked === true })
-                  }
-                />
-                <span>{label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
       }
     />
   );

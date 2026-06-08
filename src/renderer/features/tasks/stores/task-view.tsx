@@ -22,7 +22,7 @@ import { taskSidebarPreferenceStore } from './task-sidebar-preferences';
  * - `'agents'`      — conversation / PTY view
  * - `'other-file'`  — image, svg preview, binary, too-large, file-error
  */
-export type RendererKind = 'monaco' | 'markdown' | 'diff' | 'agents' | 'other-file';
+export type RendererKind = 'overview' | 'monaco' | 'markdown' | 'diff' | 'agents' | 'other-file';
 
 interface TaskViewResources {
   conversations: ConversationManagerStore;
@@ -149,8 +149,21 @@ export class TaskViewStore {
     return [...taskSidebarPreferenceStore.contextPanelOpenSectionIds];
   }
 
+  get sessionPanelOpenSectionIds(): string[] {
+    return [...taskSidebarPreferenceStore.sessionPanelOpenSectionIds];
+  }
+
+  isDisclosureOpen(id: string, defaultOpen: boolean): boolean {
+    return taskSidebarPreferenceStore.isDisclosureOpen(id, defaultOpen);
+  }
+
+  setDisclosureOpen(id: string, open: boolean): void {
+    taskSidebarPreferenceStore.setDisclosureOpen(id, open);
+  }
+
   get activeRenderer(): RendererKind {
     const desc = this.tabManager.activeDescriptor;
+    if (desc?.kind === 'overview') return 'overview';
     if (desc?.kind === 'diff') return 'diff';
     const tab = this.tabManager.activeFileEntry;
     if (!tab) return 'agents';
@@ -201,6 +214,10 @@ export class TaskViewStore {
 
   setContextPanelSectionOpen(sectionId: string, open: boolean): void {
     taskSidebarPreferenceStore.setContextPanelSectionOpen(sectionId, open);
+  }
+
+  setSessionPanelOpenSectionIds(sectionIds: string[]): void {
+    taskSidebarPreferenceStore.setSessionPanelOpenSectionIds(sectionIds);
   }
 
   setFocusedRegion(region: 'main' | 'bottom'): void {

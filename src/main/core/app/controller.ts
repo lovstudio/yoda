@@ -3,7 +3,7 @@ import { createRPCController } from '@shared/ipc/rpc';
 import type { OpenInAppId } from '@shared/openInApps';
 import { deepLinkService } from '@main/app/deep-link';
 import { telemetryService } from '@main/lib/telemetry';
-import { appService } from './service';
+import { appService, type SaveTextFileDialogArgs } from './service';
 import type { TriggerVoiceInputArgs } from './voice-input';
 
 export const appController = createRPCController({
@@ -57,6 +57,17 @@ export const appController = createRPCController({
   },
   openSelectDirectoryDialog: (args: { title: string; message: string }) =>
     appService.openSelectDirectoryDialog(args),
+  saveTextFileDialog: async (args: SaveTextFileDialogArgs) => {
+    try {
+      const result = await appService.saveTextFileDialog(args);
+      return { success: true as const, ...result };
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
   getAppVersion: () => appService.getCachedAppVersion(),
   getElectronVersion: () => process.versions.electron,
   getPlatform: () => process.platform,

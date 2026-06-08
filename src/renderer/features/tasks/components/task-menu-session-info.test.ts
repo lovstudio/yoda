@@ -24,6 +24,8 @@ describe('resolveTaskMenuSessionFields', () => {
       sessionId: 'actual-codex-thread',
       sessionTitle: 'Actual Codex title',
       resumeCommand: 'codex resume actual-codex-thread',
+      running: true,
+      tmuxEnabled: true,
     });
 
     const fields = await resolveTaskMenuSessionFields(makeConversation(), '/repo');
@@ -40,6 +42,8 @@ describe('resolveTaskMenuSessionFields', () => {
       sessionTitle: 'Actual Codex title',
       providerName: 'Codex',
       resumeCommand: 'codex resume actual-codex-thread',
+      running: true,
+      tmuxEnabled: true,
     });
   });
 

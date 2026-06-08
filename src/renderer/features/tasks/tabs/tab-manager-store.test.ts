@@ -2,7 +2,7 @@ import { observable } from 'mobx';
 import { describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
 import type { ConversationManagerStore } from '@renderer/features/tasks/conversations/conversation-manager';
-import { TabManagerStore } from './tab-manager-store';
+import { OVERVIEW_TAB_ID, TabManagerStore } from './tab-manager-store';
 
 vi.mock('@renderer/lib/ipc', () => ({
   events: {
@@ -61,6 +61,88 @@ describe('TabManagerStore conversation recovery', () => {
 
     expect(store.openPreferredConversation()).toBe(true);
     expect(store.activeConversationId).toBe('conversation-2');
+  });
+});
+
+describe('TabManagerStore overview tab', () => {
+  it('injects a fixed overview tab at index 0 on default init, keeping the conversation active', () => {
+    const store = new TabManagerStore(
+      makeConversationManager([
+        makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
+      ]),
+      'workspace-1'
+    );
+
+    store.initializeDefault();
+
+    expect(store.resolvedTabs[0]?.kind).toBe('overview');
+    expect(store.tabOrder[0]).toBe(OVERVIEW_TAB_ID);
+    // Default focus stays on the conversation, not the overview tab.
+    expect(store.activeConversationId).toBe('conversation-1');
+  });
+
+  it('cannot be closed', () => {
+    const store = new TabManagerStore(makeConversationManager([]), 'workspace-1');
+    store.initializeDefault();
+
+    store.closeTab(OVERVIEW_TAB_ID);
+
+    expect(store.tabOrder).toContain(OVERVIEW_TAB_ID);
+  });
+
+  it('is excluded from the persisted snapshot', () => {
+    const store = new TabManagerStore(
+      makeConversationManager([
+        makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
+      ]),
+      'workspace-1'
+    );
+    store.initializeDefault();
+
+    // The overview tab is synthesized per-mount and never serialized.
+    expect(store.snapshot.tabs).toHaveLength(1);
+    expect(store.snapshot.tabs.every((t) => t.kind === 'conversation')).toBe(true);
+  });
+
+  it('is re-injected after restoring a snapshot that never contained it', () => {
+    const store = new TabManagerStore(
+      makeConversationManager([
+        makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
+      ]),
+      'workspace-1'
+    );
+
+    store.restoreSnapshot({
+      tabs: [
+        {
+          kind: 'conversation',
+          tabId: 'tab-1',
+          conversationId: 'conversation-1',
+          isPreview: false,
+        },
+      ],
+      activeTabId: 'tab-1',
+    });
+
+    expect(store.tabOrder[0]).toBe(OVERVIEW_TAB_ID);
+    expect(store.activeTabId).toBe('tab-1');
+  });
+
+  it('stays pinned at index 0 when other tabs are reordered', () => {
+    const store = new TabManagerStore(
+      makeConversationManager([
+        makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
+        makeConversation('conversation-2', '2026-05-02T00:00:00.000Z', false),
+      ]),
+      'workspace-1'
+    );
+    store.initializeDefault();
+    store.openConversation('conversation-2');
+
+    // Attempt to drag a conversation (index 1) into the overview slot (index 0).
+    store.reorderTabs(1, 0);
+
+    expect(store.tabOrder[0]).toBe(OVERVIEW_TAB_ID);
   });
 });
 

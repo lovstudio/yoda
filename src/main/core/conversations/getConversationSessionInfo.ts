@@ -8,6 +8,7 @@ import {
 import { providerOverrideSettings } from '@main/core/settings/provider-settings-service';
 import { db } from '@main/db/client';
 import { conversations, projects } from '@main/db/schema';
+import { resolveTask } from '../projects/utils';
 import { resolveAgentResumeSession } from './codex-session-id';
 import { buildAgentCommand, buildAgentSubcommand } from './impl/agent-command';
 import { mapConversationRowToConversation } from './utils';
@@ -38,10 +39,15 @@ export async function getConversationSessionInfo(
   const conversation = mapConversationRowToConversation(row.conversation, true);
   const workingDirectory = cwd?.trim() || row.projectPath;
   const session = resolveAgentResumeSession(conversation, workingDirectory);
+  const activeSession = resolveTask(projectId, taskId)
+    ?.conversations.getActiveSessions()
+    .find((item) => item.conversationId === conversationId);
 
   return {
     sessionId: session.sessionId,
     sessionTitle: session.sessionTitle,
+    running: activeSession !== undefined,
+    tmuxEnabled: activeSession?.detachable ?? false,
     resumeCommand: await buildResumeCommand({
       providerId: conversation.providerId,
       sessionId: session.sessionId,

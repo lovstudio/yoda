@@ -14,6 +14,8 @@ export type PtySpawnIntent =
       cwd: string;
       shellSetup?: string;
       tmuxSessionName?: string;
+      /** Client size used to create the tmux window so it matches xterm's width. */
+      tmuxSize?: { cols: number; rows: number };
       /** Environment exported inside the tmux-created shell command. */
       tmuxEnv?: Record<string, string>;
     }
@@ -23,6 +25,8 @@ export type PtySpawnIntent =
       command: PtyCommandSpec;
       shellSetup?: string;
       tmuxSessionName?: string;
+      /** Client size used to create the tmux window so it matches xterm's width. */
+      tmuxSize?: { cols: number; rows: number };
       /** Environment exported inside the tmux-created shell command. */
       tmuxEnv?: Record<string, string>;
     };
@@ -201,7 +205,7 @@ function resolvePosixSpawn(intent: PtySpawnIntent, env: NodeJS.ProcessEnv): Reso
         command: shell,
         args: [
           '-c',
-          buildTmuxShellLine(intent.tmuxSessionName, commandLine, undefined, intent.tmuxEnv),
+          buildTmuxShellLine(intent.tmuxSessionName, commandLine, intent.tmuxSize, intent.tmuxEnv),
         ],
         cwd: intent.cwd,
         warnings: [],
@@ -236,7 +240,7 @@ function resolvePosixSpawn(intent: PtySpawnIntent, env: NodeJS.ProcessEnv): Reso
         buildTmuxShellLine(
           intent.tmuxSessionName,
           fullCommandLine,
-          undefined,
+          intent.tmuxSize,
           intent.tmuxEnv
         ),
       ],

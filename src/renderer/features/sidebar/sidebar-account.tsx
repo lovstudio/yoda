@@ -1,5 +1,7 @@
 import {
   ChevronsUpDown,
+  Download,
+  Info,
   LogIn,
   LogOut,
   MessageSquareShare,
@@ -7,6 +9,7 @@ import {
   Settings2,
   User,
 } from 'lucide-react';
+import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -17,6 +20,7 @@ import {
 } from '@renderer/lib/hooks/useAccount';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { appState } from '@renderer/lib/stores/app-state';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,10 +36,11 @@ import { cn } from '@renderer/utils/utils';
  * to a sign-in prompt when no live session exists. Mirrors the data flow of the
  * settings AccountTab so the two stay consistent.
  */
-export const SidebarAccount: React.FC = function SidebarAccount() {
+export const SidebarAccount: React.FC = observer(function SidebarAccount() {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const { toast } = useToast();
+  const update = appState.update;
 
   const { data: session, isLoading } = useAccountSession();
   const signInMutation = useAccountSignIn();
@@ -59,6 +64,10 @@ export const SidebarAccount: React.FC = function SidebarAccount() {
   const handleGiveFeedback = React.useCallback(() => {
     showFeedbackModal({});
   }, [showFeedbackModal]);
+
+  const goToUpdateSettings = React.useCallback(() => {
+    navigate('settings', { tab: 'general' });
+  }, [navigate]);
 
   const handleSignIn = React.useCallback(() => {
     showAccountDeviceFlow({});
@@ -141,6 +150,23 @@ export const SidebarAccount: React.FC = function SidebarAccount() {
             {t('sidebar.giveFeedback')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          {update.hasUpdate && (
+            <DropdownMenuItem onClick={goToUpdateSettings}>
+              <Download className="size-4" />
+              {t('sidebar.update')}
+            </DropdownMenuItem>
+          )}
+          <div
+            role="presentation"
+            className="flex items-center gap-2 px-2 py-1.5 text-sm font-normal"
+          >
+            <Info className="size-4 shrink-0 text-foreground-muted" />
+            <span className="text-foreground-muted">{t('settings.update.version')}</span>
+            <span className="ml-auto font-mono text-xs text-foreground-tertiary-passive">
+              v{update.currentVersion || '...'}
+            </span>
+          </div>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
             onClick={handleSignOut}
@@ -182,7 +208,7 @@ export const SidebarAccount: React.FC = function SidebarAccount() {
       <LogIn className="size-3.5 shrink-0 text-foreground-tertiary-passive transition-colors group-hover/account:text-accent" />
     </button>
   );
-};
+});
 
 function Avatar({ avatarUrl, alt }: { avatarUrl?: string; alt: string }) {
   if (avatarUrl) {

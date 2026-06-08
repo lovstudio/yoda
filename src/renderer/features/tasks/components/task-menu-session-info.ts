@@ -10,6 +10,8 @@ export type TaskMenuSessionFields = {
   sessionTitle?: string;
   providerName?: string;
   resumeCommand?: string;
+  running?: boolean;
+  tmuxEnabled?: boolean;
 };
 
 const SQLITE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
@@ -93,6 +95,8 @@ export async function resolveTaskMenuSessionFields(
       sessionId: resolved.sessionId || fallback.sessionId,
       sessionTitle: resolved.sessionTitle ?? fallback.sessionTitle,
       resumeCommand: resolved.resumeCommand ?? fallback.resumeCommand,
+      running: resolved.running,
+      tmuxEnabled: resolved.tmuxEnabled,
     };
   } catch {
     return fallback;

@@ -2,12 +2,14 @@ import { Archive, Loader2, MoreHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { buildTaskDeepLink } from '@shared/deep-links';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { selectCurrentPr } from '@shared/pull-requests';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { TaskSidebarAgentStatus } from '@renderer/features/sidebar/task-sidebar-agent-status';
 import { useArchiveTask } from '@renderer/features/tasks/archive-task';
 import {
+  copyTaskLink,
   TaskActionsMenu,
   TaskContextMenu,
 } from '@renderer/features/tasks/components/task-context-menu';
@@ -24,12 +26,9 @@ import {
   getTaskStore,
   taskAgentStatus,
 } from '@renderer/features/tasks/stores/task-selectors';
+import { OVERVIEW_TAB_ID } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { rpc } from '@renderer/lib/ipc';
-import {
-  useNavigate,
-  useParams,
-  useWorkspaceSlots,
-} from '@renderer/lib/layout/navigation-provider';
+import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
@@ -55,19 +54,24 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const { navigate } = useNavigate();
   const showRename = useShowModal('renameTaskModal');
   const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
-  const showConfirm = useShowModal('confirmActionModal');
   const showManageRunScripts = useShowModal('manageRunScriptsModal');
-  const showEditPreArchiveCommand = useShowModal('editPreArchiveCommandModal');
 
-  const { currentView } = useWorkspaceSlots();
   const { params } = useParams('task');
-  const isActive =
-    currentView === 'task' && params.taskId === taskId && params.projectId === projectId;
+  // The selected task stays highlighted even after navigating to a non-task view
+  // (settings, skills, etc.) — selection is only cancelled by switching to another
+  // task, not by leaving the task view. `viewParamsStore['task']` persists the
+  // last-active task across view changes, so we match against it regardless of the
+  // current view.
+  const isActive = params.taskId === taskId && params.projectId === projectId;
   const [isMenuOpen, setMenuOpen] = useState(false);
+  // The sidebar archive button is a two-step confirm: the first click arms it
+  // (turns it into a confirm badge), the second click archives. Anything that
+  // moves focus away — leaving the row, opening the menu — disarms it.
+  const [isArchiveConfirming, setArchiveConfirming] = useState(false);
 
   const task = getTaskStore(projectId, taskId)!;
   const taskManager = getTaskManagerStore(projectId);
-  const { archiveTask, hasPreArchiveCommand } = useArchiveTask(projectId);
+  const { archiveTask } = useArchiveTask(projectId);
   const [isArchiving, setIsArchiving] = useState(false);
 
   const isBootstrapping =
@@ -84,12 +88,14 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     void taskManager?.provisionTask(taskId);
   };
 
+  // Archiving never runs the pre-archive skill by default; running it is an
+  // explicit opt-in via the context menu.
   const handleArchive = (options?: { skipPreCommand?: boolean }) => {
     if (isArchiving) return;
     void (async () => {
       try {
         setIsArchiving(true);
-        await archiveTask(taskId, options);
+        await archiveTask(taskId, { skipPreCommand: true, ...options });
       } finally {
         setIsArchiving(false);
       }
@@ -105,17 +111,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   };
 
   const handleRename = () => showRename({ projectId, taskId, currentName: taskName });
-
-  const handleDelete = () =>
-    showConfirm({
-      title: t('sidebar.deleteTask.title'),
-      description: t('sidebar.deleteTask.description', { name: taskName }),
-      confirmLabel: t('sidebar.deleteTask.confirmLabel'),
-      onSuccess: () => {
-        void taskManager?.deleteTask(taskId);
-        if (isActive) navigate('project', { projectId });
-      },
-    });
 
   const canPin = task.state !== 'unregistered';
   const canMarkReview = task.state !== 'unregistered';
@@ -171,9 +166,21 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const handleViewStatus = () => {
     navigate('task', { projectId, taskId });
   };
+  const handleCopyYodaLink = () => {
+    const link = buildTaskDeepLink({
+      projectId,
+      taskId,
+    });
+    void copyTaskLink(link, t);
+  };
   const handleRestartSession =
     provisionedTask && menuConversation
-      ? () => void provisionedTask.conversations.restartConversation(menuConversation.id)
+      ? (tmuxOverride?: boolean) =>
+          void provisionedTask.conversations.restartConversation(
+            menuConversation.id,
+            undefined,
+            tmuxOverride
+          )
       : undefined;
 
   const openPreferredConversationIfEmpty = () => {
@@ -189,6 +196,15 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     handleProvision();
     openPreferredConversationIfEmpty();
     navigate('task', { projectId, taskId });
+  };
+
+  // The context-menu "open details" entry enters the task and activates its
+  // fixed Overview tab (task info / sessions / sub-tasks), distinguishing it from
+  // a plain row click which only enters the task view on the last-active tab.
+  const handleOpenOverview = () => {
+    handleProvision();
+    navigate('task', { projectId, taskId });
+    asProvisioned(task)?.taskView.tabManager.setActiveTab(OVERVIEW_TAB_ID);
   };
 
   const menuActions = {
@@ -207,21 +223,17 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     projectPath,
     workingDirectory: provisionedTask?.path,
     openDetailsLabel: t('tasks.context.openDetails'),
-    onOpenDetails: handleOpenDetails,
+    onOpenDetails: handleOpenOverview,
     onPin: () => void task.setPinned(true),
     onUnpin: () => void task.setPinned(false),
     onMarkNeedsReview: () => void task.setNeedsReview(true),
     onUnmarkNeedsReview: () => void task.setNeedsReview(false),
     onRename: handleRename,
     onArchive: handleArchive,
-    onArchiveSkipPreCommand: hasPreArchiveCommand
-      ? () => handleArchive({ skipPreCommand: true })
-      : undefined,
     onArchiveWithNote: handleArchiveWithNote,
-    onConfigurePreArchive: () => showEditPreArchiveCommand({}),
+    onCopyYodaLink: handleCopyYodaLink,
     onReconnect: handleReconnect,
     onRestartSession: handleRestartSession,
-    onDelete: handleDelete,
     onRunScript: handleRunScript,
     canRunScript: Boolean(provisionedTask),
     onConfigureScripts: handleConfigureScripts,
@@ -247,7 +259,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         )}
         isActive={isActive}
         onMouseDown={(e) => e.preventDefault()}
-        onClick={handleOpenDetails}
+        onMouseLeave={() => setArchiveConfirming(false)}
+        onClick={() => {
+          setArchiveConfirming(false);
+          handleOpenDetails();
+        }}
         onDoubleClick={(e) => {
           e.stopPropagation();
           handleRename();
@@ -272,7 +288,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         <div
           className={cn(
             'items-center gap-0.5',
-            isMenuOpen || isArchiving
+            isMenuOpen || isArchiving || isArchiveConfirming
               ? 'flex'
               : isAgentWorking
                 ? 'hidden'
@@ -282,7 +298,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           <TaskActionsMenu
             {...menuActions}
             open={isMenuOpen}
-            onOpenChange={setMenuOpen}
+            onOpenChange={(open) => {
+              if (open) setArchiveConfirming(false);
+              setMenuOpen(open);
+            }}
             trigger={
               <SidebarItemMiniButton
                 type="button"
@@ -293,26 +312,44 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               </SidebarItemMiniButton>
             }
           />
-          <SidebarItemMiniButton
-            type="button"
-            aria-label={t('sidebar.archiveTask')}
-            disabled={isArchiving}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleArchive();
-            }}
-          >
-            {isArchiving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Archive className="h-4 w-4" />
-            )}
-          </SidebarItemMiniButton>
+          {isArchiveConfirming ? (
+            <button
+              type="button"
+              aria-label={t('sidebar.confirmArchive')}
+              disabled={isArchiving}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setArchiveConfirming(false);
+                handleArchive();
+              }}
+              className="flex h-6 items-center gap-1 rounded-md bg-destructive/10 px-1.5 text-[11px] font-medium text-destructive hover:bg-destructive/20"
+            >
+              <Archive className="h-3.5 w-3.5" />
+              {t('sidebar.confirmArchive')}
+            </button>
+          ) : (
+            <SidebarItemMiniButton
+              type="button"
+              aria-label={t('sidebar.archiveTask')}
+              disabled={isArchiving}
+              onClick={(e) => {
+                e.stopPropagation();
+                setArchiveConfirming(true);
+              }}
+            >
+              {isArchiving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Archive className="h-4 w-4" />
+              )}
+            </SidebarItemMiniButton>
+          )}
         </div>
         <div
           className={cn(
             'items-center',
-            isMenuOpen || isArchiving
+            isMenuOpen || isArchiving || isArchiveConfirming
               ? 'hidden'
               : isAgentWorking
                 ? 'flex'

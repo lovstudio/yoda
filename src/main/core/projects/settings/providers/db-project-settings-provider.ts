@@ -12,7 +12,6 @@ import { SHAREABLE_FIELD_ACCESSORS } from '@shared/project-settings-fields';
 import type { UpdateProjectSettingsError } from '@shared/projects';
 import { err, ok, type Result } from '@shared/result';
 import type { FileSystemProvider } from '@main/core/fs/types';
-import { appSettingsService } from '@main/core/settings/settings-service';
 import { log } from '@main/lib/logger';
 import { migrateLegacyProjectSettingsIfNeeded } from '../legacy-project-settings-migration';
 import { compactUndefined, parseJsonObject, readJson } from '../project-settings-json';
@@ -46,11 +45,9 @@ export abstract class DbProjectSettingsProvider implements ProjectSettingsProvid
 
   protected async initialBaseProjectSettings(): Promise<BaseProjectSettings> {
     const defaultBranch = this.defaultBranchFallback.trim() || 'main';
-    const projectDefaults = await appSettingsService.get('project');
     return {
       defaultBranch,
       remote: remoteNameFromQualifiedRef(defaultBranch) ?? 'origin',
-      tmux: projectDefaults.tmuxByDefault,
     };
   }
 

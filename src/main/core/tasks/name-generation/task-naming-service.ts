@@ -366,10 +366,12 @@ async function buildContextSnapshot(
   };
 
   if (settings.context.prompt) {
+    // Only the real first prompt belongs here. params.name may be a random
+    // placeholder slug (blank submit), which must not masquerade as a prompt.
     addSource({
       id: 'prompt',
       label: 'First user prompt',
-      content: input.params.initialConversation?.initialPrompt ?? input.params.name,
+      content: input.params.initialConversation?.initialPrompt,
     });
   }
 

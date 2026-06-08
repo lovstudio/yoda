@@ -30,7 +30,7 @@ import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { cn } from '@renderer/utils/utils';
 import { SidebarPinnedTaskList } from './pinned-task-list';
 import { SidebarProjectlessTaskList } from './projectless-task-list';
-import { ProjectsGroupLabel } from './projects-group-label';
+import { ProjectsGroupLabel, ProjectsSettingsMenu } from './projects-group-label';
 import { SidebarAccount } from './sidebar-account';
 import {
   SidebarContainer,
@@ -123,7 +123,11 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
             </SidebarMenuButton>
             <SidebarMenuButton
               onClick={() =>
-                showCommandPalette({ projectId: currentProjectId, taskId: currentTaskId })
+                showCommandPalette({
+                  projectId: currentProjectId,
+                  taskId: currentTaskId,
+                  initialQuery: 'in:tasks ',
+                })
               }
               aria-label={t('sidebar.searchTasks')}
               className="w-full justify-between"
@@ -132,10 +136,13 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 <Search className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
                 <span className="truncate min-w-0">{t('sidebar.searchTasks')}</span>
               </span>
-              <ShortcutHint settingsKey="commandPalette" />
+              <ShortcutHint settingsKey="commandPaletteTasks" />
             </SidebarMenuButton>
             <div className="my-1 border-t border-border" />
-            <WorkspaceSwitcher />
+            <div className="group/ws flex h-8 items-center gap-1 rounded-lg pr-1 text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary has-data-popup-open:bg-background-tertiary-1 has-data-popup-open:text-foreground-tertiary">
+              <WorkspaceSwitcher />
+              <ProjectsSettingsMenu />
+            </div>
           </SidebarMenu>
         </SidebarFooter>
         <SidebarContent className="flex flex-col overflow-y-auto">

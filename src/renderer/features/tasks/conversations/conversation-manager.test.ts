@@ -12,11 +12,14 @@ const mocks = vi.hoisted(() => ({
   eventOnMock: vi.fn(),
   ptyConnectMock: vi.fn(),
   ptyDisposeMock: vi.fn(),
+  ptyReconnectMock: vi.fn(),
   ptyResizeMock: vi.fn(),
   archiveConversationMock: vi.fn(),
+  getConversationRuntimeStatusesMock: vi.fn(),
   getConversationsForTaskMock: vi.fn(),
   listeners: new Map<string, (data: unknown) => void>(),
   resumeConversationMock: vi.fn(),
+  restartConversationMock: vi.fn(),
   soundPlayMock: vi.fn(),
   touchConversationMock: vi.fn(),
 }));
@@ -29,8 +32,10 @@ vi.mock('@renderer/lib/ipc', () => ({
   rpc: {
     conversations: {
       archiveConversation: mocks.archiveConversationMock,
+      getConversationRuntimeStatuses: mocks.getConversationRuntimeStatusesMock,
       getConversationsForTask: mocks.getConversationsForTaskMock,
       resumeConversation: mocks.resumeConversationMock,
+      restartConversation: mocks.restartConversationMock,
       touchConversation: mocks.touchConversationMock,
     },
     pty: {
@@ -47,6 +52,7 @@ vi.mock('@renderer/lib/pty/pty-session', () => ({
     constructor(readonly sessionId: string) {}
 
     connect = mocks.ptyConnectMock;
+    reconnect = mocks.ptyReconnectMock;
     dispose = mocks.ptyDisposeMock;
   },
 }));
@@ -67,6 +73,11 @@ const conversation: Conversation = {
   isInitialConversation: true,
 };
 
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe('ConversationManagerStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -76,8 +87,10 @@ describe('ConversationManagerStore', () => {
       return vi.fn();
     });
     mocks.resumeConversationMock.mockResolvedValue(undefined);
+    mocks.restartConversationMock.mockResolvedValue(undefined);
     mocks.archiveConversationMock.mockResolvedValue(undefined);
     mocks.touchConversationMock.mockResolvedValue(undefined);
+    mocks.getConversationRuntimeStatusesMock.mockResolvedValue({});
     mocks.getConversationsForTaskMock.mockResolvedValue([]);
   });
 
@@ -129,6 +142,22 @@ describe('ConversationManagerStore', () => {
     expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 132, 37);
   });
 
+  it('restarts a conversation and reconnects the frontend PTY', async () => {
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+
+    await store.restartConversation('conversation-1', { cols: 120, rows: 30 });
+
+    expect(mocks.restartConversationMock).toHaveBeenCalledWith(
+      'project-1',
+      'task-1',
+      'conversation-1',
+      { cols: 120, rows: 30 },
+      undefined
+    );
+    expect(mocks.ptyReconnectMock).toHaveBeenCalled();
+    expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 120, 30);
+  });
+
   it('refreshes loaded conversations when ensuring an externally added conversation', async () => {
     const externalConversation = {
       ...conversation,
@@ -143,6 +172,26 @@ describe('ConversationManagerStore', () => {
 
     expect(mocks.getConversationsForTaskMock).toHaveBeenCalledWith('project-1', 'task-1');
     expect(store.conversations.get('conversation-2')?.data).toEqual(externalConversation);
+  });
+
+  it('hydrates runtime status for preloaded conversations without re-emitting', async () => {
+    mocks.getConversationRuntimeStatusesMock.mockResolvedValueOnce({
+      'conversation-1': 'working',
+    });
+
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    await flushPromises();
+
+    expect(store.conversations.get('conversation-1')?.status).toBe('working');
+    expect(mocks.getConversationRuntimeStatusesMock).toHaveBeenCalledWith('project-1', 'task-1', [
+      'conversation-1',
+    ]);
+    expect(mocks.eventEmitMock).not.toHaveBeenCalledWith(agentSessionStatusChangedChannel, {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+      status: 'working',
+    });
   });
 
   it('applies conversation rename events from session title sync', () => {

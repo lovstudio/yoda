@@ -1,5 +1,5 @@
 import { exec } from 'node:child_process';
-import { stat } from 'node:fs/promises';
+import { stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { clipboard, dialog, shell } from 'electron';
@@ -44,6 +44,13 @@ const FONT_CACHE_TTL_MS = 5 * 60 * 1_000;
 type RemoteTerminalLaunchAttempt = {
   file: string;
   args: string[];
+};
+
+export type SaveTextFileDialogArgs = {
+  title?: string;
+  defaultPath: string;
+  content: string;
+  filters?: Array<{ name: string; extensions: string[] }>;
 };
 
 class AppService implements IInitializable, IDisposable {
@@ -218,6 +225,20 @@ class AppService implements IInitializable, IDisposable {
       return;
     }
 
+    // The generic "Finder" opener means "open with the OS default" (a folder in
+    // Finder, a file with its default app). Use Electron's shell.openPath — the
+    // LaunchServices API directly — instead of shelling out to `open`, matching
+    // the working reveal path above and surfacing any LS error as a real string.
+    // NOTE: a polluted LaunchServices database (stale duplicate handler
+    // registrations for a UTI) can still make resolution non-deterministic and
+    // yield a `"(null)" has no permission to open …` error; that is a system
+    // issue fixed by rebuilding the LS DB (`lsregister -kill -r -all`), not here.
+    if (appId === 'finder') {
+      const errorMessage = await shell.openPath(target);
+      if (errorMessage) throw new Error(errorMessage);
+      return;
+    }
+
     await this.openInLocal({ label, target, platformConfig });
   }
 
@@ -389,6 +410,27 @@ class AppService implements IInitializable, IDisposable {
     });
     if (result.canceled) return undefined;
     return result.filePaths[0];
+  }
+
+  async saveTextFileDialog(
+    args: SaveTextFileDialogArgs
+  ): Promise<{ canceled: true } | { canceled: false; filePath: string }> {
+    if (!args || typeof args.defaultPath !== 'string' || args.defaultPath.trim() === '') {
+      throw new Error('Invalid default path');
+    }
+    if (typeof args.content !== 'string') {
+      throw new Error('Invalid file content');
+    }
+
+    const result = await dialog.showSaveDialog(getMainWindow()!, {
+      title: args.title,
+      defaultPath: args.defaultPath,
+      filters: args.filters,
+    });
+    if (result.canceled || !result.filePath) return { canceled: true };
+
+    await writeFile(result.filePath, args.content, 'utf8');
+    return { canceled: false, filePath: result.filePath };
   }
 }
 

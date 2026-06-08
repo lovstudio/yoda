@@ -35,7 +35,11 @@ SidebarContent.displayName = 'SidebarContent';
 
 export const SidebarGroup = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn('mb-6 grid', className)} {...props} />
+    <div
+      ref={ref}
+      className={cn('mb-6 grid min-w-0 grid-cols-[minmax(0,1fr)]', className)}
+      {...props}
+    />
   )
 );
 SidebarGroup.displayName = 'SidebarGroup';
@@ -44,7 +48,11 @@ export const SidebarGroupContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('grid gap-1', className)} {...props} />
+  <div
+    ref={ref}
+    className={cn('grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1', className)}
+    {...props}
+  />
 ));
 SidebarGroupContent.displayName = 'SidebarGroupContent';
 
@@ -60,7 +68,9 @@ export const SidebarFooter = React.forwardRef<HTMLDivElement, React.HTMLAttribut
 SidebarFooter.displayName = 'SidebarFooter';
 
 export const SidebarMenu = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => <div ref={ref} className={cn('', className)} {...props} />
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn('min-w-0', className)} {...props} />
+  )
 );
 SidebarMenu.displayName = 'SidebarMenu';
 
@@ -88,7 +98,7 @@ export const SidebarItemMiniButton = React.forwardRef<
 SidebarItemMiniButton.displayName = 'SidebarItemMiniButton';
 
 const sidebarMenuItemClass =
-  'flex w-full font-normal h-8 text-foreground-tertiary-muted rounded-lg items-center hover:bg-background-tertiary-1 hover:text-foreground-tertiary gap-2 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[active=true]:bg-background-tertiary-2 data-[active=true]:text-foreground-tertiary';
+  'flex w-full min-w-0 overflow-hidden font-normal h-8 text-foreground-tertiary-muted rounded-lg items-center hover:bg-background-tertiary-1 hover:text-foreground-tertiary gap-2 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[active=true]:bg-background-tertiary-2 data-[active=true]:text-foreground-tertiary';
 
 interface SidebarMenuButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   isActive?: boolean;
@@ -118,7 +128,7 @@ export function SidebarSectionHeader({
   rightSlot,
 }: SidebarSectionHeaderProps) {
   return (
-    <div className="flex items-center pl-5 pr-2.5 h-8">
+    <div className="flex items-center pl-5 pr-4 h-8">
       <button
         type="button"
         onClick={onToggle}

@@ -56,7 +56,11 @@ const _OPEN_IN_APPS = {
     iconPath: ICON_PATHS.finder,
     alwaysAvailable: true,
     platforms: {
-      darwin: { openCommands: ['open -a Finder {{path}}'] },
+      // Local opens for `finder` are handled via shell.openPath (see
+      // AppService.openIn); this command is the documented CLI equivalent.
+      // Plain `open` opens a directory in Finder and a file with its default
+      // app — never `open -a Finder <file>`, which fails for files.
+      darwin: { openCommands: ['open {{path}}'] },
       win32: {
         openCommands: ['explorer "{{path_raw}}"'],
         label: 'Explorer',

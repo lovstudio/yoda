@@ -12,7 +12,7 @@ export type DeepLinkTarget = {
   id: string;
   rawUrl: string;
   projectId: string;
-  taskId: string;
+  taskId?: string;
   conversationId?: string;
   promptId?: string;
   promptIndex?: number;
@@ -34,6 +34,24 @@ export function buildSessionDeepLink(
   if (args.promptId) url.searchParams.set('promptId', args.promptId);
   if (args.promptIndex !== undefined) url.searchParams.set('promptIndex', String(args.promptIndex));
   return url.toString();
+}
+
+export function buildProjectDeepLink(args: { projectId: string }, scheme = APP_NAME_LOWER): string {
+  return `${scheme}://project/${encodeURIComponent(args.projectId)}`;
+}
+
+export function buildTaskDeepLink(
+  args: { projectId: string; taskId: string; conversationId?: string; promptId?: string },
+  scheme = APP_NAME_LOWER
+): string {
+  const path = [
+    'task',
+    encodeURIComponent(args.projectId),
+    encodeURIComponent(args.taskId),
+    ...(args.conversationId ? ['session', encodeURIComponent(args.conversationId)] : []),
+    ...(args.conversationId && args.promptId ? ['prompt', encodeURIComponent(args.promptId)] : []),
+  ].join('/');
+  return `${scheme}://${path}`;
 }
 
 export function parseYodaDeepLink(rawUrl: string, scheme = APP_NAME_LOWER): ParsedDeepLink | null {
@@ -61,6 +79,11 @@ export function parseYodaDeepLink(rawUrl: string, scheme = APP_NAME_LOWER): Pars
         ...queryTarget,
         conversationId: parts[0] ?? queryTarget.conversationId,
         ...promptFromPath(parts, 1),
+      });
+    case 'project':
+      return compactTarget({
+        ...queryTarget,
+        projectId: parts[0] ?? queryTarget.projectId,
       });
     case 'task':
       return compactTarget({

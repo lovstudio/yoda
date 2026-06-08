@@ -217,6 +217,27 @@ export function readCodexThreadTitle(
   });
 }
 
+export function readCodexThreadRolloutPath(
+  statePath: string,
+  threadId: string
+): string | undefined {
+  return withCodexState(statePath, (db) => {
+    const row = db
+      .prepare(
+        `
+          SELECT NULLIF(rollout_path, '') AS rolloutPath
+          FROM threads
+          WHERE id = ?
+          LIMIT 1
+        `
+      )
+      .get(threadId);
+    if (typeof row !== 'object' || row === null) return undefined;
+    const value = (row as Record<string, unknown>).rolloutPath;
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+  });
+}
+
 export function readCodexThreadArchiveStatus(
   statePath: string,
   threadId: string

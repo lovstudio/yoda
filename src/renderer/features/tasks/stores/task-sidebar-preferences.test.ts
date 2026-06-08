@@ -36,6 +36,8 @@ describe('TaskSidebarPreferenceStore', () => {
         sidebarTab: 'files',
         isSidebarCollapsed: false,
         contextPanelOpenSectionIds: ['tools', 'injected-context'],
+        sessionPanelOpenSectionIds: ['context'],
+        disclosureOpenIds: [],
       },
       { sidebarTab: 'changes', isSidebarCollapsed: true }
     );
@@ -43,10 +45,13 @@ describe('TaskSidebarPreferenceStore', () => {
     expect(store.sidebarTab).toBe('files');
     expect(store.isSidebarCollapsed).toBe(false);
     expect(store.contextPanelOpenSectionIds).toEqual(['tools', 'injected-context']);
+    expect(store.sessionPanelOpenSectionIds).toEqual(['context']);
     expect(mocks.set).toHaveBeenCalledWith(TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'files',
       isSidebarCollapsed: false,
       contextPanelOpenSectionIds: ['tools', 'injected-context'],
+      sessionPanelOpenSectionIds: ['context'],
+      disclosureOpenIds: [],
     });
     expect(mocks.save).not.toHaveBeenCalled();
   });
@@ -61,7 +66,9 @@ describe('TaskSidebarPreferenceStore', () => {
     expect(mocks.save).toHaveBeenCalledWith(TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'changes',
       isSidebarCollapsed: false,
-      contextPanelOpenSectionIds: ['llm-context', 'session-prompts', 'injected-context'],
+      contextPanelOpenSectionIds: ['llm-context', 'memory'],
+      sessionPanelOpenSectionIds: ['basic'],
+      disclosureOpenIds: [],
     });
   });
 
@@ -84,11 +91,38 @@ describe('TaskSidebarPreferenceStore', () => {
       sidebarTab: 'context',
       isSidebarCollapsed: true,
       contextPanelOpenSectionIds: ['session-prompts'],
+      sessionPanelOpenSectionIds: ['basic'],
+      disclosureOpenIds: [],
     });
     expect(mocks.save).toHaveBeenNthCalledWith(2, TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'context',
       isSidebarCollapsed: false,
       contextPanelOpenSectionIds: ['session-prompts'],
+      sessionPanelOpenSectionIds: ['basic'],
+      disclosureOpenIds: [],
+    });
+  });
+
+  it('hydrates the session info tab from the shared snapshot', () => {
+    const store = new TaskSidebarPreferenceStore();
+
+    store.hydrate(
+      {
+        sidebarTab: 'session',
+        isSidebarCollapsed: false,
+        contextPanelOpenSectionIds: [],
+      },
+      null
+    );
+
+    expect(store.sidebarTab).toBe('session');
+    expect(store.isSidebarCollapsed).toBe(false);
+    expect(mocks.set).toHaveBeenCalledWith(TASK_SIDEBAR_VIEW_STATE_KEY, {
+      sidebarTab: 'session',
+      isSidebarCollapsed: false,
+      contextPanelOpenSectionIds: [],
+      sessionPanelOpenSectionIds: ['basic'],
+      disclosureOpenIds: [],
     });
   });
 
@@ -112,16 +146,50 @@ describe('TaskSidebarPreferenceStore', () => {
       sidebarTab: 'context',
       isSidebarCollapsed: false,
       contextPanelOpenSectionIds: ['tools', 'skills'],
+      sessionPanelOpenSectionIds: ['basic'],
+      disclosureOpenIds: [],
     });
     expect(mocks.save).toHaveBeenNthCalledWith(2, TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'context',
       isSidebarCollapsed: false,
       contextPanelOpenSectionIds: ['tools', 'skills', 'session-prompts'],
+      sessionPanelOpenSectionIds: ['basic'],
+      disclosureOpenIds: [],
     });
     expect(mocks.save).toHaveBeenNthCalledWith(3, TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'context',
       isSidebarCollapsed: false,
       contextPanelOpenSectionIds: ['skills', 'session-prompts'],
+      sessionPanelOpenSectionIds: ['basic'],
+      disclosureOpenIds: [],
     });
+  });
+
+  it('persists ad-hoc disclosure open state, honoring per-id defaults', () => {
+    const store = new TaskSidebarPreferenceStore();
+    store.hydrate({ disclosureOpenIds: ['+a', '-b'] }, null);
+    vi.clearAllMocks();
+
+    // Remembered values win over the supplied default.
+    expect(store.isDisclosureOpen('a', false)).toBe(true);
+    expect(store.isDisclosureOpen('b', true)).toBe(false);
+    // Unknown id falls back to its default.
+    expect(store.isDisclosureOpen('c', true)).toBe(true);
+    expect(store.isDisclosureOpen('c', false)).toBe(false);
+
+    // Setting an explicit closed survives even when default is open.
+    store.setDisclosureOpen('c', false);
+    expect(store.isDisclosureOpen('c', true)).toBe(false);
+    expect(store.disclosureOpenIds).toEqual(['+a', '-b', '-c']);
+
+    // Re-setting the same id replaces, never duplicates.
+    store.setDisclosureOpen('a', false);
+    expect(store.disclosureOpenIds).toEqual(['-b', '-c', '-a']);
+    expect(store.isDisclosureOpen('a', true)).toBe(false);
+
+    expect(mocks.save).toHaveBeenLastCalledWith(
+      TASK_SIDEBAR_VIEW_STATE_KEY,
+      expect.objectContaining({ disclosureOpenIds: ['-b', '-c', '-a'] })
+    );
   });
 });

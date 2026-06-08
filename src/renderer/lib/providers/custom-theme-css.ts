@@ -102,6 +102,10 @@ export function buildCustomThemeCssVars(theme: CustomTheme): CssVarMap {
   const destructiveMuted = mix(c.diffDeleted, c.foregroundMuted, 0.72);
   const selection = mix(c.primaryButtonBackground, c.background, isDark ? 0.55 : 0.35);
   const selectionForeground = isDark ? c.foreground : c.background;
+  const tertiaryBg = isDark ? c.background : c.background2;
+  const tertiaryBg1 = isDark ? c.background1 : mix(c.background3, c.background2, 0.55);
+  const tertiaryBg2 = isDark ? c.background2 : c.background3;
+  const tertiaryBg3 = isDark ? c.background3 : mix(c.foreground, c.background3, 0.05);
 
   return {
     '--background': c.background,
@@ -119,10 +123,10 @@ export function buildCustomThemeCssVars(theme: CustomTheme): CssVarMap {
     '--foreground-secondary': c.foreground,
     '--foreground-secondary-muted': c.foregroundMuted,
     '--foreground-secondary-passive': c.foregroundPassive,
-    '--background-tertiary': isDark ? c.background : c.background2,
-    '--background-tertiary-1': isDark ? c.background1 : c.background3,
-    '--background-tertiary-2': c.background2,
-    '--background-tertiary-3': c.background3,
+    '--background-tertiary': tertiaryBg,
+    '--background-tertiary-1': tertiaryBg1,
+    '--background-tertiary-2': tertiaryBg2,
+    '--background-tertiary-3': tertiaryBg3,
     '--foreground-tertiary': c.foreground,
     '--foreground-tertiary-muted': c.foregroundMuted,
     '--foreground-tertiary-passive': c.foregroundPassive,

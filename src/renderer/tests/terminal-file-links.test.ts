@@ -54,6 +54,18 @@ describe('terminal file links', () => {
     ]);
   });
 
+  it('drops a trailing sentence period after the extension', () => {
+    const line = 'output/手工川-会话实时摘要机制-2026-06-09-v0.1.md.';
+    const expected = 'output/手工川-会话实时摘要机制-2026-06-09-v0.1.md';
+    expect(extractTerminalFileLinkCandidates(line)).toEqual([{ text: expected, index: 0 }]);
+  });
+
+  it('keeps interior dots in multi-part extensions', () => {
+    expect(extractTerminalFileLinkCandidates('看 output/foo.md.bak 后面')).toEqual([
+      { text: 'output/foo.md.bak', index: '看 '.length },
+    ]);
+  });
+
   it('normalizes workspace-relative paths', () => {
     expect(resolveTerminalFileLinkTarget('./poster/../poster/index.html')).toEqual({
       originalText: './poster/../poster/index.html',

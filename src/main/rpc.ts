@@ -1,5 +1,6 @@
 import { createRPCRouter } from '../shared/ipc/rpc';
 import { accountController } from './core/account/controller';
+import { agentHooksController } from './core/agent-hooks/controller';
 import { agentsConfigController } from './core/agents-config/controller';
 import { appController } from './core/app/controller';
 import { conversationController } from './core/conversations/controller';
@@ -38,6 +39,7 @@ import { legacyPortController } from './db/legacy-port/controller';
 
 export const rpcRouter = createRPCRouter({
   account: accountController,
+  agentHooks: agentHooksController,
   agentsConfig: agentsConfigController,
   legacyPort: legacyPortController,
   app: appController,

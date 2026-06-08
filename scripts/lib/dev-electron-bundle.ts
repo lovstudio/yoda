@@ -8,6 +8,8 @@ const DEV_BUNDLE_CACHE_VERSION = '3';
 const SOURCE_APP_NAME = 'Electron.app';
 const SOURCE_EXECUTABLE_NAME = 'Electron';
 const DEV_APP_NAME = 'Yoda.app';
+const DEV_ICON_SOURCE = path.join('src', 'assets', 'images', 'yoda', 'yoda.icns');
+const DEV_ICON_FILE = 'icon.icns';
 
 const DEV_ELECTRON_BUNDLE_VALUES: Record<string, string> = {
   CFBundleName: DEV_PRODUCT_NAME,
@@ -42,7 +44,9 @@ export function prepareDevElectronBundle(repoRoot: string): string | undefined {
   patchBundleInfo(devBundlePath, {
     ...DEV_ELECTRON_BUNDLE_VALUES,
     CFBundleExecutable: SOURCE_EXECUTABLE_NAME,
+    CFBundleIconFile: DEV_ICON_FILE,
   });
+  installDevBundleIcon(repoRoot, devBundlePath);
   writeFileSync(markerPath, markerValue);
   registerBundle(devBundlePath);
 
@@ -70,6 +74,14 @@ function patchBundleInfo(bundlePath: string, values: Record<string, string>): vo
   for (const [key, value] of Object.entries(values)) {
     upsertPlistString(plist, key, value);
   }
+}
+
+function installDevBundleIcon(repoRoot: string, bundlePath: string): void {
+  const sourceIcon = path.join(repoRoot, DEV_ICON_SOURCE);
+  const resourcesPath = path.join(bundlePath, 'Contents', 'Resources');
+  if (!existsSync(sourceIcon) || !existsSync(resourcesPath)) return;
+
+  cpSync(sourceIcon, path.join(resourcesPath, DEV_ICON_FILE));
 }
 
 function registerBundle(bundlePath: string): void {

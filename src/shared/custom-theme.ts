@@ -2,6 +2,7 @@ import z from 'zod';
 
 export const CUSTOM_THEME_SCHEMA_VERSION = 1;
 export const CUSTOM_THEME_SELECTION_PREFIX = 'custom:';
+export const CUSTOM_THEME_EXAMPLE_FILE_NAME = 'yoda-theme-example.json';
 
 export type BuiltInTheme = 'ylight' | 'ydark';
 export type CustomThemeMode = 'light' | 'dark';
@@ -77,6 +78,37 @@ export type CustomThemeColors = z.infer<typeof customThemeColorsSchema>;
 export type CustomTheme = z.infer<typeof customThemeSchema>;
 export type CustomThemeCollection = z.infer<typeof customThemeCollectionSchema>;
 export type CustomThemesSettings = z.infer<typeof customThemesSettingsSchema>;
+
+export const CUSTOM_THEME_EXAMPLE: CustomTheme = {
+  schemaVersion: CUSTOM_THEME_SCHEMA_VERSION,
+  id: 'example-light',
+  name: 'Example Light',
+  mode: 'light',
+  colors: {
+    background: '#faf7ef',
+    background1: '#f2ecdd',
+    background2: '#e8dfca',
+    background3: '#d8ceb9',
+    foreground: '#1f2933',
+    foregroundMuted: '#64707d',
+    foregroundPassive: '#9ca3af',
+    border: '#d8ceb9',
+    border1: '#b9ad95',
+    border2: '#918771',
+    primaryButtonBackground: '#215a46',
+    primaryButtonBackgroundHover: '#287055',
+    primaryButtonForeground: '#ffffff',
+    primaryButtonBorder: '#1b4b3a',
+    statusInProgress: '#9a6700',
+    statusInReview: '#2f7d4f',
+    statusDone: '#6b7280',
+    statusTodo: '#6b7280',
+    statusCancelled: '#9ca3af',
+    diffAdded: '#3f8f5f',
+    diffModified: '#b7791f',
+    diffDeleted: '#c2413b',
+  },
+};
 
 export type CustomThemeWarning = {
   code: 'low-contrast';

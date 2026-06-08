@@ -99,8 +99,11 @@ export class FileModelLifecycleStore implements Snapshottable<EditorViewSnapshot
   }
 
   restoreSnapshot(snapshot: Partial<EditorViewSnapshot>): void {
-    if (snapshot.expandedPaths) {
-      this.expandedPaths.replace(snapshot.expandedPaths);
+    if (!Array.isArray(snapshot.expandedPaths)) return;
+
+    this.expandedPaths.clear();
+    for (const path of snapshot.expandedPaths) {
+      if (typeof path === 'string') this.expandedPaths.add(path);
     }
   }
 

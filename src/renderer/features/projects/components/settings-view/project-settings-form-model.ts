@@ -10,7 +10,6 @@ import {
 export type FormState = {
   preservePatterns: string;
   shellSetup: string;
-  tmux: boolean;
   scriptSetup: string;
   scriptRun: string;
   scriptTeardown: string;
@@ -52,7 +51,6 @@ export function settingsToForm(
   return {
     preservePatterns: (s.preservePatterns ?? []).join('\n'),
     shellSetup: s.shellSetup ?? '',
-    tmux: s.tmux ?? true,
     scriptSetup: normalizeScript(s.scripts?.setup),
     scriptRun: normalizeScript(s.scripts?.run),
     scriptTeardown: normalizeScript(s.scripts?.teardown),
@@ -89,7 +87,6 @@ export function formToSettings(f: FormState): ProjectSettings {
   return {
     preservePatterns: preservePatterns.length > 0 ? preservePatterns : undefined,
     shellSetup: blankToUndefined(f.shellSetup),
-    tmux: f.tmux,
     scripts: hasScripts ? scripts : undefined,
     worktreeDirectory: blankToUndefined(f.worktreeDirectory),
     defaultBranch,

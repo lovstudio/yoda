@@ -1,20 +1,38 @@
+/** The mutually-exclusive search scope. `all` applies no qualifier. */
+export type SearchScope = 'all' | 'sessions' | 'tasks' | 'projects' | 'actions';
+
 export type ParsedQuery = {
   /** Query with all recognised qualifiers stripped, ready to feed into search. */
   text: string;
-  /** Set when `in:sessions` was present anywhere in the input. */
-  inSessions: boolean;
+  /** The active scope — at most one qualifier is honoured. */
+  scope: SearchScope;
 };
 
-const IN_SESSIONS_RE = /(^|\s)in:sessions(?=\s|$)/i;
+/** A scope qualifier (`in:<name>`) and its matching regex. */
+const QUALIFIERS: Record<Exclude<SearchScope, 'all'>, RegExp> = {
+  sessions: /(^|\s)in:sessions(?=\s|$)/i,
+  tasks: /(^|\s)in:tasks(?=\s|$)/i,
+  projects: /(^|\s)in:projects(?=\s|$)/i,
+  actions: /(^|\s)in:actions(?=\s|$)/i,
+};
+
+const SCOPE_ORDER: Exclude<SearchScope, 'all'>[] = ['sessions', 'tasks', 'projects', 'actions'];
 
 export function parseQuery(raw: string): ParsedQuery {
-  const inSessions = IN_SESSIONS_RE.test(raw);
-  const text = raw.replace(IN_SESSIONS_RE, ' ').replace(/\s+/g, ' ').trim();
-  return { text, inSessions };
+  // First-matching qualifier wins; the scope chips are mutually exclusive.
+  const scope = SCOPE_ORDER.find((name) => QUALIFIERS[name].test(raw)) ?? 'all';
+  let text = raw;
+  for (const re of Object.values(QUALIFIERS)) text = text.replace(re, ' ');
+  text = text.replace(/\s+/g, ' ').trim();
+  return { text, scope };
 }
 
-export function toggleInSessionsQualifier(raw: string, on: boolean): string {
-  const stripped = raw.replace(IN_SESSIONS_RE, ' ').replace(/\s+/g, ' ').trim();
-  if (!on) return stripped;
-  return stripped ? `in:sessions ${stripped}` : 'in:sessions';
+/** Rewrites the query so it carries exactly the given scope (or none for `all`). */
+export function setScope(raw: string, scope: SearchScope): string {
+  let stripped = raw;
+  for (const re of Object.values(QUALIFIERS)) stripped = stripped.replace(re, ' ');
+  stripped = stripped.replace(/\s+/g, ' ').trim();
+  if (scope === 'all') return stripped;
+  const prefix = `in:${scope}`;
+  return stripped ? `${prefix} ${stripped}` : prefix;
 }

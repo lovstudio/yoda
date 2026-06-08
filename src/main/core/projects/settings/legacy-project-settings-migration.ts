@@ -86,7 +86,6 @@ export async function migrateLegacyProjectSettingsIfNeeded({
         defaultBranchFallback
       );
     }
-    if (legacy.tmux !== undefined) next.tmux = legacy.tmux;
     if (legacy.workspaceProvider !== undefined) {
       next.workspaceProvider = legacy.workspaceProvider;
     }

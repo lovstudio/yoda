@@ -54,12 +54,12 @@ const config: Configuration = {
       { target: 'dmg', arch: ['arm64'] },
       { target: 'zip', arch: ['arm64'] },
     ],
-    icon: 'src/assets/images/yoda/yoda-beta.icns',
+    icon: 'src/assets/images/yoda/yoda.icns',
     notarize: false,
     ...macSigning,
   },
   dmg: {
-    icon: 'src/assets/images/yoda/yoda-beta.icns',
+    icon: 'src/assets/images/yoda/yoda.icns',
   },
   linux: {
     category: 'Development',
@@ -70,7 +70,7 @@ const config: Configuration = {
     ],
   },
   win: {
-    icon: 'src/assets/images/yoda/app-icon-beta.png',
+    icon: 'src/assets/images/yoda/icon-dock.png',
     target: [
       { target: 'nsis', arch: ['x64'] },
       { target: 'msi', arch: ['x64'] },

@@ -2,8 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectProvider, type ProjectProviderTransport } from './project-provider';
 
 const mocks = vi.hoisted(() => ({
+  getAppSetting: vi.fn(),
   releaseAllForProject: vi.fn(),
   teardownAllForProject: vi.fn(),
+}));
+
+vi.mock('@main/core/settings/settings-service', () => ({
+  appSettingsService: {
+    get: mocks.getAppSetting,
+  },
 }));
 
 vi.mock('@main/core/tasks/task-manager', () => ({
@@ -18,9 +25,9 @@ vi.mock('@main/core/workspaces/workspace-registry', () => ({
   },
 }));
 
-function createProvider(tmux: boolean): ProjectProvider {
+function createProvider(): ProjectProvider {
   const settings = {
-    get: vi.fn(async () => ({ tmux })),
+    get: vi.fn(async () => ({})),
   };
   const transport = {
     kind: 'local',
@@ -47,24 +54,29 @@ function createProvider(tmux: boolean): ProjectProvider {
 describe('ProjectProvider dispose', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getAppSetting.mockResolvedValue({ tmuxByDefault: false });
   });
 
-  it('uses terminate mode from project settings when tmux is disabled', async () => {
-    await createProvider(false).dispose();
+  it('uses terminate mode from global settings when tmux is disabled', async () => {
+    mocks.getAppSetting.mockResolvedValue({ tmuxByDefault: false });
+
+    await createProvider().dispose();
 
     expect(mocks.teardownAllForProject).toHaveBeenCalledWith('project-1', 'terminate');
     expect(mocks.releaseAllForProject).toHaveBeenCalledWith('project-1', 'terminate');
   });
 
-  it('uses detach mode from project settings when tmux is enabled', async () => {
-    await createProvider(true).dispose();
+  it('uses detach mode from global settings when tmux is enabled', async () => {
+    mocks.getAppSetting.mockResolvedValue({ tmuxByDefault: true });
+
+    await createProvider().dispose();
 
     expect(mocks.teardownAllForProject).toHaveBeenCalledWith('project-1', 'detach');
     expect(mocks.releaseAllForProject).toHaveBeenCalledWith('project-1', 'detach');
   });
 
   it('can force detach mode for app shutdown', async () => {
-    await createProvider(false).dispose({ mode: 'detach' });
+    await createProvider().dispose({ mode: 'detach' });
 
     expect(mocks.teardownAllForProject).toHaveBeenCalledWith('project-1', 'detach');
     expect(mocks.releaseAllForProject).toHaveBeenCalledWith('project-1', 'detach');

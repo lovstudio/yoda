@@ -32,7 +32,7 @@ export class SshConversationProvider implements ConversationProvider {
   private sessions = new Map<string, Pty>();
   private knownSessionIds = new Set<string>();
   private readonly projectId: string;
-  private readonly taskPath: string;
+  readonly taskPath: string;
   private readonly taskId: string;
   private readonly taskEnvVars: Record<string, string>;
   private readonly tmux: boolean = false;
@@ -79,7 +79,8 @@ export class SshConversationProvider implements ConversationProvider {
     conversation: Conversation,
     initialSize: { cols: number; rows: number } = { cols: DEFAULT_COLS, rows: DEFAULT_ROWS },
     isResuming: boolean = false,
-    initialPrompt?: string
+    initialPrompt?: string,
+    tmuxOverride?: boolean
   ): Promise<void> {
     const sessionId = makePtySessionId(
       conversation.projectId,
@@ -107,7 +108,7 @@ export class SshConversationProvider implements ConversationProvider {
       initialPrompt,
     });
 
-    const tmuxSessionName = await this.resolveTmuxSessionName(sessionId);
+    const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
     const providerEnv = resolveProviderEnv(providerConfig, {
       providerId: conversation.providerId,
       tmuxEnabled: Boolean(tmuxSessionName),
@@ -162,6 +163,7 @@ export class SshConversationProvider implements ConversationProvider {
     });
 
     pty.onExit(({ exitCode }) => {
+      if (this.sessions.get(sessionId) !== pty) return;
       ptySessionRegistry.unregister(sessionId);
       this.sessions.delete(sessionId);
       this.sessionInfos.delete(sessionId);
@@ -213,12 +215,15 @@ export class SshConversationProvider implements ConversationProvider {
     });
   }
 
-  private resolveTmuxSessionName(sessionId: string): Promise<string | undefined> {
+  private resolveTmuxSessionName(
+    sessionId: string,
+    tmuxOverride?: boolean
+  ): Promise<string | undefined> {
     return resolveAvailableTmuxSessionName({
       auto: false,
       connectionId: this.connectionId,
       ctx: this.ctx,
-      requested: this.tmux,
+      requested: tmuxOverride ?? this.tmux,
       sessionId,
       source: 'SshConversationProvider',
     });

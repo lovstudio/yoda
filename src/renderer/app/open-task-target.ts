@@ -1,6 +1,5 @@
 import { when } from 'mobx';
 import type { DeepLinkTarget } from '@shared/deep-links';
-import { contextPanelFocusStore } from '@renderer/features/tasks/context-panel-focus';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import type { NavigateFnTyped } from '@renderer/lib/layout/navigation-provider';
 import { log } from '@renderer/utils/logger';
@@ -16,6 +15,10 @@ export function openTaskTarget(
   disposers?: Set<() => void>
 ): void {
   const { projectId, taskId, conversationId, promptId, promptIndex } = target;
+  if (!taskId) {
+    navigate('project', { projectId });
+    return;
+  }
   navigate('task', { projectId, taskId });
   if (!conversationId) return;
 
@@ -35,13 +38,9 @@ export function openTaskTarget(
           provisioned.taskView.setFocusedRegion('main');
 
           if (promptId || promptIndex) {
+            // Prompts now live in the dedicated Conversation chapter; open it.
             provisioned.taskView.setSidebarCollapsed(false);
-            provisioned.taskView.setSidebarTab('context');
-            contextPanelFocusStore.focusPrompt({
-              sessionId: conversationId,
-              promptId,
-              promptIndex,
-            });
+            provisioned.taskView.setSidebarTab('conversations');
           }
         })
         .catch((error: unknown) => {

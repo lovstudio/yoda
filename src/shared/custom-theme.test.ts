@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   createCustomThemeCollection,
+  CUSTOM_THEME_EXAMPLE,
+  CUSTOM_THEME_EXAMPLE_FILE_NAME,
   getCustomThemeId,
   parseCustomThemePackageText,
   toCustomThemeSelection,
@@ -45,6 +47,16 @@ describe('custom theme packages', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.theme.id).toBe('solar-light');
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('keeps the downloadable example importable', () => {
+    const result = parseCustomThemePackageText(JSON.stringify(CUSTOM_THEME_EXAMPLE));
+
+    expect(CUSTOM_THEME_EXAMPLE_FILE_NAME).toBe('yoda-theme-example.json');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.theme.id).toBe(CUSTOM_THEME_EXAMPLE.id);
     expect(result.warnings).toEqual([]);
   });
 

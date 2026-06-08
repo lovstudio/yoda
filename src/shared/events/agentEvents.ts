@@ -1,6 +1,13 @@
 import { defineEvent } from '@shared/ipc/events';
 
-export type AgentEventType = 'notification' | 'stop' | 'error';
+export type AgentEventType =
+  | 'notification'
+  | 'stop'
+  | 'error'
+  /** An interactive tool (AskUserQuestion / ExitPlanMode) is blocking on the user. */
+  | 'awaiting-input'
+  /** That interactive tool was answered — the agent resumes working. */
+  | 'awaiting-input-resolved';
 
 export type AgentSessionRuntimeStatus =
   | 'idle'
@@ -77,3 +84,25 @@ export interface AgentSessionStatusChanged {
 export const agentSessionStatusChangedChannel = defineEvent<AgentSessionStatusChanged>(
   'agent:session-status-changed'
 );
+
+/**
+ * Emitted when a hook command runs while debug mode is enabled for a task.
+ * Captured by Yoda's logging shim wrapped around each effective hook command.
+ * Topic = taskId.
+ */
+export interface HookExecEvent {
+  projectId: string;
+  taskId: string;
+  conversationId: string;
+  providerId: string;
+  /** Stable id of the hook (event:matcher:index) it corresponds to. */
+  hookId: string;
+  /** Hook event key, e.g. 'PreToolUse', 'Notification'. */
+  hookEvent: string;
+  command: string;
+  exitCode: number | undefined;
+  output?: string;
+  timestamp: number;
+}
+
+export const hookExecChannel = defineEvent<HookExecEvent>('agent:hook-exec');

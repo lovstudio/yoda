@@ -77,6 +77,9 @@ export type TaskSidebarViewSnapshot = {
   sidebarTab?: string;
   isSidebarCollapsed?: boolean;
   contextPanelOpenSectionIds?: string[];
+  sessionPanelOpenSectionIds?: string[];
+  /** Open ids for ad-hoc disclosures (`<details>`, group toggles) across panels. */
+  disclosureOpenIds?: string[];
 };
 
 export type ProjectViewSnapshot = {

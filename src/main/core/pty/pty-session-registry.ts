@@ -45,6 +45,7 @@ export class PtySessionRegistry {
     };
 
     pty.onData((data) => {
+      if (this.ptyMap.get(sessionId) !== pty) return;
       buffer += data;
       if (!flushTimer) {
         flushTimer = setTimeout(flush, FLUSH_INTERVAL_MS);
@@ -56,6 +57,7 @@ export class PtySessionRegistry {
     });
 
     pty.onExit((info) => {
+      if (this.ptyMap.get(sessionId) !== pty) return;
       // Flush any buffered output before emitting exit
       if (flushTimer !== null) {
         clearTimeout(flushTimer);
@@ -93,6 +95,10 @@ export class PtySessionRegistry {
 
   get(sessionId: string): Pty | undefined {
     return this.ptyMap.get(sessionId);
+  }
+
+  snapshot(sessionId: string): string {
+    return this.ringBuffers.get(sessionId) ?? '';
   }
 
   /**

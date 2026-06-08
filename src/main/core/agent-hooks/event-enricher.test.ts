@@ -34,13 +34,14 @@ describe('enrichEvent', () => {
       }),
     });
 
-    expect(event.type).toBe('stop');
-    expect(event.providerId).toBe('codex');
-    expect(event.projectId).toBe('project-1');
-    expect(event.taskId).toBe('task-1');
-    expect(event.conversationId).toBe('conversation-1');
-    expect(event.payload.lastAssistantMessage).toBe('Done.');
-    expect(event.payload.notificationType).toBeUndefined();
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe('stop');
+    expect(event!.providerId).toBe('codex');
+    expect(event!.projectId).toBe('project-1');
+    expect(event!.taskId).toBe('task-1');
+    expect(event!.conversationId).toBe('conversation-1');
+    expect(event!.payload.lastAssistantMessage).toBe('Done.');
+    expect(event!.payload.notificationType).toBeUndefined();
   });
 
   it('preserves regular Codex notification events', async () => {
@@ -52,7 +53,18 @@ describe('enrichEvent', () => {
       }),
     });
 
-    expect(event.type).toBe('notification');
-    expect(event.payload.notificationType).toBe('permission_prompt');
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe('notification');
+    expect(event!.payload.notificationType).toBe('permission_prompt');
+  });
+
+  it('returns null (no 500) when the conversation no longer exists', async () => {
+    mocks.limit.mockResolvedValue([]); // conversation deleted mid-flight
+    const event = await enrichEvent({
+      ptyId: makePtyId('claude', 'gone-conversation'),
+      type: 'stop',
+      body: '{}',
+    });
+    expect(event).toBeNull();
   });
 });

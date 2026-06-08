@@ -51,6 +51,7 @@ interface ProjectMenuActions {
   isSsh: boolean;
   canReconnect: boolean;
   projectPath?: string;
+  onCopyYodaLink?: () => void;
   onPin: () => void;
   onUnpin: () => void;
   onOpenDetails?: () => void;
@@ -116,6 +117,15 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
         },
       });
     }
+  }
+  if (actions.onCopyYodaLink) {
+    items.push({
+      key: 'copy-yoda-link',
+      group: 1,
+      icon: Copy,
+      label: t('sidebar.copyProjectYodaLink'),
+      onSelect: actions.onCopyYodaLink,
+    });
   }
 
   // group 2 — configuration

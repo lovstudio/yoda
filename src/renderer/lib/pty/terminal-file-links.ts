@@ -11,9 +11,12 @@ const MAX_WRAPPED_LINE_LENGTH = 2048;
 // brackets so paths like `bar.txt。` or `foo.md（…）` terminate cleanly.
 const PATH_SEG_EXCLUDED = `\\s"'\`$<>|\\\\:：（）「」『』【】〈〉《》，。；！？`;
 const PATH_LEADING = `\\s"'([{<:：（「『【〈《`;
-const PATH_TRAILING = `\\s"')\\]}>,，。；;!?！？(（）「」『』【】〈〉《》`;
+const PATH_TRAILING = `\\s"')\\]}>,，。；;!?！？.(（）「」『』【】〈〉《》`;
+// File extension: 1–32 path chars after a dot, but the final char may not be a
+// dot so a trailing sentence period (`foo.md.`) is left out of the link.
+const PATH_EXT = `[^${PATH_SEG_EXCLUDED}\\/]{0,31}[^${PATH_SEG_EXCLUDED}\\/.]`;
 const FILE_PATH_CANDIDATE_REGEX = new RegExp(
-  `(^|[${PATH_LEADING}])(@?(?:(?:~|\\.{1,2})\\/|\\/)?(?:[^${PATH_SEG_EXCLUDED}]+\\/)+[^${PATH_SEG_EXCLUDED}\\/]*\\.[^${PATH_SEG_EXCLUDED}\\/]{1,32}(?::\\d+(?::\\d+)?)?)(?=$|[${PATH_TRAILING}])`,
+  `(^|[${PATH_LEADING}])(@?(?:(?:~|\\.{1,2})\\/|\\/)?(?:[^${PATH_SEG_EXCLUDED}]+\\/)+[^${PATH_SEG_EXCLUDED}\\/]*\\.${PATH_EXT}(?::\\d+(?::\\d+)?)?)(?=$|[${PATH_TRAILING}])`,
   'gu'
 );
 

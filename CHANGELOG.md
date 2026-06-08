@@ -5,6 +5,31 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.3.10 — 2026-06-09
+
+### Added
+
+- Add a token-protected desktop mobile gateway and Expo mobile app workspace for
+  viewing project/task state and creating requests from mobile.
+- Add an agent-hooks inspector with exec enrichment/shim and per-hook overrides
+  (apply + persisted store).
+- Add Claude run-state and transcript parsing, on-demand session summary
+  generation, conversation runtime status, and a conversation restart flow.
+
+### Changed
+
+- Rework agent run-state synchronization to fix inaccurate spinner/idle status.
+- Refresh command-palette scoped search and task hooks/harness/overview/session
+  panels, naming config fields, and persisted disclosure UI.
+- Improve PTY terminal sizing and rendering (right-edge overflow, tmux scroll
+  residue, restart half-screen).
+
+### Fixed
+
+- Fix agent running-state desync that caused stuck spinners and wrong idle state.
+- Fix terminal right-side overflow, trailing whitespace, and tmux scroll
+  artifacts.
+
 ## 0.3.9 — 2026-06-07
 
 ### Added

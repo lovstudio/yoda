@@ -94,6 +94,7 @@ void app.whenReady().then(async () => {
   const __bootMark = (label: string) =>
     console.log(`[DEBUG][boot] ${label} +${Date.now() - __bootT0}ms`);
   __bootMark('whenReady fired');
+  console.log('[BUILD-MARKER] agent-run-state-sync v3 (claude-truth + enrichEvent-null)');
   agentSessionRuntimeStore.initialize();
 
   // Login-shell env capture (`$SHELL -ilc 'env'`) can take 1-2s when the user
@@ -148,7 +149,7 @@ void app.whenReady().then(async () => {
   deepLinkService.start();
 
   setupAppProtocol(join(app.getAppPath(), 'out', 'renderer'));
-  setupApplicationMenu();
+  await setupApplicationMenu();
   __bootMark('protocol + menu done');
   const __win = createMainWindowWithDeepLinkReset();
   __bootMark('createMainWindow returned');

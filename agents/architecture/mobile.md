@@ -28,7 +28,11 @@ pnpm run dev
 Override it with `YODA_MOBILE_GATEWAY_TOKEN=<token>` when needed. Packaged/production builds
 generate a random token unless the environment variable is set.
 
-Start Expo with:
+In development, desktop startup also auto-starts local Expo Metro on port `8081` when no Metro is
+already running. Set `YODA_MOBILE_METRO_DISABLED=1` to turn off this auto-start, or set
+`YODA_MOBILE_EXPO_URL` when Metro runs somewhere else.
+
+Start Expo manually only when you want a separate terminal, tunnel mode, or custom flags:
 
 ```bash
 pnpm mobile

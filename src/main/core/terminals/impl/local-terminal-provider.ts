@@ -121,12 +121,14 @@ export class LocalTerminalProvider implements TerminalProvider {
           command,
           shellSetup: this.shellSetup,
           tmuxSessionName,
+          tmuxSize: initialSize,
         }
       : {
           kind: 'interactive-shell',
           cwd: this.taskPath,
           shellSetup: this.shellSetup,
           tmuxSessionName,
+          tmuxSize: initialSize,
         };
     const resolved = resolveLocalPtySpawn({
       platform: process.platform,

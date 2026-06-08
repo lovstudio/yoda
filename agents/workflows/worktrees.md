@@ -29,7 +29,6 @@ Base project settings are DB-backed Project Settings, not runtime `.yoda.json` k
 - `worktreeDirectory`
 - `defaultBranch`
 - `remote`
-- `tmux`
 - `workspaceProvider`
 
 ## Rules
@@ -37,5 +36,5 @@ Base project settings are DB-backed Project Settings, not runtime `.yoda.json` k
 - do not hardcode worktree paths; use service helpers
 - use lifecycle config for repo-specific bootstrap and teardown behavior
 - `shellSetup` runs inside each PTY before the interactive shell starts
-- tmux wrapping has an app level default but is also project-configurable in Project Settings and affects PTY lifecycle behavior.
+- tmux wrapping is controlled by the global task setting and affects PTY lifecycle behavior.
 - `preservePatterns` never copies tracked files or `.yoda.json`

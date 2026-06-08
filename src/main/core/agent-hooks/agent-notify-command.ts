@@ -13,15 +13,36 @@ export type CodexNotifyCommandOptions = {
 
 const ensuredWindowsCodexNotifyScriptPaths = new Set<string>();
 
+/**
+ * POSIX snippet that reads the hook server's current `{ port, token }` from the
+ * well-known endpoint file ($HOME/.yoda/hook-endpoint.json) at fire-time into
+ * `YH_PORT` / `YH_TOKEN`. This survives main-process restarts: a long-lived
+ * agent process always reads the *current* endpoint instead of a stale
+ * `YODA_HOOK_PORT` env captured when its PTY was spawned.
+ *
+ * Uses only `sed` (no python, no jq) so there is no nested-quote hazard when
+ * this string is embedded directly in a hook command line, and no runtime
+ * dependency beyond a POSIX shell. If the file is absent, `YH_PORT` is empty
+ * and the caller's `[ -n "$YH_PORT" ]` guard skips the request.
+ */
+function readHookEndpointSnippet(): string {
+  const file = '"$HOME/.yoda/hook-endpoint.json"';
+  return (
+    `YH_PORT=$(sed -n 's/.*"port":\\([0-9]*\\).*/\\1/p' ${file} 2>/dev/null); ` +
+    `YH_TOKEN=$(sed -n 's/.*"token":"\\([^"]*\\)".*/\\1/p' ${file} 2>/dev/null); `
+  );
+}
+
 export function makeClaudeHookCommand(eventType: string): string {
   return (
-    'curl -sf -X POST ' +
+    readHookEndpointSnippet() +
+    '[ -n "$YH_PORT" ] && curl -sf -X POST ' +
     '-H "Content-Type: application/json" ' +
-    '-H "X-Yoda-Token: $YODA_HOOK_TOKEN" ' +
+    '-H "X-Yoda-Token: $YH_TOKEN" ' +
     '-H "X-Yoda-Pty-Id: $YODA_PTY_ID" ' +
     `-H "X-Yoda-Event-Type: ${eventType}" ` +
     '-d @- ' +
-    '"http://127.0.0.1:$YODA_HOOK_PORT/hook" || true'
+    '"http://127.0.0.1:$YH_PORT/hook"; true'
   );
 }
 
@@ -33,13 +54,14 @@ function makePosixCodexNotifyCommand(): string[] {
   return [
     'bash',
     '-c',
-    'curl -sf -X POST ' +
+    readHookEndpointSnippet() +
+      '[ -n "$YH_PORT" ] && curl -sf -X POST ' +
       "-H 'Content-Type: application/json' " +
-      '-H "X-Yoda-Token: $YODA_HOOK_TOKEN" ' +
+      '-H "X-Yoda-Token: $YH_TOKEN" ' +
       '-H "X-Yoda-Pty-Id: $YODA_PTY_ID" ' +
       '-H "X-Yoda-Event-Type: notification" ' +
       '-d "$1" ' +
-      '"http://127.0.0.1:$YODA_HOOK_PORT/hook" || true',
+      '"http://127.0.0.1:$YH_PORT/hook"; true',
     '_',
   ];
 }

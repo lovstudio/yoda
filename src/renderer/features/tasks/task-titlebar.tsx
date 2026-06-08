@@ -1,13 +1,4 @@
-import {
-  FileDiff,
-  FolderOpen,
-  Info,
-  ListChecks,
-  Pencil,
-  Pin,
-  Sparkles,
-  Terminal,
-} from 'lucide-react';
+import { Cpu, FileDiff, FolderOpen, PanelRightOpen, Pin, Terminal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import type { Issue } from '@shared/tasks';
@@ -177,14 +168,14 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
           </Tooltip>
           <Separator orientation="vertical" className="h-5 self-center!" />
           <ToggleGroup
-            value={taskView.isSidebarCollapsed ? [] : [taskView.sidebarTab]}
+            value={taskView.isSidebarCollapsed ? [] : [titlebarTabValue(taskView.sidebarTab)]}
             onValueChange={([tab]) => {
               if (!tab) {
                 taskView.setSidebarCollapsed(true);
                 return;
               }
-              if (!isSidebarTab(tab)) return;
-              taskView.setSidebarTab(tab);
+              if (!isTitlebarTab(tab)) return;
+              taskView.setSidebarTab(sidebarTabForTitlebar(tab));
               taskView.setSidebarCollapsed(false);
             }}
             size="icon-sm"
@@ -196,37 +187,27 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
                   <ToggleGroupItem
                     size="icon-sm"
                     value="session"
-                    aria-label={t('tasks.sessionInfo.title')}
+                    aria-label={t('tasks.sessionPanel.title')}
                   >
-                    <Info className="size-3.5" />
+                    <PanelRightOpen className="size-3.5" />
                   </ToggleGroupItem>
                 }
               />
-              <TooltipContent>{t('tasks.sessionInfo.title')}</TooltipContent>
+              <TooltipContent>{t('tasks.sessionPanel.title')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
                 render={
                   <ToggleGroupItem
                     size="icon-sm"
-                    value="context"
-                    aria-label={t('tasks.contextTab')}
+                    value="harness"
+                    aria-label={t('tasks.sessionPanel.harness')}
                   >
-                    <Sparkles className="size-3.5" />
+                    <Cpu className="size-3.5" />
                   </ToggleGroupItem>
                 }
               />
-              <TooltipContent>{t('tasks.contextTab')}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <ToggleGroupItem size="icon-sm" value="task" aria-label="Task">
-                    <ListChecks className="size-3.5" />
-                  </ToggleGroupItem>
-                }
-              />
-              <TooltipContent>Task</TooltipContent>
+              <TooltipContent>{t('tasks.sessionPanel.harness')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
@@ -248,20 +229,6 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
               />
               <TooltipContent>{t('tasks.files')}</TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <ToggleGroupItem
-                    size="icon-sm"
-                    value="rename"
-                    aria-label={t('tasks.rename.panelTitle')}
-                  >
-                    <Pencil className="size-3.5" />
-                  </ToggleGroupItem>
-                }
-              />
-              <TooltipContent>{t('tasks.rename.panelTitle')}</TooltipContent>
-            </Tooltip>
           </ToggleGroup>
         </div>
       }
@@ -269,16 +236,23 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
   );
 });
 
-function isSidebarTab(value: string): value is SidebarTab {
-  return (
-    value === 'session' ||
-    value === 'task' ||
-    value === 'conversations' ||
-    value === 'changes' ||
-    value === 'files' ||
-    value === 'context' ||
-    value === 'rename'
-  );
+/** The icons the titlebar exposes after merging the session-family tabs. */
+type TitlebarTab = 'session' | 'harness' | 'changes' | 'files';
+
+function isTitlebarTab(value: string): value is TitlebarTab {
+  return value === 'session' || value === 'harness' || value === 'changes' || value === 'files';
+}
+
+/** Which titlebar toggle is active for the current sidebar tab. */
+function titlebarTabValue(tab: SidebarTab): TitlebarTab {
+  if (tab === 'changes' || tab === 'files') return tab;
+  if (tab === 'context' || tab === 'hooks') return 'harness';
+  return 'session';
+}
+
+/** The canonical sidebar tab a titlebar toggle activates. */
+function sidebarTabForTitlebar(tab: TitlebarTab): SidebarTab {
+  return tab === 'harness' ? 'context' : tab;
 }
 
 function LinkedIssuesBadgeGroup({ issues }: { issues: Issue[] }) {

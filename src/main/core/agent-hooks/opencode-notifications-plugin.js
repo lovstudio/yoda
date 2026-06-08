@@ -1,11 +1,16 @@
 /* global fetch, process */
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 export const YodaNotifications = async () => ({
   event: async ({ event }) => {
-    const port = process.env.YODA_HOOK_PORT;
-    const token = process.env.YODA_HOOK_TOKEN;
+    // Read the live hook endpoint at fire-time so it survives main-process
+    // restarts (a captured YODA_HOOK_PORT env would go stale).
+    const endpoint = readYodaHookEndpoint();
     const ptyId = process.env.YODA_PTY_ID;
-    if (!port || !token || !ptyId) return;
+    if (!endpoint || !ptyId) return;
+    const { port, token } = endpoint;
 
     const payload = toYodaPayload(event);
     if (!payload) return;
@@ -26,6 +31,17 @@ export const YodaNotifications = async () => ({
     }
   },
 });
+
+function readYodaHookEndpoint() {
+  try {
+    const file = join(homedir(), '.yoda', 'hook-endpoint.json');
+    const { port, token } = JSON.parse(readFileSync(file, 'utf8'));
+    if (!port || !token) return undefined;
+    return { port, token };
+  } catch {
+    return undefined;
+  }
+}
 
 function toYodaPayload(event) {
   if (event.type === 'session.idle') {

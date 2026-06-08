@@ -1,6 +1,12 @@
 import type { Conversation } from '@shared/conversations';
 import type { Project } from '@shared/projects';
-import type { CommandPaletteQuery, SearchItem, SearchItemKind } from '@shared/search';
+import type {
+  CommandPalettePage,
+  CommandPalettePagedQuery,
+  CommandPaletteQuery,
+  SearchItem,
+  SearchItemKind,
+} from '@shared/search';
 import type { Task } from '@shared/tasks';
 import { db, sqlite } from '@main/db/client';
 import { projects, tasks } from '@main/db/schema';
@@ -14,6 +20,7 @@ type FtsRow = {
   item_id: string;
   project_id: string | null;
   task_id: string | null;
+  archived: string | null;
   title: string;
   rank: number;
 };
@@ -31,11 +38,26 @@ type RecentConversationRow = {
   task_id: string;
 };
 
+function toSearchItem(r: FtsRow): SearchItem {
+  return {
+    kind: r.item_type as SearchItemKind,
+    id: r.item_id,
+    projectId: r.project_id,
+    taskId: r.task_id,
+    title: r.title,
+    subtitle: '',
+    score: r.rank,
+    archived: r.archived === '1',
+  };
+}
+
 class SearchService {
   initialize(): void {
     taskEvents.on('task:created', (task) => this.upsertTask(task));
     taskEvents.on('task:updated', (task) => this.upsertTask(task));
-    taskEvents.on('task:archived', (taskId) => this.removeByType('task', taskId));
+    // Archived tasks stay indexed (marked archived) so search can still surface
+    // them; restore emits task:updated, which re-upserts with archived cleared.
+    taskEvents.on('task:archived', (taskId) => this.markTaskArchived(taskId));
     taskEvents.on('task:deleted', (taskId) => this.removeByType('task', taskId));
 
     projectEvents.on('project:created', (project) => this.upsertProject(project));
@@ -60,78 +82,281 @@ class SearchService {
   }
 
   search({ query, context }: CommandPaletteQuery): SearchItem[] {
-    if (!query.trim()) return this.recents(context);
+    const trimmed = query.trim();
+    if (!trimmed) return this.recents(context);
 
-    const ftsQuery = query
-      .trim()
-      .split(/[\s\-_]+/)
-      .filter(Boolean)
-      .map((t) => `${t}*`)
-      .join(' AND ');
+    const terms = trimmed.split(/[\s\-_]+/).filter(Boolean);
 
-    let rows: FtsRow[];
+    // The trigram tokenizer indexes 3-char sliding windows, so it can match
+    // substrings inside CJK words (e.g. "残影" inside "滚动残影") — but only for
+    // terms of 3+ chars. Short terms (1-2 chars, common in CJK) have no trigram
+    // to match, so those queries fall back to a LIKE substring scan.
+    const trigramOk = terms.length > 0 && terms.every((t) => t.length >= 3);
+    const rows = trigramOk ? this.searchFts(terms, context) : this.searchLike(trimmed, context);
+    return this.attachTimestamps(rows);
+  }
+
+  /**
+   * Fills in `timestamp` for FTS results. The search index has no time column,
+   * so look each item's last-activity time up from its source table by id.
+   */
+  private attachTimestamps(items: SearchItem[]): SearchItem[] {
+    if (items.length === 0) return items;
+
+    const ids = { task: [] as string[], project: [] as string[], conversation: [] as string[] };
+    for (const it of items) ids[it.kind].push(it.id);
+
+    const ts = new Map<string, string | null>();
+    const load = (kind: SearchItemKind, sql: string, idList: string[]) => {
+      if (idList.length === 0) return;
+      const placeholders = idList.map(() => '?').join(',');
+      const rows = sqlite.prepare(sql.replace('@ids', placeholders)).all(...idList) as {
+        id: string;
+        ts: string | null;
+      }[];
+      for (const r of rows) ts.set(`${kind}:${r.id}`, r.ts);
+    };
     try {
-      if (context?.taskId) {
-        rows = sqlite
-          .prepare(
-            `SELECT item_type, item_id, project_id, task_id, title, bm25(search_index) AS rank
-             FROM search_index
-             WHERE search_index MATCH ?
-               AND (item_type != 'conversation' OR task_id = ?)
-             ORDER BY rank
-             LIMIT 30`
-          )
-          .all(ftsQuery, context.taskId) as FtsRow[];
-      } else {
-        rows = sqlite
-          .prepare(
-            `SELECT item_type, item_id, project_id, task_id, title, bm25(search_index) AS rank
-             FROM search_index
-             WHERE search_index MATCH ?
-               AND item_type != 'conversation'
-             ORDER BY rank
-             LIMIT 30`
-          )
-          .all(ftsQuery) as FtsRow[];
-      }
+      load('task', `SELECT id, last_interacted_at AS ts FROM tasks WHERE id IN (@ids)`, ids.task);
+      load('project', `SELECT id, updated_at AS ts FROM projects WHERE id IN (@ids)`, ids.project);
+      load(
+        'conversation',
+        `SELECT id, last_interacted_at AS ts FROM conversations WHERE id IN (@ids)`,
+        ids.conversation
+      );
     } catch (e) {
-      log.warn('SearchService: FTS query failed', { query, error: String(e) });
-      return [];
+      log.warn('SearchService: attachTimestamps failed', { error: String(e) });
     }
 
-    return rows.map((r) => ({
-      kind: r.item_type as SearchItemKind,
-      id: r.item_id,
-      projectId: r.project_id,
-      taskId: r.task_id,
-      title: r.title,
-      subtitle: '',
-      score: r.rank,
-    }));
+    return items.map((it) => ({ ...it, timestamp: ts.get(`${it.kind}:${it.id}`) ?? null }));
+  }
+
+  /**
+   * Paginated, single-kind query backing the scoped infinite-scroll views.
+   * Empty query → recents for that kind; otherwise FTS/LIKE filtered to the kind.
+   * Fetches limit+1 rows to detect whether another page exists.
+   */
+  searchPaged({
+    query,
+    kind,
+    offset,
+    limit,
+    context,
+  }: CommandPalettePagedQuery): CommandPalettePage {
+    const probe = limit + 1;
+    const trimmed = query.trim();
+    const rows = trimmed
+      ? this.attachTimestamps(this.searchKindPaged(trimmed, kind, context, probe, offset))
+      : this.recentsForKind(kind, context, probe, offset);
+
+    const hasMore = rows.length > limit;
+    return { items: rows.slice(0, limit), nextOffset: hasMore ? offset + limit : null };
+  }
+
+  private recentsForKind(
+    kind: SearchItemKind,
+    context: CommandPaletteQuery['context'],
+    limit: number,
+    offset: number
+  ): SearchItem[] {
+    if (kind === 'task') return this.recentTasks(context, limit, offset);
+    if (kind === 'project') return this.recentProjects(limit, offset);
+    return this.recentConversations(context, limit, offset);
+  }
+
+  /**
+   * Kind-scoped typed search (FTS for 3+ char terms, LIKE fallback otherwise)
+   * with native LIMIT/OFFSET so pagination is correct per kind.
+   */
+  private searchKindPaged(
+    query: string,
+    kind: SearchItemKind,
+    context: CommandPaletteQuery['context'],
+    limit: number,
+    offset: number
+  ): SearchItem[] {
+    const terms = query.split(/[\s\-_]+/).filter(Boolean);
+    const trigramOk = terms.length > 0 && terms.every((t) => t.length >= 3);
+    // Conversations are only matched within the current task, mirroring search().
+    const convScoped = kind === 'conversation' && context?.taskId;
+
+    try {
+      if (trigramOk) {
+        const ftsQuery = terms.map((t) => `"${t.replace(/"/g, '""')}"`).join(' AND ');
+        const rows = (
+          convScoped
+            ? sqlite
+                .prepare(
+                  `SELECT item_type, item_id, project_id, task_id, archived, title, bm25(search_index) AS rank
+                   FROM search_index
+                   WHERE search_index MATCH ? AND item_type = ? AND task_id = ?
+                   ORDER BY archived, rank LIMIT ? OFFSET ?`
+                )
+                .all(ftsQuery, kind, context!.taskId, limit, offset)
+            : sqlite
+                .prepare(
+                  `SELECT item_type, item_id, project_id, task_id, archived, title, bm25(search_index) AS rank
+                   FROM search_index
+                   WHERE search_index MATCH ? AND item_type = ?
+                   ORDER BY archived, rank LIMIT ? OFFSET ?`
+                )
+                .all(ftsQuery, kind, limit, offset)
+        ) as FtsRow[];
+        return rows.map(toSearchItem);
+      }
+
+      const like = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
+      const rows = (
+        convScoped
+          ? sqlite
+              .prepare(
+                `SELECT item_type, item_id, project_id, task_id, archived, title, 0 AS rank
+                 FROM search_index
+                 WHERE (title LIKE ? ESCAPE '\\' OR keywords LIKE ? ESCAPE '\\')
+                   AND item_type = ? AND task_id = ?
+                 ORDER BY archived LIMIT ? OFFSET ?`
+              )
+              .all(like, like, kind, context!.taskId, limit, offset)
+          : sqlite
+              .prepare(
+                `SELECT item_type, item_id, project_id, task_id, archived, title, 0 AS rank
+                 FROM search_index
+                 WHERE (title LIKE ? ESCAPE '\\' OR keywords LIKE ? ESCAPE '\\')
+                   AND item_type = ?
+                 ORDER BY archived LIMIT ? OFFSET ?`
+              )
+              .all(like, like, kind, limit, offset)
+      ) as FtsRow[];
+      return rows.map(toSearchItem);
+    } catch (e) {
+      log.warn('SearchService: searchKindPaged failed', { kind, error: String(e) });
+      return [];
+    }
+  }
+
+  /** Trigram FTS5 search with BM25 ranking. Each term must be 3+ chars. */
+  private searchFts(terms: string[], context?: CommandPaletteQuery['context']): SearchItem[] {
+    // Quote each term so trigram treats it as a literal substring and FTS5
+    // operators inside the term (-, ", *) are not interpreted as query syntax.
+    const ftsQuery = terms.map((t) => `"${t.replace(/"/g, '""')}"`).join(' AND ');
+
+    try {
+      const rows = (
+        context?.taskId
+          ? sqlite
+              .prepare(
+                `SELECT item_type, item_id, project_id, task_id, archived, title, bm25(search_index) AS rank
+                 FROM search_index
+                 WHERE search_index MATCH ?
+                   AND (item_type != 'conversation' OR task_id = ?)
+                 ORDER BY archived, rank
+                 LIMIT 30`
+              )
+              .all(ftsQuery, context.taskId)
+          : sqlite
+              .prepare(
+                `SELECT item_type, item_id, project_id, task_id, archived, title, bm25(search_index) AS rank
+                 FROM search_index
+                 WHERE search_index MATCH ?
+                   AND item_type != 'conversation'
+                 ORDER BY archived, rank
+                 LIMIT 30`
+              )
+              .all(ftsQuery)
+      ) as FtsRow[];
+      return rows.map(toSearchItem);
+    } catch (e) {
+      log.warn('SearchService: FTS query failed', { terms, error: String(e) });
+      return [];
+    }
+  }
+
+  /** Substring fallback for short (1-2 char) queries the trigram index can't serve. */
+  private searchLike(needle: string, context?: CommandPaletteQuery['context']): SearchItem[] {
+    const like = `%${needle.replace(/[\\%_]/g, '\\$&')}%`;
+    try {
+      const rows = (
+        context?.taskId
+          ? sqlite
+              .prepare(
+                `SELECT item_type, item_id, project_id, task_id, archived, title, 0 AS rank
+                 FROM search_index
+                 WHERE (title LIKE ? ESCAPE '\\' OR keywords LIKE ? ESCAPE '\\')
+                   AND (item_type != 'conversation' OR task_id = ?)
+                 ORDER BY archived
+                 LIMIT 30`
+              )
+              .all(like, like, context.taskId)
+          : sqlite
+              .prepare(
+                `SELECT item_type, item_id, project_id, task_id, archived, title, 0 AS rank
+                 FROM search_index
+                 WHERE (title LIKE ? ESCAPE '\\' OR keywords LIKE ? ESCAPE '\\')
+                   AND item_type != 'conversation'
+                 ORDER BY archived
+                 LIMIT 30`
+              )
+              .all(like, like)
+      ) as FtsRow[];
+      return rows.map(toSearchItem);
+    } catch (e) {
+      log.warn('SearchService: LIKE query failed', { needle, error: String(e) });
+      return [];
+    }
   }
 
   private recents(context?: CommandPaletteQuery['context']): SearchItem[] {
-    const taskStmt = context?.projectId
-      ? sqlite.prepare(
-          `SELECT t.id, t.name, t.project_id
-           FROM tasks t
-           WHERE t.archived_at IS NULL AND t.project_id = ?
-           ORDER BY t.last_interacted_at DESC
-           LIMIT 10`
-        )
-      : sqlite.prepare(
-          `SELECT t.id, t.name, t.project_id
-           FROM tasks t
-           WHERE t.archived_at IS NULL
-           ORDER BY t.last_interacted_at DESC
-           LIMIT 10`
-        );
+    // Same per-category preview size so the "all" overview is balanced across
+    // kinds (the scoped chips give the full, infinite-scroll list per kind).
+    const PREVIEW = 8;
+    const results: SearchItem[] = [];
+    // Guard each source independently so one failing query can't blank the list.
+    try {
+      results.push(...this.recentTasks(context, PREVIEW));
+    } catch (e) {
+      log.warn('SearchService: recentTasks failed', { error: String(e) });
+    }
+    try {
+      results.push(...this.recentProjects(PREVIEW));
+    } catch (e) {
+      log.warn('SearchService: recentProjects failed', { error: String(e) });
+    }
+    try {
+      results.push(...this.recentConversations(context, PREVIEW));
+    } catch (e) {
+      log.warn('SearchService: recentConversations failed', { error: String(e) });
+    }
+    return results;
+  }
 
+  /** Recent tasks — active first, then archived (both surfaced). */
+  private recentTasks(
+    context?: CommandPaletteQuery['context'],
+    limit = 10,
+    offset = 0
+  ): SearchItem[] {
     const taskRows = (
-      context?.projectId ? taskStmt.all(context.projectId) : taskStmt.all()
-    ) as RecentTaskRow[];
+      context?.projectId
+        ? sqlite
+            .prepare(
+              `SELECT t.id, t.name, t.project_id, t.archived_at, t.last_interacted_at
+               FROM tasks t
+               WHERE t.project_id = ?
+               ORDER BY (t.archived_at IS NOT NULL), t.last_interacted_at DESC
+               LIMIT ? OFFSET ?`
+            )
+            .all(context.projectId, limit, offset)
+        : sqlite
+            .prepare(
+              `SELECT t.id, t.name, t.project_id, t.archived_at, t.last_interacted_at
+               FROM tasks t
+               ORDER BY (t.archived_at IS NOT NULL), t.last_interacted_at DESC
+               LIMIT ? OFFSET ?`
+            )
+            .all(limit, offset)
+    ) as (RecentTaskRow & { archived_at: string | null; last_interacted_at: string | null })[];
 
-    const results: SearchItem[] = taskRows.map((r) => ({
+    return taskRows.map((r) => ({
       kind: 'task' as const,
       id: r.id,
       projectId: r.project_id,
@@ -139,49 +364,121 @@ class SearchService {
       title: r.name,
       subtitle: '',
       score: 0,
+      archived: r.archived_at != null,
+      timestamp: r.last_interacted_at,
     }));
+  }
 
-    if (context?.taskId) {
-      const conversationRows = sqlite
-        .prepare(
-          `SELECT c.id, c.title, c.project_id, c.task_id
-           FROM conversations c
-           WHERE c.task_id = ? AND c.archived_at IS NULL
-           ORDER BY c.last_interacted_at DESC
-           LIMIT 10`
-        )
-        .all(context.taskId) as RecentConversationRow[];
+  /** Recent projects — active first, then archived. Internal projects are hidden. */
+  private recentProjects(limit = 8, offset = 0): SearchItem[] {
+    const rows = sqlite
+      .prepare(
+        `SELECT p.id, p.name, p.archived_at, p.updated_at
+         FROM projects p
+         WHERE p.is_internal = 0
+         ORDER BY (p.archived_at IS NOT NULL), p.updated_at DESC
+         LIMIT ? OFFSET ?`
+      )
+      .all(limit, offset) as {
+      id: string;
+      name: string;
+      archived_at: string | null;
+      updated_at: string | null;
+    }[];
 
-      for (const r of conversationRows) {
-        results.push({
-          kind: 'conversation',
-          id: r.id,
-          projectId: r.project_id,
-          taskId: r.task_id,
-          title: r.title,
-          subtitle: '',
-          score: 0,
-        });
-      }
-    }
+    return rows.map((r) => ({
+      kind: 'project' as const,
+      id: r.id,
+      projectId: null,
+      taskId: null,
+      title: r.name,
+      subtitle: '',
+      score: 0,
+      archived: r.archived_at != null,
+      timestamp: r.updated_at,
+    }));
+  }
 
-    return results;
+  /**
+   * Recent conversations. Scoped to the current task when one is open, otherwise
+   * the most recent conversations across all active tasks.
+   */
+  private recentConversations(
+    context?: CommandPaletteQuery['context'],
+    limit = 10,
+    offset = 0
+  ): SearchItem[] {
+    // Conversations under archived tasks are still surfaced (the conversation
+    // itself isn't archived); they sort after those under active tasks. The JOIN
+    // also drops orphans whose task row no longer exists.
+    const rows = (
+      context?.taskId
+        ? sqlite
+            .prepare(
+              `SELECT c.id, c.title, c.project_id, c.task_id, c.last_interacted_at,
+                      t.archived_at AS task_archived_at
+               FROM conversations c
+               INNER JOIN tasks t ON c.task_id = t.id
+               WHERE c.task_id = ? AND c.archived_at IS NULL
+               ORDER BY c.last_interacted_at DESC
+               LIMIT ? OFFSET ?`
+            )
+            .all(context.taskId, limit, offset)
+        : sqlite
+            .prepare(
+              `SELECT c.id, c.title, c.project_id, c.task_id, c.last_interacted_at,
+                      t.archived_at AS task_archived_at
+               FROM conversations c
+               INNER JOIN tasks t ON c.task_id = t.id
+               WHERE c.archived_at IS NULL
+               ORDER BY (t.archived_at IS NOT NULL), c.last_interacted_at DESC
+               LIMIT ? OFFSET ?`
+            )
+            .all(limit, offset)
+    ) as (RecentConversationRow & {
+      last_interacted_at: string | null;
+      task_archived_at: string | null;
+    })[];
+
+    return rows.map((r) => ({
+      kind: 'conversation' as const,
+      id: r.id,
+      projectId: r.project_id,
+      taskId: r.task_id,
+      title: r.title,
+      subtitle: '',
+      score: 0,
+      timestamp: r.last_interacted_at,
+      archived: r.task_archived_at != null,
+    }));
   }
 
   private upsertTask(task: Task): void {
     const linkedIssues = task.linkedIssues ?? (task.linkedIssue ? [task.linkedIssue] : []);
     const issueKeywords = linkedIssues.flatMap((issue) => [issue.identifier, issue.title]);
     const keywords = [task.taskBranch, ...issueKeywords].filter(Boolean).join(' ');
+    const archived = task.archivedAt ? '1' : '';
 
     try {
       sqlite
         .prepare(
-          `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, title, keywords)
-           VALUES ('task', ?, ?, NULL, ?, ?)`
+          `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, archived, title, keywords)
+           VALUES ('task', ?, ?, NULL, ?, ?, ?)`
         )
-        .run(task.id, task.projectId, task.name, keywords);
+        .run(task.id, task.projectId, archived, task.name, keywords);
     } catch (e) {
       log.warn('SearchService: upsertTask failed', { taskId: task.id, error: String(e) });
+    }
+  }
+
+  /** Flips an existing indexed task to archived without re-deriving its row. */
+  private markTaskArchived(taskId: string): void {
+    try {
+      sqlite
+        .prepare(`UPDATE search_index SET archived = '1' WHERE item_id = ? AND item_type = 'task'`)
+        .run(taskId);
+    } catch (e) {
+      log.warn('SearchService: markTaskArchived failed', { taskId, error: String(e) });
     }
   }
 
@@ -189,8 +486,8 @@ class SearchService {
     try {
       sqlite
         .prepare(
-          `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, title, keywords)
-           VALUES ('project', ?, NULL, NULL, ?, ?)`
+          `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, archived, title, keywords)
+           VALUES ('project', ?, NULL, NULL, '', ?, ?)`
         )
         .run(project.id, project.name, project.path);
     } catch (e) {
@@ -205,8 +502,8 @@ class SearchService {
     try {
       sqlite
         .prepare(
-          `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, title, keywords)
-           VALUES ('conversation', ?, ?, ?, ?, '')`
+          `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, archived, title, keywords)
+           VALUES ('conversation', ?, ?, ?, '', ?, '')`
         )
         .run(conversation.id, conversation.projectId, conversation.taskId, conversation.title);
     } catch (e) {
@@ -242,8 +539,8 @@ class SearchService {
 
       sqlite
         .prepare(
-          `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, title, keywords)
-           VALUES ('conversation', ?, ?, ?, ?, '')`
+          `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, archived, title, keywords)
+           VALUES ('conversation', ?, ?, ?, '', ?, '')`
         )
         .run(conversationId, projectId, taskId, title);
     } catch (e) {
@@ -284,26 +581,34 @@ class SearchService {
         .all() as RecentConversationRow[];
 
       const upsertStmt = sqlite.prepare(
-        `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, title, keywords)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, archived, title, keywords)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       );
 
       sqlite.transaction(() => {
+        // Archived tasks stay indexed (flagged) so search can surface them.
         for (const t of allTasks) {
-          if (t.archivedAt) continue;
-          upsertStmt.run('task', t.id, t.projectId, null, t.name, t.taskBranch ?? '');
+          upsertStmt.run(
+            'task',
+            t.id,
+            t.projectId,
+            null,
+            t.archivedAt ? '1' : '',
+            t.name,
+            t.taskBranch ?? ''
+          );
         }
         for (const p of allProjects) {
           if (p.archivedAt) continue;
-          upsertStmt.run('project', p.id, null, null, p.name, p.path);
+          upsertStmt.run('project', p.id, null, null, '', p.name, p.path);
         }
         for (const c of allConversations) {
-          upsertStmt.run('conversation', c.id, c.project_id, c.task_id, c.title, '');
+          upsertStmt.run('conversation', c.id, c.project_id, c.task_id, '', c.title, '');
         }
       })();
 
       log.info('SearchService: backfilled search index', {
-        tasks: allTasks.filter((t) => !t.archivedAt).length,
+        tasks: allTasks.length,
         projects: allProjects.filter((p) => !p.archivedAt).length,
         conversations: allConversations.length,
       });

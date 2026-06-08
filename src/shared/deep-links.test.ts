@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildSessionDeepLink, isYodaDeepLinkUrl, parseYodaDeepLink } from './deep-links';
+import {
+  buildProjectDeepLink,
+  buildSessionDeepLink,
+  buildTaskDeepLink,
+  isYodaDeepLinkUrl,
+  parseYodaDeepLink,
+} from './deep-links';
 
 describe('deep links', () => {
   it('parses session links', () => {
@@ -30,6 +36,27 @@ describe('deep links', () => {
       conversationId: 'conversation-1',
       promptIndex: 2,
     });
+  });
+
+  it('builds task links that round-trip through the parser', () => {
+    expect(buildTaskDeepLink({ projectId: 'project-1', taskId: 'task-1' })).toBe(
+      'yoda://task/project-1/task-1'
+    );
+    const withSession = buildTaskDeepLink({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+    });
+    expect(parseYodaDeepLink(withSession)).toEqual({
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+    });
+  });
+
+  it('builds project links that round-trip through the parser', () => {
+    expect(buildProjectDeepLink({ projectId: 'project-1' })).toBe('yoda://project/project-1');
+    expect(parseYodaDeepLink('yoda://project/project-1')).toEqual({ projectId: 'project-1' });
   });
 
   it('builds session links', () => {

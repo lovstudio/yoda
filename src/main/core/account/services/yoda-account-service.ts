@@ -228,8 +228,8 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
     }
   }
 
-  async validateSession(): Promise<boolean> {
-    if (this.sessionToken) return true;
+  async validateSession(options: { forceRefresh?: boolean } = {}): Promise<boolean> {
+    if (this.sessionToken && !options.forceRefresh) return true;
     const refreshToken = await accountKV.get('refreshToken');
     if (!refreshToken) return false;
     try {
@@ -240,6 +240,7 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
       this.sessionToken = null;
       await accountCredentialStore.clear();
       await accountKV.del('refreshToken');
+      this._hooks.callHookBackground('accountCleared');
       return false;
     }
   }
