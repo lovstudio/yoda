@@ -1,3 +1,4 @@
+import { AgentEditModal } from '@renderer/features/agents-config/agent-edit-modal';
 import { CommandPaletteModal } from '@renderer/features/command-palette/command-palette-modal';
 import { IntegrationSetupModal } from '@renderer/features/integrations/integration-setup-modal';
 import { McpModal } from '@renderer/features/mcp/components/McpModal';
@@ -16,6 +17,7 @@ import { CreatePrModal } from '@renderer/features/tasks/diff-view/changes-panel/
 import { EditPreArchiveCommandModal } from '@renderer/features/tasks/edit-pre-archive-command-modal';
 import { ConflictDialog } from '@renderer/features/tasks/editor/conflict-dialog';
 import { RenameTaskModal } from '@renderer/features/tasks/rename-task-modal';
+import { SessionPromptsModal } from '@renderer/features/tasks/session-prompts-modal';
 import { AccountDeviceFlowModalOverlay } from '@renderer/lib/components/account-device-flow-modal';
 import { AddSshConnModal } from '@renderer/lib/components/add-ssh-conn-modal';
 import { ChangeProjectConnectionModal } from '@renderer/lib/components/change-project-connection-modal';
@@ -54,9 +56,11 @@ export const modalRegistry = {
   feedbackModal: createModal(FeedbackModal),
   mcpServerModal: createModal(McpModal),
   createSkillModal: createModal(CreateSkillModal),
+  agentEditModal: createModal(AgentEditModal, { size: 'lg' }),
   conflictDialog: createModal(ConflictDialog, { size: 'sm' }),
   createPrModal: createModal(CreatePrModal, { size: 'md' }),
   renameTaskModal: createModal(RenameTaskModal, { size: 'xs' }),
+  sessionPromptsModal: createModal(SessionPromptsModal, { size: 'lg' }),
   renameProjectModal: createModal(RenameProjectModal, { size: 'xs' }),
   archiveTaskWithNoteModal: createModal(ArchiveTaskWithNoteModal, { size: 'xs' }),
   editPreArchiveCommandModal: createModal(EditPreArchiveCommandModal, { size: 'xs' }),

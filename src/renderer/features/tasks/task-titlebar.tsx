@@ -1,4 +1,13 @@
-import { FileDiff, FolderOpen, ListChecks, Pencil, Pin, Sparkles, Terminal } from 'lucide-react';
+import {
+  FileDiff,
+  FolderOpen,
+  Info,
+  ListChecks,
+  Pencil,
+  Pin,
+  Sparkles,
+  Terminal,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import type { Issue } from '@shared/tasks';
@@ -186,14 +195,28 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
                 render={
                   <ToggleGroupItem
                     size="icon-sm"
-                    value="rename"
-                    aria-label={t('tasks.rename.panelTitle')}
+                    value="session"
+                    aria-label={t('tasks.sessionInfo.title')}
                   >
-                    <Pencil className="size-3.5" />
+                    <Info className="size-3.5" />
                   </ToggleGroupItem>
                 }
               />
-              <TooltipContent>{t('tasks.rename.panelTitle')}</TooltipContent>
+              <TooltipContent>{t('tasks.sessionInfo.title')}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <ToggleGroupItem
+                    size="icon-sm"
+                    value="context"
+                    aria-label={t('tasks.contextTab')}
+                  >
+                    <Sparkles className="size-3.5" />
+                  </ToggleGroupItem>
+                }
+              />
+              <TooltipContent>{t('tasks.contextTab')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
@@ -230,14 +253,14 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
                 render={
                   <ToggleGroupItem
                     size="icon-sm"
-                    value="context"
-                    aria-label={t('tasks.contextTab')}
+                    value="rename"
+                    aria-label={t('tasks.rename.panelTitle')}
                   >
-                    <Sparkles className="size-3.5" />
+                    <Pencil className="size-3.5" />
                   </ToggleGroupItem>
                 }
               />
-              <TooltipContent>{t('tasks.contextTab')}</TooltipContent>
+              <TooltipContent>{t('tasks.rename.panelTitle')}</TooltipContent>
             </Tooltip>
           </ToggleGroup>
         </div>
@@ -248,6 +271,7 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
 
 function isSidebarTab(value: string): value is SidebarTab {
   return (
+    value === 'session' ||
     value === 'task' ||
     value === 'conversations' ||
     value === 'changes' ||
