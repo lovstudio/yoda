@@ -1,11 +1,10 @@
 import { PanelLeft } from 'lucide-react';
 import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NavButtons } from '@renderer/lib/components/nav-buttons';
+import { NavButtons, NavIconButton } from '@renderer/lib/components/nav-buttons';
 import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
-import { Toggle } from '@renderer/lib/ui/toggle';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 
 export function Titlebar({ leftSlot, rightSlot }: { leftSlot?: ReactNode; rightSlot?: ReactNode }) {
@@ -24,25 +23,24 @@ export function Titlebar({ leftSlot, rightSlot }: { leftSlot?: ReactNode; rightS
           <div className="flex items-center justify-start [-webkit-app-region:no-drag]">
             {!isLeftOpen && (
               <>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Toggle
-                        pressed={isLeftOpen}
-                        variant="outline"
-                        size="sm"
-                        className="ml-2 size-7 border-none"
-                        onPressedChange={() => setCollapsed('left', isLeftOpen)}
-                      >
-                        <PanelLeft className="h-4 w-4" />
-                      </Toggle>
-                    }
-                  />
-                  <TooltipContent>
-                    {t('navigation.toggleLeftSidebar')}
-                    <ShortcutHint settingsKey="toggleLeftSidebar" />
-                  </TooltipContent>
-                </Tooltip>
+                <TooltipProvider delay={300}>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <NavIconButton
+                          className="ml-2 size-7 border-none"
+                          onClick={() => setCollapsed('left', isLeftOpen)}
+                        />
+                      }
+                    >
+                      <PanelLeft className="h-4 w-4" />
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={8}>
+                      {t('navigation.toggleLeftSidebar')}
+                      <ShortcutHint settingsKey="toggleLeftSidebar" />
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <NavButtons />
               </>
             )}
