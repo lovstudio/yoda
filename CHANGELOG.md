@@ -9,26 +9,37 @@ is preserved in git tags only.
 
 ### Added
 
-- Add a token-protected desktop mobile gateway and Expo mobile app workspace for
-  viewing project/task state and creating requests from mobile.
-- Add an agent-hooks inspector with exec enrichment/shim and per-hook overrides
-  (apply + persisted store).
-- Add Claude run-state and transcript parsing, on-demand session summary
-  generation, conversation runtime status, and a conversation restart flow.
+- **Workspaces**: group and switch projects into named workspaces from the
+  sidebar, with a workspace switcher and a new bottom account/user entry.
+- **Configurable agents**: define and manage custom agent entities (create,
+  edit, manage) and surface provider + model summaries on the home run controls.
+- **Agent hooks inspector**: inspect agent hook executions with exec
+  enrichment/shim and per-hook overrides (apply + persisted store).
+- Add a redesigned task view split into overview, session, harness, and hooks
+  panels, plus background auto-rename and pre-archive skill execution.
+- Add Claude/Codex run-state sources and transcript parsing, on-demand session
+  summary generation, conversation runtime status, and a conversation restart
+  flow.
 
 ### Changed
 
-- Rework agent run-state synchronization to fix inaccurate spinner/idle status.
-- Refresh command-palette scoped search and task hooks/harness/overview/session
-  panels, naming config fields, and persisted disclosure UI.
+- **Rework agent run-state synchronization** so the running/idle indicator is
+  accurate — fixing stuck spinners and conversations that looked busy when idle.
+- Refresh the sidebar (workspace grouping, unified nav icons, account entry) and
+  command-palette scoped search with fuzzy skill autocomplete.
+- Let the project selector show full paths and correctly attribute
+  subdirectories; improve session prompt previews.
 - Improve PTY terminal sizing and rendering (right-edge overflow, tmux scroll
   residue, restart half-screen).
 
 ### Fixed
 
 - Fix agent running-state desync that caused stuck spinners and wrong idle state.
+- Stop the sidebar from spinning indefinitely when a pre-archive skill runs.
 - Fix terminal right-side overflow, trailing whitespace, and tmux scroll
-  artifacts.
+  artifacts; fix restart-task menu and half-screen terminal.
+- Fix macOS "Open in Finder" to enter the folder instead of highlighting the
+  parent directory.
 
 ## 0.3.9 — 2026-06-07
 

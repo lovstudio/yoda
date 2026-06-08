@@ -57,9 +57,11 @@ Yoda 不绑定单一模型或厂商。Claude Code、Codex、OpenCode、Gemini、
 
 > **一个桌面应用，把"任务 → 多代理并行 → 审查 → 合并"收敛成一条可控的流水线。** 不绑定模型，不绑定厂商，本地优先。
 
-四个核心差异点：
+核心差异点：
 
 - **并行 worktree**：每个任务运行在独立的 `git worktree` 中，多个代理同时工作，不会踩到主工作区。
+- **工作区分组**：把项目归入命名的 workspace，在侧边栏一键切换上下文——不同客户、不同产品线各自独立。
+- **可配置 Agent**：自定义并管理 agent 实体，运行时直接看到每个范式的 provider 与 model 摘要。
 - **提供商无关**：带上你已经在用的编码代理 CLI——Claude Code、Codex、OpenCode、Gemini、Cursor、Copilot 等 [27 个 provider](#providers) 按任务自由切换。
 - **从任务到会话**：Linear、Jira、GitHub/GitLab/Forgejo Issues、Plain 的 ticket 直接作为新会话提示词，CI/CD 状态在 diff 旁可见。
 - **本地优先 + 跨平台**：应用状态存在本机 SQLite，Yoda 自身不上传你的代码；提供 macOS（Apple Silicon / Intel）、Windows、Linux 安装包。
@@ -67,6 +69,7 @@ Yoda 不绑定单一模型或厂商。Claude Code、Codex、OpenCode、Gemini、
 <details>
 <summary>更多能力</summary>
 
+- **Agent hooks 检查器**：查看 agent hook 执行过程，支持逐 hook 覆盖与持久化。
 - **SSH 远程开发**：挂载远程机器上的项目，用和本地一致的流程运行代理。
 - **移动端协作**：通过默认开启且带 token 的桌面 gateway 和 Expo 移动端，在手机上查看项目/任务状态并发起新需求。
 - **审查与归档**：把任务标记为待审查，执行归档前命令，然后归档或合并。
