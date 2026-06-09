@@ -3,6 +3,7 @@ import type {
   ClaudeSessionPrompt,
   SessionSummary,
   SessionSummaryResult,
+  SessionSummaryScope,
 } from '@shared/conversations';
 import { isAgentSessionRunningStatus } from '@shared/events/agentEvents';
 import { log } from '@main/lib/logger';
@@ -11,19 +12,23 @@ import { generateSessionSummary } from './generateSessionSummary';
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getCodexSessionContext } from './getCodexSessionContext';
 
+/** Number of trailing user prompts a `recent` summary covers. */
+const RECENT_PROMPT_COUNT = 4;
+
 /**
- * Resolves a session summary with this priority:
- *   1. the compaction summary the runtime already wrote into the transcript
- *      (zero cost — preferred)
- *   2. an on-demand summary generated from the session's user prompts
- *      (only when no compaction summary exists AND the session is idle, so we
- *      never spawn a summarization CLI in the middle of an active turn)
+ * Resolves a session summary for one scope:
+ *   - `global`: the whole session. Prefers the runtime's own compaction
+ *     summary (zero cost); otherwise generates from all user prompts.
+ *   - `recent`: only the last few user prompts. Always generated, kept short
+ *     and cheap — meant to refresh after every reply.
  *
- * `status` lets the UI explain why there is no summary yet (running / no
- * prompts / generation failed) instead of a blank "no summary".
+ * Generation is skipped while the session is mid-turn (we never spawn a
+ * summarization CLI during an active turn). `status` lets the UI explain an
+ * absent summary instead of showing a blank state.
  */
 export async function getSessionSummary(
   providerId: AgentProviderId,
+  scope: SessionSummaryScope,
   projectId: string,
   taskId: string,
   cwd: string,
@@ -35,26 +40,32 @@ export async function getSessionSummary(
     agentSessionRuntimeStore.getStatus({ projectId, taskId, conversationId })
   );
 
-  const prompts = await loadPrompts(
+  const loaded = await loadContext(
     providerId,
     cwd,
     conversationId,
     conversationTitle,
     conversationCreatedAt
   );
-  if (prompts === null) return { summary: null, status: 'unsupported' };
-  if (prompts.summary) return { summary: prompts.summary, status: 'compaction' };
-  if (running) return { summary: null, status: 'running' };
-  if (prompts.prompts.length === 0) return { summary: null, status: 'empty' };
+  if (loaded === null) return { summary: null, status: 'unsupported' };
 
-  const generated = await generateSessionSummary(providerId, cwd, prompts.prompts);
-  log.info('[session-summary] generated', { providerId, ok: generated !== null });
+  // Global scope can short-circuit to the runtime's own compaction summary.
+  if (scope === 'global' && loaded.summary) {
+    return { summary: loaded.summary, status: 'compaction' };
+  }
+
+  const prompts = scope === 'recent' ? loaded.prompts.slice(-RECENT_PROMPT_COUNT) : loaded.prompts;
+  if (prompts.length === 0) return { summary: null, status: 'empty' };
+  if (running) return { summary: null, status: 'running' };
+
+  const generated = await generateSessionSummary(providerId, cwd, prompts, scope);
+  log.info('[session-summary] generated', { providerId, scope, ok: generated !== null });
   return generated
     ? { summary: generated, status: 'generated' }
     : { summary: null, status: 'failed' };
 }
 
-async function loadPrompts(
+async function loadContext(
   providerId: AgentProviderId,
   cwd: string,
   conversationId: string,

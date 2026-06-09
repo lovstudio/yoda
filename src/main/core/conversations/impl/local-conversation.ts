@@ -32,7 +32,7 @@ import { buildAgentEnv } from '@main/core/pty/pty-env';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { logLocalPtySpawnWarnings, resolveLocalPtySpawn } from '@main/core/pty/pty-spawn-platform';
 import { resolveAvailableTmuxSessionName } from '@main/core/pty/tmux-availability';
-import { killTmuxSession } from '@main/core/pty/tmux-session-name';
+import { killTmuxSession, sendLiteralToTmuxSession } from '@main/core/pty/tmux-session-name';
 import { sessionTitleManager } from '@main/core/session-title/session-title-manager';
 import { providerOverrideSettings } from '@main/core/settings/provider-settings-service';
 import { appSettingsService } from '@main/core/settings/settings-service';
@@ -337,6 +337,21 @@ export class LocalConversationProvider implements ConversationProvider {
       if (!info) return [];
       return [{ ...info, detachable: this.tmuxSessionNames.has(sessionId) }];
     });
+  }
+
+  async sendInput(conversationId: string, data: string): Promise<boolean> {
+    const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+    const pty = this.sessions.get(sessionId);
+    if (pty) {
+      pty.write(data);
+      return true;
+    }
+
+    const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
+    if (!tmuxSessionName) return false;
+
+    await sendLiteralToTmuxSession(this.ctx, tmuxSessionName, data);
+    return true;
   }
 
   private async prepareHookConfig(providerId: Conversation['providerId']): Promise<void> {

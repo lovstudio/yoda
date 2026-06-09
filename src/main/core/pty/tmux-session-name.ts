@@ -6,6 +6,8 @@ const YODA_TMUX_SOCKET_NAME = 'yoda';
 
 const YODA_TMUX_SERVER_ARGS = ['-L', YODA_TMUX_SOCKET_NAME, '-f', '/dev/null'] as const;
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const TMUX_SEND_TIMEOUT_MS = 2_000;
+const TMUX_SEND_MAX_BUFFER = 4_096;
 
 function tmuxShellPrefix(): string {
   return ['tmux', ...YODA_TMUX_SERVER_ARGS].join(' ');
@@ -80,4 +82,15 @@ export async function killTmuxSession(ctx: IExecutionContext, sessionName: strin
       error: String(err),
     });
   }
+}
+
+export async function sendLiteralToTmuxSession(
+  ctx: IExecutionContext,
+  sessionName: string,
+  data: string
+): Promise<void> {
+  await ctx.exec('tmux', [...YODA_TMUX_SERVER_ARGS, 'send-keys', '-t', sessionName, '-l', data], {
+    timeout: TMUX_SEND_TIMEOUT_MS,
+    maxBuffer: TMUX_SEND_MAX_BUFFER,
+  });
 }

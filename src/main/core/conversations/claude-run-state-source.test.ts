@@ -54,6 +54,44 @@ describe('classifyClaudeTranscript', () => {
     const raw = ['not json', JSON.stringify(userMsg), '', JSON.stringify(stop)].join('\n');
     expect(classifyClaudeTranscript(raw)).toBe('idle');
   });
+
+  it('awaiting-input when an interactive tool_use has no matching tool_result', () => {
+    const askUse = {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', name: 'AskUserQuestion', id: 'tu_1' }],
+      },
+    };
+    expect(classifyClaudeTranscript(jsonl([userMsg, askUse]))).toBe('awaiting-input');
+  });
+
+  it('back to working once the interactive tool_use is answered (tool_result present)', () => {
+    const askUse = {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', name: 'AskUserQuestion', id: 'tu_1' }],
+      },
+    };
+    const answer = {
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_1' }] },
+    };
+    // answered → no pending interactive tool; last user (the answer) after stop → working
+    expect(classifyClaudeTranscript(jsonl([stop, userMsg, askUse, answer]))).toBe('working');
+  });
+
+  it('ExitPlanMode also counts as awaiting-input', () => {
+    const plan = {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', name: 'ExitPlanMode', id: 'ep_1' }],
+      },
+    };
+    expect(classifyClaudeTranscript(jsonl([userMsg, plan]))).toBe('awaiting-input');
+  });
 });
 
 describe('watchClaudeRunState (live tailer)', () => {

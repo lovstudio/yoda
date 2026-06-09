@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   resolveAgentResumeSessionId: vi.fn(),
   resolveLocalPtySpawn: vi.fn(),
   removeRuntimeStatus: vi.fn(),
+  sendLiteralToTmuxSession: vi.fn(),
   setRuntimeStatus: vi.fn(),
   spawnLocalPty: vi.fn(),
   startTitle: vi.fn(),
@@ -95,6 +96,7 @@ vi.mock('@main/core/pty/tmux-availability', () => ({
 vi.mock('@main/core/pty/tmux-session-name', () => ({
   killTmuxSession: vi.fn(),
   makeTmuxSessionName: (sessionId: string) => `tmux-${sessionId}`,
+  sendLiteralToTmuxSession: mocks.sendLiteralToTmuxSession,
 }));
 
 vi.mock('@main/core/session-title/session-title-manager', () => ({
@@ -156,8 +158,11 @@ type SpawnOptions = {
 
 class FakePty implements Pty {
   private readonly exitHandlers: Array<(info: PtyExitInfo) => void> = [];
+  readonly writes: string[] = [];
 
-  write(): void {}
+  write(data: string): void {
+    this.writes.push(data);
+  }
 
   resize(): void {}
 
@@ -218,6 +223,7 @@ describe('LocalConversationProvider', () => {
     mocks.maybeAutoTrustLocal.mockResolvedValue(undefined);
     mocks.prepareHookConfig.mockResolvedValue(undefined);
     mocks.ensureCodexThreadUnarchived.mockResolvedValue(undefined);
+    mocks.sendLiteralToTmuxSession.mockResolvedValue(undefined);
     mocks.resolveAgentResumeSessionId.mockImplementation((conversation: Conversation) => {
       return conversation.id;
     });
@@ -384,6 +390,35 @@ describe('LocalConversationProvider', () => {
     expect(provider.getActiveSessionCount()).toBe(0);
     expect(provider.getDetachableSessionCount()).toBe(0);
     expect(provider.getActiveSessions()).toEqual([]);
+  });
+
+  it('sends input to an active PTY session', async () => {
+    const provider = createProvider();
+
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    await expect(provider.sendInput(conversation.id, 'mobile follow-up')).resolves.toBe(true);
+    expect(spawned[0].pty.writes).toEqual(['mobile follow-up']);
+    expect(mocks.sendLiteralToTmuxSession).not.toHaveBeenCalled();
+  });
+
+  it('falls back to tmux when the active PTY is detached', async () => {
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    const provider = createProvider();
+
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    (
+      provider as unknown as {
+        sessions: Map<string, Pty>;
+      }
+    ).sessions.delete(sessionId);
+
+    await expect(provider.sendInput(conversation.id, 'mobile follow-up')).resolves.toBe(true);
+    expect(mocks.sendLiteralToTmuxSession).toHaveBeenCalledWith(
+      expect.anything(),
+      'tmux-session',
+      'mobile follow-up'
+    );
   });
 
   it('tracks runtime status separately from PTY presence', async () => {

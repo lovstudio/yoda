@@ -25,7 +25,10 @@ import { log } from '@main/lib/logger';
  * Trailing metadata rows (`mode`, `permission-mode`, `ai-title`, …) are ignored;
  * only `user` messages and `stop_hook_summary` rows move the needle.
  */
-export type ClaudeTurnState = 'working' | 'idle';
+export type ClaudeTurnState = 'working' | 'awaiting-input' | 'idle';
+
+/** Tools that block the turn waiting for a user decision (no Notification hook). */
+const INTERACTIVE_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
 export async function readClaudeTurnState(
   cwd: string,
@@ -41,11 +44,24 @@ export async function readClaudeTurnState(
   return classifyClaudeTranscript(raw);
 }
 
-/** Pure classifier over raw transcript text. Exported for tests. */
+/**
+ * Pure classifier over raw transcript text. Exported for tests.
+ *
+ * Returns:
+ *  - `awaiting-input` if an interactive tool (AskUserQuestion / ExitPlanMode) was
+ *    issued but has no matching `tool_result` yet — the agent is blocked on the
+ *    user. This is detected straight from the transcript, independent of the
+ *    PreToolUse hook, so it can't be lost.
+ *  - `working` if the last user message comes after the last `stop_hook_summary`
+ *    (a turn is in progress).
+ *  - `idle` otherwise (turn finished / nothing running).
+ */
 export function classifyClaudeTranscript(raw: string): ClaudeTurnState {
   let lastUserIdx = -1;
   let lastStopIdx = -1;
   let idx = -1;
+  const pendingInteractiveToolIds = new Set<string>();
+  const resolvedToolIds = new Set<string>();
 
   for (const line of raw.split('\n')) {
     const trimmed = line.trim();
@@ -61,8 +77,29 @@ export function classifyClaudeTranscript(raw: string): ClaudeTurnState {
       lastStopIdx = idx;
       continue;
     }
+    const message = row.message;
+    const content =
+      typeof message === 'object' && message !== null
+        ? (message as Record<string, unknown>).content
+        : undefined;
+    if (Array.isArray(content)) {
+      for (const item of content) {
+        if (typeof item !== 'object' || item === null) continue;
+        const it = item as Record<string, unknown>;
+        if (
+          it.type === 'tool_use' &&
+          typeof it.name === 'string' &&
+          INTERACTIVE_TOOLS.has(it.name) &&
+          typeof it.id === 'string'
+        ) {
+          pendingInteractiveToolIds.add(it.id);
+        }
+        if (it.type === 'tool_result' && typeof it.tool_use_id === 'string') {
+          resolvedToolIds.add(it.tool_use_id);
+        }
+      }
+    }
     if (row.type === 'user') {
-      const message = row.message;
       if (
         typeof message === 'object' &&
         message !== null &&
@@ -71,6 +108,11 @@ export function classifyClaudeTranscript(raw: string): ClaudeTurnState {
         lastUserIdx = idx;
       }
     }
+  }
+
+  // An interactive tool with no matching result = blocked on the user.
+  for (const id of pendingInteractiveToolIds) {
+    if (!resolvedToolIds.has(id)) return 'awaiting-input';
   }
 
   if (lastUserIdx === -1) return 'idle';
@@ -202,14 +244,27 @@ class ClaudeTranscriptStateTailer implements ClaudeRunStateWatcher {
     const first = this.lastState === undefined;
     if (state === this.lastState) return;
     this.lastState = state;
-    // On the very first read, only act if the session is actively working — a
+    // On the very first read, only act if the session is actively running — a
     // first-read `idle` is the steady state and must not fire a spurious
     // `completed` (green dot) for a session that simply isn't running.
     if (first && state === 'idle') return;
-    this.dispatch(
-      state === 'working'
-        ? { kind: 'turn-started', at: Date.now(), force: true }
-        : { kind: 'turn-completed', at: Date.now() }
-    );
+    this.dispatch(eventForClaudeState(state));
+  }
+}
+
+function eventForClaudeState(state: ClaudeTurnState): RunStateEvent {
+  switch (state) {
+    case 'working':
+      // NOT forced: the tailer only *observes* that a turn is in progress, so it
+      // must not clear a more specific awaiting-input sub-state set elsewhere.
+      return { kind: 'turn-started', at: Date.now() };
+    case 'awaiting-input':
+      return {
+        kind: 'awaiting-input',
+        at: Date.now(),
+        pendingAction: { notificationType: 'elicitation_dialog' },
+      };
+    case 'idle':
+      return { kind: 'turn-completed', at: Date.now() };
   }
 }

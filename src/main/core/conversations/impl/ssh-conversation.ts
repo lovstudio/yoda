@@ -16,7 +16,7 @@ import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { resolveSshCommand } from '@main/core/pty/spawn-utils';
 import { openSsh2Pty } from '@main/core/pty/ssh2-pty';
 import { resolveAvailableTmuxSessionName } from '@main/core/pty/tmux-availability';
-import { killTmuxSession } from '@main/core/pty/tmux-session-name';
+import { killTmuxSession, sendLiteralToTmuxSession } from '@main/core/pty/tmux-session-name';
 import { providerOverrideSettings } from '@main/core/settings/provider-settings-service';
 import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { events } from '@main/lib/events';
@@ -247,6 +247,21 @@ export class SshConversationProvider implements ConversationProvider {
       if (!info) return [];
       return [{ ...info, detachable: this.tmuxSessionNames.has(sessionId) }];
     });
+  }
+
+  async sendInput(conversationId: string, data: string): Promise<boolean> {
+    const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
+    const pty = this.sessions.get(sessionId);
+    if (pty) {
+      pty.write(data);
+      return true;
+    }
+
+    const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
+    if (!tmuxSessionName) return false;
+
+    await sendLiteralToTmuxSession(this.ctx, tmuxSessionName, data);
+    return true;
   }
 
   async stopSession(conversationId: string): Promise<void> {

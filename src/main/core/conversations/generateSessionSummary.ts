@@ -1,5 +1,9 @@
 import { getProvider, type AgentProviderId } from '@shared/agent-provider-registry';
-import type { ClaudeSessionPrompt, SessionSummary } from '@shared/conversations';
+import type {
+  ClaudeSessionPrompt,
+  SessionSummary,
+  SessionSummaryScope,
+} from '@shared/conversations';
 import { extractAgentMessageText, runAgentCli } from '@main/core/agent-cli/run-agent-cli';
 import { providerOverrideSettings } from '@main/core/settings/provider-settings-service';
 import { appSettingsService } from '@main/core/settings/settings-service';
@@ -27,13 +31,14 @@ type SummaryCommand = { command: string; args: string[]; stdin: string };
 export async function generateSessionSummary(
   providerId: AgentProviderId,
   cwd: string,
-  prompts: ClaudeSessionPrompt[]
+  prompts: ClaudeSessionPrompt[],
+  scope: SessionSummaryScope
 ): Promise<SessionSummary | null> {
   const userPrompts = prompts.map((p) => p.text.trim()).filter(Boolean);
   if (userPrompts.length === 0) return null;
 
   const taskSettings = await appSettingsService.get('tasks');
-  const prompt = buildSummaryPrompt(userPrompts, taskSettings.namingLanguage);
+  const prompt = buildSummaryPrompt(userPrompts, taskSettings.namingLanguage, scope);
   const command = buildSummaryCommand(providerId, prompt);
   if (!command) return null;
 
@@ -82,7 +87,11 @@ function buildSummaryCommand(providerId: AgentProviderId, prompt: string): Summa
   return null;
 }
 
-function buildSummaryPrompt(userPrompts: string[], language: string): string {
+function buildSummaryPrompt(
+  userPrompts: string[],
+  language: string,
+  scope: SessionSummaryScope
+): string {
   const languageRule =
     language === 'en'
       ? 'Write the summary in English.'
@@ -93,15 +102,30 @@ function buildSummaryPrompt(userPrompts: string[], language: string): string {
     userPrompts.map((text, index) => `${index + 1}. ${text}`).join('\n'),
     MAX_PROMPT_CHARS
   );
-  return [
-    'You are summarizing a coding session for someone about to resume the work.',
+  const common = [
     'Output ONLY the summary text — no preamble, no meta commentary, no "here is the summary".',
     'Do not explore the repository or run tools; summarize purely from the messages below.',
-    'Cover the overall goal, what has been requested so far, and the likely current focus.',
-    'Be concise: a few short paragraphs or bullet points. Plain text only, no markdown fences.',
+    'Plain text only, no markdown fences.',
     languageRule,
+  ];
+  const scopeRules =
+    scope === 'recent'
+      ? [
+          'Summarize ONLY what the user is currently working on, based on their most recent messages.',
+          'Be very short: one or two sentences. No history, no background.',
+        ]
+      : [
+          'You are summarizing a whole coding session for someone about to resume the work.',
+          'Cover the overall goal, what has been requested so far, and the likely current focus.',
+          'Be concise: a few short paragraphs or bullet points.',
+        ];
+  return [
+    ...scopeRules,
+    ...common,
     '',
-    'User messages in the session (in order):',
+    scope === 'recent'
+      ? 'Most recent user messages (in order):'
+      : 'User messages in the session (in order):',
     transcript,
   ].join('\n');
 }

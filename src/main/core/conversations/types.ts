@@ -23,6 +23,7 @@ export interface ConversationProvider {
     tmuxOverride?: boolean
   ): Promise<void>;
   stopSession(conversationId: string): Promise<void>;
+  sendInput(conversationId: string, data: string): Promise<boolean>;
   getActiveSessions(): ActiveConversationSession[];
   destroyAll(): Promise<void>;
   detachAll(): Promise<void>;

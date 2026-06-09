@@ -1,12 +1,18 @@
 import { watch, type FSWatcher } from 'node:fs';
-import { open } from 'node:fs/promises';
-import type { RunStateEvent } from '@shared/events/agent-run-state';
+import { open, readFile } from 'node:fs/promises';
+import {
+  initialRunState,
+  reduceRunState,
+  type RunStateEvent,
+} from '@shared/events/agent-run-state';
 import {
   getClaimedCodexThreadId,
   readCodexThreadRolloutPath,
   resolveCodexStatePath,
 } from '@main/core/session-title/codex-title-source';
 import { log } from '@main/lib/logger';
+
+export type CodexTurnState = 'working' | 'idle' | 'error';
 
 /**
  * Deterministic run-state source for Codex sessions.
@@ -230,4 +236,33 @@ function parseTimestampMs(value: unknown): number | undefined {
   if (typeof value !== 'string') return undefined;
   const ms = Date.parse(value);
   return Number.isNaN(ms) ? undefined : ms;
+}
+
+/**
+ * Point-in-time run-state for a Codex conversation, derived by folding all turn
+ * events in its rollout JSONL. Used for stateless cold-load reads (no reliance
+ * on in-memory state that a main-process restart would lose). Returns null if
+ * the rollout can't be located.
+ */
+export async function readCodexTurnState(
+  conversationId: string,
+  options: { statePath?: string } = {}
+): Promise<CodexTurnState | null> {
+  const statePath = options.statePath ?? resolveCodexStatePath();
+  const threadId = getClaimedCodexThreadId(conversationId) ?? conversationId;
+  const rolloutPath = readCodexThreadRolloutPath(statePath, threadId);
+  if (!rolloutPath) return null;
+  const raw = await readFile(rolloutPath, 'utf8').catch(() => undefined);
+  if (raw === undefined) return null;
+
+  let state = initialRunState();
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const event = parseTurnEvent(trimmed);
+    if (event) state = reduceRunState(state, event);
+  }
+  if (state.status === 'working' || state.status === 'awaiting-input') return 'working';
+  if (state.status === 'error') return 'error';
+  return 'idle';
 }

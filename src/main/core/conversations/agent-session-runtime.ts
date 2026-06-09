@@ -199,6 +199,15 @@ class AgentSessionRuntimeStore {
   getState(session: SessionKey): RunState {
     return this.entries.get(keyFor(session))?.state ?? initialRunState();
   }
+
+  /** Snapshot of every tracked session's current status, for renderer cold-load. */
+  getAllStatuses(): Array<SessionKey & { status: AgentSessionRuntimeStatus }> {
+    const result: Array<SessionKey & { status: AgentSessionRuntimeStatus }> = [];
+    for (const { session, state } of this.entries.values()) {
+      result.push({ ...session, status: state.status });
+    }
+    return result;
+  }
 }
 
 export const agentSessionRuntimeStore = new AgentSessionRuntimeStore();

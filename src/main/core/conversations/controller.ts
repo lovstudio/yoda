@@ -2,6 +2,7 @@ import { createRPCController } from '@shared/ipc/rpc';
 import { archiveConversation } from './archiveConversation';
 import { createConversation } from './createConversation';
 import { deleteConversation } from './deleteConversation';
+import { getAllRuntimeStatuses } from './getAllRuntimeStatuses';
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getClaudeSessionMetadata } from './getClaudeSessionMetadata';
 import { getCodexSessionContext } from './getCodexSessionContext';
@@ -24,6 +25,7 @@ export const conversationController = createRPCController({
   restartConversation,
   resumeConversation,
   getConversationRuntimeStatuses,
+  getAllRuntimeStatuses,
   getConversationsForTask,
   touchConversation,
   getClaudeSessionMetadata,
