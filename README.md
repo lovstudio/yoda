@@ -5,7 +5,7 @@
 <h1 align="center">Yoda</h1>
 
 <p align="center">
-  <strong>你的 agent workspace 的 harness。</strong><br>
+  <strong>Harness for your Agent Workspace</strong><br>
   <sub>把 Claude Code、Codex、Gemini 等 27 种 Runtime 收进同一个工作区——按任务挑选、并行开工、互相 review，Skills / Hooks / Memory / 上下文尽收眼底。</sub>
 </p>
 
