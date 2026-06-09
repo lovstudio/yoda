@@ -599,10 +599,6 @@
     "runHostLocal": "本机",
     "runHostSsh": "SSH 主机",
     "agentLabel": "Agent",
-    "pickAgent": "Agent",
-    "pickAgents": "Agents",
-    "manageAgents": "管理",
-    "noAgentsCreate": "先创建一个 Agent",
     "brainstormPolicy": "先做 Spec",
     "brainstormAgent": "Spec agent",
     "compareBranchPolicy": "{{count}} 个独立分支",
@@ -613,6 +609,11 @@
     "reviewImplementer": "A agent",
     "reviewReviewer": "B reviewer",
     "reviewRoundLimit": "如仍有问题，review loop 最多运行 {{count}} 轮。",
+    "slotMyAgents": "我的 Agents",
+    "slotRuntimes": "Runtimes",
+    "slotNewAgent": "新建 Agent",
+    "slotManageAgents": "管理",
+    "slotNoResults": "无匹配项",
     "agentSystemPromptAria": "编辑 {{label}} 的 system prompt",
     "agentSystemPromptTitle": "{{label}} system prompt",
     "agentSystemPromptPlaceholder": "描述这个 agent 的角色、约束和工作方式。",
@@ -2012,6 +2013,6 @@
     "switch": "切换工作区",
     "current": "工作区（{{name}}）",
     "defaultTab": "默认",
-    "countsAria": "{{toRead}} 条未读，{{running}} 个运行中，共 {{total}} 个"
+    "countsAria": "{{toRead}} 条未读"
   }
 }

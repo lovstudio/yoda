@@ -599,10 +599,6 @@
     "runHostLocal": "Local host",
     "runHostSsh": "SSH host",
     "agentLabel": "Agent",
-    "pickAgent": "Agent",
-    "pickAgents": "Agents",
-    "manageAgents": "Manage",
-    "noAgentsCreate": "Create an agent to use here",
     "brainstormPolicy": "Spec first",
     "brainstormAgent": "Spec agent",
     "compareBranchPolicy": "{{count}} isolated branches",
@@ -613,6 +609,11 @@
     "reviewImplementer": "A agent",
     "reviewReviewer": "B reviewer",
     "reviewRoundLimit": "Review loop stops after {{count}} rounds if issues remain.",
+    "slotMyAgents": "My agents",
+    "slotRuntimes": "Runtimes",
+    "slotNewAgent": "New agent",
+    "slotManageAgents": "Manage",
+    "slotNoResults": "No matches",
     "agentSystemPromptAria": "Edit {{label}} system prompt",
     "agentSystemPromptTitle": "{{label}} system prompt",
     "agentSystemPromptPlaceholder": "Describe this agent's role, constraints, and operating style.",
@@ -2012,6 +2013,6 @@
     "switch": "Switch workspace",
     "current": "Workspace ({{name}})",
     "defaultTab": "Default",
-    "countsAria": "{{toRead}} unread, {{running}} running, {{total}} total"
+    "countsAria": "{{toRead}} unread"
   }
 }

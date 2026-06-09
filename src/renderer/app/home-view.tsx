@@ -20,14 +20,12 @@ import {
   Mic,
   Monitor,
   Palette,
-  PencilLine,
   Plus,
   Repeat2,
   RotateCcw,
   Server,
   ShieldCheck,
   Sparkles,
-  Terminal,
   Users,
   X,
 } from 'lucide-react';
@@ -42,6 +40,7 @@ import {
   type ComponentType,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
@@ -74,7 +73,10 @@ import { useEffectiveProvider } from '@renderer/features/tasks/conversations/use
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
 import { useAgentAutoApproveDefaults } from '@renderer/features/tasks/hooks/useAgentAutoApproveDefaults';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
-import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
+import {
+  AgentSlotSelector,
+  type AgentSlotSelection,
+} from '@renderer/lib/components/agent-slot/agent-slot-selector';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useAccountSession } from '@renderer/lib/hooks/useAccount';
@@ -109,7 +111,6 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from '@renderer/lib/ui/popover';
-import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 import {
@@ -422,6 +423,30 @@ function comparePromptKey(index: number): string {
 
 function teamPromptKey(roleId: TeamRoleId): string {
   return `team:${roleId}`;
+}
+
+/**
+ * Resolve what a slot actually runs with. When the slot has a user-defined
+ * Agent selected, that Agent's preferred runtime + system prompt win; otherwise
+ * we fall back to the bare-runtime value and the per-slot prompt override.
+ */
+function resolveAgentSlot(args: {
+  selectedAgentId: string | null;
+  agents: Agent[];
+  fallbackProvider: AgentProviderId | null;
+  fallbackSystemPrompt: string;
+}): { provider: AgentProviderId | null; systemPrompt: string; agent: Agent | null } {
+  const agent = args.selectedAgentId
+    ? (args.agents.find((a) => a.id === args.selectedAgentId) ?? null)
+    : null;
+  if (agent) {
+    return {
+      provider: agent.preferredRuntimeProvider ?? args.fallbackProvider,
+      systemPrompt: agent.systemPrompt,
+      agent,
+    };
+  }
+  return { provider: args.fallbackProvider, systemPrompt: args.fallbackSystemPrompt, agent: null };
 }
 
 function defaultCompareSystemPrompt(index: number): string {
@@ -917,9 +942,16 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     () => draft?.selectedAgentIds ?? {},
     [draft?.selectedAgentIds]
   );
-  const setSelectedAgentsForMode = useCallback(
-    (mode: HomeRunMode, ids: string[]) => {
-      updateDraft({ selectedAgentIds: { ...selectedAgentIdsByMode, [mode]: ids } });
+  // Per-slot user-Agent selection. We reuse the persisted `selectedAgentIds`
+  // string→string[] map, keyed by each slot's prompt key (one selected agent id
+  // per slot, or empty when the slot runs a bare runtime).
+  const slotAgentId = useCallback(
+    (slotKey: string): string | null => selectedAgentIdsByMode[slotKey]?.[0] ?? null,
+    [selectedAgentIdsByMode]
+  );
+  const setSlotAgent = useCallback(
+    (slotKey: string, agentId: string) => {
+      updateDraft({ selectedAgentIds: { ...selectedAgentIdsByMode, [slotKey]: [agentId] } });
     },
     [selectedAgentIdsByMode, updateDraft]
   );
@@ -943,11 +975,14 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     let provider = providerId;
     let model: string | null = null;
     if (runMode === 'normal') {
-      const agent = userAgents.find((a) => a.id === (selectedAgentIdsByMode.normal ?? [])[0]);
-      if (agent) {
-        provider = agent.preferredRuntimeProvider ?? providerId;
-        model = agent.model;
-      }
+      const resolved = resolveAgentSlot({
+        selectedAgentId: selectedAgentIdsByMode[NORMAL_PROMPT_KEY]?.[0] ?? null,
+        agents: userAgents,
+        fallbackProvider: providerId,
+        fallbackSystemPrompt: '',
+      });
+      provider = resolved.provider;
+      model = resolved.agent?.model ?? null;
     } else if (runMode === 'review') {
       provider = reviewerProvider;
     }
@@ -1071,6 +1106,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     hydratedPromptRef.current = true;
     setPrompt(draft.prompt ?? '');
   }, [draft]);
+  const runModeAnchorRef = useRef<HTMLDivElement>(null);
   const promptWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!hydratedPromptRef.current) return;
@@ -1282,9 +1318,23 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
       };
       const getSystemPrompt = (key: string, defaultPrompt: string) =>
         resolveAgentSystemPrompt(agentSystemPrompts, key, defaultPrompt);
+      // Resolve a slot honoring its selected user-Agent (if any), falling back
+      // to the bare runtime + per-slot prompt override.
+      const resolveSlot = (
+        slotKey: string,
+        fallbackProvider: AgentProviderId | null,
+        defaultPrompt: string
+      ) =>
+        resolveAgentSlot({
+          selectedAgentId: selectedAgentIdsByMode[slotKey]?.[0] ?? null,
+          agents: userAgents,
+          fallbackProvider,
+          fallbackSystemPrompt: getSystemPrompt(slotKey, defaultPrompt),
+        });
 
       if (!mounted) {
         if (!providerId) return;
+        const normalSlot = resolveSlot(NORMAL_PROMPT_KEY, providerId, '');
         await projectManager.mountProject(INTERNAL_PROJECT_ID).catch(() => {});
         const internalProject = asMounted(projectManager.projects.get(INTERNAL_PROJECT_ID));
         if (!internalProject) {
@@ -1298,15 +1348,17 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
         const taskName = ensureUniqueTaskDisplayName(baseName, existingDraftNames);
         const taskId = crypto.randomUUID();
         const conversationId = crypto.randomUUID();
-        const normalSystemPrompt = getSystemPrompt(NORMAL_PROMPT_KEY, '').trim();
+        const draftSlot =
+          runMode === 'brainstorm'
+            ? resolveSlot(SPEC_PROMPT_KEY, providerId, defaultSpecSystemPrompt())
+            : normalSlot;
+        const draftProvider = draftSlot.provider ?? providerId;
+        const draftSystemPrompt = draftSlot.systemPrompt.trim();
         const initialPrompt =
           runMode === 'brainstorm'
-            ? buildSpecPrompt({
-                requirement: trimmed,
-                systemPrompt: getSystemPrompt(SPEC_PROMPT_KEY, defaultSpecSystemPrompt()),
-              })
-            : normalSystemPrompt
-              ? buildRequirementPrompt({ requirement: trimmed, systemPrompt: normalSystemPrompt })
+            ? buildSpecPrompt({ requirement: trimmed, systemPrompt: draftSlot.systemPrompt })
+            : draftSystemPrompt
+              ? buildRequirementPrompt({ requirement: trimmed, systemPrompt: draftSystemPrompt })
               : trimmed || undefined;
         void internalProject.taskManager
           .createTask({
@@ -1319,10 +1371,10 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
               id: conversationId,
               projectId: INTERNAL_PROJECT_ID,
               taskId,
-              provider: providerId,
-              title: initialConversationTitle(providerId, trimmed || undefined, []),
+              provider: draftProvider,
+              title: initialConversationTitle(draftProvider, trimmed || undefined, []),
               initialPrompt,
-              autoApprove: autoApproveDefaults.getDefault(providerId),
+              autoApprove: autoApproveDefaults.getDefault(draftProvider),
             },
           })
           .catch(() => {
@@ -1381,13 +1433,14 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
       };
 
       if (runMode === 'brainstorm') {
-        if (!providerId) return;
+        const slot = resolveSlot(SPEC_PROMPT_KEY, providerId, defaultSpecSystemPrompt());
+        if (!slot.provider) return;
         const task = createProjectTask({
-          provider: providerId,
+          provider: slot.provider,
           nameSeed: `${baseName}-spec`,
           initialPrompt: buildSpecPrompt({
             requirement: trimmed,
-            systemPrompt: getSystemPrompt(SPEC_PROMPT_KEY, defaultSpecSystemPrompt()),
+            systemPrompt: slot.systemPrompt,
           }),
           titlePrompt: trimmed || undefined,
           strategyKind: 'no-worktree',
@@ -1402,21 +1455,23 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
       }
 
       if (runMode === 'compare') {
-        const launches = compareProviders.map((provider, index) =>
-          createProjectTask({
+        const launches = compareProviders.map((provider, index) => {
+          const slot = resolveSlot(
+            comparePromptKey(index),
             provider,
-            nameSeed: `${baseName}-agent-${index + 1}-${provider}`,
+            defaultCompareSystemPrompt(index)
+          );
+          return createProjectTask({
+            provider: slot.provider ?? provider,
+            nameSeed: `${baseName}-agent-${index + 1}-${slot.provider ?? provider}`,
             initialPrompt: buildRequirementPrompt({
               requirement: trimmed,
-              systemPrompt: getSystemPrompt(
-                comparePromptKey(index),
-                defaultCompareSystemPrompt(index)
-              ),
+              systemPrompt: slot.systemPrompt,
             }),
             titlePrompt: trimmed || undefined,
             strategyKind: 'new-branch',
-          })
-        );
+          });
+        });
         const first = launches[0];
         if (first) navigate('task', { projectId: mounted.data.id, taskId: first.taskId });
         void Promise.allSettled(launches.map((launch) => launch.promise)).then(reportFailures);
@@ -1426,16 +1481,23 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
       }
 
       if (runMode === 'review') {
-        if (!providerId) return;
+        const implementerSlot = resolveSlot(
+          REVIEW_IMPLEMENTER_PROMPT_KEY,
+          providerId,
+          defaultReviewImplementerSystemPrompt()
+        );
+        const reviewerSlot = resolveSlot(
+          REVIEW_REVIEWER_PROMPT_KEY,
+          reviewerProvider,
+          defaultReviewReviewerSystemPrompt()
+        );
+        if (!implementerSlot.provider) return;
         const implementation = createProjectTask({
-          provider: providerId,
+          provider: implementerSlot.provider,
           nameSeed: `${baseName}-implement`,
           initialPrompt: buildRequirementPrompt({
             requirement: trimmed,
-            systemPrompt: getSystemPrompt(
-              REVIEW_IMPLEMENTER_PROMPT_KEY,
-              defaultReviewImplementerSystemPrompt()
-            ),
+            systemPrompt: implementerSlot.systemPrompt,
           }),
           titlePrompt: trimmed || undefined,
           strategyKind: effectiveReviewStrategyKind,
@@ -1447,11 +1509,8 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
           implementationConversationId: implementation.conversationId,
           implementationReady: implementation.promise,
           requirement: trimmed,
-          reviewerProvider,
-          reviewerSystemPrompt: getSystemPrompt(
-            REVIEW_REVIEWER_PROMPT_KEY,
-            defaultReviewReviewerSystemPrompt()
-          ),
+          reviewerProvider: reviewerSlot.provider ?? reviewerProvider,
+          reviewerSystemPrompt: reviewerSlot.systemPrompt,
           getAutoApprove: autoApproveDefaults.getDefault,
         }).catch((error: unknown) => {
           toast.error(error instanceof Error ? error.message : 'Review mode orchestration failed.');
@@ -1463,15 +1522,17 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
 
       if (runMode === 'team') {
         const ceoRole = TEAM_ROLES[0];
+        const ceoSlot = resolveSlot(
+          teamPromptKey(ceoRole.id),
+          teamProviders.ceo,
+          defaultTeamSystemPrompt(ceoRole)
+        );
         const ceo = createProjectTask({
-          provider: teamProviders.ceo,
+          provider: ceoSlot.provider ?? teamProviders.ceo,
           nameSeed: `${baseName}-${ceoRole.taskSuffix}`,
           initialPrompt: buildTeamCeoPrompt({
             requirement: trimmed,
-            systemPrompt: getSystemPrompt(
-              teamPromptKey(ceoRole.id),
-              defaultTeamSystemPrompt(ceoRole)
-            ),
+            systemPrompt: ceoSlot.systemPrompt,
           }),
           titlePrompt: trimmed || undefined,
           strategyKind: 'new-branch',
@@ -1484,22 +1545,24 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
             ceo.taskId,
             ceo.conversationId
           );
-          const workerLaunches = TEAM_ROLES.filter((role) => role.id !== 'ceo').map((role) =>
-            createProjectTask({
-              provider: teamProviders[role.id],
+          const workerLaunches = TEAM_ROLES.filter((role) => role.id !== 'ceo').map((role) => {
+            const slot = resolveSlot(
+              teamPromptKey(role.id),
+              teamProviders[role.id],
+              defaultTeamSystemPrompt(role)
+            );
+            return createProjectTask({
+              provider: slot.provider ?? teamProviders[role.id],
               nameSeed: `${baseName}-${role.taskSuffix}`,
               initialPrompt: buildTeamRolePrompt({
                 requirement: trimmed,
                 ceoPlan: ceoOutput || '(The CEO agent did not produce captured output.)',
-                systemPrompt: getSystemPrompt(
-                  teamPromptKey(role.id),
-                  defaultTeamSystemPrompt(role)
-                ),
+                systemPrompt: slot.systemPrompt,
               }),
               titlePrompt: trimmed || undefined,
               strategyKind: 'new-branch',
-            })
-          );
+            });
+          });
           reportFailures(await Promise.allSettled(workerLaunches.map((launch) => launch.promise)));
         })().catch((error: unknown) => {
           toast.error(error instanceof Error ? error.message : 'Agent team orchestration failed.');
@@ -1509,14 +1572,11 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
         return;
       }
 
-      const normalAgent = userAgents.find((a) => a.id === (selectedAgentIdsByMode.normal ?? [])[0]);
-      const normalProvider = normalAgent?.preferredRuntimeProvider ?? providerId;
-      if (!normalProvider) return;
-      const normalSystemPrompt = (
-        normalAgent ? normalAgent.systemPrompt : getSystemPrompt(NORMAL_PROMPT_KEY, '')
-      ).trim();
+      const normalSlot = resolveSlot(NORMAL_PROMPT_KEY, providerId, '');
+      if (!normalSlot.provider) return;
+      const normalSystemPrompt = normalSlot.systemPrompt.trim();
       const task = createProjectTask({
-        provider: normalProvider,
+        provider: normalSlot.provider,
         nameSeed: baseName,
         initialPrompt: normalSystemPrompt
           ? buildRequirementPrompt({ requirement: trimmed, systemPrompt: normalSystemPrompt })
@@ -1905,11 +1965,54 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
 
             <div className="mt-3 flex flex-col gap-2">
               <div className="overflow-x-auto pb-1">
-                <div className="flex min-w-max flex-wrap items-center gap-2">
+                <div ref={runModeAnchorRef} className="flex min-w-max flex-wrap items-center gap-2">
+                  <ProjectSelector
+                    value={selectedProjectId}
+                    onChange={setSelectedProjectId}
+                    allowProjectless
+                    initializeGitRepositoryOnPick
+                    trigger={
+                      <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+                        <FolderOpen className="size-3.5 text-foreground-muted" />
+                        <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
+                      </ComboboxTrigger>
+                    }
+                  />
+                  <RunHostSelector kind={runHostKind} />
+                  {runMode === 'brainstorm' && (
+                    <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>
+                  )}
+                  {mounted && runMode === 'compare' && (
+                    <Chip icon={GitFork}>
+                      {t('home.compareBranchPolicy', { count: compareProviders.length })}
+                    </Chip>
+                  )}
+                  {mounted && runMode === 'team' && (
+                    <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
+                  )}
+                  {mounted && runMode === 'normal' && (
+                    <StrategyChip
+                      strategyKind={effectiveStandardStrategyKind}
+                      disabled={isUnborn}
+                      onChange={setStrategyKind}
+                      ariaLabel={t('home.strategyAria')}
+                      labels={strategyLabels}
+                    />
+                  )}
+                  {mounted && runMode === 'review' && (
+                    <StrategyChip
+                      strategyKind={effectiveReviewStrategyKind}
+                      disabled={isUnborn}
+                      onChange={setReviewStrategyKind}
+                      ariaLabel={t('home.reviewStrategyAria')}
+                      labels={reviewStrategyLabels}
+                    />
+                  )}
                   <RunModeSelector
                     mode={runMode}
                     summary={runModeSummary}
                     onChange={setRunMode}
+                    anchorRef={runModeAnchorRef}
                     renderConfiguration={(configurationMode) => (
                       <ModeConfigurationPanel
                         mode={configurationMode}
@@ -1925,59 +2028,14 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                         onTeamProviderChange={setTeamProvider}
                         agentSystemPrompts={agentSystemPrompts}
                         onAgentSystemPromptChange={setAgentSystemPrompt}
-                        selectedAgentIds={selectedAgentIdsByMode[configurationMode] ?? []}
-                        onSelectedAgentsChange={(ids) =>
-                          setSelectedAgentsForMode(configurationMode, ids)
-                        }
-                        multiAgent={configurationMode === 'team'}
+                        agents={userAgents}
+                        slotAgentId={slotAgentId}
+                        onSlotAgentChange={setSlotAgent}
                         connectionId={connectionId}
                         className="mt-2 border-t-0 pt-0"
                       />
                     )}
                   />
-                  <ProjectSelector
-                    value={selectedProjectId}
-                    onChange={setSelectedProjectId}
-                    allowProjectless
-                    initializeGitRepositoryOnPick
-                    trigger={
-                      <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
-                        <FolderOpen className="size-3.5 text-foreground-muted" />
-                        <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
-                      </ComboboxTrigger>
-                    }
-                  />
-                  <RunHostSelector kind={runHostKind} />
-                  <TmuxChip />
-                  {mounted && runMode === 'normal' && (
-                    <StrategyChip
-                      strategyKind={effectiveStandardStrategyKind}
-                      disabled={isUnborn}
-                      onChange={setStrategyKind}
-                      ariaLabel={t('home.strategyAria')}
-                      labels={strategyLabels}
-                    />
-                  )}
-                  {runMode === 'brainstorm' && (
-                    <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>
-                  )}
-                  {mounted && runMode === 'compare' && (
-                    <Chip icon={GitFork}>
-                      {t('home.compareBranchPolicy', { count: compareProviders.length })}
-                    </Chip>
-                  )}
-                  {mounted && runMode === 'review' && (
-                    <StrategyChip
-                      strategyKind={effectiveReviewStrategyKind}
-                      disabled={isUnborn}
-                      onChange={setReviewStrategyKind}
-                      ariaLabel={t('home.reviewStrategyAria')}
-                      labels={reviewStrategyLabels}
-                    />
-                  )}
-                  {mounted && runMode === 'team' && (
-                    <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
-                  )}
                 </div>
               </div>
             </div>
@@ -2295,9 +2353,16 @@ interface RunModeSelectorProps {
   summary?: string | null;
   onChange: (mode: HomeRunMode) => void;
   renderConfiguration: (mode: HomeRunMode) => ReactNode;
+  anchorRef?: RefObject<HTMLElement | null>;
 }
 
-function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunModeSelectorProps) {
+function RunModeSelector({
+  mode,
+  summary,
+  onChange,
+  renderConfiguration,
+  anchorRef,
+}: RunModeSelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const current = RUN_MODE_OPTIONS.find((option) => option.mode === mode) ?? RUN_MODE_OPTIONS[0];
@@ -2328,6 +2393,7 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
       />
       <PopoverContent
         align="start"
+        anchor={anchorRef}
         className="max-h-[min(70dvh,40rem)] w-[min(44rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
       >
         <div className="flex min-h-0 max-h-[inherit] divide-x divide-border/60">
@@ -2390,96 +2456,6 @@ interface StrategyChipLabels {
   noWorktreeDesc: string;
 }
 
-interface AgentCardPickerProps {
-  selectedAgentIds: string[];
-  onChange: (ids: string[]) => void;
-  multi: boolean;
-}
-
-function AgentCardPicker({ selectedAgentIds, onChange, multi }: AgentCardPickerProps) {
-  const { t } = useTranslation();
-  const { navigate } = useNavigate();
-  const { agents, isLoading } = useAgents();
-
-  const toggle = (agent: Agent) => {
-    if (multi) {
-      onChange(
-        selectedAgentIds.includes(agent.id)
-          ? selectedAgentIds.filter((id) => id !== agent.id)
-          : [...selectedAgentIds, agent.id]
-      );
-    } else {
-      onChange(selectedAgentIds.includes(agent.id) ? [] : [agent.id]);
-    }
-  };
-
-  if (isLoading) return null;
-
-  return (
-    <div className="mb-3 flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-foreground-muted">
-          {multi ? t('home.pickAgents') : t('home.pickAgent')}
-        </span>
-        <button
-          type="button"
-          onClick={() => navigate('agentManager')}
-          className="text-[11px] text-primary transition-colors hover:underline"
-        >
-          {t('home.manageAgents')}
-        </button>
-      </div>
-      {agents.length === 0 ? (
-        <button
-          type="button"
-          onClick={() => navigate('agentManager')}
-          className="flex items-center justify-center gap-2 rounded-md border border-dashed border-border bg-background-1 px-3 py-3 text-xs text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
-        >
-          <Plus className="size-3.5" />
-          {t('home.noAgentsCreate')}
-        </button>
-      ) : (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {agents.map((agent) => {
-            const selected = selectedAgentIds.includes(agent.id);
-            return (
-              <button
-                key={agent.id}
-                type="button"
-                onClick={() => toggle(agent)}
-                className={cn(
-                  'flex items-start gap-2.5 rounded-lg border p-2.5 text-left transition-colors',
-                  selected
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border bg-background-1 hover:bg-background-2'
-                )}
-              >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background-2 text-base">
-                  {agent.icon || '🤖'}
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span
-                    className={cn(
-                      'flex items-center gap-1.5 truncate text-sm font-medium',
-                      selected ? 'text-primary' : 'text-foreground'
-                    )}
-                  >
-                    <span className="truncate">{agent.name}</span>
-                    {selected && <Check className="size-3.5 shrink-0" />}
-                  </span>
-                  <span className="line-clamp-1 text-xs text-foreground-muted">
-                    {agent.description || t('agentManager.noDescriptionShort')}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 interface ModeConfigurationPanelProps {
   mode: HomeRunMode;
   providerId: AgentProviderId | null;
@@ -2494,9 +2470,9 @@ interface ModeConfigurationPanelProps {
   onTeamProviderChange: (roleId: TeamRoleId, provider: AgentProviderId) => void;
   agentSystemPrompts: AgentSystemPromptOverrides;
   onAgentSystemPromptChange: (key: string, prompt: string | null) => void;
-  selectedAgentIds: string[];
-  onSelectedAgentsChange: (ids: string[]) => void;
-  multiAgent?: boolean;
+  agents: Agent[];
+  slotAgentId: (slotKey: string) => string | null;
+  onSlotAgentChange: (slotKey: string, agentId: string) => void;
   connectionId?: string;
   className?: string;
 }
@@ -2515,37 +2491,32 @@ function ModeConfigurationPanel({
   onTeamProviderChange,
   agentSystemPrompts,
   onAgentSystemPromptChange,
-  selectedAgentIds,
-  onSelectedAgentsChange,
-  multiAgent = false,
+  agents,
+  slotAgentId,
+  onSlotAgentChange,
   connectionId,
   className,
 }: ModeConfigurationPanelProps) {
   const { t } = useTranslation();
 
-  const getPromptProps = (key: string, defaultPrompt: string) => {
+  // Everything a single slot card needs: its per-slot prompt override props
+  // plus its user-Agent selection. `key` is the slot's stable prompt key.
+  const slotProps = (key: string, defaultPrompt: string) => {
     const savedPrompt = agentSystemPrompts[key];
     return {
       systemPrompt: typeof savedPrompt === 'string' ? savedPrompt : defaultPrompt,
       hasCustomSystemPrompt: typeof savedPrompt === 'string',
       onSystemPromptChange: (next: string) => onAgentSystemPromptChange(key, next),
       onSystemPromptReset: () => onAgentSystemPromptChange(key, null),
+      agents,
+      selectedAgentId: slotAgentId(key),
+      onSelectAgent: (agentId: string) => onSlotAgentChange(key, agentId),
     };
   };
 
-  const supportsAgentCards = mode === 'normal' || mode === 'team';
-
   return (
     <div className={cn('mt-3 border-t border-border/60 pt-3', className)}>
-      {supportsAgentCards && (
-        <AgentCardPicker
-          selectedAgentIds={selectedAgentIds}
-          onChange={onSelectedAgentsChange}
-          multi={multiAgent}
-        />
-      )}
-
-      {mode === 'normal' && selectedAgentIds.length === 0 && (
+      {mode === 'normal' && (
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           <Agent
             icon={Bot}
@@ -2553,7 +2524,7 @@ function ModeConfigurationPanel({
             value={providerId}
             onChange={onProviderChange}
             connectionId={connectionId}
-            {...getPromptProps(NORMAL_PROMPT_KEY, '')}
+            {...slotProps(NORMAL_PROMPT_KEY, '')}
           />
         </div>
       )}
@@ -2566,11 +2537,8 @@ function ModeConfigurationPanel({
             value={providerId}
             onChange={onProviderChange}
             connectionId={connectionId}
-            {...getPromptProps(SPEC_PROMPT_KEY, defaultSpecSystemPrompt())}
+            {...slotProps(SPEC_PROMPT_KEY, defaultSpecSystemPrompt())}
           />
-          <div className="flex min-h-24 items-center rounded-lg border border-border/70 bg-background-1 p-3 text-xs leading-relaxed text-foreground-muted">
-            {t('home.brainstormGuide')}
-          </div>
         </div>
       )}
 
@@ -2584,7 +2552,7 @@ function ModeConfigurationPanel({
               value={agent}
               onChange={(provider) => onCompareProviderChange(index, provider)}
               connectionId={connectionId}
-              {...getPromptProps(comparePromptKey(index), defaultCompareSystemPrompt(index))}
+              {...slotProps(comparePromptKey(index), defaultCompareSystemPrompt(index))}
               action={
                 <button
                   type="button"
@@ -2619,10 +2587,7 @@ function ModeConfigurationPanel({
             value={providerId}
             onChange={onProviderChange}
             connectionId={connectionId}
-            {...getPromptProps(
-              REVIEW_IMPLEMENTER_PROMPT_KEY,
-              defaultReviewImplementerSystemPrompt()
-            )}
+            {...slotProps(REVIEW_IMPLEMENTER_PROMPT_KEY, defaultReviewImplementerSystemPrompt())}
           />
           <Agent
             icon={ShieldCheck}
@@ -2630,7 +2595,7 @@ function ModeConfigurationPanel({
             value={reviewerProvider}
             onChange={onReviewerProviderChange}
             connectionId={connectionId}
-            {...getPromptProps(REVIEW_REVIEWER_PROMPT_KEY, defaultReviewReviewerSystemPrompt())}
+            {...slotProps(REVIEW_REVIEWER_PROMPT_KEY, defaultReviewReviewerSystemPrompt())}
           />
           <div className="sm:col-span-2 text-xs text-foreground-muted">
             {t('home.reviewRoundLimit', { count: REVIEW_MAX_ROUNDS })}
@@ -2648,7 +2613,7 @@ function ModeConfigurationPanel({
               value={teamProviders[role.id]}
               onChange={(provider) => onTeamProviderChange(role.id, provider)}
               connectionId={connectionId}
-              {...getPromptProps(teamPromptKey(role.id), defaultTeamSystemPrompt(role))}
+              {...slotProps(teamPromptKey(role.id), defaultTeamSystemPrompt(role))}
             />
           ))}
         </div>
@@ -2668,6 +2633,11 @@ interface AgentProps {
   onSystemPromptReset: () => void;
   connectionId?: string;
   action?: ReactNode;
+  /** User Agents this slot can pick from. */
+  agents: Agent[];
+  /** Currently selected user-Agent id for this slot, or null for a bare runtime. */
+  selectedAgentId: string | null;
+  onSelectAgent: (agentId: string) => void;
 }
 
 function Agent({
@@ -2681,11 +2651,21 @@ function Agent({
   onSystemPromptReset,
   connectionId,
   action,
+  agents,
+  selectedAgentId,
+  onSelectAgent,
 }: AgentProps) {
   const { t } = useTranslation();
+  const { navigate } = useNavigate();
+  const showAgentModal = useShowModal('agentEditModal');
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptDraft, setPromptDraft] = useState(systemPrompt);
   const promptPreview = systemPrompt.trim() || t('home.agentSystemPromptEmpty');
+
+  const selectedAgent = selectedAgentId ? agents.find((a) => a.id === selectedAgentId) : undefined;
+  const selection: AgentSlotSelection = selectedAgent
+    ? { kind: 'agent', agentId: selectedAgent.id }
+    : { kind: 'provider', provider: value ?? AGENT_PROVIDER_IDS[0] };
 
   const handlePromptOpenChange = (open: boolean) => {
     setPromptOpen(open);
@@ -2703,81 +2683,86 @@ function Agent({
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 bg-background-1 p-3">
+    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 bg-background-1 p-2.5">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-background-2 text-foreground-muted">
-          <Icon className="size-3.5" />
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-background-2 text-foreground-muted">
+          <Icon className="size-3" />
         </span>
         <span className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-wide text-foreground-muted">
           {label}
         </span>
-        <span
-          className={cn(
-            'shrink-0 rounded-sm px-1.5 py-0.5 text-[10px]',
-            hasCustomSystemPrompt
-              ? 'bg-primary/10 text-primary'
-              : 'bg-background-2 text-foreground-muted'
-          )}
-        >
-          {hasCustomSystemPrompt
-            ? t('home.agentSystemPromptCustom')
-            : t('home.agentSystemPromptDefault')}
-        </span>
         {action}
       </div>
-      <AgentSelector
-        value={value}
-        onChange={onChange}
-        connectionId={connectionId}
-        className="h-9 text-sm"
-      />
-      <Popover open={promptOpen} onOpenChange={handlePromptOpenChange}>
-        <PopoverTrigger
-          render={
-            <button
-              type="button"
-              aria-label={t('home.agentSystemPromptAria', { label })}
-              className="flex h-8 min-w-0 items-center gap-2 rounded-md bg-background-1 px-2 text-left text-xs text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
-            >
-              <FileText className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{promptPreview}</span>
-              <PencilLine className="size-3.5 shrink-0" />
-            </button>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <AgentSlotSelector
+          selection={selection}
+          agents={agents}
+          onSelectAgent={onSelectAgent}
+          onSelectProvider={onChange}
+          onCreateAgent={() =>
+            showAgentModal({ onSuccess: (created) => onSelectAgent(created.id) })
           }
+          onManageAgents={() => navigate('agentManager')}
+          connectionId={connectionId}
+          className="flex-1"
         />
-        <PopoverContent
-          align="start"
-          className="max-h-(--available-height) w-96 max-w-[calc(100vw-2rem)] gap-3 overflow-y-auto overscroll-contain p-3"
-        >
-          <PopoverHeader>
-            <PopoverTitle>{t('home.agentSystemPromptTitle', { label })}</PopoverTitle>
-          </PopoverHeader>
-          <Textarea
-            value={promptDraft}
-            onChange={(event) => setPromptDraft(event.target.value)}
-            placeholder={t('home.agentSystemPromptPlaceholder')}
-            className="h-64 max-h-[40dvh] min-h-48 resize-y overflow-y-auto rounded-md border border-border bg-background px-3 py-2 font-mono text-xs field-sizing-fixed leading-relaxed focus-visible:ring-1"
-          />
-          <div className="flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={resetPrompt}
-              className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+        {!selectedAgent && (
+          <Popover open={promptOpen} onOpenChange={handlePromptOpenChange}>
+            <PopoverTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={t('home.agentSystemPromptAria', { label })}
+                  title={promptPreview}
+                  className={cn(
+                    'relative flex size-9 shrink-0 items-center justify-center rounded-md border border-border transition-colors hover:bg-background-2 hover:text-foreground',
+                    hasCustomSystemPrompt
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-transparent text-foreground-muted'
+                  )}
+                >
+                  <FileText className="size-4" />
+                  {hasCustomSystemPrompt && (
+                    <span className="absolute right-1 top-1 size-1.5 rounded-full bg-primary" />
+                  )}
+                </button>
+              }
+            />
+            <PopoverContent
+              align="start"
+              className="max-h-(--available-height) w-96 max-w-[calc(100vw-2rem)] gap-3 overflow-y-auto overscroll-contain p-3"
             >
-              <RotateCcw className="size-3.5" />
-              <span>{t('home.agentSystemPromptReset')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={savePrompt}
-              className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              <Check className="size-3.5" />
-              <span>{t('home.agentSystemPromptSave')}</span>
-            </button>
-          </div>
-        </PopoverContent>
-      </Popover>
+              <PopoverHeader>
+                <PopoverTitle>{t('home.agentSystemPromptTitle', { label })}</PopoverTitle>
+              </PopoverHeader>
+              <Textarea
+                value={promptDraft}
+                onChange={(event) => setPromptDraft(event.target.value)}
+                placeholder={t('home.agentSystemPromptPlaceholder')}
+                className="h-64 max-h-[40dvh] min-h-48 resize-y overflow-y-auto rounded-md border border-border bg-background px-3 py-2 font-mono text-xs field-sizing-fixed leading-relaxed focus-visible:ring-1"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={resetPrompt}
+                  className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+                >
+                  <RotateCcw className="size-3.5" />
+                  <span>{t('home.agentSystemPromptReset')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={savePrompt}
+                  className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  <Check className="size-3.5" />
+                  <span>{t('home.agentSystemPromptSave')}</span>
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
+      </div>
     </div>
   );
 }
@@ -2788,32 +2773,6 @@ function Chip({ icon: Icon, children }: ChipProps) {
       <Icon className="size-3.5 text-foreground-muted" />
       {children}
     </span>
-  );
-}
-
-function TmuxChip() {
-  const { t } = useTranslation();
-  const { value: project, update, isLoading, isSaving } = useAppSettingsKey('project');
-  const enabled = project?.tmuxByDefault ?? true;
-
-  return (
-    <label
-      title={t('settings.tasks.enableTmuxDescription')}
-      className={cn(
-        'flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2',
-        (isLoading || isSaving) && 'cursor-not-allowed opacity-50'
-      )}
-    >
-      <Terminal className="size-3.5 text-foreground-muted" />
-      tmux
-      <Switch
-        size="sm"
-        checked={enabled}
-        disabled={isLoading || isSaving}
-        onCheckedChange={(checked) => update({ tmuxByDefault: checked })}
-        aria-label={t('settings.tasks.enableTmux')}
-      />
-    </label>
   );
 }
 
