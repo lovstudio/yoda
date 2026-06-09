@@ -168,12 +168,14 @@ async function applyBackgroundTaskNaming(input: {
 
   if (input.initialConversationId && input.initialConversationTitle) {
     const [conversation] = await db
-      .select({ title: conversations.title })
+      .select({ titleSource: conversations.titleSource })
       .from(conversations)
       .where(eq(conversations.id, input.initialConversationId))
       .limit(1);
-    if (conversation?.title === input.initialConversationTitle) {
-      await renameConversation(input.initialConversationId, naming.taskName);
+    // Our generated title overrides the provider CLI's interim auto-title
+    // ('agent'), but never a manual rename ('user').
+    if (conversation && conversation.titleSource !== 'user') {
+      await renameConversation(input.initialConversationId, naming.taskName, 'yoda');
     }
   }
 }

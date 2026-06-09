@@ -60,17 +60,23 @@ class SessionTitleManager {
     if (!displayTitle) return;
 
     const [convRow] = await db
-      .select({ title: conversations.title })
+      .select({ title: conversations.title, titleSource: conversations.titleSource })
       .from(conversations)
       .where(eq(conversations.id, ctx.conversationId))
       .limit(1);
     if (!convRow) return;
+
+    // The provider CLI's auto-title is only an interim name: once our own
+    // naming ('yoda') or the user has set a title, never overwrite it. This
+    // also guards against replayed title rows when resuming old transcripts.
+    if (convRow.titleSource === 'user' || convRow.titleSource === 'yoda') return;
 
     if (convRow.title !== displayTitle) {
       await db
         .update(conversations)
         .set({
           title: displayTitle,
+          titleSource: 'agent',
           updatedAt: sql`CURRENT_TIMESTAMP`,
         })
         .where(eq(conversations.id, ctx.conversationId));

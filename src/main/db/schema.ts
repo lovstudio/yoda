@@ -146,6 +146,12 @@ export const tasks = sqliteTable(
     statusChangedAt: text('status_changed_at')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
+    // Last computed diff totals for the task (source branch merge-base diff +
+    // working tree). Snapshotted on status changes / agent exits / archive so
+    // stats survive worktree removal.
+    diffAdditions: integer('diff_additions'),
+    diffDeletions: integer('diff_deletions'),
+    diffCapturedAt: text('diff_captured_at'),
     isPinned: integer('is_pinned').notNull().default(0), // boolean, 0=false, 1=true
     needsReview: integer('needs_review').notNull().default(0), // boolean, 0=false, 1=true — surfaces a review marker in the UI
     isUserNamed: integer('is_user_named').notNull().default(0), // 1 if user manually renamed
@@ -361,7 +367,14 @@ export const conversations = sqliteTable(
       .notNull()
       .references(() => tasks.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
+    // Who last set `title`: 'user' (manual rename), 'yoda' (our background
+    // naming), 'agent' (provider CLI's own session title). Null = still the
+    // initial title. Priority when writing: user > yoda > agent.
+    titleSource: text('title_source').$type<'user' | 'yoda' | 'agent'>(),
     provider: text('provider'),
+    // Effective account mode at the last agent spawn — how this session's
+    // tokens were paid for ('official-subscription' | 'official-api' | 'yoda-maas').
+    authProvider: text('auth_provider').$type<AgentAccountProviderId>(),
     config: text('config'),
     createdAt: text('created_at')
       .notNull()
