@@ -1,4 +1,17 @@
 {
+  "fileActions": {
+    "label": "文件操作",
+    "openInYoda": "在 Yoda 中打开",
+    "openInApp": "在 {{app}} 中打开",
+    "contentTruncated": "内容已截断——打开文件查看完整内容。",
+    "openFile": "打开文件",
+    "revealInFolder": "在文件夹中显示",
+    "openInTerminal": "在终端中打开",
+    "copyRelativePath": "复制相对路径",
+    "copyAbsolutePath": "复制绝对路径",
+    "pathCopied": "路径已复制",
+    "openFailed": "打开失败"
+  },
   "common": {
     "ok": "确定",
     "cancel": "取消",
@@ -71,7 +84,7 @@
     "newTask": "新建任务",
     "searchTasks": "搜索任务",
     "agentManager": "Agent",
-    "agents": "Agent Runtime",
+    "agents": "Runtime",
     "maas": "MaaS",
     "skills": "技能",
     "skillIssues": "{{count}} 个 skill 校验问题",
@@ -84,7 +97,9 @@
       "openMenu": "打开账户菜单",
       "manage": "管理账户",
       "signInPrompt": "登录",
-      "signInHint": "连接你的 Yoda 账户"
+      "signInHint": "连接你的 Yoda 账户",
+      "showNav": "显示侧边栏导航",
+      "hideNav": "隐藏侧边栏导航"
     },
     "dropToAddProject": "拖入以添加项目",
     "projects": "项目",
@@ -308,7 +323,8 @@
       "description": "自定义应用的外观与行为。",
       "keyboardShortcuts": "键盘快捷键",
       "tools": "工具",
-      "sidebarNav": "侧边栏导航"
+      "sidebarNav": "侧边栏导航",
+      "sidebarNavShowSection": "显示侧边栏导航"
     },
     "keyboardShortcutsTab": {
       "description": "自定义应用操作的键盘快捷键。"
@@ -358,6 +374,7 @@
     },
     "update": {
       "version": "版本",
+      "currentVersion": "当前版本",
       "checkForUpdates": "检查更新",
       "checking": "正在检查更新…",
       "checkFailed": "无法检查更新",
@@ -403,14 +420,31 @@
       "autoGenerateNameDescription": "创建新任务时生成可读任务名和专业分支名。",
       "namingConfigTitle": "命名",
       "namingConfigDescription": "用于命名任务的模型、目标语言和上下文来源。",
-      "namingSettings": "兜底命名模型",
+      "summaryConfigTitle": "会话摘要",
+      "summaryConfigDescription": "用于生成会话摘要的 Agent。使用其自身的 provider 与模型运行，独立于各会话的运行时。",
+      "namingAgentLabel": "命名 Agent",
+      "namingAgentHint": "负责命名任务的 Agent，同时绑定其运行时与模型——命名必须在 Agent 环境中执行。",
+      "summaryAgentLabel": "摘要 Agent",
+      "summaryAgentHint": "负责生成会话摘要的 Agent，完全使用其自身的 provider 与模型运行；即使当前会话的运行时已不可用，摘要仍可正常生成。",
+      "summaryLanguageLabel": "摘要语言",
+      "statusBarSourceLabel": "状态栏",
+      "statusBarSourceHint": "终端下方那条显示什么。选「隐藏」即可隐藏它。",
+      "summaryContext": {
+        "recentLabel": "近期摘要输入",
+        "globalLabel": "全局摘要输入",
+        "source": {
+          "user": "用户消息",
+          "assistant": "AI 回复",
+          "project": "项目信息"
+        }
+      },
       "namingSettingsDescription": "当自动推断没有候选时，可选用作基于 Agent 命名的兜底模型 ID。",
-      "namingModelPlaceholder": "留空则从 Agent 自动推断",
       "namingLanguageLabel": "目标语言",
       "namingLanguageApp": "应用语言",
       "namingLanguagePrompt": "Prompt 语言",
       "namingLanguageZh": "中文",
       "namingLanguageEn": "英文",
+      "namingTimeoutLabel": "超时（秒）",
       "namingContextLabel": "上下文来源",
       "namingContextPrompt": "首条 Prompt",
       "namingContextProject": "项目路径",
@@ -665,15 +699,21 @@
       "pin": "固定标签页",
       "copyPath": "复制路径",
       "copyYodaLink": "复制会话 Yoda 链接",
+      "openInWindow": "在独立窗口打开",
+      "openInWindowFailed": "打开独立窗口失败",
+      "returnFromWindowFailed": "恢复标签页失败",
       "overview": "概览",
       "newConversation": "新建会话",
       "archiveConversation": "归档会话",
       "archiveConversationSkipPre": "归档会话（跳过归档前 skill）",
+      "reloadConversation": "重新加载会话",
       "preview": "预览"
     },
     "overview": {
       "sessions": "会话（{{count}}）",
-      "noSessions": "暂无会话"
+      "noSessions": "暂无会话",
+      "archivedSessions": "已归档（{{count}}）",
+      "unarchiveFailed": "取消归档失败"
     },
     "files": "文件",
     "toggleTerminal": "切换终端",
@@ -681,6 +721,32 @@
       "title": "会话信息",
       "noSession": "暂无会话",
       "noSessionDescription": "创建或打开会话后可查看运行时信息。",
+      "sessionTitle": "会话",
+      "titleDebug": "会话标题调试",
+      "storedTitle": "当前标题",
+      "runtimeTitle": "运行时标题",
+      "titleSource": "标题来源",
+      "titleSourceYoda": "Yoda 会话",
+      "titleSourceClaude": "Claude 记录文件",
+      "titleSourceCodex": "Codex 状态库",
+      "titleSourceRuntime": "运行时会话",
+      "runtimeTitleUnavailable": "暂无运行时标题",
+      "aiRename": "AI 重命名",
+      "aiRenaming": "AI...",
+      "agentRenameComplete": "会话已重命名",
+      "agentRenameFailed": "Agent 重命名失败",
+      "namingDebug": "命名调试",
+      "generatedTitle": "生成标题",
+      "promptTokens": "Prompt tokens",
+      "systemPrompt": "系统 prompt",
+      "finalPrompt": "实际发送 prompt",
+      "copyNamingDebug": "复制命名调试",
+      "namingContextSources": "命名上下文",
+      "yodaConversationId": "Yoda 会话 ID",
+      "runtimeSessionId": "运行时会话 ID",
+      "manualRename": "手动重命名",
+      "manualTitle": "手动标题",
+      "renameFailed": "重命名会话失败",
       "status": "状态",
       "tmux": "tmux",
       "running": "运行中",
@@ -688,6 +754,10 @@
       "disabled": "未启用",
       "notRunning": "未运行",
       "unknown": "未知",
+      "createdAt": "创建时间",
+      "updatedAt": "更新时间",
+      "lastInteractedAt": "最近交互",
+      "archivedAt": "归档时间",
       "resumeCommand": "恢复命令",
       "promptCount": "{{count}} 条 prompt",
       "promptCount_plural": "{{count}} 条 prompt",
@@ -718,6 +788,7 @@
     "rename": {
       "title": "重命名任务",
       "panelTitle": "任务命名",
+      "debug": "任务命名调试",
       "configure": "配置",
       "configureHint": "这些设置对所有任务生效。调整后重新生成。",
       "label": "任务名",
@@ -732,10 +803,12 @@
       "statusReady": "已完成",
       "statusFailed": "失败",
       "statusIdle": "无记录",
-      "durationEstimate": "耗时评估",
+      "durationEstimate": "耗时",
       "durationRunning": "已耗时 {{duration}}",
-      "durationLast": "约 {{duration}}",
+      "durationLast": "耗时 {{duration}}",
       "durationUnavailable": "暂无耗时记录",
+      "generatingWithDuration": "生成中 {{duration}}",
+      "renamingWithDuration": "重命名中 {{duration}}",
       "contextTokens": "上下文 tokens",
       "sourceTokens": "{{count}} tokens",
       "contextStats": "{{sources}} 个来源 · {{tokens}} tokens · {{characters}} 字符 · {{method}}",
@@ -750,11 +823,19 @@
       "branchPreview": "分支名：{{slug}}",
       "renaming": "重命名中…",
       "submit": "重命名",
-      "renameFailed": "重命名任务失败"
+      "renameFailed": "重命名任务失败",
+      "tabManual": "手动",
+      "tabAuto": "自动",
+      "sectionBasics": "基础信息",
+      "sectionConfig": "配置",
+      "sectionContext": "上下文来源",
+      "aiName": "AI 命名",
+      "aiNaming": "命名中 {{duration}}",
+      "previewPrompt": "预览 Prompt"
     },
     "archiveWithNote": {
       "title": "归档 \"{{name}}\"",
-      "label": "备注",
+      "label": "备注（可选）",
       "placeholder": "为何归档此任务？",
       "archiving": "归档中…",
       "submit": "归档"
@@ -815,6 +896,7 @@
     "failedTearDownWorkspace": "清理工作区失败",
     "devServerRunningAt": "开发服务器运行在 {{url}}",
     "selectTask": "选择任务",
+    "taskUnavailable": "任务不可用",
     "lifecycle": {
       "inProgress": "进行中",
       "review": "待审查",
@@ -933,10 +1015,9 @@
       "openDetails": "打开详情",
       "unpinTask": "取消置顶",
       "pinTask": "置顶",
-      "unmarkReview": "取消稍后再读",
-      "markForReview": "稍后再读",
-      "archive": "归档",
-      "archiveWithNote": "归档（附备注）…",
+      "unmarkReview": "标记已读",
+      "markForReview": "标记未读",
+      "archive": "归档…",
       "restartSession": "重启任务",
       "reopenTask": "重新加载",
       "copyTaskBasicInfo": "复制基本信息",
@@ -969,6 +1050,19 @@
       "hooks": "Hooks",
       "summaryGlobal": "全局摘要",
       "summaryRecent": "近期动态",
+      "summaryRegenerate": "重新生成摘要",
+      "summaryConfigure": "配置摘要 Agent",
+      "recentProgressTooltip": "会话进展与下一步",
+      "statusBar": {
+        "switchSource": "切换状态栏显示内容",
+        "recentPromptTooltip": "本会话最近一次提问 —— 点击查看完整历史",
+        "recentPromptEmpty": "暂无提问",
+        "source": {
+          "summary": "近期摘要",
+          "recentPrompt": "最近提问",
+          "off": "隐藏"
+        }
+      },
       "summaryEmpty": "暂无摘要",
       "summaryEmptyDescription": "当有可总结的内容后，这里会显示摘要。",
       "summaryGenerating": "正在生成摘要…",
@@ -1170,9 +1264,55 @@
       "name": "名称不能为空。"
     }
   },
+  "builtinAgents": {
+    "general": {
+      "name": "通用 Agent",
+      "description": "通用编码 Agent，没有特定角色设定。"
+    },
+    "spec": {
+      "name": "规格 Agent",
+      "description": "规格优先：先澄清需求并产出 PRD，再开始编码。"
+    },
+    "review-implementer": {
+      "name": "实现者",
+      "description": "实现需求并处理评审反馈。"
+    },
+    "review-reviewer": {
+      "name": "评审者",
+      "description": "对照需求评审一份实现。"
+    },
+    "team-ceo": {
+      "name": "CEO",
+      "description": "拆解需求并把工作分配给团队。"
+    },
+    "team-product": {
+      "name": "产品",
+      "description": "把需求转化为产品行为和验收标准。"
+    },
+    "team-engineering": {
+      "name": "工程",
+      "description": "以工程严谨度实现代码改动并完成验证。"
+    },
+    "team-uiux": {
+      "name": "UI/UX",
+      "description": "打磨用户体验并实现 UI 改动。"
+    },
+    "team-operations": {
+      "name": "运营",
+      "description": "评审上线、引导、沟通和运营风险。"
+    },
+    "naming": {
+      "name": "命名",
+      "description": "为编码任务生成简洁的名称和分支 slug。"
+    },
+    "summary": {
+      "name": "摘要",
+      "description": "根据会话消息生成编码会话摘要。"
+    }
+  },
   "agents": {
-    "title": "代理管理",
-    "subtitle": "为每个 CLI 代理配置命名、记忆、Hooks 与技能",
+    "title": "Runtime",
+    "subtitle": "管理已安装的 CLI 运行时，查看检测状态与版本",
     "detected": "已检测",
     "notDetected": "未检测",
     "notFound": "未找到该代理",
@@ -1180,6 +1320,7 @@
     "openInFinder": "打开",
     "unset": "未设置",
     "tabs": {
+      "account": "Auth",
       "maas": "运行时",
       "models": "Models",
       "memory": "记忆",
@@ -1203,6 +1344,60 @@
       "planActivate": "Plan 模式命令",
       "autoStart": "自启动命令",
       "defaultArgs": "默认参数"
+    },
+    "account": {
+      "title": "认证来源",
+      "description": "选择 {{name}} 会话使用的认证来源，其余来源可保持就绪、随时切换。",
+      "officialSubscription": "官方订阅",
+      "officialSubscriptionDescription": "{{name}} 的官方登录与订阅凭据由它自己的 CLI 或本地配置管理。",
+      "officialApi": "官方 API",
+      "officialApiDescription": "Yoda 启动 {{name}} 会话时会转发这些 API Key 和 Base URL 环境变量。",
+      "configureApi": "配置环境变量",
+      "maasSource": "Yoda MaaS",
+      "maasDescription": "如已配置模型平台，可作为共享路由、观测与计费来源。",
+      "manageMaas": "管理 MaaS",
+      "selectAria": "使用{{name}}作为认证来源",
+      "expandAria": "展开{{name}}详情",
+      "selectedUnavailable": "该来源尚未就绪，请先完成配置",
+      "statusRuntimeVersion": "v{{version}}",
+      "statusRuntimeDetected": "已检测",
+      "statusRuntimeMissing": "未检测到 CLI",
+      "statusApiConfigured": "已配置 {{count}}/{{total}}",
+      "statusApiMissing": "未配置",
+      "statusApiUnknown": "无已知环境变量",
+      "statusMaasConfigured": "已连接 {{count}} 个",
+      "statusMaasMissing": "未连接",
+      "statusLoggedOut": "未登录",
+      "accountCli": "CLI",
+      "accountLabel": "账号",
+      "accountOrg": "组织",
+      "accountPlan": "套餐",
+      "accountNotLoggedIn": "未检测到登录账号，请先在终端登录 {{name}}。",
+      "accountUnsupported": "暂不支持读取 {{name}} 的订阅账号信息。",
+      "accountLoadFailed": "读取账号信息失败",
+      "recheckRuntime": "重新检测",
+      "testConnection": "测试连接",
+      "testOk": "连接正常",
+      "testFailed": "连接失败",
+      "loadingAccountStatus": "正在加载账号状态…",
+      "noKnownApiEnvVars": "该运行时暂未登记已知的官方 API 环境变量。",
+      "envSourceCustom": "自定义",
+      "envSourceInherited": "系统环境",
+      "envSourceUnset": "未设置",
+      "noMaasConnections": "尚未连接 MaaS 平台。",
+      "usageTitle": "用量",
+      "usageDescription": "来自 ZenMux Management API 的真实用量统计。",
+      "usageRefresh": "刷新",
+      "usageNoMaas": "在 MaaS 视图连接 ZenMux 后即可显示真实用量统计。",
+      "usageLoading": "正在加载用量…",
+      "usageError": "无法加载用量",
+      "usageEmpty": "暂无匹配的用量统计。",
+      "usageRecords": "记录",
+      "usageTokens": "Tokens",
+      "usageCost": "费用",
+      "usagePeriod": "周期",
+      "usageAllRoutes": "全部 MaaS 路由",
+      "usageFilteredBy": "过滤"
     },
     "memory": {
       "title": "记忆 / 上下文文件",
@@ -1857,6 +2052,33 @@
       "emptyDescription": "打开一个任务会话后会显示在这里。",
       "openSession": "打开 {{title}}",
       "taskFallback": "任务 {{id}}"
+    },
+    "harness": {
+      "label": "Harness",
+      "title": "AI Harness",
+      "openProject": "打开项目",
+      "openFailed": "打开失败",
+      "memoryTitle": "记忆与提示词",
+      "memoryEmpty": "尚无记忆文件。创建 {{path}} 为该 runtime 提供项目级指令。",
+      "skillsTitle": "Skills",
+      "skillsEmpty": "尚未安装 skill。在 {{path}} 下添加 SKILL.md 目录。",
+      "commandsTitle": "斜杠命令",
+      "commandsEmpty": "尚无命令。在 {{path}} 下添加 *.md 文件。",
+      "subagentsTitle": "子 Agent",
+      "subagentsEmpty": "尚无子 Agent。在 {{path}} 下添加 *.md 文件。",
+      "mcpTitle": "MCP 服务器",
+      "mcpEmpty": "{{path}} 中未声明 MCP 服务器。",
+      "debugTitle": "配置文件与扫描路径",
+      "contentTruncated": "内容已截断——打开文件查看完整内容。",
+      "available": "可用",
+      "missing": "缺失",
+      "disabled": "已禁用",
+      "issueCount": "{{count}} 个问题",
+      "issueCount_plural": "{{count}} 个问题",
+      "runtimes": {
+        "codex": "Codex",
+        "claude": "Claude Code"
+      }
     },
     "addProject": {
       "title": "添加项目",

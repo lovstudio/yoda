@@ -1,4 +1,17 @@
 {
+  "fileActions": {
+    "label": "File actions",
+    "openInYoda": "Open in Yoda",
+    "openInApp": "Open in {{app}}",
+    "contentTruncated": "Content truncated — open the file to see everything.",
+    "openFile": "Open file",
+    "revealInFolder": "Reveal in folder",
+    "openInTerminal": "Open in terminal",
+    "copyRelativePath": "Copy relative path",
+    "copyAbsolutePath": "Copy absolute path",
+    "pathCopied": "Path copied",
+    "openFailed": "Open failed"
+  },
   "common": {
     "ok": "OK",
     "cancel": "Cancel",
@@ -71,7 +84,7 @@
     "newTask": "New task",
     "searchTasks": "Search tasks",
     "agentManager": "Agents",
-    "agents": "Agent Runtime",
+    "agents": "Runtime",
     "maas": "MaaS",
     "skills": "Skills",
     "skillIssues": "{{count}} skill issue(s)",
@@ -84,7 +97,9 @@
       "openMenu": "Open account menu",
       "manage": "Manage account",
       "signInPrompt": "Sign in",
-      "signInHint": "Connect your Yoda account"
+      "signInHint": "Connect your Yoda account",
+      "showNav": "Show sidebar navigation",
+      "hideNav": "Hide sidebar navigation"
     },
     "dropToAddProject": "Drop to add project",
     "projects": "Projects",
@@ -308,7 +323,8 @@
       "description": "Customize the appearance and behavior of the app.",
       "keyboardShortcuts": "Keyboard shortcuts",
       "tools": "Tools",
-      "sidebarNav": "Sidebar navigation"
+      "sidebarNav": "Sidebar navigation",
+      "sidebarNavShowSection": "Show sidebar navigation"
     },
     "keyboardShortcutsTab": {
       "description": "Customize keyboard shortcuts for app actions."
@@ -358,6 +374,7 @@
     },
     "update": {
       "version": "Version",
+      "currentVersion": "Current version",
       "checkForUpdates": "Check for updates",
       "checking": "Checking for updates…",
       "checkFailed": "Couldn't check for updates",
@@ -403,14 +420,31 @@
       "autoGenerateNameDescription": "Generate readable task names and professional branch names when creating a new task.",
       "namingConfigTitle": "Naming",
       "namingConfigDescription": "Model, target language, and the context sources used to name tasks.",
-      "namingSettings": "Fallback naming model",
+      "summaryConfigTitle": "Session summary",
+      "summaryConfigDescription": "The agent used to generate session summaries. Runs on its own provider and model, independent of each session's runtime.",
+      "namingAgentLabel": "Naming agent",
+      "namingAgentHint": "The agent that names tasks. It binds both the runtime and model, since naming must run inside an agent environment.",
+      "summaryAgentLabel": "Summary agent",
+      "summaryAgentHint": "The agent that generates session summaries. It runs entirely on its own provider and model, so summaries keep working even if the session's own runtime is unavailable.",
+      "summaryLanguageLabel": "Summary language",
+      "statusBarSourceLabel": "Status bar",
+      "statusBarSourceHint": "What the strip below the terminal shows. Choose \"Hidden\" to hide it.",
+      "summaryContext": {
+        "recentLabel": "Recent summary inputs",
+        "globalLabel": "Global summary inputs",
+        "source": {
+          "user": "User messages",
+          "assistant": "AI replies",
+          "project": "Project info"
+        }
+      },
       "namingSettingsDescription": "Optional fallback model id for agent-based task naming when inference does not return a candidate.",
-      "namingModelPlaceholder": "Leave empty to infer from the agent",
       "namingLanguageLabel": "Target language",
       "namingLanguageApp": "App language",
       "namingLanguagePrompt": "Prompt language",
       "namingLanguageZh": "Chinese",
       "namingLanguageEn": "English",
+      "namingTimeoutLabel": "Timeout (sec)",
       "namingContextLabel": "Context sources",
       "namingContextPrompt": "First prompt",
       "namingContextProject": "Project path",
@@ -665,15 +699,21 @@
       "pin": "Pin tab",
       "copyPath": "Copy path",
       "copyYodaLink": "Copy session Yoda link",
+      "openInWindow": "Open in separate window",
+      "openInWindowFailed": "Failed to open separate window",
+      "returnFromWindowFailed": "Failed to return tab",
       "overview": "Overview",
       "newConversation": "New conversation",
       "archiveConversation": "Archive session",
       "archiveConversationSkipPre": "Archive session without pre-archive skill",
+      "reloadConversation": "Reload session",
       "preview": "Preview"
     },
     "overview": {
       "sessions": "Sessions ({{count}})",
-      "noSessions": "No sessions yet"
+      "noSessions": "No sessions yet",
+      "archivedSessions": "Archived ({{count}})",
+      "unarchiveFailed": "Failed to unarchive conversation"
     },
     "files": "Files",
     "toggleTerminal": "Toggle terminal",
@@ -681,6 +721,32 @@
       "title": "Session info",
       "noSession": "No session",
       "noSessionDescription": "Create or open a session to inspect runtime details.",
+      "sessionTitle": "Session",
+      "titleDebug": "Session title debug",
+      "storedTitle": "Current title",
+      "runtimeTitle": "Runtime title",
+      "titleSource": "Title source",
+      "titleSourceYoda": "Yoda conversation",
+      "titleSourceClaude": "Claude transcript",
+      "titleSourceCodex": "Codex state",
+      "titleSourceRuntime": "Runtime session",
+      "runtimeTitleUnavailable": "No runtime title resolved",
+      "aiRename": "AI rename",
+      "aiRenaming": "AI...",
+      "agentRenameComplete": "Session renamed",
+      "agentRenameFailed": "Agent rename failed",
+      "namingDebug": "Naming debug",
+      "generatedTitle": "Generated title",
+      "promptTokens": "Prompt tokens",
+      "systemPrompt": "System prompt",
+      "finalPrompt": "Final prompt sent",
+      "copyNamingDebug": "Copy naming debug",
+      "namingContextSources": "Naming context",
+      "yodaConversationId": "Yoda conversation ID",
+      "runtimeSessionId": "Runtime session ID",
+      "manualRename": "Manual rename",
+      "manualTitle": "Manual title",
+      "renameFailed": "Failed to rename session",
       "status": "Status",
       "tmux": "tmux",
       "running": "Running",
@@ -688,6 +754,10 @@
       "disabled": "Disabled",
       "notRunning": "Not running",
       "unknown": "Unknown",
+      "createdAt": "Created",
+      "updatedAt": "Updated",
+      "lastInteractedAt": "Last active",
+      "archivedAt": "Archived",
       "resumeCommand": "Resume",
       "promptCount": "{{count}} prompt",
       "promptCount_plural": "{{count}} prompts",
@@ -718,6 +788,7 @@
     "rename": {
       "title": "Rename task",
       "panelTitle": "Task naming",
+      "debug": "Task naming debug",
       "configure": "Configure",
       "configureHint": "These settings apply to all tasks. Adjust, then regenerate.",
       "label": "Task name",
@@ -734,8 +805,10 @@
       "statusIdle": "No record",
       "durationEstimate": "Duration",
       "durationRunning": "Elapsed {{duration}}",
-      "durationLast": "About {{duration}}",
+      "durationLast": "{{duration}}",
       "durationUnavailable": "No duration recorded",
+      "generatingWithDuration": "Generating {{duration}}",
+      "renamingWithDuration": "Renaming {{duration}}",
       "contextTokens": "Context tokens",
       "sourceTokens": "{{count}} tokens",
       "contextStats": "{{sources}} sources · {{tokens}} tokens · {{characters}} chars · {{method}}",
@@ -750,11 +823,19 @@
       "branchPreview": "Branch: {{slug}}",
       "renaming": "Renaming…",
       "submit": "Rename",
-      "renameFailed": "Failed to rename task"
+      "renameFailed": "Failed to rename task",
+      "tabManual": "Manual",
+      "tabAuto": "Auto",
+      "sectionBasics": "Overview",
+      "sectionConfig": "Configuration",
+      "sectionContext": "Context sources",
+      "aiName": "AI name",
+      "aiNaming": "Naming {{duration}}",
+      "previewPrompt": "Preview prompt"
     },
     "archiveWithNote": {
       "title": "Archive \"{{name}}\"",
-      "label": "Note",
+      "label": "Note (optional)",
       "placeholder": "Why are you archiving this task?",
       "archiving": "Archiving…",
       "submit": "Archive"
@@ -815,6 +896,7 @@
     "failedTearDownWorkspace": "Failed to tear down workspace",
     "devServerRunningAt": "Dev server running at {{url}}",
     "selectTask": "Select task",
+    "taskUnavailable": "Task unavailable",
     "lifecycle": {
       "inProgress": "In Progress",
       "review": "Review",
@@ -933,10 +1015,9 @@
       "openDetails": "Open details",
       "unpinTask": "Unpin",
       "pinTask": "Pin",
-      "unmarkReview": "Unmark read later",
-      "markForReview": "Read later",
-      "archive": "Archive",
-      "archiveWithNote": "Archive with note…",
+      "unmarkReview": "Mark as read",
+      "markForReview": "Mark as unread",
+      "archive": "Archive…",
       "restartSession": "Restart task",
       "reopenTask": "Reload",
       "copyTaskBasicInfo": "Copy basic info",
@@ -969,6 +1050,19 @@
       "hooks": "Hooks",
       "summaryGlobal": "Global summary",
       "summaryRecent": "Recent activity",
+      "summaryRegenerate": "Regenerate summary",
+      "summaryConfigure": "Configure summary agent",
+      "recentProgressTooltip": "Conversation progress and next step",
+      "statusBar": {
+        "switchSource": "Change what this bar shows",
+        "recentPromptTooltip": "Your latest prompt in this session — click for full history",
+        "recentPromptEmpty": "No prompt yet",
+        "source": {
+          "summary": "Recent summary",
+          "recentPrompt": "Latest prompt",
+          "off": "Hidden"
+        }
+      },
       "summaryEmpty": "No summary yet",
       "summaryEmptyDescription": "A summary appears once there is something to summarize.",
       "summaryGenerating": "Generating summary…",
@@ -1170,9 +1264,55 @@
       "name": "Name is required."
     }
   },
+  "builtinAgents": {
+    "general": {
+      "name": "General Agent",
+      "description": "A general-purpose coding agent with no special framing."
+    },
+    "spec": {
+      "name": "Spec Agent",
+      "description": "Spec-first: clarify requirements and produce a PRD before coding."
+    },
+    "review-implementer": {
+      "name": "Implementer",
+      "description": "Implements the requirement and addresses reviewer feedback."
+    },
+    "review-reviewer": {
+      "name": "Reviewer",
+      "description": "Reviews an implementation against the requirement."
+    },
+    "team-ceo": {
+      "name": "CEO",
+      "description": "Decomposes the requirement and assigns work to the team."
+    },
+    "team-product": {
+      "name": "Product",
+      "description": "Turns the requirement into product behavior and acceptance criteria."
+    },
+    "team-engineering": {
+      "name": "Engineering",
+      "description": "Implements code changes with engineering rigor and validation."
+    },
+    "team-uiux": {
+      "name": "UI/UX",
+      "description": "Shapes the user experience and implements UI changes."
+    },
+    "team-operations": {
+      "name": "Operations",
+      "description": "Reviews rollout, onboarding, communication, and operational risk."
+    },
+    "naming": {
+      "name": "Naming",
+      "description": "Generates concise task names and branch slugs."
+    },
+    "summary": {
+      "name": "Summary",
+      "description": "Summarizes a coding session from its messages."
+    }
+  },
   "agents": {
-    "title": "Agents",
-    "subtitle": "Configure naming, memory, hooks and skills for each CLI agent",
+    "title": "Runtime",
+    "subtitle": "Manage installed CLI runtimes — detection status and versions",
     "detected": "Detected",
     "notDetected": "Not detected",
     "notFound": "Agent not found",
@@ -1180,6 +1320,7 @@
     "openInFinder": "Open",
     "unset": "unset",
     "tabs": {
+      "account": "Auth",
       "maas": "Runtime",
       "models": "Models",
       "memory": "Memory",
@@ -1203,6 +1344,60 @@
       "planActivate": "Plan-mode command",
       "autoStart": "Autostart command",
       "defaultArgs": "Default args"
+    },
+    "account": {
+      "title": "Auth source",
+      "description": "Pick the auth source {{name}} sessions use. Other sources can stay configured and ready to switch.",
+      "officialSubscription": "Official subscription",
+      "officialSubscriptionDescription": "{{name}} keeps official login and subscription credentials in its own CLI or local config.",
+      "officialApi": "Official API",
+      "officialApiDescription": "API keys and base URLs forwarded to {{name}} when Yoda launches runtime sessions.",
+      "configureApi": "Configure env",
+      "maasSource": "Yoda MaaS",
+      "maasDescription": "Use configured model platforms for shared routing, observability, and billing when available.",
+      "manageMaas": "Manage MaaS",
+      "selectAria": "Use {{name}} as the auth source",
+      "expandAria": "Toggle {{name}} details",
+      "selectedUnavailable": "This source is not ready yet — finish configuring it first",
+      "statusRuntimeVersion": "v{{version}}",
+      "statusRuntimeDetected": "Detected",
+      "statusRuntimeMissing": "CLI not detected",
+      "statusApiConfigured": "{{count}}/{{total}} configured",
+      "statusApiMissing": "Not configured",
+      "statusApiUnknown": "No known env vars",
+      "statusMaasConfigured": "{{count}} connected",
+      "statusMaasMissing": "Not connected",
+      "statusLoggedOut": "Not signed in",
+      "accountCli": "CLI",
+      "accountLabel": "Account",
+      "accountOrg": "Organization",
+      "accountPlan": "Plan",
+      "accountNotLoggedIn": "No signed-in account detected. Sign in via the {{name}} CLI first.",
+      "accountUnsupported": "Reading {{name}} subscription account info is not supported yet.",
+      "accountLoadFailed": "Could not read account info",
+      "recheckRuntime": "Re-detect",
+      "testConnection": "Test connection",
+      "testOk": "Connection OK",
+      "testFailed": "Connection failed",
+      "loadingAccountStatus": "Loading account status...",
+      "noKnownApiEnvVars": "No known provider API environment variables are registered for this runtime.",
+      "envSourceCustom": "Custom",
+      "envSourceInherited": "System env",
+      "envSourceUnset": "Not set",
+      "noMaasConnections": "No MaaS platform is connected yet.",
+      "usageTitle": "Usage",
+      "usageDescription": "Real usage statistics from the ZenMux Management API.",
+      "usageRefresh": "Refresh",
+      "usageNoMaas": "Connect ZenMux in the MaaS view to show real usage statistics.",
+      "usageLoading": "Loading usage...",
+      "usageError": "Could not load usage",
+      "usageEmpty": "No matching usage statistics.",
+      "usageRecords": "Records",
+      "usageTokens": "Tokens",
+      "usageCost": "Cost",
+      "usagePeriod": "Period",
+      "usageAllRoutes": "All MaaS routes",
+      "usageFilteredBy": "Filtered"
     },
     "memory": {
       "title": "Memory / context file",
@@ -1857,6 +2052,33 @@
       "emptyDescription": "Open a task session to see it here.",
       "openSession": "Open {{title}}",
       "taskFallback": "Task {{id}}"
+    },
+    "harness": {
+      "label": "Harness",
+      "title": "AI harness",
+      "openProject": "Open project",
+      "openFailed": "Open failed",
+      "memoryTitle": "Memory & prompts",
+      "memoryEmpty": "No memory file yet. Create {{path}} to give this runtime project instructions.",
+      "skillsTitle": "Skills",
+      "skillsEmpty": "No skills installed. Add SKILL.md folders under {{path}}.",
+      "commandsTitle": "Slash commands",
+      "commandsEmpty": "No commands defined. Add *.md files under {{path}}.",
+      "subagentsTitle": "Subagents",
+      "subagentsEmpty": "No subagents defined. Add *.md files under {{path}}.",
+      "mcpTitle": "MCP servers",
+      "mcpEmpty": "No MCP servers declared in {{path}}.",
+      "debugTitle": "Config files & scanned paths",
+      "contentTruncated": "Content truncated — open the file to see everything.",
+      "available": "Available",
+      "missing": "Missing",
+      "disabled": "Disabled",
+      "issueCount": "{{count}} issue",
+      "issueCount_plural": "{{count}} issues",
+      "runtimes": {
+        "codex": "Codex",
+        "claude": "Claude Code"
+      }
     },
     "addProject": {
       "title": "Add project",
