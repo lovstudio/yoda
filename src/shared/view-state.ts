@@ -109,4 +109,6 @@ export type SidebarSnapshot = {
   projectsCollapsed?: boolean;
   hideProjectsWithoutActiveTasks?: boolean;
   activeWorkspaceId?: string;
+  navItemOrder?: string[];
+  hiddenNavItems?: string[];
 };

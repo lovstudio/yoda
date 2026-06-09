@@ -97,14 +97,14 @@ function isRunningStatus(status: RunStatus): boolean {
 export function reduceRunState(state: RunState, event: RunStateEvent): RunState {
   switch (event.kind) {
     case 'turn-started': {
-      // Honour the same suppression the old `setWorking` had: a non-forced
-      // start that arrives while we're already showing a permission prompt
-      // should not clear that prompt (the user still has to answer it).
-      if (
-        !event.force &&
-        state.status === 'awaiting-input' &&
-        state.pendingAction?.notificationType === 'permission_prompt'
-      ) {
+      // A non-forced start only *observes* that the turn is in progress (e.g. the
+      // transcript tailer). While we're showing an awaiting-input prompt — a
+      // permission request OR an AskUserQuestion/ExitPlanMode elicitation — the
+      // turn is technically still running, but the user must answer first. Keep
+      // the more specific awaiting-input sub-state instead of flipping to a bare
+      // "working" spinner. Only an explicit `force` (user actually submitted)
+      // clears it.
+      if (!event.force && state.status === 'awaiting-input') {
         return state;
       }
       return {

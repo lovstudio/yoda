@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyAgentCommandPrefix,
+  buildPromptInjectionPayload,
   getAgentCommandSubmitDelayMs,
   getAgentCommandSubmitInput,
   getAgentCommandSubmitSuffix,
@@ -78,5 +79,25 @@ describe('getAgentCommandSubmitInput', () => {
 
   it('uses carriage return for providers without custom submission input', () => {
     expect(getAgentCommandSubmitInput('claude')).toBe('\r');
+  });
+});
+
+describe('buildPromptInjectionPayload', () => {
+  it('trims single-line prompt input', () => {
+    expect(buildPromptInjectionPayload({ providerId: 'codex', text: '  Review this  ' })).toBe(
+      'Review this'
+    );
+  });
+
+  it('wraps multiline non-Claude input in bracketed paste', () => {
+    expect(buildPromptInjectionPayload({ providerId: 'codex', text: 'line one\nline two' })).toBe(
+      '\x1b[200~line one\nline two\x1b[201~'
+    );
+  });
+
+  it('keeps Claude multiline input unwrapped', () => {
+    expect(buildPromptInjectionPayload({ providerId: 'claude', text: 'line one\nline two' })).toBe(
+      'line one\nline two'
+    );
   });
 });

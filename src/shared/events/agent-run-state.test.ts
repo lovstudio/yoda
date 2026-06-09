@@ -109,14 +109,19 @@ describe('reduceRunState', () => {
     expect(s.pendingAction).toBeNull();
   });
 
-  it('non-forced turn-started clears a non-permission awaiting state (idle prompt)', () => {
-    const awaiting = reduceRunState(initialRunState(), {
-      kind: 'awaiting-input',
-      at: 10,
-      pendingAction: idlePrompt,
-    });
-    const s = reduceRunState(awaiting, { kind: 'turn-started', at: 20 });
-    expect(s.status).toBe('working');
+  it('non-forced turn-started preserves ANY awaiting-input (incl. elicitation/idle)', () => {
+    // The transcript tailer emits non-forced turn-started while a turn is in
+    // progress. During an AskUserQuestion / idle wait the turn IS running, but
+    // the user must answer first — so the awaiting-input sub-state must survive.
+    for (const pendingAction of [idlePrompt, { notificationType: 'elicitation_dialog' as const }]) {
+      const awaiting = reduceRunState(initialRunState(), {
+        kind: 'awaiting-input',
+        at: 10,
+        pendingAction,
+      });
+      const s = reduceRunState(awaiting, { kind: 'turn-started', at: 20 });
+      expect(s.status).toBe('awaiting-input');
+    }
   });
 
   it('process-exited clears running state to idle', () => {

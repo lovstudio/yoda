@@ -97,6 +97,13 @@ export type SessionSummary = {
 };
 
 /**
+ * Which slice of the session a summary covers.
+ * - `global`: the whole session (prefers the runtime compaction summary)
+ * - `recent`: only the last few user messages (short, refreshed each turn)
+ */
+export type SessionSummaryScope = 'global' | 'recent';
+
+/**
  * Outcome of resolving a session summary. `status` explains the absence of a
  * summary so the UI can show a meaningful message instead of a blank state.
  * - `compaction`: surfaced the runtime's own compaction summary
