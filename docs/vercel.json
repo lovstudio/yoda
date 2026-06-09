@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/docs", "destination": "https://yoda-docs.vercel.app/docs" },
+    { "source": "/docs/:path*", "destination": "https://yoda-docs.vercel.app/docs/:path*" }
+  ]
+}
