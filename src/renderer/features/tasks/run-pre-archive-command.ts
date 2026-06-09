@@ -1,6 +1,7 @@
 import { reaction } from 'mobx';
 import {
   applyAgentCommandPrefix,
+  buildPromptInjectionPayload,
   getAgentCommandSubmitDelayMs,
   getAgentCommandSubmitInput,
   getAgentCommandSubmitSuffix,
@@ -8,7 +9,6 @@ import {
 import type { ConversationStore } from '@renderer/features/tasks/conversations/conversation-manager';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { rpc } from '@renderer/lib/ipc';
-import { buildPromptInjectionPayload } from '@renderer/lib/pty/prompt-injection';
 import { log } from '@renderer/utils/logger';
 
 const COMPLETION_TIMEOUT_MS = 10 * 60_000;

@@ -20,14 +20,12 @@ import {
   Mic,
   Monitor,
   Palette,
-  PencilLine,
   Plus,
   Repeat2,
   RotateCcw,
   Server,
   ShieldCheck,
   Sparkles,
-  Terminal,
   Users,
   X,
 } from 'lucide-react';
@@ -42,12 +40,14 @@ import {
   type ComponentType,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
 import {
   applyAgentCommandPrefix,
+  buildPromptInjectionPayload,
   getAgentCommandSubmitDelayMs,
 } from '@shared/agent-command-prefix';
 import {
@@ -81,7 +81,6 @@ import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { buildPromptInjectionPayload } from '@renderer/lib/pty/prompt-injection';
 import { appState } from '@renderer/lib/stores/app-state';
 import {
   Combobox,
@@ -109,7 +108,6 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from '@renderer/lib/ui/popover';
-import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 import {
@@ -1071,6 +1069,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     hydratedPromptRef.current = true;
     setPrompt(draft.prompt ?? '');
   }, [draft]);
+  const runModeAnchorRef = useRef<HTMLDivElement>(null);
   const promptWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!hydratedPromptRef.current) return;
@@ -1905,11 +1904,54 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
 
             <div className="mt-3 flex flex-col gap-2">
               <div className="overflow-x-auto pb-1">
-                <div className="flex min-w-max flex-wrap items-center gap-2">
+                <div ref={runModeAnchorRef} className="flex min-w-max flex-wrap items-center gap-2">
+                  <ProjectSelector
+                    value={selectedProjectId}
+                    onChange={setSelectedProjectId}
+                    allowProjectless
+                    initializeGitRepositoryOnPick
+                    trigger={
+                      <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+                        <FolderOpen className="size-3.5 text-foreground-muted" />
+                        <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
+                      </ComboboxTrigger>
+                    }
+                  />
+                  <RunHostSelector kind={runHostKind} />
+                  {runMode === 'brainstorm' && (
+                    <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>
+                  )}
+                  {mounted && runMode === 'compare' && (
+                    <Chip icon={GitFork}>
+                      {t('home.compareBranchPolicy', { count: compareProviders.length })}
+                    </Chip>
+                  )}
+                  {mounted && runMode === 'team' && (
+                    <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
+                  )}
+                  {mounted && runMode === 'normal' && (
+                    <StrategyChip
+                      strategyKind={effectiveStandardStrategyKind}
+                      disabled={isUnborn}
+                      onChange={setStrategyKind}
+                      ariaLabel={t('home.strategyAria')}
+                      labels={strategyLabels}
+                    />
+                  )}
+                  {mounted && runMode === 'review' && (
+                    <StrategyChip
+                      strategyKind={effectiveReviewStrategyKind}
+                      disabled={isUnborn}
+                      onChange={setReviewStrategyKind}
+                      ariaLabel={t('home.reviewStrategyAria')}
+                      labels={reviewStrategyLabels}
+                    />
+                  )}
                   <RunModeSelector
                     mode={runMode}
                     summary={runModeSummary}
                     onChange={setRunMode}
+                    anchorRef={runModeAnchorRef}
                     renderConfiguration={(configurationMode) => (
                       <ModeConfigurationPanel
                         mode={configurationMode}
@@ -1935,49 +1977,6 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                       />
                     )}
                   />
-                  <ProjectSelector
-                    value={selectedProjectId}
-                    onChange={setSelectedProjectId}
-                    allowProjectless
-                    initializeGitRepositoryOnPick
-                    trigger={
-                      <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
-                        <FolderOpen className="size-3.5 text-foreground-muted" />
-                        <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
-                      </ComboboxTrigger>
-                    }
-                  />
-                  <RunHostSelector kind={runHostKind} />
-                  <TmuxChip />
-                  {mounted && runMode === 'normal' && (
-                    <StrategyChip
-                      strategyKind={effectiveStandardStrategyKind}
-                      disabled={isUnborn}
-                      onChange={setStrategyKind}
-                      ariaLabel={t('home.strategyAria')}
-                      labels={strategyLabels}
-                    />
-                  )}
-                  {runMode === 'brainstorm' && (
-                    <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>
-                  )}
-                  {mounted && runMode === 'compare' && (
-                    <Chip icon={GitFork}>
-                      {t('home.compareBranchPolicy', { count: compareProviders.length })}
-                    </Chip>
-                  )}
-                  {mounted && runMode === 'review' && (
-                    <StrategyChip
-                      strategyKind={effectiveReviewStrategyKind}
-                      disabled={isUnborn}
-                      onChange={setReviewStrategyKind}
-                      ariaLabel={t('home.reviewStrategyAria')}
-                      labels={reviewStrategyLabels}
-                    />
-                  )}
-                  {mounted && runMode === 'team' && (
-                    <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
-                  )}
                 </div>
               </div>
             </div>
@@ -2295,9 +2294,16 @@ interface RunModeSelectorProps {
   summary?: string | null;
   onChange: (mode: HomeRunMode) => void;
   renderConfiguration: (mode: HomeRunMode) => ReactNode;
+  anchorRef?: RefObject<HTMLElement | null>;
 }
 
-function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunModeSelectorProps) {
+function RunModeSelector({
+  mode,
+  summary,
+  onChange,
+  renderConfiguration,
+  anchorRef,
+}: RunModeSelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const current = RUN_MODE_OPTIONS.find((option) => option.mode === mode) ?? RUN_MODE_OPTIONS[0];
@@ -2328,6 +2334,7 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
       />
       <PopoverContent
         align="start"
+        anchor={anchorRef}
         className="max-h-[min(70dvh,40rem)] w-[min(44rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
       >
         <div className="flex min-h-0 max-h-[inherit] divide-x divide-border/60">
@@ -2568,9 +2575,6 @@ function ModeConfigurationPanel({
             connectionId={connectionId}
             {...getPromptProps(SPEC_PROMPT_KEY, defaultSpecSystemPrompt())}
           />
-          <div className="flex min-h-24 items-center rounded-lg border border-border/70 bg-background-1 p-3 text-xs leading-relaxed text-foreground-muted">
-            {t('home.brainstormGuide')}
-          </div>
         </div>
       )}
 
@@ -2703,81 +2707,78 @@ function Agent({
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 bg-background-1 p-3">
+    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 bg-background-1 p-2.5">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-background-2 text-foreground-muted">
-          <Icon className="size-3.5" />
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-background-2 text-foreground-muted">
+          <Icon className="size-3" />
         </span>
         <span className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-wide text-foreground-muted">
           {label}
         </span>
-        <span
-          className={cn(
-            'shrink-0 rounded-sm px-1.5 py-0.5 text-[10px]',
-            hasCustomSystemPrompt
-              ? 'bg-primary/10 text-primary'
-              : 'bg-background-2 text-foreground-muted'
-          )}
-        >
-          {hasCustomSystemPrompt
-            ? t('home.agentSystemPromptCustom')
-            : t('home.agentSystemPromptDefault')}
-        </span>
         {action}
       </div>
-      <AgentSelector
-        value={value}
-        onChange={onChange}
-        connectionId={connectionId}
-        className="h-9 text-sm"
-      />
-      <Popover open={promptOpen} onOpenChange={handlePromptOpenChange}>
-        <PopoverTrigger
-          render={
-            <button
-              type="button"
-              aria-label={t('home.agentSystemPromptAria', { label })}
-              className="flex h-8 min-w-0 items-center gap-2 rounded-md bg-background-1 px-2 text-left text-xs text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
-            >
-              <FileText className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{promptPreview}</span>
-              <PencilLine className="size-3.5 shrink-0" />
-            </button>
-          }
+      <div className="flex min-w-0 items-center gap-1.5">
+        <AgentSelector
+          value={value}
+          onChange={onChange}
+          connectionId={connectionId}
+          className="h-9 flex-1 text-sm"
         />
-        <PopoverContent
-          align="start"
-          className="max-h-(--available-height) w-96 max-w-[calc(100vw-2rem)] gap-3 overflow-y-auto overscroll-contain p-3"
-        >
-          <PopoverHeader>
-            <PopoverTitle>{t('home.agentSystemPromptTitle', { label })}</PopoverTitle>
-          </PopoverHeader>
-          <Textarea
-            value={promptDraft}
-            onChange={(event) => setPromptDraft(event.target.value)}
-            placeholder={t('home.agentSystemPromptPlaceholder')}
-            className="h-64 max-h-[40dvh] min-h-48 resize-y overflow-y-auto rounded-md border border-border bg-background px-3 py-2 font-mono text-xs field-sizing-fixed leading-relaxed focus-visible:ring-1"
+        <Popover open={promptOpen} onOpenChange={handlePromptOpenChange}>
+          <PopoverTrigger
+            render={
+              <button
+                type="button"
+                aria-label={t('home.agentSystemPromptAria', { label })}
+                title={promptPreview}
+                className={cn(
+                  'relative flex size-9 shrink-0 items-center justify-center rounded-md border border-border transition-colors hover:bg-background-2 hover:text-foreground',
+                  hasCustomSystemPrompt
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-transparent text-foreground-muted'
+                )}
+              >
+                <FileText className="size-4" />
+                {hasCustomSystemPrompt && (
+                  <span className="absolute right-1 top-1 size-1.5 rounded-full bg-primary" />
+                )}
+              </button>
+            }
           />
-          <div className="flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={resetPrompt}
-              className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
-            >
-              <RotateCcw className="size-3.5" />
-              <span>{t('home.agentSystemPromptReset')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={savePrompt}
-              className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              <Check className="size-3.5" />
-              <span>{t('home.agentSystemPromptSave')}</span>
-            </button>
-          </div>
-        </PopoverContent>
-      </Popover>
+          <PopoverContent
+            align="start"
+            className="max-h-(--available-height) w-96 max-w-[calc(100vw-2rem)] gap-3 overflow-y-auto overscroll-contain p-3"
+          >
+            <PopoverHeader>
+              <PopoverTitle>{t('home.agentSystemPromptTitle', { label })}</PopoverTitle>
+            </PopoverHeader>
+            <Textarea
+              value={promptDraft}
+              onChange={(event) => setPromptDraft(event.target.value)}
+              placeholder={t('home.agentSystemPromptPlaceholder')}
+              className="h-64 max-h-[40dvh] min-h-48 resize-y overflow-y-auto rounded-md border border-border bg-background px-3 py-2 font-mono text-xs field-sizing-fixed leading-relaxed focus-visible:ring-1"
+            />
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={resetPrompt}
+                className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+              >
+                <RotateCcw className="size-3.5" />
+                <span>{t('home.agentSystemPromptReset')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={savePrompt}
+                className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                <Check className="size-3.5" />
+                <span>{t('home.agentSystemPromptSave')}</span>
+              </button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
     </div>
   );
 }
@@ -2788,32 +2789,6 @@ function Chip({ icon: Icon, children }: ChipProps) {
       <Icon className="size-3.5 text-foreground-muted" />
       {children}
     </span>
-  );
-}
-
-function TmuxChip() {
-  const { t } = useTranslation();
-  const { value: project, update, isLoading, isSaving } = useAppSettingsKey('project');
-  const enabled = project?.tmuxByDefault ?? true;
-
-  return (
-    <label
-      title={t('settings.tasks.enableTmuxDescription')}
-      className={cn(
-        'flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2',
-        (isLoading || isSaving) && 'cursor-not-allowed opacity-50'
-      )}
-    >
-      <Terminal className="size-3.5 text-foreground-muted" />
-      tmux
-      <Switch
-        size="sm"
-        checked={enabled}
-        disabled={isLoading || isSaving}
-        onCheckedChange={(checked) => update({ tmuxByDefault: checked })}
-        aria-label={t('settings.tasks.enableTmux')}
-      />
-    </label>
   );
 }
 

@@ -225,7 +225,9 @@ export class ConversationManagerStore {
       );
       runInAction(() => {
         for (const [conversationId, status] of Object.entries(statuses)) {
-          if (status === 'idle') continue;
+          // The backend is the stateless authority (derived from the transcript),
+          // so apply every verdict including `idle` — that's how a stale `working`
+          // from before a restart gets corrected on cold load.
           this.conversations.get(conversationId)?.hydrateStatus(status);
         }
       });

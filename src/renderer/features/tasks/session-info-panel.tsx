@@ -7,6 +7,7 @@ import type {
   Conversation,
   SessionSummary,
   SessionSummaryResult,
+  SessionSummaryScope,
   SessionSummaryStatus,
 } from '@shared/conversations';
 import {
@@ -281,12 +282,15 @@ export const SessionPromptsContent = observer(function SessionPromptsContent({
 });
 
 /**
- * Loads a session summary for the active conversation: the runtime's own
- * compaction summary when one exists, otherwise an on-demand summary generated
- * from the conversation. Refreshes whenever the session goes idle (i.e. after
- * each reply) while the panel is open.
+ * Loads one summary scope for the active conversation. `global` prefers the
+ * runtime's compaction summary; `recent` is a short summary of the last few
+ * messages. Only fetches while `active` (the section is open), and re-runs
+ * whenever the session goes idle — i.e. after each reply, while open.
  */
-export function useSessionSummary(active: boolean): {
+export function useSessionSummary(
+  active: boolean,
+  scope: SessionSummaryScope
+): {
   summary: SessionSummary | null;
   status: SessionSummaryStatus | undefined;
   isLoading: boolean;
@@ -311,7 +315,7 @@ export function useSessionSummary(active: boolean): {
     if (!active || !conversation) return;
     let cancelled = false;
     setIsLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
-    void resolveSessionSummary(conversation, projectId, taskId, provisionedTask.path)
+    void resolveSessionSummary(conversation, scope, projectId, taskId, provisionedTask.path)
       .then((next) => {
         if (!cancelled) setResult(next);
       })
@@ -324,7 +328,7 @@ export function useSessionSummary(active: boolean): {
     return () => {
       cancelled = true;
     };
-  }, [active, conversation, projectId, taskId, provisionedTask.path, sessionStatus]);
+  }, [active, conversation, scope, projectId, taskId, provisionedTask.path, sessionStatus]);
 
   return {
     summary: result?.summary ?? null,
@@ -424,6 +428,7 @@ export const SessionSummaryContent = observer(function SessionSummaryContent({
 
 async function resolveSessionSummary(
   conversation: Conversation,
+  scope: SessionSummaryScope,
   projectId: string,
   taskId: string,
   cwd: string
@@ -431,6 +436,7 @@ async function resolveSessionSummary(
   try {
     return await rpc.conversations.getSessionSummary(
       conversation.providerId,
+      scope,
       projectId,
       taskId,
       cwd,

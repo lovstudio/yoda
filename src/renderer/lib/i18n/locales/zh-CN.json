@@ -216,8 +216,10 @@
       "tasks": "任务",
       "integrations": "集成",
       "mcp": "MCP",
-      "repository": "仓库",
+      "repository": "项目",
+      "github": "GitHub",
       "interface": "界面",
+      "keyboardShortcuts": "快捷键",
       "docs": "文档"
     },
     "general": {
@@ -284,8 +286,11 @@
       "statusConnecting": "连接中…",
       "statusNotConnected": "未连接"
     },
+    "githubTab": {
+      "description": "配置 GitHub 分支与 push 设置。"
+    },
     "repositoryTab": {
-      "description": "配置仓库与分支设置。",
+      "description": "配置项目设置。",
       "branchPrefix": "分支前缀",
       "autoPush": "创建后自动 push",
       "autoPushAria": "启用创建后自动 push",
@@ -302,7 +307,11 @@
     "interfaceTab": {
       "description": "自定义应用的外观与行为。",
       "keyboardShortcuts": "键盘快捷键",
-      "tools": "工具"
+      "tools": "工具",
+      "sidebarNav": "侧边栏导航"
+    },
+    "keyboardShortcutsTab": {
+      "description": "自定义应用操作的键盘快捷键。"
     },
     "language": {
       "title": "语言",
@@ -596,7 +605,6 @@
     "noAgentsCreate": "先创建一个 Agent",
     "brainstormPolicy": "先做 Spec",
     "brainstormAgent": "Spec agent",
-    "brainstormGuide": "Agent 会只在影响范围、UIUX、数据模型、约束或验收的关键不确定点上提问，并把已确认内容沉淀为条目化 PRD、设计说明、任务拆解、验收标准和待确认问题。",
     "compareBranchPolicy": "{{count}} 个独立分支",
     "teamBranchPolicy": "角色独立分支",
     "compareAgent": "Agent {{index}}",
@@ -608,8 +616,6 @@
     "agentSystemPromptAria": "编辑 {{label}} 的 system prompt",
     "agentSystemPromptTitle": "{{label}} system prompt",
     "agentSystemPromptPlaceholder": "描述这个 agent 的角色、约束和工作方式。",
-    "agentSystemPromptDefault": "默认 prompt",
-    "agentSystemPromptCustom": "自定义 prompt",
     "agentSystemPromptEmpty": "无 system prompt",
     "agentSystemPromptReset": "重置",
     "agentSystemPromptSave": "保存",
@@ -966,6 +972,8 @@
       "tasks": "待办",
       "summary": "摘要",
       "hooks": "Hooks",
+      "summaryGlobal": "全局摘要",
+      "summaryRecent": "近期动态",
       "summaryEmpty": "暂无摘要",
       "summaryEmptyDescription": "当有可总结的内容后，这里会显示摘要。",
       "summaryGenerating": "正在生成摘要…",
@@ -2003,6 +2011,7 @@
     "deleteFailed": "删除工作区失败",
     "switch": "切换工作区",
     "current": "工作区（{{name}}）",
-    "defaultTab": "默认"
+    "defaultTab": "默认",
+    "countsAria": "{{toRead}} 条未读，{{running}} 个运行中，共 {{total}} 个"
   }
 }

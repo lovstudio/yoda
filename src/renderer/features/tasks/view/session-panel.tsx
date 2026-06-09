@@ -1,9 +1,11 @@
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import { ChevronRight, Info, ListChecks, MessageSquareText, Sparkles } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { SessionSummaryScope } from '@shared/conversations';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { cn } from '@renderer/utils/utils';
 import {
   SessionInfoPanel,
   SessionPromptsContent,
@@ -157,9 +159,9 @@ const TasksBlind = observer(function TasksBlind({ open, title }: { open: boolean
 });
 
 /**
- * The 摘要 blind: surfaces the latest compaction summary the agent runtime
- * itself wrote into the transcript (Claude Code's `isCompactSummary` row /
- * Codex's SUMMARY_PREFIX message). Nothing is generated locally.
+ * The 摘要 blind: holds two independent chapters — a global session summary and
+ * a short recent-activity summary. Each chapter lazily fetches only while it is
+ * expanded, and refreshes after each reply (see `SummaryChapter`).
  */
 const SummaryBlind = observer(function SummaryBlind({
   open,
@@ -168,10 +170,58 @@ const SummaryBlind = observer(function SummaryBlind({
   open: boolean;
   title: string;
 }) {
-  const summary = useSessionSummary(open);
+  const { t } = useTranslation();
   return (
     <Blind id="summary" icon={<Sparkles className="size-3.5" />} title={title} open={open}>
-      {() => <SessionSummaryContent summary={summary} />}
+      {() => (
+        <div className="flex flex-col">
+          <SummaryChapter
+            scope="recent"
+            title={t('tasks.sessionPanel.summaryRecent')}
+            defaultOpen
+          />
+          <SummaryChapter scope="global" title={t('tasks.sessionPanel.summaryGlobal')} />
+        </div>
+      )}
     </Blind>
+  );
+});
+
+/**
+ * One collapsible summary chapter. The summary query runs only while the
+ * chapter is open, so opening the panel does not fire both scopes at once and
+ * the global (whole-session) generation only happens when the user asks for it.
+ */
+const SummaryChapter = observer(function SummaryChapter({
+  scope,
+  title,
+  defaultOpen = false,
+}: {
+  scope: SessionSummaryScope;
+  title: string;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const summary = useSessionSummary(open, scope);
+  return (
+    <div className="border-b border-border/40 last:border-b-0">
+      <button
+        type="button"
+        className="group flex h-7 w-full min-w-0 items-center gap-1.5 px-3 text-left text-[11px] transition-colors hover:bg-background-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <ChevronRight
+          className={cn(
+            'size-3 shrink-0 text-foreground-passive transition-transform',
+            open && 'rotate-90'
+          )}
+        />
+        <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={title}>
+          {title}
+        </span>
+      </button>
+      {open ? <SessionSummaryContent summary={summary} /> : null}
+    </div>
   );
 });

@@ -216,8 +216,10 @@
       "tasks": "Tasks",
       "integrations": "Integrations",
       "mcp": "MCP",
-      "repository": "Repository",
+      "repository": "Project",
+      "github": "GitHub",
       "interface": "Interface",
+      "keyboardShortcuts": "Keyboard shortcuts",
       "docs": "Docs"
     },
     "general": {
@@ -284,8 +286,11 @@
       "statusConnecting": "Connecting…",
       "statusNotConnected": "Not connected"
     },
+    "githubTab": {
+      "description": "Configure GitHub branch and push settings."
+    },
     "repositoryTab": {
-      "description": "Configure repository and branch settings.",
+      "description": "Configure project settings.",
       "branchPrefix": "Branch prefix",
       "autoPush": "Auto-push on create",
       "autoPushAria": "Enable automatic push on create",
@@ -302,7 +307,11 @@
     "interfaceTab": {
       "description": "Customize the appearance and behavior of the app.",
       "keyboardShortcuts": "Keyboard shortcuts",
-      "tools": "Tools"
+      "tools": "Tools",
+      "sidebarNav": "Sidebar navigation"
+    },
+    "keyboardShortcutsTab": {
+      "description": "Customize keyboard shortcuts for app actions."
     },
     "language": {
       "title": "Language",
@@ -596,7 +605,6 @@
     "noAgentsCreate": "Create an agent to use here",
     "brainstormPolicy": "Spec first",
     "brainstormAgent": "Spec agent",
-    "brainstormGuide": "The agent asks only about material uncertainty affecting scope, UI/UX, data model, constraints, or acceptance, then captures confirmed decisions as an itemized PRD, design notes, task breakdown, acceptance checks, and open questions.",
     "compareBranchPolicy": "{{count}} isolated branches",
     "teamBranchPolicy": "Role branches",
     "compareAgent": "Agent {{index}}",
@@ -605,11 +613,14 @@
     "reviewImplementer": "A agent",
     "reviewReviewer": "B reviewer",
     "reviewRoundLimit": "Review loop stops after {{count}} rounds if issues remain.",
+    "slotMyAgents": "My agents",
+    "slotRuntimes": "Runtimes",
+    "slotNewAgent": "New agent",
+    "slotManageAgents": "Manage",
+    "slotNoResults": "No matches",
     "agentSystemPromptAria": "Edit {{label}} system prompt",
     "agentSystemPromptTitle": "{{label}} system prompt",
     "agentSystemPromptPlaceholder": "Describe this agent's role, constraints, and operating style.",
-    "agentSystemPromptDefault": "Default prompt",
-    "agentSystemPromptCustom": "Custom prompt",
     "agentSystemPromptEmpty": "No system prompt",
     "agentSystemPromptReset": "Reset",
     "agentSystemPromptSave": "Save",
@@ -966,6 +977,8 @@
       "tasks": "Tasks",
       "summary": "Summary",
       "hooks": "Hooks",
+      "summaryGlobal": "Global summary",
+      "summaryRecent": "Recent activity",
       "summaryEmpty": "No summary yet",
       "summaryEmptyDescription": "A summary appears once there is something to summarize.",
       "summaryGenerating": "Generating summary…",
@@ -2003,6 +2016,7 @@
     "deleteFailed": "Failed to delete workspace",
     "switch": "Switch workspace",
     "current": "Workspace ({{name}})",
-    "defaultTab": "Default"
+    "defaultTab": "Default",
+    "countsAria": "{{toRead}} unread, {{running}} running, {{total}} total"
   }
 }
