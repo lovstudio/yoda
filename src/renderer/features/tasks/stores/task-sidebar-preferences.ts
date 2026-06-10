@@ -12,7 +12,6 @@ export const TASK_SIDEBAR_VIEW_STATE_KEY = 'task-sidebar';
 
 const DEFAULT_SIDEBAR_TAB: SidebarTab = 'conversations';
 const DEFAULT_SIDEBAR_COLLAPSED = true;
-const DEFAULT_CONTEXT_PANEL_OPEN_SECTION_IDS = ['llm-context', 'memory'];
 
 /** The merged Session panel opens to its Basic blind by default. */
 const DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS = ['basic'];
@@ -40,10 +39,6 @@ function hasSidebarSnapshotValue(
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
-}
-
-function hasContextPanelSnapshotValue(snapshot: TaskSidebarViewSnapshot | null): boolean {
-  return isStringArray(snapshot?.contextPanelOpenSectionIds);
 }
 
 function hasSessionPanelSnapshotValue(snapshot: TaskSidebarViewSnapshot | null): boolean {
@@ -80,15 +75,6 @@ function normalizeOpenSectionIds(value: string[]): string[] {
   return Array.from(new Set(value));
 }
 
-function resolveContextPanelOpenSectionIds(
-  sharedSnapshot: TaskSidebarViewSnapshot | null
-): string[] {
-  if (isStringArray(sharedSnapshot?.contextPanelOpenSectionIds)) {
-    return normalizeOpenSectionIds(sharedSnapshot.contextPanelOpenSectionIds);
-  }
-  return [...DEFAULT_CONTEXT_PANEL_OPEN_SECTION_IDS];
-}
-
 function resolveSessionPanelOpenSectionIds(
   sharedSnapshot: TaskSidebarViewSnapshot | null
 ): string[] {
@@ -102,7 +88,11 @@ function resolveOpenSidebarGroups(
   sharedSnapshot: TaskSidebarViewSnapshot | null
 ): SidebarTabGroup[] {
   if (isStringArray(sharedSnapshot?.openSidebarGroups)) {
-    return sharedSnapshot.openSidebarGroups.filter(isSidebarTabGroup);
+    // The legacy "harness" card has been folded into the Session panel.
+    const groups = sharedSnapshot.openSidebarGroups
+      .map((group) => (group === 'harness' ? 'session' : group))
+      .filter(isSidebarTabGroup);
+    return Array.from(new Set(groups));
   }
   // Feature cards default to NOT being in the strip — the user adds the ones
   // they need via the "+" picker.
@@ -119,7 +109,6 @@ function resolveDisclosureOpenIds(sharedSnapshot: TaskSidebarViewSnapshot | null
 export class TaskSidebarPreferenceStore {
   sidebarTab: SidebarTab = DEFAULT_SIDEBAR_TAB;
   isSidebarCollapsed: boolean = DEFAULT_SIDEBAR_COLLAPSED;
-  contextPanelOpenSectionIds: string[] = [...DEFAULT_CONTEXT_PANEL_OPEN_SECTION_IDS];
   sessionPanelOpenSectionIds: string[] = [...DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS];
   disclosureOpenIds: string[] = [];
   openSidebarGroups: SidebarTabGroup[] = [];
@@ -133,7 +122,6 @@ export class TaskSidebarPreferenceStore {
     return {
       sidebarTab: this.sidebarTab,
       isSidebarCollapsed: this.isSidebarCollapsed,
-      contextPanelOpenSectionIds: [...this.contextPanelOpenSectionIds],
       sessionPanelOpenSectionIds: [...this.sessionPanelOpenSectionIds],
       disclosureOpenIds: [...this.disclosureOpenIds],
       openSidebarGroups: [...this.openSidebarGroups],
@@ -148,7 +136,6 @@ export class TaskSidebarPreferenceStore {
 
     this.sidebarTab = resolveSidebarTab(sharedSnapshot, legacySnapshot);
     this.isSidebarCollapsed = resolveSidebarCollapsed(sharedSnapshot, legacySnapshot);
-    this.contextPanelOpenSectionIds = resolveContextPanelOpenSectionIds(sharedSnapshot);
     this.sessionPanelOpenSectionIds = resolveSessionPanelOpenSectionIds(sharedSnapshot);
     this.disclosureOpenIds = resolveDisclosureOpenIds(sharedSnapshot);
     this.openSidebarGroups = resolveOpenSidebarGroups(sharedSnapshot);
@@ -158,7 +145,6 @@ export class TaskSidebarPreferenceStore {
 
     if (
       (!hasSidebarSnapshotValue(sharedSnapshot) && hasSidebarSnapshotValue(legacySnapshot)) ||
-      !hasContextPanelSnapshotValue(sharedSnapshot) ||
       !hasSessionPanelSnapshotValue(sharedSnapshot) ||
       !hasDisclosureSnapshotValue(sharedSnapshot)
     ) {
@@ -188,23 +174,6 @@ export class TaskSidebarPreferenceStore {
     if (!this.openSidebarGroups.includes(group)) return;
     this.openSidebarGroups = this.openSidebarGroups.filter((g) => g !== group);
     this.persist();
-  }
-
-  setContextPanelOpenSectionIds(sectionIds: string[]): void {
-    const next = normalizeOpenSectionIds(sectionIds);
-    if (arraysEqual(this.contextPanelOpenSectionIds, next)) return;
-    this.contextPanelOpenSectionIds = next;
-    this.persist();
-  }
-
-  setContextPanelSectionOpen(sectionId: string, open: boolean): void {
-    const sectionIds = new Set(this.contextPanelOpenSectionIds);
-    if (open) {
-      sectionIds.add(sectionId);
-    } else {
-      sectionIds.delete(sectionId);
-    }
-    this.setContextPanelOpenSectionIds([...sectionIds]);
   }
 
   setSessionPanelOpenSectionIds(sectionIds: string[]): void {

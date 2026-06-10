@@ -808,12 +808,40 @@
       "manualTitle": "Manual title",
       "renameFailed": "Failed to rename session",
       "status": "Status",
+      "runtimeId": "Runtime ID",
+      "agentStatusLabel": "Agent state",
+      "runtimeRunning": "Runtime",
+      "ptyStatusLabel": "PTY",
+      "ptySessionId": "PTY session ID",
+      "workingDirectory": "Working directory",
+      "branch": "Branch",
+      "projectId": "Project ID",
+      "taskId": "Task ID",
+      "contentSource": "Content source",
+      "initialConversation": "Initial session",
+      "resumeSession": "Resumed session",
+      "autoApprove": "Auto approve",
+      "seen": "Seen",
+      "sessionExited": "Session exited",
+      "archived": "Archived",
       "tmux": "tmux",
       "running": "Running",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "notRunning": "Not running",
       "unknown": "Unknown",
+      "agentStatus": {
+        "idle": "Idle",
+        "working": "Working",
+        "awaiting-input": "Awaiting input",
+        "error": "Error",
+        "completed": "Completed"
+      },
+      "ptyStatus": {
+        "disconnected": "Disconnected",
+        "connecting": "Connecting",
+        "ready": "Connected"
+      },
       "processPid": "PID",
       "processStatusLabel": "Process",
       "processUpdatedAt": "Process updated",
@@ -1118,7 +1146,6 @@
     "sessionPanel": {
       "title": "Session",
       "basic": "Basic",
-      "harness": "Harness",
       "conversation": "Conversation",
       "tasks": "Tasks",
       "summary": "Summary",
@@ -1155,7 +1182,10 @@
       "restore": "Restore panel size",
       "addCard": "Add panel",
       "removeCard": "Remove from strip",
-      "emptyHint": "Click + to add a panel"
+      "emptyHint": "Click + to add a panel",
+      "cardDescSession": "Session info, prompts, and the agent runtime",
+      "cardDescChanges": "Review file changes in the worktree",
+      "cardDescFiles": "Browse the task's working directory"
     },
     "createSubtask": "Create subtask",
     "setParent": {
@@ -1607,9 +1637,15 @@
     },
     "categories": {
       "lifecycle": "Runtime lifecycle",
-      "session": "Session sync",
-      "account": "Account",
-      "assets": "Config assets — detect, validate, debug & manage"
+      "session": "Session",
+      "context": "Context",
+      "extensibility": "Extensibility",
+      "control": "Control & safety",
+      "account": "Models & accounts",
+      "workflow": "Engineering workflow",
+      "surface": "Surface & UX",
+      "orchestration": "Automation & orchestration",
+      "observability": "Observability"
     },
     "features": {
       "version": {
@@ -1623,6 +1659,126 @@
       "launch": {
         "name": "Launch",
         "desc": "Spawn and orchestrate runtime sessions from Yoda with the right flags and environment."
+      },
+      "doctor": {
+        "name": "Config self-diagnosis",
+        "desc": "Health-check runtime configuration: detect misconfiguration and suggest fixes."
+      },
+      "sessionResume": {
+        "name": "Resume / fork / history",
+        "desc": "Resume, continue and fork past sessions — seamless cross-process takeover."
+      },
+      "compaction": {
+        "name": "Context compaction",
+        "desc": "Context-window management and auto-compaction so long sessions don't lose memory."
+      },
+      "checkpointing": {
+        "name": "Checkpoint / rewind",
+        "desc": "File-level checkpoints and rollback — an undo button when the agent breaks code."
+      },
+      "memory": {
+        "name": "Auto memory",
+        "desc": "Manage the agent's self-accumulated long-term memory, guarding against pollution and staleness."
+      },
+      "fileContext": {
+        "name": "Files & multimodal input",
+        "desc": "@file references, images and ignore rules — every channel that feeds context."
+      },
+      "plugins": {
+        "name": "Plugins",
+        "desc": "Detect, validate and manage plugins and marketplace distribution."
+      },
+      "subagents": {
+        "name": "Subagents",
+        "desc": "Detect, validate, debug and manage subagent definitions."
+      },
+      "slashCommands": {
+        "name": "Custom commands",
+        "desc": "Detect, validate, debug and manage slash / custom commands."
+      },
+      "outputStyles": {
+        "name": "Output styles",
+        "desc": "Detect and manage output-style configuration."
+      },
+      "permissions": {
+        "name": "Permissions & approvals",
+        "desc": "A unified view and management of permission modes / approval policies."
+      },
+      "sandboxing": {
+        "name": "Sandboxing",
+        "desc": "Detect and manage OS-level sandbox configuration (Seatbelt / landlock etc.)."
+      },
+      "managedSettings": {
+        "name": "Managed settings",
+        "desc": "Detect and reconcile organization-level policy rollout."
+      },
+      "trustModel": {
+        "name": "Trust model",
+        "desc": "Unified management of folder trust, hook trust and MCP trust."
+      },
+      "modelConfig": {
+        "name": "Model selection & config",
+        "desc": "Unified management of model tiers, reasoning effort and related settings."
+      },
+      "providers": {
+        "name": "Third-party providers / gateway",
+        "desc": "Configuration management for BYOK, API-base redirection and LLM gateways."
+      },
+      "worktrees": {
+        "name": "Git worktree parallelism",
+        "desc": "Create, merge and clean up worktree-isolated parallel tasks."
+      },
+      "codeReview": {
+        "name": "Code review",
+        "desc": "Integrate and productize agent code-review capabilities."
+      },
+      "headlessCi": {
+        "name": "Headless / CI",
+        "desc": "Non-interactive mode and CI pipeline integration."
+      },
+      "sdk": {
+        "name": "Agent SDK",
+        "desc": "Research the SDK integration path (versus the current CLI-spawn approach)."
+      },
+      "ideAcp": {
+        "name": "IDE / ACP",
+        "desc": "Editor integration and the Agent Client Protocol."
+      },
+      "notifications": {
+        "name": "Notifications",
+        "desc": "Unified takeover of done / needs-attention notification channels."
+      },
+      "keybindings": {
+        "name": "Keybindings & themes",
+        "desc": "Detect and manage keybinding and theme configuration."
+      },
+      "planMode": {
+        "name": "Plan mode",
+        "desc": "Plan-mode state awareness and approval-flow integration."
+      },
+      "agentTeams": {
+        "name": "Multi-agent orchestration",
+        "desc": "Agent teams and parallel task orchestration."
+      },
+      "routines": {
+        "name": "Routines / scheduled tasks",
+        "desc": "Unattended tasks via cron scheduling and event triggers."
+      },
+      "remoteExecution": {
+        "name": "Cloud execution & handoff",
+        "desc": "Cloud sessions and cross-device handoff (teleport / remote)."
+      },
+      "telemetry": {
+        "name": "Telemetry / OTel",
+        "desc": "Telemetry export and team analytics."
+      },
+      "costTracking": {
+        "name": "Cost tracking",
+        "desc": "Per-task / per-session cost accounting (ccusage-compatible)."
+      },
+      "transcript": {
+        "name": "Transcript storage format",
+        "desc": "Parsing JSONL / rollout session files — the foundation under every sync capability."
       },
       "sessionNameSync": {
         "name": "Session name sync",
@@ -1689,10 +1845,10 @@
         "codex": "Codex is stricter about skill format; Yoda's built-in validator surfaces issues right in the sidebar."
       },
       "hooks": {
-        "codex": "Codex has no full hooks mechanism yet (only limited config like notify) — tracking upstream progress."
+        "codex": "Codex hooks went GA on 2026-05-14 (10 events + content-hash trust model), closely mirroring CC's event set — Yoda integration under research."
       },
       "statusline": {
-        "codex": "Codex CLI has no statusline mechanism."
+        "codex": "Codex has a built-in statusline (tui.status_line in config.toml plus /statusline), though custom command-backed rendering isn't supported yet — Yoda integration under research."
       }
     },
     "report": {

@@ -57,11 +57,13 @@ const CONTEXT_PANEL_SECTION_IDS = {
 type ContextPanelSectionId =
   (typeof CONTEXT_PANEL_SECTION_IDS)[keyof typeof CONTEXT_PANEL_SECTION_IDS];
 
-export const ContextPanel = observer(function ContextPanel({
-  chromeless = false,
+/**
+ * The harness blinds (agent runtime view: memory, tools, MCP, skills, agents,
+ * hooks) — accordion items meant to live inside the Session panel's root.
+ */
+export const HarnessSections = observer(function HarnessSections({
   active = true,
 }: {
-  chromeless?: boolean;
   /** When false, live sub-panels (e.g. hooks) pause their queries/subscriptions. */
   active?: boolean;
 } = {}) {
@@ -71,66 +73,48 @@ export const ContextPanel = observer(function ContextPanel({
   const { tabManager } = taskView;
   const activeConversation = tabManager.activeConversation;
 
-  const providerId = activeConversation?.data.providerId;
+  const runtimeId = activeConversation?.data.runtimeId;
   const hooksOpen =
-    active && taskView.contextPanelOpenSectionIds.includes(CONTEXT_PANEL_SECTION_IDS.hooks);
+    active && taskView.sessionPanelOpenSectionIds.includes(CONTEXT_PANEL_SECTION_IDS.hooks);
 
   return (
-    <div
-      className={cn(
-        'flex w-full flex-col',
-        chromeless ? 'min-w-0' : 'h-full overflow-hidden bg-background'
-      )}
-    >
-      {chromeless ? null : (
-        <div className="flex h-7 shrink-0 items-center border-b border-border/70 px-3">
-          <MicroLabel className="text-foreground-passive">{t('tasks.panel.context')}</MicroLabel>
-        </div>
-      )}
-
-      <AccordionPrimitive.Root
-        type="multiple"
-        value={taskView.contextPanelOpenSectionIds}
-        onValueChange={(sectionIds) => taskView.setContextPanelOpenSectionIds(sectionIds)}
-        className={cn(chromeless ? 'min-w-0' : 'min-h-0 flex-1 overflow-y-auto')}
-      >
-        {!activeConversation ? (
-          <Section
-            id={CONTEXT_PANEL_SECTION_IDS.llmContext}
-            title={t('tasks.panel.llmContext')}
-            icon={<Cpu className="size-3.5" />}
-          >
-            <Empty>{t('tasks.panel.noActiveConversation')}</Empty>
-          </Section>
-        ) : providerId === 'claude' ? (
-          <ClaudeContextSections cwd={provisioned.path} sessionId={activeConversation.data.id} />
-        ) : providerId === 'codex' ? (
-          <CodexContextSections
-            cwd={provisioned.path}
-            conversationId={activeConversation.data.id}
-            conversationTitle={activeConversation.data.title}
-            conversationCreatedAt={activeConversation.data.createdAt ?? null}
-          />
-        ) : (
-          <Section
-            id={CONTEXT_PANEL_SECTION_IDS.llmContext}
-            title={t('tasks.panel.llmContext')}
-            icon={<Cpu className="size-3.5" />}
-          >
-            <Empty>{t('tasks.panel.contextUnsupported')}</Empty>
-          </Section>
-        )}
-
+    <>
+      {!activeConversation ? (
         <Section
-          id={CONTEXT_PANEL_SECTION_IDS.hooks}
-          title={t('tasks.sessionPanel.hooks')}
-          icon={<Webhook className="size-3.5" />}
-          bare
+          id={CONTEXT_PANEL_SECTION_IDS.llmContext}
+          title={t('tasks.panel.llmContext')}
+          icon={<Cpu className="size-3.5" />}
         >
-          <HooksPanel active={hooksOpen} chromeless />
+          <Empty>{t('tasks.panel.noActiveConversation')}</Empty>
         </Section>
-      </AccordionPrimitive.Root>
-    </div>
+      ) : runtimeId === 'claude' ? (
+        <ClaudeContextSections cwd={provisioned.path} sessionId={activeConversation.data.id} />
+      ) : runtimeId === 'codex' ? (
+        <CodexContextSections
+          cwd={provisioned.path}
+          conversationId={activeConversation.data.id}
+          conversationTitle={activeConversation.data.title}
+          conversationCreatedAt={activeConversation.data.createdAt ?? null}
+        />
+      ) : (
+        <Section
+          id={CONTEXT_PANEL_SECTION_IDS.llmContext}
+          title={t('tasks.panel.llmContext')}
+          icon={<Cpu className="size-3.5" />}
+        >
+          <Empty>{t('tasks.panel.contextUnsupported')}</Empty>
+        </Section>
+      )}
+
+      <Section
+        id={CONTEXT_PANEL_SECTION_IDS.hooks}
+        title={t('tasks.sessionPanel.hooks')}
+        icon={<Webhook className="size-3.5" />}
+        bare
+      >
+        <HooksPanel active={hooksOpen} chromeless />
+      </Section>
+    </>
   );
 });
 
@@ -975,19 +959,19 @@ function Section({
 
   return (
     <AccordionPrimitive.Item value={id} className="min-w-0 border-b border-border/70">
-      <AccordionPrimitive.Header className="m-0 flex h-8 min-w-0 items-center hover:bg-background-2">
+      <AccordionPrimitive.Header className="m-0 flex h-8 min-w-0 items-center pr-1.5 hover:bg-background-2">
         {hasContent ? (
-          <AccordionPrimitive.Trigger className="group flex h-full min-w-0 flex-1 items-center gap-1.5 px-2.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border">
+          <AccordionPrimitive.Trigger className="group flex h-full min-w-0 flex-1 items-center gap-2 px-3 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border">
             <ChevronRight className="size-3 shrink-0 text-foreground-passive transition-transform group-data-[state=open]:rotate-90" />
             <SectionTitle icon={icon} title={title} />
           </AccordionPrimitive.Trigger>
         ) : (
-          <div className="flex h-full min-w-0 flex-1 items-center gap-1.5 px-2.5 text-left text-xs">
+          <div className="flex h-full min-w-0 flex-1 items-center gap-2 px-3 text-left text-xs">
             <span className="size-3 shrink-0" />
             <SectionTitle icon={icon} title={title} />
           </div>
         )}
-        <div className="flex h-full shrink-0 items-center gap-1 pr-2">
+        <div className="flex h-full shrink-0 items-center gap-1 pr-0.5">
           {typeof count === 'number' ? (
             <span className="shrink-0 font-mono text-[10px] text-foreground-passive">{count}</span>
           ) : null}
@@ -995,11 +979,11 @@ function Section({
         </div>
       </AccordionPrimitive.Header>
       {hasContent ? (
-        <AccordionPrimitive.Content className="overflow-hidden">
+        <AccordionPrimitive.Content className="overflow-hidden border-t border-border/50 bg-background-1/20">
           {bare ? (
             children
           ) : (
-            <div className="flex min-w-0 flex-col gap-1.5 px-2.5 pb-2">{children}</div>
+            <div className="flex min-w-0 flex-col gap-1.5 px-3 py-2">{children}</div>
           )}
         </AccordionPrimitive.Content>
       ) : null}

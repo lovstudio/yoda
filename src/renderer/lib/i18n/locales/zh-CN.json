@@ -808,12 +808,40 @@
       "manualTitle": "手动标题",
       "renameFailed": "重命名会话失败",
       "status": "状态",
+      "runtimeId": "Runtime ID",
+      "agentStatusLabel": "Agent 状态",
+      "runtimeRunning": "Runtime",
+      "ptyStatusLabel": "PTY",
+      "ptySessionId": "PTY 会话 ID",
+      "workingDirectory": "工作目录",
+      "branch": "分支",
+      "projectId": "项目 ID",
+      "taskId": "任务 ID",
+      "contentSource": "内容源",
+      "initialConversation": "初始会话",
+      "resumeSession": "恢复会话",
+      "autoApprove": "自动批准",
+      "seen": "已读",
+      "sessionExited": "会话已退出",
+      "archived": "已归档",
       "tmux": "tmux",
       "running": "运行中",
       "enabled": "已启用",
       "disabled": "未启用",
       "notRunning": "未运行",
       "unknown": "未知",
+      "agentStatus": {
+        "idle": "空闲",
+        "working": "工作中",
+        "awaiting-input": "等待输入",
+        "error": "错误",
+        "completed": "已完成"
+      },
+      "ptyStatus": {
+        "disconnected": "未连接",
+        "connecting": "连接中",
+        "ready": "已连接"
+      },
       "processPid": "PID",
       "processStatusLabel": "进程",
       "processUpdatedAt": "进程更新时间",
@@ -1118,7 +1146,6 @@
     "sessionPanel": {
       "title": "会话",
       "basic": "基础",
-      "harness": "Harness",
       "conversation": "对话",
       "tasks": "待办",
       "summary": "摘要",
@@ -1155,7 +1182,10 @@
       "restore": "恢复面板大小",
       "addCard": "添加面板",
       "removeCard": "从标签栏移除",
-      "emptyHint": "点击 + 添加面板"
+      "emptyHint": "点击 + 添加面板",
+      "cardDescSession": "会话信息、对话记录与 Agent 运行时",
+      "cardDescChanges": "审阅工作区的文件改动",
+      "cardDescFiles": "浏览任务的工作目录"
     },
     "createSubtask": "创建子任务",
     "setParent": {
@@ -1607,9 +1637,15 @@
     },
     "categories": {
       "lifecycle": "Runtime 生命周期",
-      "session": "Session 同步",
-      "account": "账户",
-      "assets": "配置资产——检测、校验、调试与管理"
+      "session": "Session",
+      "context": "上下文",
+      "extensibility": "扩展",
+      "control": "控制与安全",
+      "account": "模型与账户",
+      "workflow": "工程流",
+      "surface": "UI 外显",
+      "orchestration": "自动化编排",
+      "observability": "可观测"
     },
     "features": {
       "version": {
@@ -1623,6 +1659,126 @@
       "launch": {
         "name": "启动",
         "desc": "由 Yoda 以正确的参数和环境拉起并编排 Runtime 会话。"
+      },
+      "doctor": {
+        "name": "配置自诊断",
+        "desc": "对 Runtime 配置做体检：检测错误配置并给出修复建议。"
+      },
+      "sessionResume": {
+        "name": "Resume / Fork / 历史",
+        "desc": "恢复、续接与分叉历史会话，跨进程无缝接管。"
+      },
+      "compaction": {
+        "name": "上下文压缩",
+        "desc": "Context window 管理与自动压缩，长会话不失忆。"
+      },
+      "checkpointing": {
+        "name": "Checkpoint / Rewind",
+        "desc": "文件级检查点与回滚，agent 改坏代码可一键后悔。"
+      },
+      "memory": {
+        "name": "自动记忆",
+        "desc": "管理 agent 自主积累的长期记忆，防污染与过期。"
+      },
+      "fileContext": {
+        "name": "文件与多模态引用",
+        "desc": "@文件、图片、ignore 规则——上下文喂料全通道的检测与管理。"
+      },
+      "plugins": {
+        "name": "Plugins",
+        "desc": "插件与 marketplace 分发的检测、校验与管理。"
+      },
+      "subagents": {
+        "name": "Subagents",
+        "desc": "子代理定义的检测、校验、调试与管理。"
+      },
+      "slashCommands": {
+        "name": "自定义命令",
+        "desc": "Slash / 自定义命令的检测、校验、调试与管理。"
+      },
+      "outputStyles": {
+        "name": "Output Styles",
+        "desc": "输出风格配置的检测与管理。"
+      },
+      "permissions": {
+        "name": "权限与审批",
+        "desc": "Permission modes / approval policy 的统一视图与管理。"
+      },
+      "sandboxing": {
+        "name": "沙箱",
+        "desc": "OS 级沙箱配置的检测与管理（Seatbelt / landlock 等）。"
+      },
+      "managedSettings": {
+        "name": "企业托管配置",
+        "desc": "组织级策略下发的检测与对账。"
+      },
+      "trustModel": {
+        "name": "信任模型",
+        "desc": "目录信任、hook 信任、MCP 信任的统一管理。"
+      },
+      "modelConfig": {
+        "name": "模型选择与配置",
+        "desc": "模型档位、推理强度等配置的统一管理。"
+      },
+      "providers": {
+        "name": "第三方 Provider / Gateway",
+        "desc": "BYOK、API Base 重定向与 LLM gateway 的配置管理。"
+      },
+      "worktrees": {
+        "name": "Git Worktree 并行",
+        "desc": "Worktree 隔离与并行任务的创建、合并与清理。"
+      },
+      "codeReview": {
+        "name": "代码评审",
+        "desc": "Agent 评审能力的接入与产品化。"
+      },
+      "headlessCi": {
+        "name": "Headless / CI",
+        "desc": "非交互模式与 CI 管线集成。"
+      },
+      "sdk": {
+        "name": "Agent SDK",
+        "desc": "SDK 接入路线研究（对照 CLI spawn 方案）。"
+      },
+      "ideAcp": {
+        "name": "IDE / ACP",
+        "desc": "编辑器对接与 Agent Client Protocol 集成。"
+      },
+      "notifications": {
+        "name": "通知",
+        "desc": "任务完成 / 需介入的通知通道统一接管。"
+      },
+      "keybindings": {
+        "name": "Keybindings 与主题",
+        "desc": "键位与主题配置的检测与管理。"
+      },
+      "planMode": {
+        "name": "Plan Mode",
+        "desc": "计划模式的状态感知与审批流接入。"
+      },
+      "agentTeams": {
+        "name": "多 Agent 编排",
+        "desc": "Agent teams 与并行任务编排。"
+      },
+      "routines": {
+        "name": "定时任务 / Routines",
+        "desc": "Cron 调度与事件触发的无人值守任务。"
+      },
+      "remoteExecution": {
+        "name": "云端执行与接力",
+        "desc": "云端会话与跨设备接力（teleport / remote）。"
+      },
+      "telemetry": {
+        "name": "Telemetry / OTel",
+        "desc": "遥测导出与团队分析。"
+      },
+      "costTracking": {
+        "name": "成本追踪",
+        "desc": "Per-task / session 成本核算（ccusage 口径）。"
+      },
+      "transcript": {
+        "name": "Transcript 存储格式",
+        "desc": "JSONL / rollout 会话文件解析——一切同步能力的地基。"
       },
       "sessionNameSync": {
         "name": "Session 命名同步",
@@ -1689,10 +1845,10 @@
         "codex": "Codex 对 skill 格式更严格，Yoda 内置校验器会把问题直接暴露在侧边栏。"
       },
       "hooks": {
-        "codex": "Codex 暂无完整的 hooks 机制（仅 notify 等有限配置），持续跟踪上游进展。"
+        "codex": "Codex hooks 已于 2026-05-14 GA（10 个事件 + 基于内容 hash 的信任机制），与 CC 事件集高度同构；Yoda 接入研究中。"
       },
       "statusline": {
-        "codex": "Codex CLI 没有 statusline 机制。"
+        "codex": "Codex 有内置 statusline（config.toml 的 tui.status_line + /statusline 命令），但暂不支持自定义外部命令渲染；Yoda 接入研究中。"
       }
     },
     "report": {

@@ -7,7 +7,6 @@ import {
   PanelBottom,
   PanelRight,
   Plus,
-  Wrench,
   X,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
@@ -27,14 +26,11 @@ import { cn } from '@renderer/utils/utils';
 import { ChangesPanel } from '../diff-view/changes-panel/changes-panel';
 import { EditorFileTree } from '../editor/editor-file-tree';
 import {
-  isHarnessTab,
-  isSessionFamilyTab,
   SIDEBAR_TAB_GROUPS,
   sidebarGroupForTab,
   sidebarTabForGroup,
   type SidebarTabGroup,
 } from '../types';
-import { HarnessPanel } from './harness-panel';
 import { SessionPanel } from './session-panel';
 import { SidebarPinnedContent } from './sidebar-pinned-content';
 
@@ -42,8 +38,6 @@ function groupLabelKey(group: SidebarTabGroup): string {
   switch (group) {
     case 'session':
       return 'tasks.sessionPanel.title';
-    case 'harness':
-      return 'tasks.sessionPanel.harness';
     case 'changes':
       return 'tasks.changes';
     case 'files':
@@ -51,12 +45,22 @@ function groupLabelKey(group: SidebarTabGroup): string {
   }
 }
 
+/** One-line blurb shown on the empty-state feature card. */
+function groupDescKey(group: SidebarTabGroup): string {
+  switch (group) {
+    case 'session':
+      return 'tasks.sidePane.cardDescSession';
+    case 'changes':
+      return 'tasks.sidePane.cardDescChanges';
+    case 'files':
+      return 'tasks.sidePane.cardDescFiles';
+  }
+}
+
 function groupIcon(group: SidebarTabGroup): React.ReactNode {
   switch (group) {
     case 'session':
       return <MessageSquare className="size-3.5" />;
-    case 'harness':
-      return <Wrench className="size-3.5" />;
     case 'changes':
       return <GitCompare className="size-3.5" />;
     case 'files':
@@ -76,8 +80,7 @@ export const TaskSidebar = observer(function TaskSidebar() {
   const currentGroup = activePinnedId ? null : sidebarGroupForTab(activeTab);
   const activeGroup =
     currentGroup && openSidebarGroups.includes(currentGroup) ? currentGroup : null;
-  const sessionActive = activeGroup === 'session' && isSessionFamilyTab(activeTab);
-  const harnessActive = activeGroup === 'harness' && isHarnessTab(activeTab);
+  const sessionActive = activeGroup === 'session';
   const availableGroups = SIDEBAR_TAB_GROUPS.filter((g) => !openSidebarGroups.includes(g));
   const isEmpty = !activeGroup && !activePinnedId;
 
@@ -218,9 +221,6 @@ export const TaskSidebar = observer(function TaskSidebar() {
           <Activity mode={sessionActive ? 'visible' : 'hidden'}>
             <SessionPanel />
           </Activity>
-          <Activity mode={harnessActive ? 'visible' : 'hidden'}>
-            <HarnessPanel />
-          </Activity>
           <Activity mode={activeGroup === 'changes' ? 'visible' : 'hidden'}>
             <ChangesPanel />
           </Activity>
@@ -237,20 +237,34 @@ export const TaskSidebar = observer(function TaskSidebar() {
               </Activity>
             );
           })}
-          {/* Empty state: a centered grid of all available feature cards. */}
+          {/* Empty state: a centered list of all available feature cards, one per row. */}
           {isEmpty ? (
             availableGroups.length > 0 ? (
               <div className="flex h-full items-center justify-center p-6">
-                <div className="grid w-full max-w-64 grid-cols-2 gap-2">
-                  {availableGroups.map((group) => (
+                <div className="flex w-full max-w-72 flex-col gap-2">
+                  <p className="animate-in px-1 pb-1 text-[10px] font-medium uppercase tracking-widest text-foreground-passive fade-in-0 fill-mode-backwards">
+                    {t('tasks.sidePane.addCard')}
+                  </p>
+                  {availableGroups.map((group, index) => (
                     <button
                       key={group}
                       type="button"
-                      className="flex flex-col items-center gap-2 rounded-md border border-border bg-background-1 p-4 text-xs text-foreground-muted hover:bg-background-2 hover:text-foreground [&_svg]:size-4"
+                      className="group/card flex w-full animate-in items-center gap-3 rounded-lg border border-border bg-background-1 px-3 py-2.5 text-left fade-in-0 slide-in-from-bottom-2 fill-mode-backwards transition-colors hover:border-primary/40 hover:bg-background-2"
+                      style={{ animationDelay: `${(index + 1) * 60}ms` }}
                       onClick={() => selectGroup(group)}
                     >
-                      {groupIcon(group)}
-                      {t(groupLabelKey(group))}
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background-2 text-foreground-muted transition-colors group-hover/card:border-primary/30 group-hover/card:bg-primary/10 group-hover/card:text-primary [&_svg]:size-4">
+                        {groupIcon(group)}
+                      </span>
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="text-xs font-medium text-foreground">
+                          {t(groupLabelKey(group))}
+                        </span>
+                        <span className="truncate text-[11px] leading-4 text-foreground-passive">
+                          {t(groupDescKey(group))}
+                        </span>
+                      </span>
+                      <Plus className="size-3.5 shrink-0 text-foreground-passive opacity-0 transition-opacity group-hover/card:opacity-100" />
                     </button>
                   ))}
                 </div>

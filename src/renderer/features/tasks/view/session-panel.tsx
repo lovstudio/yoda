@@ -12,6 +12,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SessionSummaryScope } from '@shared/conversations';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { HarnessSections } from '../context-panel';
 import {
   SessionInfoPanel,
   SessionPromptsContent,
@@ -29,19 +30,22 @@ import {
   TranscriptFileActions,
   useConversationTranscript,
 } from '../transcript-panel';
-import { sessionSectionForTab, type SessionPanelSection } from '../types';
+import { isSessionFamilyTab, sessionSectionForTab, type SessionPanelSection } from '../types';
 
 /**
  * Merged "Session" sidebar surface — the 百叶窗 (window-blind) accordion that
- * folds the session / conversation / task / naming tabs into one panel. Each
+ * folds the session / conversation / task / naming tabs into one panel, plus
+ * the agent-runtime (harness) blinds: memory, tools, MCP, skills, hooks. Each
  * blind hosts an existing panel rendered in `chromeless` mode so the blind
- * trigger is the only header. (The agent runtime lives in its own HarnessPanel.)
+ * trigger is the only header.
  */
 export const SessionPanel = observer(function SessionPanel() {
   const { t } = useTranslation();
   const { taskView } = useProvisionedTask();
   // Single-expand 百叶窗: only one blind is open at a time.
   const openSection = taskView.sessionPanelOpenSectionIds[0] ?? '';
+  // Live sub-panels (e.g. hooks) pause their subscriptions while hidden.
+  const panelActive = !taskView.isSidebarCollapsed && isSessionFamilyTab(taskView.sidebarTab);
 
   // Deep-link bridge: commands and the context panel still call
   // `setSidebarTab('context' | 'task' | 'hooks' | 'rename')`. Expand the
@@ -97,6 +101,8 @@ export const SessionPanel = observer(function SessionPanel() {
           open={openSection === 'summary-global'}
           title={t('tasks.sessionPanel.summaryGlobal')}
         />
+
+        <HarnessSections active={panelActive} />
       </AccordionPrimitive.Root>
     </div>
   );

@@ -18,17 +18,15 @@ export type SessionPanelSection =
   | 'conversation'
   | 'transcript'
   | 'tasks'
-  | 'summary-global';
-
-/**
- * Legacy tabs that route into the Harness titlebar toggle (the agent runtime
- * view: LLM context, tools, MCP, skills, memory, hooks).
- */
-export const HARNESS_TABS: readonly SidebarTab[] = ['context', 'hooks'];
-
-export function isHarnessTab(tab: SidebarTab): boolean {
-  return HARNESS_TABS.includes(tab);
-}
+  | 'summary-global'
+  // Harness blinds (the agent runtime view), folded into the same accordion.
+  | 'llm-context'
+  | 'memory'
+  | 'tools'
+  | 'mcp-servers'
+  | 'skills'
+  | 'agents-available'
+  | 'hooks';
 
 /**
  * Legacy session-family tabs that have been folded into the single Session
@@ -40,6 +38,8 @@ export const SESSION_FAMILY_TABS: readonly SidebarTab[] = [
   'conversations',
   'task',
   'rename',
+  'context',
+  'hooks',
 ];
 
 export function isSessionFamilyTab(tab: SidebarTab): boolean {
@@ -51,14 +51,9 @@ export function isSessionFamilyTab(tab: SidebarTab): boolean {
  * tabs. Each card is an independently addable/closable chip in the sidebar
  * strip (extensible later).
  */
-export type SidebarTabGroup = 'session' | 'harness' | 'changes' | 'files';
+export type SidebarTabGroup = 'session' | 'changes' | 'files';
 
-export const SIDEBAR_TAB_GROUPS: readonly SidebarTabGroup[] = [
-  'session',
-  'harness',
-  'changes',
-  'files',
-];
+export const SIDEBAR_TAB_GROUPS: readonly SidebarTabGroup[] = ['session', 'changes', 'files'];
 
 export function isSidebarTabGroup(value: unknown): value is SidebarTabGroup {
   return SIDEBAR_TAB_GROUPS.includes(value as SidebarTabGroup);
@@ -67,13 +62,12 @@ export function isSidebarTabGroup(value: unknown): value is SidebarTabGroup {
 /** Which sidebar tab group a (legacy) sidebar tab belongs to. */
 export function sidebarGroupForTab(tab: SidebarTab): SidebarTabGroup {
   if (tab === 'changes' || tab === 'files') return tab;
-  if (isHarnessTab(tab)) return 'harness';
   return 'session';
 }
 
 /** The canonical sidebar tab a tab group activates. */
 export function sidebarTabForGroup(group: SidebarTabGroup): SidebarTab {
-  return group === 'harness' ? 'context' : group;
+  return group;
 }
 
 /** Maps a session-family tab to the blind it should expand, if any. */
@@ -86,6 +80,10 @@ export function sessionSectionForTab(tab: SidebarTab): SessionPanelSection | nul
       return 'tasks';
     case 'conversations':
       return 'conversation';
+    case 'context':
+      return 'memory';
+    case 'hooks':
+      return 'hooks';
     default:
       return null;
   }

@@ -82,9 +82,8 @@ export type TaskViewSnapshot = {
 export type TaskSidebarViewSnapshot = {
   sidebarTab?: string;
   isSidebarCollapsed?: boolean;
-  /** Feature cards (session/harness/changes/files) added to the sidebar strip. */
+  /** Feature cards (session/changes/files) added to the sidebar strip. */
   openSidebarGroups?: string[];
-  contextPanelOpenSectionIds?: string[];
   sessionPanelOpenSectionIds?: string[];
   /** Open ids for ad-hoc disclosures (`<details>`, group toggles) across panels. */
   disclosureOpenIds?: string[];

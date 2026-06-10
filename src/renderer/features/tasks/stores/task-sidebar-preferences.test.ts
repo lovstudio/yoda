@@ -35,8 +35,7 @@ describe('TaskSidebarPreferenceStore', () => {
       {
         sidebarTab: 'files',
         isSidebarCollapsed: false,
-        contextPanelOpenSectionIds: ['tools', 'injected-context'],
-        sessionPanelOpenSectionIds: ['context'],
+        sessionPanelOpenSectionIds: ['conversation'],
         disclosureOpenIds: [],
       },
       { sidebarTab: 'changes', isSidebarCollapsed: true }
@@ -44,13 +43,11 @@ describe('TaskSidebarPreferenceStore', () => {
 
     expect(store.sidebarTab).toBe('files');
     expect(store.isSidebarCollapsed).toBe(false);
-    expect(store.contextPanelOpenSectionIds).toEqual(['tools', 'injected-context']);
-    expect(store.sessionPanelOpenSectionIds).toEqual(['context']);
+    expect(store.sessionPanelOpenSectionIds).toEqual(['conversation']);
     expect(mocks.set).toHaveBeenCalledWith(TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'files',
       isSidebarCollapsed: false,
-      contextPanelOpenSectionIds: ['tools', 'injected-context'],
-      sessionPanelOpenSectionIds: ['context'],
+      sessionPanelOpenSectionIds: ['conversation'],
       disclosureOpenIds: [],
       openSidebarGroups: [],
     });
@@ -67,7 +64,6 @@ describe('TaskSidebarPreferenceStore', () => {
     expect(mocks.save).toHaveBeenCalledWith(TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'changes',
       isSidebarCollapsed: false,
-      contextPanelOpenSectionIds: ['llm-context', 'memory'],
       sessionPanelOpenSectionIds: ['basic'],
       disclosureOpenIds: [],
       openSidebarGroups: [],
@@ -80,7 +76,8 @@ describe('TaskSidebarPreferenceStore', () => {
       {
         sidebarTab: 'task',
         isSidebarCollapsed: true,
-        contextPanelOpenSectionIds: ['session-prompts'],
+        sessionPanelOpenSectionIds: ['basic'],
+        disclosureOpenIds: [],
       },
       null
     );
@@ -92,7 +89,6 @@ describe('TaskSidebarPreferenceStore', () => {
     expect(mocks.save).toHaveBeenNthCalledWith(1, TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'context',
       isSidebarCollapsed: true,
-      contextPanelOpenSectionIds: ['session-prompts'],
       sessionPanelOpenSectionIds: ['basic'],
       disclosureOpenIds: [],
       openSidebarGroups: [],
@@ -100,74 +96,48 @@ describe('TaskSidebarPreferenceStore', () => {
     expect(mocks.save).toHaveBeenNthCalledWith(2, TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'context',
       isSidebarCollapsed: false,
-      contextPanelOpenSectionIds: ['session-prompts'],
       sessionPanelOpenSectionIds: ['basic'],
       disclosureOpenIds: [],
       openSidebarGroups: [],
     });
   });
 
-  it('hydrates the session info tab from the shared snapshot', () => {
+  it('folds the legacy harness card into the session card on hydrate', () => {
     const store = new TaskSidebarPreferenceStore();
 
-    store.hydrate(
-      {
-        sidebarTab: 'session',
-        isSidebarCollapsed: false,
-        contextPanelOpenSectionIds: [],
-      },
-      null
-    );
-
-    expect(store.sidebarTab).toBe('session');
-    expect(store.isSidebarCollapsed).toBe(false);
-    expect(mocks.set).toHaveBeenCalledWith(TASK_SIDEBAR_VIEW_STATE_KEY, {
-      sidebarTab: 'session',
-      isSidebarCollapsed: false,
-      contextPanelOpenSectionIds: [],
-      sessionPanelOpenSectionIds: ['basic'],
-      disclosureOpenIds: [],
-      openSidebarGroups: [],
-    });
-  });
-
-  it('persists context panel accordion sections to the shared key', () => {
-    const store = new TaskSidebarPreferenceStore();
     store.hydrate(
       {
         sidebarTab: 'context',
         isSidebarCollapsed: false,
-        contextPanelOpenSectionIds: ['tools'],
+        sessionPanelOpenSectionIds: ['basic'],
+        disclosureOpenIds: [],
+        openSidebarGroups: ['harness', 'session', 'files'],
+      },
+      null
+    );
+
+    expect(store.openSidebarGroups).toEqual(['session', 'files']);
+  });
+
+  it('persists session panel accordion sections to the shared key', () => {
+    const store = new TaskSidebarPreferenceStore();
+    store.hydrate(
+      {
+        sidebarTab: 'session',
+        isSidebarCollapsed: false,
+        sessionPanelOpenSectionIds: ['basic'],
+        disclosureOpenIds: [],
       },
       null
     );
     vi.clearAllMocks();
 
-    store.setContextPanelOpenSectionIds(['tools', 'tools', 'skills']);
-    store.setContextPanelSectionOpen('session-prompts', true);
-    store.setContextPanelSectionOpen('tools', false);
+    store.setSessionPanelOpenSectionIds(['hooks', 'hooks']);
 
-    expect(mocks.save).toHaveBeenNthCalledWith(1, TASK_SIDEBAR_VIEW_STATE_KEY, {
-      sidebarTab: 'context',
+    expect(mocks.save).toHaveBeenCalledWith(TASK_SIDEBAR_VIEW_STATE_KEY, {
+      sidebarTab: 'session',
       isSidebarCollapsed: false,
-      contextPanelOpenSectionIds: ['tools', 'skills'],
-      sessionPanelOpenSectionIds: ['basic'],
-      disclosureOpenIds: [],
-      openSidebarGroups: [],
-    });
-    expect(mocks.save).toHaveBeenNthCalledWith(2, TASK_SIDEBAR_VIEW_STATE_KEY, {
-      sidebarTab: 'context',
-      isSidebarCollapsed: false,
-      contextPanelOpenSectionIds: ['tools', 'skills', 'session-prompts'],
-      sessionPanelOpenSectionIds: ['basic'],
-      disclosureOpenIds: [],
-      openSidebarGroups: [],
-    });
-    expect(mocks.save).toHaveBeenNthCalledWith(3, TASK_SIDEBAR_VIEW_STATE_KEY, {
-      sidebarTab: 'context',
-      isSidebarCollapsed: false,
-      contextPanelOpenSectionIds: ['skills', 'session-prompts'],
-      sessionPanelOpenSectionIds: ['basic'],
+      sessionPanelOpenSectionIds: ['hooks'],
       disclosureOpenIds: [],
       openSidebarGroups: [],
     });

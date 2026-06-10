@@ -181,10 +181,6 @@ export class TaskViewStore {
     return taskSidebarPreferenceStore.openSidebarGroups;
   }
 
-  get contextPanelOpenSectionIds(): string[] {
-    return [...taskSidebarPreferenceStore.contextPanelOpenSectionIds];
-  }
-
   get sessionPanelOpenSectionIds(): string[] {
     return [...taskSidebarPreferenceStore.sessionPanelOpenSectionIds];
   }
@@ -258,14 +254,6 @@ export class TaskViewStore {
 
   setSidebarMaximized(maximized: boolean): void {
     this.isSidebarMaximized = maximized;
-  }
-
-  setContextPanelOpenSectionIds(sectionIds: string[]): void {
-    taskSidebarPreferenceStore.setContextPanelOpenSectionIds(sectionIds);
-  }
-
-  setContextPanelSectionOpen(sectionId: string, open: boolean): void {
-    taskSidebarPreferenceStore.setContextPanelSectionOpen(sectionId, open);
   }
 
   setSessionPanelOpenSectionIds(sectionIds: string[]): void {
