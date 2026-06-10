@@ -110,7 +110,7 @@ export const SETTINGS_DEFAULTS = {
     selectedAgentIds: {},
     expressMode: false,
     attachImagesAsPaths: false,
-    attachInline: false,
+    promptTokens: [],
     preArchiveCommand: '',
     defaultQuickActions: [{ id: 'release', label: 'Release', command: '/release-via-cicd' }],
   },

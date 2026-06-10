@@ -110,6 +110,7 @@
     "automation": "自动化",
     "mobile": "移动端",
     "settings": "设置",
+    "roadmap": "Roadmap",
     "giveFeedback": "反馈建议",
     "account": {
       "openMenu": "打开账户菜单",
@@ -805,6 +806,14 @@
       "disabled": "未启用",
       "notRunning": "未运行",
       "unknown": "未知",
+      "processPid": "PID",
+      "processStatusLabel": "进程",
+      "processUpdatedAt": "进程更新时间",
+      "processStatus": {
+        "busy": "忙碌",
+        "idle": "空闲",
+        "waiting": "等待"
+      },
       "createdAt": "创建时间",
       "updatedAt": "更新时间",
       "lastInteractedAt": "最近交互",
@@ -1564,6 +1573,133 @@
     "copyCommand": "复制命令",
     "searchAgents": "搜索代理…",
     "noAgentInstalled": "未安装代理"
+  },
+  "roadmap": {
+    "title": "Roadmap",
+    "subtitle": "深度调研各大 Agent 的细节设计、实现与差异，极其费时费力——但为了让 Yoda 的体验足够丝滑，这是必经之路。每个能力点都有对应的引申研究，确保正确、专业、持续更新。",
+    "book": {
+      "bookTitle": "《高质量 Agent 设计指南》",
+      "bookSubtitle": "基于主流 Agent 源码分析与最佳实践",
+      "desc": "我们像写书一样推进研究：每个能力点深挖不同 Agent 的设计与实现，沉淀为一篇支持持续迭代的独立报告；所有报告汇总起来，将成为一本权威著作。下方矩阵即是这本书的目录与写作进度。",
+      "chapterCount": "{{count}} 章"
+    },
+    "matrix": {
+      "title": "Runtime 能力矩阵",
+      "desc": "各 Runtime 对每项能力的支持状态。点击行可展开背后的研究备注。",
+      "featureColumn": "能力",
+      "upcoming": "下一个"
+    },
+    "status": {
+      "shipped": "已支持",
+      "testing": "测试中",
+      "inProgress": "开发中",
+      "researching": "研究中",
+      "planned": "计划中",
+      "na": "不适用"
+    },
+    "categories": {
+      "lifecycle": "Runtime 生命周期",
+      "session": "Session 同步",
+      "account": "账户",
+      "assets": "配置资产——检测、校验、调试与管理"
+    },
+    "features": {
+      "version": {
+        "name": "版本管理",
+        "desc": "检测已安装的 CLI 版本，提示更新，并支持锁定到已验证的版本。"
+      },
+      "install": {
+        "name": "安装",
+        "desc": "通过官方安装渠道一键安装 Runtime CLI。"
+      },
+      "launch": {
+        "name": "启动",
+        "desc": "由 Yoda 以正确的参数和环境拉起并编排 Runtime 会话。"
+      },
+      "sessionNameSync": {
+        "name": "Session 命名同步",
+        "desc": "无论在哪里改名，CLI 与 Yoda 之间的会话命名始终保持一致。"
+      },
+      "sessionAutoRename": {
+        "name": "Session 自动重命名",
+        "desc": "当 Runtime 自己做不到或做不好时，由 Yoda 自动生成有意义的会话标题。"
+      },
+      "sessionStateSync": {
+        "name": "Session 状态同步",
+        "desc": "实时反映每个会话真实的运行 / 空闲 / 结束状态。"
+      },
+      "authSync": {
+        "name": "Auth 信息同步与管理",
+        "desc": "识别各 Runtime 的订阅 / API Key 认证方式，并在一处统一管理凭证。"
+      },
+      "usageSync": {
+        "name": "用量信息同步与管理",
+        "desc": "跨 Runtime 聚合各账户的用量与成本。"
+      },
+      "systemPrompt": {
+        "name": "System Prompt",
+        "desc": "检测、校验、调试与管理 Runtime 的 system prompt 配置。"
+      },
+      "projectPrompt": {
+        "name": "Project Prompt",
+        "desc": "检测、校验、调试与管理项目级 prompt（CLAUDE.md / AGENTS.md）。"
+      },
+      "skills": {
+        "name": "Skills",
+        "desc": "跨 Runtime 检测、校验、调试与管理 skills。"
+      },
+      "mcp": {
+        "name": "MCP",
+        "desc": "检测、校验、调试与管理 MCP server 配置。"
+      },
+      "hooks": {
+        "name": "Hooks",
+        "desc": "检测、校验、调试与管理生命周期 hooks。"
+      },
+      "statusline": {
+        "name": "Statusline",
+        "desc": "检测、校验、调试与管理 statusline 配置。"
+      }
+    },
+    "notes": {
+      "sessionNameSync": {
+        "claude": "命名会经由多种途径更新（CLI 内改名、transcript 回放、Yoda 内改名），需要多源合并，避免互相覆盖。",
+        "codex": "与 Claude Code 同样的多源合并，此外 Codex 自己的 rollout 文件命名路径也需要对账。"
+      },
+      "sessionAutoRename": {
+        "claude": "Claude Code 自带的自动命名只有英文，由 Yoda 生成本地化标题后覆盖。",
+        "codex": "自动重命名只有 Codex App 才有，CLI 没有——由 Yoda 自行生成补齐。"
+      },
+      "sessionStateSync": {
+        "claude": "早期基于 JSONL transcript 推断状态，会出现僵尸 working；改为基于 PID 的判定后才彻底稳定。",
+        "codex": "正在移植 PID 方案，处于测试验证阶段。"
+      },
+      "usageSync": {
+        "claude": "从 keychain 读取真实订阅档位，并按 ccusage 口径计算成本——不展示伪造数据。"
+      },
+      "skills": {
+        "codex": "Codex 对 skill 格式更严格，Yoda 内置校验器会把问题直接暴露在侧边栏。"
+      },
+      "hooks": {
+        "codex": "Codex 暂无完整的 hooks 机制（仅 notify 等有限配置），持续跟踪上游进展。"
+      },
+      "statusline": {
+        "codex": "Codex CLI 没有 statusline 机制。"
+      }
+    },
+    "report": {
+      "label": "深度报告",
+      "statusLine": "深度报告：{{status}}",
+      "published": "已发布",
+      "draft": "撰写中",
+      "planned": "规划中",
+      "read": "阅读深度报告"
+    },
+    "cta": {
+      "title": "影响 Roadmap",
+      "desc": "想让某个 Runtime 或能力被优先支持？告诉我们——反馈会直接决定这张表的推进顺序。",
+      "button": "反馈建议"
+    }
   },
   "usage": {
     "title": "用量统计",

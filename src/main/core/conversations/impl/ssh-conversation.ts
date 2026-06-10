@@ -29,7 +29,7 @@ import {
   snapshotTaskDiffOnSessionExit,
 } from '../session-stats-hooks';
 import { buildAgentCommand } from './agent-command';
-import { appendImageMentions } from './image-attachments';
+import { substituteImageMentions } from './image-attachments';
 import { resolveRuntimeEnv, resolveRuntimeTmuxEnv } from './runtime-env';
 
 const DEFAULT_COLS = 80;
@@ -117,7 +117,7 @@ export class SshConversationProvider implements ConversationProvider {
       // Clipboard paste is local-only; remote sessions get @path mentions.
       initialPrompt: isResuming
         ? initialPrompt
-        : appendImageMentions(initialPrompt, imagePaths ?? []),
+        : substituteImageMentions(initialPrompt, imagePaths ?? []),
     });
 
     const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
@@ -197,7 +197,7 @@ export class SshConversationProvider implements ConversationProvider {
       ptySessionRegistry.unregister(sessionId);
       this.sessions.delete(sessionId);
       this.sessionInfos.delete(sessionId);
-      agentSessionRuntimeStore.remove({
+      markRuntimeSessionExited({
         projectId: conversation.projectId,
         taskId: conversation.taskId,
         conversationId: conversation.id,
@@ -309,7 +309,7 @@ export class SshConversationProvider implements ConversationProvider {
       ptySessionRegistry.unregister(sessionId);
     }
     this.sessionInfos.delete(sessionId);
-    agentSessionRuntimeStore.remove({
+    markRuntimeSessionExited({
       projectId: this.projectId,
       taskId: this.taskId,
       conversationId,
@@ -347,4 +347,17 @@ export class SshConversationProvider implements ConversationProvider {
     this.sessions.clear();
     this.sessionInfos.clear();
   }
+}
+
+function markRuntimeSessionExited(session: {
+  projectId: string;
+  taskId: string;
+  conversationId: string;
+}): void {
+  agentSessionRuntimeStore.dispatch(
+    session,
+    { kind: 'process-exited', at: Date.now() },
+    'process-exited'
+  );
+  agentSessionRuntimeStore.remove(session);
 }

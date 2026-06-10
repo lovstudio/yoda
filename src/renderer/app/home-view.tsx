@@ -14,6 +14,7 @@ import {
   FolderOpen,
   GitCompare,
   GitFork,
+  Image as ImageIcon,
   Lightbulb,
   Loader2,
   Megaphone,
@@ -35,12 +36,14 @@ import { observer } from 'mobx-react-lite';
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ClipboardEvent,
   type ComponentType,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -121,6 +124,19 @@ import {
   type ActivePathMention,
   type PathCompletionItem,
 } from './path-mention-autocomplete';
+import {
+  fileTokenLabel,
+  findTokenRanges,
+  measureTokenRects,
+  serializePromptWithTokens,
+  snapSelectionToTokens,
+  tokenAtPoint,
+  tokenText,
+  uniqueTokenLabel,
+  type PromptToken,
+  type PromptTokenKind,
+  type TokenRect,
+} from './prompt-attachment-tokens';
 
 type TaskStrategyKind = 'new-branch' | 'no-worktree';
 type HomeRunMode = 'normal' | 'brainstorm' | 'compare' | 'review' | 'team';
@@ -270,16 +286,6 @@ function getGreetingKey(hour: number): string {
   if (hour >= 18 && hour < 22) return 'home.greeting.evening';
   return 'home.greeting.lateNight';
 }
-
-type PromptAttachment = {
-  id: string;
-  kind: 'image' | 'file';
-  /** Absolute local path; ultimately what the agent receives (as a paste or @-mention). */
-  path: string;
-  name: string;
-  /** Object URL backing the image thumbnail; revoked when the attachment is removed. */
-  previewUrl?: string;
-};
 
 const IMAGE_ATTACHMENT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 
@@ -1089,47 +1095,113 @@ export const HomeComposer = observer(function HomeComposer({
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptSelection, setPromptSelection] = useState({ start: 0, end: 0 });
   const promptSelectionRef = useRef(promptSelection);
-  const [attachments, setAttachments] = useState<PromptAttachment[]>([]);
+  // Attachments live inside the prompt as inline sentinel tokens (`@[图片1]`,
+  // `@[report.pdf]`); this registry maps each label to its path/preview.
+  const [promptTokens, setPromptTokens] = useState<PromptToken[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const attachmentsRef = useRef(attachments);
-  attachmentsRef.current = attachments;
+  const promptTokensRef = useRef(promptTokens);
+  promptTokensRef.current = promptTokens;
   // Object URLs survive React state; release them when the composer unmounts.
   useEffect(
     () => () => {
-      for (const attachment of attachmentsRef.current) {
-        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      for (const token of promptTokensRef.current) {
+        if (token.previewUrl) URL.revokeObjectURL(token.previewUrl);
       }
     },
     []
   );
-  const clearAttachments = useCallback(() => {
-    setAttachments((prev) => {
-      for (const attachment of prev) {
-        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+  const clearPromptTokens = useCallback(() => {
+    setPromptTokens((prev) => {
+      for (const token of prev) {
+        if (token.previewUrl) URL.revokeObjectURL(token.previewUrl);
       }
       return [];
     });
   }, []);
-  const removeAttachment = useCallback((id: string) => {
-    setAttachments((prev) => {
-      const target = prev.find((attachment) => attachment.id === id);
-      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
-      return prev.filter((attachment) => attachment.id !== id);
+  // NOTE: registrations are deliberately kept when their sentinel text is
+  // deleted — undo (Cmd+Z) restores the text and the mapping must still hold.
+  // Serialization only acts on sentinels present in the text; preview URLs
+  // are revoked on submit/unmount.
+  //
+  // Current occurrences of registered tokens in the text, in document order.
+  const tokenRanges = useMemo(() => findTokenRanges(prompt, promptTokens), [prompt, promptTokens]);
+  const tokenRangesRef = useRef(tokenRanges);
+  tokenRangesRef.current = tokenRanges;
+  // Pixel rects of each token occurrence inside the textarea (mirror-measured)
+  // — drives the pill highlights, hover preview, and right-click hit testing.
+  const [tokenRects, setTokenRects] = useState<Map<string, TokenRect[]>>(new Map());
+  const [promptScrollTop, setPromptScrollTop] = useState(0);
+  const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
+  const [tokenMenu, setTokenMenu] = useState<{
+    tokenId: string;
+    left: number;
+    top: number;
+  } | null>(null);
+  // Layout effect (not rAF): the chip overlay is opaque and must be in place
+  // before paint, or the raw sentinel text would flash through while typing.
+  useLayoutEffect(() => {
+    const textarea = promptTextareaRef.current;
+    if (!textarea) return;
+    setTokenRects(measureTokenRects(textarea, tokenRanges));
+  }, [tokenRanges]);
+  useEffect(() => {
+    const textarea = promptTextareaRef.current;
+    if (!textarea) return;
+    const observer = new ResizeObserver(() => {
+      setTokenRects(
+        measureTokenRects(textarea, findTokenRanges(textarea.value, promptTokensRef.current))
+      );
     });
+    observer.observe(textarea);
+    return () => observer.disconnect();
   }, []);
-  const addAttachment = useCallback(
-    (kind: PromptAttachment['kind'], path: string, name: string, previewUrl?: string) => {
-      setAttachments((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), kind, path, name, previewUrl },
-      ]);
+  const hitTestToken = useCallback(
+    (e: MouseEvent<HTMLTextAreaElement>): string | null => {
+      const textarea = e.currentTarget;
+      const rect = textarea.getBoundingClientRect();
+      return tokenAtPoint(
+        tokenRects,
+        e.clientX - rect.left,
+        e.clientY - rect.top + textarea.scrollTop
+      );
     },
-    []
+    [tokenRects]
   );
-  // Preview = open with the OS default app (Quick Look-ish, works for any type).
-  const previewAttachment = useCallback((attachment: PromptAttachment) => {
-    void rpc.app.openIn({ app: 'finder', path: attachment.path }).catch(() => {});
-  }, []);
+  const handlePromptMouseMove = useCallback(
+    (e: MouseEvent<HTMLTextAreaElement>) => {
+      setHoveredTokenId(hitTestToken(e));
+    },
+    [hitTestToken]
+  );
+  const handlePromptContextMenu = useCallback(
+    (e: MouseEvent<HTMLTextAreaElement>) => {
+      const tokenId = hitTestToken(e);
+      if (!tokenId) return;
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      setTokenMenu({ tokenId, left: e.clientX - rect.left, top: e.clientY - rect.top });
+    },
+    [hitTestToken]
+  );
+  const handlePromptMouseDown = useCallback(
+    (e: MouseEvent<HTMLTextAreaElement>) => {
+      // Suppress double-click word-selection on a token — the native selection
+      // would paint over the chip (ghosting); the gesture means "open".
+      if (e.detail > 1 && hitTestToken(e)) e.preventDefault();
+    },
+    [hitTestToken]
+  );
+  const handlePromptDoubleClick = useCallback(
+    (e: MouseEvent<HTMLTextAreaElement>) => {
+      const tokenId = hitTestToken(e);
+      if (!tokenId) return;
+      const token = promptTokensRef.current.find((item) => item.id === tokenId);
+      if (!token) return;
+      e.preventDefault();
+      void rpc.app.openIn({ app: 'finder', path: token.path }).catch(() => {});
+    },
+    [hitTestToken]
+  );
   const [pathCompletionItems, setPathCompletionItems] = useState<PathCompletionItem[]>([]);
   const [pathCompletionOpen, setPathCompletionOpen] = useState(false);
   const [pathCompletionLoading, setPathCompletionLoading] = useState(false);
@@ -1181,7 +1253,18 @@ export const HomeComposer = observer(function HomeComposer({
       filteredSkillShortcutOptions.length > 0 ||
       activeSkillShortcut.query.length > 0);
   const updatePromptSelection = useCallback((target: HTMLTextAreaElement) => {
-    const next = { start: target.selectionStart, end: target.selectionEnd };
+    const raw = { start: target.selectionStart, end: target.selectionEnd };
+    // Tokens are atomic: the caret may not land inside one, and a range
+    // selection swallows overlapped tokens whole.
+    const next = snapSelectionToTokens(
+      raw,
+      tokenRangesRef.current,
+      promptSelectionRef.current.start
+    );
+    if (next.start !== raw.start || next.end !== raw.end) {
+      target.setSelectionRange(next.start, next.end);
+    }
+    promptSelectionRef.current = next;
     setPromptSelection((current) =>
       current.start === next.start && current.end === next.end ? current : next
     );
@@ -1195,6 +1278,13 @@ export const HomeComposer = observer(function HomeComposer({
     if (draft === undefined) return;
     hydratedPromptRef.current = true;
     setPrompt(draft.prompt ?? '');
+    // Re-link the attachment-token registry persisted with the draft — the
+    // composer remounts on every navigation and the sentinels in the restored
+    // prompt would otherwise be orphaned plain text. Image hover previews
+    // (object URLs) don't survive the remount; paths and chips do.
+    setPromptTokens(
+      (draft.promptTokens ?? []).map((token) => ({ ...token, id: crypto.randomUUID() }))
+    );
   }, [draft]);
   const runModeAnchorRef = useRef<HTMLDivElement>(null);
   const promptWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1376,13 +1466,6 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [updateDraft]
   );
-  const attachInline = draft?.attachInline ?? false;
-  const setAttachInline = useCallback(
-    (next: boolean) => {
-      updateDraft({ attachInline: next });
-    },
-    [updateDraft]
-  );
   const modeCanRunWithoutProject = runMode === 'normal' || runMode === 'brainstorm';
   const modeRequiresWorktree =
     !taskScopedTarget &&
@@ -1422,32 +1505,21 @@ export const HomeComposer = observer(function HomeComposer({
         navigate('task', { projectId, taskId });
         onSubmitted?.({ kind: 'task', projectId, taskId });
       };
-      // Attachment transport: file attachments are always @path mentions in
-      // the prompt. Image attachments travel out-of-band (the main process
-      // pastes them natively into TUIs that support it) — unless the user
-      // prefers paths, which folds them into the mentions too.
-      const pathAttachments = attachImagesAsPaths
-        ? attachments
-        : attachments.filter((attachment) => attachment.kind === 'file');
-      const imageAttachments = attachImagesAsPaths
-        ? []
-        : attachments.filter((attachment) => attachment.kind === 'image');
-      const attachmentMentions = pathAttachments
-        .map((attachment) => `@${attachment.path}`)
-        .join('\n');
-      const requirement = attachmentMentions
-        ? trimmed
-          ? `${trimmed}\n\n${attachmentMentions}`
-          : attachmentMentions
-        : trimmed;
-      const imagePaths =
-        imageAttachments.length > 0
-          ? imageAttachments.map((attachment) => attachment.path)
-          : undefined;
+      // Attachment transport: inline sentinel tokens are replaced in place —
+      // file tokens (and image tokens when the user prefers paths) become
+      // @path mentions; remaining image tokens become {{yoda-image:N}} markers
+      // the main process expands per runtime (native clipboard paste for TUIs
+      // that support it, @path substitution for the rest). Ordering always
+      // follows the text.
+      const serialized = serializePromptWithTokens(trimmed, promptTokens, {
+        imagesAsPaths: attachImagesAsPaths,
+      });
+      const requirement = serialized.text;
+      const imagePaths = serialized.imagePaths.length > 0 ? serialized.imagePaths : undefined;
       const resetComposer = () => {
         setPrompt('');
-        updateDraft({ prompt: '' });
-        clearAttachments();
+        updateDraft({ prompt: '', promptTokens: [] });
+        clearPromptTokens();
       };
       const reportFailures = (results: PromiseSettledResult<unknown>[]) => {
         const failures = results.filter((result) => result.status === 'rejected');
@@ -1474,7 +1546,7 @@ export const HomeComposer = observer(function HomeComposer({
         const conversationTitleInputs = Array.from(
           targetProvisionedTask.conversations.conversations.values(),
           (conversation) => ({
-            providerId: conversation.data.runtimeId,
+            runtimeId: conversation.data.runtimeId,
             title: conversation.data.title,
           })
         );
@@ -1490,7 +1562,7 @@ export const HomeComposer = observer(function HomeComposer({
             args.titlePrompt ?? args.initialPrompt,
             conversationTitleInputs
           );
-          conversationTitleInputs.push({ providerId: args.provider, title });
+          conversationTitleInputs.push({ runtimeId: args.provider, title });
           createdConversationIds.push(conversationId);
           const promise = targetProvisionedTask.conversations.createConversation({
             id: conversationId,
@@ -1654,6 +1726,7 @@ export const HomeComposer = observer(function HomeComposer({
       const promptDisplayName = trimmed ? taskNameFromPrompt(trimmed) : '';
       const baseName =
         promptDisplayName || (await rpc.tasks.generateTaskName(trimmed ? { title: trimmed } : {}));
+
       if (!mounted) {
         const draftSlot = resolveSlot(
           runMode === 'brainstorm' ? SPEC_PROMPT_KEY : NORMAL_PROMPT_KEY,
@@ -1906,9 +1979,9 @@ export const HomeComposer = observer(function HomeComposer({
     targetProvisionedTask,
     runtimeId,
     defaultBranch,
-    attachments,
+    promptTokens,
     attachImagesAsPaths,
-    clearAttachments,
+    clearPromptTokens,
     effectiveReviewStrategyKind,
     effectiveStandardStrategyKind,
     trimmed,
@@ -1977,53 +2050,77 @@ export const HomeComposer = observer(function HomeComposer({
     [applyPromptEdit, prompt, promptSelection, skillIdByShortcutCommand]
   );
 
-  // Inline attach mode: insert @path text at the caret instead of creating a
-  // chip. Reads the live textarea value (not the `prompt` closure) so async
-  // insertions (pasted screenshots after the temp-file roundtrip) and batched
-  // sequential inserts always land in the current text.
-  const insertAttachmentMentions = useCallback(
-    (filePaths: string[]) => {
-      if (filePaths.length === 0) return;
+  // Inserts text at the caret. Reads the live textarea value (not the
+  // `prompt` closure) so async insertions (pasted screenshots after the
+  // temp-file roundtrip) and batched sequential inserts always land in the
+  // current text.
+  const insertPromptSnippet = useCallback(
+    (snippet: string) => {
       const textarea = promptTextareaRef.current;
       const value = textarea ? textarea.value : prompt;
       const selection = textarea
         ? { start: textarea.selectionStart, end: textarea.selectionEnd }
         : promptSelectionRef.current;
-      const next = insertPromptText(
-        value,
-        selection,
-        filePaths.map((filePath) => `@${filePath}`).join(' ')
-      );
+      const next = insertPromptText(value, selection, snippet);
       applyPromptEdit(next.value, { start: next.caret, end: next.caret });
     },
     [applyPromptEdit, prompt]
   );
 
-  // Picked attachments all become chips: images with a thumbnail, other files
-  // with an icon card. Serialization happens on submit (@-mentions / native
-  // image paste depending on runtime and preference). In inline mode they are
-  // inserted as @path text at the caret instead, preserving ordering.
+  // Registers an attachment and inserts its inline sentinel at the caret.
+  const insertAttachmentToken = useCallback(
+    (kind: PromptTokenKind, path: string, name: string, previewUrl?: string) => {
+      const existing = promptTokensRef.current;
+      const base =
+        kind === 'image'
+          ? t('home.imageTokenLabel', {
+              index: existing.filter((token) => token.kind === 'image').length + 1,
+            })
+          : fileTokenLabel(name);
+      const label = uniqueTokenLabel(base, existing);
+      const next = [...existing, { id: crypto.randomUUID(), kind, label, path, previewUrl }];
+      setPromptTokens(next);
+      updateDraft({
+        promptTokens: next.map((token) => ({
+          kind: token.kind,
+          label: token.label,
+          path: token.path,
+        })),
+      });
+      insertPromptSnippet(tokenText(label));
+    },
+    [insertPromptSnippet, t, updateDraft]
+  );
+
+  // Deletes a token's sentinel from the text; the orphan-GC effect then drops
+  // its registration and revokes the preview URL.
+  const removeTokenFromPrompt = useCallback(
+    (token: PromptToken) => {
+      const textarea = promptTextareaRef.current;
+      const value = textarea ? textarea.value : prompt;
+      const next = value.split(tokenText(token.label)).join('');
+      const caret = Math.min(
+        textarea ? textarea.selectionStart : promptSelectionRef.current.start,
+        next.length
+      );
+      applyPromptEdit(next, { start: caret, end: caret });
+    },
+    [applyPromptEdit, prompt]
+  );
+
   const attachFiles = useCallback(
     (files: File[]) => {
-      if (attachInline) {
-        insertAttachmentMentions(
-          files
-            .map((file) => window.electronAPI.getPathForFile(file).trim())
-            .filter((filePath) => filePath.length > 0)
-        );
-        return;
-      }
       for (const file of files) {
         const filePath = window.electronAPI.getPathForFile(file).trim();
         if (!filePath) continue;
         if (file.type.startsWith('image/') || IMAGE_ATTACHMENT_RE.test(filePath)) {
-          addAttachment('image', filePath, file.name, URL.createObjectURL(file));
+          insertAttachmentToken('image', filePath, file.name, URL.createObjectURL(file));
         } else {
-          addAttachment('file', filePath, file.name);
+          insertAttachmentToken('file', filePath, file.name);
         }
       }
     },
-    [addAttachment, attachInline, insertAttachmentMentions]
+    [insertAttachmentToken]
   );
 
   const handlePromptPaste = useCallback(
@@ -2038,29 +2135,29 @@ export const HomeComposer = observer(function HomeComposer({
         // so its bytes get persisted to a temp file in the main process.
         const existingPath = window.electronAPI.getPathForFile(file).trim();
         if (existingPath) {
-          if (attachInline) insertAttachmentMentions([existingPath]);
-          else addAttachment('image', existingPath, file.name, URL.createObjectURL(file));
+          insertAttachmentToken('image', existingPath, file.name, URL.createObjectURL(file));
           continue;
         }
-        const previewUrl = attachInline ? null : URL.createObjectURL(file);
+        const previewUrl = URL.createObjectURL(file);
         void (async () => {
           try {
             const base64 = await readFileAsBase64(file);
             const result = await rpc.fs.saveClipboardImage(base64, file.type);
             if (!result.success || !result.data) throw new Error('saveClipboardImage failed');
-            if (previewUrl === null) {
-              insertAttachmentMentions([result.data.absPath]);
-            } else {
-              addAttachment('image', result.data.absPath, file.name || 'pasted-image', previewUrl);
-            }
+            insertAttachmentToken(
+              'image',
+              result.data.absPath,
+              file.name || 'pasted-image',
+              previewUrl
+            );
           } catch {
-            if (previewUrl !== null) URL.revokeObjectURL(previewUrl);
+            URL.revokeObjectURL(previewUrl);
             toast.error(t('home.attachPasteFailedToast'));
           }
         })();
       }
     },
-    [addAttachment, attachInline, insertAttachmentMentions, t]
+    [insertAttachmentToken, t]
   );
 
   const applyPromptMarkdownEdit = useCallback(
@@ -2164,6 +2261,29 @@ export const HomeComposer = observer(function HomeComposer({
         }
       }
 
+      // Atomic token deletion: Backspace at a token's end (or Delete at its
+      // start) removes the whole sentinel. The caret can only sit at token
+      // boundaries (selection snapping), so these two cases cover all edits.
+      if ((e.key === 'Backspace' || e.key === 'Delete') && !isImeComposing(e)) {
+        const target = e.currentTarget;
+        if (target.selectionStart === target.selectionEnd) {
+          const caret = target.selectionStart;
+          const range =
+            e.key === 'Backspace'
+              ? tokenRangesRef.current.find((item) => item.end === caret)
+              : tokenRangesRef.current.find((item) => item.start === caret);
+          if (range) {
+            e.preventDefault();
+            const value = target.value;
+            applyPromptEdit(value.slice(0, range.start) + value.slice(range.end), {
+              start: range.start,
+              end: range.start,
+            });
+            return;
+          }
+        }
+      }
+
       if (e.key === 'Tab') {
         e.preventDefault();
         applyPromptTabEdit(e.currentTarget, e.shiftKey ? 'outdent' : 'indent');
@@ -2187,6 +2307,7 @@ export const HomeComposer = observer(function HomeComposer({
       activePathMention,
       activeSkillShortcut,
       activeSkillShortcutKey,
+      applyPromptEdit,
       applyPromptEnterEdit,
       applyPromptTabEdit,
       canSubmit,
@@ -2248,11 +2369,69 @@ export const HomeComposer = observer(function HomeComposer({
               }}
               onKeyDown={handlePromptKeyDown}
               onPaste={handlePromptPaste}
+              onScroll={(e) => setPromptScrollTop(e.currentTarget.scrollTop)}
+              onMouseMove={handlePromptMouseMove}
+              onMouseLeave={() => setHoveredTokenId(null)}
+              onMouseDown={handlePromptMouseDown}
+              onDoubleClick={handlePromptDoubleClick}
+              onContextMenu={handlePromptContextMenu}
               className={cn(
                 'min-h-28 resize-none border-0 bg-transparent px-5 py-4 text-base placeholder:text-foreground-muted focus-visible:border-0 focus-visible:ring-0',
-                isNonStandardRunMode && 'pt-10'
+                isNonStandardRunMode && 'pt-10',
+                hoveredTokenId && 'cursor-default'
               )}
             />
+            {tokenRects.size > 0 && (
+              // Opaque chip overlay ABOVE the textarea text: the sentinel only
+              // provides layout/caret geometry, the visible entity is ours
+              // (icon + label, hover/selected states). pointer-events-none so
+              // clicks, hover and right-click stay on the textarea handlers.
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 z-[5] overflow-hidden"
+              >
+                {Array.from(tokenRects.entries()).flatMap(([tokenId, rects]) => {
+                  const token = promptTokens.find((item) => item.id === tokenId);
+                  if (!token) return [];
+                  const range = tokenRanges.find((item) => item.token.id === tokenId);
+                  const selected =
+                    !!range &&
+                    promptSelection.start !== promptSelection.end &&
+                    promptSelection.start <= range.start &&
+                    promptSelection.end >= range.end;
+                  const TokenIcon = token.kind === 'image' ? ImageIcon : FileText;
+                  return rects.map((rect, index) => (
+                    <div
+                      key={`${tokenId}:${index}`}
+                      className={cn(
+                        // Inset within the sentinel rect for breathing room —
+                        // the exposed edges are ink-free en-space delimiters.
+                        'absolute flex items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-[5px] border bg-background-2 px-1 transition-colors',
+                        hoveredTokenId === tokenId
+                          ? 'border-primary/60 bg-background-3'
+                          : 'border-border',
+                        selected && 'border-primary bg-primary/15'
+                      )}
+                      style={{
+                        left: rect.left + 3,
+                        top: rect.top - promptScrollTop + 2,
+                        width: Math.max(rect.width - 6, 0),
+                        height: Math.max(rect.height - 4, 0),
+                      }}
+                    >
+                      {index === 0 && (
+                        <>
+                          <TokenIcon className="size-3 shrink-0 text-foreground-muted" />
+                          <span className="truncate text-xs leading-none text-foreground">
+                            {token.label}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  ));
+                })}
+              </div>
+            )}
             {pathCompletionOpen && activePathMention && (
               <PathCompletionMenu
                 items={pathCompletionItems}
@@ -2283,47 +2462,99 @@ export const HomeComposer = observer(function HomeComposer({
                 onSelect={(item) => commitSkillShortcut(item.command, activeSkillShortcut)}
               />
             )}
-          </div>
-          {attachments.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 px-4 pb-1">
-              {attachments.map((attachment) => (
-                <div key={attachment.id} className="group relative" title={attachment.path}>
-                  {attachment.kind === 'image' && attachment.previewUrl ? (
-                    <button
-                      type="button"
-                      aria-label={t('home.previewAttachmentAria')}
-                      onClick={() => previewAttachment(attachment)}
-                      className="block overflow-hidden rounded-md border border-border transition-colors hover:border-border-1"
-                    >
-                      <img
-                        src={attachment.previewUrl}
-                        alt={attachment.name}
-                        className="size-14 object-cover"
-                      />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      aria-label={t('home.previewAttachmentAria')}
-                      onClick={() => previewAttachment(attachment)}
-                      className="flex h-14 max-w-44 items-center gap-2 rounded-md border border-border bg-background-1 px-3 text-left transition-colors hover:bg-background-2"
-                    >
-                      <FileText className="size-4 shrink-0 text-foreground-muted" />
-                      <span className="truncate text-xs text-foreground">{attachment.name}</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    aria-label={t('home.removeAttachmentAria')}
-                    onClick={() => removeAttachment(attachment.id)}
-                    className="absolute -right-1.5 -top-1.5 hidden size-4 items-center justify-center rounded-full border border-border bg-background-1 text-foreground-muted shadow-sm hover:text-foreground group-hover:flex"
+            {!tokenMenu &&
+              hoveredTokenId &&
+              (() => {
+                const token = promptTokens.find((item) => item.id === hoveredTokenId);
+                const rect = tokenRects.get(hoveredTokenId)?.[0];
+                if (!token || !rect) return null;
+                return (
+                  <div
+                    className="pointer-events-none absolute z-20 max-w-72 rounded-md border border-border bg-background-quaternary p-1.5 shadow-md"
+                    style={{ left: rect.left, top: rect.top - promptScrollTop + rect.height + 6 }}
                   >
-                    <X className="size-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+                    {token.kind === 'image' && token.previewUrl ? (
+                      <img
+                        src={token.previewUrl}
+                        alt={token.label}
+                        className="max-h-44 max-w-full rounded-sm object-contain"
+                      />
+                    ) : null}
+                    <div className="mt-1 truncate px-0.5 text-[11px] text-foreground-muted">
+                      {token.path}
+                    </div>
+                  </div>
+                );
+              })()}
+            {tokenMenu &&
+              (() => {
+                const token = promptTokens.find((item) => item.id === tokenMenu.tokenId);
+                if (!token) return null;
+                const closeMenu = () => setTokenMenu(null);
+                const menuItemClass =
+                  'flex w-full items-center rounded-sm px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-background-2';
+                return (
+                  <>
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={closeMenu}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        closeMenu();
+                      }}
+                    />
+                    <div
+                      className="absolute z-40 min-w-44 rounded-md border border-border bg-background-quaternary p-1 shadow-md"
+                      style={{ left: tokenMenu.left, top: tokenMenu.top }}
+                    >
+                      <button
+                        type="button"
+                        className={menuItemClass}
+                        onClick={() => {
+                          void navigator.clipboard.writeText(token.path);
+                          closeMenu();
+                        }}
+                      >
+                        {t('home.tokenCopyPath')}
+                      </button>
+                      <button
+                        type="button"
+                        className={menuItemClass}
+                        onClick={() => {
+                          void rpc.app
+                            .openIn({ app: 'finder', path: token.path, reveal: true })
+                            .catch(() => {});
+                          closeMenu();
+                        }}
+                      >
+                        {t('home.tokenRevealInFinder')}
+                      </button>
+                      <button
+                        type="button"
+                        className={menuItemClass}
+                        onClick={() => {
+                          void rpc.app.openIn({ app: 'finder', path: token.path }).catch(() => {});
+                          closeMenu();
+                        }}
+                      >
+                        {t('home.tokenOpenDefault')}
+                      </button>
+                      <div className="my-1 h-px bg-border" />
+                      <button
+                        type="button"
+                        className={menuItemClass}
+                        onClick={() => {
+                          removeTokenFromPrompt(token);
+                          closeMenu();
+                        }}
+                      >
+                        {t('home.tokenRemove')}
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+          </div>
           <div className="flex items-center justify-between gap-2 px-2.5 py-2">
             <div className="flex items-center gap-1">
               <input
@@ -2490,22 +2721,6 @@ export const HomeComposer = observer(function HomeComposer({
                   <Switch
                     checked={attachImagesAsPaths}
                     onCheckedChange={setAttachImagesAsPaths}
-                    disabled={attachInline}
-                    className="mt-0.5"
-                  />
-                </div>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium text-foreground">
-                      {t('home.attachInlineLabel')}
-                    </span>
-                    <span className="text-xs text-foreground-muted">
-                      {t('home.attachInlineDesc')}
-                    </span>
-                  </div>
-                  <Switch
-                    checked={attachInline}
-                    onCheckedChange={setAttachInline}
                     className="mt-0.5"
                   />
                 </div>

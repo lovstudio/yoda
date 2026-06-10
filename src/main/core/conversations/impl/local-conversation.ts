@@ -14,14 +14,9 @@ import { hookOverridesStore } from '@main/core/agent-hooks/inspect/hook-override
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
 import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-interrupt-sniffer';
-import {
-  watchClaudeRunState,
-  type ClaudeRunStateWatcher,
-} from '@main/core/conversations/claude-run-state-source';
-import {
-  watchCodexRunState,
-  type CodexRunStateWatcher,
-} from '@main/core/conversations/codex-run-state-source';
+import { watchClaudeRunState } from '@main/core/conversations/claude-run-state-source';
+import { watchClaudeSessionActivity } from '@main/core/conversations/claude-session-activity-source';
+import { watchCodexRunState } from '@main/core/conversations/codex-run-state-source';
 import type {
   ActiveConversationSession,
   ConversationProvider,
@@ -48,11 +43,13 @@ import {
   snapshotTaskDiffOnSessionExit,
 } from '../session-stats-hooks';
 import { buildAgentCommand } from './agent-command';
-import { appendImageMentions, injectClipboardImagesAndPrompt } from './image-attachments';
+import { injectClipboardImagesAndPrompt, substituteImageMentions } from './image-attachments';
 import { resolveAgentApiEnvVars, resolveRuntimeEnv, resolveRuntimeTmuxEnv } from './runtime-env';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
+
+type RunStateWatcher = { stop(): void };
 
 export class LocalConversationProvider implements ConversationProvider {
   private sessions = new Map<string, Pty>();
@@ -68,10 +65,7 @@ export class LocalConversationProvider implements ConversationProvider {
   private readonly preparedHookProviders = new Map<string, boolean>();
   private readonly tmuxSessionNames = new Map<string, string>();
   private readonly sessionInfos = new Map<string, Omit<ActiveConversationSession, 'detachable'>>();
-  private readonly runStateWatchers = new Map<
-    string,
-    CodexRunStateWatcher | ClaudeRunStateWatcher
-  >();
+  private readonly runStateWatchers = new Map<string, RunStateWatcher[]>();
 
   constructor({
     projectId,
@@ -152,7 +146,7 @@ export class LocalConversationProvider implements ConversationProvider {
     const useClipboardImagePaste = Boolean(pendingImagePaths && providerDef?.clipboardImagePaste);
     const effectiveInitialPrompt =
       pendingImagePaths && !useClipboardImagePaste
-        ? appendImageMentions(initialPrompt, pendingImagePaths)
+        ? substituteImageMentions(initialPrompt, pendingImagePaths)
         : initialPrompt;
     const { command, args: baseArgs } = buildAgentCommand({
       runtimeId: conversation.runtimeId,
@@ -246,7 +240,7 @@ export class LocalConversationProvider implements ConversationProvider {
       this.sessions.delete(sessionId);
       this.sessionInfos.delete(sessionId);
       this.stopRunStateWatcher(conversation.id);
-      agentSessionRuntimeStore.remove({
+      markRuntimeSessionExited({
         projectId: conversation.projectId,
         taskId: conversation.taskId,
         conversationId: conversation.id,
@@ -337,24 +331,30 @@ export class LocalConversationProvider implements ConversationProvider {
         { conversationId: conversation.id, cwd: this.taskPath, startedAtMs },
         (event) => agentSessionRuntimeStore.dispatch(session, event, 'codex-rollout')
       );
-      this.runStateWatchers.set(conversation.id, watcher);
+      this.runStateWatchers.set(conversation.id, [watcher]);
       return;
     }
     if (conversation.runtimeId === 'claude') {
-      const watcher = watchClaudeRunState(
-        { conversationId: conversation.id, cwd: this.taskPath },
-        (event) => agentSessionRuntimeStore.dispatch(session, event, 'claude-transcript')
-      );
-      this.runStateWatchers.set(conversation.id, watcher);
+      this.runStateWatchers.set(conversation.id, [
+        watchClaudeRunState({ conversationId: conversation.id, cwd: this.taskPath }, (event) =>
+          agentSessionRuntimeStore.dispatch(session, event, 'claude-transcript')
+        ),
+        watchClaudeSessionActivity(
+          { conversationId: conversation.id, cwd: this.taskPath },
+          (event) => agentSessionRuntimeStore.dispatch(session, event, 'claude-session-activity')
+        ),
+      ]);
     }
   }
 
   private stopRunStateWatcher(conversationId: string): void {
-    const watcher = this.runStateWatchers.get(conversationId);
-    if (!watcher) return;
-    try {
-      watcher.stop();
-    } catch {}
+    const watchers = this.runStateWatchers.get(conversationId);
+    if (!watchers) return;
+    for (const watcher of watchers) {
+      try {
+        watcher.stop();
+      } catch {}
+    }
     this.runStateWatchers.delete(conversationId);
   }
 
@@ -445,7 +445,7 @@ export class LocalConversationProvider implements ConversationProvider {
       ptySessionRegistry.unregister(sessionId);
     }
     this.sessionInfos.delete(sessionId);
-    agentSessionRuntimeStore.remove({
+    markRuntimeSessionExited({
       projectId: this.projectId,
       taskId: this.taskId,
       conversationId,
@@ -488,6 +488,19 @@ export class LocalConversationProvider implements ConversationProvider {
     this.sessions.clear();
     this.sessionInfos.clear();
   }
+}
+
+function markRuntimeSessionExited(session: {
+  projectId: string;
+  taskId: string;
+  conversationId: string;
+}): void {
+  agentSessionRuntimeStore.dispatch(
+    session,
+    { kind: 'process-exited', at: Date.now() },
+    'process-exited'
+  );
+  agentSessionRuntimeStore.remove(session);
 }
 
 function withCodexRuntimeNotifyArgs(

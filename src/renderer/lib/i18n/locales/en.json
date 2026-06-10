@@ -110,6 +110,7 @@
     "automation": "Automation",
     "mobile": "Mobile",
     "settings": "Settings",
+    "roadmap": "Roadmap",
     "giveFeedback": "Give feedback",
     "account": {
       "openMenu": "Open account menu",
@@ -805,6 +806,14 @@
       "disabled": "Disabled",
       "notRunning": "Not running",
       "unknown": "Unknown",
+      "processPid": "PID",
+      "processStatusLabel": "Process",
+      "processUpdatedAt": "Process updated",
+      "processStatus": {
+        "busy": "Busy",
+        "idle": "Idle",
+        "waiting": "Waiting"
+      },
       "createdAt": "Created",
       "updatedAt": "Updated",
       "lastInteractedAt": "Last active",
@@ -1564,6 +1573,133 @@
     "copyCommand": "Copy command",
     "searchAgents": "Search agents...",
     "noAgentInstalled": "No agent installed"
+  },
+  "roadmap": {
+    "title": "Roadmap",
+    "subtitle": "Deeply researching how each agent designs and implements these details is slow, hard work — but it is the only way to make Yoda feel seamless. Every capability below is backed by hands-on research, kept correct and up to date.",
+    "book": {
+      "bookTitle": "A High-Quality Agent Design Guide",
+      "bookSubtitle": "based on source-level analysis of mainstream agents and best practices",
+      "desc": "We run this research like writing a book: each capability gets a deep dive into how different agents design and implement it, captured as a standalone, continuously-iterated report. Together, the reports build toward an authoritative guide. The matrix below is the book's table of contents and writing progress.",
+      "chapterCount": "{{count}} chapters"
+    },
+    "matrix": {
+      "title": "Runtime capability matrix",
+      "desc": "Per-runtime support status for each capability. Click a row for the research notes behind it.",
+      "featureColumn": "Capability",
+      "upcoming": "Up next"
+    },
+    "status": {
+      "shipped": "Shipped",
+      "testing": "Testing",
+      "inProgress": "In progress",
+      "researching": "Researching",
+      "planned": "Planned",
+      "na": "Not applicable"
+    },
+    "categories": {
+      "lifecycle": "Runtime lifecycle",
+      "session": "Session sync",
+      "account": "Account",
+      "assets": "Config assets — detect, validate, debug & manage"
+    },
+    "features": {
+      "version": {
+        "name": "Version management",
+        "desc": "Detect the installed CLI version, surface updates, and pin known-good versions."
+      },
+      "install": {
+        "name": "Installation",
+        "desc": "One-click install of the runtime CLI with the official install channel."
+      },
+      "launch": {
+        "name": "Launch",
+        "desc": "Spawn and orchestrate runtime sessions from Yoda with the right flags and environment."
+      },
+      "sessionNameSync": {
+        "name": "Session name sync",
+        "desc": "Keep session names consistent between the CLI and Yoda, no matter where they are renamed."
+      },
+      "sessionAutoRename": {
+        "name": "Session auto-rename",
+        "desc": "Generate meaningful session titles automatically when the runtime can't — or won't — do it well."
+      },
+      "sessionStateSync": {
+        "name": "Session state sync",
+        "desc": "Reflect the real running/idle/finished state of every session in real time."
+      },
+      "authSync": {
+        "name": "Auth sync & management",
+        "desc": "Detect subscription / API-key auth per runtime and manage credentials in one place."
+      },
+      "usageSync": {
+        "name": "Usage sync & management",
+        "desc": "Aggregate per-account usage and cost across runtimes."
+      },
+      "systemPrompt": {
+        "name": "System prompt",
+        "desc": "Detect, validate, debug and manage the runtime's system prompt configuration."
+      },
+      "projectPrompt": {
+        "name": "Project prompt",
+        "desc": "Detect, validate, debug and manage project-level prompts (CLAUDE.md / AGENTS.md)."
+      },
+      "skills": {
+        "name": "Skills",
+        "desc": "Detect, validate, debug and manage skills across runtimes."
+      },
+      "mcp": {
+        "name": "MCP",
+        "desc": "Detect, validate, debug and manage MCP server configuration."
+      },
+      "hooks": {
+        "name": "Hooks",
+        "desc": "Detect, validate, debug and manage lifecycle hooks."
+      },
+      "statusline": {
+        "name": "Statusline",
+        "desc": "Detect, validate, debug and manage the statusline configuration."
+      }
+    },
+    "notes": {
+      "sessionNameSync": {
+        "claude": "Names change through several channels (in-CLI rename, transcript replay, rename inside Yoda) — Yoda merges all sources without overwriting each other.",
+        "codex": "Same multi-source merge as Claude Code; Codex adds its own rollout-file naming path that must be reconciled."
+      },
+      "sessionAutoRename": {
+        "claude": "Claude Code's built-in auto-naming is English-only; Yoda generates a localized title and overrides it.",
+        "codex": "Auto-rename only exists in the Codex app, not the CLI — Yoda fills the gap by generating titles itself."
+      },
+      "sessionStateSync": {
+        "claude": "Early versions inferred state from JSONL transcripts, which left zombie \"working\" sessions; switching to PID-based detection made it solid.",
+        "codex": "Porting the PID-based approach — currently in testing."
+      },
+      "usageSync": {
+        "claude": "Reads the real plan tier from the keychain and computes cost with ccusage-compatible accounting — no fabricated numbers."
+      },
+      "skills": {
+        "codex": "Codex is stricter about skill format; Yoda's built-in validator surfaces issues right in the sidebar."
+      },
+      "hooks": {
+        "codex": "Codex has no full hooks mechanism yet (only limited config like notify) — tracking upstream progress."
+      },
+      "statusline": {
+        "codex": "Codex CLI has no statusline mechanism."
+      }
+    },
+    "report": {
+      "label": "Deep-dive report",
+      "statusLine": "Deep-dive report: {{status}}",
+      "published": "Published",
+      "draft": "Drafting",
+      "planned": "Planned",
+      "read": "Read the deep-dive report"
+    },
+    "cta": {
+      "title": "Shape the roadmap",
+      "desc": "Want a runtime or capability prioritized? Tell us — feedback directly drives the order of this list.",
+      "button": "Give feedback"
+    }
   },
   "usage": {
     "title": "Usage",

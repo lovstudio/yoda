@@ -332,10 +332,16 @@ export const homeDraftSchema = z.preprocess(
     /** When true, image attachments are sent as @path mentions instead of
      *  being pasted natively (clipboard + Ctrl+V) into the agent TUI. */
     attachImagesAsPaths: z.boolean(),
-    /** When true, attachments are inserted as @path text at the caret instead
-     *  of becoming attachment chips — everything travels as one string, so the
-     *  ordering relative to the typed text is preserved. */
-    attachInline: z.boolean(),
+    /** Attachment-token registry backing the inline sentinels in `prompt` —
+     *  label → absolute path. Persisted with the draft so tokens survive the
+     *  composer remounting on navigation. */
+    promptTokens: z.array(
+      z.object({
+        kind: z.enum(['image', 'file']),
+        label: z.string(),
+        path: z.string(),
+      })
+    ),
     /** When non-empty, archiving a task or session first sends this skill or
      *  command to the target conversation and waits for the agent to finish
      *  before performing the actual archive. Bare skill/command names are
