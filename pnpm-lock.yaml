@@ -364,8 +364,8 @@ importers:
         specifier: ^16.3.0
         version: 16.3.0
       lovinsp:
-        specifier: ^1.7.0
-        version: 1.7.0
+        specifier: ^1.8.0
+        version: 1.8.0
       postcss:
         specifier: ^8.4.32
         version: 8.5.6
@@ -2069,23 +2069,23 @@ packages:
     resolution: {integrity: sha512-51Qvei5AS/KuPAFrlIys2zedKk1S2hMhnFKraLBHqQumlAAlsKegT/hYQN02SmzXwB5scHEQe8LPYZmwYgwMcg==}
     engines: {node: '>=20'}
 
-  '@lovinsp/core@1.7.0':
-    resolution: {integrity: sha512-vY61i7GJaAmI44nv9AIJAQrTECbOrE/XHXhW99L+ObPOOqRzo2F+6lxizHpvpjoOzkm1cIMB2T36c/PWKJDhGg==}
+  '@lovinsp/core@1.8.0':
+    resolution: {integrity: sha512-d0LcQXCj/wZPo3ckkDzB5657qBEycsQrLfcpbs0ytlHGsv5AunhRGQRU7kyihR4B7P9fWSEhb/q+tFtDI8OFTg==}
 
-  '@lovinsp/esbuild@1.7.0':
-    resolution: {integrity: sha512-tUt2qmBmi2q6U0SP3HArRQ6Rs+cfNsvzcwpYmGCHqauKV7BniB4uviJS0LzXzTVGBDJI4ERF1E/Pdcwn+lAfTg==}
+  '@lovinsp/esbuild@1.8.0':
+    resolution: {integrity: sha512-9HXS5AB3AWo5aG3+aE2fX1zlb35T4U3RMgenEmBQr2EiWwYErXf3x2WEnCPaDi/DTR1YEPLtmqTVFe+pX4Lutw==}
 
-  '@lovinsp/mako@1.7.0':
-    resolution: {integrity: sha512-GT8wgNRD0LUZUvmmbr+heb1wXBQ5i4LftV3YqSj4Czi7CnSuU1Y5ayYWRYqpeqe7fvGbGviQcTKACAXm5yqg2Q==}
+  '@lovinsp/mako@1.8.0':
+    resolution: {integrity: sha512-OKDDGTnr9im0K+n35xvlg4ZmNQcaUMSRAtwPLLQ/MBIyvj86R3f+oclzuHOAtq847WKTUACj/spZSZlvLd0c2A==}
 
-  '@lovinsp/turbopack@1.7.0':
-    resolution: {integrity: sha512-5XyIFWbeoWUCQvl0KNFw8wKFCv4D+9fdFDWW64EJLxFiUBjFR3Dm6RLfnaoPbFAkfiqTShy/CLQ7XIOS9VWScw==}
+  '@lovinsp/turbopack@1.8.0':
+    resolution: {integrity: sha512-1UlxJiyqF5bmkqlpHRgFyXYHUGTpEJ+iC+rUfwCcG6rnTOjHn0QcsogPikXi+gUWtCy+eoycncv5R4yd4qaHiw==}
 
-  '@lovinsp/vite@1.7.0':
-    resolution: {integrity: sha512-lHR5lGITSnqHQX7UBmpx1kOof27t5UyiyrKiN1aFhOMSv+rtN7Wkw8YkZTB7kQY6bRrbPmBIaBaQQ0b9Q7mZfA==}
+  '@lovinsp/vite@1.8.0':
+    resolution: {integrity: sha512-8zMLQtTDrzX3k4B1aoBW3nTDW+vsjy865vKQ33gv2eWC/WnP08Fgq55adWU//67MBWH1yt7nqe5VmF3hrqsYAQ==}
 
-  '@lovinsp/webpack@1.7.0':
-    resolution: {integrity: sha512-odwUpwNxzb7Zgr5Sj2gOLYSKP2yPawKEbD+Qc9CkXWkMfbaHMR/DSp6uR4yK06pWAQmGqkDQ+w2zc2dSs0LRXw==}
+  '@lovinsp/webpack@1.8.0':
+    resolution: {integrity: sha512-Jk3dhTR2guOFrDdsFOVef8JBrRwDMdwjrI9v2EOD57MSMQWc6q+2GwsEMs07VbgetQloxgYYs1wT8nhbZt7NRQ==}
 
   '@malept/cross-spawn-promise@1.1.1':
     resolution: {integrity: sha512-RTBGWL5FWQcg9orDOCcp4LvItNzUPcyEU9bwaeJX0rJ1IQxzucC48Y0/sQLp/g6t99IQgAlGIaesJS+gTn7tVQ==}
@@ -6168,8 +6168,8 @@ packages:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
     hasBin: true
 
-  lovinsp@1.7.0:
-    resolution: {integrity: sha512-Avr2Hv0NoEy0gFRO/qOp0d0KCe63w1E90o+1TK5Ed32MggfCuGNRxHqeKNukxB1ACR6GLSd168/rSczPhRQKSA==}
+  lovinsp@1.8.0:
+    resolution: {integrity: sha512-kRN5nDfyoYXBLqDZMldKzXv8j4743ANYTD7aLDcA6BI7zyh1EN1+QUf9nZKu//Hg6pTug1uNYCeoCMsGKjv/Lw==}
 
   lowercase-keys@2.0.0:
     resolution: {integrity: sha512-tqNXrS78oMOE73NMxK4EMLQsQowWf8jKooH9g7xPavRT706R6bkQJ6DY2Te7QukaZsulxa30wQ7bk0pm4XiHmA==}
@@ -10661,7 +10661,7 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  '@lovinsp/core@1.7.0':
+  '@lovinsp/core@1.8.0':
     dependencies:
       '@vue/compiler-dom': 3.5.34
       chalk: 4.1.2
@@ -10671,35 +10671,35 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@lovinsp/esbuild@1.7.0':
+  '@lovinsp/esbuild@1.8.0':
     dependencies:
-      '@lovinsp/core': 1.7.0
+      '@lovinsp/core': 1.8.0
     transitivePeerDependencies:
       - supports-color
 
-  '@lovinsp/mako@1.7.0':
+  '@lovinsp/mako@1.8.0':
     dependencies:
-      '@lovinsp/core': 1.7.0
+      '@lovinsp/core': 1.8.0
     transitivePeerDependencies:
       - supports-color
 
-  '@lovinsp/turbopack@1.7.0':
+  '@lovinsp/turbopack@1.8.0':
     dependencies:
-      '@lovinsp/core': 1.7.0
-      '@lovinsp/webpack': 1.7.0
+      '@lovinsp/core': 1.8.0
+      '@lovinsp/webpack': 1.8.0
     transitivePeerDependencies:
       - supports-color
 
-  '@lovinsp/vite@1.7.0':
+  '@lovinsp/vite@1.8.0':
     dependencies:
-      '@lovinsp/core': 1.7.0
+      '@lovinsp/core': 1.8.0
       chalk: 4.1.1
     transitivePeerDependencies:
       - supports-color
 
-  '@lovinsp/webpack@1.7.0':
+  '@lovinsp/webpack@1.8.0':
     dependencies:
-      '@lovinsp/core': 1.7.0
+      '@lovinsp/core': 1.8.0
     transitivePeerDependencies:
       - supports-color
 
@@ -15303,14 +15303,14 @@ snapshots:
     dependencies:
       js-tokens: 4.0.0
 
-  lovinsp@1.7.0:
+  lovinsp@1.8.0:
     dependencies:
-      '@lovinsp/core': 1.7.0
-      '@lovinsp/esbuild': 1.7.0
-      '@lovinsp/mako': 1.7.0
-      '@lovinsp/turbopack': 1.7.0
-      '@lovinsp/vite': 1.7.0
-      '@lovinsp/webpack': 1.7.0
+      '@lovinsp/core': 1.8.0
+      '@lovinsp/esbuild': 1.8.0
+      '@lovinsp/mako': 1.8.0
+      '@lovinsp/turbopack': 1.8.0
+      '@lovinsp/vite': 1.8.0
+      '@lovinsp/webpack': 1.8.0
       chalk: 4.1.1
     transitivePeerDependencies:
       - supports-color

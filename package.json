@@ -85,7 +85,7 @@
     "husky": "^9.1.7",
     "jsdom": "^29.0.2",
     "lint-staged": "^16.3.0",
-    "lovinsp": "^1.7.0",
+    "lovinsp": "^1.8.0",
     "postcss": "^8.4.32",
     "prettier": "3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.14",
