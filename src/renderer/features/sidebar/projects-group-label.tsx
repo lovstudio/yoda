@@ -1,4 +1,5 @@
 import {
+  Archive,
   ChevronsDownUp,
   ChevronsUpDown,
   CircleDot,
@@ -6,26 +7,29 @@ import {
   ListRestart,
   Settings2,
   Zap,
+  type LucideIcon,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { SidebarTaskGroupBy, SidebarTaskSortBy } from '@shared/view-state';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@renderer/lib/ui/dropdown-menu';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
+import { Separator } from '@renderer/lib/ui/separator';
+import { Switch } from '@renderer/lib/ui/switch';
+import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { SidebarSectionHeader } from './sidebar-primitives';
+import type { ProjectTypeFilter } from './sidebar-store';
 
 export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
   const { t } = useTranslation();
@@ -41,7 +45,7 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
 
 /**
  * View-options icon button next to the workspace switcher: opens the sidebar
- * task-list display settings. Highlighted while any setting deviates from the
+ * task-list display panel. Highlighted while any setting deviates from the
  * defaults.
  */
 export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
@@ -50,18 +54,19 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
   const expressMode = homeDraft?.expressMode ?? false;
   const customized =
     sidebarStore.projectTypeFilter !== 'all' ||
-    sidebarStore.taskSortBy !== 'created-at' ||
+    sidebarStore.taskSortBy !== 'updated-at' ||
     sidebarStore.taskGroupBy !== 'project' ||
     sidebarStore.hideProjectsWithoutActiveTasks ||
     sidebarStore.sortNeedsReviewLast ||
+    sidebarStore.sortArchivingLast ||
     expressMode;
 
   return (
-    <DropdownMenu>
+    <Popover>
       <Tooltip>
         <TooltipTrigger
           render={
-            <DropdownMenuTrigger
+            <PopoverTrigger
               render={
                 <Button
                   size="icon-xs"
@@ -77,160 +82,199 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
         </TooltipTrigger>
         <TooltipContent>{t('workspaces.viewOptions')}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="min-w-72">
-        <ProjectsSettingsMenuItems />
-      </DropdownMenuContent>
-    </DropdownMenu>
+      <PopoverContent align="end" className="w-72 gap-0 p-1.5">
+        <ProjectsSettingsPanel />
+      </PopoverContent>
+    </Popover>
   );
 });
 
 /**
- * Sidebar task-list display settings (group / sort / filter / view toggles),
- * rendered as menu items inside a parent dropdown or submenu.
+ * Sidebar task-list display panel, Linear-style: layout choices as compact
+ * label + control rows, boolean rules as switch rows (visually distinct from
+ * single-choice selects), bulk actions in a footer. Lives in a popover so
+ * multiple settings can be adjusted without the panel closing.
  */
-export const ProjectsSettingsMenuItems = observer(function ProjectsSettingsMenuItems() {
+const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
   const { t } = useTranslation();
   const { value: homeDraft, update: updateHomeDraft } = useAppSettingsKey('homeDraft');
   const expressMode = homeDraft?.expressMode ?? false;
 
+  const groupByLabels: Record<SidebarTaskGroupBy, string> = {
+    project: t('sidebar.groupByProject'),
+    none: t('sidebar.groupByNone'),
+    type: t('sidebar.groupByType'),
+    activity: t('sidebar.groupByActivity'),
+  };
+
   return (
-    <>
-      <DropdownMenuGroup>
-        <DropdownMenuLabel>{t('sidebar.groupBy')}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={sidebarStore.taskGroupBy}>
-          <DropdownMenuRadioItem
-            value="project"
-            onClick={() => sidebarStore.applyGroupBy('project')}
-          >
-            {t('sidebar.groupByProject')}
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="none" onClick={() => sidebarStore.applyGroupBy('none')}>
-            {t('sidebar.groupByNone')}
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="type" onClick={() => sidebarStore.applyGroupBy('type')}>
-            {t('sidebar.groupByType')}
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem
-            value="activity"
-            onClick={() => sidebarStore.applyGroupBy('activity')}
-          >
-            {t('sidebar.groupByActivity')}
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-      </DropdownMenuGroup>
-      <DropdownMenuSeparator />
-      <DropdownMenuGroup>
-        <DropdownMenuLabel>{t('sidebar.sortBy')}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={sidebarStore.taskSortBy}>
-          <DropdownMenuRadioItem
-            value="created-at"
-            onClick={() => sidebarStore.applySort('created-at')}
-          >
-            {t('sidebar.sortByCreatedAt')}
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem
-            value="updated-at"
-            onClick={() => sidebarStore.applySort('updated-at')}
-          >
-            {t('sidebar.sortByUpdatedAt')}
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <DropdownMenuCheckboxItem
-                checked={sidebarStore.sortNeedsReviewLast}
-                onCheckedChange={(checked) => sidebarStore.setSortNeedsReviewLast(checked === true)}
-              >
-                <CircleDot className="size-3.5" />
-                {t('sidebar.sortNeedsReviewLast')}
-              </DropdownMenuCheckboxItem>
-            }
-          />
-          <TooltipContent side="left" align="start" className="max-w-72">
-            {t('sidebar.sortNeedsReviewLastDescription')}
-          </TooltipContent>
-        </Tooltip>
-      </DropdownMenuGroup>
-      <DropdownMenuSeparator />
-      <DropdownMenuGroup>
-        <DropdownMenuLabel>{t('sidebar.filterByType')}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={sidebarStore.projectTypeFilter}>
-          <DropdownMenuRadioItem
-            value="all"
-            onClick={() => sidebarStore.setProjectTypeFilter('all')}
-          >
-            {t('sidebar.filterAll')}
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem
-            value="local"
-            onClick={() => sidebarStore.setProjectTypeFilter('local')}
-          >
-            {t('sidebar.filterLocal')}
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem
-            value="ssh"
-            onClick={() => sidebarStore.setProjectTypeFilter('ssh')}
-          >
-            {t('sidebar.filterSsh')}
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-      </DropdownMenuGroup>
-      <DropdownMenuSeparator />
-      <DropdownMenuGroup>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <DropdownMenuCheckboxItem
-                checked={sidebarStore.hideProjectsWithoutActiveTasks}
-                onCheckedChange={(checked) =>
-                  sidebarStore.setHideProjectsWithoutActiveTasks(checked === true)
-                }
-              >
-                <EyeOff className="size-3.5" />
-                {t('sidebar.hideProjectsWithoutActiveTasks')}
-              </DropdownMenuCheckboxItem>
-            }
-          />
-          <TooltipContent side="left" align="start" className="max-w-72">
-            {t('sidebar.hideProjectsWithoutActiveTasksDescription')}
-          </TooltipContent>
-        </Tooltip>
-      </DropdownMenuGroup>
-      <DropdownMenuSeparator />
-      <DropdownMenuGroup>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <DropdownMenuCheckboxItem
-                checked={expressMode}
-                onCheckedChange={(checked) => updateHomeDraft({ expressMode: checked === true })}
-              >
-                <Zap className="size-3.5" />
-                {t('sidebar.expressMode')}
-              </DropdownMenuCheckboxItem>
-            }
-          />
-          <TooltipContent side="left" align="start" className="max-w-72">
-            {t('sidebar.expressModeDescription')}
-          </TooltipContent>
-        </Tooltip>
-      </DropdownMenuGroup>
-      <DropdownMenuSeparator />
-      <DropdownMenuGroup>
-        <DropdownMenuItem onClick={() => sidebarStore.expandAllProjects()}>
-          <ChevronsUpDown className="size-3.5" />
+    <div className="flex flex-col">
+      <PanelRow label={t('sidebar.groupBy')}>
+        <Select
+          value={sidebarStore.taskGroupBy}
+          onValueChange={(value) => sidebarStore.applyGroupBy(value as SidebarTaskGroupBy)}
+        >
+          <SelectTrigger size="sm" className="text-xs">
+            <SelectValue>{(value: SidebarTaskGroupBy) => groupByLabels[value]}</SelectValue>
+          </SelectTrigger>
+          <SelectContent align="end">
+            {(Object.keys(groupByLabels) as SidebarTaskGroupBy[]).map((value) => (
+              <SelectItem key={value} value={value}>
+                {groupByLabels[value]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </PanelRow>
+      <PanelRow label={t('sidebar.sortBy')}>
+        <ToggleGroup
+          size="xs"
+          multiple={false}
+          value={[sidebarStore.taskSortBy]}
+          onValueChange={([value]) => {
+            if (value) sidebarStore.applySort(value as SidebarTaskSortBy);
+          }}
+        >
+          <ToggleGroupItem value="created-at">{t('sidebar.sortByCreatedAt')}</ToggleGroupItem>
+          <ToggleGroupItem value="updated-at">{t('sidebar.sortByUpdatedAt')}</ToggleGroupItem>
+        </ToggleGroup>
+      </PanelRow>
+      <PanelRow label={t('sidebar.filterByType')}>
+        <ToggleGroup
+          size="xs"
+          multiple={false}
+          value={[sidebarStore.projectTypeFilter]}
+          onValueChange={([value]) => {
+            if (value) sidebarStore.setProjectTypeFilter(value as ProjectTypeFilter);
+          }}
+        >
+          <ToggleGroupItem value="all">{t('sidebar.filterAllShort')}</ToggleGroupItem>
+          <ToggleGroupItem value="local">{t('sidebar.filterLocalShort')}</ToggleGroupItem>
+          <ToggleGroupItem value="ssh">{t('sidebar.filterSshShort')}</ToggleGroupItem>
+        </ToggleGroup>
+      </PanelRow>
+      <PanelSeparator />
+      <SectionLabel>{t('sidebar.demoteRules')}</SectionLabel>
+      <SwitchRow
+        icon={CircleDot}
+        label={t('sidebar.demoteNeedsReview')}
+        description={t('sidebar.sortNeedsReviewLastDescription')}
+        checked={sidebarStore.sortNeedsReviewLast}
+        onCheckedChange={(checked) => sidebarStore.setSortNeedsReviewLast(checked)}
+      />
+      <SwitchRow
+        icon={Archive}
+        label={t('sidebar.demoteArchiving')}
+        description={t('sidebar.sortArchivingLastDescription')}
+        checked={sidebarStore.sortArchivingLast}
+        onCheckedChange={(checked) => sidebarStore.setSortArchivingLast(checked)}
+      />
+      <PanelSeparator />
+      <SwitchRow
+        icon={EyeOff}
+        label={t('sidebar.hideProjectsWithoutActiveTasks')}
+        description={t('sidebar.hideProjectsWithoutActiveTasksDescription')}
+        checked={sidebarStore.hideProjectsWithoutActiveTasks}
+        onCheckedChange={(checked) => sidebarStore.setHideProjectsWithoutActiveTasks(checked)}
+      />
+      <SwitchRow
+        icon={Zap}
+        label={t('sidebar.expressMode')}
+        description={t('sidebar.expressModeDescription')}
+        checked={expressMode}
+        onCheckedChange={(checked) => updateHomeDraft({ expressMode: checked })}
+      />
+      <PanelSeparator />
+      <div className="grid grid-cols-2 gap-1">
+        <Button
+          variant="ghost"
+          size="xs"
+          className="justify-start text-foreground-muted hover:text-foreground"
+          onClick={() => sidebarStore.expandAllProjects()}
+        >
+          <ChevronsUpDown />
           {t('sidebar.expandAll')}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => sidebarStore.collapseAllProjects()}>
-          <ChevronsDownUp className="size-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="justify-start text-foreground-muted hover:text-foreground"
+          onClick={() => sidebarStore.collapseAllProjects()}
+        >
+          <ChevronsDownUp />
           {t('sidebar.collapseAll')}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => sidebarStore.clearManualTaskOrder()}>
-          <ListRestart className="size-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="col-span-2 justify-start text-foreground-muted hover:text-foreground"
+          onClick={() => sidebarStore.clearManualTaskOrder()}
+        >
+          <ListRestart />
           {t('sidebar.clearManualOrder')}
-        </DropdownMenuItem>
-      </DropdownMenuGroup>
-    </>
+        </Button>
+      </div>
+    </div>
   );
 });
+
+function PanelRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex h-8 items-center justify-between gap-2 px-2">
+      <span className="text-xs text-foreground-muted">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="px-2 pt-1 pb-0.5 text-xs font-medium text-foreground-muted">{children}</div>
+  );
+}
+
+function PanelSeparator() {
+  return <Separator className="my-1.5 -mx-1.5 w-auto" />;
+}
+
+function SwitchRow({
+  icon: Icon,
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  icon: LucideIcon;
+  label: string;
+  description?: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  // The row itself toggles (big hit target); the switch is the focusable
+  // control and stops propagation so a direct click doesn't double-toggle.
+  const row = (
+    <div
+      className="flex h-8 cursor-default items-center gap-2 rounded-sm px-2 text-sm hover:bg-background-quaternary-1"
+      onClick={() => onCheckedChange(!checked)}
+    >
+      <Icon className="size-3.5 shrink-0 text-foreground-muted" />
+      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+      <Switch
+        size="sm"
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+
+  if (!description) return row;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={row} />
+      <TooltipContent side="left" align="start" className="max-w-72">
+        {description}
+      </TooltipContent>
+    </Tooltip>
+  );
+}

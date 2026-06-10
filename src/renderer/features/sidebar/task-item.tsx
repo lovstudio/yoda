@@ -276,7 +276,17 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   };
 
   return (
-    <TaskContextMenu {...menuActions}>
+    <TaskContextMenu
+      {...menuActions}
+      // Hold the deferred reflow while the menu is open: the menu is a portal,
+      // so the pointer leaving the list onto it would otherwise release the
+      // pointer-based hold and let "标记未读" reorder rows mid-interaction.
+      onOpenChange={(open) =>
+        open
+          ? sidebarStore.holdTaskReflow('task-menu')
+          : sidebarStore.releaseTaskReflow('task-menu')
+      }
+    >
       <SidebarMenuRow
         className={cn(
           'group/row flex items-center justify-between px-1 h-8 gap-1',

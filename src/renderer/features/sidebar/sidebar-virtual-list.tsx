@@ -97,6 +97,11 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     projectParams.projectId
   );
 
+  // Deferred reflow: keep needsReview demotion frozen while the pointer is
+  // inside the list, so marking a task (or auto-clear on open) doesn't reorder
+  // rows under the cursor. Release on leave/unmount lets the list reflow.
+  useEffect(() => () => sidebarStore.releaseTaskReflow('projects-list'), []);
+
   // Expand the parent project when navigating to a task (not when `rows` changes —
   // otherwise collapsing while staying on that task would immediately re-expand).
   useEffect(() => {
@@ -267,7 +272,12 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={allDndIds} strategy={verticalListSortingStrategy}>
-        <div ref={containerRef} className="space-y-0.5 px-3 pt-1 pb-3 overflow-hidden">
+        <div
+          ref={containerRef}
+          className="space-y-0.5 px-3 pt-1 pb-3 overflow-hidden"
+          onPointerEnter={() => sidebarStore.holdTaskReflow('projects-list')}
+          onPointerLeave={() => sidebarStore.releaseTaskReflow('projects-list')}
+        >
           {renderRows.map((row) => {
             if (row.kind === 'task-group-toggle') {
               return (

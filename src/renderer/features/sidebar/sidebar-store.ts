@@ -117,6 +117,12 @@ function isActiveSidebarTask(task: TaskStore): boolean {
   return task.state === 'unregistered' || !('archivedAt' in task.data && task.data.archivedAt);
 }
 
+/** Archive in flight: requested but not yet completed (the row still shows while the saga runs). */
+function taskIsArchiving(task: TaskStore): boolean {
+  const reg = registeredTaskData(task);
+  return !!reg?.archiveRequestedAt && !reg.archivedAt;
+}
+
 type RegisteredProjectStore = ProjectStore & { data: LocalProject | SshProject };
 
 function isRegisteredProject(project: ProjectStore): project is RegisteredProjectStore {
@@ -140,7 +146,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   projectActivityById: Record<string, string> = {};
   expandedProjectIds = observable.set<string>();
   pinnedProjectIds = observable.set<string>();
-  taskSortBy: SidebarTaskSortBy = 'created-at';
+  taskSortBy: SidebarTaskSortBy = 'updated-at';
   taskGroupBy: SidebarTaskGroupBy = 'project';
   pinnedCollapsed = false;
   projectsCollapsed = false;
@@ -148,6 +154,18 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   hideProjectsWithoutActiveTasks = false;
   /** Sort tasks marked "稍后再读" (needsReview) to the bottom of their group. */
   sortNeedsReviewLast = false;
+  /** Sort tasks with an archive in flight to the bottom of their group. */
+  sortArchivingLast = false;
+  /**
+   * Deferred reflow: while the pointer is inside a task list, the needsReview
+   * values used for demotion are frozen at this snapshot so rows don't jump
+   * under the cursor when marked. Released (null) when the pointer leaves —
+   * the list then reflows. Archive demotion stays live on purpose: archiving
+   * means "get it out of the way", so it sinks immediately.
+   */
+  private frozenNeedsReviewByTaskId: ReadonlyMap<string, boolean> | null = null;
+  /** Active reflow-hold sources (pointer-in-list, open row menu, …). */
+  private readonly reflowHoldReasons = new Set<string>();
   /** Persisted order of the secondary nav items; missing keys fall back to default order. */
   navItemOrder: SidebarNavItemKey[] = [...SIDEBAR_NAV_ITEM_KEYS];
   hiddenNavItems = observable.set<SidebarNavItemKey>();
@@ -546,6 +564,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       projectsCollapsed: this.projectsCollapsed,
       hideProjectsWithoutActiveTasks: this.hideProjectsWithoutActiveTasks,
       sortNeedsReviewLast: this.sortNeedsReviewLast,
+      sortArchivingLast: this.sortArchivingLast,
       activeWorkspaceId: this.workspaceStore.activeWorkspaceId,
       navItemOrder: [...this.navItemOrder],
       hiddenNavItems: [...this.hiddenNavItems],
@@ -595,6 +614,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (snapshot.sortNeedsReviewLast !== undefined) {
       this.sortNeedsReviewLast = snapshot.sortNeedsReviewLast === true;
     }
+    if (snapshot.sortArchivingLast !== undefined) {
+      this.sortArchivingLast = snapshot.sortArchivingLast === true;
+    }
     if (snapshot.activeWorkspaceId !== undefined) {
       this.workspaceStore.restoreActiveWorkspaceId(snapshot.activeWorkspaceId);
     }
@@ -639,6 +661,14 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   setSortNeedsReviewLast(enabled: boolean): void {
     this.sortNeedsReviewLast = enabled;
+    if (!enabled) {
+      this.reflowHoldReasons.clear();
+      this.frozenNeedsReviewByTaskId = null;
+    }
+  }
+
+  setSortArchivingLast(enabled: boolean): void {
+    this.sortArchivingLast = enabled;
   }
 
   /**
@@ -796,7 +826,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     const newTasks = tasks
       .filter((t) => !seen.has(t.data.id))
       .sort((a, b) => this.compareSidebarTasks(a, b));
-    return this.demoteNeedsReviewTasks([...newTasks, ...result]);
+    return this.demoteTasksToBottom([...newTasks, ...result]);
   }
 
   private taskNeedsReview(task: TaskStore): boolean {
@@ -804,15 +834,58 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   /**
-   * Stable partition: when `sortNeedsReviewLast` is on, "稍后再读" tasks sink to
-   * the bottom of their group while keeping relative (manual) order intact.
+   * needsReview as used for sorting: the live value, unless reflow is held
+   * (pointer inside a task list) — then the value frozen at hold time.
    */
-  private demoteNeedsReviewTasks(tasks: TaskStore[]): TaskStore[] {
-    if (!this.sortNeedsReviewLast) return tasks;
+  private taskNeedsReviewForSort(task: TaskStore): boolean {
+    return this.frozenNeedsReviewByTaskId?.get(task.data.id) ?? this.taskNeedsReview(task);
+  }
+
+  /** Whether the task sinks to the bottom of its group under the active demote rules. */
+  private isTaskDemoted(task: TaskStore): boolean {
+    if (this.sortNeedsReviewLast && this.taskNeedsReviewForSort(task)) return true;
+    if (this.sortArchivingLast && taskIsArchiving(task)) return true;
+    return false;
+  }
+
+  /**
+   * Stable partition: demoted tasks ("稍后再读" / archiving, per settings) sink
+   * to the bottom of their group while keeping relative (manual) order intact.
+   */
+  private demoteTasksToBottom(tasks: TaskStore[]): TaskStore[] {
+    if (!this.sortNeedsReviewLast && !this.sortArchivingLast) return tasks;
     return [
-      ...tasks.filter((t) => !this.taskNeedsReview(t)),
-      ...tasks.filter((t) => this.taskNeedsReview(t)),
+      ...tasks.filter((t) => !this.isTaskDemoted(t)),
+      ...tasks.filter((t) => this.isTaskDemoted(t)),
     ];
+  }
+
+  /**
+   * Freeze the needsReview demotion order while the user is interacting with a
+   * task list (pointer inside it, or a row context menu open), so toggling
+   * "稍后再读" (or an auto-clear on open) doesn't reorder rows under the cursor.
+   * Multiple sources hold concurrently — e.g. the pointer leaves the list onto
+   * a portal context menu — so holds are keyed by reason and the list only
+   * reflows once every reason has released.
+   */
+  holdTaskReflow(reason: string): void {
+    if (!this.sortNeedsReviewLast) return;
+    const wasHeld = this.reflowHoldReasons.size > 0;
+    this.reflowHoldReasons.add(reason);
+    if (wasHeld) return;
+    const frozen = new Map<string, boolean>();
+    for (const project of this.projectManager.projects.values()) {
+      if (!project.mountedProject) continue;
+      for (const task of project.mountedProject.taskManager.tasks.values()) {
+        frozen.set(task.data.id, this.taskNeedsReview(task));
+      }
+    }
+    this.frozenNeedsReviewByTaskId = frozen;
+  }
+
+  releaseTaskReflow(reason: string): void {
+    this.reflowHoldReasons.delete(reason);
+    if (this.reflowHoldReasons.size === 0) this.frozenNeedsReviewByTaskId = null;
   }
 
   setTaskOrder(projectId: string, orderedIds: string[]): void {
@@ -825,11 +898,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   private compareSidebarTasksBy(a: TaskStore, b: TaskStore, kind: 'created' | 'updated'): number {
-    if (this.sortNeedsReviewLast) {
-      const ra = this.taskNeedsReview(a);
-      const rb = this.taskNeedsReview(b);
-      if (ra !== rb) return ra ? 1 : -1;
-    }
+    const da = this.isTaskDemoted(a);
+    const db = this.isTaskDemoted(b);
+    if (da !== db) return da ? 1 : -1;
     const ia = getSortInstant(a, kind);
     const ib = getSortInstant(b, kind);
     const d = compareSidebarInstantsDesc(ia, ib);

@@ -461,12 +461,13 @@ function showCopyFailure(t: TFunction): void {
 
 interface TaskContextMenuProps extends TaskMenuActions {
   children: React.ReactNode;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function TaskContextMenu({ children, ...actions }: TaskContextMenuProps) {
+export function TaskContextMenu({ children, onOpenChange, ...actions }: TaskContextMenuProps) {
   const items = useMenuItems(actions);
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={onOpenChange}>
       <ContextMenuTrigger>{children}</ContextMenuTrigger>
       <ContextMenuContent className="w-max overflow-x-visible">
         {items.map((item, index) => {

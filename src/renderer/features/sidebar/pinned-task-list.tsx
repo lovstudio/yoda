@@ -19,7 +19,13 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
         onToggle={() => sidebarStore.togglePinnedCollapsed()}
       />
       {showList && (
-        <SidebarMenu className="px-3">
+        // Same deferred-reflow hold as the projects list: needsReview demotion
+        // stays frozen while the pointer is over these rows.
+        <SidebarMenu
+          className="px-3"
+          onPointerEnter={() => sidebarStore.holdTaskReflow('pinned-list')}
+          onPointerLeave={() => sidebarStore.releaseTaskReflow('pinned-list')}
+        >
           {entries.map((entry) => {
             if (entry.kind === 'project') {
               return (
