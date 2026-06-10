@@ -249,9 +249,10 @@
     "tabs": {
       "general": "通用",
       "account": "账户",
-      "agents": "代理",
+      "agents": "Runtime",
       "tasks": "任务",
       "integrations": "集成",
+      "openIn": "打开方式",
       "mcp": "MCP",
       "repository": "项目",
       "github": "GitHub",
@@ -288,10 +289,10 @@
       "signOutConfirmLabel": "退出登录"
     },
     "agentsTab": {
-      "description": "管理 CLI 代理与模型配置。",
+      "description": "管理 CLI 运行环境（Runtime）与模型配置。",
       "reviewPrompt": "审查 Prompt",
       "cliAgents": "Runtime",
-      "agentInstalled": "已安装代理",
+      "agentInstalled": "Runtime 已安装",
       "agentInstalledDescription": "{{name}} 已就绪。",
       "installFailed": "安装失败",
       "detected": "已检测到",
@@ -344,12 +345,14 @@
     "interfaceTab": {
       "description": "自定义应用的外观与行为。",
       "keyboardShortcuts": "键盘快捷键",
-      "tools": "工具",
       "sidebarNav": "侧边栏导航",
       "sidebarNavShowSection": "显示侧边栏导航"
     },
     "keyboardShortcutsTab": {
       "description": "自定义应用操作的键盘快捷键。"
+    },
+    "openInTab": {
+      "description": "选择哪些外部应用出现在「在…中打开」菜单和文件操作中。"
     },
     "language": {
       "title": "语言",
@@ -630,14 +633,15 @@
     "promptPlaceholder": "可向 yoda 询问任何事。输入 / 或 $ 使用 skills，输入 @ 提及文件",
     "attachAria": "添加附件",
     "attachSshUnsupported": "SSH 项目暂不支持本地附件",
-    "removeAttachmentAria": "移除附件",
-    "previewAttachmentAria": "预览附件",
     "attachPasteFailedToast": "无法添加粘贴的图片",
     "composerSettingsAria": "输入设置",
     "attachImagesAsPathsLabel": "图片以文件路径发送",
     "attachImagesAsPathsDesc": "以 @路径 形式引用图片，而不是把图片原生粘贴进 agent 终端。",
-    "attachInlineLabel": "附件内联插入文本",
-    "attachInlineDesc": "以 @路径 直接插入光标处而非生成附件卡片，可保证附件与文字的先后顺序。",
+    "imageTokenLabel": "图 {{index}}",
+    "tokenCopyPath": "复制路径",
+    "tokenRevealInFinder": "在 Finder 中显示",
+    "tokenOpenDefault": "用默认应用打开",
+    "tokenRemove": "移除",
     "voiceAria": "触发 Typeless 语音输入",
     "voiceTooltip": "触发 Typeless 免持语音快捷键",
     "voiceTriggeredToast": "已触发 Typeless 语音输入（{{shortcut}}）。",
@@ -1149,7 +1153,8 @@
     "transcript": {
       "noSession": "暂无活动会话",
       "loading": "正在加载实录…",
-      "empty": "暂无实录内容"
+      "empty": "暂无实录内容",
+      "earlierLines": "前面还有 {{count}} 行 — 打开完整文件"
     }
   },
   "commandPalette": {

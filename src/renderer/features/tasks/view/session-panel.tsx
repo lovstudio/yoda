@@ -1,20 +1,34 @@
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
-import { ChevronRight, Info, ListChecks, MessageSquareText, Sparkles } from 'lucide-react';
+import {
+  ChevronRight,
+  Info,
+  ListChecks,
+  MessageSquareText,
+  ScrollText,
+  Sparkles,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SessionSummaryScope } from '@shared/conversations';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
-import { cn } from '@renderer/utils/utils';
 import {
   SessionInfoPanel,
   SessionPromptsContent,
+  SessionPromptsCount,
   SessionPromptsViewAllButton,
   SessionSummaryContent,
+  SessionSummaryCount,
   useSessionPrompts,
   useSessionSummary,
 } from '../session-info-panel';
 import { TaskPanel, TaskTodosCount, useTaskTodos } from '../task-panel';
+import {
+  TranscriptContent,
+  TranscriptCount,
+  TranscriptFileActions,
+  useConversationTranscript,
+} from '../transcript-panel';
 import { sessionSectionForTab, type SessionPanelSection } from '../types';
 
 /**
@@ -70,9 +84,19 @@ export const SessionPanel = observer(function SessionPanel() {
           title={t('tasks.sessionPanel.conversation')}
         />
 
+        <TranscriptBlind
+          open={openSection === 'transcript'}
+          title={t('tasks.sessionPanel.transcript')}
+        />
+
         <TasksBlind open={openSection === 'tasks'} title={t('tasks.sessionPanel.tasks')} />
 
-        <SummaryBlind open={openSection === 'summary'} title={t('tasks.sessionPanel.summary')} />
+        <SummaryBlind
+          id="summary-global"
+          scope="global"
+          open={openSection === 'summary-global'}
+          title={t('tasks.sessionPanel.summaryGlobal')}
+        />
       </AccordionPrimitive.Root>
     </div>
   );
@@ -83,6 +107,7 @@ function Blind({
   icon,
   title,
   open,
+  count,
   actions,
   children,
 }: {
@@ -90,6 +115,8 @@ function Blind({
   icon: React.ReactNode;
   title: string;
   open: boolean;
+  /** Item-count badge rendered on the right of the header at all times (open or not). */
+  count?: React.ReactNode;
   /** Toolbar actions rendered on the right of the header while the blind is open. */
   actions?: React.ReactNode;
   children: (active: boolean) => React.ReactNode;
@@ -104,7 +131,10 @@ function Blind({
             {title}
           </span>
         </AccordionPrimitive.Trigger>
-        {open && actions ? <div className="flex shrink-0 items-center">{actions}</div> : null}
+        <div className="flex shrink-0 items-center">
+          {count}
+          {open ? actions : null}
+        </div>
       </AccordionPrimitive.Header>
       <AccordionPrimitive.Content className="overflow-hidden border-t border-border/50 bg-background-1/20">
         {/* Only mount panel work (queries, live refresh) while the blind is open. */}
@@ -125,16 +155,45 @@ const ConversationBlind = observer(function ConversationBlind({
   open: boolean;
   title: string;
 }) {
-  const prompts = useSessionPrompts(open);
+  // Load prompts regardless of open state so the header count is always live.
+  const prompts = useSessionPrompts(true);
   return (
     <Blind
       id="conversation"
       icon={<MessageSquareText className="size-3.5" />}
       title={title}
       open={open}
+      count={<SessionPromptsCount prompts={prompts} />}
       actions={<SessionPromptsViewAllButton prompts={prompts} />}
     >
       {() => <SessionPromptsContent prompts={prompts} />}
+    </Blind>
+  );
+});
+
+/**
+ * The Transcript blind: a live mirror of the conversation's on-disk transcript
+ * (Claude session JSONL / Codex rollout). Only subscribes to the main-process
+ * file watch while open.
+ */
+const TranscriptBlind = observer(function TranscriptBlind({
+  open,
+  title,
+}: {
+  open: boolean;
+  title: string;
+}) {
+  const feed = useConversationTranscript(open);
+  return (
+    <Blind
+      id="transcript"
+      icon={<ScrollText className="size-3.5" />}
+      title={title}
+      open={open}
+      count={<TranscriptCount feed={feed} />}
+      actions={<TranscriptFileActions feed={feed} />}
+    >
+      {() => <TranscriptContent feed={feed} />}
     </Blind>
   );
 });
@@ -151,7 +210,7 @@ const TasksBlind = observer(function TasksBlind({ open, title }: { open: boolean
       icon={<ListChecks className="size-3.5" />}
       title={title}
       open={open}
-      actions={<TaskTodosCount todos={todos} />}
+      count={<TaskTodosCount todos={todos} />}
     >
       {() => <TaskPanel chromeless todos={todos} />}
     </Blind>
@@ -159,69 +218,34 @@ const TasksBlind = observer(function TasksBlind({ open, title }: { open: boolean
 });
 
 /**
- * The 摘要 blind: holds two independent chapters — a global session summary and
- * a short recent-activity summary. Each chapter lazily fetches only while it is
- * expanded, and refreshes after each reply (see `SummaryChapter`).
+ * The whole-session summary blind. It prefers the runtime's zero-cost
+ * compaction summary, so it can keep its header count live without spawning a
+ * summarization CLI in the background.
  */
 const SummaryBlind = observer(function SummaryBlind({
+  id,
+  scope,
   open,
   title,
 }: {
+  id: SessionPanelSection;
+  scope: SessionSummaryScope;
   open: boolean;
   title: string;
 }) {
-  const { t } = useTranslation();
+  // recent: auto-refresh every idle turn while open. global: trigger-only —
+  // opening it must not spawn a summarization CLI; it generates only when the
+  // user clicks regenerate.
+  const summary = useSessionSummary(open, scope, { autoGenerate: scope === 'recent' });
   return (
-    <Blind id="summary" icon={<Sparkles className="size-3.5" />} title={title} open={open}>
-      {() => (
-        <div className="flex flex-col">
-          <SummaryChapter
-            scope="recent"
-            title={t('tasks.sessionPanel.summaryRecent')}
-            defaultOpen
-          />
-          <SummaryChapter scope="global" title={t('tasks.sessionPanel.summaryGlobal')} />
-        </div>
-      )}
+    <Blind
+      id={id}
+      icon={<Sparkles className="size-3.5" />}
+      title={title}
+      open={open}
+      count={<SessionSummaryCount summary={summary} />}
+    >
+      {() => <SessionSummaryContent summary={summary} />}
     </Blind>
-  );
-});
-
-/**
- * One collapsible summary chapter. The summary query runs only while the
- * chapter is open, so opening the panel does not fire both scopes at once and
- * the global (whole-session) generation only happens when the user asks for it.
- */
-const SummaryChapter = observer(function SummaryChapter({
-  scope,
-  title,
-  defaultOpen = false,
-}: {
-  scope: SessionSummaryScope;
-  title: string;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const summary = useSessionSummary(open, scope);
-  return (
-    <div className="border-b border-border/40 last:border-b-0">
-      <button
-        type="button"
-        className="group flex h-7 w-full min-w-0 items-center gap-1.5 px-3 text-left text-[11px] transition-colors hover:bg-background-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        <ChevronRight
-          className={cn(
-            'size-3 shrink-0 text-foreground-passive transition-transform',
-            open && 'rotate-90'
-          )}
-        />
-        <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={title}>
-          {title}
-        </span>
-      </button>
-      {open ? <SessionSummaryContent summary={summary} /> : null}
-    </div>
   );
 });

@@ -249,9 +249,10 @@
     "tabs": {
       "general": "General",
       "account": "Account",
-      "agents": "Agents",
+      "agents": "Runtime",
       "tasks": "Tasks",
       "integrations": "Integrations",
+      "openIn": "Open in",
       "mcp": "MCP",
       "repository": "Project",
       "github": "GitHub",
@@ -291,7 +292,7 @@
       "description": "Manage runtimes and model configurations.",
       "reviewPrompt": "Review Prompt",
       "cliAgents": "Runtimes",
-      "agentInstalled": "Agent installed",
+      "agentInstalled": "Runtime installed",
       "agentInstalledDescription": "{{name}} is ready.",
       "installFailed": "Install failed",
       "detected": "Detected",
@@ -344,12 +345,14 @@
     "interfaceTab": {
       "description": "Customize the appearance and behavior of the app.",
       "keyboardShortcuts": "Keyboard shortcuts",
-      "tools": "Tools",
       "sidebarNav": "Sidebar navigation",
       "sidebarNavShowSection": "Show sidebar navigation"
     },
     "keyboardShortcutsTab": {
       "description": "Customize keyboard shortcuts for app actions."
+    },
+    "openInTab": {
+      "description": "Choose which external apps appear in \"Open in\" menus and file actions across the app."
     },
     "language": {
       "title": "Language",
@@ -630,14 +633,15 @@
     "promptPlaceholder": "Ask yoda anything. Type / or $ to use skills, or @ to mention files.",
     "attachAria": "Attach files",
     "attachSshUnsupported": "Local attachments are not supported for SSH projects",
-    "removeAttachmentAria": "Remove attachment",
-    "previewAttachmentAria": "Preview attachment",
     "attachPasteFailedToast": "Could not attach the pasted image",
     "composerSettingsAria": "Input settings",
     "attachImagesAsPathsLabel": "Send images as file paths",
     "attachImagesAsPathsDesc": "Reference images as @path mentions instead of pasting them natively into the agent terminal.",
-    "attachInlineLabel": "Insert attachments inline",
-    "attachInlineDesc": "Insert @path at the cursor instead of adding attachment cards, preserving ordering relative to your text.",
+    "imageTokenLabel": "Image {{index}}",
+    "tokenCopyPath": "Copy path",
+    "tokenRevealInFinder": "Reveal in Finder",
+    "tokenOpenDefault": "Open with default app",
+    "tokenRemove": "Remove",
     "voiceAria": "Trigger Typeless voice input",
     "voiceTooltip": "Trigger the Typeless hands-free voice shortcut",
     "voiceTriggeredToast": "Triggered Typeless voice input ({{shortcut}}).",
@@ -1149,7 +1153,8 @@
     "transcript": {
       "noSession": "No active session",
       "loading": "Loading transcript…",
-      "empty": "No transcript yet"
+      "empty": "No transcript yet",
+      "earlierLines": "{{count}} earlier lines — open the full file"
     }
   },
   "commandPalette": {
