@@ -717,11 +717,54 @@ export function HomeViewWrapper({ children }: HomeViewWrapperProps) {
 export const HomeMainPanel = observer(function HomeMainPanel() {
   const { t } = useTranslation();
   const { effectiveTheme } = useTheme();
-  const showAddProjectModal = useShowModal('addProjectModal');
-  const { navigate } = useNavigate();
   const { data: accountSession } = useAccountSession();
   const sessionUser = accountSession?.user;
   const greetingName = sessionUser?.name?.trim() || sessionUser?.username || '';
+
+  return (
+    <div className="flex h-full flex-col overflow-y-auto bg-background text-foreground">
+      <div className="mx-auto flex min-h-full w-full max-w-6xl flex-1 flex-col px-5 pb-8 pt-14 sm:px-8 lg:px-10">
+        <div className="flex flex-1 flex-col justify-center gap-8 py-4">
+          <div className="text-center">
+            <div className="mb-4 flex items-center justify-center">
+              <img
+                key={effectiveTheme}
+                src={effectiveTheme === 'ydark' ? yodaLogoWhite : yodaLogo}
+                alt="Yoda"
+                className="h-9"
+              />
+            </div>
+            <h1 className="text-2xl font-semibold">
+              {greetingName
+                ? t(getGreetingKey(new Date().getHours()), { name: greetingName })
+                : t('home.headline')}
+            </h1>
+          </div>
+
+          <HomeComposer className="mx-auto w-full max-w-4xl" />
+        </div>
+      </div>
+    </div>
+  );
+});
+
+/**
+ * The new-task prompt composer — the heart of the home page, also reusable
+ * inside a modal (the tab strip's "+" within a task) so starting new work
+ * doesn't shift attention away. Drafts persist to the shared `homeDraft`
+ * setting in both hosts.
+ */
+export const HomeComposer = observer(function HomeComposer({
+  className,
+  onSubmitted,
+}: {
+  className?: string;
+  /** Called after a successful submit (the composer itself navigates to the new task). */
+  onSubmitted?: () => void;
+}) {
+  const { t } = useTranslation();
+  const showAddProjectModal = useShowModal('addProjectModal');
+  const { navigate } = useNavigate();
 
   const projectManager = getProjectManagerStore();
 
@@ -957,6 +1000,11 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const persistedPrompt = draft?.prompt ?? '';
   const [prompt, setPrompt] = useState(persistedPrompt);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  // Landing on home (sidebar "new task", the tab strip's "+") should put the
+  // caret straight into the prompt — the panel remounts on every navigation.
+  useEffect(() => {
+    promptTextareaRef.current?.focus({ preventScroll: true });
+  }, []);
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptSelection, setPromptSelection] = useState({ start: 0, end: 0 });
   const promptSelectionRef = useRef(promptSelection);
@@ -1229,6 +1277,11 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     if (!canSubmit || submitting) return;
     setSubmitting(true);
     try {
+      // Every successful submit lands on the new task; modal hosts close on it.
+      const goToTask = (projectId: string, taskId: string) => {
+        navigate('task', { projectId, taskId });
+        onSubmitted?.();
+      };
       const promptDisplayName = trimmed ? taskNameFromPrompt(trimmed) : '';
       const baseName =
         promptDisplayName || (await rpc.tasks.generateTaskName(trimmed ? { title: trimmed } : {}));
@@ -1298,7 +1351,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
           .catch(() => {
             toast.error('Agent task failed to start.');
           });
-        navigate('task', { projectId: INTERNAL_PROJECT_ID, taskId });
+        goToTask(INTERNAL_PROJECT_ID, taskId);
         setPrompt('');
         updateDraft({ prompt: '' });
         return;
@@ -1363,7 +1416,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
           titlePrompt: trimmed || undefined,
           strategyKind: 'no-worktree',
         });
-        navigate('task', { projectId: mounted.data.id, taskId: task.taskId });
+        goToTask(mounted.data.id, task.taskId);
         void task.promise.catch(() => {
           toast.error('Agent task failed to start.');
         });
@@ -1391,7 +1444,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
         });
         if (launches.length === 0) return;
         const first = launches[0];
-        if (first) navigate('task', { projectId: mounted.data.id, taskId: first.taskId });
+        if (first) goToTask(mounted.data.id, first.taskId);
         void Promise.allSettled(launches.map((launch) => launch.promise)).then(reportFailures);
         setPrompt('');
         updateDraft({ prompt: '' });
@@ -1412,7 +1465,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
           titlePrompt: trimmed || undefined,
           strategyKind: effectiveReviewStrategyKind,
         });
-        navigate('task', { projectId: mounted.data.id, taskId: implementation.taskId });
+        goToTask(mounted.data.id, implementation.taskId);
         void runReviewOrchestration({
           projectId: mounted.data.id,
           taskId: implementation.taskId,
@@ -1445,7 +1498,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
           titlePrompt: trimmed || undefined,
           strategyKind: 'new-branch',
         });
-        navigate('task', { projectId: mounted.data.id, taskId: ceo.taskId });
+        goToTask(mounted.data.id, ceo.taskId);
         void (async () => {
           await ceo.promise;
           const ceoOutput = await waitForInitialConversationOutput(
@@ -1491,7 +1544,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
         titlePrompt: trimmed || undefined,
         strategyKind: effectiveStandardStrategyKind,
       });
-      navigate('task', { projectId: mounted.data.id, taskId: task.taskId });
+      goToTask(mounted.data.id, task.taskId);
       void task.promise.catch(() => {
         toast.error('Agent task failed to start.');
       });
@@ -1517,6 +1570,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
     slotAgentId,
     autoApproveDefaults,
     navigate,
+    onSubmitted,
     projectManager,
     updateDraft,
   ]);
@@ -1715,234 +1769,207 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const isNonStandardRunMode = runMode !== 'normal';
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto bg-background text-foreground">
-      <div className="mx-auto flex min-h-full w-full max-w-6xl flex-1 flex-col px-5 pb-8 pt-14 sm:px-8 lg:px-10">
-        <div className="flex flex-1 flex-col justify-center gap-8 py-4">
-          <div className="text-center">
-            <div className="mb-4 flex items-center justify-center">
-              <img
-                key={effectiveTheme}
-                src={effectiveTheme === 'ydark' ? yodaLogoWhite : yodaLogo}
-                alt="Yoda"
-                className="h-9"
-              />
-            </div>
-            <h1 className="text-2xl font-semibold">
-              {greetingName
-                ? `${t(getGreetingKey(new Date().getHours()), { name: greetingName })} · `
-                : ''}
-              {t('home.headline')}
-            </h1>
-          </div>
-
-          <div className="mx-auto w-full max-w-4xl">
-            <div
+    <div className={className}>
+      <div
+        className={cn(
+          'rounded-lg border shadow-sm transition-[background-color,border-color,box-shadow]',
+          promptInputChrome.containerClassName
+        )}
+      >
+        <div className="flex flex-col">
+          <div className="relative">
+            {isNonStandardRunMode && (
+              <div
+                className={cn(
+                  'pointer-events-none absolute right-3 top-2 z-10 inline-flex h-6 max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full border px-2 text-[11px] font-medium',
+                  promptInputChrome.badgeClassName
+                )}
+              >
+                <PromptInputModeIcon className="size-3.5 shrink-0" />
+                <span className="truncate">{t(promptInputChrome.labelKey)}</span>
+              </div>
+            )}
+            <Textarea
+              ref={promptTextareaRef}
+              placeholder={t('home.promptPlaceholder')}
+              value={prompt}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                updatePromptSelection(e.target);
+              }}
+              onSelect={(e) => updatePromptSelection(e.currentTarget)}
+              onClick={(e) => updatePromptSelection(e.currentTarget)}
+              onFocus={(e) => {
+                setPromptFocused(true);
+                updatePromptSelection(e.currentTarget);
+                if (activePathMention) setPathCompletionOpen(true);
+              }}
+              onKeyUp={(e) => updatePromptSelection(e.currentTarget)}
+              onBlur={() => {
+                setPromptFocused(false);
+                setPathCompletionOpen(false);
+              }}
+              onKeyDown={handlePromptKeyDown}
               className={cn(
-                'rounded-lg border shadow-sm transition-[background-color,border-color,box-shadow]',
-                promptInputChrome.containerClassName
+                'min-h-28 resize-none border-0 bg-transparent px-5 py-4 text-base placeholder:text-foreground-muted focus-visible:border-0 focus-visible:ring-0',
+                isNonStandardRunMode && 'pt-10'
               )}
-            >
-              <div className="flex flex-col">
-                <div className="relative">
-                  {isNonStandardRunMode && (
-                    <div
-                      className={cn(
-                        'pointer-events-none absolute right-3 top-2 z-10 inline-flex h-6 max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full border px-2 text-[11px] font-medium',
-                        promptInputChrome.badgeClassName
-                      )}
-                    >
-                      <PromptInputModeIcon className="size-3.5 shrink-0" />
-                      <span className="truncate">{t(promptInputChrome.labelKey)}</span>
-                    </div>
-                  )}
-                  <Textarea
-                    ref={promptTextareaRef}
-                    placeholder={t('home.promptPlaceholder')}
-                    value={prompt}
-                    onChange={(e) => {
-                      setPrompt(e.target.value);
-                      updatePromptSelection(e.target);
-                    }}
-                    onSelect={(e) => updatePromptSelection(e.currentTarget)}
-                    onClick={(e) => updatePromptSelection(e.currentTarget)}
-                    onFocus={(e) => {
-                      setPromptFocused(true);
-                      updatePromptSelection(e.currentTarget);
-                      if (activePathMention) setPathCompletionOpen(true);
-                    }}
-                    onKeyUp={(e) => updatePromptSelection(e.currentTarget)}
-                    onBlur={() => {
-                      setPromptFocused(false);
-                      setPathCompletionOpen(false);
-                    }}
-                    onKeyDown={handlePromptKeyDown}
-                    className={cn(
-                      'min-h-28 resize-none border-0 bg-transparent px-5 py-4 text-base placeholder:text-foreground-muted focus-visible:border-0 focus-visible:ring-0',
-                      isNonStandardRunMode && 'pt-10'
-                    )}
-                  />
-                  {pathCompletionOpen && activePathMention && (
-                    <PathCompletionMenu
-                      items={pathCompletionItems}
-                      activeIndex={activePathCompletionIndex}
-                      loading={pathCompletionLoading}
-                      error={pathCompletionError}
-                      showEmpty={activePathMention.query.length > 0}
-                      labels={{
-                        loading: t('common.loading'),
-                        error: t('common.error'),
-                        noResults: t('common.noResults'),
-                      }}
-                      onActiveIndexChange={setActivePathCompletionIndex}
-                      onSelect={(item) => commitPathCompletion(item, activePathMention)}
-                    />
-                  )}
-                  {skillShortcutMenuOpen && activeSkillShortcut && (
-                    <SkillShortcutMenu
-                      items={filteredSkillShortcutOptions}
-                      activeIndex={effectiveSkillShortcutIndex}
-                      loading={skillsLoading}
-                      showEmpty={activeSkillShortcut.query.length > 0}
-                      labels={{
-                        loading: t('common.loading'),
-                        noResults: t('skills.noMatches'),
-                      }}
-                      onActiveIndexChange={setActiveSkillShortcutIndex}
-                      onSelect={(item) => commitSkillShortcut(item.command, activeSkillShortcut)}
-                    />
-                  )}
-                </div>
-                <div className="flex items-center justify-between gap-2 px-2.5 py-2">
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      aria-label={t('home.addAria')}
-                      onClick={() => showAddProjectModal({ strategy: 'local', mode: 'pick' })}
-                      className="flex size-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
-                    >
-                      <Plus className="size-4" />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <SkillShortcutSelector
-                      runtimeId={runtimeId}
-                      options={skillShortcutOptions}
-                      isLoading={skillsLoading}
-                      isError={skillsError}
-                      onInsert={commitSkillShortcut}
-                      className="h-8 gap-1.5 rounded-full border-0 bg-background-2/60 px-3 text-xs font-medium text-foreground transition-colors hover:bg-background-2"
-                    />
-                    <button
-                      type="button"
-                      aria-label={t('home.voiceAria')}
-                      aria-busy={voiceInputTriggering}
-                      title={t('home.voiceTooltip')}
-                      disabled={voiceInputTriggering}
-                      onClick={() => void handleVoiceInput()}
-                      className={cn(
-                        'flex size-8 shrink-0 items-center justify-center rounded-full transition-colors',
-                        voiceInputTriggering
-                          ? 'bg-primary/10 text-primary hover:bg-primary/15'
-                          : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
-                      )}
-                    >
-                      <Mic className={cn('size-4', voiceInputTriggering && 'animate-pulse')} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t('home.submitAria')}
-                      disabled={!canSubmit}
-                      onClick={() => void handleSubmit()}
-                      className={cn(
-                        'flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-150',
-                        canSubmit
-                          ? 'scale-100 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
-                          : 'scale-95 text-foreground-muted/60'
-                      )}
-                    >
-                      <ArrowUp
-                        className={cn('size-4 transition-transform', canSubmit && 'scale-110')}
-                      />
-                    </button>
-                  </div>
-                </div>
-              </div>
+            />
+            {pathCompletionOpen && activePathMention && (
+              <PathCompletionMenu
+                items={pathCompletionItems}
+                activeIndex={activePathCompletionIndex}
+                loading={pathCompletionLoading}
+                error={pathCompletionError}
+                showEmpty={activePathMention.query.length > 0}
+                labels={{
+                  loading: t('common.loading'),
+                  error: t('common.error'),
+                  noResults: t('common.noResults'),
+                }}
+                onActiveIndexChange={setActivePathCompletionIndex}
+                onSelect={(item) => commitPathCompletion(item, activePathMention)}
+              />
+            )}
+            {skillShortcutMenuOpen && activeSkillShortcut && (
+              <SkillShortcutMenu
+                items={filteredSkillShortcutOptions}
+                activeIndex={effectiveSkillShortcutIndex}
+                loading={skillsLoading}
+                showEmpty={activeSkillShortcut.query.length > 0}
+                labels={{
+                  loading: t('common.loading'),
+                  noResults: t('skills.noMatches'),
+                }}
+                onActiveIndexChange={setActiveSkillShortcutIndex}
+                onSelect={(item) => commitSkillShortcut(item.command, activeSkillShortcut)}
+              />
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2 px-2.5 py-2">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label={t('home.addAria')}
+                onClick={() => showAddProjectModal({ strategy: 'local', mode: 'pick' })}
+                className="flex size-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+              >
+                <Plus className="size-4" />
+              </button>
             </div>
+            <div className="flex items-center gap-1.5">
+              <SkillShortcutSelector
+                runtimeId={runtimeId}
+                options={skillShortcutOptions}
+                isLoading={skillsLoading}
+                isError={skillsError}
+                onInsert={commitSkillShortcut}
+                className="h-8 gap-1.5 rounded-full border-0 bg-background-2/60 px-3 text-xs font-medium text-foreground transition-colors hover:bg-background-2"
+              />
+              <button
+                type="button"
+                aria-label={t('home.voiceAria')}
+                aria-busy={voiceInputTriggering}
+                title={t('home.voiceTooltip')}
+                disabled={voiceInputTriggering}
+                onClick={() => void handleVoiceInput()}
+                className={cn(
+                  'flex size-8 shrink-0 items-center justify-center rounded-full transition-colors',
+                  voiceInputTriggering
+                    ? 'bg-primary/10 text-primary hover:bg-primary/15'
+                    : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
+                )}
+              >
+                <Mic className={cn('size-4', voiceInputTriggering && 'animate-pulse')} />
+              </button>
+              <button
+                type="button"
+                aria-label={t('home.submitAria')}
+                disabled={!canSubmit}
+                onClick={() => void handleSubmit()}
+                className={cn(
+                  'flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-150',
+                  canSubmit
+                    ? 'scale-100 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                    : 'scale-95 text-foreground-muted/60'
+                )}
+              >
+                <ArrowUp className={cn('size-4 transition-transform', canSubmit && 'scale-110')} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            <div className="mt-3 flex flex-col gap-2">
-              <div className="overflow-x-auto pb-1">
-                <div ref={runModeAnchorRef} className="flex min-w-max flex-wrap items-center gap-2">
-                  <ProjectSelector
-                    value={selectedProjectId}
-                    onChange={setSelectedProjectId}
-                    allowProjectless
-                    initializeGitRepositoryOnPick
-                    trigger={
-                      <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
-                        <FolderOpen className="size-3.5 text-foreground-muted" />
-                        <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
-                      </ComboboxTrigger>
-                    }
-                  />
-                  <RunHostSelector kind={runHostKind} />
-                  {runMode === 'brainstorm' && (
-                    <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>
-                  )}
-                  {mounted && runMode === 'compare' && (
-                    <Chip icon={GitFork}>
-                      {t('home.compareBranchPolicy', { count: compareRuntimes.length })}
-                    </Chip>
-                  )}
-                  {mounted && runMode === 'team' && (
-                    <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
-                  )}
-                  {mounted && runMode === 'normal' && (
-                    <StrategyChip
-                      strategyKind={effectiveStandardStrategyKind}
-                      disabled={isUnborn}
-                      onChange={setStrategyKind}
-                      ariaLabel={t('home.strategyAria')}
-                      labels={strategyLabels}
-                    />
-                  )}
-                  {mounted && runMode === 'review' && (
-                    <StrategyChip
-                      strategyKind={effectiveReviewStrategyKind}
-                      disabled={isUnborn}
-                      onChange={setReviewStrategyKind}
-                      ariaLabel={t('home.reviewStrategyAria')}
-                      labels={reviewStrategyLabels}
-                    />
-                  )}
-                  <RunModeSelector
-                    mode={runMode}
-                    summary={runModeSummary}
-                    onChange={setRunMode}
-                    anchorRef={runModeAnchorRef}
-                    renderConfiguration={(configurationMode) => (
-                      <ModeConfigurationPanel
-                        mode={configurationMode}
-                        runtimeId={runtimeId}
-                        onRuntimeChange={setRuntimeOverride}
-                        compareRuntimes={compareRuntimes}
-                        onCompareProviderChange={setCompareProvider}
-                        onAddCompareRuntime={addCompareProvider}
-                        onRemoveCompareRuntime={removeCompareProvider}
-                        reviewerRuntime={reviewerRuntime}
-                        onReviewerProviderChange={setReviewerProvider}
-                        teamRuntimes={teamRuntimes}
-                        onTeamProviderChange={setTeamProvider}
-                        agents={userAgents}
-                        slotAgentId={slotAgentId}
-                        onSlotAgentChange={setSlotAgent}
-                        connectionId={connectionId}
-                        className="mt-2 border-t-0 pt-0"
-                      />
-                    )}
-                  />
-                </div>
-              </div>
-            </div>
+      <div className="mt-3 flex flex-col gap-2">
+        <div className="overflow-x-auto pb-1">
+          <div ref={runModeAnchorRef} className="flex min-w-max flex-wrap items-center gap-2">
+            <ProjectSelector
+              value={selectedProjectId}
+              onChange={setSelectedProjectId}
+              allowProjectless
+              initializeGitRepositoryOnPick
+              trigger={
+                <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+                  <FolderOpen className="size-3.5 text-foreground-muted" />
+                  <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
+                </ComboboxTrigger>
+              }
+            />
+            <RunHostSelector kind={runHostKind} />
+            {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
+            {mounted && runMode === 'compare' && (
+              <Chip icon={GitFork}>
+                {t('home.compareBranchPolicy', { count: compareRuntimes.length })}
+              </Chip>
+            )}
+            {mounted && runMode === 'team' && (
+              <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
+            )}
+            {mounted && runMode === 'normal' && (
+              <StrategyChip
+                strategyKind={effectiveStandardStrategyKind}
+                disabled={isUnborn}
+                onChange={setStrategyKind}
+                ariaLabel={t('home.strategyAria')}
+                labels={strategyLabels}
+              />
+            )}
+            {mounted && runMode === 'review' && (
+              <StrategyChip
+                strategyKind={effectiveReviewStrategyKind}
+                disabled={isUnborn}
+                onChange={setReviewStrategyKind}
+                ariaLabel={t('home.reviewStrategyAria')}
+                labels={reviewStrategyLabels}
+              />
+            )}
+            <RunModeSelector
+              mode={runMode}
+              summary={runModeSummary}
+              onChange={setRunMode}
+              anchorRef={runModeAnchorRef}
+              renderConfiguration={(configurationMode) => (
+                <ModeConfigurationPanel
+                  mode={configurationMode}
+                  runtimeId={runtimeId}
+                  onRuntimeChange={setRuntimeOverride}
+                  compareRuntimes={compareRuntimes}
+                  onCompareProviderChange={setCompareProvider}
+                  onAddCompareRuntime={addCompareProvider}
+                  onRemoveCompareRuntime={removeCompareProvider}
+                  reviewerRuntime={reviewerRuntime}
+                  onReviewerProviderChange={setReviewerProvider}
+                  teamRuntimes={teamRuntimes}
+                  onTeamProviderChange={setTeamProvider}
+                  agents={userAgents}
+                  slotAgentId={slotAgentId}
+                  onSlotAgentChange={setSlotAgent}
+                  connectionId={connectionId}
+                  className="mt-2 border-t-0 pt-0"
+                />
+              )}
+            />
           </div>
         </div>
       </div>

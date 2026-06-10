@@ -103,6 +103,7 @@
     "agentManager": "Agent",
     "agents": "Runtime",
     "maas": "MaaS",
+    "usage": "用量",
     "skills": "技能",
     "skillIssues": "{{count}} 个 skill 校验问题",
     "openFirstSkillIssue": "打开第一个 skill 问题",
@@ -614,14 +615,14 @@
   },
   "home": {
     "greeting": {
-      "earlyMorning": "起得真早，{{name}}",
-      "morning": "早，{{name}}",
-      "noon": "中午好，{{name}}",
-      "afternoon": "下午好，{{name}}",
-      "evening": "晚上好，{{name}}",
-      "lateNight": "夜深了，{{name}}"
+      "earlyMorning": "起得真早，{{name}}，趁安静创造点什么",
+      "morning": "早，{{name}}，今天想创造点什么？",
+      "noon": "中午好，{{name}}，有什么新想法？",
+      "afternoon": "下午好，{{name}}，一起创造点什么吧",
+      "evening": "晚上好，{{name}}，今晚想创造点什么？",
+      "lateNight": "夜深了，{{name}}，做完这个就休息"
     },
-    "headline": "今天想做点什么？",
+    "headline": "今天想创造点什么？",
     "promptPlaceholder": "可向 yoda 询问任何事。输入 / 或 $ 使用 skills，输入 @ 提及文件",
     "addAria": "添加",
     "voiceAria": "触发 Typeless 语音输入",
@@ -1512,6 +1513,34 @@
     "copyCommand": "复制命令",
     "searchAgents": "搜索代理…",
     "noAgentInstalled": "未安装代理"
+  },
+  "usage": {
+    "title": "用量统计",
+    "subtitle": "全部任务与会话的累计活动——Token 消耗解析自 agent 会话记录。",
+    "empty": "暂无用量数据，先跑几个 agent 会话吧。",
+    "cards": {
+      "tasksArchived": "已归档任务",
+      "tasksTotal": "共 {{count}} 个",
+      "tokens": "Token 总量",
+      "tokensDetail": "输入 {{input}} · 输出 {{output}} · 缓存 {{cache}}",
+      "tokensNone": "暂无可解析的会话",
+      "lines": "代码变更",
+      "linesDetail": "跨全部任务累计",
+      "activeDays": "活跃天数",
+      "activeDaysDetail": "有 Token 消耗的天数"
+    },
+    "heatmap": {
+      "title": "每日 Token 消耗",
+      "dayTooltip": "{{date}} · {{tokens}} tokens",
+      "emptyDayTooltip": "{{date}} · 无活动",
+      "less": "少",
+      "more": "多"
+    },
+    "byRuntime": "按运行时",
+    "bySource": "按来源",
+    "sessionCount": "{{count}} 个会话",
+    "sourceUnknown": "未记录",
+    "topTasks": "Token 消耗 Top 任务"
   },
   "maas": {
     "title": "MaaS",

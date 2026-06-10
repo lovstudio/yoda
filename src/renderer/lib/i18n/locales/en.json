@@ -103,6 +103,7 @@
     "agentManager": "Agents",
     "agents": "Runtime",
     "maas": "MaaS",
+    "usage": "Usage",
     "skills": "Skills",
     "skillIssues": "{{count}} skill issue(s)",
     "openFirstSkillIssue": "Open first skill issue",
@@ -614,14 +615,14 @@
   },
   "home": {
     "greeting": {
-      "earlyMorning": "Early bird, {{name}}",
-      "morning": "Morning, {{name}}",
-      "noon": "Hi {{name}}",
-      "afternoon": "Afternoon, {{name}}",
-      "evening": "Evening, {{name}}",
-      "lateNight": "Up late, {{name}}"
+      "earlyMorning": "Early start, {{name}} — quiet hours, perfect for creating",
+      "morning": "Morning, {{name}} — what shall we create today?",
+      "noon": "Hi {{name}} — any new ideas?",
+      "afternoon": "Afternoon, {{name}} — let's create something",
+      "evening": "Evening, {{name}} — what shall we make tonight?",
+      "lateNight": "Up late, {{name}} — finish this one, then rest"
     },
-    "headline": "What's next?",
+    "headline": "What shall we create today?",
     "promptPlaceholder": "Ask yoda anything. Type / or $ to use skills, or @ to mention files.",
     "addAria": "Add",
     "voiceAria": "Trigger Typeless voice input",
@@ -1512,6 +1513,34 @@
     "copyCommand": "Copy command",
     "searchAgents": "Search agents...",
     "noAgentInstalled": "No agent installed"
+  },
+  "usage": {
+    "title": "Usage",
+    "subtitle": "Lifetime activity across all tasks and sessions — token burn parsed from agent transcripts.",
+    "empty": "No usage data yet — run some agent sessions first.",
+    "cards": {
+      "tasksArchived": "Tasks archived",
+      "tasksTotal": "{{count}} total",
+      "tokens": "Tokens",
+      "tokensDetail": "In {{input}} · Out {{output}} · Cache {{cache}}",
+      "tokensNone": "No parseable sessions yet",
+      "lines": "Code changed",
+      "linesDetail": "Across all tasks",
+      "activeDays": "Active days",
+      "activeDaysDetail": "Days with token activity"
+    },
+    "heatmap": {
+      "title": "Daily token burn",
+      "dayTooltip": "{{date}} · {{tokens}} tokens",
+      "emptyDayTooltip": "{{date}} · no activity",
+      "less": "Less",
+      "more": "More"
+    },
+    "byRuntime": "By runtime",
+    "bySource": "By source",
+    "sessionCount": "{{count}} sessions",
+    "sourceUnknown": "Untracked",
+    "topTasks": "Top tasks by tokens"
   },
   "maas": {
     "title": "MaaS",
