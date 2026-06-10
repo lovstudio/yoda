@@ -49,6 +49,23 @@ export function routeKey(viewId: ViewId | string, params: Record<string, unknown
 }
 
 /**
+ * Stored task tabs always carry an explicit `tab` target. A tab-less route is
+ * a scope-entry command (resolved to the scope's last-active tab) — persisting
+ * it on the entry would turn every later click on that tab back into a scope
+ * entry, which bounces to the task's internal active tab instead of showing
+ * the overview.
+ */
+function normalizeTabParams(
+  viewId: ViewId | string,
+  params: Record<string, unknown>
+): Record<string, unknown> {
+  if (viewId === 'task' && params.tab === undefined) {
+    return { ...params, tab: { kind: 'overview' } };
+  }
+  return params;
+}
+
+/**
  * The fixed page set of a project scope — every page is a permanent top-level
  * tab (mirrors the former in-panel ToggleGroup). Keep in sync with the
  * ProjectView union in features/projects/stores/project-view.ts.
@@ -142,9 +159,13 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       const tab: AppTabEntry = {
         id: createTabId(),
         viewId: this.navigation.currentViewId,
-        params: toJS(
-          this.navigation.viewParamsStore[this.navigation.currentViewId] ?? {}
-        ) as Record<string, unknown>,
+        params: normalizeTabParams(
+          this.navigation.currentViewId,
+          toJS(this.navigation.viewParamsStore[this.navigation.currentViewId] ?? {}) as Record<
+            string,
+            unknown
+          >
+        ),
       };
       this.tabs.push(tab);
       this.activeTabId = tab.id;
@@ -158,7 +179,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       action(({ viewId, params }) => {
         const tab = this.activeTab;
         if (!tab) return;
-        const nextParams = toJS(params ?? {}) as Record<string, unknown>;
+        const routedParams = toJS(params ?? {}) as Record<string, unknown>;
 
         // Entering a task/project without an explicit target (sidebar click,
         // deep link to the entity itself) restores the scope's last active
@@ -166,10 +187,10 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
         // scope keeps the current tab — a tab-less route is a scope-entry
         // command, never a tab identity.
         const isScopeEntry =
-          (viewId === 'task' && nextParams.tab === undefined) ||
-          (viewId === 'project' && nextParams.view === undefined);
+          (viewId === 'task' && routedParams.tab === undefined) ||
+          (viewId === 'project' && routedParams.view === undefined);
         if (isScopeEntry) {
-          const scope = tabScopeKey(viewId, nextParams);
+          const scope = tabScopeKey(viewId, routedParams);
           const remembered =
             scope === tabScopeKey(tab.viewId, tab.params) ? tab : this._lastActiveInScope(scope);
           if (remembered) {
@@ -182,6 +203,9 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
           }
         }
 
+        // Tabs store the explicit shape; a scope-entry route only falls
+        // through to here on the first visit (no remembered tab to restore).
+        const nextParams = normalizeTabParams(viewId, routedParams);
         const key = routeKey(viewId, nextParams);
 
         // Already on this route — just refresh params.
@@ -257,7 +281,10 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
    * deduplicated). New tabs insert after the last tab of their scope.
    */
   openTab<T extends ViewId>(viewId: T, params?: WrapParams<T>): void {
-    const normalizedParams = toJS(params ?? {}) as Record<string, unknown>;
+    const normalizedParams = normalizeTabParams(
+      viewId,
+      toJS(params ?? {}) as Record<string, unknown>
+    );
     const key = routeKey(viewId, normalizedParams);
     const existing = this.tabs.find((entry) => routeKey(entry.viewId, entry.params) === key);
     log.debug('[tab-sync] openTab', { viewId, params: normalizedParams, dedupe: !!existing });
@@ -441,7 +468,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       .filter(
         (tab): tab is AppTabEntry => typeof tab?.id === 'string' && typeof tab.viewId === 'string'
       )
-      .map((tab) => ({ ...tab, params: tab.params ?? {} }))
+      .map((tab) => ({ ...tab, params: normalizeTabParams(tab.viewId, tab.params ?? {}) }))
       .filter((tab) => {
         const key = routeKey(tab.viewId, tab.params);
         if (seenRoutes.has(key)) return false;
