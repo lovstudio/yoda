@@ -146,6 +146,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   projectsCollapsed = false;
   projectTypeFilter: ProjectTypeFilter = 'all';
   hideProjectsWithoutActiveTasks = false;
+  /** Sort tasks marked "稍后再读" (needsReview) to the bottom of their group. */
+  sortNeedsReviewLast = false;
   /** Persisted order of the secondary nav items; missing keys fall back to default order. */
   navItemOrder: SidebarNavItemKey[] = [...SIDEBAR_NAV_ITEM_KEYS];
   hiddenNavItems = observable.set<SidebarNavItemKey>();
@@ -543,6 +545,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       pinnedCollapsed: this.pinnedCollapsed,
       projectsCollapsed: this.projectsCollapsed,
       hideProjectsWithoutActiveTasks: this.hideProjectsWithoutActiveTasks,
+      sortNeedsReviewLast: this.sortNeedsReviewLast,
       activeWorkspaceId: this.workspaceStore.activeWorkspaceId,
       navItemOrder: [...this.navItemOrder],
       hiddenNavItems: [...this.hiddenNavItems],
@@ -589,6 +592,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (snapshot.hideProjectsWithoutActiveTasks !== undefined) {
       this.hideProjectsWithoutActiveTasks = snapshot.hideProjectsWithoutActiveTasks === true;
     }
+    if (snapshot.sortNeedsReviewLast !== undefined) {
+      this.sortNeedsReviewLast = snapshot.sortNeedsReviewLast === true;
+    }
     if (snapshot.activeWorkspaceId !== undefined) {
       this.workspaceStore.restoreActiveWorkspaceId(snapshot.activeWorkspaceId);
     }
@@ -629,6 +635,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   setHideProjectsWithoutActiveTasks(hidden: boolean): void {
     this.hideProjectsWithoutActiveTasks = hidden;
+  }
+
+  setSortNeedsReviewLast(enabled: boolean): void {
+    this.sortNeedsReviewLast = enabled;
   }
 
   /**
@@ -786,7 +796,23 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     const newTasks = tasks
       .filter((t) => !seen.has(t.data.id))
       .sort((a, b) => this.compareSidebarTasks(a, b));
-    return [...newTasks, ...result];
+    return this.demoteNeedsReviewTasks([...newTasks, ...result]);
+  }
+
+  private taskNeedsReview(task: TaskStore): boolean {
+    return registeredTaskData(task)?.needsReview === true;
+  }
+
+  /**
+   * Stable partition: when `sortNeedsReviewLast` is on, "稍后再读" tasks sink to
+   * the bottom of their group while keeping relative (manual) order intact.
+   */
+  private demoteNeedsReviewTasks(tasks: TaskStore[]): TaskStore[] {
+    if (!this.sortNeedsReviewLast) return tasks;
+    return [
+      ...tasks.filter((t) => !this.taskNeedsReview(t)),
+      ...tasks.filter((t) => this.taskNeedsReview(t)),
+    ];
   }
 
   setTaskOrder(projectId: string, orderedIds: string[]): void {
@@ -799,6 +825,11 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   private compareSidebarTasksBy(a: TaskStore, b: TaskStore, kind: 'created' | 'updated'): number {
+    if (this.sortNeedsReviewLast) {
+      const ra = this.taskNeedsReview(a);
+      const rb = this.taskNeedsReview(b);
+      if (ra !== rb) return ra ? 1 : -1;
+    }
     const ia = getSortInstant(a, kind);
     const ib = getSortInstant(b, kind);
     const d = compareSidebarInstantsDesc(ia, ib);

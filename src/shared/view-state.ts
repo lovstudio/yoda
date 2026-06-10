@@ -127,6 +127,8 @@ export type SidebarSnapshot = {
   pinnedCollapsed?: boolean;
   projectsCollapsed?: boolean;
   hideProjectsWithoutActiveTasks?: boolean;
+  /** Sort tasks marked "稍后再读" (needsReview) to the bottom of their group. */
+  sortNeedsReviewLast?: boolean;
   activeWorkspaceId?: string;
   navItemOrder?: string[];
   hiddenNavItems?: string[];

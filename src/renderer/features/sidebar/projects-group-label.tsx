@@ -1,4 +1,12 @@
-import { ChevronsDownUp, ChevronsUpDown, EyeOff, ListRestart, Settings2, Zap } from 'lucide-react';
+import {
+  ChevronsDownUp,
+  ChevronsUpDown,
+  CircleDot,
+  EyeOff,
+  ListRestart,
+  Settings2,
+  Zap,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -45,6 +53,7 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
     sidebarStore.taskSortBy !== 'created-at' ||
     sidebarStore.taskGroupBy !== 'project' ||
     sidebarStore.hideProjectsWithoutActiveTasks ||
+    sidebarStore.sortNeedsReviewLast ||
     expressMode;
 
   return (
@@ -126,6 +135,22 @@ export const ProjectsSettingsMenuItems = observer(function ProjectsSettingsMenuI
             {t('sidebar.sortByUpdatedAt')}
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <DropdownMenuCheckboxItem
+                checked={sidebarStore.sortNeedsReviewLast}
+                onCheckedChange={(checked) => sidebarStore.setSortNeedsReviewLast(checked === true)}
+              >
+                <CircleDot className="size-3.5" />
+                {t('sidebar.sortNeedsReviewLast')}
+              </DropdownMenuCheckboxItem>
+            }
+          />
+          <TooltipContent side="left" align="start" className="max-w-72">
+            {t('sidebar.sortNeedsReviewLastDescription')}
+          </TooltipContent>
+        </Tooltip>
       </DropdownMenuGroup>
       <DropdownMenuSeparator />
       <DropdownMenuGroup>
