@@ -78,6 +78,12 @@ export class ConversationManagerStore {
         conversationStore.setWorking({ force: true });
         return;
       }
+      if (event.type === 'prompt-submit') {
+        // UserPromptSubmit hook — a new turn started, no matter where the
+        // prompt was typed (terminal TUI or Yoda input box).
+        conversationStore.setWorking({ force: true });
+        return;
+      }
       if (event.type === 'notification') {
         const nt = event.payload.notificationType;
         if (!isAttentionNotification(nt)) return;
@@ -121,6 +127,7 @@ export class ConversationManagerStore {
       const conversationStore = this.conversations.get(event.conversationId);
       if (!conversationStore) return;
       conversationStore.clearWorking();
+      conversationStore.setSessionExited(true);
     });
   }
 
@@ -384,7 +391,8 @@ export class ConversationManagerStore {
     conversationId: string,
     initialSize?: { cols: number; rows: number }
   ): Promise<void> {
-    if (!this.conversations.has(conversationId)) return;
+    const store = this.conversations.get(conversationId);
+    if (!store) return;
     try {
       await rpc.conversations.resumeConversation(
         this.projectId,
@@ -392,6 +400,7 @@ export class ConversationManagerStore {
         conversationId,
         initialSize
       );
+      store.setSessionExited(false);
       if (initialSize) {
         const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
         void rpc.pty.resize(sessionId, initialSize.cols, initialSize.rows);
@@ -426,6 +435,7 @@ export class ConversationManagerStore {
         effectiveSize,
         tmuxOverride
       );
+      store.setSessionExited(false);
       await store.session.reconnect();
       if (effectiveSize) {
         const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
@@ -475,6 +485,12 @@ export class ConversationStore {
   seen = true;
   /** True while the archive flow (pre-archive command + archive) is in flight. */
   isArchiving = false;
+  /**
+   * True after the agent process died on its own (CLI exited — e.g. a Codex
+   * self-update quits the binary). Cleared when a resume/restart respawns it.
+   * Drives the "session exited → reload" affordance in the conversations panel.
+   */
+  sessionExited = false;
   lastNotificationType: NotificationType | null = null;
   /** Human-readable "what is it waiting on" context for `awaiting-input`. */
   pendingActionDescription: string | null = null;
@@ -491,6 +507,8 @@ export class ConversationStore {
       status: observable,
       seen: observable,
       isArchiving: observable,
+      sessionExited: observable,
+      setSessionExited: action,
       lastNotificationType: observable,
       pendingActionDescription: observable,
       setStatus: action,
@@ -596,6 +614,10 @@ export class ConversationStore {
 
   setArchiving(value: boolean) {
     this.isArchiving = value;
+  }
+
+  setSessionExited(value: boolean) {
+    this.sessionExited = value;
   }
 
   dispose() {

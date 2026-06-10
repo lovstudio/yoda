@@ -178,6 +178,16 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
     : undefined;
 
   const onInterruptPress = activeConversation ? () => activeConversation.clearWorking() : undefined;
+
+  // The agent process died on its own (e.g. a Codex self-update exits the CLI).
+  // Resume would be a no-op for the user (the auto-resume guard already ran for
+  // this session), so offer the restart path explicitly.
+  const handleReloadExitedSession = () => {
+    if (!activeConversation) return;
+    const pty = activeConversation.session.pty;
+    const initialSize = pty ? getResumeInitialSize(pty, terminalContainerRef.current) : undefined;
+    void conversations.restartConversation(activeConversation.data.id, initialSize);
+  };
   const { data: homeDir } = useQuery({
     queryKey: ['homeDir'],
     queryFn: () => rpc.app.getHomeDir(),
@@ -280,6 +290,16 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
                       remoteConnectionId={remoteConnectionId}
                       fileLinks={fileLinks}
                     />
+                    {activeConversation?.sessionExited ? (
+                      <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-3 border-t border-border bg-background/95 px-4 py-2.5">
+                        <span className="text-sm text-muted-foreground">
+                          {t('tasks.conversations.sessionExited')}
+                        </span>
+                        <Button size="sm" variant="outline" onClick={handleReloadExitedSession}>
+                          {t('tasks.tabs.reloadConversation')}
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

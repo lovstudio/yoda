@@ -726,7 +726,8 @@
       "emptyDescription": "创建会话以开始使用代理。",
       "sessions": "会话",
       "deleteTitle": "删除会话",
-      "deleteDescription": "“{{title}}” 将被永久删除，此操作无法撤销。"
+      "deleteDescription": "“{{title}}” 将被永久删除，此操作无法撤销。",
+      "sessionExited": "代理进程已退出。"
     },
     "tabs": {
       "close": "关闭标签页",

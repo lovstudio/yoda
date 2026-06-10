@@ -726,7 +726,8 @@
       "emptyDescription": "Create a conversation to start working with an agent.",
       "sessions": "Sessions",
       "deleteTitle": "Delete conversation",
-      "deleteDescription": "\"{{title}}\" will be permanently deleted. This action cannot be undone."
+      "deleteDescription": "\"{{title}}\" will be permanently deleted. This action cannot be undone.",
+      "sessionExited": "The agent process exited."
     },
     "tabs": {
       "close": "Close tab",
