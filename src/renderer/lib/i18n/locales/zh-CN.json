@@ -829,7 +829,6 @@
       "autoApprove": "自动批准",
       "seen": "已读",
       "sessionExited": "会话已退出",
-      "archived": "已归档",
       "tmux": "tmux",
       "running": "运行中",
       "enabled": "已启用",
@@ -873,7 +872,23 @@
       "viewAllPrompts": "查看全部",
       "truncatedPrompts": "已截断 {{count}} 条 prompt",
       "truncatedPrompts_plural": "已截断 {{count}} 条 prompt",
-      "promptsModalTitle": "用户 prompts"
+      "promptsModalTitle": "用户 prompts",
+      "fieldInfo": {
+        "contentSource": "会话内容在磁盘上的来源文件（Claude 的 JSONL 记录 / Codex 的 rollout 文件），转写、统计、命名都从这里读取。",
+        "autoApprove": "是否自动批准 agent 的工具调用与操作，无需逐次人工确认。",
+        "resumeCommand": "在外部终端手动恢复此会话时可直接执行的 CLI 命令。",
+        "agentStatus": "从会话输出推断的 agent 工作状态：空闲、工作中、等待输入等。",
+        "runtimeRunning": "Runtime CLI 进程当前是否在运行。",
+        "tmux": "会话是否托管在 tmux 中。启用后即使窗口关闭，进程仍存活并可重连。",
+        "ptyStatus": "界面与主进程伪终端（PTY）之间的连接状态，影响终端输出是否实时可见。",
+        "ptySessionId": "本次 PTY 连接的内部标识，仅用于调试，应用重启后会变化。",
+        "processStatus": "由进程活动推断的瞬时状态：忙碌、空闲或等待。",
+        "processUpdatedAt": "进程状态（忙碌/空闲/等待）最近一次变化的时间。",
+        "sessionExited": "CLI 进程是否已退出。退出后继续对话会通过恢复命令拉起新进程。",
+        "seen": "你是否已查看过该会话的最新输出，用于侧栏的未读标记。",
+        "updatedAt": "该会话数据库记录最近一次被写入的时间，任何字段变化（标题、状态、归档等）都会刷新。",
+        "lastInteractedAt": "你最近一次在该会话中发送输入或操作终端的时间，区别于记录更新（后台写入也会刷新记录更新）。"
+      }
     },
     "hooks": {
       "title": "Hooks",
@@ -1111,6 +1126,7 @@
       "statuslineNotConfigured": "未配置 statusline",
       "statuslineTemplates": "候选模板",
       "noStatuslineTemplates": "暂无模板，可在 设置 → Agents 中添加",
+      "statuslineCapturedName": "原配置",
       "statuslineSourceLocal": "项目（local）",
       "statuslineSourceProject": "项目",
       "statuslineSourceUser": "全局",
@@ -1166,9 +1182,7 @@
     "sessionPanel": {
       "title": "会话",
       "basic": "基础",
-      "status": "状态",
       "overview": "概要",
-      "harness": "Harness",
       "manageSections": "管理章节",
       "moveSectionUp": "上移",
       "moveSectionDown": "下移",

@@ -1,5 +1,6 @@
 import {
   Copy,
+  Info,
   Loader2,
   Maximize2,
   MoreHorizontal,
@@ -170,9 +171,9 @@ function SessionInfoGroupLabel({ label, divider = false }: { label: string; divi
 }
 
 /**
- * The 基础 blind: immutable meta info only, in three levels — 项目 / 任务 /
- * 会话. Live status moved to `SessionStatusPanel`; title/summary moved to
- * `SessionOverviewPanel`.
+ * The 基础 blind: the session's full fact sheet, ordered static → dynamic in
+ * five segments — 位置 (project/task), 会话身份, 运行状态, Token 用量, 时间线.
+ * Title/summary live in `SessionOverviewPanel`.
  */
 export const SessionInfoPanel = observer(function SessionInfoPanel({
   active,
@@ -182,13 +183,51 @@ export const SessionInfoPanel = observer(function SessionInfoPanel({
   chromeless?: boolean;
 }) {
   const { t } = useTranslation();
-  const { provisionedTask, conversation, fields, isLoading } = useSessionInfoFields(active);
+  const {
+    provisionedTask,
+    conversation,
+    conversationStore,
+    sessionStatus,
+    agentRuntimeStatus,
+    fields,
+    isLoading,
+  } = useSessionInfoFields(active);
+  const { projectId, taskId } = useTaskViewContext();
+  // Per-session token burn, parsed from the provider transcript by the stats
+  // domain. Task-level fetch (cached/shared via react-query) narrowed to this
+  // conversation; null when the runtime has no transcript reader.
+  const { data: taskStats } = useTaskStats(projectId, taskId, { enabled: active });
+  const sessionTokens = conversation
+    ? (taskStats?.conversations.find((item) => item.conversationId === conversation.id)?.tokens ??
+      null)
+    : null;
 
   const branchName = provisionedTask.workspace.git.branchName ?? provisionedTask.taskBranch;
   const yesNo = (value: boolean | null | undefined): string | undefined => {
     if (value == null) return undefined;
     return value ? t('common.yes') : t('common.no');
   };
+  const runningStatus =
+    fields?.running === undefined
+      ? t('tasks.sessionInfo.unknown')
+      : fields.running
+        ? t('tasks.sessionInfo.running')
+        : t('tasks.sessionInfo.notRunning');
+  const tmuxStatus =
+    fields?.running === false
+      ? t('tasks.sessionInfo.notRunning')
+      : fields?.tmuxEnabled === undefined
+        ? t('tasks.sessionInfo.unknown')
+        : fields.tmuxEnabled
+          ? t('tasks.sessionInfo.enabled')
+          : t('tasks.sessionInfo.disabled');
+  const processStatus = fields?.process?.status
+    ? t(`tasks.sessionInfo.processStatus.${fields.process.status}`)
+    : undefined;
+  const agentStatus = agentRuntimeStatus
+    ? t(`tasks.sessionInfo.agentStatus.${agentRuntimeStatus}`)
+    : undefined;
+  const ptyStatus = sessionStatus ? t(`tasks.sessionInfo.ptyStatus.${sessionStatus}`) : undefined;
 
   return (
     <SessionInfoShell
@@ -250,134 +289,77 @@ export const SessionInfoPanel = observer(function SessionInfoPanel({
               value={fields.contentSourcePath}
               mono
               copyable
+              info={t('tasks.sessionInfo.fieldInfo.contentSource')}
             />
             <SessionInfoValue
               label={t('tasks.sessionInfo.autoApprove')}
               value={yesNo(conversation.autoApprove)}
-            />
-            <SessionInfoTimeValue
-              label={t('tasks.sessionInfo.createdAt')}
-              value={conversation.createdAt}
+              info={t('tasks.sessionInfo.fieldInfo.autoApprove')}
             />
             <SessionInfoValue
               label={t('tasks.sessionInfo.resumeCommand')}
               value={fields.resumeCommand}
               mono
               copyable
+              info={t('tasks.sessionInfo.fieldInfo.resumeCommand')}
             />
-          </section>
-        </div>
-      )}
-    </SessionInfoShell>
-  );
-});
-
-/**
- * The 状态 blind: everything live about the session — agent/PTY/process state,
- * visibility flags, and activity timestamps. Split out of 基础 so the meta
- * grid stays immutable while this one churns.
- */
-export const SessionStatusPanel = observer(function SessionStatusPanel({
-  active,
-  chromeless = false,
-}: {
-  active: boolean;
-  chromeless?: boolean;
-}) {
-  const { t } = useTranslation();
-  const { conversation, conversationStore, sessionStatus, agentRuntimeStatus, fields, isLoading } =
-    useSessionInfoFields(active);
-  const { projectId, taskId } = useTaskViewContext();
-  // Per-session token burn, parsed from the provider transcript by the stats
-  // domain. Task-level fetch (cached/shared via react-query) narrowed to this
-  // conversation; null when the runtime has no transcript reader.
-  const { data: taskStats } = useTaskStats(projectId, taskId, { enabled: active });
-  const sessionTokens = conversation
-    ? (taskStats?.conversations.find((item) => item.conversationId === conversation.id)?.tokens ??
-      null)
-    : null;
-
-  const runningStatus =
-    fields?.running === undefined
-      ? t('tasks.sessionInfo.unknown')
-      : fields.running
-        ? t('tasks.sessionInfo.running')
-        : t('tasks.sessionInfo.notRunning');
-  const tmuxStatus =
-    fields?.running === false
-      ? t('tasks.sessionInfo.notRunning')
-      : fields?.tmuxEnabled === undefined
-        ? t('tasks.sessionInfo.unknown')
-        : fields.tmuxEnabled
-          ? t('tasks.sessionInfo.enabled')
-          : t('tasks.sessionInfo.disabled');
-  const processStatus = fields?.process?.status
-    ? t(`tasks.sessionInfo.processStatus.${fields.process.status}`)
-    : undefined;
-  const agentStatus = agentRuntimeStatus
-    ? t(`tasks.sessionInfo.agentStatus.${agentRuntimeStatus}`)
-    : undefined;
-  const ptyStatus = sessionStatus ? t(`tasks.sessionInfo.ptyStatus.${sessionStatus}`) : undefined;
-  const yesNo = (value: boolean | null | undefined): string | undefined => {
-    if (value == null) return undefined;
-    return value ? t('common.yes') : t('common.no');
-  };
-  const hasActivityTimestamps = Boolean(
-    conversation?.updatedAt || conversation?.lastInteractedAt || conversation?.archivedAt
-  );
-
-  return (
-    <SessionInfoShell
-      title={t('tasks.sessionPanel.status')}
-      isLoading={isLoading}
-      chromeless={chromeless}
-    >
-      {!conversation || !fields ? (
-        <EmptyState
-          label={t('tasks.sessionInfo.noSession')}
-          description={t('tasks.sessionInfo.noSessionDescription')}
-        />
-      ) : (
-        <div className="flex min-w-0 flex-col gap-2">
-          <section className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 rounded-md bg-background-1/40 px-2 py-1.5">
-            <SessionInfoValue label={t('tasks.sessionInfo.agentStatusLabel')} value={agentStatus} />
-            <SessionInfoValue label={t('tasks.sessionInfo.runtimeRunning')} value={runningStatus} />
-            <SessionInfoValue label={t('tasks.sessionInfo.tmux')} value={tmuxStatus} />
-            <SessionInfoValue label={t('tasks.sessionInfo.ptyStatusLabel')} value={ptyStatus} />
+            <SessionInfoDivider />
+            <SessionInfoValue
+              label={t('tasks.sessionInfo.agentStatusLabel')}
+              value={agentStatus}
+              info={t('tasks.sessionInfo.fieldInfo.agentStatus')}
+            />
+            <SessionInfoValue
+              label={t('tasks.sessionInfo.runtimeRunning')}
+              value={runningStatus}
+              info={t('tasks.sessionInfo.fieldInfo.runtimeRunning')}
+            />
+            <SessionInfoValue
+              label={t('tasks.sessionInfo.tmux')}
+              value={tmuxStatus}
+              info={t('tasks.sessionInfo.fieldInfo.tmux')}
+            />
+            <SessionInfoValue
+              label={t('tasks.sessionInfo.ptyStatusLabel')}
+              value={ptyStatus}
+              info={t('tasks.sessionInfo.fieldInfo.ptyStatus')}
+            />
             <SessionInfoValue
               label={t('tasks.sessionInfo.ptySessionId')}
               value={conversationStore?.session.sessionId}
               mono
+              copyable
+              info={t('tasks.sessionInfo.fieldInfo.ptySessionId')}
             />
             {fields.process?.pid !== undefined ? (
               <SessionInfoValue
                 label={t('tasks.sessionInfo.processPid')}
                 value={String(fields.process.pid)}
                 mono
+                copyable
               />
             ) : null}
             {processStatus ? (
               <SessionInfoValue
                 label={t('tasks.sessionInfo.processStatusLabel')}
                 value={processStatus}
+                info={t('tasks.sessionInfo.fieldInfo.processStatus')}
               />
             ) : null}
             <SessionInfoTimeValue
               label={t('tasks.sessionInfo.processUpdatedAt')}
               value={fields.process?.updatedAt}
-            />
-            <SessionInfoDivider />
-            <SessionInfoValue
-              label={t('tasks.sessionInfo.seen')}
-              value={yesNo(conversationStore?.seen)}
+              info={t('tasks.sessionInfo.fieldInfo.processUpdatedAt')}
             />
             <SessionInfoValue
               label={t('tasks.sessionInfo.sessionExited')}
               value={yesNo(conversationStore?.sessionExited)}
+              info={t('tasks.sessionInfo.fieldInfo.sessionExited')}
             />
             <SessionInfoValue
-              label={t('tasks.sessionInfo.archived')}
-              value={yesNo(Boolean(conversation.archivedAt))}
+              label={t('tasks.sessionInfo.seen')}
+              value={yesNo(conversationStore?.seen)}
+              info={t('tasks.sessionInfo.fieldInfo.seen')}
             />
             {sessionTokens ? (
               <>
@@ -416,23 +398,25 @@ export const SessionStatusPanel = observer(function SessionStatusPanel({
                 />
               </>
             ) : null}
-            {hasActivityTimestamps ? (
-              <>
-                <SessionInfoDivider />
-                <SessionInfoTimeValue
-                  label={t('tasks.sessionInfo.updatedAt')}
-                  value={conversation.updatedAt}
-                />
-                <SessionInfoTimeValue
-                  label={t('tasks.sessionInfo.lastInteractedAt')}
-                  value={conversation.lastInteractedAt}
-                />
-                <SessionInfoTimeValue
-                  label={t('tasks.sessionInfo.archivedAt')}
-                  value={conversation.archivedAt}
-                />
-              </>
-            ) : null}
+            <SessionInfoDivider />
+            <SessionInfoTimeValue
+              label={t('tasks.sessionInfo.createdAt')}
+              value={conversation.createdAt}
+            />
+            <SessionInfoTimeValue
+              label={t('tasks.sessionInfo.updatedAt')}
+              value={conversation.updatedAt}
+              info={t('tasks.sessionInfo.fieldInfo.updatedAt')}
+            />
+            <SessionInfoTimeValue
+              label={t('tasks.sessionInfo.lastInteractedAt')}
+              value={conversation.lastInteractedAt}
+              info={t('tasks.sessionInfo.fieldInfo.lastInteractedAt')}
+            />
+            <SessionInfoTimeValue
+              label={t('tasks.sessionInfo.archivedAt')}
+              value={conversation.archivedAt}
+            />
           </section>
         </div>
       )}
@@ -2082,16 +2066,54 @@ function buildSessionSummaryDebugReport(snapshot: SessionSummarySnapshot): strin
   return lines.join('\n');
 }
 
+/**
+ * Label cell shared by the info rows. `info` adds a hover-revealed Info icon
+ * that opens a click popover explaining what the field means.
+ */
+function SessionInfoLabelCell({ label, info }: { label: string; info?: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-0.5 text-foreground-passive">
+      <span className="truncate" title={label}>
+        {label}
+      </span>
+      {info ? (
+        <Popover>
+          <PopoverTrigger
+            render={
+              <button
+                type="button"
+                className="shrink-0 opacity-0 hover:text-foreground group-hover/info-row:opacity-100 data-popup-open:opacity-100"
+                aria-label={label}
+              >
+                <Info className="size-3" aria-hidden="true" />
+              </button>
+            }
+          />
+          <PopoverContent
+            side="bottom"
+            align="start"
+            className="w-60 p-2.5 text-xs leading-relaxed text-foreground-muted"
+          >
+            {info}
+          </PopoverContent>
+        </Popover>
+      ) : null}
+    </span>
+  );
+}
+
 function SessionInfoValue({
   label,
   value,
   mono = false,
   copyable = false,
+  info,
 }: {
   label: string;
   value?: string;
   mono?: boolean;
   copyable?: boolean;
+  info?: string;
 }) {
   const { t } = useTranslation();
   if (!value) return null;
@@ -2110,9 +2132,7 @@ function SessionInfoValue({
   };
   return (
     <div className="group/info-row col-span-2 grid min-w-0 grid-cols-subgrid items-center gap-x-2 text-[11px] leading-tight">
-      <span className="truncate text-foreground-passive" title={label}>
-        {label}
-      </span>
+      <SessionInfoLabelCell label={label} info={info} />
       <span className="flex min-w-0 items-center gap-1">
         <span
           className={cn('min-w-0 truncate text-foreground-muted', mono && 'font-mono')}
@@ -2138,13 +2158,19 @@ function SessionInfoValue({
   );
 }
 
-function SessionInfoTimeValue({ label, value }: { label: string; value?: string | null }) {
+function SessionInfoTimeValue({
+  label,
+  value,
+  info,
+}: {
+  label: string;
+  value?: string | null;
+  info?: string;
+}) {
   if (!value) return null;
   return (
-    <div className="col-span-2 grid min-w-0 grid-cols-subgrid items-center gap-x-2 text-[11px] leading-tight">
-      <span className="truncate text-foreground-passive" title={label}>
-        {label}
-      </span>
+    <div className="group/info-row col-span-2 grid min-w-0 grid-cols-subgrid items-center gap-x-2 text-[11px] leading-tight">
+      <SessionInfoLabelCell label={label} info={info} />
       <span className="min-w-0 truncate text-foreground-muted" title={value}>
         <RelativeTime value={value} />
       </span>

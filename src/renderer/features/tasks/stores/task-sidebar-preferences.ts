@@ -1,7 +1,10 @@
 import { makeAutoObservable } from 'mobx';
 import type { TaskSidebarViewSnapshot, TaskViewSnapshot } from '@shared/view-state';
 import {
+  isSessionPanelUnit,
   isSidebarTabGroup,
+  SESSION_PANEL_UNITS,
+  type SessionPanelUnit,
   type SidebarTab,
   type SidebarTabGroup,
 } from '@renderer/features/tasks/types';
@@ -79,7 +82,10 @@ function resolveSessionPanelOpenSectionIds(
   sharedSnapshot: TaskSidebarViewSnapshot | null
 ): string[] {
   if (isStringArray(sharedSnapshot?.sessionPanelOpenSectionIds)) {
-    return normalizeOpenSectionIds(sharedSnapshot.sessionPanelOpenSectionIds);
+    // The legacy "status" blind has been folded into the Basic blind.
+    return normalizeOpenSectionIds(
+      sharedSnapshot.sessionPanelOpenSectionIds.map((id) => (id === 'status' ? 'basic' : id))
+    );
   }
   return [...DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS];
 }
@@ -106,10 +112,36 @@ function resolveDisclosureOpenIds(sharedSnapshot: TaskSidebarViewSnapshot | null
   return [];
 }
 
+/**
+ * Normalizes a persisted unit order: drop unknown ids and duplicates, then
+ * append any units missing from the snapshot (new units added in later app
+ * versions surface in their default position at the end of the known ones).
+ */
+function normalizeUnitOrder(value: unknown): SessionPanelUnit[] {
+  const order = (isStringArray(value) ? value : []).filter(isSessionPanelUnit);
+  const seen = new Set(order);
+  return [...new Set(order), ...SESSION_PANEL_UNITS.filter((unit) => !seen.has(unit))];
+}
+
+function resolveSessionPanelUnitOrder(
+  sharedSnapshot: TaskSidebarViewSnapshot | null
+): SessionPanelUnit[] {
+  return normalizeUnitOrder(sharedSnapshot?.sessionPanelUnitOrder);
+}
+
+function resolveSessionPanelHiddenUnits(
+  sharedSnapshot: TaskSidebarViewSnapshot | null
+): SessionPanelUnit[] {
+  if (!isStringArray(sharedSnapshot?.sessionPanelHiddenUnits)) return [];
+  return [...new Set(sharedSnapshot.sessionPanelHiddenUnits.filter(isSessionPanelUnit))];
+}
+
 export class TaskSidebarPreferenceStore {
   sidebarTab: SidebarTab = DEFAULT_SIDEBAR_TAB;
   isSidebarCollapsed: boolean = DEFAULT_SIDEBAR_COLLAPSED;
   sessionPanelOpenSectionIds: string[] = [...DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS];
+  sessionPanelUnitOrder: SessionPanelUnit[] = [...SESSION_PANEL_UNITS];
+  sessionPanelHiddenUnits: SessionPanelUnit[] = [];
   disclosureOpenIds: string[] = [];
   openSidebarGroups: SidebarTabGroup[] = [];
   private isHydrated: boolean = false;
@@ -123,6 +155,8 @@ export class TaskSidebarPreferenceStore {
       sidebarTab: this.sidebarTab,
       isSidebarCollapsed: this.isSidebarCollapsed,
       sessionPanelOpenSectionIds: [...this.sessionPanelOpenSectionIds],
+      sessionPanelUnitOrder: [...this.sessionPanelUnitOrder],
+      sessionPanelHiddenUnits: [...this.sessionPanelHiddenUnits],
       disclosureOpenIds: [...this.disclosureOpenIds],
       openSidebarGroups: [...this.openSidebarGroups],
     };
@@ -137,6 +171,8 @@ export class TaskSidebarPreferenceStore {
     this.sidebarTab = resolveSidebarTab(sharedSnapshot, legacySnapshot);
     this.isSidebarCollapsed = resolveSidebarCollapsed(sharedSnapshot, legacySnapshot);
     this.sessionPanelOpenSectionIds = resolveSessionPanelOpenSectionIds(sharedSnapshot);
+    this.sessionPanelUnitOrder = resolveSessionPanelUnitOrder(sharedSnapshot);
+    this.sessionPanelHiddenUnits = resolveSessionPanelHiddenUnits(sharedSnapshot);
     this.disclosureOpenIds = resolveDisclosureOpenIds(sharedSnapshot);
     this.openSidebarGroups = resolveOpenSidebarGroups(sharedSnapshot);
     this.isHydrated = true;
@@ -180,6 +216,26 @@ export class TaskSidebarPreferenceStore {
     const next = normalizeOpenSectionIds(sectionIds);
     if (arraysEqual(this.sessionPanelOpenSectionIds, next)) return;
     this.sessionPanelOpenSectionIds = next;
+    this.persist();
+  }
+
+  setSessionPanelUnitHidden(unit: SessionPanelUnit, hidden: boolean): void {
+    const isHidden = this.sessionPanelHiddenUnits.includes(unit);
+    if (hidden === isHidden) return;
+    this.sessionPanelHiddenUnits = hidden
+      ? [...this.sessionPanelHiddenUnits, unit]
+      : this.sessionPanelHiddenUnits.filter((u) => u !== unit);
+    this.persist();
+  }
+
+  /** Moves a unit one slot up (-1) or down (+1) in the panel order. */
+  moveSessionPanelUnit(unit: SessionPanelUnit, delta: -1 | 1): void {
+    const order = [...this.sessionPanelUnitOrder];
+    const index = order.indexOf(unit);
+    const target = index + delta;
+    if (index === -1 || target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    this.sessionPanelUnitOrder = order;
     this.persist();
   }
 

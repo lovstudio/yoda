@@ -18,15 +18,68 @@ export type SessionPanelSection =
   | 'conversation'
   | 'transcript'
   | 'tasks'
-  | 'summary-global'
-  // Harness blinds (the agent runtime view), folded into the same accordion.
-  | 'llm-context'
+  | 'overview'
+  // Harness blinds (the agent runtime view), migrated from the retired
+  // harness tab into the same accordion as first-class sections.
   | 'memory'
   | 'tools'
   | 'mcp-servers'
   | 'skills'
   | 'agents-available'
   | 'hooks';
+
+/**
+ * Orderable/hideable units of the Session panel accordion, in default order.
+ * Units and sections are the same set — every blind is individually
+ * manageable, including the harness ones.
+ */
+export const SESSION_PANEL_UNITS = [
+  'basic',
+  'conversation',
+  'transcript',
+  'tasks',
+  'memory',
+  'tools',
+  'mcp-servers',
+  'skills',
+  'agents-available',
+  'hooks',
+  'overview',
+] as const;
+
+export type SessionPanelUnit = (typeof SESSION_PANEL_UNITS)[number];
+
+export function isSessionPanelUnit(value: unknown): value is SessionPanelUnit {
+  return SESSION_PANEL_UNITS.includes(value as SessionPanelUnit);
+}
+
+/** i18n label key for a Session panel unit (matches the blind titles). */
+export function sessionPanelUnitLabelKey(unit: SessionPanelUnit): string {
+  switch (unit) {
+    case 'basic':
+      return 'tasks.sessionPanel.basic';
+    case 'conversation':
+      return 'tasks.sessionPanel.conversation';
+    case 'transcript':
+      return 'tasks.sessionPanel.transcript';
+    case 'tasks':
+      return 'tasks.sessionPanel.tasks';
+    case 'memory':
+      return 'tasks.panel.memory';
+    case 'tools':
+      return 'tasks.panel.tools';
+    case 'mcp-servers':
+      return 'tasks.panel.mcpServers';
+    case 'skills':
+      return 'tasks.panel.skills';
+    case 'agents-available':
+      return 'tasks.panel.agentsAvailable';
+    case 'hooks':
+      return 'tasks.sessionPanel.hooks';
+    case 'overview':
+      return 'tasks.sessionPanel.overview';
+  }
+}
 
 /**
  * Legacy session-family tabs that have been folded into the single Session

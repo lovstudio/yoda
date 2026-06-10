@@ -11,7 +11,7 @@ import { observer } from 'mobx-react-lite';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
-import { HarnessSections } from '../context-panel';
+import { HarnessSection } from '../context-panel';
 import {
   SessionInfoPanel,
   SessionOverviewAIButton,
@@ -39,9 +39,9 @@ import {
 /**
  * Merged "Session" sidebar surface — the 百叶窗 (window-blind) accordion that
  * folds the session / conversation / task / naming tabs into one panel, plus
- * the agent-runtime (harness) blinds: memory, tools, MCP, skills, hooks. Each
- * blind hosts an existing panel rendered in `chromeless` mode so the blind
- * trigger is the only header.
+ * the agent-runtime (harness) blinds: memory, tools, MCP, skills, agents,
+ * hooks. Each blind hosts an existing panel rendered in `chromeless` mode so
+ * the blind trigger is the only header.
  */
 export const SessionPanel = observer(function SessionPanel() {
   const { t } = useTranslation();
@@ -111,8 +111,13 @@ export const SessionPanel = observer(function SessionPanel() {
             title={t('tasks.sessionPanel.tasks')}
           />
         );
-      case 'harness':
-        return <HarnessSections key={unit} active={panelActive} />;
+      case 'memory':
+      case 'tools':
+      case 'mcp-servers':
+      case 'skills':
+      case 'agents-available':
+      case 'hooks':
+        return <HarnessSection key={unit} id={unit} active={panelActive} />;
       case 'overview':
         // 概要 (title + summary) defaults LAST so it can stay open and hang at
         // the bottom edge while the user works through any conversation.

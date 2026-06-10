@@ -829,7 +829,6 @@
       "autoApprove": "Auto approve",
       "seen": "Seen",
       "sessionExited": "Session exited",
-      "archived": "Archived",
       "tmux": "tmux",
       "running": "Running",
       "enabled": "Enabled",
@@ -873,7 +872,23 @@
       "viewAllPrompts": "View all",
       "truncatedPrompts": "{{count}} truncated prompt",
       "truncatedPrompts_plural": "{{count}} truncated prompts",
-      "promptsModalTitle": "User prompts"
+      "promptsModalTitle": "User prompts",
+      "fieldInfo": {
+        "contentSource": "On-disk source file for this session's content (Claude JSONL transcript / Codex rollout). Transcript, stats, and naming all read from it.",
+        "autoApprove": "Whether agent tool calls are approved automatically, without per-call confirmation.",
+        "resumeCommand": "CLI command you can run in an external terminal to resume this session manually.",
+        "agentStatus": "Agent working state inferred from session output: idle, working, awaiting input, etc.",
+        "runtimeRunning": "Whether the runtime CLI process is currently running.",
+        "tmux": "Whether the session is hosted in tmux. If enabled, the process survives window close and can be reattached.",
+        "ptyStatus": "Connection state between the UI and the main-process pseudo terminal (PTY); affects live terminal output.",
+        "ptySessionId": "Internal identifier of this PTY connection, for debugging only; changes after app restart.",
+        "processStatus": "Momentary state inferred from process activity: busy, idle, or waiting.",
+        "processUpdatedAt": "When the process state (busy/idle/waiting) last changed.",
+        "sessionExited": "Whether the CLI process has exited. Continuing the conversation spawns a new process via the resume command.",
+        "seen": "Whether you have viewed this session's latest output; drives the unread marker in the sidebar.",
+        "updatedAt": "When this session's database record was last written. Any field change (title, status, archive, ...) refreshes it.",
+        "lastInteractedAt": "When you last sent input or interacted with the terminal in this session — unlike record updated, which background writes also refresh."
+      }
     },
     "hooks": {
       "title": "Hooks",
@@ -1111,6 +1126,7 @@
       "statuslineNotConfigured": "No statusline configured",
       "statuslineTemplates": "Templates",
       "noStatuslineTemplates": "No templates yet — add them in Settings → Agents",
+      "statuslineCapturedName": "Original",
       "statuslineSourceLocal": "Project (local)",
       "statuslineSourceProject": "Project",
       "statuslineSourceUser": "Global",
@@ -1166,9 +1182,7 @@
     "sessionPanel": {
       "title": "Session",
       "basic": "Basic",
-      "status": "Status",
       "overview": "Overview",
-      "harness": "Harness",
       "manageSections": "Manage sections",
       "moveSectionUp": "Move up",
       "moveSectionDown": "Move down",
