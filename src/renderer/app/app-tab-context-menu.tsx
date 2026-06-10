@@ -1,4 +1,15 @@
-import { AppWindow, Archive, Link, PanelRight, RefreshCw } from 'lucide-react';
+import {
+  AppWindow,
+  Archive,
+  ArrowRightToLine,
+  CopyX,
+  Link,
+  ListX,
+  PanelRight,
+  Pencil,
+  RefreshCw,
+  X,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { Fragment, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -19,26 +30,34 @@ import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { openTaskTabInWindow } from '@renderer/features/tasks/tabs/tab-meta';
 import { FilePathMenuItems, type FilePathTarget } from '@renderer/lib/components/file-path-actions';
+import { APP_SHORTCUTS } from '@renderer/lib/hooks/useKeyboardShortcuts';
+import { showModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
-import type { AppTabEntry } from '@renderer/lib/stores/app-tabs-store';
+import { isIndexTab, type AppTabEntry } from '@renderer/lib/stores/app-tabs-store';
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuTrigger,
 } from '@renderer/lib/ui/context-menu';
 import { log } from '@renderer/utils/logger';
 
 /**
  * Right-click menu for top-level app tabs, built as sections separated
- * automatically:
+ * automatically. Section order follows frequency, with the destructive
+ * lifecycle action isolated at the bottom:
  *
- *   1. placement   — open in side pane / open in window
- *   2. actions     — reload session, copy Yoda link
- *   3. archive     — archive session (+ skip-pre variant)
- *   4. file        — path actions for file/diff tabs
- *   5. close group — close / close others / close right / close all (scope-wide)
+ *   conversation tabs: actions (rename / copy link)
+ *                      → placement (pin to sidebar / open in window)
+ *                      → close group → lifecycle (reload / archive, always last)
+ *   file/diff tabs:    placement → path actions → close group
+ *   every other tab:   close group only
+ *
+ * Close-group items render conditionally (no "close others" without others,
+ * no "close to the right" at the rightmost tab) and operate scope-wide on
+ * the visible strip; index tabs are never closed.
  */
 export const AppTabContextMenu = observer(function AppTabContextMenu({
   tab,
@@ -68,12 +87,14 @@ export const AppTabContextMenu = observer(function AppTabContextMenu({
   );
 });
 
-type Translate = Parameters<typeof copyTaskLink>[1];
+export type Translate = Parameters<typeof copyTaskLink>[1];
 
 function buildTabSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
   if (tab.viewId === 'task') return buildTaskSections(tab, t);
-  if (tab.viewId === 'file') return [buildProjectFileSection(tab)];
-  return [];
+  if (tab.viewId === 'file') {
+    return [buildProjectFileSection(tab), buildCloseSection(tab, t)];
+  }
+  return [buildCloseSection(tab, t)];
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +104,10 @@ function buildTabSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
 function buildTaskSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
   const { projectId, taskId } = tab.params as { projectId?: string; taskId?: string };
   const target = (tab.params.tab as TaskWindowTabTarget | undefined) ?? { kind: 'overview' };
-  if (!projectId || !taskId || target.kind === 'overview') return [];
+  if (!projectId || !taskId) return [];
+  // The index tab itself isn't closeable, but it's a natural place to sweep
+  // the rest of the strip from.
+  if (target.kind === 'overview') return [buildCloseSection(tab, t)];
 
   const provisioned = asProvisioned(getTaskStore(projectId, taskId));
 
@@ -116,63 +140,14 @@ function buildTaskSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
   );
 
   if (target.kind === 'conversation') {
-    const conversationId = target.conversationId;
-
-    const actions: ReactNode[] = [];
-    if (provisioned) {
-      actions.push(
-        <ContextMenuItem
-          key="reload"
-          className="whitespace-nowrap"
-          onClick={() => void provisioned.conversations.restartConversation(conversationId)}
-        >
-          <RefreshCw className="size-4" />
-          {t('tasks.tabs.reloadConversation')}
-        </ContextMenuItem>
-      );
-    }
-    actions.push(
-      <ContextMenuItem
-        key="copy-link"
-        className="whitespace-nowrap"
-        onClick={() =>
-          void copyTaskLink(buildTaskDeepLink({ projectId, taskId, conversationId }), t)
-        }
-      >
-        <Link className="size-4" />
-        {t('tasks.tabs.copyYodaLink')}
-      </ContextMenuItem>
+    const [actions, lifecycle] = buildConversationSections(
+      provisioned,
+      projectId,
+      taskId,
+      target.conversationId,
+      t
     );
-
-    const archive: ReactNode[] = [];
-    if (provisioned) {
-      // Archiving always runs the configured pre-archive command (when set) —
-      // the plain close (×) is the no-command path.
-      const archiveConversation = () => {
-        if (provisioned.conversations.conversations.get(conversationId)?.isArchiving) return;
-        void (async () => {
-          try {
-            await archiveConversationWithPreCommand(projectId, taskId, conversationId);
-            await archiveTaskIfNoConversationsLeft(projectId, taskId);
-          } catch (error) {
-            log.warn('AppTabContextMenu: archive conversation failed', {
-              projectId,
-              taskId,
-              conversationId,
-              error,
-            });
-          }
-        })();
-      };
-      archive.push(
-        <ContextMenuItem key="archive" className="whitespace-nowrap" onClick={archiveConversation}>
-          <Archive className="size-4" />
-          {t('tasks.tabs.archiveConversation')}
-        </ContextMenuItem>
-      );
-    }
-
-    return [placement, actions, archive];
+    return [actions ?? [], placement, buildCloseSection(tab, t), lifecycle ?? []];
   }
 
   // file / diff target — path actions based on the task worktree.
@@ -186,7 +161,169 @@ function buildTaskSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
       ]
     : [];
 
-  return [placement, file];
+  return [placement, file, buildCloseSection(tab, t)];
+}
+
+/**
+ * Scope-wide close actions for the visible strip. Items appear only when they
+ * would actually do something; the ⌘W hint shows only on the active tab since
+ * the shortcut targets the active tab, not the right-clicked one.
+ */
+function buildCloseSection(tab: AppTabEntry, t: Translate): ReactNode[] {
+  const visible = appState.appTabs.visibleTabs;
+  const index = visible.findIndex((entry) => entry.id === tab.id);
+  const closeable = visible.filter((entry) => !isIndexTab(entry));
+  const others = closeable.filter((entry) => entry.id !== tab.id);
+  const toRight =
+    index === -1 ? [] : visible.slice(index + 1).filter((entry) => !isIndexTab(entry));
+
+  const closeHotkey =
+    tab.id === appState.appTabs.activeTabId
+      ? formatHotkey(APP_SHORTCUTS.tabClose.defaultHotkey)
+      : undefined;
+
+  const items: ReactNode[] = [];
+  if (!isIndexTab(tab)) {
+    items.push(
+      <ContextMenuItem
+        key="close"
+        className="whitespace-nowrap"
+        onClick={() => closeTaskTopTab(tab)}
+      >
+        <X className="size-4" />
+        {t('tasks.tabs.close')}
+        {closeHotkey ? <ContextMenuShortcut>{closeHotkey}</ContextMenuShortcut> : null}
+      </ContextMenuItem>
+    );
+  }
+  if (others.length > 0) {
+    items.push(
+      <ContextMenuItem
+        key="close-others"
+        className="whitespace-nowrap"
+        onClick={() => others.forEach(closeTaskTopTab)}
+      >
+        <ListX className="size-4" />
+        {t('tasks.tabs.closeOthers')}
+      </ContextMenuItem>
+    );
+  }
+  if (toRight.length > 0) {
+    items.push(
+      <ContextMenuItem
+        key="close-right"
+        className="whitespace-nowrap"
+        onClick={() => toRight.forEach(closeTaskTopTab)}
+      >
+        <ArrowRightToLine className="size-4" />
+        {t('tasks.tabs.closeToRight')}
+      </ContextMenuItem>
+    );
+  }
+  if (closeable.length > 1) {
+    items.push(
+      <ContextMenuItem
+        key="close-all"
+        className="whitespace-nowrap"
+        onClick={() => closeable.forEach(closeTaskTopTab)}
+      >
+        <CopyX className="size-4" />
+        {t('tasks.tabs.closeAll')}
+      </ContextMenuItem>
+    );
+  }
+  return items;
+}
+
+/** 'Mod+W' → '⌘W', matching the command palette's hotkey display. */
+function formatHotkey(hotkey: string | undefined): string | undefined {
+  return hotkey?.replace('Mod', '⌘').replace('Shift', '⇧').replace('Alt', '⌥').replace(/\+/g, '');
+}
+
+/**
+ * Conversation menu sections (actions + lifecycle), shared between the
+ * top-level tab strip and the task sidebar's pinned chips.
+ */
+export function buildConversationSections(
+  provisioned: ProvisionedTask | undefined,
+  projectId: string,
+  taskId: string,
+  conversationId: string,
+  t: Translate
+): ReactNode[][] {
+  const actions: ReactNode[] = [];
+  if (provisioned) {
+    actions.push(
+      <ContextMenuItem
+        key="rename"
+        className="whitespace-nowrap"
+        onClick={() =>
+          showModal('renameConversationModal', {
+            projectId,
+            taskId,
+            conversationId,
+            currentTitle:
+              provisioned.conversations.conversations.get(conversationId)?.data.title ?? '',
+          })
+        }
+      >
+        <Pencil className="size-4" />
+        {t('tasks.tabs.renameConversation')}
+      </ContextMenuItem>
+    );
+  }
+  actions.push(
+    <ContextMenuItem
+      key="copy-link"
+      className="whitespace-nowrap"
+      onClick={() => void copyTaskLink(buildTaskDeepLink({ projectId, taskId, conversationId }), t)}
+    >
+      <Link className="size-4" />
+      {t('tasks.tabs.copyYodaLink')}
+    </ContextMenuItem>
+  );
+
+  // Lifecycle section: reload (rare recovery action) and archive — both act
+  // on the session as a whole, kept at the bottom away from the daily items.
+  const lifecycle: ReactNode[] = [];
+  if (provisioned) {
+    lifecycle.push(
+      <ContextMenuItem
+        key="reload"
+        className="whitespace-nowrap"
+        onClick={() => void provisioned.conversations.restartConversation(conversationId)}
+      >
+        <RefreshCw className="size-4" />
+        {t('tasks.tabs.reloadConversation')}
+      </ContextMenuItem>
+    );
+    // Archiving always runs the configured pre-archive command (when set) —
+    // the plain close (×) is the no-command path.
+    const archiveConversation = () => {
+      if (provisioned.conversations.conversations.get(conversationId)?.isArchiving) return;
+      void (async () => {
+        try {
+          await archiveConversationWithPreCommand(projectId, taskId, conversationId);
+          await archiveTaskIfNoConversationsLeft(projectId, taskId);
+        } catch (error) {
+          log.warn('AppTabContextMenu: archive conversation failed', {
+            projectId,
+            taskId,
+            conversationId,
+            error,
+          });
+        }
+      })();
+    };
+    lifecycle.push(
+      <ContextMenuItem key="archive" className="whitespace-nowrap" onClick={archiveConversation}>
+        <Archive className="size-4" />
+        {t('tasks.tabs.archiveConversation')}
+      </ContextMenuItem>
+    );
+  }
+
+  return [actions, lifecycle];
 }
 
 /**
@@ -247,7 +384,7 @@ function buildProjectFileSection(tab: AppTabEntry): ReactNode[] {
   ];
 }
 
-function fileTarget(
+export function fileTarget(
   rootPath: string,
   relativePath: string,
   sshConnectionId: string | null | undefined

@@ -87,6 +87,24 @@ export function FileActionsDropdown({
   );
 }
 
+/**
+ * Floating file-actions pill for full-bleed editor views (Monaco hosts),
+ * mirroring the markdown preview's top-right toolbar chrome.
+ */
+export function FileActionsOverlay({ filePath }: { filePath: string }) {
+  const provisioned = useProvisionedTask();
+  const sourcePath = `${provisioned.path.replace(/\/+$/, '')}/${filePath}`;
+
+  return (
+    <div className="absolute right-3 top-3 z-10 flex h-7 items-center overflow-hidden rounded-lg border border-border bg-background">
+      <FileActionsDropdown
+        sourcePath={sourcePath}
+        className="flex h-full w-auto items-center justify-center rounded-none px-2"
+      />
+    </div>
+  );
+}
+
 export function FileActionsContextMenu({
   sourcePath,
   kind = 'file',

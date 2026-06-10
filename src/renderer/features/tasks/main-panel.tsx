@@ -18,6 +18,7 @@ import { Input } from '@renderer/lib/ui/input';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
+import { FileActionsDropdown, FileActionsOverlay } from './components/file-actions';
 import { ConversationsPanel } from './conversations/conversations-panel';
 import { DiffView } from './diff-view/main-panel/diff-view';
 import { EditorMainPanel } from './editor/editor-main-panel';
@@ -353,9 +354,7 @@ const TaskUpperSplit = observer(function TaskUpperSplit() {
         // min() lets narrow windows clamp the sidebar via CSS without
         // touching the stored px — it springs back when space returns.
         style={
-          isSidebarMaximized
-            ? undefined
-            : { width: isCollapsed ? 0 : `min(${sidebarPx}px, 50%)` }
+          isSidebarMaximized ? undefined : { width: isCollapsed ? 0 : `min(${sidebarPx}px, 50%)` }
         }
       >
         <TaskSidebar />
@@ -411,8 +410,9 @@ export const TaskActiveTabContent = observer(function TaskActiveTabContent() {
         className="absolute inset-0"
         style={{ display: renderer === 'monaco' ? 'flex' : 'none' }}
       />
-      {/* SVG source toggle — floats over the Monaco host when editing an SVG file */}
-      {renderer === 'monaco' && <SvgSourceToggleOverlay />}
+      {/* Floating toolbar over the Monaco host — preview toggle for SVG source,
+          file actions for every code file (mirrors the markdown preview). */}
+      {renderer === 'monaco' && <MonacoFileToolbar />}
 
       <Activity mode={renderer === 'overview' ? 'visible' : 'hidden'}>
         <OverviewPanel />
@@ -434,16 +434,31 @@ export const TaskActiveTabContent = observer(function TaskActiveTabContent() {
 });
 
 /**
+ * Floats over the Monaco host: SVG source files get a preview/source toggle,
+ * every code file gets the file-actions dropdown — same top-right chrome as
+ * the markdown preview.
+ */
+const MonacoFileToolbar = observer(function MonacoFileToolbar() {
+  const { taskView } = useProvisionedTask();
+  const activeTab = taskView.tabManager.activeFileEntry;
+
+  if (!activeTab) return null;
+  if (activeTab.renderer.kind === 'svg-source') return <SvgSourceToggleOverlay />;
+  return <FileActionsOverlay filePath={activeTab.path} />;
+});
+
+/**
  * Shown over the Monaco host when the active tab is an SVG file in source mode.
  * Lets the user toggle back to the SVG preview renderer.
  */
 const SvgSourceToggleOverlay = observer(function SvgSourceToggleOverlay() {
   const { t } = useTranslation();
-  const { taskView } = useProvisionedTask();
-  const { tabManager } = taskView;
+  const provisioned = useProvisionedTask();
+  const { tabManager } = provisioned.taskView;
   const activeTab = tabManager.activeFileEntry;
 
   if (!activeTab || activeTab.renderer.kind !== 'svg-source') return null;
+  const sourcePath = `${provisioned.path.replace(/\/+$/, '')}/${activeTab.path}`;
 
   return (
     <ToggleGroup
@@ -462,6 +477,10 @@ const SvgSourceToggleOverlay = observer(function SvgSourceToggleOverlay() {
       <ToggleGroupItem value="svg-source" aria-label={t('editor.editSource')}>
         <Pencil className="h-3.5 w-3.5" />
       </ToggleGroupItem>
+      <FileActionsDropdown
+        sourcePath={sourcePath}
+        className="flex h-full w-auto items-center justify-center rounded-none border-l border-border px-2"
+      />
     </ToggleGroup>
   );
 });

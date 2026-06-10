@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef } from 'react';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
+import { FileActionsOverlay } from '@renderer/features/tasks/components/file-actions';
 import type { ConversationStore } from '@renderer/features/tasks/conversations/conversation-manager';
 import { getResumeInitialSize } from '@renderer/features/tasks/conversations/conversations-panel';
 import { FileDiffView } from '@renderer/features/tasks/diff-view/main-panel/file-diff-view';
@@ -63,7 +64,12 @@ const SidebarPinnedFile = observer(function SidebarPinnedFile({ file }: { file: 
   switch (file.renderer.kind) {
     case 'text':
     case 'svg-source':
-      return <LeasedMonacoEditor filePath={file.path} />;
+      return (
+        <LeasedMonacoEditor
+          filePath={file.path}
+          overlay={<FileActionsOverlay filePath={file.path} />}
+        />
+      );
     case 'markdown':
       return <MarkdownEditorRenderer filePath={file.path} />;
     case 'markdown-source':

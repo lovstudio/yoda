@@ -1,4 +1,6 @@
 import {
+  AppWindow,
+  ArrowLeftToLine,
   Folder,
   GitCompare,
   Maximize2,
@@ -10,12 +12,25 @@ import {
   X,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { Activity } from 'react';
+import { Activity, Fragment } from 'react';
 import { useTranslation } from 'react-i18next';
+import { buildConversationSections, fileTarget } from '@renderer/app/app-tab-context-menu';
 import { openTaskTopTab } from '@renderer/app/open-task-target';
 import type { ResolvedTab } from '@renderer/features/tasks/tabs/tab-manager-store';
-import { buildTaskWindowTarget, getTabMeta } from '@renderer/features/tasks/tabs/tab-meta';
+import {
+  buildTaskWindowTarget,
+  getTabMeta,
+  openTaskTabInWindow,
+} from '@renderer/features/tasks/tabs/tab-meta';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import { FilePathMenuItems } from '@renderer/lib/components/file-path-actions';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@renderer/lib/ui/context-menu';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,7 +86,8 @@ function groupIcon(group: SidebarTabGroup): React.ReactNode {
 export const TaskSidebar = observer(function TaskSidebar() {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
-  const { taskView } = useProvisionedTask();
+  const provisioned = useProvisionedTask();
+  const { taskView } = provisioned;
   const { tabManager } = taskView;
   const { isSidebarCollapsed, sidebarTab: activeTab, openSidebarGroups } = taskView;
   const pinnedTabs = tabManager.resolvedSidebarTabs;
@@ -117,6 +133,76 @@ export const TaskSidebar = observer(function TaskSidebar() {
     });
   };
 
+  // Right-click menu sections for a pinned chip, mirroring the top strip's
+  // AppTabContextMenu: placement, then kind-specific actions.
+  const pinnedSections = (tab: ResolvedTab): React.ReactNode[][] => {
+    const placement: React.ReactNode[] = [];
+    if (tab.kind === 'conversation') {
+      placement.push(
+        <ContextMenuItem
+          key="move-back"
+          className="whitespace-nowrap"
+          onClick={() => closePinned(tab)}
+        >
+          <ArrowLeftToLine className="size-4" />
+          {t('tasks.sidePane.moveBack')}
+        </ContextMenuItem>
+      );
+    }
+    placement.push(
+      <ContextMenuItem
+        key="window"
+        className="whitespace-nowrap"
+        onClick={() => {
+          void openTaskTabInWindow(buildTaskWindowTarget(projectId, taskId, tab)).then((opened) => {
+            if (opened) tabManager.closeTab(tab.tabId);
+          });
+        }}
+      >
+        <AppWindow className="size-4" />
+        {t('tasks.tabs.openInWindow')}
+      </ContextMenuItem>
+    );
+
+    if (tab.kind === 'conversation') {
+      // Same ordering as the top strip: session actions first, placement
+      // second, the lifecycle section (reload / archive) at the bottom.
+      const [actions, lifecycle] = buildConversationSections(
+        provisioned,
+        projectId,
+        taskId,
+        tab.conversationId,
+        t
+      );
+      return [actions ?? [], placement, lifecycle ?? []];
+    }
+
+    if (tab.kind === 'file' || tab.kind === 'diff') {
+      return [
+        placement,
+        [
+          <FilePathMenuItems
+            key="file-actions"
+            target={fileTarget(provisioned.path, tab.path, provisioned.workspace.sshConnectionId)}
+            components={{ Item: ContextMenuItem, Separator: ContextMenuSeparator }}
+          />,
+        ],
+        [
+          <ContextMenuItem
+            key="close"
+            className="whitespace-nowrap"
+            onClick={() => closePinned(tab)}
+          >
+            <X className="size-4" />
+            {t('common.close')}
+          </ContextMenuItem>,
+        ],
+      ];
+    }
+
+    return [placement];
+  };
+
   return (
     <Activity mode={isSidebarCollapsed ? 'hidden' : 'visible'}>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
@@ -129,33 +215,49 @@ export const TaskSidebar = observer(function TaskSidebar() {
             style={{ scrollbarWidth: 'none' }}
           >
             {openSidebarGroups.map((group) => (
-              <SidebarChip
+              <ChipContextMenu
                 key={group}
-                label={t(groupLabelKey(group))}
-                icon={groupIcon(group)}
-                isActive={activeGroup === group}
-                closeLabel={t('tasks.sidePane.removeCard')}
-                onSelect={() => selectGroup(group)}
-                onClose={() => closeGroup(group)}
-              />
+                sections={[
+                  [
+                    <ContextMenuItem
+                      key="remove"
+                      className="whitespace-nowrap"
+                      onClick={() => closeGroup(group)}
+                    >
+                      <X className="size-4" />
+                      {t('tasks.sidePane.removeCard')}
+                    </ContextMenuItem>,
+                  ],
+                ]}
+              >
+                <SidebarChip
+                  label={t(groupLabelKey(group))}
+                  icon={groupIcon(group)}
+                  isActive={activeGroup === group}
+                  closeLabel={t('tasks.sidePane.removeCard')}
+                  onSelect={() => selectGroup(group)}
+                  onClose={() => closeGroup(group)}
+                />
+              </ChipContextMenu>
             ))}
             {pinnedTabs.map((tab) => {
               const meta = getTabMeta(tab);
               return (
-                <SidebarChip
-                  key={tab.tabId}
-                  label={meta.label}
-                  title={meta.title}
-                  icon={meta.icon}
-                  isActive={activePinnedId === tab.tabId}
-                  closeLabel={t(
-                    tab.kind === 'file' || tab.kind === 'diff'
-                      ? 'common.close'
-                      : 'tasks.sidePane.moveBack'
-                  )}
-                  onSelect={() => tabManager.setActiveSidebarTab(tab.tabId)}
-                  onClose={() => closePinned(tab)}
-                />
+                <ChipContextMenu key={tab.tabId} sections={pinnedSections(tab)}>
+                  <SidebarChip
+                    label={meta.label}
+                    title={meta.title}
+                    icon={meta.icon}
+                    isActive={activePinnedId === tab.tabId}
+                    closeLabel={t(
+                      tab.kind === 'file' || tab.kind === 'diff'
+                        ? 'common.close'
+                        : 'tasks.sidePane.moveBack'
+                    )}
+                    onSelect={() => tabManager.setActiveSidebarTab(tab.tabId)}
+                    onClose={() => closePinned(tab)}
+                  />
+                </ChipContextMenu>
               );
             })}
             {availableGroups.length > 0 ? (
@@ -280,6 +382,33 @@ export const TaskSidebar = observer(function TaskSidebar() {
     </Activity>
   );
 });
+
+/** Right-click menu around a sidebar chip; sections render separated like AppTabContextMenu. */
+function ChipContextMenu({
+  sections,
+  children,
+}: {
+  sections: React.ReactNode[][];
+  children: React.ReactNode;
+}) {
+  const filtered = sections.filter((section) => section.length > 0);
+  if (filtered.length === 0) return <>{children}</>;
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-56">
+        {filtered.map((section, index) => (
+          // Sections are stable per chip kind — index keys are fine here.
+          <Fragment key={index}>
+            {index > 0 ? <ContextMenuSeparator /> : null}
+            {section}
+          </Fragment>
+        ))}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
 
 /** A chip in the sidebar strip — same visual language as the titlebar's AppTab. */
 function SidebarChip({

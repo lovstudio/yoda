@@ -1,6 +1,7 @@
 import { Eye, Pencil } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
+import { FileActionsDropdown } from '@renderer/features/tasks/components/file-actions';
 import { LeasedMonacoEditor } from '@renderer/features/tasks/editor/leased-monaco-editor';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { MarkdownEditorRenderer } from '@renderer/lib/editor/markdown-renderer';
@@ -42,8 +43,9 @@ interface MarkdownSourceToggleOverlayProps {
 
 export function MarkdownSourceToggleOverlay({ filePath }: MarkdownSourceToggleOverlayProps) {
   const { t } = useTranslation();
-  const { taskView } = useProvisionedTask();
-  const { tabManager } = taskView;
+  const provisioned = useProvisionedTask();
+  const { tabManager } = provisioned.taskView;
+  const sourcePath = `${provisioned.path.replace(/\/+$/, '')}/${filePath}`;
 
   return (
     <ToggleGroup
@@ -62,6 +64,10 @@ export function MarkdownSourceToggleOverlay({ filePath }: MarkdownSourceToggleOv
       <ToggleGroupItem value="markdown-source" aria-label={t('editor.editSource')}>
         <Pencil className="h-3.5 w-3.5" />
       </ToggleGroupItem>
+      <FileActionsDropdown
+        sourcePath={sourcePath}
+        className="flex h-full w-auto items-center justify-center rounded-none border-l border-border px-2"
+      />
     </ToggleGroup>
   );
 }

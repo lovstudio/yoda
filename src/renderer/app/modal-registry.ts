@@ -15,6 +15,7 @@ import { ArchiveTaskWithNoteModal } from '@renderer/features/tasks/archive-task-
 import { CreateTaskModal } from '@renderer/features/tasks/create-task-modal/create-task-modal';
 import { CreatePrModal } from '@renderer/features/tasks/diff-view/changes-panel/components/pr-entry/create-pr-modal';
 import { ConflictDialog } from '@renderer/features/tasks/editor/conflict-dialog';
+import { RenameConversationModal } from '@renderer/features/tasks/rename-conversation-modal';
 import { RenameTaskModal } from '@renderer/features/tasks/rename-task-modal';
 import { SessionPromptsModal } from '@renderer/features/tasks/session-prompts-modal';
 import { SetParentTaskModal } from '@renderer/features/tasks/set-parent-task-modal';
@@ -62,6 +63,7 @@ export const modalRegistry = {
   conflictDialog: createModal(ConflictDialog, { size: 'sm' }),
   createPrModal: createModal(CreatePrModal, { size: 'md' }),
   renameTaskModal: createModal(RenameTaskModal, { size: 'xs' }),
+  renameConversationModal: createModal(RenameConversationModal, { size: 'xs' }),
   setParentTaskModal: createModal(SetParentTaskModal, { size: 'sm' }),
   sessionPromptsModal: createModal(SessionPromptsModal, { size: 'lg' }),
   renameProjectModal: createModal(RenameProjectModal, { size: 'xs' }),
