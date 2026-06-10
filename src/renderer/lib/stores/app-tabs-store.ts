@@ -1,6 +1,7 @@
-import { computed, makeObservable, observable, reaction, toJS } from 'mobx';
+import { action, computed, makeObservable, observable, reaction, toJS } from 'mobx';
 import type { AppTabsSnapshot } from '@shared/view-state';
 import type { ViewId, WrapParams } from '@renderer/app/view-registry';
+import { log } from '@renderer/utils/logger';
 import type { NavigationStore } from './navigation-store';
 import type { Snapshottable } from './snapshottable';
 
@@ -119,6 +120,11 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       activeTabId: observable,
       replayNonce: observable,
       visibleTabs: computed,
+      start: action,
+      openTab: action,
+      activateTab: action,
+      closeTab: action,
+      restoreSnapshot: action,
     });
   }
 
@@ -149,7 +155,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
         viewId: this.navigation.currentViewId,
         params: this.navigation.viewParamsStore[this.navigation.currentViewId],
       }),
-      ({ viewId, params }) => {
+      action(({ viewId, params }) => {
         const tab = this.activeTab;
         if (!tab) return;
         const nextParams = toJS(params ?? {}) as Record<string, unknown>;
@@ -210,7 +216,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
         this.tabs.splice(this._insertIndex(viewId, nextParams), 0, next);
         this._activate(next);
         this._ensureScopeIndexTab(next);
-      }
+      })
     );
   }
 
@@ -254,7 +260,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
     const normalizedParams = toJS(params ?? {}) as Record<string, unknown>;
     const key = routeKey(viewId, normalizedParams);
     const existing = this.tabs.find((entry) => routeKey(entry.viewId, entry.params) === key);
-    console.info('[tab-sync] openTab', { viewId, params: normalizedParams, dedupe: !!existing });
+    log.debug('[tab-sync] openTab', { viewId, params: normalizedParams, dedupe: !!existing });
     this.replayNonce += 1;
     if (existing) {
       // Refresh params (normalization may differ from the stored shape).

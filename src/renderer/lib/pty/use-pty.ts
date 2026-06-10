@@ -829,7 +829,11 @@ export function usePty(
         };
 
         terminalElement.addEventListener('mousedown', handleSelectionGestureStart, true);
-        terminalElement.addEventListener('touchstart', handleSelectionGestureStart, true);
+        // passive: the touch path never calls preventDefault, so don't block scrolling.
+        terminalElement.addEventListener('touchstart', handleSelectionGestureStart, {
+          capture: true,
+          passive: true,
+        });
         terminalDocument.addEventListener('mousemove', handleForcedSelectionMouseMove, true);
         terminalDocument.addEventListener('mouseup', handleForcedSelectionMouseUp, true);
         terminalDocument.addEventListener('mouseup', handleSelectionGestureEnd, true);

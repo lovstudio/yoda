@@ -20,6 +20,7 @@ import {
   setPreviousTabActive as tabUtilsSetPreviousTabActive,
   setTabActiveIndex as tabUtilsSetTabActiveIndex,
 } from '@renderer/lib/stores/tab-utils';
+import { log } from '@renderer/utils/logger';
 import { setTelemetryConversationScope } from '@renderer/utils/telemetry-scope';
 
 // ---------------------------------------------------------------------------
@@ -476,21 +477,21 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   private _forwardToTopLevel(target: TaskWindowTabTarget): boolean {
     const bridge = this.topLevelBridge;
     if (!bridge) {
-      console.info('[tab-sync] forward: no bridge yet, stashing intent', target);
+      log.debug('[tab-sync] forward: no bridge yet, stashing intent', target);
       this.pendingTopLevelTarget = target;
       return false;
     }
     if (!this.isVisible) {
-      console.info('[tab-sync] forward: not visible, running internally', target);
+      log.debug('[tab-sync] forward: not visible, running internally', target);
       return false;
     }
     // Replay re-entry for the same target runs internally; anything else is a
     // fresh user intent and surfaces as a top-level tab.
     if (bridge.applyingKey === JSON.stringify(target)) {
-      console.info('[tab-sync] forward: replay re-entry, running internally', target);
+      log.debug('[tab-sync] forward: replay re-entry, running internally', target);
       return false;
     }
-    console.info('[tab-sync] forward: surfacing as top-level tab', target);
+    log.debug('[tab-sync] forward: surfacing as top-level tab', target);
     bridge.open(target);
     return true;
   }

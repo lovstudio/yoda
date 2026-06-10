@@ -26,16 +26,7 @@ import { log } from '@renderer/utils/logger';
 import { initSoundPlayer } from '@renderer/utils/soundPlayer';
 import { appState } from './lib/stores/app-state';
 
-// [boot-timing] Captured as early as the module evaluates so we can measure the
-// full cold-start of a detached task window. Remove with the other [boot-timing]
-// logs once profiling is done.
-const BOOT_T0 = performance.now();
-const bootLog = (label: string) => {
-  console.log(`[boot-timing] renderer: ${label} @ +${Math.round(performance.now() - BOOT_T0)}ms`);
-};
-
 async function bootstrap() {
-  bootLog('bootstrap() start (bundle evaluated)');
   // Wire invalidation bridges so FS and git events flow into the model registry.
   wireModelRegistryInvalidation(modelRegistry);
   wirePrCacheInvalidation();
@@ -55,7 +46,7 @@ async function bootstrap() {
     diffEditorPool.init(0).catch((error: unknown) => {
       log.warn('[monaco-diff-pool] init failed:', error);
     }),
-  ]).then(() => bootLog('monaco pools ready'));
+  ]);
 
   const [navResult, sidebarResult, allViewState] = await Promise.all([
     rpc.viewState.get('navigation') as Promise<NavigationSnapshot> | null,
@@ -64,7 +55,6 @@ async function bootstrap() {
     appState.projects.load(),
     appState.workspaces.load(),
   ]);
-  bootLog('bootstrap await done (viewState + projects/workspaces, monaco deferred)');
   void monacoInit;
 
   viewStateCache.populate(allViewState as Record<string, unknown>);
@@ -109,7 +99,6 @@ async function bootstrap() {
     appState.sidebar.expandAllProjects();
   }
 
-  bootLog('React render() called');
   // Avoid double-mount in dev which can duplicate PTY sessions
   ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <ErrorBoundary>

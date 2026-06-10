@@ -6,6 +6,7 @@ import {
   taskRenamedChannel,
   taskStatusUpdatedChannel,
 } from '@shared/events/taskEvents';
+import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import {
   createTaskStrategyRequiresBranchName,
   type CreateTaskError,
@@ -21,6 +22,7 @@ import type { RepositoryStore } from '@renderer/features/projects/stores/reposit
 import { TASK_SIDEBAR_VIEW_STATE_KEY } from '@renderer/features/tasks/stores/task-sidebar-preferences';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { events, rpc } from '@renderer/lib/ipc';
+import { appState } from '@renderer/lib/stores/app-state';
 import { viewStateCache } from '@renderer/lib/stores/view-state-cache';
 import { log } from '@renderer/utils/logger';
 import {
@@ -308,6 +310,13 @@ export class TaskManagerStore {
 
   async createTask(params: CreateTaskParams) {
     const setupRequiresBranchName = createTaskStrategyRequiresBranchName(params.strategy);
+    // Projectless (Drafts) tasks belong to the workspace they were created in;
+    // tasks in a real project inherit the project's workspace in the sidebar.
+    const sidebarWorkspaceId =
+      params.sidebarWorkspaceId ??
+      (this.projectId === INTERNAL_PROJECT_ID
+        ? appState.workspaces.activeWorkspace?.id
+        : undefined);
     runInAction(() => {
       this.tasks.set(
         params.id,
@@ -322,24 +331,27 @@ export class TaskManagerStore {
           needsReview: false,
           setupStatus: 'pending',
           setupRequiresBranchName,
+          sidebarWorkspaceId,
         })
       );
     });
 
     const sourceBranch = structuredClone(toJS(params.sourceBranch));
 
-    const result = await rpc.tasks.createTask({ ...params, sourceBranch }).catch((e: unknown) => {
-      // Network/IPC-level failure — surface as a generic error.
-      const message = e instanceof Error ? e.message : String(e);
-      runInAction(() => {
-        const current = this.tasks.get(params.id);
-        if (current && isUnregistered(current)) {
-          current.phase = 'create-error';
-          current.errorMessage = message;
-        }
+    const result = await rpc.tasks
+      .createTask({ ...params, sourceBranch, sidebarWorkspaceId })
+      .catch((e: unknown) => {
+        // Network/IPC-level failure — surface as a generic error.
+        const message = e instanceof Error ? e.message : String(e);
+        runInAction(() => {
+          const current = this.tasks.get(params.id);
+          if (current && isUnregistered(current)) {
+            current.phase = 'create-error';
+            current.errorMessage = message;
+          }
+        });
+        throw e;
       });
-      throw e;
-    });
 
     if (!result.success) {
       const message = formatCreateTaskError(result.error);
@@ -389,13 +401,8 @@ export class TaskManagerStore {
   }
 
   async provisionTask(taskId: string): Promise<void> {
-    const _t = (label: string) =>
-      console.log(`[boot-timing] provisionTask: ${label} @ ${Math.round(performance.now())}ms`);
-    _t('start');
     await getProjectManagerStore().mountProject(this.projectId);
-    _t('mountProject done');
     await this.loadTasks();
-    _t('loadTasks done');
 
     const inFlight = this._provisionPromises.get(taskId);
     if (inFlight) return inFlight;
@@ -408,29 +415,19 @@ export class TaskManagerStore {
     });
 
     const promise = Promise.all([
-      rpc.tasks.provisionTask(taskId).then((r) => {
-        _t('rpc.provisionTask done');
-        return r;
-      }),
+      rpc.tasks.provisionTask(taskId),
       viewStateCache.get(`task:${taskId}`),
       viewStateCache.get(TASK_SIDEBAR_VIEW_STATE_KEY),
-      rpc.conversations
-        .getConversationsForTask(this.projectId, taskId)
-        .then((c) => {
-          _t('getConversationsForTask done');
-          return c;
-        })
-        .catch((err: unknown) => {
-          log.warn('TaskManagerStore: failed to pre-load conversations during provision', {
-            taskId,
-            error: err,
-          });
-          toast.error('Failed to load conversations');
-          return [] as Conversation[];
-        }),
+      rpc.conversations.getConversationsForTask(this.projectId, taskId).catch((err: unknown) => {
+        log.warn('TaskManagerStore: failed to pre-load conversations during provision', {
+          taskId,
+          error: err,
+        });
+        toast.error('Failed to load conversations');
+        return [] as Conversation[];
+      }),
     ])
       .then(([result, savedSnapshot, sharedSidebarSnapshot, preloadedConversations]) => {
-        _t('Promise.all resolved, building ProvisionedTask');
         runInAction(() => {
           const current = this.tasks.get(taskId);
           if (current && isUnprovisioned(current)) {
@@ -448,7 +445,6 @@ export class TaskManagerStore {
             current.activate();
           }
         });
-        _t('transitionToProvisioned + activate done (now ready)');
       })
       .catch((err: unknown) => {
         runInAction(() => {

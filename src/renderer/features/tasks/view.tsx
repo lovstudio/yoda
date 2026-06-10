@@ -126,13 +126,13 @@ const TopLevelTabSync = observer(function TopLevelTabSync({
 
   useEffect(() => {
     if (!target || !targetKey) return;
-    console.info('[tab-sync] replay: applying route target', { projectId, taskId, target });
+    log.debug('[tab-sync] replay: applying route target', { projectId, taskId, target });
     let cancelled = false;
     const bridge = tabManager.topLevelBridge;
     if (bridge) bridge.applyingKey = targetKey;
     void openProvisionedTaskTab(provisioned, target)
       .then((found) => {
-        console.info('[tab-sync] replay: result', {
+        log.debug('[tab-sync] replay: result', {
           target: JSON.parse(targetKey),
           found,
           cancelled,
@@ -221,11 +221,6 @@ export const TaskViewWrapperWithProviders = observer(function TaskViewWrapperWit
   const taskStore = getTaskStore(projectId, taskId);
   const kind = taskViewKind(taskStore, projectId);
 
-  // [boot-timing] track the gap between mount and the provision trigger firing.
-  console.log(
-    `[boot-timing] TaskViewWrapper: render kind='${kind}' hasStore=${!!taskStore} @ ${Math.round(performance.now())}ms`
-  );
-
   // Auto-provision when the task view is rendered with an idle task — covers
   // session restore where the task wasn't in openTaskIds, direct navigation,
   // and any other path that lands on the task view before provisioning runs.
@@ -233,9 +228,6 @@ export const TaskViewWrapperWithProviders = observer(function TaskViewWrapperWit
     if (kind !== 'idle') return;
     if (taskStore && 'archivedAt' in taskStore.data && taskStore.data.archivedAt) return;
 
-    console.log(
-      `[boot-timing] TaskViewWrapper: provisionTask() trigger fired @ ${Math.round(performance.now())}ms`
-    );
     getTaskManagerStore(projectId)
       ?.provisionTask(taskId)
       .catch(() => {});
