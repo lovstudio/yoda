@@ -180,7 +180,92 @@ const TaskSetupRecovery = observer(function TaskSetupRecovery({
 
 const SIDEBAR_COLLAPSED_SIZE = '0px';
 
+/**
+ * Bottom-bar-first layout: the outer split is vertical so the terminal drawer
+ * spans the full width (under the sidebar too); the main|sidebar horizontal
+ * split only occupies the upper region.
+ */
 const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
+  const { taskView } = useProvisionedTask();
+  const bottomPanelRef = usePanelRef();
+  const draggingRef = useRef(false);
+  const [isHandleDragging, setIsHandleDragging] = useState(false);
+  const layout = usePersistentPanelLayout('task-main-vertical');
+
+  useEffect(() => {
+    const panel = bottomPanelRef.current;
+    if (!panel) return;
+    const isCollapsed = panel.isCollapsed();
+    if (taskView.isTerminalDrawerOpen && isCollapsed) {
+      panel.expand();
+    } else if (!taskView.isTerminalDrawerOpen && !isCollapsed) {
+      panel.collapse();
+    }
+  }, [taskView.isTerminalDrawerOpen, bottomPanelRef]);
+
+  return (
+    <ResizablePanelGroup
+      orientation="vertical"
+      className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
+      {...layout}
+    >
+      <ResizablePanel
+        id="task-main-content"
+        minSize="30%"
+        className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
+        data-yoda-animate={isHandleDragging ? 'false' : 'true'}
+      >
+        <TaskUpperSplit />
+      </ResizablePanel>
+      <ResizableHandle
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setIsHandleDragging(true);
+          if (!draggingRef.current) {
+            draggingRef.current = true;
+            panelDragStore.setDragging(true);
+          }
+        }}
+        onPointerUp={() => {
+          setIsHandleDragging(false);
+          if (draggingRef.current) {
+            draggingRef.current = false;
+            panelDragStore.setDragging(false);
+          }
+        }}
+        onPointerCancel={() => {
+          setIsHandleDragging(false);
+          if (draggingRef.current) {
+            draggingRef.current = false;
+            panelDragStore.setDragging(false);
+          }
+        }}
+        className={taskView.isTerminalDrawerOpen ? 'flex' : 'hidden'}
+      />
+      <ResizablePanel
+        id="task-terminal-drawer"
+        panelRef={bottomPanelRef}
+        collapsible
+        collapsedSize="0%"
+        defaultSize="25%"
+        minSize="15%"
+        className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
+        data-yoda-animate={isHandleDragging ? 'false' : 'true'}
+        onResize={() => {
+          const wantOpen = !(bottomPanelRef.current?.isCollapsed() ?? false);
+          if (taskView.isTerminalDrawerOpen !== wantOpen) {
+            taskView.setTerminalDrawerOpen(wantOpen);
+          }
+        }}
+      >
+        <TerminalsPanel />
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  );
+});
+
+/** Upper region: main column | task sidebar (horizontal split). */
+const TaskUpperSplit = observer(function TaskUpperSplit() {
   const { taskView } = useProvisionedTask();
   const sidebarPanelRef = usePanelRef();
   const [isHandleDragging, setIsHandleDragging] = useState(false);
@@ -239,99 +324,15 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
 });
 
 /**
- * Splits the main area horizontally between the tab strip column and the
- * optional right side pane (a tab pinned aside via "open in side panel").
- * The panel group stays mounted regardless, so toggling the side pane never
- * remounts the main column (which would tear down terminals).
- */
-/**
  * The side pane is a shell-level workspace column now (see app/app-side-pane)
- * so it survives main-area navigation — this split just hosts the main column.
+ * so it survives main-area navigation — this wrapper just hosts the main
+ * content and marks the side-pane drop scope for tab tear-out.
  */
 const TaskMainAreaSplit = observer(function TaskMainAreaSplit() {
   return (
     <div className="h-full w-full min-h-0 min-w-0" data-side-pane-scope>
-      <TaskMainColumn />
+      <UnifiedMainContent />
     </div>
-  );
-});
-
-const TaskMainColumn = observer(function TaskMainColumn() {
-  const { taskView } = useProvisionedTask();
-  const bottomPanelRef = usePanelRef();
-  const draggingRef = useRef(false);
-  const [isHandleDragging, setIsHandleDragging] = useState(false);
-  const layout = usePersistentPanelLayout('task-main-vertical');
-
-  useEffect(() => {
-    const panel = bottomPanelRef.current;
-    if (!panel) return;
-    const isCollapsed = panel.isCollapsed();
-    if (taskView.isTerminalDrawerOpen && isCollapsed) {
-      panel.expand();
-    } else if (!taskView.isTerminalDrawerOpen && !isCollapsed) {
-      panel.collapse();
-    }
-  }, [taskView.isTerminalDrawerOpen, bottomPanelRef]);
-
-  return (
-    <ResizablePanelGroup
-      orientation="vertical"
-      className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
-      {...layout}
-    >
-      <ResizablePanel
-        id="task-main-content"
-        minSize="30%"
-        className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
-        data-yoda-animate={isHandleDragging ? 'false' : 'true'}
-      >
-        <UnifiedMainContent />
-      </ResizablePanel>
-      <ResizableHandle
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          setIsHandleDragging(true);
-          if (!draggingRef.current) {
-            draggingRef.current = true;
-            panelDragStore.setDragging(true);
-          }
-        }}
-        onPointerUp={() => {
-          setIsHandleDragging(false);
-          if (draggingRef.current) {
-            draggingRef.current = false;
-            panelDragStore.setDragging(false);
-          }
-        }}
-        onPointerCancel={() => {
-          setIsHandleDragging(false);
-          if (draggingRef.current) {
-            draggingRef.current = false;
-            panelDragStore.setDragging(false);
-          }
-        }}
-        className={taskView.isTerminalDrawerOpen ? 'flex' : 'hidden'}
-      />
-      <ResizablePanel
-        id="task-terminal-drawer"
-        panelRef={bottomPanelRef}
-        collapsible
-        collapsedSize="0%"
-        defaultSize="25%"
-        minSize="15%"
-        className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
-        data-yoda-animate={isHandleDragging ? 'false' : 'true'}
-        onResize={() => {
-          const wantOpen = !(bottomPanelRef.current?.isCollapsed() ?? false);
-          if (taskView.isTerminalDrawerOpen !== wantOpen) {
-            taskView.setTerminalDrawerOpen(wantOpen);
-          }
-        }}
-      >
-        <TerminalsPanel />
-      </ResizablePanel>
-    </ResizablePanelGroup>
   );
 });
 
