@@ -16,10 +16,16 @@ import { log } from '@renderer/utils/logger';
 /**
  * Opens (or focuses — routes are deduplicated) a top-level app tab for an
  * internal task tab target. The task view's TopLevelTabSync replays the target
- * onto the internal TabManagerStore once the route applies.
+ * onto the internal TabManagerStore once the route applies. With
+ * `activate: false` the tab is only ensured in the strip, in the background.
  */
-export function openTaskTopTab(projectId: string, taskId: string, tab: TaskWindowTabTarget): void {
-  appState.appTabs.openTab('task', { projectId, taskId, tab });
+export function openTaskTopTab(
+  projectId: string,
+  taskId: string,
+  tab: TaskWindowTabTarget,
+  options?: { activate?: boolean }
+): void {
+  appState.appTabs.openTab('task', { projectId, taskId, tab }, options);
 }
 
 /**

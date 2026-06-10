@@ -119,9 +119,9 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
   tabs: AppTabEntry[] = [];
   activeTabId: string | null = null;
   /**
-   * Bumped on every openTab — lets the task view re-run its route replay even
-   * when the route itself didn't change (clicking the same session again must
-   * re-align internal state if a previous alignment was disrupted).
+   * Bumped on every activating openTab — lets the task view re-run its route
+   * replay even when the route itself didn't change (clicking the same session
+   * again must re-align internal state if a previous alignment was disrupted).
    */
   replayNonce = 0;
 
@@ -279,8 +279,15 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
   /**
    * Opens a tab for the route, or activates the existing one (routes are
    * deduplicated). New tabs insert after the last tab of their scope.
+   * With `activate: false` the tab is only ensured in the strip — the active
+   * tab and navigation stay untouched (e.g. unpinning a sidebar chip).
    */
-  openTab<T extends ViewId>(viewId: T, params?: WrapParams<T>): void {
+  openTab<T extends ViewId>(
+    viewId: T,
+    params?: WrapParams<T>,
+    options?: { activate?: boolean }
+  ): void {
+    const activate = options?.activate ?? true;
     const normalizedParams = normalizeTabParams(
       viewId,
       toJS(params ?? {}) as Record<string, unknown>
@@ -288,10 +295,11 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
     const key = routeKey(viewId, normalizedParams);
     const existing = this.tabs.find((entry) => routeKey(entry.viewId, entry.params) === key);
     log.debug('[tab-sync] openTab', { viewId, params: normalizedParams, dedupe: !!existing });
-    this.replayNonce += 1;
+    if (activate) this.replayNonce += 1;
     if (existing) {
       // Refresh params (normalization may differ from the stored shape).
       existing.params = normalizedParams;
+      if (!activate) return;
       this._activate(existing);
       this.navigation._applyNavigation(viewId, normalizedParams as WrapParams<T>);
       return;
@@ -299,9 +307,9 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
 
     const tab: AppTabEntry = { id: createTabId(), viewId, params: normalizedParams };
     this.tabs.splice(this._insertIndex(viewId, normalizedParams), 0, tab);
-    this._activate(tab);
+    if (activate) this._activate(tab);
     this._ensureScopeIndexTab(tab);
-    this.navigation._applyNavigation(tab.viewId, tab.params as WrapParams<T>);
+    if (activate) this.navigation._applyNavigation(tab.viewId, tab.params as WrapParams<T>);
   }
 
   /** Insert after the last same-scope tab, else after the active tab. */

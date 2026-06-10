@@ -823,12 +823,14 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     scheduleTerminalRelayout();
   }
 
-  /** Move a sidebar-pinned tab back to the end of the strip and activate it. */
+  /**
+   * Move a sidebar-pinned tab back to the end of the strip, without activating
+   * it — closing a pin shouldn't yank the main area away from its current tab.
+   */
   moveSidebarTabBack(tabId: string): void {
     if (!this._unpinSidebarTab(tabId)) return;
     if (!this.entries.has(tabId)) return;
     addTabId(this, tabId);
-    this.activeTabId = tabId;
   }
 
   /** Select a pinned tab in the sidebar strip; undefined yields to the builtin panels. */

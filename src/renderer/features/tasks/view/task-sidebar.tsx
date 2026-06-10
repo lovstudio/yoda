@@ -99,11 +99,19 @@ export const TaskSidebar = observer(function TaskSidebar() {
     }
   };
 
-  // Closing a pinned chip returns the entity to the strip — and surfaces it as
-  // a top-level app tab, since the internal strip is no longer rendered.
+  // Closing a pinned chip: files/diffs (e.g. smart-path cmd+click opens) are
+  // stateless and reopenable — just close them, never surface them in the main
+  // area. Conversations return to the strip as a background top-level tab so
+  // the session stays reachable without stealing the main area's active tab.
   const closePinned = (tab: ResolvedTab) => {
+    if (tab.kind === 'file' || tab.kind === 'diff') {
+      tabManager.closeTab(tab.tabId);
+      return;
+    }
     tabManager.moveSidebarTabBack(tab.tabId);
-    openTaskTopTab(projectId, taskId, buildTaskWindowTarget(projectId, taskId, tab).tab);
+    openTaskTopTab(projectId, taskId, buildTaskWindowTarget(projectId, taskId, tab).tab, {
+      activate: false,
+    });
   };
 
   return (
@@ -137,7 +145,11 @@ export const TaskSidebar = observer(function TaskSidebar() {
                   title={meta.title}
                   icon={meta.icon}
                   isActive={activePinnedId === tab.tabId}
-                  closeLabel={t('tasks.sidePane.moveBack')}
+                  closeLabel={t(
+                    tab.kind === 'file' || tab.kind === 'diff'
+                      ? 'common.close'
+                      : 'tasks.sidePane.moveBack'
+                  )}
                   onSelect={() => tabManager.setActiveSidebarTab(tab.tabId)}
                   onClose={() => closePinned(tab)}
                 />
