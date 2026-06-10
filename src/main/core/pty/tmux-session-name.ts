@@ -34,7 +34,10 @@ export function buildTmuxShellLine(
   environment?: Record<string, string>
 ): string {
   const quotedName = JSON.stringify(sessionName);
-  const quotedCmd = JSON.stringify(`${buildEnvironmentPrefix(environment)}${commandLine}`);
+  // Single-quote (not JSON.stringify): JSON escapes a real newline into the
+  // two characters `\n`, which POSIX double quotes pass through literally —
+  // multiline prompts would reach the CLI as literal "\n" text.
+  const quotedCmd = quotePosixValue(`${buildEnvironmentPrefix(environment)}${commandLine}`);
   const paneMouseFormat = JSON.stringify('#{||:#{pane_in_mode},#{mouse_any_flag}}');
   // Create the window at the client's real size so tmux draws at the same width
   // xterm renders at. Without this, `new-session -d` is born at tmux's default

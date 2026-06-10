@@ -28,6 +28,11 @@ describe('applyAgentCommandPrefix', () => {
     );
   });
 
+  it('adds the prefix to versioned skill ids containing dots', () => {
+    expect(applyAgentCommandPrefix('claude', 'skill-creator-0.1.0')).toBe('/skill-creator-0.1.0');
+    expect(applyAgentCommandPrefix('codex', 'skill-creator-0.1.0')).toBe('$skill-creator-0.1.0');
+  });
+
   it('leaves arbitrary prompts unchanged', () => {
     expect(applyAgentCommandPrefix('codex', 'Review the release changes')).toBe(
       'Review the release changes'
@@ -84,20 +89,12 @@ describe('getAgentCommandSubmitInput', () => {
 
 describe('buildPromptInjectionPayload', () => {
   it('trims single-line prompt input', () => {
-    expect(buildPromptInjectionPayload({ providerId: 'codex', text: '  Review this  ' })).toBe(
-      'Review this'
-    );
+    expect(buildPromptInjectionPayload('  Review this  ')).toBe('Review this');
   });
 
-  it('wraps multiline non-Claude input in bracketed paste', () => {
-    expect(buildPromptInjectionPayload({ providerId: 'codex', text: 'line one\nline two' })).toBe(
+  it('wraps multiline input in bracketed paste', () => {
+    expect(buildPromptInjectionPayload('line one\nline two')).toBe(
       '\x1b[200~line one\nline two\x1b[201~'
-    );
-  });
-
-  it('keeps Claude multiline input unwrapped', () => {
-    expect(buildPromptInjectionPayload({ providerId: 'claude', text: 'line one\nline two' })).toBe(
-      'line one\nline two'
     );
   });
 });

@@ -273,7 +273,7 @@ describe('resolveLocalPtySpawn - POSIX', () => {
     expect(result.command).toBe('/bin/bash');
     expect(result.args[0]).toBe('-c');
     expect(result.args[1]).toContain(
-      '"export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=\'1\'; claude --resume conv-1"'
+      "'export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN='\\''1'\\''; claude --resume conv-1'"
     );
   });
 });

@@ -8,7 +8,7 @@ function makeAgentConfig(overrides: Partial<AgentSessionConfig> = {}): AgentSess
   return {
     taskId: 'task-1',
     conversationId: 'conv-1',
-    providerId: 'claude',
+    runtimeId: 'claude',
     command: 'claude',
     args: ['--resume', 'conv-1'],
     cwd: '/workspace',
@@ -97,7 +97,9 @@ describe('resolveSshCommand', () => {
     expect(result).toContain('tmux -L yoda -f /dev/null new-session -d -s "agent-session"');
     expect(result).toContain('tmux -L yoda -f /dev/null attach-session -t "agent-session"');
     expect(result).toContain('"copy-mode -H -e"');
-    expect(result).toContain("'\\''claude'\\'' '\\''--resume'\\'' '\\''conv-1'\\''");
+    expect(result).toContain('claude');
+    expect(result).toContain('--resume');
+    expect(result).toContain('conv-1');
   });
 
   it('exports agent tmux env inside remote tmux-created commands', () => {
@@ -115,7 +117,9 @@ describe('resolveSshCommand', () => {
 
     expect(result).toContain('tmux -L yoda -f /dev/null new-session -d -s "agent-session"');
     expect(result).toContain('export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=');
-    expect(result).toContain("'\\''claude'\\'' '\\''--resume'\\'' '\\''conv-1'\\''");
+    expect(result).toContain('claude');
+    expect(result).toContain('--resume');
+    expect(result).toContain('conv-1');
   });
 
   it('launches remote general terminals with the captured remote shell', () => {

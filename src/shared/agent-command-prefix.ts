@@ -1,18 +1,18 @@
-import { getProvider, type AgentProviderId } from './agent-provider-registry';
+import { getRuntime, type RuntimeId } from './runtime-registry';
 
 const KNOWN_COMMAND_PREFIXES = new Set(['/', '$']);
-const COMMAND_NAME = /^[A-Za-z0-9][A-Za-z0-9_:-]*$/;
+const COMMAND_NAME = /^[A-Za-z0-9][A-Za-z0-9_:.-]*$/;
 
 /**
  * Keep agent-native command examples portable between providers.
  * Arbitrary prompts are left unchanged; only compact command-like values
  * such as "release", "/release", or "$release" are rewritten.
  */
-export function applyAgentCommandPrefix(providerId: AgentProviderId, text: string): string {
+export function applyAgentCommandPrefix(runtimeId: RuntimeId, text: string): string {
   const trimmed = text.trim();
   if (!trimmed) return '';
 
-  const commandPrefix = getProvider(providerId)?.commandPrefix;
+  const commandPrefix = getRuntime(runtimeId)?.commandPrefix;
   if (!commandPrefix) return trimmed;
 
   const first = trimmed[0];
@@ -29,9 +29,9 @@ export function applyAgentCommandPrefix(providerId: AgentProviderId, text: strin
   return `${commandPrefix}${trimmed}`;
 }
 
-export function getAgentCommandSubmitSuffix(providerId: AgentProviderId, text: string): string {
+export function getAgentCommandSubmitSuffix(runtimeId: RuntimeId, text: string): string {
   const trimmed = text.trim();
-  const provider = getProvider(providerId);
+  const provider = getRuntime(runtimeId);
   const commandPrefix = provider?.commandPrefix;
   const commandSubmitSuffix = provider?.commandSubmitSuffix;
   if (!trimmed || !commandPrefix || !commandSubmitSuffix) return '';
@@ -42,21 +42,21 @@ export function getAgentCommandSubmitSuffix(providerId: AgentProviderId, text: s
   return commandSubmitSuffix;
 }
 
-export function getAgentCommandSubmitDelayMs(providerId: AgentProviderId): number {
-  return getProvider(providerId)?.commandSubmitDelayMs ?? 0;
+export function getAgentCommandSubmitDelayMs(runtimeId: RuntimeId): number {
+  return getRuntime(runtimeId)?.commandSubmitDelayMs ?? 0;
 }
 
-export function getAgentCommandSubmitInput(providerId: AgentProviderId): string {
-  return getProvider(providerId)?.commandSubmitInput ?? '\r';
+export function getAgentCommandSubmitInput(runtimeId: RuntimeId): string {
+  return getRuntime(runtimeId)?.commandSubmitInput ?? '\r';
 }
 
-export function buildPromptInjectionPayload(args: {
-  providerId: AgentProviderId | string | undefined;
-  text: string;
-}): string {
-  const trimmed = args.text.trim();
-  const hasMultilinePayload = trimmed.includes('\n');
-  const shouldUseBracketedPaste = args.providerId !== 'claude' && hasMultilinePayload;
-  if (!shouldUseBracketedPaste) return trimmed;
+/**
+ * Wrap multiline prompts in bracketed-paste markers so TUIs treat the
+ * injection as a paste and preserve line breaks. Without the markers,
+ * Claude Code sanitizes raw `\n` chunks into literal "\n" text.
+ */
+export function buildPromptInjectionPayload(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed.includes('\n')) return trimmed;
   return `\x1b[200~${trimmed}\x1b[201~`;
 }

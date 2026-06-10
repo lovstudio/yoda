@@ -613,10 +613,7 @@ async function sendPromptToConversation(
   conversation: ConversationStore,
   text: string
 ): Promise<void> {
-  const payload = buildPromptInjectionPayload({
-    runtimeId: conversation.data.runtimeId,
-    text,
-  });
+  const payload = buildPromptInjectionPayload(text);
   if (!payload) return;
 
   conversation.setWorking({ force: true });

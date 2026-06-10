@@ -50,8 +50,15 @@ describe('buildTmuxShellLine', () => {
       'INVALID-NAME': 'ignored',
     });
 
-    expect(line).toContain('"export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=\'1\'; claude"');
+    expect(line).toContain("'export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN='\\''1'\\''; claude'");
     expect(line).not.toContain('INVALID-NAME');
+  });
+
+  it('preserves real newlines in the command line instead of escaping to literal \\n', () => {
+    const line = buildTmuxShellLine('agent-session', "claude 'line one\nline two'");
+
+    expect(line).toContain('line one\nline two');
+    expect(line).not.toContain('\\n');
   });
 });
 
