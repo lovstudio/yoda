@@ -3,6 +3,7 @@ import type * as monaco from 'monaco-editor';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HEAD_REF, STAGED_REF } from '@shared/git';
+import type { ActiveFile } from '@shared/view-state';
 import { useDiffEditorComments } from '@renderer/features/tasks/diff-view/comments/use-diff-editor-comments';
 import { ImageDiffView } from '@renderer/features/tasks/diff-view/main-panel/image-diff-view';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
@@ -13,14 +14,19 @@ import { StickyDiffEditor } from '@renderer/lib/monaco/sticky-diff-editor';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { getLanguageFromPath } from '@renderer/utils/languageUtils';
 
-export const FileDiffView = observer(function FileDiffView() {
+export const FileDiffView = observer(function FileDiffView({
+  file,
+}: {
+  /** Diff to render. Defaults to the diff view's active file (main panel usage). */
+  file?: ActiveFile;
+}) {
   const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
   const { workspaceId } = provisioned;
   const diffView = provisioned.taskView.diffView;
   const draftComments = provisioned.draftComments;
-  const activeFile = diffView.activeFile;
+  const activeFile = file ?? diffView.activeFile;
   const [editor, setEditor] = useState<monaco.editor.IStandaloneDiffEditor | null>(null);
 
   const isBinary = activeFile ? isBinaryForDiff(activeFile.path) : false;

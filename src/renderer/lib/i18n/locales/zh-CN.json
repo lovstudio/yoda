@@ -116,9 +116,7 @@
       "signInPrompt": "登录",
       "signInHint": "连接你的 Yoda 账户",
       "showNav": "显示侧边栏导航",
-      "hideNav": "隐藏侧边栏导航",
-      "noStatsYet": "暂无统计数据",
-      "totalsTitle": "累计：归档 {{tasks}} 个任务 · +{{added}} -{{deleted}} 行 · {{tokens}} tokens"
+      "hideNav": "隐藏侧边栏导航"
     },
     "dropToAddProject": "拖入以添加项目",
     "projects": "项目",

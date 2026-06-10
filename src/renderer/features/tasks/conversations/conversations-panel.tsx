@@ -31,8 +31,9 @@ import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
 import type { ConversationStore } from './conversation-manager';
+import { SessionStatusBar } from './session-status-bar';
 
-function getResumeInitialSize(
+export function getResumeInitialSize(
   pty: FrontendPty,
   container: HTMLElement | null
 ): TerminalDimensions | undefined {
@@ -89,6 +90,7 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
   const activeConversation: ConversationStore | undefined = tm.activeConversation;
   const activeSession = activeConversation?.session ?? null;
   const activeSessionId = activeSession?.sessionId ?? null;
+  const statusBarActive = provisioned.taskView.activeRenderer === 'agents';
   const hasConversationTabs = tm.resolvedTabs.some((t) => t.kind === 'conversation');
   const conversationStores = Array.from(conversations.conversations.values()).sort((a, b) => {
     const aTime = a.data.lastInteractedAt ? Date.parse(a.data.lastInteractedAt) : 0;
@@ -202,7 +204,7 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
   );
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden p-2">
+    <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-[var(--xterm-bg)] px-2 pt-2">
       <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
         <div
           ref={containerRef}
@@ -284,6 +286,7 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
           </PaneSizingProvider>
         </div>
       </div>
+      <SessionStatusBar active={statusBarActive} />
     </div>
   );
 });
@@ -342,8 +345,8 @@ const ConversationSessionListItem = observer(function ConversationSessionListIte
   conversation: ConversationStore;
   onOpen: (conversationId: string) => void;
 }) {
-  const providerId = conversation.data.providerId;
-  const config = agentConfig[providerId];
+  const runtimeId = conversation.data.runtimeId;
+  const config = agentConfig[runtimeId];
   const title = conversation.data.title.trim() || conversation.data.id;
 
   return (

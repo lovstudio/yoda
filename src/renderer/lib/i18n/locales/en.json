@@ -116,9 +116,7 @@
       "signInPrompt": "Sign in",
       "signInHint": "Connect your Yoda account",
       "showNav": "Show sidebar navigation",
-      "hideNav": "Hide sidebar navigation",
-      "noStatsYet": "No stats yet",
-      "totalsTitle": "All time: {{tasks}} tasks archived · +{{added}} -{{deleted}} lines · {{tokens}} tokens"
+      "hideNav": "Hide sidebar navigation"
     },
     "dropToAddProject": "Drop to add project",
     "projects": "Projects",

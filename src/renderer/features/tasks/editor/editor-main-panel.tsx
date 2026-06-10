@@ -28,7 +28,7 @@ interface OtherFileRendererProps {
   file: FileTabStore;
 }
 
-function OtherFileRenderer({ file }: OtherFileRendererProps) {
+export function OtherFileRenderer({ file }: OtherFileRendererProps) {
   switch (file.renderer.kind) {
     case 'svg':
       return <SvgRenderer filePath={file.path} />;
