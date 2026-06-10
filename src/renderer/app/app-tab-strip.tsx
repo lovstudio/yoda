@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   ListTodo,
   MessageSquare,
+  Plus,
   Puzzle,
   Server,
   Settings,
@@ -25,6 +26,8 @@ import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conv
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { FileIcon } from '@renderer/lib/editor/file-icon';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import {
   isIndexTab,
@@ -56,6 +59,26 @@ const VIEW_ICONS: Partial<Record<ViewId, LucideIcon>> = {
 export const AppTabStrip = observer(function AppTabStrip() {
   const { t } = useTranslation();
   const { visibleTabs, activeTabId } = appState.appTabs;
+  const { navigate } = useNavigate();
+  const showNewTaskModal = useShowModal('newTaskModal');
+
+  // The strip is scope-isolated, so the first task/project tab carries the
+  // active scope's identity.
+  const scopeParams = visibleTabs.find((tab) => tab.viewId === 'task' || tab.viewId === 'project')
+    ?.params as { projectId?: string; taskId?: string } | undefined;
+  const projectId = typeof scopeParams?.projectId === 'string' ? scopeParams.projectId : undefined;
+  const inTaskScope = typeof scopeParams?.taskId === 'string';
+
+  // Inside a task, starting new work must not shift attention away — host the
+  // home composer in a modal. Elsewhere, go to the home draft page itself.
+  const handleNewSession = () => {
+    if (inTaskScope) {
+      showNewTaskModal({});
+      return;
+    }
+    navigate('home', projectId ? { projectId } : undefined);
+  };
+  const newSessionLabel = t('sidebar.newTask');
 
   return (
     <div className="flex items-center gap-1 overflow-x-auto">
@@ -71,6 +94,15 @@ export const AppTabStrip = observer(function AppTabStrip() {
           />
         </AppTabContextMenu>
       ))}
+      <button
+        type="button"
+        aria-label={newSessionLabel}
+        title={newSessionLabel}
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-passive hover:bg-background-2 hover:text-foreground [-webkit-app-region:no-drag]"
+        onClick={handleNewSession}
+      >
+        <Plus className="size-3.5" />
+      </button>
     </div>
   );
 });

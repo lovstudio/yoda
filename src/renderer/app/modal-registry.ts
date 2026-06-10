@@ -1,3 +1,4 @@
+import { NewTaskModal } from '@renderer/app/new-task-modal';
 import { AgentEditModal } from '@renderer/features/agents-config/agent-edit-modal';
 import { CommandPaletteModal } from '@renderer/features/command-palette/command-palette-modal';
 import { IntegrationSetupModal } from '@renderer/features/integrations/integration-setup-modal';
@@ -7,7 +8,6 @@ import { ManageRunScriptsModal } from '@renderer/features/projects/components/ma
 import { ManageQuickActionsModal } from '@renderer/features/projects/components/overview-view/manage-quick-actions-modal';
 import { RenameProjectModal } from '@renderer/features/projects/components/rename-project-modal';
 import { ShareProjectConfigModal } from '@renderer/features/projects/components/settings-view/share-project-config-modal';
-import { MobileConnectionModal } from '@renderer/features/sidebar/mobile-connection-modal';
 import { CreateSkillModal } from '@renderer/features/skills/components/CreateSkillModal';
 import { AddRemoteModal } from '@renderer/features/tasks/add-remote-modal';
 import { ArchiveTaskWithNoteModal } from '@renderer/features/tasks/archive-task-with-note-modal';
@@ -45,6 +45,7 @@ export function createModal<TProps, TResult>(
 export const modalRegistry = {
   commandPaletteModal: createModal(CommandPaletteModal, { size: 'md' }),
   taskModal: createModal(CreateTaskModal),
+  newTaskModal: createModal(NewTaskModal, { size: 'lg' }),
   addProjectModal: createModal(AddProjectModal),
   addSshConnModal: createModal(AddSshConnModal),
   changeProjectConnectionModal: createModal(ChangeProjectConnectionModal, { size: 'sm' }),
@@ -67,7 +68,6 @@ export const modalRegistry = {
   manageQuickActionsModal: createModal(ManageQuickActionsModal, { size: 'md' }),
   integrationSetupModal: createModal(IntegrationSetupModal, { size: 'md' }),
   addRemoteModal: createModal(AddRemoteModal),
-  mobileConnectionModal: createModal(MobileConnectionModal, { size: 'md' }),
   quitAgentSessionsModal: createModal(QuitAgentSessionsModal, { size: 'md' }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } satisfies Record<string, ModalRegistryEntry<any, any>>;
