@@ -626,7 +626,10 @@
     },
     "headline": "今天想创造点什么？",
     "promptPlaceholder": "可向 yoda 询问任何事。输入 / 或 $ 使用 skills，输入 @ 提及文件",
-    "addAria": "添加",
+    "attachAria": "添加附件",
+    "attachSshUnsupported": "SSH 项目暂不支持本地附件",
+    "removeAttachmentAria": "移除附件",
+    "attachPasteFailedToast": "无法添加粘贴的图片",
     "voiceAria": "触发 Typeless 语音输入",
     "voiceTooltip": "触发 Typeless 免持语音快捷键",
     "voiceTriggeredToast": "已触发 Typeless 语音输入（{{shortcut}}）。",
@@ -1864,6 +1867,7 @@
     }
   },
   "agentStatus": {
+    "interrupt": "打断",
     "working": "工作中",
     "awaiting-input": "等待输入",
     "error": "错误",

@@ -1,5 +1,5 @@
+import { Loader2, Square } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { CLISpinner } from '@renderer/features/tasks/components/cliSpinner';
 import type { AgentStatus } from '@renderer/features/tasks/conversations/conversation-manager';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
@@ -10,21 +10,60 @@ interface AgentStatusIndicatorProps {
   status: AgentIndicatorStatus;
   className?: string;
   disableTooltip?: boolean;
+  /** When set and status is `working`, hover swaps the spinner for a stop icon and click interrupts. */
+  onInterrupt?: () => void;
 }
 
 export function AgentStatusIndicator({
   status,
   className,
   disableTooltip,
+  onInterrupt,
 }: AgentStatusIndicatorProps) {
   const { t } = useTranslation();
   if (!status || status === 'idle') return null;
   const statusLabel = t(`agentStatus.${status}`);
 
+  if (status === 'working' && onInterrupt) {
+    const interruptLabel = t('agentStatus.interrupt');
+    const button = (
+      <button
+        type="button"
+        aria-label={interruptLabel}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onInterrupt();
+        }}
+        className="group/interrupt size-6 flex items-center justify-center cursor-pointer"
+      >
+        <Loader2
+          className={cn(
+            'size-3.5 animate-spin text-primary group-hover/interrupt:hidden',
+            className
+          )}
+        />
+        <Square
+          className={cn(
+            'size-3 text-primary fill-current hidden group-hover/interrupt:block',
+            className
+          )}
+        />
+      </button>
+    );
+    if (disableTooltip) return button;
+    return (
+      <Tooltip>
+        <TooltipTrigger render={button} />
+        <TooltipContent>{interruptLabel}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
   const renderIndicator = () => {
     switch (status) {
       case 'working':
-        return <CLISpinner />;
+        return <Loader2 className={cn('size-3.5 animate-spin text-primary', className)} />;
       case 'awaiting-input':
         return (
           <span

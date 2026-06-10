@@ -23,6 +23,7 @@ import {
   resolveTaskMenuSessionFields,
   selectPreferredConversation,
 } from '@renderer/features/tasks/components/task-menu-session-info';
+import { interruptTaskSessions } from '@renderer/features/tasks/interrupt-task-sessions';
 import { type TaskStore } from '@renderer/features/tasks/stores/task';
 import {
   asProvisioned,
@@ -251,7 +252,10 @@ export const TaskRow = observer(function TaskRow({
           )}
         >
           {agentAttention ? (
-            <AgentStatusIndicator status={agentAttention} />
+            <AgentStatusIndicator
+              status={agentAttention}
+              onInterrupt={() => interruptTaskSessions(task.data.projectId, task.data.id)}
+            />
           ) : (
             <RelativeTime
               value={task.data.createdAt}

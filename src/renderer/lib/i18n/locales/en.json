@@ -626,7 +626,10 @@
     },
     "headline": "What shall we create today?",
     "promptPlaceholder": "Ask yoda anything. Type / or $ to use skills, or @ to mention files.",
-    "addAria": "Add",
+    "attachAria": "Attach files",
+    "attachSshUnsupported": "Local attachments are not supported for SSH projects",
+    "removeAttachmentAria": "Remove attachment",
+    "attachPasteFailedToast": "Could not attach the pasted image",
     "voiceAria": "Trigger Typeless voice input",
     "voiceTooltip": "Trigger the Typeless hands-free voice shortcut",
     "voiceTriggeredToast": "Triggered Typeless voice input ({{shortcut}}).",
@@ -1864,6 +1867,7 @@
     }
   },
   "agentStatus": {
+    "interrupt": "Interrupt",
     "working": "Working",
     "awaiting-input": "Awaiting input",
     "error": "Error",

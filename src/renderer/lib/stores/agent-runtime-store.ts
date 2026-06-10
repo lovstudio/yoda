@@ -103,6 +103,16 @@ export class AgentRuntimeStore {
     return null;
   }
 
+  /** Conversation ids of this task whose sessions are currently `working`. */
+  workingConversationIds(projectId: string, taskId: string): string[] {
+    const prefix = `${taskKey(projectId, taskId)}\0`;
+    const ids: string[] = [];
+    for (const [key, status] of this.statuses) {
+      if (status === 'working' && key.startsWith(prefix)) ids.push(key.slice(prefix.length));
+    }
+    return ids;
+  }
+
   isTaskRunning(projectId: string, taskId: string): boolean {
     const status = this.taskStatus(projectId, taskId);
     return status !== null && isAgentSessionRunningStatus(status);

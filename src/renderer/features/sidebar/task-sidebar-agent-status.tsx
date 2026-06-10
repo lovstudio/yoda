@@ -2,9 +2,11 @@ import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { CLISpinner } from '@renderer/features/tasks/components/cliSpinner';
+import { interruptTaskSessions } from '@renderer/features/tasks/interrupt-task-sessions';
 import {
   isUnprovisioned,
   isUnregistered,
+  registeredTaskData,
   type TaskStore,
 } from '@renderer/features/tasks/stores/task';
 import { taskAgentStatus } from '@renderer/features/tasks/stores/task-selectors';
@@ -46,7 +48,13 @@ export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
   }
 
   if (status) {
-    return <AgentStatusIndicator status={status} />;
+    const data = registeredTaskData(task);
+    return (
+      <AgentStatusIndicator
+        status={status}
+        onInterrupt={data ? () => interruptTaskSessions(data.projectId, data.id) : undefined}
+      />
+    );
   }
 
   if (needsReview) {
