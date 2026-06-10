@@ -235,6 +235,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       openConversation: action,
       openConversationPreview: action,
       openFile: action,
+      openFileInSidebar: action,
       openFilePreview: action,
       openDiff: action,
       openDiffPreview: action,
@@ -582,6 +583,31 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     this.entries.set(tab.tabId, tab);
     addTabId(this, tab.tabId);
     this.activeTabId = tab.tabId;
+  }
+
+  /**
+   * Open a file directly as a sidebar-pinned tab (terminal/conversation smart
+   * path links land here so the session stays visible). An entry already open
+   * in the main strip is moved aside; never forwarded to the top level —
+   * the whole point is staying in this task view.
+   */
+  openFileInSidebar(path: string, options?: OpenFileOptions): void {
+    const existing = this._findFileEntryByPath(path);
+    if (existing) {
+      existing.isPreview = false;
+      existing.revealLocation(options?.line, options?.column);
+      if (this.sidebarTabIds.includes(existing.tabId)) {
+        this.activeSidebarTabId = existing.tabId;
+      } else {
+        this.moveTabToSidebar(existing.tabId);
+      }
+      return;
+    }
+    const tab = new FileTabStore(path, false);
+    tab.revealLocation(options?.line, options?.column);
+    this.entries.set(tab.tabId, tab);
+    this.sidebarTabIds.push(tab.tabId);
+    this.activeSidebarTabId = tab.tabId;
   }
 
   openFilePreview(path: string): void {

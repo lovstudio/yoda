@@ -145,8 +145,9 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
       isRemote: Boolean(remoteConnectionId),
       onOpen: ({ filePath, absolutePath, line, column }) => {
         if (filePath) {
-          provisionedTask.taskView.tabManager.openFile(filePath, { line, column });
-          provisionedTask.taskView.setFocusedRegion('main');
+          // Open into the sidebar so the terminal stays visible.
+          provisionedTask.taskView.tabManager.openFileInSidebar(filePath, { line, column });
+          provisionedTask.taskView.setSidebarCollapsed(false);
           return;
         }
         if (absolutePath) {
