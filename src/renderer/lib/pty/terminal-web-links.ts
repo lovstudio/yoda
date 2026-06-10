@@ -1,5 +1,5 @@
 import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm';
-import { getWindowedLineStrings, mapStringRangeToViewportRange } from './terminal-file-links';
+import { buildScanChunks, mapScanRangeToBufferRange } from './terminal-file-links';
 import {
   createTerminalLinkHoverHandlers,
   isTerminalLinkActivation,
@@ -46,15 +46,18 @@ export function getTerminalWebLinkMatches(
   terminal: Terminal,
   bufferLineNumber: number
 ): TerminalWebLinkMatch[] {
-  const [lines, startLineIndex] = getWindowedLineStrings(bufferLineNumber - 1, terminal);
-  const line = lines.join('');
-  if (!line) return [];
+  // Shares the file-link scan window: soft-wrapped rows joined, plus
+  // conservative hard-wrap continuation joining (Claude Code's ink renderer
+  // breaks long URLs with real newlines).
+  const chunks = buildScanChunks(bufferLineNumber - 1, terminal);
+  if (chunks.length === 0) return [];
+  const line = chunks.map((chunk) => chunk.text).join('');
 
   const matches: TerminalWebLinkMatch[] = [];
   for (const candidate of extractTerminalWebLinkCandidates(line)) {
-    const range = mapStringRangeToViewportRange(
+    const range = mapScanRangeToBufferRange(
       terminal,
-      startLineIndex,
+      chunks,
       candidate.index,
       candidate.url.length
     );

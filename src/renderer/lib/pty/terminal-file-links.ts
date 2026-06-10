@@ -126,8 +126,9 @@ const HARD_WRAP_JOIN_MAX = 4;
 const PATH_SEG_EXCLUDED_RE = new RegExp(`[${PATH_SEG_EXCLUDED}]`, 'u');
 const TRAILING_PATH_RUN_RE = new RegExp(`[^${PATH_SEG_EXCLUDED}]+$`, 'u');
 const COMPLETE_EXT_RE = /\.[A-Za-z0-9]{1,8}$/;
+const URL_IN_PROGRESS_RE = /(?:https?|ftp|file):\/\/\S+$/i;
 
-interface ScanChunk {
+export interface ScanChunk {
   /** Buffer row index of the chunk's first row. */
   startLineIndex: number;
   /** Cell offset of the chunk's first character (stripped continuation indent). */
@@ -140,7 +141,7 @@ interface ScanChunk {
   charOffset: number;
 }
 
-function buildScanChunks(lineIndex: number, terminal: Terminal): ScanChunk[] {
+export function buildScanChunks(lineIndex: number, terminal: Terminal): ScanChunk[] {
   const [lines, startLineIndex] = getWindowedLineStrings(lineIndex, terminal);
   const text = lines.join('');
   if (!text) return [];
@@ -213,8 +214,14 @@ function canHardJoin(
   if (!lowerStripped || PATH_SEG_EXCLUDED_RE.test(lowerStripped[0])) return false;
   // A complete-looking extension at the break usually IS the path end (the row
   // just happens to be full) — only join when the continuation clearly extends
-  // it (`.gz` of a wrapped `archive.tar.gz`, or another path segment).
-  if (COMPLETE_EXT_RE.test(tail) && lowerStripped[0] !== '.' && lowerStripped[0] !== '/') {
+  // it (`.gz` of a wrapped `archive.tar.gz`, or another path segment). A row
+  // ending mid-URL is exempt: `https://github.c` + `om/...` must still join.
+  if (
+    COMPLETE_EXT_RE.test(tail) &&
+    !URL_IN_PROGRESS_RE.test(upperText) &&
+    lowerStripped[0] !== '.' &&
+    lowerStripped[0] !== '/'
+  ) {
     return false;
   }
   return true;
@@ -236,7 +243,7 @@ function isRowFull(terminal: Terminal, rowIndex: number): boolean {
   return false;
 }
 
-function mapScanRangeToBufferRange(
+export function mapScanRangeToBufferRange(
   terminal: Terminal,
   chunks: ScanChunk[],
   scanIndex: number,
@@ -427,7 +434,7 @@ function normalizeWorkspaceRelativePath(path: string): string | null {
   return segments.length > 0 ? segments.join('/') : null;
 }
 
-export function getWindowedLineStrings(lineIndex: number, terminal: Terminal): [string[], number] {
+function getWindowedLineStrings(lineIndex: number, terminal: Terminal): [string[], number] {
   let line: IBufferLine | undefined;
   let topIndex = lineIndex;
   let bottomIndex = lineIndex;
@@ -468,23 +475,6 @@ export function getWindowedLineStrings(lineIndex: number, terminal: Terminal): [
   }
 
   return [lines, topIndex];
-}
-
-export function mapStringRangeToViewportRange(
-  terminal: Terminal,
-  lineIndex: number,
-  stringIndex: number,
-  stringLength: number
-): ILink['range'] | null {
-  const [startY, startX] = mapStringIndexToBufferCell(terminal, lineIndex, 0, stringIndex);
-  const [endY, endX] = mapStringIndexToBufferCell(terminal, startY, startX, stringLength);
-
-  if (startY === -1 || startX === -1 || endY === -1 || endX === -1) return null;
-
-  return {
-    start: { x: startX + 1, y: startY + 1 },
-    end: { x: endX, y: endY + 1 },
-  };
 }
 
 function mapStringIndexToBufferCell(
