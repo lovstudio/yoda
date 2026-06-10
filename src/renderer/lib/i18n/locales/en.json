@@ -685,6 +685,8 @@
     "teamRoleUiux": "UIUX · Jony Ive",
     "teamRoleOperations": "User ops · Tim Cook",
     "selectProjectPlaceholder": "Select project",
+    "newConversationInTaskTitle": "Create a new conversation under \"{{name}}\"",
+    "taskConversationScopeTooltip": "You are creating a child session for this task.",
     "remoteMode": "Remote",
     "localMode": "Local",
     "needProjectHint": "Pick a project to send a message.",

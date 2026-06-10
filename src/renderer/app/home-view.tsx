@@ -63,6 +63,7 @@ import {
   asMounted,
   getProjectManagerStore,
   getRepositoryStore,
+  projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { recordSkillInvocation } from '@renderer/features/skills/skill-usage-stats';
@@ -103,6 +104,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import {
@@ -126,6 +128,14 @@ type RunHostKind = 'local' | 'ssh';
 type SkillShortcutPrefix = '/' | '$';
 type TeamRoleId = 'ceo' | 'product' | 'engineering' | 'uiux' | 'operations';
 type TeamRuntimeSelection = Record<TeamRoleId, RuntimeId>;
+
+type HomeComposerSubmitTarget =
+  | { kind: 'new-task' }
+  | { kind: 'existing-task'; projectId: string; taskId: string };
+
+export type HomeComposerSubmitResult =
+  | { kind: 'task'; projectId: string; taskId: string }
+  | { kind: 'conversation'; projectId: string; taskId: string; conversationIds: string[] };
 
 /**
  * Humanize a model id for the run-mode chip, e.g. `claude-opus-4-8` → `Opus 4.8`.
@@ -811,21 +821,23 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
 });
 
 /**
- * The new-task prompt composer — the heart of the home page, also reusable
- * inside a modal (the tab strip's "+" within a task) so starting new work
- * doesn't shift attention away. Drafts persist to the shared `homeDraft`
- * setting in both hosts.
+ * The home prompt composer. By default it creates tasks; in task-scoped hosts
+ * it reuses the same UI to create conversations inside the existing task.
+ * Drafts persist to the shared `homeDraft` setting in both hosts.
  */
 export const HomeComposer = observer(function HomeComposer({
   className,
   onSubmitted,
+  submitTarget = { kind: 'new-task' },
 }: {
   className?: string;
-  /** Called after a successful submit (the composer itself navigates to the new task). */
-  onSubmitted?: () => void;
+  /** Called after a successful submit. New-task mode navigates before firing it. */
+  onSubmitted?: (result: HomeComposerSubmitResult) => void;
+  submitTarget?: HomeComposerSubmitTarget;
 }) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
+  const taskScopedTarget = submitTarget.kind === 'existing-task' ? submitTarget : null;
 
   const projectManager = getProjectManagerStore();
 
@@ -846,21 +858,23 @@ export const HomeComposer = observer(function HomeComposer({
   const { value: draft, update: updateDraft } = useAppSettingsKey('homeDraft');
 
   const selectedProjectId =
+    taskScopedTarget?.projectId ??
     homeProjectId ??
     navProjectId ??
     (draft === undefined ? undefined : (draft.selectedProjectId ?? undefined));
   const setSelectedProjectId = useCallback(
     (next: string | undefined) => {
+      if (taskScopedTarget) return;
       updateDraft({ selectedProjectId: next ?? null });
     },
-    [updateDraft]
+    [taskScopedTarget, updateDraft]
   );
 
   useEffect(() => {
-    if (!homeProjectId) return;
+    if (!homeProjectId || taskScopedTarget) return;
     updateDraft({ selectedProjectId: homeProjectId });
     setHomeParams({ projectId: undefined });
-  }, [homeProjectId, setHomeParams, updateDraft]);
+  }, [homeProjectId, setHomeParams, taskScopedTarget, updateDraft]);
 
   const projectStore = selectedProjectId
     ? projectManager.projects.get(selectedProjectId)
@@ -868,6 +882,12 @@ export const HomeComposer = observer(function HomeComposer({
   const mounted = asMounted(projectStore);
   const projectData = mounted?.data;
   const connectionId = projectData?.type === 'ssh' ? projectData.connectionId : undefined;
+  const taskScopedTaskStore = taskScopedTarget
+    ? getTaskStore(taskScopedTarget.projectId, taskScopedTarget.taskId)
+    : undefined;
+  const taskScopedProjectName = taskScopedTarget
+    ? (projectDisplayName(projectStore) ?? taskScopedTarget.projectId)
+    : undefined;
 
   const repo = selectedProjectId ? getRepositoryStore(selectedProjectId) : undefined;
   const defaultBranch = repo?.defaultBranch;
@@ -1348,6 +1368,7 @@ export const HomeComposer = observer(function HomeComposer({
   const effectiveReviewStrategyKind: TaskStrategyKind = isUnborn
     ? 'no-worktree'
     : reviewStrategyKind;
+  const targetProvisionedTask = asProvisioned(taskScopedTaskStore);
   const attachImagesAsPaths = draft?.attachImagesAsPaths ?? false;
   const setAttachImagesAsPaths = useCallback(
     (next: boolean) => {
@@ -1364,9 +1385,10 @@ export const HomeComposer = observer(function HomeComposer({
   );
   const modeCanRunWithoutProject = runMode === 'normal' || runMode === 'brainstorm';
   const modeRequiresWorktree =
-    runMode === 'compare' ||
-    runMode === 'team' ||
-    (runMode === 'review' && effectiveReviewStrategyKind === 'new-branch');
+    !taskScopedTarget &&
+    (runMode === 'compare' ||
+      runMode === 'team' ||
+      (runMode === 'review' && effectiveReviewStrategyKind === 'new-branch'));
   const trimmed = prompt.trim();
   // A slot can run only when it has an Agent assigned (the Agent supplies the
   // runtime + prompt). Each mode requires all its slots filled.
@@ -1385,18 +1407,20 @@ export const HomeComposer = observer(function HomeComposer({
   const canSubmit =
     !submitting &&
     modeHasAgents &&
-    (modeCanRunWithoutProject
-      ? !mounted || !!defaultBranch
-      : !!mounted && !!defaultBranch && (!modeRequiresWorktree || !isUnborn));
+    (taskScopedTarget
+      ? !!targetProvisionedTask
+      : modeCanRunWithoutProject
+        ? !mounted || !!defaultBranch
+        : !!mounted && !!defaultBranch && (!modeRequiresWorktree || !isUnborn));
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || submitting) return;
     setSubmitting(true);
     try {
-      // Every successful submit lands on the new task; modal hosts close on it.
+      // Every successful new-task submit lands on the new task; modal hosts close on it.
       const goToTask = (projectId: string, taskId: string) => {
         navigate('task', { projectId, taskId });
-        onSubmitted?.();
+        onSubmitted?.({ kind: 'task', projectId, taskId });
       };
       // Attachment transport: file attachments are always @path mentions in
       // the prompt. Image attachments travel out-of-band (the main process
@@ -1425,16 +1449,14 @@ export const HomeComposer = observer(function HomeComposer({
         updateDraft({ prompt: '' });
         clearAttachments();
       };
-      const promptDisplayName = trimmed ? taskNameFromPrompt(trimmed) : '';
-      const baseName =
-        promptDisplayName || (await rpc.tasks.generateTaskName(trimmed ? { title: trimmed } : {}));
       const reportFailures = (results: PromiseSettledResult<unknown>[]) => {
         const failures = results.filter((result) => result.status === 'rejected');
         if (failures.length > 0) {
+          const targetName = taskScopedTarget ? 'conversation' : 'task';
           toast.error(
             failures.length === 1
-              ? 'One agent task failed to start.'
-              : `${failures.length} agent tasks failed to start.`
+              ? `One agent ${targetName} failed to start.`
+              : `${failures.length} agent ${targetName}s failed to start.`
           );
         }
       };
@@ -1447,6 +1469,191 @@ export const HomeComposer = observer(function HomeComposer({
           runtimeOverride,
         });
 
+      if (taskScopedTarget) {
+        if (!targetProvisionedTask) return;
+        const conversationTitleInputs = Array.from(
+          targetProvisionedTask.conversations.conversations.values(),
+          (conversation) => ({
+            providerId: conversation.data.runtimeId,
+            title: conversation.data.title,
+          })
+        );
+        const createdConversationIds: string[] = [];
+        const createTaskConversation = (args: {
+          provider: RuntimeId;
+          initialPrompt: string | undefined;
+          titlePrompt?: string;
+        }) => {
+          const conversationId = crypto.randomUUID();
+          const title = initialConversationTitle(
+            args.provider,
+            args.titlePrompt ?? args.initialPrompt,
+            conversationTitleInputs
+          );
+          conversationTitleInputs.push({ providerId: args.provider, title });
+          createdConversationIds.push(conversationId);
+          const promise = targetProvisionedTask.conversations.createConversation({
+            id: conversationId,
+            projectId: taskScopedTarget.projectId,
+            taskId: taskScopedTarget.taskId,
+            runtime: args.provider,
+            title,
+            initialPrompt: args.initialPrompt,
+            imagePaths,
+            autoApprove: autoApproveDefaults.getDefault(args.provider),
+          });
+          return { conversationId, runtime: args.provider, promise };
+        };
+        const finishTaskConversationSubmit = () => {
+          void getTaskStore(taskScopedTarget.projectId, taskScopedTarget.taskId)?.setNeedsReview(
+            false
+          );
+          onSubmitted?.({
+            kind: 'conversation',
+            projectId: taskScopedTarget.projectId,
+            taskId: taskScopedTarget.taskId,
+            conversationIds: createdConversationIds,
+          });
+          resetComposer();
+        };
+
+        if (runMode === 'brainstorm') {
+          const slot = resolveSlot(SPEC_PROMPT_KEY, runtimeId);
+          if (!slot.provider) return;
+          const launch = createTaskConversation({
+            provider: slot.provider,
+            initialPrompt: buildSpecPrompt({
+              requirement,
+              systemPrompt: slot.systemPrompt,
+            }),
+            titlePrompt: trimmed || undefined,
+          });
+          finishTaskConversationSubmit();
+          void launch.promise.catch(() => {
+            toast.error('Agent conversation failed to start.');
+          });
+          return;
+        }
+
+        if (runMode === 'compare') {
+          const launches = compareRuntimes.flatMap((provider, index) => {
+            const slot = resolveSlot(comparePromptKey(index), provider);
+            if (!slot.provider) return [];
+            return [
+              createTaskConversation({
+                provider: slot.provider,
+                initialPrompt: buildRequirementPrompt({
+                  requirement,
+                  systemPrompt: slot.systemPrompt,
+                }),
+                titlePrompt: trimmed || undefined,
+              }),
+            ];
+          });
+          if (launches.length === 0) return;
+          finishTaskConversationSubmit();
+          void Promise.allSettled(launches.map((launch) => launch.promise)).then(reportFailures);
+          return;
+        }
+
+        if (runMode === 'review') {
+          const implementerSlot = resolveSlot(REVIEW_IMPLEMENTER_PROMPT_KEY, runtimeId);
+          const reviewerSlot = resolveSlot(REVIEW_REVIEWER_PROMPT_KEY, reviewerRuntime);
+          if (!implementerSlot.provider || !reviewerSlot.provider) return;
+          const implementation = createTaskConversation({
+            provider: implementerSlot.provider,
+            initialPrompt: buildRequirementPrompt({
+              requirement,
+              systemPrompt: implementerSlot.systemPrompt,
+            }),
+            titlePrompt: trimmed || undefined,
+          });
+          finishTaskConversationSubmit();
+          void runReviewOrchestration({
+            projectId: taskScopedTarget.projectId,
+            taskId: taskScopedTarget.taskId,
+            implementationConversationId: implementation.conversationId,
+            implementationReady: implementation.promise,
+            requirement,
+            reviewerRuntime: reviewerSlot.provider,
+            reviewerSystemPrompt: reviewerSlot.systemPrompt,
+            getAutoApprove: autoApproveDefaults.getDefault,
+          }).catch((error: unknown) => {
+            toast.error(
+              error instanceof Error ? error.message : 'Review mode orchestration failed.'
+            );
+          });
+          return;
+        }
+
+        if (runMode === 'team') {
+          const ceoRole = TEAM_ROLES[0];
+          const ceoSlot = resolveSlot(teamPromptKey(ceoRole.id), teamRuntimes.ceo);
+          if (!ceoSlot.provider) return;
+          const ceo = createTaskConversation({
+            provider: ceoSlot.provider,
+            initialPrompt: buildTeamCeoPrompt({
+              requirement,
+              systemPrompt: ceoSlot.systemPrompt,
+            }),
+            titlePrompt: trimmed || undefined,
+          });
+          finishTaskConversationSubmit();
+          void (async () => {
+            await ceo.promise;
+            const ceoOutput = await waitForInitialConversationOutput(
+              taskScopedTarget.projectId,
+              taskScopedTarget.taskId,
+              ceo.conversationId
+            );
+            const workerLaunches = TEAM_ROLES.filter((role) => role.id !== 'ceo').flatMap(
+              (role) => {
+                const slot = resolveSlot(teamPromptKey(role.id), teamRuntimes[role.id]);
+                if (!slot.provider) return [];
+                return [
+                  createTaskConversation({
+                    provider: slot.provider,
+                    initialPrompt: buildTeamRolePrompt({
+                      requirement,
+                      ceoPlan: ceoOutput || '(The CEO agent did not produce captured output.)',
+                      systemPrompt: slot.systemPrompt,
+                    }),
+                    titlePrompt: trimmed || undefined,
+                  }),
+                ];
+              }
+            );
+            reportFailures(
+              await Promise.allSettled(workerLaunches.map((launch) => launch.promise))
+            );
+          })().catch((error: unknown) => {
+            toast.error(
+              error instanceof Error ? error.message : 'Agent team orchestration failed.'
+            );
+          });
+          return;
+        }
+
+        const normalSlot = resolveSlot(NORMAL_PROMPT_KEY, runtimeId);
+        if (!normalSlot.provider) return;
+        const normalSystemPrompt = normalSlot.systemPrompt.trim();
+        const launch = createTaskConversation({
+          provider: normalSlot.provider,
+          initialPrompt: normalSystemPrompt
+            ? buildRequirementPrompt({ requirement, systemPrompt: normalSystemPrompt })
+            : requirement || undefined,
+          titlePrompt: trimmed || undefined,
+        });
+        finishTaskConversationSubmit();
+        void launch.promise.catch(() => {
+          toast.error('Agent conversation failed to start.');
+        });
+        return;
+      }
+
+      const promptDisplayName = trimmed ? taskNameFromPrompt(trimmed) : '';
+      const baseName =
+        promptDisplayName || (await rpc.tasks.generateTaskName(trimmed ? { title: trimmed } : {}));
       if (!mounted) {
         const draftSlot = resolveSlot(
           runMode === 'brainstorm' ? SPEC_PROMPT_KEY : NORMAL_PROMPT_KEY,
@@ -1695,6 +1902,8 @@ export const HomeComposer = observer(function HomeComposer({
   }, [
     canSubmit,
     mounted,
+    taskScopedTarget,
+    targetProvisionedTask,
     runtimeId,
     defaultBranch,
     attachments,
@@ -2187,29 +2396,36 @@ export const HomeComposer = observer(function HomeComposer({
       <div className="mt-3 flex flex-col gap-2">
         <div className="overflow-x-auto pb-1">
           <div ref={runModeAnchorRef} className="flex min-w-max flex-wrap items-center gap-2">
-            <ProjectSelector
-              value={selectedProjectId}
-              onChange={setSelectedProjectId}
-              allowProjectless
-              initializeGitRepositoryOnPick
-              trigger={
-                <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
-                  <FolderOpen className="size-3.5 text-foreground-muted" />
-                  <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
-                </ComboboxTrigger>
-              }
-            />
+            {taskScopedTarget ? (
+              <TaskScopedProjectButton
+                label={taskScopedProjectName ?? taskScopedTarget.projectId}
+                tooltip={t('home.taskConversationScopeTooltip')}
+              />
+            ) : (
+              <ProjectSelector
+                value={selectedProjectId}
+                onChange={setSelectedProjectId}
+                allowProjectless
+                initializeGitRepositoryOnPick
+                trigger={
+                  <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+                    <FolderOpen className="size-3.5 text-foreground-muted" />
+                    <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
+                  </ComboboxTrigger>
+                }
+              />
+            )}
             <RunHostSelector kind={runHostKind} />
             {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
-            {mounted && runMode === 'compare' && (
+            {!taskScopedTarget && mounted && runMode === 'compare' && (
               <Chip icon={GitFork}>
                 {t('home.compareBranchPolicy', { count: compareRuntimes.length })}
               </Chip>
             )}
-            {mounted && runMode === 'team' && (
+            {!taskScopedTarget && mounted && runMode === 'team' && (
               <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
             )}
-            {mounted && runMode === 'normal' && (
+            {!taskScopedTarget && mounted && runMode === 'normal' && (
               <StrategyChip
                 strategyKind={effectiveStandardStrategyKind}
                 disabled={isUnborn}
@@ -2218,7 +2434,7 @@ export const HomeComposer = observer(function HomeComposer({
                 labels={strategyLabels}
               />
             )}
-            {mounted && runMode === 'review' && (
+            {!taskScopedTarget && mounted && runMode === 'review' && (
               <StrategyChip
                 strategyKind={effectiveReviewStrategyKind}
                 disabled={isUnborn}
@@ -2305,6 +2521,11 @@ export const HomeComposer = observer(function HomeComposer({
 interface ChipProps {
   icon: ComponentType<{ className?: string }>;
   children: ReactNode;
+}
+
+interface TaskScopedProjectButtonProps {
+  label: string;
+  tooltip: string;
 }
 
 interface RunHostSelectorProps {
@@ -2931,6 +3152,25 @@ function Agent({
         />
       )}
     </div>
+  );
+}
+
+function TaskScopedProjectButton({ label, tooltip }: TaskScopedProjectButtonProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
+        <button
+          type="button"
+          disabled
+          aria-label={label}
+          className="flex h-7 max-w-64 cursor-not-allowed items-center gap-1.5 rounded-md border border-border bg-background-1/60 px-2.5 text-xs text-foreground-muted opacity-75"
+        >
+          <FolderOpen className="size-3.5 shrink-0 text-foreground-passive" />
+          <span className="min-w-0 truncate">{label}</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64 text-left">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 

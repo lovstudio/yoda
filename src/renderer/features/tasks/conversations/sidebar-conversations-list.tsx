@@ -148,7 +148,7 @@ export const SidebarConversationsList = observer(function SidebarConversationsLi
   const { projectId, taskId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
   const { tabManager } = provisioned.taskView;
-  const showCreateConversationModal = useShowModal('createConversationModal');
+  const showNewConversationModal = useShowModal('newConversationModal');
   const conversationIds = Array.from(provisioned.conversations.conversations.values())
     .sort((a, b) => {
       const aTime = a.data.lastInteractedAt ? new Date(a.data.lastInteractedAt).getTime() : 0;
@@ -167,11 +167,12 @@ export const SidebarConversationsList = observer(function SidebarConversationsLi
   });
 
   const handleCreate = () => {
-    showCreateConversationModal({
+    showNewConversationModal({
       projectId,
       taskId,
-      onSuccess: ({ conversationId }) => {
-        tabManager.openConversation(conversationId);
+      onSuccess: ({ conversationIds }) => {
+        const conversationId = conversationIds[0];
+        if (conversationId) tabManager.openConversation(conversationId);
       },
     });
   };

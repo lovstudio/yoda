@@ -61,25 +61,37 @@ export const AppTabStrip = observer(function AppTabStrip() {
   const { t } = useTranslation();
   const { visibleTabs, activeTabId } = appState.appTabs;
   const { navigate } = useNavigate();
-  const showNewTaskModal = useShowModal('newTaskModal');
+  const showNewConversationModal = useShowModal('newConversationModal');
 
   // The strip is scope-isolated, so the first task/project tab carries the
   // active scope's identity.
   const scopeParams = visibleTabs.find((tab) => tab.viewId === 'task' || tab.viewId === 'project')
     ?.params as { projectId?: string; taskId?: string } | undefined;
   const projectId = typeof scopeParams?.projectId === 'string' ? scopeParams.projectId : undefined;
-  const inTaskScope = typeof scopeParams?.taskId === 'string';
+  const taskId = typeof scopeParams?.taskId === 'string' ? scopeParams.taskId : undefined;
+  const provisionedTask =
+    projectId && taskId ? asProvisioned(getTaskStore(projectId, taskId)) : undefined;
 
-  // Inside a task, starting new work must not shift attention away — host the
-  // home composer in a modal. Elsewhere, go to the home draft page itself.
+  // Inside a task, the strip's "+" creates another conversation in that task.
+  // Elsewhere, go to the home draft page for creating a new task.
   const handleNewSession = () => {
-    if (inTaskScope) {
-      showNewTaskModal({});
+    if (projectId && taskId) {
+      if (!provisionedTask) return;
+      showNewConversationModal({
+        projectId,
+        taskId,
+        onSuccess: ({ conversationIds }) => {
+          const conversationId = conversationIds[0];
+          if (conversationId) provisionedTask.taskView.tabManager.openConversation(conversationId);
+          provisionedTask.taskView.setFocusedRegion('main');
+        },
+      });
       return;
     }
     navigate('home', projectId ? { projectId } : undefined);
   };
-  const newSessionLabel = t('sidebar.newTask');
+  const newSessionLabel = taskId ? t('tasks.tabs.newConversation') : t('sidebar.newTask');
+  const newSessionDisabled = Boolean(taskId && !provisionedTask);
 
   return (
     <div className="flex items-center gap-1 overflow-x-auto">
@@ -99,7 +111,8 @@ export const AppTabStrip = observer(function AppTabStrip() {
         type="button"
         aria-label={newSessionLabel}
         title={newSessionLabel}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-passive hover:bg-background-2 hover:text-foreground [-webkit-app-region:no-drag]"
+        disabled={newSessionDisabled}
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-passive hover:bg-background-2 hover:text-foreground disabled:pointer-events-none disabled:opacity-50 [-webkit-app-region:no-drag]"
         onClick={handleNewSession}
       >
         <Plus className="size-3.5" />

@@ -46,7 +46,7 @@ export const OverviewPanel = observer(function OverviewPanel() {
   const { projectId, taskId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
   const { tabManager } = provisioned.taskView;
-  const showCreateConversationModal = useShowModal('createConversationModal');
+  const showNewConversationModal = useShowModal('newConversationModal');
 
   const sessions = Array.from(provisioned.conversations.conversations.values()).sort(
     (a, b) => sessionTime(b.data.lastInteractedAt) - sessionTime(a.data.lastInteractedAt)
@@ -67,11 +67,12 @@ export const OverviewPanel = observer(function OverviewPanel() {
     ancestors.length > 3 ? [ancestors[0], null, ancestors[ancestors.length - 1]] : ancestors;
 
   const handleCreate = () => {
-    showCreateConversationModal({
+    showNewConversationModal({
       projectId,
       taskId,
-      onSuccess: ({ conversationId }) => {
-        tabManager.openConversation(conversationId);
+      onSuccess: ({ conversationIds }) => {
+        const conversationId = conversationIds[0];
+        if (conversationId) tabManager.openConversation(conversationId);
       },
     });
   };

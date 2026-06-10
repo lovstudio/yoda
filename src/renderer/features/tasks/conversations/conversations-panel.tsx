@@ -3,7 +3,6 @@ import { MessageSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { useIsActiveTask } from '@renderer/features/tasks/hooks/use-is-active-task';
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -60,21 +59,18 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
   const provisioned = useProvisionedTask();
   const { conversations } = provisioned;
   const { tabManager: tm } = provisioned.taskView;
-  const showCreateConversationModal = useShowModal('createConversationModal');
+  const showNewConversationModal = useShowModal('newConversationModal');
   const isActive = useIsActiveTask(taskId);
-  const mountedProject = asMounted(getProjectStore(projectId));
-  const remoteConnectionId =
-    mountedProject?.data.type === 'ssh' ? mountedProject.data.connectionId : undefined;
 
   const autoFocus = isActive && provisioned.taskView.focusedRegion === 'main';
 
   const handleCreate = () =>
-    showCreateConversationModal({
-      connectionId: remoteConnectionId,
+    showNewConversationModal({
       projectId,
       taskId,
-      onSuccess: ({ conversationId }) => {
-        tm.openConversation(conversationId);
+      onSuccess: ({ conversationIds }) => {
+        const conversationId = conversationIds[0];
+        if (conversationId) tm.openConversation(conversationId);
         provisioned.taskView.setFocusedRegion('main');
       },
     });

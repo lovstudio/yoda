@@ -685,6 +685,8 @@
     "teamRoleUiux": "UIUX · 乔尼·艾夫",
     "teamRoleOperations": "用户运营 · 蒂姆库克",
     "selectProjectPlaceholder": "选择项目",
+    "newConversationInTaskTitle": "在「{{name}}」下创建一个新对话",
+    "taskConversationScopeTooltip": "你现在正在新建该任务的子会话",
     "remoteMode": "远程模式",
     "localMode": "本地模式",
     "needProjectHint": "先选择一个项目即可发送",

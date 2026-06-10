@@ -1,4 +1,3 @@
-import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import {
   asProvisioned,
   getRegisteredTaskData,
@@ -31,10 +30,6 @@ export function createTaskCommandProvider(projectId: string, taskId: string): Co
       const taskView = getTaskView(projectId, taskId);
       const tabManager = taskView?.tabManager;
 
-      const mountedProject = asMounted(getProjectStore(projectId));
-      const connectionId =
-        mountedProject?.data.type === 'ssh' ? mountedProject.data.connectionId : undefined;
-
       const taskMgr = getTaskManagerStore(projectId);
       const taskIds = taskMgr ? Array.from(taskMgr.tasks.keys()) : [];
       const currentIdx = taskIds.indexOf(taskId);
@@ -51,12 +46,12 @@ export function createTaskCommandProvider(projectId: string, taskId: string): Co
           shortcutKey: 'newConversation',
           group: 'Conversations',
           execute() {
-            showModal('createConversationModal', {
+            showModal('newConversationModal', {
               projectId,
               taskId,
-              connectionId,
-              onSuccess: ({ conversationId }) => {
-                tabManager?.openConversation(conversationId);
+              onSuccess: ({ conversationIds }) => {
+                const conversationId = conversationIds[0];
+                if (conversationId) tabManager?.openConversation(conversationId);
                 taskView?.setFocusedRegion('main');
               },
             });

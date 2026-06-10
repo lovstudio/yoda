@@ -1,3 +1,4 @@
+import { NewConversationModal } from '@renderer/app/new-conversation-modal';
 import { NewTaskModal } from '@renderer/app/new-task-modal';
 import { AgentEditModal } from '@renderer/features/agents-config/agent-edit-modal';
 import { CommandPaletteModal } from '@renderer/features/command-palette/command-palette-modal';
@@ -11,7 +12,6 @@ import { ShareProjectConfigModal } from '@renderer/features/projects/components/
 import { CreateSkillModal } from '@renderer/features/skills/components/CreateSkillModal';
 import { AddRemoteModal } from '@renderer/features/tasks/add-remote-modal';
 import { ArchiveTaskWithNoteModal } from '@renderer/features/tasks/archive-task-with-note-modal';
-import { CreateConversationModal } from '@renderer/features/tasks/conversations/create-conversation-modal';
 import { CreateTaskModal } from '@renderer/features/tasks/create-task-modal/create-task-modal';
 import { CreatePrModal } from '@renderer/features/tasks/diff-view/changes-panel/components/pr-entry/create-pr-modal';
 import { ConflictDialog } from '@renderer/features/tasks/editor/conflict-dialog';
@@ -48,13 +48,13 @@ export const modalRegistry = {
   commandPaletteModal: createModal(CommandPaletteModal, { size: 'md' }),
   taskModal: createModal(CreateTaskModal),
   newTaskModal: createModal(NewTaskModal, { size: 'lg' }),
+  newConversationModal: createModal(NewConversationModal, { size: 'lg' }),
   addProjectModal: createModal(AddProjectModal),
   addSshConnModal: createModal(AddSshConnModal),
   changeProjectConnectionModal: createModal(ChangeProjectConnectionModal, { size: 'sm' }),
   githubDeviceFlowModal: createModal(GithubDeviceFlowModalOverlay, { size: 'md' }),
   accountDeviceFlowModal: createModal(AccountDeviceFlowModalOverlay, { size: 'md' }),
   confirmActionModal: createModal(ConfirmActionDialog, { size: 'xs' }),
-  createConversationModal: createModal(CreateConversationModal),
   feedbackModal: createModal(FeedbackModal),
   mcpServerModal: createModal(McpModal),
   createSkillModal: createModal(CreateSkillModal),

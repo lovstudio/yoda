@@ -4,8 +4,7 @@ import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { DialogContentArea, DialogHeader, DialogTitle } from '@renderer/lib/ui/dialog';
 
 /**
- * Hosts the home page's new-task composer in a modal, so starting new work
- * from inside a task doesn't shift attention away. The composer preselects
+ * Hosts the home page's new-task composer in a modal. The composer preselects
  * the current scope's project via navigation state and navigates to the new
  * task on submit; the modal just closes behind it.
  */
