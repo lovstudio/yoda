@@ -9,7 +9,7 @@
         try {
           var raw = localStorage.getItem('yoda-theme');
           var pref = raw ? JSON.parse(raw) : null;
-          if (pref === 'emlight') pref = 'ylight';
+          if (pref === 'emlight' || pref === 'ywarm') pref = 'ylight';
           else if (pref === 'emdark') pref = 'ydark';
           var effective =
             pref === 'ylight' || pref === 'ydark'

@@ -1,6 +1,6 @@
 import { createContext, useEffect, useLayoutEffect, type ReactNode } from 'react';
 import type { Theme } from '@shared/app-settings';
-import { findCustomTheme } from '@shared/custom-theme';
+import { findCustomTheme, YODA_WARM_THEME } from '@shared/custom-theme';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useLocalStorage } from '@renderer/lib/hooks/useLocalStorage';
 import { applyThemeToAll } from '@renderer/lib/pty/pty';
@@ -55,7 +55,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const theme: Theme = themeValue ?? null;
   const customThemes = customThemesValue?.items ?? [];
-  const selectedCustomTheme = findCustomTheme(customThemes, theme);
+  const selectedCustomTheme =
+    theme === 'ywarm' ? YODA_WARM_THEME : findCustomTheme(customThemes, theme);
   const effectiveTheme: EffectiveTheme = selectedCustomTheme
     ? selectedCustomTheme.mode === 'dark'
       ? 'ydark'

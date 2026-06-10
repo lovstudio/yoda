@@ -1,4 +1,4 @@
-import { Download, FileJson, Monitor, Moon, Sun, Trash2, Upload } from 'lucide-react';
+import { Download, FileJson, Monitor, Moon, Sun, Sunset, Trash2, Upload } from 'lucide-react';
 import React, { useCallback, useMemo, useRef, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '@shared/app-settings';
@@ -298,6 +298,16 @@ const ThemeCard: React.FC = () => {
         >
           <Moon className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="text-center">{t('settings.theme.yodaDark')}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleSetTheme('ywarm')}
+          className={`${buttonBase} ${theme === 'ywarm' ? activeClass : inactiveClass}`}
+          aria-pressed={theme === 'ywarm'}
+          aria-label={t('settings.theme.ariaWarm')}
+        >
+          <Sunset className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="text-center">{t('settings.theme.yodaWarm')}</span>
         </button>
       </div>
       <div className="mt-1 grid gap-2">

@@ -176,11 +176,13 @@ export const terminalSettingsSchema = z.object({
     .catch(DEFAULT_TERMINAL_SCROLLBACK_LINES),
 });
 
-const legacyThemeSchema = z.enum(['ylight', 'ydark', 'emlight', 'emdark']).transform((value) => {
-  if (value === 'emlight') return 'ylight' as const;
-  if (value === 'emdark') return 'ydark' as const;
-  return value;
-});
+const legacyThemeSchema = z
+  .enum(['ylight', 'ydark', 'ywarm', 'emlight', 'emdark'])
+  .transform((value) => {
+    if (value === 'emlight') return 'ylight' as const;
+    if (value === 'emdark') return 'ydark' as const;
+    return value;
+  });
 
 export const themeSchema = z
   .union([legacyThemeSchema, customThemeSelectionSchema])

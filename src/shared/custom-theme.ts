@@ -4,7 +4,7 @@ export const CUSTOM_THEME_SCHEMA_VERSION = 1;
 export const CUSTOM_THEME_SELECTION_PREFIX = 'custom:';
 export const CUSTOM_THEME_EXAMPLE_FILE_NAME = 'yoda-theme-example.json';
 
-export type BuiltInTheme = 'ylight' | 'ydark';
+export type BuiltInTheme = 'ylight' | 'ydark' | 'ywarm';
 export type CustomThemeMode = 'light' | 'dark';
 export type CustomThemeSelection = `${typeof CUSTOM_THEME_SELECTION_PREFIX}${string}`;
 export type ThemeSelection = BuiltInTheme | CustomThemeSelection | null;
@@ -107,6 +107,39 @@ export const CUSTOM_THEME_EXAMPLE: CustomTheme = {
     diffAdded: '#3f8f5f',
     diffModified: '#b7791f',
     diffDeleted: '#c2413b',
+  },
+};
+
+// Built-in "Yoda Warm" palette (Lovstudio Warm Academic). Selected via the
+// 'ywarm' built-in theme and applied through the custom-theme CSS var pipeline.
+export const YODA_WARM_THEME: CustomTheme = {
+  schemaVersion: CUSTOM_THEME_SCHEMA_VERSION,
+  id: 'ywarm',
+  name: 'Yoda Warm',
+  mode: 'light',
+  colors: {
+    background: '#f9f9f7',
+    background1: '#f4f2ec',
+    background2: '#ece8dc',
+    background3: '#ded8c7',
+    foreground: '#181818',
+    foregroundMuted: '#73736b',
+    foregroundPassive: '#9a9890',
+    border: '#ddd8cb',
+    border1: '#c9c1b2',
+    border2: '#a89f90',
+    primaryButtonBackground: '#a8563f',
+    primaryButtonBackgroundHover: '#8f4734',
+    primaryButtonForeground: '#ffffff',
+    primaryButtonBorder: '#8f4734',
+    statusInProgress: '#b7791f',
+    statusInReview: '#735384',
+    statusDone: '#5f7f4f',
+    statusTodo: '#87867f',
+    statusCancelled: '#b45f5c',
+    diffAdded: '#5f7f4f',
+    diffModified: '#c29242',
+    diffDeleted: '#c86655',
   },
 };
 
