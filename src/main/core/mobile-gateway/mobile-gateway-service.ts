@@ -1,14 +1,16 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import http from 'node:http';
 import { networkInterfaces } from 'node:os';
+import path from 'node:path';
 import { URL } from 'node:url';
+import { app } from 'electron';
 import {
   buildPromptInjectionPayload,
   getAgentCommandSubmitDelayMs,
   getAgentCommandSubmitInput,
 } from '@shared/agent-command-prefix';
-import { AGENT_PROVIDER_IDS, type AgentProviderId } from '@shared/agent-provider-registry';
 import type { Conversation } from '@shared/conversations';
 import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import {
@@ -42,6 +44,7 @@ import {
   type Project,
 } from '@shared/projects';
 import { makePtySessionId } from '@shared/ptySessionId';
+import { RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import { ensureUniqueTaskSlug, taskNameFromPrompt } from '@shared/task-name';
 import type { CreateTaskError, CreateTaskWarning, Task } from '@shared/tasks';
 import { loadClaudeTranscript } from '@main/core/conversations/claude-transcript';
@@ -106,6 +109,68 @@ function shouldStartGateway(): boolean {
 
 function isDevelopment(): boolean {
   return process.env.NODE_ENV !== 'production';
+}
+
+function metroPidFilePath(): string {
+  return path.join(app.getPath('userData'), 'metro-dev-server.pid');
+}
+
+function writeMetroPidFile(pid: number): void {
+  try {
+    fs.writeFileSync(metroPidFilePath(), String(pid), 'utf8');
+  } catch (error) {
+    log.warn('MobileGateway: failed to write Metro pid file', { error: String(error) });
+  }
+}
+
+function removeMetroPidFile(): void {
+  try {
+    fs.rmSync(metroPidFilePath(), { force: true });
+  } catch (error) {
+    log.warn('MobileGateway: failed to remove Metro pid file', { error: String(error) });
+  }
+}
+
+function isOurMetroProcess(pid: number): boolean {
+  const result = spawnSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' });
+  if (result.status !== 0) return false;
+  return result.stdout.includes('@yoda/mobile');
+}
+
+// A previous Yoda instance that crashed or was force-killed leaves its detached
+// Metro process group orphaned (and getMetroStatus() would happily adopt it
+// forever). Kill it before we check the port, so the orphan never outlives the
+// next launch.
+function killStaleMetroFromPidFile(): void {
+  if (process.platform === 'win32') return;
+
+  let pid: number;
+  try {
+    pid = Number.parseInt(fs.readFileSync(metroPidFilePath(), 'utf8').trim(), 10);
+  } catch {
+    return;
+  }
+  if (!Number.isInteger(pid) || pid <= 1) {
+    removeMetroPidFile();
+    return;
+  }
+
+  if (isOurMetroProcess(pid)) {
+    log.info('MobileGateway: killing stale Expo Metro from previous run', { pid });
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch (error) {
+        log.warn('MobileGateway: failed to kill stale Expo Metro', {
+          pid,
+          error: String(error),
+        });
+      }
+    }
+  }
+  removeMetroPidFile();
 }
 
 function shouldAutoStartLocalMetro(): boolean {
@@ -433,8 +498,8 @@ function normalizeSessionInputRequest(body: unknown): MobileSessionInputRequest 
   };
 }
 
-function isAgentProviderId(value: string): value is AgentProviderId {
-  return AGENT_PROVIDER_IDS.includes(value as AgentProviderId);
+function isRuntimeId(value: string): value is RuntimeId {
+  return RUNTIME_IDS.includes(value as RuntimeId);
 }
 
 function isTaskActivityRunning(status: MobileTaskActivityStatus): boolean {
@@ -462,6 +527,7 @@ function resolveTaskActivityStatus(
 export class MobileGatewayService {
   private server: http.Server | null = null;
   private metroProcess: ChildProcess | null = null;
+  private metroEnsureInFlight: Promise<void> | null = null;
   private token = '';
   private host = '0.0.0.0';
   private port = MOBILE_GATEWAY_DEFAULT_PORT;
@@ -505,10 +571,9 @@ export class MobileGatewayService {
       token: process.env.YODA_MOBILE_GATEWAY_TOKEN ? '<env>' : this.token,
     });
 
-    const primaryUrl = lanUrls(this.port)[0] ?? `http://localhost:${this.port}`;
-    void this.ensureLocalMetro(primaryUrl).catch((error: unknown) => {
-      log.warn('MobileGateway: failed to ensure Expo Metro is running', { error: String(error) });
-    });
+    // Reap any Metro orphaned by a crashed previous run at startup, even though
+    // Metro itself now only starts lazily via getConnectionInfo().
+    killStaleMetroFromPidFile();
   }
 
   dispose(): void {
@@ -516,6 +581,24 @@ export class MobileGatewayService {
     if (!this.server) return;
     this.server.close();
     this.server = null;
+  }
+
+  // Metro costs ~450MB RSS, so it is started lazily: only when the user opens
+  // the mobile connection view (getConnectionInfo), not on gateway startup.
+  private ensureLocalMetroLazy(): void {
+    if (!this.server) return;
+    if (this.metroEnsureInFlight) return;
+
+    const primaryUrl = lanUrls(this.port)[0] ?? `http://localhost:${this.port}`;
+    this.metroEnsureInFlight = this.ensureLocalMetro(primaryUrl)
+      .catch((error: unknown) => {
+        log.warn('MobileGateway: failed to ensure Expo Metro is running', {
+          error: String(error),
+        });
+      })
+      .finally(() => {
+        this.metroEnsureInFlight = null;
+      });
   }
 
   private async ensureLocalMetro(primaryUrl: string): Promise<void> {
@@ -555,6 +638,7 @@ export class MobileGatewayService {
     );
 
     this.metroProcess = child;
+    if (child.pid) writeMetroPidFile(child.pid);
     pipeMetroLog(child.stdout, 'info', 'MobileGateway: Expo Metro');
     pipeMetroLog(child.stderr, 'warn', 'MobileGateway: Expo Metro');
 
@@ -564,6 +648,7 @@ export class MobileGatewayService {
     });
     child.on('exit', (code, signal) => {
       if (this.metroProcess === child) this.metroProcess = null;
+      removeMetroPidFile();
       log.info('MobileGateway: Expo Metro exited', { code, signal });
     });
 
@@ -589,11 +674,13 @@ export class MobileGatewayService {
   }
 
   getConnectionInfo(): MobileGatewayConnectionInfo {
+    this.ensureLocalMetroLazy();
     const urls = lanUrls(this.port);
     const primaryUrl = urls[0] ?? `http://localhost:${this.port}`;
     return {
       enabled: shouldStartGateway(),
       running: Boolean(this.server),
+      mode: isDevelopment() ? 'development' : 'production',
       host: this.host,
       port: this.port,
       token: this.token || null,
@@ -738,7 +825,7 @@ export class MobileGatewayService {
       lastInteractedAt: task.lastInteractedAt,
       needsReview: task.needsReview,
       isPinned: task.isPinned,
-      providerCounts: task.conversations,
+      runtimeCounts: task.conversations,
       conversationCount: Object.values(task.conversations).reduce((sum, count) => sum + count, 0),
     };
   }
@@ -843,10 +930,7 @@ export class MobileGatewayService {
       throw new MobileGatewayError(404, 'session_not_found', 'Mobile session was not found.');
     }
 
-    const payload = buildPromptInjectionPayload({
-      providerId: conversation.providerId,
-      text: params.input,
-    });
+    const payload = buildPromptInjectionPayload(params.input);
     if (!payload) {
       throw new MobileGatewayError(400, 'missing_input', 'Input is required.');
     }
@@ -859,13 +943,13 @@ export class MobileGatewayService {
       );
     }
     if (params.submit !== false) {
-      await sleep(getAgentCommandSubmitDelayMs(conversation.providerId));
+      await sleep(getAgentCommandSubmitDelayMs(conversation.runtimeId));
       if (
         !(await this.writeConversationInput(
           projectId,
           taskId,
           conversationId,
-          getAgentCommandSubmitInput(conversation.providerId)
+          getAgentCommandSubmitInput(conversation.runtimeId)
         ))
       ) {
         throw new MobileGatewayError(
@@ -962,7 +1046,7 @@ export class MobileGatewayService {
       projectId: conversation.projectId,
       taskId: conversation.taskId,
       title: conversation.title,
-      providerId: conversation.providerId,
+      runtimeId: conversation.runtimeId,
       createdAt: conversation.createdAt,
       updatedAt: conversation.updatedAt,
       lastInteractedAt: conversation.lastInteractedAt,
@@ -986,7 +1070,7 @@ export class MobileGatewayService {
       return { content: liveBuffer, source: 'live' };
     }
 
-    if (conversation.providerId === 'codex') {
+    if (conversation.runtimeId === 'codex') {
       const history = await loadCodexRolloutTerminalHistoryForConversation({
         conversation,
         cwd,
@@ -1008,7 +1092,7 @@ export class MobileGatewayService {
     cwd: string,
     sessionId: string
   ): Promise<MobileSessionTranscriptBlock[]> {
-    if (conversation.providerId === 'claude') {
+    if (conversation.runtimeId === 'claude') {
       const transcript = await loadClaudeTranscript({
         cwd,
         sessionId,
@@ -1022,7 +1106,7 @@ export class MobileGatewayService {
       return transcript ?? [];
     }
 
-    if (conversation.providerId !== 'codex') return [];
+    if (conversation.runtimeId !== 'codex') return [];
 
     const transcript = await loadCodexRolloutTranscriptForConversation({
       conversation,
@@ -1061,7 +1145,7 @@ export class MobileGatewayService {
         id: conversationId,
         projectId,
         taskId,
-        provider,
+        runtime: provider,
         title: taskNameFromPrompt(params.prompt) || 'Mobile request',
         initialPrompt: params.prompt,
       },
@@ -1091,12 +1175,12 @@ export class MobileGatewayService {
     return project;
   }
 
-  private async resolveProvider(provider: string | undefined): Promise<AgentProviderId> {
+  private async resolveProvider(provider: string | undefined): Promise<RuntimeId> {
     if (provider) {
-      if (isAgentProviderId(provider)) return provider;
+      if (isRuntimeId(provider)) return provider;
       throw new MobileGatewayError(400, 'invalid_provider', `Unsupported provider: ${provider}`);
     }
-    return appSettingsService.get('defaultAgent');
+    return appSettingsService.get('defaultRuntime');
   }
 
   private async resolveSourceBranch(project: Project, projectId: string) {
