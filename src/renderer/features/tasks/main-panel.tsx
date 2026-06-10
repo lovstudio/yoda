@@ -11,7 +11,8 @@ import {
 } from '@renderer/features/tasks/stores/task-selectors';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { usePersistentPanelLayout } from '@renderer/lib/hooks/use-persistent-panel-layout';
-import { panelDragStore } from '@renderer/lib/layout/panel-drag-store';
+import { rpc } from '@renderer/lib/ipc';
+import { viewStateCache } from '@renderer/lib/stores/view-state-cache';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
@@ -180,8 +181,6 @@ const TaskSetupRecovery = observer(function TaskSetupRecovery({
   );
 });
 
-const SIDEBAR_COLLAPSED_SIZE = '0px';
-
 /**
  * Bottom-bar-first layout: the outer split is vertical so the terminal drawer
  * spans the full width (under the sidebar too); the main|sidebar horizontal
@@ -190,7 +189,6 @@ const SIDEBAR_COLLAPSED_SIZE = '0px';
 const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
   const { taskView } = useProvisionedTask();
   const bottomPanelRef = usePanelRef();
-  const draggingRef = useRef(false);
   const [isHandleDragging, setIsHandleDragging] = useState(false);
   const layout = usePersistentPanelLayout('task-main-vertical');
 
@@ -223,25 +221,9 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
           setIsHandleDragging(true);
-          if (!draggingRef.current) {
-            draggingRef.current = true;
-            panelDragStore.setDragging(true);
-          }
         }}
-        onPointerUp={() => {
-          setIsHandleDragging(false);
-          if (draggingRef.current) {
-            draggingRef.current = false;
-            panelDragStore.setDragging(false);
-          }
-        }}
-        onPointerCancel={() => {
-          setIsHandleDragging(false);
-          if (draggingRef.current) {
-            draggingRef.current = false;
-            panelDragStore.setDragging(false);
-          }
-        }}
+        onPointerUp={() => setIsHandleDragging(false)}
+        onPointerCancel={() => setIsHandleDragging(false)}
         className={taskView.isTerminalDrawerOpen ? 'flex' : 'hidden'}
       />
       <ResizablePanel
@@ -251,6 +233,8 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
         collapsedSize="0%"
         defaultSize="25%"
         minSize="15%"
+        // Window-height changes must not rescale the drawer height.
+        groupResizeBehavior="preserve-pixel-size"
         className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
         onResize={() => {
@@ -266,90 +250,117 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
   );
 });
 
+const SIDEBAR_MIN_PX = 280;
+const SIDEBAR_DEFAULT_PX = 360;
+/** Dragging the divider below this width collapses the sidebar. */
+const SIDEBAR_COLLAPSE_THRESHOLD_PX = 200;
+const SIDEBAR_PX_VIEW_STATE_KEY = 'task-sidebar-px';
+
+function loadSidebarPx(): number {
+  const saved = viewStateCache.peek(SIDEBAR_PX_VIEW_STATE_KEY);
+  const n = typeof saved === 'string' ? Number(saved) : NaN;
+  return Number.isFinite(n) && n >= SIDEBAR_MIN_PX ? Math.round(n) : SIDEBAR_DEFAULT_PX;
+}
+
 /**
- * Upper region: (titlebar + main column) | task sidebar (horizontal split).
- * The titlebar lives inside the LEFT column so the split also divides the top
- * bar — the sidebar reaches the window top with its own header row.
+ * Upper region: (titlebar + main column) | task sidebar.
+ *
+ * Deliberately NOT a ResizablePanelGroup: the group model stores percentages,
+ * so outer width changes (left workspace sidebar drag, window resize) leak
+ * quantization wobble into sibling panels even with
+ * groupResizeBehavior="preserve-pixel-size" (measured ±1-2px/frame plus
+ * drift).  Plain flexbox with a px-width sidebar makes the invariant
+ * structural: only this divider can change the sidebar width — the main
+ * column absorbs every outer change.
  */
 const TaskUpperSplit = observer(function TaskUpperSplit() {
   const { projectId, taskId } = useTaskViewContext();
   const { taskView } = useProvisionedTask();
-  const sidebarPanelRef = usePanelRef();
-  const [isHandleDragging, setIsHandleDragging] = useState(false);
-  const layout = usePersistentPanelLayout('task-sidebar-layout');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const sidebarElRef = useRef<HTMLDivElement>(null);
+  const [sidebarPx, setSidebarPx] = useState(loadSidebarPx);
+  const sidebarPxRef = useRef(sidebarPx);
+  sidebarPxRef.current = sidebarPx;
+  const dragRef = useRef<{ startX: number; startPx: number } | null>(null);
+
+  const isCollapsed = taskView.isSidebarCollapsed;
   // Maximized: the sidebar overlays the whole upper split. The main column stays
   // mounted underneath so editor/Activity state survives the toggle.
-  const isSidebarMaximized = taskView.isSidebarMaximized && !taskView.isSidebarCollapsed;
+  const isSidebarMaximized = taskView.isSidebarMaximized && !isCollapsed;
 
-  useEffect(() => {
-    const panel = sidebarPanelRef.current;
-    if (!panel) return;
-    const isCollapsed = panel.isCollapsed();
-    if (taskView.isSidebarCollapsed && !isCollapsed) {
-      panel.collapse();
-    } else if (!taskView.isSidebarCollapsed && isCollapsed) {
-      panel.expand();
-    }
-  }, [taskView.isSidebarCollapsed, sidebarPanelRef]);
+  const endDividerDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    // Hand the width back to React + persistence only on release.
+    setSidebarPx(sidebarPxRef.current);
+    viewStateCache.set(SIDEBAR_PX_VIEW_STATE_KEY, String(sidebarPxRef.current));
+    void rpc.viewState.save(SIDEBAR_PX_VIEW_STATE_KEY, String(sidebarPxRef.current));
+  };
 
   return (
-    <ResizablePanelGroup
-      orientation="horizontal"
-      className="relative min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
-      {...layout}
+    <div
+      ref={containerRef}
+      className="relative flex h-full min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
     >
-      <ResizablePanel
-        id="task-main-area"
-        className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
-        data-yoda-animate={isHandleDragging ? 'false' : 'true'}
+      <div
+        data-task-main-column
+        className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
-        <div className="flex h-full min-h-0 flex-col overflow-hidden">
-          <ActiveTaskTitlebar projectId={projectId} taskId={taskId} />
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <TaskMainAreaSplit />
-          </div>
+        <ActiveTaskTitlebar projectId={projectId} taskId={taskId} />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <TaskMainAreaSplit />
         </div>
-      </ResizablePanel>
-      <ResizableHandle
+      </div>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        className="relative w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
-          setIsHandleDragging(true);
-          panelDragStore.setDragging(true);
+          dragRef.current = { startX: e.clientX, startPx: isCollapsed ? 0 : sidebarPxRef.current };
         }}
-        onPointerUp={() => {
-          setIsHandleDragging(false);
-          panelDragStore.setDragging(false);
-        }}
-        onPointerCancel={() => {
-          setIsHandleDragging(false);
-          panelDragStore.setDragging(false);
-        }}
-      />
-      <ResizablePanel
-        id="task-sidebar"
-        panelRef={sidebarPanelRef}
-        defaultSize="25%"
-        minSize="280px"
-        maxSize="50%"
-        collapsible
-        collapsedSize={SIDEBAR_COLLAPSED_SIZE}
-        className={cn(
-          'min-h-0 min-w-0 overflow-hidden bg-background text-foreground',
-          // position:absolute takes the panel out of flex flow — inset-0 makes it
-          // cover the whole group while the flex-basis inline style is ignored.
-          isSidebarMaximized && 'absolute inset-0 z-20'
-        )}
-        data-yoda-animate={isHandleDragging ? 'false' : 'true'}
-        onResize={() => {
-          const wantCollapsed = sidebarPanelRef.current?.isCollapsed() ?? false;
-          if (taskView.isSidebarCollapsed !== wantCollapsed) {
-            taskView.setSidebarCollapsed(wantCollapsed);
+        onPointerMove={(e) => {
+          const drag = dragRef.current;
+          if (!drag) return;
+          // Dragging left widens the sidebar.
+          const raw = drag.startPx + (drag.startX - e.clientX);
+          if (raw < SIDEBAR_COLLAPSE_THRESHOLD_PX) {
+            if (!taskView.isSidebarCollapsed) taskView.setSidebarCollapsed(true);
+            return;
+          }
+          if (taskView.isSidebarCollapsed) taskView.setSidebarCollapsed(false);
+          const max = (containerRef.current?.getBoundingClientRect().width ?? Infinity) / 2;
+          const px = Math.round(Math.min(Math.max(raw, SIDEBAR_MIN_PX), max));
+          // Write the width straight to the DOM while dragging — zero-frame
+          // lag, no React render on the pointer hot path. React state catches
+          // up once on release (endDividerDrag).
+          sidebarPxRef.current = px;
+          if (sidebarElRef.current) {
+            sidebarElRef.current.style.width = `min(${px}px, 50%)`;
           }
         }}
+        onPointerUp={endDividerDrag}
+        onPointerCancel={endDividerDrag}
+      />
+      <div
+        ref={sidebarElRef}
+        data-task-sidebar
+        className={cn(
+          'min-h-0 shrink-0 overflow-hidden bg-background text-foreground',
+          isSidebarMaximized && 'absolute inset-0 z-20'
+        )}
+        // min() lets narrow windows clamp the sidebar via CSS without
+        // touching the stored px — it springs back when space returns.
+        style={
+          isSidebarMaximized
+            ? undefined
+            : { width: isCollapsed ? 0 : `min(${sidebarPx}px, 50%)` }
+        }
       >
         <TaskSidebar />
-      </ResizablePanel>
-    </ResizablePanelGroup>
+      </div>
+    </div>
   );
 });
 

@@ -15,7 +15,7 @@ interface WorkspaceLayoutProps {
 }
 
 export function WorkspaceLayout({ leftSidebar, mainContent }: WorkspaceLayoutProps) {
-  const { leftPanelRef, handleDragging, setIsLeftOpen, isLeftOpen } = useWorkspaceLayoutContext();
+  const { leftPanelRef, setIsLeftOpen, isLeftOpen } = useWorkspaceLayoutContext();
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: 'workspace-outer',
     storage: localStorage,
@@ -42,12 +42,6 @@ export function WorkspaceLayout({ leftSidebar, mainContent }: WorkspaceLayoutPro
         {leftSidebar}
       </ResizablePanel>
       <ResizableHandle
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          handleDragging('left', true);
-        }}
-        onPointerUp={() => handleDragging('left', false)}
-        onPointerCancel={() => handleDragging('left', false)}
         className={cn(
           'items-center justify-center transition-colors hover:bg-border/80',
           isLeftOpen ? 'flex' : 'hidden'

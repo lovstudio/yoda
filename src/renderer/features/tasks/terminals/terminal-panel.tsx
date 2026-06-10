@@ -13,7 +13,6 @@ import {
 } from '@renderer/lib/hooks/useKeyboardShortcuts';
 import { useTabShortcuts } from '@renderer/lib/hooks/useTabShortcuts';
 import { rpc } from '@renderer/lib/ipc';
-import { panelDragStore } from '@renderer/lib/layout/panel-drag-store';
 import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
@@ -204,15 +203,7 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
           fileLinks={fileLinks}
         />
       </ResizablePanel>
-      <ResizableHandle
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          panelDragStore.setDragging(true);
-        }}
-        className="hover:bg-background-2"
-        onPointerUp={() => panelDragStore.setDragging(false)}
-        onPointerCancel={() => panelDragStore.setDragging(false)}
-      />
+      <ResizableHandle className="hover:bg-background-2" />
       <ResizablePanel id="terminal-drawer-sidebar" defaultSize="25%" minSize="150px" maxSize="50%">
         <TerminalDrawerSidebar
           className="h-full"

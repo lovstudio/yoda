@@ -159,7 +159,7 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
           height: '100%',
           minHeight: 0,
           boxSizing: 'border-box',
-          backgroundColor: themeOverride?.background ?? 'var(--background-1)',
+          backgroundColor: themeOverride?.background ?? 'var(--xterm-bg)',
         }}
       >
         <div

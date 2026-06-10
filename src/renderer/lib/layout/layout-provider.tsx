@@ -2,20 +2,16 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
-  useRef,
   useState,
   type ReactNode,
   type RefObject,
 } from 'react';
 import { usePanelRef, type PanelImperativeHandle } from 'react-resizable-panels';
-import { panelDragStore } from './panel-drag-store';
 
 export interface WorkspaceLayoutContextValue {
   isLeftOpen: boolean;
   leftPanelRef: RefObject<PanelImperativeHandle | null>;
   setIsLeftOpen: (open: boolean) => void;
-  handleDragging: (side: 'left', dragging: boolean) => void;
   setCollapsed: (side: 'left', collapsed: boolean) => void;
   toggleLeft: () => void;
 }
@@ -26,27 +22,6 @@ export function useWorkspaceLayoutService() {
   const leftPanelRef = usePanelRef();
 
   const [isLeftOpen, setIsLeftOpen] = useState(true);
-
-  const draggingRef = useRef({ left: false });
-
-  const handleDragging = useCallback((side: 'left', dragging: boolean) => {
-    if (draggingRef.current[side] === dragging) return;
-    const wasDragging = draggingRef.current.left;
-    draggingRef.current[side] = dragging;
-    const isDragging = draggingRef.current.left;
-    if (wasDragging !== isDragging) {
-      panelDragStore.setDragging(isDragging);
-    }
-  }, []);
-
-  useEffect(() => {
-    const dragging = draggingRef.current;
-    return () => {
-      if (dragging.left) {
-        panelDragStore.setDragging(false);
-      }
-    };
-  }, []);
 
   const setCollapsed = useCallback(
     (side: 'left', collapsed: boolean) => {
@@ -68,7 +43,6 @@ export function useWorkspaceLayoutService() {
 
   return {
     leftPanelRef,
-    handleDragging,
     setIsLeftOpen,
     isLeftOpen,
     setCollapsed,

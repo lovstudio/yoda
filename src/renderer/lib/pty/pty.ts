@@ -26,6 +26,14 @@ export interface SessionTheme {
  */
 export const TERMINAL_LINE_HEIGHT = 1.0;
 
+/**
+ * Sole timer in the resize pipeline's unfreeze chain: reveals the resized
+ * terminal when no TUI repaint ever arrives (plain shells, silent sessions —
+ * their rewrapped plain text is already the correct final content).
+ * Everything else is event-driven; see FrontendPty.commitResize().
+ */
+const UNFREEZE_FALLBACK_MS = 300;
+
 export const DEFAULT_TERMINAL_FONT_FAMILY = [
   'Menlo',
   'Monaco',
@@ -124,12 +132,12 @@ export class FrontendPty {
   private pendingWrites: string[] = [];
   private hasFlushed = false;
   private savedViewportY: number | null = null;
-  /** Deferred terminal.resize, applied on the next data chunk (or timeout). */
-  private deferredResize: {
-    cols: number;
-    rows: number;
-    timer: ReturnType<typeof setTimeout>;
-  } | null = null;
+  /** Snapshot overlay hiding resize transitions — see commitResize(). */
+  private freezeOverlay: HTMLCanvasElement | null = null;
+  /** Unfreeze event chain state: idle → await-data → await-render → idle. */
+  private unfreezePhase: 'idle' | 'await-data' | 'await-render' = 'idle';
+  private unfreezeRenderDisposable: IDisposable | null = null;
+  private unfreezeFallbackTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly scrollDisposable: { dispose(): void };
   private webglAddon: WebglAddon | null = null;
   private webglContextLossDisposable: IDisposable | null = null;
@@ -191,7 +199,10 @@ export class FrontendPty {
 
   private loadWebglRenderer(): void {
     try {
-      const webglAddon = new WebglAddon();
+      // preserveDrawingBuffer so the freeze-frame overlay (see
+      // resizeNow/freezeFrameDuringResize) can reliably drawImage() the WebGL
+      // canvas at any moment.
+      const webglAddon = new WebglAddon(true);
       const contextLossDisposable = webglAddon.onContextLoss(() => {
         log.warn('FrontendPty: WebGL renderer context lost; falling back to DOM renderer', {
           sessionId: this.sessionId,
@@ -249,7 +260,8 @@ export class FrontendPty {
    * (`\x1b[35;1H…`), while a full repaint homes the cursor (bare `\x1b[H`),
    * clears the screen, or switches the alt buffer.  Deliberately NO size
    * heuristic: large chunks can be plain streamed output or OSC52 clipboard
-   * payloads, and a false positive here paints rewrap garbage.
+   * payloads, and a false positive advances the unfreeze chain on stale
+   * content.  Verified against live Claude Code traffic.
    */
   private static looksLikeRepaint(data: string): boolean {
     return (
@@ -262,13 +274,11 @@ export class FrontendPty {
 
   private writeOrBuffer(data: string): void {
     if (this.hasFlushed) {
-      // Apply a deferred reflow only when the app's repaint frame arrives, so
-      // the rewrapped viewport is overwritten by the new frame in the same
-      // tick (before the next paint).  Incremental chunks (spinners, streamed
-      // output) must NOT trigger it — they'd expose the rewrap garbage for
-      // the 30-100ms until the real repaint lands.
-      if (this.deferredResize && FrontendPty.looksLikeRepaint(data)) {
-        this.applyDeferredResize();
+      // Unfreeze chain step 1: the app's post-SIGWINCH repaint reaching us
+      // (in-flight pre-resize chunks — spinners, streamed rows — must NOT
+      // advance the chain; they would reveal the rewrapped buffer early).
+      if (this.unfreezePhase === 'await-data' && FrontendPty.looksLikeRepaint(data)) {
+        this.unfreezePhase = 'await-render';
       }
       this.terminal.write(data);
     } else {
@@ -277,61 +287,126 @@ export class FrontendPty {
   }
 
   /**
-   * Apply a resize without ever painting forced-rewrap garbage.
+   * Commit a resize as ONE atomic visual transition (rows + cols together).
    *
-   * xterm's resize is asymmetric:
-   *  - Cols GROWTH never force-wraps existing lines (it only unwraps
-   *    previously wrapped ones) — that reflow is correct by construction, so
-   *    growth applies immediately: live reflow with no garbage possible.
-   *  - Cols SHRINK force-wraps every line longer than the new width, which
-   *    garbles absolutely-positioned TUI screens — and apps like Claude Code
-   *    debounce their resize repaint, so the garbage would stay on screen for
-   *    the whole drag.  Instead the PTY learns the new size immediately (the
-   *    app starts rendering at the narrow width right away) while the
-   *    terminal keeps its wider grid — narrow content on a wide grid renders
-   *    fine, zero visual debt.  The shrink lands either when a full-screen
-   *    repaint arrives (vim-class apps repaint per SIGWINCH — atomic swap in
-   *    writeOrBuffer) or `settleMs` after the LAST resize report (drag
-   *    settled; by then on-screen content is already narrow, so the shrink
-   *    wraps nothing).  Resetting the timer per report is deliberate — the
-   *    deferral shows a correct frame, so there is nothing to starve.
+   * term.resize() synchronously clears the WebGL canvas and force-rewraps
+   * the buffer; painted raw that is the white flash / garbled layout
+   * (verified frame-by-frame via tracing screenshots).  The transition is
+   * hidden behind a snapshot of the last presented frame and revealed by an
+   * event chain — no timing assumptions:
    *
-   * Rows-only changes never rewrap, and a terminal that hasn't flushed its
-   * historical buffer yet has no frame worth protecting — both apply
-   * immediately.
+   *   freezeFrame()      snapshot canvas → overlay covers the terminal
+   *   terminal.resize()  clear + rewrap happen under the overlay
+   *   (caller sends rpc.pty.resize in the same tick → app repaints)
+   *   unfreeze chain — entry phase depends on direction (user-chosen
+   *   tradeoff: live-follow on grow, no garbling on shrink):
+   *     GROW / rows-only ('await-render'): unwrapping is correct by
+   *       construction, so reveal on the resize's own full redraw — live
+   *       per-column tracking during drags.  (The transcript may shift
+   *       vertically as line counts change; inherent to live reflow.)
+   *     SHRINK ('await-data'): force-wrapping garbles TUI rows, so hold the
+   *       snapshot until the app's repaint arrives (looksLikeRepaint in
+   *       writeOrBuffer) — successive shrink commits keep the snapshot up,
+   *       and the reveal happens when the app catches up.
+   *   then: next FULL-viewport onRender (partial renders would expose the
+   *   cleared rest of the canvas) → one requestAnimationFrame (the redrawn
+   *   canvas is presented) → overlay hidden.
+   *   fallback timer: sessions with no TUI never send a repaint; their
+   *   plain-text rewrap IS the correct final content, so reveal after
+   *   UNFREEZE_FALLBACK_MS.
+   *
+   * A terminal that hasn't flushed its history yet has no frame worth
+   * protecting and resizes bare.
    */
-  requestResize(cols: number, rows: number, settleMs: number): void {
-    if (this.terminal.cols === cols && this.terminal.rows === rows) {
-      this.cancelDeferredResize();
-      return;
-    }
-    if (cols >= this.terminal.cols || !this.hasFlushed) {
-      this.cancelDeferredResize();
+  commitResize(cols: number, rows: number): void {
+    if (this.terminal.cols === cols && this.terminal.rows === rows) return;
+    if (!this.hasFlushed) {
       this.terminal.resize(cols, rows);
       return;
     }
-    // Cols shrink: rows apply now, the cols shrink waits for repaint/settle.
-    if (this.terminal.rows !== rows) {
-      this.terminal.resize(this.terminal.cols, rows);
-    }
-    this.cancelDeferredResize();
-    const timer = setTimeout(() => this.applyDeferredResize(), settleMs);
-    this.deferredResize = { cols, rows, timer };
+    const isShrink = cols < this.terminal.cols;
+    // If a previous commit is still frozen, keep ITS snapshot (the canvas
+    // underneath may be mid-transition garbage — re-snapshotting it would
+    // put that garbage on the overlay) and just restart the unfreeze chain.
+    const frozen = this.unfreezePhase !== 'idle' ? true : this.freezeFrame();
+    this.terminal.resize(cols, rows);
+    if (frozen) this.armUnfreeze(isShrink ? 'await-data' : 'await-render');
   }
 
-  private applyDeferredResize(): void {
-    const pending = this.deferredResize;
-    if (!pending) return;
-    this.cancelDeferredResize();
-    if (this.terminal.cols !== pending.cols || this.terminal.rows !== pending.rows) {
-      this.terminal.resize(pending.cols, pending.rows);
-    }
+  private getWebglCanvas(): HTMLCanvasElement | null {
+    if (!this.webglAddon) return null;
+    // .xterm-screen hosts canvas.xterm-link-layer (2d) FIRST, then the
+    // unclassed WebGL render canvas — a bare `canvas` selector grabs the
+    // transparent link layer and the freeze snapshot would be empty.
+    return this.ownedContainer.querySelector<HTMLCanvasElement>(
+      '.xterm-screen canvas:not(.xterm-link-layer)'
+    );
   }
 
-  private cancelDeferredResize(): void {
-    if (!this.deferredResize) return;
-    clearTimeout(this.deferredResize.timer);
-    this.deferredResize = null;
+  /**
+   * Snapshot the current frame onto the overlay so it covers the terminal.
+   * Returns false when no usable snapshot could be taken (DOM renderer
+   * fallback, zero-sized canvas, context lost) — the caller then resizes
+   * bare instead of arming an unfreeze that has nothing to reveal.
+   */
+  private freezeFrame(): boolean {
+    const gl = this.getWebglCanvas();
+    if (!gl || gl.width === 0 || gl.height === 0) return false;
+    let overlay = this.freezeOverlay;
+    if (!overlay) {
+      overlay = document.createElement('canvas');
+      overlay.className = 'terminal-freeze-overlay';
+      Object.assign(overlay.style, {
+        position: 'absolute',
+        left: '0',
+        top: '0',
+        pointerEvents: 'none',
+        zIndex: '10',
+      });
+      this.ownedContainer.style.position = 'relative';
+      this.freezeOverlay = overlay;
+    }
+    try {
+      overlay.width = gl.width;
+      overlay.height = gl.height;
+      const ctx = overlay.getContext('2d');
+      if (!ctx) return false;
+      ctx.drawImage(gl, 0, 0);
+    } catch {
+      return false;
+    }
+    overlay.style.width = gl.style.width || `${gl.width}px`;
+    overlay.style.height = gl.style.height || `${gl.height}px`;
+    overlay.style.display = 'block';
+    if (overlay.parentElement !== this.ownedContainer) {
+      this.ownedContainer.appendChild(overlay);
+    }
+    return true;
+  }
+
+  /** Start the event chain that reveals the resized terminal — see commitResize. */
+  private armUnfreeze(entryPhase: 'await-data' | 'await-render'): void {
+    this.unfreezeRenderDisposable?.dispose();
+    if (this.unfreezeFallbackTimer) clearTimeout(this.unfreezeFallbackTimer);
+    this.unfreezePhase = entryPhase;
+    this.unfreezeRenderDisposable = this.terminal.onRender((e) => {
+      if (this.unfreezePhase !== 'await-render') return;
+      if (e.start > 0 || e.end < this.terminal.rows - 1) return;
+      requestAnimationFrame(() => this.unfreeze());
+    });
+    this.unfreezeFallbackTimer = setTimeout(() => this.unfreeze(), UNFREEZE_FALLBACK_MS);
+  }
+
+  /** Hide the overlay and reset the chain. Idempotent. */
+  private unfreeze(): void {
+    this.unfreezePhase = 'idle';
+    this.unfreezeRenderDisposable?.dispose();
+    this.unfreezeRenderDisposable = null;
+    if (this.unfreezeFallbackTimer) {
+      clearTimeout(this.unfreezeFallbackTimer);
+      this.unfreezeFallbackTimer = null;
+    }
+    if (this.freezeOverlay) this.freezeOverlay.style.display = 'none';
   }
 
   /**
@@ -361,8 +436,8 @@ export class FrontendPty {
    * to eliminate the flash caused by a post-mount resize.
    */
   mount(mountTarget: HTMLElement, targetDims?: { cols: number; rows: number }): void {
-    // Mount dims are authoritative — drop any stale deferred reflow.
-    this.cancelDeferredResize();
+    // Mount dims are authoritative — drop any stale freeze overlay.
+    this.unfreeze();
     if (
       targetDims &&
       (this.terminal.cols !== targetDims.cols || this.terminal.rows !== targetDims.rows)
@@ -400,7 +475,9 @@ export class FrontendPty {
    */
   dispose(): void {
     FrontendPty.all.delete(this);
-    this.cancelDeferredResize();
+    this.unfreeze();
+    this.freezeOverlay?.remove();
+    this.freezeOverlay = null;
     this.offData?.();
     this.offData = null;
     this.scrollDisposable.dispose();

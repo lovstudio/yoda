@@ -37,24 +37,21 @@ import { TERMINAL_RELAYOUT_EVENT } from './terminal-relayout';
 import { getTerminalWebLinkAtCell, registerTerminalWebLinkProvider } from './terminal-web-links';
 
 /**
- * Throttle interval for live resize (panel drags, window resizes). One
- * measure → term.resize → rpc.pty.resize step per interval, leading +
- * trailing, so xterm reflow and the app's SIGWINCH repaint stay in lockstep
- * (~10Hz live reflow) instead of xterm reflowing per-frame against a stale
- * PTY size and the app repainting at random pauses.
+ * Minimum spacing between terminal commits during a continuous resize
+ * stream.  A commit (snapshot + grid reflow + PTY broadcast) costs 10-25ms
+ * of main-thread time; committing on every RO event during a fast drag
+ * saturated the thread and starved pointer handling — the panels themselves
+ * lagged behind the mouse (measured: input 3000px/s, panel tracking
+ * ~1500px/s with 70ms frame gaps).  Column crossings during normal-speed
+ * drags stay under this rate and commit immediately; only fast bursts are
+ * spaced out.  Enforced via an rAF chain — no timers, and the trailing
+ * commit always lands on the final size.
  */
-const TERMINAL_RESIZE_THROTTLE_MS = 100;
-/**
- * How long after the LAST resize report a deferred cols-shrink waits before
- * landing (the deferral shows a correct frame — narrow content on the wider
- * grid — so this is a settle window, not a deadline; see
- * FrontendPty.requestResize).
- */
-const TERMINAL_RESIZE_SETTLE_MS = 150;
+const TERMINAL_COMMIT_MIN_INTERVAL_MS = 64;
 const MIN_TERMINAL_COLS = 2;
 const MIN_TERMINAL_ROWS = 1;
-const MAX_LAYOUT_READY_RETRIES = 8;
-const LAYOUT_READY_RETRY_MS = 50;
+/** Layout-not-ready retries advance one frame at a time (~400ms at 60fps). */
+const MAX_LAYOUT_READY_RETRIES = 24;
 const MIN_READY_TERMINAL_COLS = 10;
 const FORCE_SELECTION_DRAG_THRESHOLD_PX = 2;
 const IS_MAC_PLATFORM =
@@ -238,9 +235,8 @@ export function usePty(
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
-  // Sends the PTY resize immediately (deduped). Pacing is owned by the
-  // measureAndResize throttle, so the SIGWINCH lands in the same tick as the
-  // corresponding term.resize() instead of drifting behind a debounce.
+  // Sends the PTY resize immediately (deduped); called in the same tick as
+  // the grid commit so the SIGWINCH corresponds to exactly that grid size.
   const sendPtyResize = useCallback(
     (newCols: number, newRows: number) => {
       const c = Math.max(MIN_TERMINAL_COLS, Math.floor(newCols));
@@ -259,101 +255,94 @@ export function usePty(
   const sendPtyResizeRef = useRef(sendPtyResize);
   sendPtyResizeRef.current = sendPtyResize;
 
+  // Layout not ready yet — try again next frame (event-driven: rAF is the
+  // browser telling us a new layout pass has happened).
   const retryMeasureAndResize = useCallback(
     (retries: number, options?: MeasureAndResizeOptions) => {
       if (retries >= MAX_LAYOUT_READY_RETRIES) return false;
-      setTimeout(() => measureAndResizeRef.current(retries + 1, options), LAYOUT_READY_RETRY_MS);
+      requestAnimationFrame(() => measureAndResizeRef.current(retries + 1, options));
       return true;
     },
     []
   );
 
   // measureAndResize is the single entry point for all DOM measurement + PTY
-  // resize work. Prefer the pane wrapper when available, then fall back to the
-  // terminal's owned container. Reports to PaneSizingContext (which broadcasts
-  // to ALL sessions in the pane) or directly via queuePtyResize for standalone
-  // terminals.
+  // resize work, and runs SYNCHRONOUSLY in the caller's tick: measure the
+  // live DOM, commit the grid resize (FrontendPty.commitResize hides the
+  // transition behind a snapshot overlay, so no frame-phase gymnastics are
+  // needed here), then broadcast the PTY resize in the same tick.
   const measureAndResize = useCallback(
     (retries = 0, options: MeasureAndResizeOptions = {}) => {
       if (!termRef.current) return;
       if (options.resetResizeDedup) {
         lastSentResizeRef.current = null;
       }
-      requestAnimationFrame(() => {
-        try {
-          const term = termRef.current;
-          if (!term) return;
-          const pane = paneSizingRef.current;
+      try {
+        const term = termRef.current;
+        const pane = paneSizingRef.current;
 
-          const cell = getCellMetrics(term);
-          if (!cell) {
-            retryMeasureAndResize(retries, options);
-            return;
-          }
-
-          // Prefer the pane wrapper: it is stable before the terminal's owned
-          // container has fully settled after being reparented from the off-screen host.
-          const termParent = (term as unknown as { element?: HTMLElement }).element?.parentElement;
-          const measureTarget =
-            pane?.containerRef.current ??
-            termParent ??
-            (containerRef.current as HTMLElement | null);
-          if (!measureTarget) return;
-          const scrollbarWidth = getTerminalFitScrollbarWidth(term);
-
-          if (
-            !isMeasureTargetReady(measureTarget, cell) &&
-            retryMeasureAndResize(retries, options)
-          ) {
-            return;
-          }
-
-          const dims =
-            pane?.measureCurrentDimensions(
-              cell.width,
-              cell.height,
-              scrollbarWidth,
-              TERMINAL_FIT_GUARD_COLUMNS
-            ) ??
-            measureDimensions(
-              measureTarget,
-              cell.width,
-              cell.height,
-              scrollbarWidth,
-              TERMINAL_FIT_GUARD_COLUMNS
-            );
-          if (!dims) {
-            retryMeasureAndResize(retries, options);
-            return;
-          }
-          const { cols: targetCols, rows: targetRows } = dims;
-
-          let didResize = false;
-          if (term.cols !== targetCols || term.rows !== targetRows) {
-            // Growth/rows apply immediately (live reflow, garbage-free by
-            // construction); cols shrinks land on repaint/settle — see
-            // FrontendPty.requestResize.
-            pty.requestResize(targetCols, targetRows, TERMINAL_RESIZE_SETTLE_MS);
-            didResize = true;
-          }
-
-          if (options.forceRefresh && !didResize) {
-            refreshTerminal(term);
-          }
-
-          // Now that the terminal is sized to the real pane width, drain any
-          // output that was buffered while it was off-screen at default cols.
-          pty.flushPendingWrites();
-
-          if (pane) {
-            pane.reportDimensions(targetCols, targetRows);
-          } else {
-            sendPtyResizeRef.current(targetCols, targetRows);
-          }
-        } catch (e) {
-          log.warn('useTerminal: measureAndResize failed', { sessionId, error: e });
+        const cell = getCellMetrics(term);
+        if (!cell) {
+          retryMeasureAndResize(retries, options);
+          return;
         }
-      });
+
+        // Prefer the pane wrapper: it is stable before the terminal's owned
+        // container has fully settled after being reparented from the off-screen host.
+        const termParent = (term as unknown as { element?: HTMLElement }).element?.parentElement;
+        const measureTarget =
+          pane?.containerRef.current ?? termParent ?? (containerRef.current as HTMLElement | null);
+        if (!measureTarget) return;
+        const scrollbarWidth = getTerminalFitScrollbarWidth(term);
+
+        if (!isMeasureTargetReady(measureTarget, cell) && retryMeasureAndResize(retries, options)) {
+          return;
+        }
+
+        const dims =
+          pane?.measureCurrentDimensions(
+            cell.width,
+            cell.height,
+            scrollbarWidth,
+            TERMINAL_FIT_GUARD_COLUMNS
+          ) ??
+          measureDimensions(
+            measureTarget,
+            cell.width,
+            cell.height,
+            scrollbarWidth,
+            TERMINAL_FIT_GUARD_COLUMNS
+          );
+        if (!dims) {
+          retryMeasureAndResize(retries, options);
+          return;
+        }
+        const { cols: targetCols, rows: targetRows } = dims;
+
+        let didResize = false;
+        if (term.cols !== targetCols || term.rows !== targetRows) {
+          pty.commitResize(targetCols, targetRows);
+          didResize = true;
+        }
+
+        if (options.forceRefresh && !didResize) {
+          refreshTerminal(term);
+        }
+
+        // Now that the terminal is sized to the real pane width, drain any
+        // output that was buffered while it was off-screen at default cols.
+        pty.flushPendingWrites();
+
+        // PTY resize goes out in the same tick as the grid commit, so the
+        // app's SIGWINCH repaint corresponds to exactly this grid size.
+        if (pane) {
+          pane.reportDimensions(targetCols, targetRows);
+        } else {
+          sendPtyResizeRef.current(targetCols, targetRows);
+        }
+      } catch (e) {
+        log.warn('useTerminal: measureAndResize failed', { sessionId, error: e });
+      }
     },
     [sessionId, containerRef, pty, retryMeasureAndResize]
   );
@@ -363,29 +352,31 @@ export function usePty(
   const measureAndResizeRef = useRef(measureAndResize);
   measureAndResizeRef.current = measureAndResize;
 
-  // Throttled entry point for high-frequency resize sources (ResizeObserver
-  // during panel drags, window resizes, panel collapse animations).
-  // Leading + trailing: the first event resizes immediately so the terminal
-  // tracks the drag, intermediate events coalesce to one resize per interval,
-  // and the trailing run settles on the final size (measureAndResize reads
-  // the live DOM at execution time, so it always measures the latest layout).
-  const resizeThrottleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastThrottledResizeRef = useRef(0);
-  const measureAndResizeThrottled = useCallback(() => {
-    if (resizeThrottleTimerRef.current !== null) return;
-    const run = () => {
-      lastThrottledResizeRef.current = Date.now();
+  // Frame-coalesced commit scheduler for the ResizeObserver stream: one
+  // pending commit at a time, executed on a rAF (latest layout wins), spaced
+  // by TERMINAL_COMMIT_MIN_INTERVAL_MS during bursts.  Keeps the expensive
+  // terminal work off the pointer-event hot path so panel drags stay glued
+  // to the mouse.
+  const pendingCommitRef = useRef(false);
+  const lastCommitAtRef = useRef(0);
+  const scheduleCommit = useCallback(() => {
+    if (pendingCommitRef.current) return;
+    pendingCommitRef.current = true;
+    const tick = () => {
+      if (!pendingCommitRef.current) return;
+      if (!termRef.current) {
+        pendingCommitRef.current = false;
+        return;
+      }
+      if (performance.now() - lastCommitAtRef.current < TERMINAL_COMMIT_MIN_INTERVAL_MS) {
+        requestAnimationFrame(tick);
+        return;
+      }
+      pendingCommitRef.current = false;
+      lastCommitAtRef.current = performance.now();
       measureAndResizeRef.current();
     };
-    const elapsed = Date.now() - lastThrottledResizeRef.current;
-    if (elapsed >= TERMINAL_RESIZE_THROTTLE_MS) {
-      run();
-    } else {
-      resizeThrottleTimerRef.current = setTimeout(() => {
-        resizeThrottleTimerRef.current = null;
-        run();
-      }, TERMINAL_RESIZE_THROTTLE_MS - elapsed);
-    }
+    requestAnimationFrame(tick);
   }, []);
 
   const applyTheme = useCallback((t?: SessionTheme) => {
@@ -938,10 +929,13 @@ export function usePty(
       );
 
       // ── ResizeObserver (observes the mount-target, not the owned container) ─
-      // Live reflow: every size change measures + resizes, throttled so xterm
-      // reflow and the PTY SIGWINCH advance in lockstep at a bounded rate.
+      // Live per-column tracking (user-chosen), frame-coalesced: RO only
+      // marks dirty; the commit runs on a rAF with burst spacing so pointer
+      // handling never waits for terminal work.  commitResize dedupes until
+      // an integer col/row boundary is crossed, and its freeze overlay makes
+      // each commit flash-free regardless of execution phase.
       const resizeObserver = new ResizeObserver(() => {
-        measureAndResizeThrottled();
+        scheduleCommit();
       });
       resizeObserver.observe(container);
       cleanups.push(() => resizeObserver.disconnect());
@@ -979,10 +973,8 @@ export function usePty(
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
     return () => {
-      if (resizeThrottleTimerRef.current) {
-        clearTimeout(resizeThrottleTimerRef.current);
-        resizeThrottleTimerRef.current = null;
-      }
+      // Drop any scheduled commit (the rAF tick no-ops on this flag).
+      pendingCommitRef.current = false;
       // Reset dedup so the next session always gets a resize on mount.
       lastSentResizeRef.current = null;
       // ResizeObserver.disconnect() and other cleanups run BEFORE unmount —
