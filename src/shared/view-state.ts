@@ -23,8 +23,12 @@ export type TabDescriptor =
 export type TabManagerSnapshot = {
   tabs: TabDescriptor[];
   activeTabId: string | undefined;
-  /** Tab pinned into the right side pane. Lives outside `tabs`/tab order. */
+  /** @deprecated Legacy single side-pane slot — migrated into `sidebarTabs` on restore. */
   sidePaneTab?: TabDescriptor;
+  /** Tabs pinned into the task sidebar strip. Live outside `tabs`/tab order. */
+  sidebarTabs?: TabDescriptor[];
+  /** The pinned sidebar tab selected in the sidebar strip, if any. */
+  activeSidebarTabId?: string;
 };
 
 export type EditorViewSnapshot = {
@@ -78,6 +82,8 @@ export type TaskViewSnapshot = {
 export type TaskSidebarViewSnapshot = {
   sidebarTab?: string;
   isSidebarCollapsed?: boolean;
+  /** Feature cards (session/harness/changes/files) added to the sidebar strip. */
+  openSidebarGroups?: string[];
   contextPanelOpenSectionIds?: string[];
   sessionPanelOpenSectionIds?: string[];
   /** Open ids for ad-hoc disclosures (`<details>`, group toggles) across panels. */
@@ -101,11 +107,6 @@ export type AppTabsSnapshot = {
   activeTabId: string | null;
 };
 
-/** Persisted shell-level side pane attachment (which task's pin is showing). */
-export type AppSidePaneSnapshot = {
-  attachment: { projectId: string; taskId: string } | null;
-};
-
 export type SidebarTaskSortBy = 'created-at' | 'updated-at';
 
 export type SidebarTaskGroupBy = 'project' | 'none' | 'type' | 'activity';
@@ -115,6 +116,10 @@ export type SidebarSnapshot = {
   expandedProjectIds?: string[];
   projectOrder?: string[];
   taskOrderByProject?: Record<string, string[]>;
+  /** Manual order of subtasks per parent task id (root tasks use taskOrderByProject). */
+  taskOrderByParent?: Record<string, string[]>;
+  /** Task ids whose subtask subtree is collapsed in the sidebar (default expanded). */
+  collapsedTaskIds?: string[];
   projectActivityById?: Record<string, string>;
   taskSortBy?: SidebarTaskSortBy;
   taskGroupBy?: SidebarTaskGroupBy;

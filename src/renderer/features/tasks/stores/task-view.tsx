@@ -9,8 +9,13 @@ import type { PrStore } from '@renderer/features/tasks/stores/pr-store';
 import { TabManagerStore } from '@renderer/features/tasks/tabs/tab-manager-store';
 import type { TerminalManagerStore } from '@renderer/features/tasks/terminals/terminal-manager';
 import { TerminalTabViewStore } from '@renderer/features/tasks/terminals/terminal-tab-view-store';
-import { type SidebarTab } from '@renderer/features/tasks/types';
+import {
+  sidebarGroupForTab,
+  type SidebarTab,
+  type SidebarTabGroup,
+} from '@renderer/features/tasks/types';
 import { appState } from '@renderer/lib/stores/app-state';
+import type { HistoryEntry } from '@renderer/lib/stores/navigation-history-store';
 import { focusTracker } from '@renderer/utils/focus-tracker';
 import { taskSidebarPreferenceStore } from './task-sidebar-preferences';
 
@@ -34,9 +39,28 @@ interface TaskViewResources {
   workspaceId: string;
 }
 
+type TaskRouteParams = { projectId?: string; taskId?: string };
+
+function activeTaskRouteMatches(projectId: string, taskId: string): boolean {
+  const params = appState.navigation.viewParamsStore['task'] as TaskRouteParams | undefined;
+  return (
+    appState.navigation.currentViewId === 'task' &&
+    params?.projectId === projectId &&
+    params.taskId === taskId
+  );
+}
+
+function isTaskViewHistoryEntry(entry: HistoryEntry, projectId: string, taskId: string): boolean {
+  if (entry.kind !== 'view' || entry.viewId !== 'task') return false;
+  const params = entry.params as TaskRouteParams;
+  return params.projectId === projectId && params.taskId === taskId;
+}
+
 export class TaskViewStore {
   focusedRegion: 'main' | 'bottom';
   isTerminalDrawerOpen: boolean;
+  /** Ephemeral: sidebar expanded over the whole upper main view. */
+  isSidebarMaximized = false;
 
   readonly tabManager: TabManagerStore;
   readonly terminalTabs: TerminalTabViewStore;
@@ -110,19 +134,27 @@ export class TaskViewStore {
       this.diffView
     );
 
-    // Push tab-level history entries whenever the active tab changes.
-    // fireImmediately captures the initial tab when the store is first constructed.
+    // Keep task navigation history tied to the visible task route. Explicit
+    // navigate('task') pushes a task-view placeholder; once a tab is available,
+    // replace that placeholder so Back lands on the concrete task tab.
     this.disposers.push(
       reaction(
-        () => this.tabManager.resolvedActiveTabId,
+        () => {
+          if (!activeTaskRouteMatches(resources.projectId, resources.taskId)) return null;
+          return this.tabManager.resolvedActiveTabId;
+        },
         (tabId) => {
           if (!tabId) return;
-          appState.history.push({
+          const entry = {
             kind: 'tab',
             projectId: resources.projectId,
             taskId: resources.taskId,
             tabId,
-          });
+          } satisfies HistoryEntry;
+          const replaced = appState.history.replaceCurrent(entry, (current) =>
+            isTaskViewHistoryEntry(current, resources.projectId, resources.taskId)
+          );
+          if (!replaced) appState.history.push(entry);
         },
         { fireImmediately: true }
       )
@@ -143,6 +175,10 @@ export class TaskViewStore {
 
   get isSidebarCollapsed(): boolean {
     return taskSidebarPreferenceStore.isSidebarCollapsed;
+  }
+
+  get openSidebarGroups(): SidebarTabGroup[] {
+    return taskSidebarPreferenceStore.openSidebarGroups;
   }
 
   get contextPanelOpenSectionIds(): string[] {
@@ -202,10 +238,26 @@ export class TaskViewStore {
 
   setSidebarTab(v: SidebarTab): void {
     taskSidebarPreferenceStore.setSidebarTab(v);
+    // Activating a tab from anywhere (titlebar toggle, commands, deep links)
+    // surfaces its feature card in the sidebar strip.
+    taskSidebarPreferenceStore.openSidebarGroup(sidebarGroupForTab(v));
+  }
+
+  openSidebarGroup(group: SidebarTabGroup): void {
+    taskSidebarPreferenceStore.openSidebarGroup(group);
+  }
+
+  closeSidebarGroup(group: SidebarTabGroup): void {
+    taskSidebarPreferenceStore.closeSidebarGroup(group);
   }
 
   setSidebarCollapsed(collapsed: boolean): void {
     taskSidebarPreferenceStore.setSidebarCollapsed(collapsed);
+    if (collapsed) this.isSidebarMaximized = false;
+  }
+
+  setSidebarMaximized(maximized: boolean): void {
+    this.isSidebarMaximized = maximized;
   }
 
   setContextPanelOpenSectionIds(sectionIds: string[]): void {

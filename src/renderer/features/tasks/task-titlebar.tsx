@@ -12,10 +12,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/toolti
 import { DevServerPills } from './components/dev-server-pills';
 
 /**
- * Task titlebar: the task identity lives in the top-level tab strip (the
- * scope's Overview index tab) — no breadcrumb here. Only three right-side
- * controls remain: open-in, terminal drawer, sidebar toggle. The sidebar
- * hosts its own tab strip for panel switching.
+ * Task titlebar slot: only renders the plain titlebar for non-ready states.
+ * For ready tasks the titlebar lives INSIDE the main panel's horizontal split
+ * (left column only), so the sidebar column reaches the top of the window and
+ * hosts its own header row at the same height.
  */
 export const TaskTitlebar = observer(function TaskTitlebar() {
   const { projectId, taskId } = useTaskViewContext();
@@ -26,10 +26,10 @@ export const TaskTitlebar = observer(function TaskTitlebar() {
     return <Titlebar />;
   }
 
-  return <ActiveTaskTitlebar projectId={projectId} taskId={taskId} />;
+  return null;
 });
 
-const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
+export const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
   projectId,
   taskId,
 }: {
@@ -50,42 +50,48 @@ const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
           {!isRemoteProject && (
             <OpenInMenu path={provisionedTask.path} className="h-7 bg-background" borderless />
           )}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Toggle
-                  size="icon-sm"
-                  pressed={taskView.isTerminalDrawerOpen}
-                  className="border-none"
-                  onPressedChange={() =>
-                    taskView.setTerminalDrawerOpen(!taskView.isTerminalDrawerOpen)
+          {/* When the sidebar is expanded, both panel toggles live at the far
+              right of the sidebar's own header strip instead. */}
+          {taskView.isSidebarCollapsed ? (
+            <>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Toggle
+                      size="icon-sm"
+                      pressed={taskView.isTerminalDrawerOpen}
+                      className="border-none"
+                      onPressedChange={() =>
+                        taskView.setTerminalDrawerOpen(!taskView.isTerminalDrawerOpen)
+                      }
+                    >
+                      <PanelBottom className="size-3.5" />
+                    </Toggle>
                   }
-                >
-                  <PanelBottom className="size-3.5" />
-                </Toggle>
-              }
-            />
-            <TooltipContent>
-              {t('tasks.toggleTerminal')} <ShortcutHint settingsKey="toggleTerminalDrawer" />
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Toggle
-                  size="icon-sm"
-                  pressed={!taskView.isSidebarCollapsed}
-                  className="border-none"
-                  onPressedChange={() => taskView.setSidebarCollapsed(!taskView.isSidebarCollapsed)}
-                >
-                  <PanelRight className="size-3.5" />
-                </Toggle>
-              }
-            />
-            <TooltipContent>
-              {t('tasks.toggleSidebar')} <ShortcutHint settingsKey="toggleRightSidebar" />
-            </TooltipContent>
-          </Tooltip>
+                />
+                <TooltipContent>
+                  {t('tasks.toggleTerminal')} <ShortcutHint settingsKey="toggleTerminalDrawer" />
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Toggle
+                      size="icon-sm"
+                      pressed={false}
+                      className="border-none"
+                      onPressedChange={() => taskView.setSidebarCollapsed(false)}
+                    >
+                      <PanelRight className="size-3.5" />
+                    </Toggle>
+                  }
+                />
+                <TooltipContent>
+                  {t('tasks.toggleSidebar')} <ShortcutHint settingsKey="toggleRightSidebar" />
+                </TooltipContent>
+              </Tooltip>
+            </>
+          ) : null}
         </div>
       }
     />

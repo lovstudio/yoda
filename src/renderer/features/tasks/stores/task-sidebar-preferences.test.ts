@@ -52,6 +52,7 @@ describe('TaskSidebarPreferenceStore', () => {
       contextPanelOpenSectionIds: ['tools', 'injected-context'],
       sessionPanelOpenSectionIds: ['context'],
       disclosureOpenIds: [],
+      openSidebarGroups: [],
     });
     expect(mocks.save).not.toHaveBeenCalled();
   });
@@ -69,6 +70,7 @@ describe('TaskSidebarPreferenceStore', () => {
       contextPanelOpenSectionIds: ['llm-context', 'memory'],
       sessionPanelOpenSectionIds: ['basic'],
       disclosureOpenIds: [],
+      openSidebarGroups: [],
     });
   });
 
@@ -93,6 +95,7 @@ describe('TaskSidebarPreferenceStore', () => {
       contextPanelOpenSectionIds: ['session-prompts'],
       sessionPanelOpenSectionIds: ['basic'],
       disclosureOpenIds: [],
+      openSidebarGroups: [],
     });
     expect(mocks.save).toHaveBeenNthCalledWith(2, TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'context',
@@ -100,6 +103,7 @@ describe('TaskSidebarPreferenceStore', () => {
       contextPanelOpenSectionIds: ['session-prompts'],
       sessionPanelOpenSectionIds: ['basic'],
       disclosureOpenIds: [],
+      openSidebarGroups: [],
     });
   });
 
@@ -123,6 +127,7 @@ describe('TaskSidebarPreferenceStore', () => {
       contextPanelOpenSectionIds: [],
       sessionPanelOpenSectionIds: ['basic'],
       disclosureOpenIds: [],
+      openSidebarGroups: [],
     });
   });
 
@@ -148,6 +153,7 @@ describe('TaskSidebarPreferenceStore', () => {
       contextPanelOpenSectionIds: ['tools', 'skills'],
       sessionPanelOpenSectionIds: ['basic'],
       disclosureOpenIds: [],
+      openSidebarGroups: [],
     });
     expect(mocks.save).toHaveBeenNthCalledWith(2, TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'context',
@@ -155,6 +161,7 @@ describe('TaskSidebarPreferenceStore', () => {
       contextPanelOpenSectionIds: ['tools', 'skills', 'session-prompts'],
       sessionPanelOpenSectionIds: ['basic'],
       disclosureOpenIds: [],
+      openSidebarGroups: [],
     });
     expect(mocks.save).toHaveBeenNthCalledWith(3, TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'context',
@@ -162,6 +169,7 @@ describe('TaskSidebarPreferenceStore', () => {
       contextPanelOpenSectionIds: ['skills', 'session-prompts'],
       sessionPanelOpenSectionIds: ['basic'],
       disclosureOpenIds: [],
+      openSidebarGroups: [],
     });
   });
 

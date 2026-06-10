@@ -238,7 +238,9 @@
     },
     "needsReview": "需要审查",
     "expressMode": "快捷模式",
-    "expressModeDescription": "开启后，点击项目右侧的「+」会直接用默认配置创建任务（默认分支 + 上次使用的代理），跳过首页的任务配置面板。需要先在首页完成一次设置以确定默认值。"
+    "expressModeDescription": "开启后，点击项目右侧的「+」会直接用默认配置创建任务（默认分支 + 上次使用的代理），跳过首页的任务配置面板。需要先在首页完成一次设置以确定默认值。",
+    "toggleSubtasks": "展开/折叠子任务",
+    "setParentFailed": "移动任务失败"
   },
   "settings": {
     "title": "设置",
@@ -717,7 +719,7 @@
       "pin": "固定标签页",
       "copyPath": "复制路径",
       "copyYodaLink": "复制会话 Yoda 链接",
-      "openInSidePane": "在右侧面板打开",
+      "openInSidePane": "固定到侧边栏",
       "openInWindow": "在独立窗口打开",
       "openInWindowFailed": "打开独立窗口失败",
       "returnFromWindowFailed": "恢复标签页失败",
@@ -742,7 +744,8 @@
           "official-api": "API Key",
           "yoda-maas": "MaaS"
         }
-      }
+      },
+      "subtasks": "子任务（{{count}}）"
     },
     "files": "文件",
     "toggleTerminal": "切换终端",
@@ -932,7 +935,8 @@
       "review": "待审查",
       "done": "已完成",
       "cancelled": "已取消",
-      "searchStatus": "搜索状态…"
+      "searchStatus": "搜索状态…",
+      "todo": "待办"
     },
     "create": {
       "fromIssue": "从 Issue 创建",
@@ -947,7 +951,8 @@
       "initialPromptPlaceholder": "描述你希望代理完成的工作。",
       "pushBranchToRemote": "将分支 push 到远端",
       "selectAnotherIssue": "选择其他 Issue",
-      "selectAnotherPr": "选择其他 Pull Request"
+      "selectAnotherPr": "选择其他 Pull Request",
+      "parentTask": "父任务："
     },
     "terminals": {
       "title": "终端",
@@ -1071,7 +1076,9 @@
         "readInstruction": "读取方式",
         "readInstructionValue": "读取上面的 JSONL 文件；逐行解析 JSON，并按时间顺序提取 user/assistant 消息。"
       },
-      "copyFailed": "无法复制到剪贴板。"
+      "copyFailed": "无法复制到剪贴板。",
+      "createSubtask": "新建子任务",
+      "setParent": "设置父任务…"
     },
     "sessionPanel": {
       "title": "会话",
@@ -1107,7 +1114,23 @@
       "summaryGenerated": "根据对话生成"
     },
     "sidePane": {
-      "moveBack": "移回主区域"
+      "moveBack": "移回主区域",
+      "maximize": "展开面板至整个主视图",
+      "restore": "恢复面板大小",
+      "addCard": "添加面板",
+      "removeCard": "从标签栏移除",
+      "emptyHint": "点击 + 添加面板"
+    },
+    "createSubtask": "创建子任务",
+    "setParent": {
+      "title": "设置父任务",
+      "searchPlaceholder": "搜索任务…",
+      "noParent": "无父任务（顶级）",
+      "noResults": "没有匹配的任务",
+      "failed": "设置父任务失败",
+      "cycleDetected": "不能把任务移到它自己的子任务下",
+      "crossProject": "父任务必须在同一项目中",
+      "parentArchived": "父任务已归档"
     }
   },
   "commandPalette": {
@@ -1546,7 +1569,17 @@
     "bySource": "按来源",
     "sessionCount": "{{count}} 个会话",
     "sourceUnknown": "未记录",
-    "topTasks": "Token 消耗 Top 任务"
+    "topTasks": "Token 消耗 Top 任务",
+    "caliber": {
+      "tasks": "口径：归档时间非空的任务数（归档即完成）；副行为历史创建的全部任务数。",
+      "tokens": "口径：解析本地 Claude / Codex 会话记录逐条累加。总量 = 输入 + 输出 + 缓存读 + 缓存写；其他 runtime 暂无解析器，计 0。",
+      "lines": "口径：每任务 = 相对源分支的已提交差异（merge-base）+ 工作区未提交变更。活跃任务实时计算，归档任务取归档前快照（本功能上线前归档的任务无快照，计 0）。",
+      "activeDays": "口径：会话记录中出现过 token 消耗的本地日历天数。",
+      "heatmap": "口径：各会话 token 按实际消耗时刻归入本地日期；色阶按非零日的分位数（25/50/75）划分。",
+      "byRuntime": "口径：按会话所属 runtime 汇总，仅统计可解析的会话。",
+      "bySource": "口径：会话启动时记录的账号模式；追踪上线前的历史会话按该 runtime 当前设置归类（估算）。",
+      "topTasks": "口径：任务内全部会话 token 求和后排序，取前 10。"
+    }
   },
   "maas": {
     "title": "MaaS",
@@ -2311,6 +2344,7 @@
     "renameFailed": "重命名工作区失败",
     "deleteFailed": "删除工作区失败",
     "switch": "切换工作区",
+    "manage": "管理工作区",
     "current": "工作区（{{name}}）",
     "defaultTab": "默认",
     "countsAria": "{{toRead}} 条未读"

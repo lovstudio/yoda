@@ -1,6 +1,10 @@
 import { makeAutoObservable } from 'mobx';
 import type { TaskSidebarViewSnapshot, TaskViewSnapshot } from '@shared/view-state';
-import { type SidebarTab } from '@renderer/features/tasks/types';
+import {
+  isSidebarTabGroup,
+  type SidebarTab,
+  type SidebarTabGroup,
+} from '@renderer/features/tasks/types';
 import { rpc } from '@renderer/lib/ipc';
 import { viewStateCache } from '@renderer/lib/stores/view-state-cache';
 
@@ -94,6 +98,17 @@ function resolveSessionPanelOpenSectionIds(
   return [...DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS];
 }
 
+function resolveOpenSidebarGroups(
+  sharedSnapshot: TaskSidebarViewSnapshot | null
+): SidebarTabGroup[] {
+  if (isStringArray(sharedSnapshot?.openSidebarGroups)) {
+    return sharedSnapshot.openSidebarGroups.filter(isSidebarTabGroup);
+  }
+  // Feature cards default to NOT being in the strip — the user adds the ones
+  // they need via the "+" picker.
+  return [];
+}
+
 function resolveDisclosureOpenIds(sharedSnapshot: TaskSidebarViewSnapshot | null): string[] {
   if (isStringArray(sharedSnapshot?.disclosureOpenIds)) {
     return normalizeOpenSectionIds(sharedSnapshot.disclosureOpenIds);
@@ -107,6 +122,7 @@ export class TaskSidebarPreferenceStore {
   contextPanelOpenSectionIds: string[] = [...DEFAULT_CONTEXT_PANEL_OPEN_SECTION_IDS];
   sessionPanelOpenSectionIds: string[] = [...DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS];
   disclosureOpenIds: string[] = [];
+  openSidebarGroups: SidebarTabGroup[] = [];
   private isHydrated: boolean = false;
 
   constructor() {
@@ -120,6 +136,7 @@ export class TaskSidebarPreferenceStore {
       contextPanelOpenSectionIds: [...this.contextPanelOpenSectionIds],
       sessionPanelOpenSectionIds: [...this.sessionPanelOpenSectionIds],
       disclosureOpenIds: [...this.disclosureOpenIds],
+      openSidebarGroups: [...this.openSidebarGroups],
     };
   }
 
@@ -134,6 +151,7 @@ export class TaskSidebarPreferenceStore {
     this.contextPanelOpenSectionIds = resolveContextPanelOpenSectionIds(sharedSnapshot);
     this.sessionPanelOpenSectionIds = resolveSessionPanelOpenSectionIds(sharedSnapshot);
     this.disclosureOpenIds = resolveDisclosureOpenIds(sharedSnapshot);
+    this.openSidebarGroups = resolveOpenSidebarGroups(sharedSnapshot);
     this.isHydrated = true;
 
     viewStateCache.set(TASK_SIDEBAR_VIEW_STATE_KEY, this.snapshot);
@@ -157,6 +175,18 @@ export class TaskSidebarPreferenceStore {
   setSidebarCollapsed(collapsed: boolean): void {
     if (this.isSidebarCollapsed === collapsed) return;
     this.isSidebarCollapsed = collapsed;
+    this.persist();
+  }
+
+  openSidebarGroup(group: SidebarTabGroup): void {
+    if (this.openSidebarGroups.includes(group)) return;
+    this.openSidebarGroups = [...this.openSidebarGroups, group];
+    this.persist();
+  }
+
+  closeSidebarGroup(group: SidebarTabGroup): void {
+    if (!this.openSidebarGroups.includes(group)) return;
+    this.openSidebarGroups = this.openSidebarGroups.filter((g) => g !== group);
     this.persist();
   }
 

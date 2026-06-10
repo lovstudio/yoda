@@ -13,7 +13,7 @@ export type SidebarTab =
  * `SidebarTab` values now route into a single "session" titlebar toggle and
  * deep-link to one of these accordion sections.
  */
-export type SessionPanelSection = 'basic' | 'conversation' | 'tasks' | 'summary';
+export type SessionPanelSection = 'basic' | 'conversation' | 'tasks' | 'summary-global';
 
 /**
  * Legacy tabs that route into the Harness titlebar toggle (the agent runtime
@@ -39,6 +39,36 @@ export const SESSION_FAMILY_TABS: readonly SidebarTab[] = [
 
 export function isSessionFamilyTab(tab: SidebarTab): boolean {
   return SESSION_FAMILY_TABS.includes(tab);
+}
+
+/**
+ * The feature cards the task sidebar exposes after merging the session-family
+ * tabs. Each card is an independently addable/closable chip in the sidebar
+ * strip (extensible later).
+ */
+export type SidebarTabGroup = 'session' | 'harness' | 'changes' | 'files';
+
+export const SIDEBAR_TAB_GROUPS: readonly SidebarTabGroup[] = [
+  'session',
+  'harness',
+  'changes',
+  'files',
+];
+
+export function isSidebarTabGroup(value: unknown): value is SidebarTabGroup {
+  return SIDEBAR_TAB_GROUPS.includes(value as SidebarTabGroup);
+}
+
+/** Which sidebar tab group a (legacy) sidebar tab belongs to. */
+export function sidebarGroupForTab(tab: SidebarTab): SidebarTabGroup {
+  if (tab === 'changes' || tab === 'files') return tab;
+  if (isHarnessTab(tab)) return 'harness';
+  return 'session';
+}
+
+/** The canonical sidebar tab a tab group activates. */
+export function sidebarTabForGroup(group: SidebarTabGroup): SidebarTab {
+  return group === 'harness' ? 'context' : group;
 }
 
 /** Maps a session-family tab to the blind it should expand, if any. */

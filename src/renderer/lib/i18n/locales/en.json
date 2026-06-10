@@ -238,7 +238,9 @@
       "otherAddresses": "Other addresses",
       "securityNote": "The connection code includes this desktop gateway token. Use it only with trusted devices on trusted networks."
     },
-    "needsReview": "Needs review"
+    "needsReview": "Needs review",
+    "toggleSubtasks": "Toggle subtasks",
+    "setParentFailed": "Failed to move task"
   },
   "settings": {
     "title": "Settings",
@@ -717,7 +719,7 @@
       "pin": "Pin tab",
       "copyPath": "Copy path",
       "copyYodaLink": "Copy session Yoda link",
-      "openInSidePane": "Open in side panel",
+      "openInSidePane": "Pin to sidebar",
       "openInWindow": "Open in separate window",
       "openInWindowFailed": "Failed to open separate window",
       "returnFromWindowFailed": "Failed to return tab",
@@ -742,7 +744,8 @@
           "official-api": "API Key",
           "yoda-maas": "MaaS"
         }
-      }
+      },
+      "subtasks": "Subtasks ({{count}})"
     },
     "files": "Files",
     "toggleTerminal": "Toggle terminal",
@@ -932,7 +935,8 @@
       "review": "Review",
       "done": "Done",
       "cancelled": "Cancelled",
-      "searchStatus": "Search status..."
+      "searchStatus": "Search status...",
+      "todo": "To Do"
     },
     "create": {
       "fromIssue": "From issue",
@@ -947,7 +951,8 @@
       "initialPromptPlaceholder": "Describe what you want the agent to do.",
       "pushBranchToRemote": "Push branch to remote",
       "selectAnotherIssue": "Select another issue",
-      "selectAnotherPr": "Select another pull request"
+      "selectAnotherPr": "Select another pull request",
+      "parentTask": "Parent task:"
     },
     "terminals": {
       "title": "Terminals",
@@ -1071,7 +1076,9 @@
         "readInstruction": "Read instruction",
         "readInstructionValue": "Read the JSONL file above; parse one JSON object per line and extract user/assistant messages in chronological order."
       },
-      "copyFailed": "The value could not be copied to the clipboard."
+      "copyFailed": "The value could not be copied to the clipboard.",
+      "createSubtask": "New subtask",
+      "setParent": "Set parent task..."
     },
     "sessionPanel": {
       "title": "Session",
@@ -1107,7 +1114,23 @@
       "summaryGenerated": "Generated from the conversation"
     },
     "sidePane": {
-      "moveBack": "Move back to tab strip"
+      "moveBack": "Move back to tab strip",
+      "maximize": "Expand panel over main view",
+      "restore": "Restore panel size",
+      "addCard": "Add panel",
+      "removeCard": "Remove from strip",
+      "emptyHint": "Click + to add a panel"
+    },
+    "createSubtask": "Create subtask",
+    "setParent": {
+      "title": "Set parent task",
+      "searchPlaceholder": "Search tasks...",
+      "noParent": "No parent (top level)",
+      "noResults": "No matching tasks",
+      "failed": "Failed to set parent task",
+      "cycleDetected": "A task cannot be moved under its own subtask",
+      "crossProject": "Parent task must be in the same project",
+      "parentArchived": "Parent task is archived"
     }
   },
   "commandPalette": {
@@ -1546,7 +1569,17 @@
     "bySource": "By source",
     "sessionCount": "{{count}} sessions",
     "sourceUnknown": "Untracked",
-    "topTasks": "Top tasks by tokens"
+    "topTasks": "Top tasks by tokens",
+    "caliber": {
+      "tasks": "How it's counted: tasks with a non-null archive date (archiving is the completion act). The sub-line is all tasks ever created.",
+      "tokens": "How it's counted: parsed from local Claude / Codex session transcripts. Total = input + output + cache read + cache write. Other runtimes have no transcript reader and count as zero.",
+      "lines": "How it's counted: per task = committed diff vs source branch (merge-base) + uncommitted working-tree changes. Live for active tasks; archived tasks use their last snapshot (tasks archived before this feature shipped have none and count as zero).",
+      "activeDays": "How it's counted: local calendar days with any token usage in session transcripts.",
+      "heatmap": "How it's counted: each session's tokens are bucketed into the local date they were consumed. Color levels are quantiles (25/50/75) of non-zero days.",
+      "byRuntime": "How it's counted: grouped by the runtime that ran each session; only sessions with parseable transcripts are included.",
+      "bySource": "How it's counted: the account mode recorded when each session was spawned. Sessions from before tracking landed are attributed to the runtime's current setting (estimate).",
+      "topTasks": "How it's counted: sum of all session tokens per task, top 10."
+    }
   },
   "maas": {
     "title": "MaaS",
@@ -2311,6 +2344,7 @@
     "renameFailed": "Failed to rename workspace",
     "deleteFailed": "Failed to delete workspace",
     "switch": "Switch workspace",
+    "manage": "Manage workspace",
     "current": "Workspace ({{name}})",
     "defaultTab": "Default",
     "countsAria": "{{toRead}} unread"

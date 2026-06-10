@@ -16,11 +16,13 @@ import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
+import { cn } from '@renderer/utils/utils';
 import { ConversationsPanel } from './conversations/conversations-panel';
 import { DiffView } from './diff-view/main-panel/diff-view';
 import { EditorMainPanel } from './editor/editor-main-panel';
 import { useEditorContext } from './editor/editor-provider';
 import { MarkdownEditorPanel } from './editor/markdown-editor-panel';
+import { ActiveTaskTitlebar } from './task-titlebar';
 import { TerminalsPanel } from './terminals/terminal-panel';
 import { OverviewPanel } from './view/overview-panel';
 import { TaskSidebar } from './view/task-sidebar';
@@ -264,12 +266,20 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
   );
 });
 
-/** Upper region: main column | task sidebar (horizontal split). */
+/**
+ * Upper region: (titlebar + main column) | task sidebar (horizontal split).
+ * The titlebar lives inside the LEFT column so the split also divides the top
+ * bar — the sidebar reaches the window top with its own header row.
+ */
 const TaskUpperSplit = observer(function TaskUpperSplit() {
+  const { projectId, taskId } = useTaskViewContext();
   const { taskView } = useProvisionedTask();
   const sidebarPanelRef = usePanelRef();
   const [isHandleDragging, setIsHandleDragging] = useState(false);
   const layout = usePersistentPanelLayout('task-sidebar-layout');
+  // Maximized: the sidebar overlays the whole upper split. The main column stays
+  // mounted underneath so editor/Activity state survives the toggle.
+  const isSidebarMaximized = taskView.isSidebarMaximized && !taskView.isSidebarCollapsed;
 
   useEffect(() => {
     const panel = sidebarPanelRef.current;
@@ -285,7 +295,7 @@ const TaskUpperSplit = observer(function TaskUpperSplit() {
   return (
     <ResizablePanelGroup
       orientation="horizontal"
-      className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
+      className="relative min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
       {...layout}
     >
       <ResizablePanel
@@ -293,12 +303,27 @@ const TaskUpperSplit = observer(function TaskUpperSplit() {
         className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
       >
-        <TaskMainAreaSplit />
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          <ActiveTaskTitlebar projectId={projectId} taskId={taskId} />
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <TaskMainAreaSplit />
+          </div>
+        </div>
       </ResizablePanel>
       <ResizableHandle
-        onPointerDown={() => setIsHandleDragging(true)}
-        onPointerUp={() => setIsHandleDragging(false)}
-        onPointerCancel={() => setIsHandleDragging(false)}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setIsHandleDragging(true);
+          panelDragStore.setDragging(true);
+        }}
+        onPointerUp={() => {
+          setIsHandleDragging(false);
+          panelDragStore.setDragging(false);
+        }}
+        onPointerCancel={() => {
+          setIsHandleDragging(false);
+          panelDragStore.setDragging(false);
+        }}
       />
       <ResizablePanel
         id="task-sidebar"
@@ -308,7 +333,12 @@ const TaskUpperSplit = observer(function TaskUpperSplit() {
         maxSize="50%"
         collapsible
         collapsedSize={SIDEBAR_COLLAPSED_SIZE}
-        className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
+        className={cn(
+          'min-h-0 min-w-0 overflow-hidden bg-background text-foreground',
+          // position:absolute takes the panel out of flex flow — inset-0 makes it
+          // cover the whole group while the flex-basis inline style is ignored.
+          isSidebarMaximized && 'absolute inset-0 z-20'
+        )}
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
         onResize={() => {
           const wantCollapsed = sidebarPanelRef.current?.isCollapsed() ?? false;
@@ -323,14 +353,9 @@ const TaskUpperSplit = observer(function TaskUpperSplit() {
   );
 });
 
-/**
- * The side pane is a shell-level workspace column now (see app/app-side-pane)
- * so it survives main-area navigation — this wrapper just hosts the main
- * content and marks the side-pane drop scope for tab tear-out.
- */
 const TaskMainAreaSplit = observer(function TaskMainAreaSplit() {
   return (
-    <div className="h-full w-full min-h-0 min-w-0" data-side-pane-scope>
+    <div className="h-full w-full min-h-0 min-w-0">
       <UnifiedMainContent />
     </div>
   );
