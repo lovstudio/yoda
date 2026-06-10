@@ -306,10 +306,10 @@ export async function createTask(
 ): Promise<Result<CreateTaskSuccess, CreateTaskError>> {
   const { strategy } = params;
   const suffix = Math.random().toString(36).slice(2, 7);
-  const [projectSettings, taskSettings, agentAutoApproveDefaults] = await Promise.all([
+  const [projectSettings, taskSettings, runtimeAutoApproveDefaults] = await Promise.all([
     appSettingsService.get('project'),
     appSettingsService.get('tasks'),
-    appSettingsService.get('agentAutoApproveDefaults'),
+    appSettingsService.get('runtimeAutoApproveDefaults'),
   ]);
   const branchPrefix = projectSettings.branchPrefix ?? '';
   let warning: CreateTaskWarning | undefined;
@@ -372,6 +372,7 @@ export async function createTask(
       sourceBranch: toStoredBranch(dbSourceBranch),
       linkedIssue: params.linkedIssue ? JSON.stringify(params.linkedIssue) : null,
       workspaceProvider: params.workspaceProvider ?? null,
+      sidebarWorkspaceId: params.sidebarWorkspaceId ?? null,
       setupStatus: 'pending',
       setupData,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -495,8 +496,8 @@ export async function createTask(
       isInitialConversation: true,
       autoApprove: resolveAgentAutoApprove(
         params.initialConversation.autoApprove,
-        agentAutoApproveDefaults,
-        params.initialConversation.provider
+        runtimeAutoApproveDefaults,
+        params.initialConversation.runtime
       ),
     });
   }
@@ -522,7 +523,7 @@ export async function createTask(
     strategy: taskCreatedStrategy,
     has_initial_prompt: Boolean(params.initialConversation?.initialPrompt?.trim()),
     has_issue: params.linkedIssue?.provider ?? 'none',
-    provider: params.initialConversation?.provider ?? null,
+    provider: params.initialConversation?.runtime ?? null,
     project_id: params.projectId,
     task_id: params.id,
   });
@@ -571,11 +572,11 @@ export async function retryTaskSetup(
     projectId,
     name: row.name,
   };
-  const [projectSettings, taskSettings, agentAutoApproveDefaults, configuredRemote] =
+  const [projectSettings, taskSettings, runtimeAutoApproveDefaults, configuredRemote] =
     await Promise.all([
       appSettingsService.get('project'),
       appSettingsService.get('tasks'),
-      appSettingsService.get('agentAutoApproveDefaults'),
+      appSettingsService.get('runtimeAutoApproveDefaults'),
       project.repository.getConfiguredRemote(),
     ]);
   const branchPrefix = projectSettings.branchPrefix ?? '';
@@ -698,8 +699,8 @@ export async function retryTaskSetup(
       isInitialConversation: true,
       autoApprove: resolveAgentAutoApprove(
         params.initialConversation.autoApprove,
-        agentAutoApproveDefaults,
-        params.initialConversation.provider
+        runtimeAutoApproveDefaults,
+        params.initialConversation.runtime
       ),
     });
   }

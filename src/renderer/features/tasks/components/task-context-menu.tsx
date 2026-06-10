@@ -1,63 +1,49 @@
 import type { TFunction } from 'i18next';
 import {
-  Activity,
   Archive,
   ArchiveRestore,
   CircleDot,
   CircleSlash,
   ClipboardList,
   Copy,
-  FileText,
-  FolderInput,
   Info,
   Link2,
   Pencil,
   Pin,
   PinOff,
-  PlayCircle,
   RefreshCw,
   RotateCcw,
-  Settings2,
 } from 'lucide-react';
-import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentProviderId } from '@shared/agent-provider-registry';
-import { ALL_WORKSPACES_ID } from '@shared/workspaces';
+import type { RuntimeId } from '@shared/runtime-registry';
+import {
+  WorkspaceAssignContextSubmenu,
+  WorkspaceAssignDropdownSubmenu,
+} from '@renderer/features/workspaces/workspace-assign-submenu';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
-import { workspaceStore } from '@renderer/lib/stores/app-state';
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
   ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@renderer/lib/ui/context-menu';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { buildTaskBasicInfo, type TaskBasicInfoFields } from './task-menu-basic-info';
 
 interface TaskSessionInfoFields {
-  providerId?: AgentProviderId;
+  runtimeId?: RuntimeId;
   sessionId?: string;
   sessionTitle?: string;
-  providerName?: string;
+  runtimeName?: string;
   resumeCommand?: string;
   running?: boolean;
   tmuxEnabled?: boolean;
@@ -85,18 +71,17 @@ interface TaskMenuActions extends TaskMenuInfoFields {
   onMarkNeedsReview: () => void;
   onUnmarkNeedsReview: () => void;
   onRename: () => void;
-  /** Archive the task. The pre-archive skill is session-level only and never runs here. */
+  /**
+   * Archive the task. Opens a dialog for an optional note; confirming there
+   * performs the archive. The pre-archive skill is session-level only and never
+   * runs here.
+   */
   onArchive: () => void;
-  onArchiveWithNote?: () => void;
   onCopyYodaLink?: () => void;
   onRestore?: () => void;
   onReconnect?: () => void;
   /** Restart the session. Pass a tmux override to force tmux on/off for this restart only. */
   onRestartSession?: (tmuxOverride?: boolean) => void;
-  onRunScript?: () => void;
-  canRunScript?: boolean;
-  onConfigureScripts?: () => void;
-  onViewStatus?: () => void;
   /** Current sidebar workspace assignment (null = default). Projectless tasks only. */
   currentWorkspaceId?: string | null;
   /** Assign this task to a sidebar workspace, or null for the default. */
@@ -117,67 +102,92 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   const { t } = useTranslation();
   const items: MenuItemDescriptor[] = [];
 
-  // group 0 — task management: pin, rename, mark-review
+  // group 0 — open details (standalone)
+  if (actions.onOpenDetails) {
+    items.push({
+      key: 'open-details',
+      group: 0,
+      icon: Info,
+      label: actions.openDetailsLabel ?? t('tasks.context.openDetails'),
+      onSelect: actions.onOpenDetails,
+    });
+  }
+
+  // group 1 — pin, archive / restore, mark-review. The default archive opens a
+  // dialog for an optional note; confirming there performs the archive. The
+  // pre-archive skill only makes sense at the session (conversation) level, so it
+  // is never offered here.
   if (actions.canPin) {
     items.push(
       actions.isPinned
         ? {
             key: 'unpin',
-            group: 0,
+            group: 1,
             icon: PinOff,
             label: t('tasks.context.unpinTask'),
             onSelect: actions.onUnpin,
           }
         : {
             key: 'pin',
-            group: 0,
+            group: 1,
             icon: Pin,
             label: t('tasks.context.pinTask'),
             onSelect: actions.onPin,
           }
     );
   }
-  items.push({
-    key: 'rename',
-    group: 0,
-    icon: Pencil,
-    label: t('common.rename'),
-    onSelect: actions.onRename,
-  });
+  if (!actions.isArchived) {
+    items.push({
+      key: 'archive',
+      group: 1,
+      icon: Archive,
+      label: t('tasks.context.archive'),
+      onSelect: actions.onArchive,
+    });
+  }
+  if (actions.isArchived && actions.onRestore) {
+    items.push({
+      key: 'restore',
+      group: 1,
+      icon: ArchiveRestore,
+      label: t('projects.tasks.restore'),
+      onSelect: actions.onRestore,
+    });
+  }
   if (actions.canMarkReview) {
     items.push(
       actions.needsReview
         ? {
             key: 'unmark-review',
-            group: 0,
+            group: 1,
             icon: CircleSlash,
             label: t('tasks.context.unmarkReview'),
             onSelect: actions.onUnmarkNeedsReview,
           }
         : {
             key: 'mark-review',
-            group: 0,
+            group: 1,
             icon: CircleDot,
             label: t('tasks.context.markForReview'),
             onSelect: actions.onMarkNeedsReview,
           }
     );
   }
-  if (actions.onRestartSession) {
-    items.push({
-      key: 'reopen',
-      group: 0,
-      icon: RefreshCw,
-      label: t('tasks.context.reopenTask'),
-      onSelect: () => actions.onRestartSession?.(),
-    });
-  }
 
-  // group 1 — copy (ID first)
+  // group 2 — rename
+  items.push({
+    key: 'rename',
+    group: 2,
+    icon: Pencil,
+    label: t('common.rename'),
+    onSelect: actions.onRename,
+  });
+
+  // group 3 — copy (ID first)
   if (actions.taskId) {
     items.push({
       key: 'copy-task-id',
-      group: 1,
+      group: 3,
       icon: Copy,
       label: t('tasks.context.copyTaskId'),
       onSelect: () => {
@@ -188,7 +198,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   if (actions.taskId || actions.taskName) {
     items.push({
       key: 'copy-task-basic-info',
-      group: 1,
+      group: 3,
       icon: ClipboardList,
       label: t('tasks.context.copyTaskBasicInfo'),
       onSelect: () => {
@@ -199,85 +209,14 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   if (actions.onCopyYodaLink) {
     items.push({
       key: 'copy-yoda-link',
-      group: 1,
+      group: 3,
       icon: Link2,
       label: t('tasks.context.copyYodaLink'),
       onSelect: actions.onCopyYodaLink,
     });
   }
 
-  // group 2 — archive / restore. The pre-archive skill only makes sense at the
-  // session (conversation) level, where it runs against a specific session before
-  // archiving it. A task spans many sessions, so it is offered only in the
-  // conversation tab context menu — never here.
-  if (!actions.isArchived) {
-    items.push({
-      key: 'archive',
-      group: 2,
-      icon: Archive,
-      label: t('tasks.context.archive'),
-      onSelect: actions.onArchive,
-    });
-    if (actions.onArchiveWithNote) {
-      items.push({
-        key: 'archive-with-note',
-        group: 2,
-        icon: FileText,
-        label: t('tasks.context.archiveWithNote'),
-        onSelect: actions.onArchiveWithNote,
-      });
-    }
-  }
-  if (actions.isArchived && actions.onRestore) {
-    items.push({
-      key: 'restore',
-      group: 2,
-      icon: ArchiveRestore,
-      label: t('projects.tasks.restore'),
-      onSelect: actions.onRestore,
-    });
-  }
-
-  // group 3 — run scripts
-  if (actions.onRunScript) {
-    items.push({
-      key: 'run-script',
-      group: 3,
-      icon: PlayCircle,
-      label: t('sidebar.runScripts.runScript'),
-      onSelect: actions.onRunScript,
-      disabled: actions.canRunScript === false,
-    });
-  }
-  if (actions.onViewStatus) {
-    items.push({
-      key: 'view-status',
-      group: 3,
-      icon: Activity,
-      label: t('sidebar.runScripts.scriptStatus'),
-      onSelect: actions.onViewStatus,
-    });
-  }
-  if (actions.onConfigureScripts) {
-    items.push({
-      key: 'configure-scripts',
-      group: 3,
-      icon: Settings2,
-      label: t('sidebar.runScripts.configure'),
-      onSelect: actions.onConfigureScripts,
-    });
-  }
-
-  // group 4 — session: open details, reconnect
-  if (actions.onOpenDetails) {
-    items.push({
-      key: 'open-details',
-      group: 4,
-      icon: Info,
-      label: actions.openDetailsLabel ?? t('tasks.context.openDetails'),
-      onSelect: actions.onOpenDetails,
-    });
-  }
+  // group 4 — session: reconnect
   if (actions.onReconnect) {
     items.push({
       key: 'reconnect',
@@ -285,6 +224,17 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       icon: RotateCcw,
       label: t('sidebar.reconnect'),
       onSelect: actions.onReconnect,
+    });
+  }
+
+  // group 5 — reopen / reload (standalone, last)
+  if (actions.onRestartSession) {
+    items.push({
+      key: 'reopen',
+      group: 5,
+      icon: RefreshCw,
+      label: t('tasks.context.reopenTask'),
+      onSelect: () => actions.onRestartSession?.(),
     });
   }
 
@@ -375,11 +325,11 @@ async function resolveSessionContentSourcePath(
   if (!cwd || !sessionId) return undefined;
 
   try {
-    if (fields.providerId === 'claude') {
+    if (fields.runtimeId === 'claude') {
       const context = await rpc.conversations.getClaudeSessionContext(cwd, sessionId);
       return context?.transcriptPath;
     }
-    if (fields.providerId === 'codex') {
+    if (fields.runtimeId === 'codex') {
       const context = await rpc.conversations.getCodexSessionContext(
         cwd,
         sessionId,
@@ -427,82 +377,6 @@ function showCopyFailure(t: TFunction): void {
   });
 }
 
-const TaskWorkspaceContextSubmenu = observer(function TaskWorkspaceContextSubmenu({
-  currentWorkspaceId,
-  onAssign,
-}: {
-  currentWorkspaceId: string | null;
-  onAssign: (workspaceId: string | null) => void;
-}) {
-  const { t } = useTranslation();
-  if (workspaceStore.workspaces.length === 0) return null;
-  return (
-    <>
-      <ContextMenuSeparator />
-      <ContextMenuSub>
-        <ContextMenuSubTrigger className="whitespace-nowrap">
-          <FolderInput className="size-4" />
-          {t('workspaces.moveToWorkspace')}
-        </ContextMenuSubTrigger>
-        <ContextMenuSubContent>
-          <ContextMenuRadioGroup value={currentWorkspaceId ?? ALL_WORKSPACES_ID}>
-            <ContextMenuRadioItem value={ALL_WORKSPACES_ID} onClick={() => onAssign(null)}>
-              {t('workspaces.defaultWorkspace')}
-            </ContextMenuRadioItem>
-            {workspaceStore.workspaces.map((workspace) => (
-              <ContextMenuRadioItem
-                key={workspace.id}
-                value={workspace.id}
-                onClick={() => onAssign(workspace.id)}
-              >
-                {workspace.name}
-              </ContextMenuRadioItem>
-            ))}
-          </ContextMenuRadioGroup>
-        </ContextMenuSubContent>
-      </ContextMenuSub>
-    </>
-  );
-});
-
-const TaskWorkspaceDropdownSubmenu = observer(function TaskWorkspaceDropdownSubmenu({
-  currentWorkspaceId,
-  onAssign,
-}: {
-  currentWorkspaceId: string | null;
-  onAssign: (workspaceId: string | null) => void;
-}) {
-  const { t } = useTranslation();
-  if (workspaceStore.workspaces.length === 0) return null;
-  return (
-    <>
-      <DropdownMenuSeparator />
-      <DropdownMenuSub>
-        <DropdownMenuSubTrigger className="whitespace-nowrap">
-          <FolderInput className="size-4" />
-          {t('workspaces.moveToWorkspace')}
-        </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent>
-          <DropdownMenuRadioGroup value={currentWorkspaceId ?? ALL_WORKSPACES_ID}>
-            <DropdownMenuRadioItem value={ALL_WORKSPACES_ID} onClick={() => onAssign(null)}>
-              {t('workspaces.defaultWorkspace')}
-            </DropdownMenuRadioItem>
-            {workspaceStore.workspaces.map((workspace) => (
-              <DropdownMenuRadioItem
-                key={workspace.id}
-                value={workspace.id}
-                onClick={() => onAssign(workspace.id)}
-              >
-                {workspace.name}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuSubContent>
-      </DropdownMenuSub>
-    </>
-  );
-});
-
 interface TaskContextMenuProps extends TaskMenuActions {
   children: React.ReactNode;
 }
@@ -536,7 +410,7 @@ export function TaskContextMenu({ children, ...actions }: TaskContextMenuProps) 
           );
         })}
         {actions.onAssignWorkspace && (
-          <TaskWorkspaceContextSubmenu
+          <WorkspaceAssignContextSubmenu
             currentWorkspaceId={actions.currentWorkspaceId ?? null}
             onAssign={actions.onAssignWorkspace}
           />
@@ -588,7 +462,7 @@ export function TaskActionsMenu({
           );
         })}
         {actions.onAssignWorkspace && (
-          <TaskWorkspaceDropdownSubmenu
+          <WorkspaceAssignDropdownSubmenu
             currentWorkspaceId={actions.currentWorkspaceId ?? null}
             onAssign={actions.onAssignWorkspace}
           />

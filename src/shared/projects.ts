@@ -52,6 +52,8 @@ export type CreateLocalProjectParams = {
   path: string;
   name: string;
   initGitRepository?: boolean;
+  /** Sidebar workspace to assign the new project to (omit for the default workspace). */
+  workspaceId?: string;
 };
 
 export type CreateSshProjectParams = {
@@ -61,6 +63,8 @@ export type CreateSshProjectParams = {
   path: string;
   connectionId: string;
   initGitRepository?: boolean;
+  /** Sidebar workspace to assign the new project to (omit for the default workspace). */
+  workspaceId?: string;
 };
 
 export type CreateProjectParams = CreateLocalProjectParams | CreateSshProjectParams;

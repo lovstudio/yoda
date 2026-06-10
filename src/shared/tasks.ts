@@ -95,6 +95,11 @@ export type CreateTaskParams = {
   initialConversation?: CreateConversationParams;
   initialStatus?: TaskLifecycleStatus;
   workspaceProvider?: 'byoi';
+  /**
+   * Sidebar workspace to assign the new task to (projectless/Drafts tasks only —
+   * tasks in a real project inherit the project's workspace in the sidebar).
+   */
+  sidebarWorkspaceId?: string;
 };
 
 export type CreateTaskError =

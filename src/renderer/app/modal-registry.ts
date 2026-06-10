@@ -17,6 +17,7 @@ import { CreatePrModal } from '@renderer/features/tasks/diff-view/changes-panel/
 import { ConflictDialog } from '@renderer/features/tasks/editor/conflict-dialog';
 import { RenameTaskModal } from '@renderer/features/tasks/rename-task-modal';
 import { SessionPromptsModal } from '@renderer/features/tasks/session-prompts-modal';
+import { CreateWorkspaceModal } from '@renderer/features/workspaces/create-workspace-modal';
 import { AccountDeviceFlowModalOverlay } from '@renderer/lib/components/account-device-flow-modal';
 import { AddSshConnModal } from '@renderer/lib/components/add-ssh-conn-modal';
 import { ChangeProjectConnectionModal } from '@renderer/lib/components/change-project-connection-modal';
@@ -62,6 +63,7 @@ export const modalRegistry = {
   renameTaskModal: createModal(RenameTaskModal, { size: 'xs' }),
   sessionPromptsModal: createModal(SessionPromptsModal, { size: 'lg' }),
   renameProjectModal: createModal(RenameProjectModal, { size: 'xs' }),
+  createWorkspaceModal: createModal(CreateWorkspaceModal, { size: 'xs' }),
   archiveTaskWithNoteModal: createModal(ArchiveTaskWithNoteModal, { size: 'xs' }),
   shareProjectConfigModal: createModal(ShareProjectConfigModal, { size: 'md' }),
   manageRunScriptsModal: createModal(ManageRunScriptsModal, { size: 'md' }),

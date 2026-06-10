@@ -93,6 +93,8 @@ export class ProjectManagerStore {
     const projectId = id ?? crypto.randomUUID();
     let resolvedId = projectId;
     const isSsh = projectType.type === 'ssh';
+    // New projects belong to the workspace they were created in (undefined → default).
+    const workspaceId = appState.workspaces.activeWorkspace?.id;
     const inspection = await rpc.projects.inspectProjectPath(
       isSsh
         ? { type: 'ssh', path: data.path, connectionId: projectType.connectionId }
@@ -109,7 +111,7 @@ export class ProjectManagerStore {
         runInAction(() => {
           this.projects.set(
             projectId,
-            createUnregisteredProject(projectId, data.name, 'registering', 'pick')
+            createUnregisteredProject(projectId, data.name, 'registering', 'pick', workspaceId)
           );
         });
         try {
@@ -121,6 +123,7 @@ export class ProjectManagerStore {
                 name: data.name,
                 connectionId: projectType.connectionId,
                 initGitRepository: data.initGitRepository,
+                workspaceId,
               })
             : await rpc.projects.createProject({
                 type: 'local',
@@ -128,6 +131,7 @@ export class ProjectManagerStore {
                 path: data.path,
                 name: data.name,
                 initGitRepository: data.initGitRepository,
+                workspaceId,
               });
           resolvedId = this._setAndOpenProject(projectId, project);
           captureTelemetry('project_added', {
@@ -151,7 +155,7 @@ export class ProjectManagerStore {
         runInAction(() => {
           this.projects.set(
             projectId,
-            createUnregisteredProject(projectId, data.name, 'cloning', 'clone')
+            createUnregisteredProject(projectId, data.name, 'cloning', 'clone', workspaceId)
           );
         });
         try {
@@ -171,12 +175,14 @@ export class ProjectManagerStore {
                 path: clonePath,
                 name: data.name,
                 connectionId: projectType.connectionId,
+                workspaceId,
               })
             : await rpc.projects.createProject({
                 type: 'local',
                 id: projectId,
                 path: clonePath,
                 name: data.name,
+                workspaceId,
               });
           resolvedId = this._setAndOpenProject(projectId, project);
           captureTelemetry('project_added', {
@@ -200,7 +206,7 @@ export class ProjectManagerStore {
         runInAction(() => {
           this.projects.set(
             projectId,
-            createUnregisteredProject(projectId, data.name, 'creating-repo', 'new')
+            createUnregisteredProject(projectId, data.name, 'creating-repo', 'new', workspaceId)
           );
         });
         try {
@@ -233,12 +239,14 @@ export class ProjectManagerStore {
                 path: clonePath,
                 name: data.name,
                 connectionId: projectType.connectionId,
+                workspaceId,
               })
             : await rpc.projects.createProject({
                 type: 'local',
                 id: projectId,
                 path: clonePath,
                 name: data.name,
+                workspaceId,
               });
           resolvedId = this._setAndOpenProject(projectId, project);
           captureTelemetry('project_added', {

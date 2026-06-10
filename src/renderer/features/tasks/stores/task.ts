@@ -39,6 +39,7 @@ export type UnregisteredTaskData = {
   setupStatus?: TaskSetupStatus;
   setupError?: string;
   setupRequiresBranchName?: boolean;
+  sidebarWorkspaceId?: string;
 };
 
 export class ProvisionedTask {
@@ -253,7 +254,7 @@ export class TaskStore {
     if (this.state === 'provisioned' && this.provisionedTask) {
       const counts: Record<string, number> = {};
       for (const conv of this.provisionedTask.conversations.conversations.values()) {
-        const id = conv.data.providerId;
+        const id = conv.data.runtimeId;
         counts[id] = (counts[id] ?? 0) + 1;
       }
       return counts;

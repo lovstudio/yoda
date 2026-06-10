@@ -13,7 +13,12 @@ import {
 } from '@renderer/features/tasks/stores/task';
 import type { WorkspaceStore } from '@renderer/features/workspaces/workspace-store';
 import type { Snapshottable } from '@renderer/lib/stores/snapshottable';
-import { isSidebarNavItemKey, SIDEBAR_NAV_ITEM_KEYS, type SidebarNavItemKey } from './nav-items';
+import {
+  isSidebarNavItemKey,
+  SIDEBAR_NAV_ITEM_KEYS,
+  type SidebarNavItemKey,
+  type SidebarPrimaryItemKey,
+} from './nav-items';
 
 function parseSidebarTaskSortBy(value: unknown): SidebarTaskSortBy | undefined {
   return value === 'created-at' || value === 'updated-at' ? value : undefined;
@@ -105,6 +110,14 @@ function isRegisteredProject(project: ProjectStore): project is RegisteredProjec
 export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   projectOrder: string[] = [];
   taskOrderByProject: Record<string, string[]> = {};
+  /**
+   * Monotonic per-project "last activity" stamp used to order projects in
+   * `updated-at` mode. It only ever moves forward: a new task or a newer task
+   * interaction bumps it, but archiving the most-recent task does NOT pull it
+   * back (an archived task no longer appears in the list, so it should not drag
+   * its project's position around).
+   */
+  projectActivityById: Record<string, string> = {};
   expandedProjectIds = observable.set<string>();
   pinnedProjectIds = observable.set<string>();
   taskSortBy: SidebarTaskSortBy = 'created-at';
@@ -116,6 +129,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   /** Persisted order of the secondary nav items; missing keys fall back to default order. */
   navItemOrder: SidebarNavItemKey[] = [...SIDEBAR_NAV_ITEM_KEYS];
   hiddenNavItems = observable.set<SidebarNavItemKey>();
+  /** Global show/hide for the entire secondary nav section. */
+  navSectionHidden = false;
+  /** Hidden primary actions (New task, Search tasks); show/hide only, no order. */
+  hiddenPrimaryItems = observable.set<SidebarPrimaryItemKey>();
 
   constructor(
     private readonly projectManager: ProjectManagerStore,
@@ -154,16 +171,45 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
         });
       }
     );
+
+    // Track each project's most-recent active-task instant and fold it into the
+    // monotonic `projectActivityById` stamp. Only forward moves are recorded, so
+    // archiving the latest task never demotes the project in `updated-at` order.
+    reaction(
+      () => {
+        const instants: [string, string][] = [];
+        for (const project of this.projectManager.projects.values()) {
+          if (!isRegisteredProject(project)) continue;
+          instants.push([project.data.id, this.mostRecentTaskInstant(project)]);
+        }
+        return instants;
+      },
+      (instants) => {
+        runInAction(() => {
+          for (const [id, instant] of instants) {
+            if (!instant) continue;
+            const current = this.projectActivityById[id] ?? '';
+            // compareSidebarInstantsDesc < 0 means `instant` is newer than `current`.
+            if (compareSidebarInstantsDesc(instant, current) < 0) {
+              this.projectActivityById[id] = instant;
+            }
+          }
+        });
+      },
+      { fireImmediately: true }
+    );
   }
 
   /**
    * Whether a project belongs to the active workspace selection. "All" matches
    * everything; "Default" matches projects with no workspace. Unregistered
-   * projects (no DB row) are treated as unassigned.
+   * projects (no DB row) use the workspace they will be assigned to on creation.
    */
   private matchesActiveWorkspace(project: ProjectStore): boolean {
     const workspaceId =
-      project.state === 'unregistered' ? null : (project.data?.workspaceId ?? null);
+      project.state === 'unregistered'
+        ? project.pendingWorkspaceId
+        : (project.data?.workspaceId ?? null);
     return this.workspaceStore.matchesActive(workspaceId);
   }
 
@@ -345,12 +391,25 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     const pairs: { projectId: string; task: TaskStore }[] = [];
     for (const project of this.projectManager.projects.values()) {
       if (!project.mountedProject) continue;
-      if (!this.matchesActiveWorkspace(project)) continue;
       const projectId = project.state === 'unregistered' ? project.id : project.data?.id;
       if (!projectId) continue;
-      if (pinnedProjectIds.has(projectId) && this.expandedProjectIds.has(projectId)) continue;
+      // Tasks already rendered under their expanded pinned project entry.
+      if (
+        pinnedProjectIds.has(projectId) &&
+        this.expandedProjectIds.has(projectId) &&
+        this.matchesActiveWorkspace(project)
+      ) {
+        continue;
+      }
+      // Pinned tasks can be assigned to a workspace individually; without an
+      // override they follow their project's workspace.
+      const projectWorkspaceId =
+        project.state === 'unregistered' ? null : (project.data?.workspaceId ?? null);
       for (const task of project.mountedProject.taskManager.tasks.values()) {
         if (!isActiveSidebarTask(task) || !task.data.isPinned) continue;
+        const taskWorkspaceId =
+          'sidebarWorkspaceId' in task.data ? task.data.sidebarWorkspaceId : undefined;
+        if (!this.workspaceStore.matchesActive(taskWorkspaceId ?? projectWorkspaceId)) continue;
         pairs.push({ projectId, task });
       }
     }
@@ -378,6 +437,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       expandedProjectIds: [...this.expandedProjectIds],
       projectOrder: [...this.projectOrder],
       taskOrderByProject: { ...this.taskOrderByProject },
+      projectActivityById: { ...this.projectActivityById },
       taskSortBy: this.taskSortBy,
       taskGroupBy: this.taskGroupBy,
       pinnedProjectIds: [...this.pinnedProjectIds],
@@ -387,6 +447,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       activeWorkspaceId: this.workspaceStore.activeWorkspaceId,
       navItemOrder: [...this.navItemOrder],
       hiddenNavItems: [...this.hiddenNavItems],
+      navSectionHidden: this.navSectionHidden,
     };
   }
 
@@ -399,6 +460,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     }
     if (snapshot.taskOrderByProject !== undefined) {
       this.taskOrderByProject = { ...snapshot.taskOrderByProject };
+    }
+    if (snapshot.projectActivityById !== undefined) {
+      this.projectActivityById = { ...snapshot.projectActivityById };
     }
     if (snapshot.taskSortBy !== undefined) {
       const v = parseSidebarTaskSortBy(snapshot.taskSortBy);
@@ -428,6 +492,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     }
     if (snapshot.hiddenNavItems !== undefined) {
       this.hiddenNavItems.replace(snapshot.hiddenNavItems.filter(isSidebarNavItemKey));
+    }
+    if (snapshot.navSectionHidden !== undefined) {
+      this.navSectionHidden = snapshot.navSectionHidden === true;
     }
   }
 
@@ -502,6 +569,15 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   resetNavItems(): void {
     this.navItemOrder = [...SIDEBAR_NAV_ITEM_KEYS];
     this.hiddenNavItems.clear();
+    this.navSectionHidden = false;
+  }
+
+  setNavSectionHidden(hidden: boolean): void {
+    this.navSectionHidden = hidden;
+  }
+
+  toggleNavSectionHidden(): void {
+    this.navSectionHidden = !this.navSectionHidden;
   }
 
   isProjectPinned(projectId: string): boolean {
@@ -609,12 +685,14 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   private sortProjectsForSidebar(projects: RegisteredProjectStore[]): RegisteredProjectStore[] {
     if (this.taskSortBy === 'updated-at') {
-      // When sorting by recent activity, project order follows the latest
-      // submitted user prompt in each project. Manual DnD order is ignored in
+      // When sorting by recent activity, project order follows each project's
+      // monotonic activity stamp (newest first). The stamp advances on new tasks
+      // and newer interactions but never regresses on archive, so removing the
+      // latest task does not reshuffle the list. Manual DnD order is ignored in
       // this mode — picking "Last used" implies recency should drive layout.
       return [...projects].sort((a, b) => {
-        const ra = this.mostRecentTaskInstant(a);
-        const rb = this.mostRecentTaskInstant(b);
+        const ra = this.projectActivityById[a.data.id] ?? '';
+        const rb = this.projectActivityById[b.data.id] ?? '';
         const d = compareSidebarInstantsDesc(ra, rb);
         if (d !== 0) return d;
         return a.data.id.localeCompare(b.data.id);

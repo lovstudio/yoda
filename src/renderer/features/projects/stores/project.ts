@@ -81,6 +81,8 @@ export class ProjectStore {
   error: string | undefined = undefined;
   errorCode: 'path-not-found' | 'ssh-disconnected' | undefined = undefined;
   mode: ProjectMode | null;
+  /** Sidebar workspace the project will belong to once registered (unregistered state only). */
+  pendingWorkspaceId: string | null = null;
   mountedProject: MountedProject | null = null;
 
   constructor(
@@ -199,9 +201,12 @@ export function createUnregisteredProject(
   id: string,
   name: string,
   phase: UnregisteredProjectPhase,
-  mode: ProjectMode = 'pick'
+  mode: ProjectMode = 'pick',
+  workspaceId: string | null = null
 ): ProjectStore {
-  return new ProjectStore('unregistered', id, name, null, phase, mode);
+  const store = new ProjectStore('unregistered', id, name, null, phase, mode);
+  store.pendingWorkspaceId = workspaceId;
+  return store;
 }
 
 export function createUnmountedProject(

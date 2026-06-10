@@ -1518,6 +1518,9 @@
     "title": "用量统计",
     "subtitle": "全部任务与会话的累计活动——Token 消耗解析自 agent 会话记录。",
     "empty": "暂无用量数据，先跑几个 agent 会话吧。",
+    "loadingHint": "首次加载需解析全部会话历史，可能需要一点时间。",
+    "loadFailed": "用量数据加载失败",
+    "retry": "重试",
     "cards": {
       "tasksArchived": "已归档任务",
       "tasksTotal": "共 {{count}} 个",
@@ -2297,6 +2300,7 @@
     "defaultName": "新工作区",
     "defaultWorkspace": "无工作区",
     "create": "新建工作区",
+    "nameLabel": "名称",
     "rename": "重命名",
     "delete": "删除",
     "moveToWorkspace": "移动到工作区",

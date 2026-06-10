@@ -112,6 +112,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
 
   const canPin = task.state !== 'unregistered';
   const canMarkReview = task.state !== 'unregistered';
+  const canAssignWorkspace = projectId === INTERNAL_PROJECT_ID || task.data.isPinned;
   const needsReview = task.data.needsReview;
 
   const provisionedTask = asProvisioned(task);
@@ -212,16 +213,17 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     onCopyYodaLink: handleCopyYodaLink,
     onReconnect: handleReconnect,
     onRestartSession: handleRestartSession,
-    // Projectless Drafts tasks belong directly to a workspace; project-bound
-    // tasks follow their project's workspace, so the submenu only shows here.
-    currentWorkspaceId:
-      projectId === INTERNAL_PROJECT_ID
-        ? (registeredTaskData(task)?.sidebarWorkspaceId ?? null)
-        : undefined,
-    onAssignWorkspace:
-      projectId === INTERNAL_PROJECT_ID
-        ? (workspaceId: string | null) => void task.setSidebarWorkspaceId(workspaceId)
-        : undefined,
+    // Projectless Drafts tasks belong directly to a workspace, and pinned tasks
+    // appear standalone in the workspace-scoped pinned strip — both can be moved
+    // individually. Other project-bound tasks follow their project's workspace.
+    currentWorkspaceId: canAssignWorkspace
+      ? (registeredTaskData(task)?.sidebarWorkspaceId ??
+        getProjectStore(projectId)?.data?.workspaceId ??
+        null)
+      : undefined,
+    onAssignWorkspace: canAssignWorkspace
+      ? (workspaceId: string | null) => void task.setSidebarWorkspaceId(workspaceId)
+      : undefined,
   };
 
   return (

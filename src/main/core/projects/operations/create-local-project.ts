@@ -18,6 +18,7 @@ export type CreateLocalProjectParams = {
   path: string;
   name: string;
   initGitRepository?: boolean;
+  workspaceId?: string;
 };
 
 export async function createLocalProject(params: CreateLocalProjectParams): Promise<LocalProject> {
@@ -57,6 +58,7 @@ export async function createLocalProject(params: CreateLocalProjectParams): Prom
           name: params.name,
           path: gitInfo.rootPath,
           workspaceProvider: 'local',
+          workspaceId: params.workspaceId ?? null,
           baseRef,
           updatedAt: sql`CURRENT_TIMESTAMP`,
         })

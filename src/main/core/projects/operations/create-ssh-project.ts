@@ -19,6 +19,7 @@ export type CreateSshProjectParams = {
   path: string;
   connectionId: string;
   initGitRepository?: boolean;
+  workspaceId?: string;
 };
 
 export async function createSshProject(params: CreateSshProjectParams): Promise<SshProject> {
@@ -68,6 +69,7 @@ export async function createSshProject(params: CreateSshProjectParams): Promise<
           name: params.name,
           path: gitInfo.rootPath,
           workspaceProvider: 'ssh',
+          workspaceId: params.workspaceId ?? null,
           sshConnectionId: params.connectionId,
           baseRef,
           updatedAt: sql`CURRENT_TIMESTAMP`,

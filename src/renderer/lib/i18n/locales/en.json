@@ -1518,6 +1518,9 @@
     "title": "Usage",
     "subtitle": "Lifetime activity across all tasks and sessions — token burn parsed from agent transcripts.",
     "empty": "No usage data yet — run some agent sessions first.",
+    "loadingHint": "First load parses all session history — this can take a moment.",
+    "loadFailed": "Failed to load usage data",
+    "retry": "Retry",
     "cards": {
       "tasksArchived": "Tasks archived",
       "tasksTotal": "{{count}} total",
@@ -2297,6 +2300,7 @@
     "defaultName": "New Workspace",
     "defaultWorkspace": "No workspace",
     "create": "New workspace",
+    "nameLabel": "Name",
     "rename": "Rename",
     "delete": "Delete",
     "moveToWorkspace": "Move to workspace",
