@@ -1173,7 +1173,7 @@
       "moveSectionUp": "上移",
       "moveSectionDown": "下移",
       "conversation": "对话",
-      "tasks": "待办",
+      "tasks": "子任务",
       "summary": "摘要",
       "hooks": "Hooks",
       "summaryGlobal": "全局摘要",
