@@ -700,6 +700,8 @@
     "selectProjectPlaceholder": "Select project",
     "newConversationInTaskTitle": "Create a new conversation under \"{{name}}\"",
     "taskConversationScopeTooltip": "You are creating a child session for this task.",
+    "newSubtaskInTaskTitle": "Create a subtask under \"{{name}}\"",
+    "subtaskScopeTooltip": "You are creating a subtask of this task.",
     "remoteMode": "Remote",
     "localMode": "Local",
     "needProjectHint": "Pick a project to send a message.",
@@ -755,6 +757,7 @@
       "archiveConversation": "Archive session",
       "archiveConversationSkipPre": "Archive session without pre-archive skill",
       "reloadConversation": "Reload session",
+      "renameConversation": "Rename session",
       "preview": "Preview"
     },
     "overview": {
@@ -1014,8 +1017,7 @@
       "initialPromptPlaceholder": "Describe what you want the agent to do.",
       "pushBranchToRemote": "Push branch to remote",
       "selectAnotherIssue": "Select another issue",
-      "selectAnotherPr": "Select another pull request",
-      "parentTask": "Parent task:"
+      "selectAnotherPr": "Select another pull request"
     },
     "terminals": {
       "title": "Terminals",
@@ -1152,6 +1154,7 @@
       "hooks": "Hooks",
       "summaryGlobal": "Global summary",
       "summaryRecent": "Recent activity",
+      "summaryGenerate": "Generate summary",
       "summaryRegenerate": "Regenerate summary",
       "summaryConfigure": "Configure summary agent",
       "recentProgressTooltip": "Conversation progress and next step",
@@ -1187,7 +1190,6 @@
       "cardDescChanges": "Review file changes in the worktree",
       "cardDescFiles": "Browse the task's working directory"
     },
-    "createSubtask": "Create subtask",
     "setParent": {
       "title": "Set parent task",
       "searchPlaceholder": "Search tasks...",
@@ -2673,6 +2675,6 @@
     "viewOptions": "View options",
     "current": "Workspace ({{name}})",
     "defaultTab": "Default",
-    "countsAria": "{{toRead}} unread"
+    "countsAria": "{{attention}} running, awaiting review or unread"
   }
 }

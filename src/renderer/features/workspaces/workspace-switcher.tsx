@@ -12,9 +12,6 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { isImeComposing } from '@renderer/utils/ime';
@@ -23,8 +20,8 @@ import { workspaceTaskCounts, type WorkspaceTaskCounts } from './workspace-task-
 
 /**
  * Current-workspace selector for the sidebar footer. Shows the active workspace
- * name and opens a dropdown that manages the workspace itself: switch (submenu
- * with "All", user workspaces and create), then rename and remove of the active
+ * name and opens a flat dropdown: workspace choices ("All", default, user
+ * workspaces) as a radio group, create, then rename and remove of the active
  * workspace as separate groups. Workspaces scope the pinned list, projects, and
  * projectless tasks shown below.
  */
@@ -106,40 +103,32 @@ export const WorkspaceSwitcher = observer(function WorkspaceSwitcher() {
         <WorkspaceCounts counts={activeCounts} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={6} className="min-w-56">
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Layers className="size-4" />
-            {t('workspaces.switch')}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="min-w-56">
-            <DropdownMenuRadioGroup value={activeId}>
-              <WorkspaceChoice
-                workspaceId={ALL_WORKSPACES_ID}
-                label={t('workspaces.allTab')}
-                onSelect={() => workspaceStore.setActiveWorkspaceId(ALL_WORKSPACES_ID)}
-              />
-              <DropdownMenuSeparator />
-              <WorkspaceChoice
-                workspaceId={DEFAULT_WORKSPACE_ID}
-                label={t('workspaces.defaultTab')}
-                onSelect={() => workspaceStore.setActiveWorkspaceId(DEFAULT_WORKSPACE_ID)}
-              />
-              {workspaces.map((workspace) => (
-                <WorkspaceChoice
-                  key={workspace.id}
-                  workspaceId={workspace.id}
-                  label={workspace.name}
-                  onSelect={() => workspaceStore.setActiveWorkspaceId(workspace.id)}
-                />
-              ))}
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => void handleCreate()}>
-              <Plus className="size-4" />
-              {t('workspaces.create')}
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        <DropdownMenuRadioGroup value={activeId}>
+          <WorkspaceChoice
+            workspaceId={ALL_WORKSPACES_ID}
+            label={t('workspaces.allTab')}
+            onSelect={() => workspaceStore.setActiveWorkspaceId(ALL_WORKSPACES_ID)}
+          />
+          <DropdownMenuSeparator />
+          <WorkspaceChoice
+            workspaceId={DEFAULT_WORKSPACE_ID}
+            label={t('workspaces.defaultTab')}
+            onSelect={() => workspaceStore.setActiveWorkspaceId(DEFAULT_WORKSPACE_ID)}
+          />
+          {workspaces.map((workspace) => (
+            <WorkspaceChoice
+              key={workspace.id}
+              workspaceId={workspace.id}
+              label={workspace.name}
+              onSelect={() => workspaceStore.setActiveWorkspaceId(workspace.id)}
+            />
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => void handleCreate()}>
+          <Plus className="size-4" />
+          {t('workspaces.create')}
+        </DropdownMenuItem>
         {activeWorkspace && (
           <>
             <DropdownMenuSeparator />
@@ -177,8 +166,8 @@ const WorkspaceChoice = observer(function WorkspaceChoice({
 });
 
 /**
- * Compact unread badge in `(N)` form, shown next to the workspace label.
- * Renders nothing when there are no unread tasks.
+ * Compact attention badge in `(N)` form, shown next to the workspace label:
+ * tasks running, awaiting review or unread. Renders nothing when zero.
  */
 function WorkspaceCounts({
   counts,
@@ -188,15 +177,15 @@ function WorkspaceCounts({
   className?: string;
 }) {
   const { t } = useTranslation();
-  if (counts.toRead <= 0) return null;
+  if (counts.attention <= 0) return null;
   return (
     <span
       className={cn('text-xs text-foreground-passive font-mono', className)}
       aria-label={t('workspaces.countsAria', {
-        toRead: counts.toRead,
+        attention: counts.attention,
       })}
     >
-      ({counts.toRead})
+      ({counts.attention})
     </span>
   );
 }

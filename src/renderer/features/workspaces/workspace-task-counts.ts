@@ -5,10 +5,12 @@ import { registeredTaskData } from '@renderer/features/tasks/stores/task';
 import { agentRuntimeStore, workspaceStore } from '@renderer/lib/stores/app-state';
 
 export type WorkspaceTaskCounts = {
-  /** Tasks manually marked "稍后再读" or with an unseen attention-worthy agent status. */
-  toRead: number;
-  /** Tasks whose agent is currently working or awaiting input. */
-  running: number;
+  /**
+   * Tasks needing attention: agent running/awaiting input, marked "稍后再读"
+   * (needsReview), or with an unseen attention-worthy status. Each task counts
+   * at most once.
+   */
+  attention: number;
   /** Active (non-archived) tasks in the workspace. */
   total: number;
 };
@@ -32,8 +34,7 @@ function matches(assignedId: string | null, workspaceId: string): boolean {
  * Call only inside `observer` components (reads MobX state).
  */
 export function workspaceTaskCounts(workspaceId: string): WorkspaceTaskCounts {
-  let toRead = 0;
-  let running = 0;
+  let attention = 0;
   let total = 0;
 
   for (const project of getProjectManagerStore().projects.values()) {
@@ -47,13 +48,19 @@ export function workspaceTaskCounts(workspaceId: string): WorkspaceTaskCounts {
       if (!matches(effectiveWorkspaceId, workspaceId)) continue;
 
       total += 1;
-      if (agentRuntimeStore.isTaskRunning(data.projectId, data.id)) running += 1;
-      // "稍后再读" (persisted needsReview flag) or an unseen attention-worthy status.
-      if (data.needsReview || agentRuntimeStore.isTaskUnread(data.projectId, data.id)) toRead += 1;
+      // Running, "稍后再读" (persisted needsReview flag) or an unseen
+      // attention-worthy status — union, so a task never counts twice.
+      if (
+        agentRuntimeStore.isTaskRunning(data.projectId, data.id) ||
+        data.needsReview ||
+        agentRuntimeStore.isTaskUnread(data.projectId, data.id)
+      ) {
+        attention += 1;
+      }
     }
   }
 
-  return { toRead, running, total };
+  return { attention, total };
 }
 
 /** Counts for the currently active workspace. */
