@@ -8,6 +8,7 @@ import {
 import { events, rpc } from '@renderer/lib/ipc';
 import { cssVar } from '@renderer/utils/cssVars';
 import { log } from '@renderer/utils/logger';
+import { registerOsc52ClipboardHandler } from './terminal-clipboard';
 import { ensureXtermHost } from './xterm-host';
 
 // ── Theme helpers ─────────────────────────────────────────────────────────────
@@ -179,6 +180,9 @@ export class FrontendPty {
       },
       theme: buildTheme(theme),
     });
+
+    // OSC 52 → system clipboard (tmux copy-mode etc.). Disposed with the terminal.
+    registerOsc52ClipboardHandler(this.terminal);
 
     this.terminal.open(this.ownedContainer);
     this.loadWebglRenderer();

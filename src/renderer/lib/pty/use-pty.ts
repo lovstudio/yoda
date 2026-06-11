@@ -24,6 +24,7 @@ import {
   shouldMapShiftEnterToCtrlJ,
   shouldPasteToTerminal,
 } from './pty-keybindings';
+import { writeTextToClipboard } from './terminal-clipboard';
 import {
   getTerminalFileLinkAtCell,
   registerTerminalFileLinkProvider,
@@ -399,14 +400,7 @@ export function usePty(
   const copySelectionToClipboard = useCallback(() => {
     const selection = termRef.current?.getSelection();
     if (!selection) return;
-
-    void rpc.app
-      .clipboardWriteText(selection)
-      .then((result) => {
-        if (result?.success) return;
-        return navigator.clipboard?.writeText(selection);
-      })
-      .catch(() => navigator.clipboard?.writeText(selection).catch(() => {}));
+    writeTextToClipboard(selection);
   }, []);
 
   const sendInput = useCallback(
