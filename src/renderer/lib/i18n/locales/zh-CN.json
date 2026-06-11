@@ -208,6 +208,15 @@
       "title": "移动端连接",
       "heading": "连接 Yoda Mobile",
       "description": "先扫码安装移动端，再扫码连接当前桌面端。",
+      "modeDev": "开发",
+      "modeProd": "正式",
+      "devHeading": "开发模式连接",
+      "devDescription": "用 Expo Go 打开移动端进行本地开发，再扫码连接当前桌面端。",
+      "prodHeading": "连接 Yoda Mobile",
+      "prodDescription": "先扫码安装移动端，再扫码连接当前桌面端。",
+      "devUnavailableInProd": "开发模式的连接方式仅在桌面端 dev 构建中可用。",
+      "stepLabel": "第 {{n}} 步",
+      "advancedDetails": "连接详情",
       "running": "Gateway 正在运行",
       "notReady": "Gateway 正在启动或暂不可用",
       "disabled": "Gateway 已关闭",
@@ -1937,6 +1946,9 @@
       "less": "少",
       "more": "多"
     },
+    "byProject": "按项目",
+    "byModel": "按模型",
+    "modelUnknown": "未知模型",
     "byRuntime": "按运行时",
     "bySource": "按来源",
     "sessionCount": "{{count}} 个会话",
@@ -1944,10 +1956,12 @@
     "topTasks": "Token 消耗 Top 任务",
     "caliber": {
       "tasks": "口径：归档时间非空的任务数（归档即完成）；副行为历史创建的全部任务数。",
-      "tokens": "口径：解析本地 Claude / Codex 会话记录逐条累加。总量 = 输入 + 输出 + 缓存读 + 缓存写；其他 runtime 暂无解析器，计 0。",
+      "tokens": "口径：解析本地 Claude / Codex 会话记录逐条累加，含 subagent 记录与项目设置中配置的辅助目录。总量 = 输入 + 输出 + 缓存读 + 缓存写；其他 runtime 暂无解析器，计 0。",
       "lines": "口径：每任务 = 相对源分支的已提交差异（merge-base）+ 工作区未提交变更。活跃任务实时计算，归档任务取归档前快照（本功能上线前归档的任务无快照，计 0）。",
       "activeDays": "口径：会话记录中出现过 token 消耗的本地日历天数。",
       "heatmap": "口径：各会话 token 按实际消耗时刻归入本地日期；色阶按非零日的分位数（25/50/75）划分。",
+      "byProject": "口径：每个会话归入其任务所属项目；辅助目录中未被追踪的会话归入配置该路径的项目（已被其他项目追踪的会话留在原项目，全局总量不重复计）。",
+      "byModel": "口径：每条记录按 provider 上报的模型 id 归类（Claude 取 message.model；Codex 取当前 turn_context 的 model）；缺失时计入未知。",
       "byRuntime": "口径：按会话所属 runtime 汇总，仅统计可解析的会话。",
       "bySource": "口径：会话启动时记录的账号模式；追踪上线前的历史会话按该 runtime 当前设置归类（估算）。",
       "topTasks": "口径：任务内全部会话 token 求和后排序，取前 10。"
@@ -2049,37 +2063,29 @@
     "codeCopied": "验证码已复制",
     "copyFailed": "复制失败",
     "copyFailedDescription": "请手动复制验证码并粘贴到浏览器中。",
-    "yourCode": "你的验证码",
-    "copyCode": "复制验证码",
     "alreadyCopied": "已复制",
-    "openingService": "正在打开服务…",
     "waiting": "等待授权中…",
-    "codeExpiresIn": "验证码将在 {{time}} 后过期",
-    "openService": "打开服务",
-    "shortcutCopy": "复制验证码",
-    "shortcutReopen": "重新打开浏览器",
+    "openService": "在浏览器中打开 {{service}}",
+    "shortcutCopy": "复制",
+    "shortcutReopen": "打开",
     "shortcutCancel": "取消",
-    "having": "遇到",
-    "trouble": "问题？",
     "signedIn": "已登录",
     "lovstudio": {
       "signInTitle": "登录 Yoda",
       "signInFailed": "登录失败",
       "signedInWelcome": "欢迎回来。",
-      "authorize": "授权 Yoda",
-      "pasteCodeDescription": "在浏览器中粘贴此验证码以完成登录。",
-      "stepSignIn": "登录",
-      "stepConfirm": "确认"
+      "pasteCodeDescription": "在浏览器中粘贴此验证码以完成登录。"
     },
     "github": {
       "connectTitle": "连接 GitHub",
       "authenticationFailed": "GitHub 认证失败",
       "connected": "GitHub 已连接",
-      "authorize": "授权 GitHub",
-      "pasteCodeDescription": "在 GitHub 中粘贴此验证码以完成账号连接。",
-      "stepAuthorize": "授权",
-      "stepPaste": "粘贴验证码"
-    }
+      "pasteCodeDescription": "在 GitHub 中粘贴此验证码以完成账号连接。"
+    },
+    "clickToCopy": "点击复制",
+    "autoOpening": "{{seconds}} 秒后自动打开浏览器…",
+    "troubleLink": "遇到问题？",
+    "requestingCode": "正在获取验证码…"
   },
   "ssh": {
     "validation": {
@@ -2541,7 +2547,8 @@
       "cacheRead": "缓存读",
       "cacheWrite": "缓存写",
       "daily": "近 30 天",
-      "topTasks": "Top 任务"
+      "topTasks": "Top 任务",
+      "thisProject": "{{name}}（本项目）"
     },
     "projectNotReady": "项目尚未就绪",
     "sessionsView": {
@@ -2645,6 +2652,12 @@
       "workspaceProviderDescription": "选择任务工作区的创建方式。",
       "worktreeDirectory": "Worktree 目录",
       "worktreeDirectoryDescription": "创建任务 worktree 的目录。",
+      "statsAuxiliaryPaths": "用量统计：辅助目录",
+      "statsAuxiliaryPathsDescription": "这些目录里的 Claude 会话也计入本项目的 token 用量——关联研究目录、其他 Yoda 项目、迁移前的旧路径都可以。每行一个绝对路径；路径已不存在也有效，按会话记录的工作目录匹配。",
+      "statsAuxiliaryPathsPlaceholder": "/path/to/related-research\n/previous/location/of/this-project",
+      "statsAuxiliaryPathsBrowse": "添加目录",
+      "statsAuxiliaryPathsBrowseTitle": "选择辅助目录",
+      "statsAuxiliaryPathsBrowseMessage": "该目录下的 Claude 会话将计入本项目的用量统计",
       "lifecycleScripts": "生命周期脚本",
       "lifecycleScriptsDescription": "任务工作区创建或清理时运行的命令。",
       "provisionCommand": "Provision 命令",

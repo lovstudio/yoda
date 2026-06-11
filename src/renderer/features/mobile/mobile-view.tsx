@@ -1,25 +1,31 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Copy,
-  Download,
   FlaskConical,
-  QrCode,
   RefreshCw,
   Rocket,
-  ScanLine,
   ShieldCheck,
   Smartphone,
   WifiOff,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { MobileGatewayMode } from '@shared/mobile-api';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@renderer/lib/ui/collapsible';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
 
@@ -34,41 +40,65 @@ function copy(value: string, successMessage: string, failureMessage: string): vo
     .catch(() => toast.error(failureMessage));
 }
 
-function QRPanel({
-  title,
-  description,
-  value,
-  icon,
-  disabledLabel,
+function QRBox({ value, disabledLabel }: { value: string | null; disabledLabel: string }) {
+  return (
+    <div className="flex aspect-square w-[204px] items-center justify-center rounded-lg border border-border bg-white p-3">
+      {value ? (
+        <QRCodeSVG value={value} size={180} marginSize={2} bgColor="#ffffff" fgColor="#171717" />
+      ) : (
+        <div className="flex flex-col items-center gap-2 text-center text-xs text-foreground-muted">
+          <WifiOff className="size-5" />
+          <span>{disabledLabel}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StepIndicator({
+  steps,
+  current,
+  onSelect,
 }: {
-  title: string;
-  description: string;
-  value: string | null;
-  icon: ReactNode;
-  disabledLabel: string;
+  steps: { title: string; label: string }[];
+  current: number;
+  onSelect: (index: number) => void;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-background p-3">
-      <div className="flex items-start gap-2">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background-quaternary-1 text-foreground">
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <div className="text-sm font-medium text-foreground">{title}</div>
-          <p className="mt-1 text-xs leading-5 text-foreground-muted">{description}</p>
-        </div>
-      </div>
-
-      <div className="flex aspect-square min-h-[168px] items-center justify-center rounded-lg border border-border bg-white p-3">
-        {value ? (
-          <QRCodeSVG value={value} size={156} marginSize={2} bgColor="#ffffff" fgColor="#171717" />
-        ) : (
-          <div className="flex flex-col items-center gap-2 text-center text-xs text-foreground-muted">
-            <WifiOff className="size-5" />
-            <span>{disabledLabel}</span>
-          </div>
-        )}
-      </div>
+    <div className="flex items-center gap-3">
+      {steps.map((step, index) => (
+        <Fragment key={step.title}>
+          {index > 0 ? <div aria-hidden className="h-px flex-1 bg-border" /> : null}
+          <button
+            type="button"
+            aria-label={step.label}
+            aria-current={index === current ? 'step' : undefined}
+            onClick={() => onSelect(index)}
+            className="flex items-center gap-2"
+          >
+            <span
+              className={cn(
+                'flex size-6 items-center justify-center rounded-full border font-mono text-xs',
+                index === current
+                  ? 'border-foreground bg-foreground text-background'
+                  : index < current
+                    ? 'border-border bg-background-quaternary-1 text-foreground'
+                    : 'border-border text-foreground-muted'
+              )}
+            >
+              {index < current ? <Check className="size-3.5" /> : index + 1}
+            </span>
+            <span
+              className={cn(
+                'text-sm',
+                index === current ? 'font-medium text-foreground' : 'text-foreground-muted'
+              )}
+            >
+              {step.title}
+            </span>
+          </button>
+        </Fragment>
+      ))}
     </div>
   );
 }
@@ -121,6 +151,7 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
   const runtimeMode = data?.mode;
   const [selectedMode, setSelectedMode] = useState<MobileGatewayMode | null>(null);
   const mode = selectedMode ?? runtimeMode ?? 'production';
+  const [stepIndex, setStepIndex] = useState(0);
 
   const primaryUrl = data?.urls[0] ?? (data ? `http://localhost:${data.port}` : '');
   const localExpoUrl = data?.localExpoUrl ?? null;
@@ -165,7 +196,10 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
             multiple={false}
             value={[mode]}
             onValueChange={([value]) => {
-              if (value) setSelectedMode(value as MobileGatewayMode);
+              if (value) {
+                setSelectedMode(value as MobileGatewayMode);
+                setStepIndex(0);
+              }
             }}
           >
             <ToggleGroupItem value="development" className="gap-1.5">
@@ -254,84 +288,132 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
                 </span>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                {isDevView ? (
-                  <QRPanel
-                    title={t('sidebar.mobileConnection.localExpoTitle')}
-                    description={t('sidebar.mobileConnection.localExpoDescription')}
-                    value={localExpoUrl}
-                    icon={<ScanLine className="size-4" />}
-                    disabledLabel={t('sidebar.mobileConnection.localExpoUnavailable')}
-                  />
-                ) : (
-                  <QRPanel
-                    title={t('sidebar.mobileConnection.installTitle')}
-                    description={t('sidebar.mobileConnection.installDescription')}
-                    value={installUrl || null}
-                    icon={<Download className="size-4" />}
-                    disabledLabel={t('sidebar.mobileConnection.installUnavailable')}
-                  />
-                )}
-                <QRPanel
-                  title={t('sidebar.mobileConnection.connectTitle')}
-                  description={t('sidebar.mobileConnection.connectDescription')}
-                  value={isReady ? pairingUrl : null}
-                  icon={<QrCode className="size-4" />}
-                  disabledLabel={t('sidebar.mobileConnection.connectUnavailable')}
+              <div className="rounded-lg border border-border bg-background p-4">
+                <StepIndicator
+                  steps={[
+                    {
+                      title: isDevView
+                        ? t('sidebar.mobileConnection.localExpoTitle')
+                        : t('sidebar.mobileConnection.installTitle'),
+                      label: t('sidebar.mobileConnection.stepLabel', { n: 1 }),
+                    },
+                    {
+                      title: t('sidebar.mobileConnection.connectTitle'),
+                      label: t('sidebar.mobileConnection.stepLabel', { n: 2 }),
+                    },
+                  ]}
+                  current={stepIndex}
+                  onSelect={setStepIndex}
                 />
-              </div>
 
-              <div className="grid gap-2">
-                {isDevView && localExpoUrl ? (
-                  <InfoRow
-                    label={t('sidebar.mobileConnection.localExpoUrl')}
-                    value={localExpoUrl}
-                    copyLabel={t('sidebar.mobileConnection.copyLocalExpoUrl')}
-                  />
-                ) : null}
-                {!isDevView ? (
-                  <InfoRow
-                    label={t('sidebar.mobileConnection.installUrl')}
-                    value={installUrl || t('common.loading')}
-                    copyLabel={t('sidebar.mobileConnection.installTitle')}
-                    disabled={!installUrl}
-                  />
-                ) : null}
-                <InfoRow
-                  label={t('sidebar.mobileConnection.gatewayUrl')}
-                  value={primaryUrl || t('common.loading')}
-                  copyLabel={t('sidebar.mobileConnection.copyGatewayUrl')}
-                  disabled={!primaryUrl}
-                />
-                <InfoRow
-                  label={t('sidebar.mobileConnection.token')}
-                  value={data?.token ?? t('common.loading')}
-                  copyLabel={t('sidebar.mobileConnection.copyToken')}
-                  disabled={!data?.token}
-                />
-              </div>
-
-              {data && data.urls.length > 1 ? (
-                <div className="grid gap-1">
-                  <div className="text-[10px] font-mono uppercase tracking-wide text-foreground-tertiary-passive">
-                    {t('sidebar.mobileConnection.otherAddresses')}
-                  </div>
-                  {data.urls.slice(1).map((url) => (
-                    <button
-                      key={url}
-                      type="button"
-                      className="truncate rounded-md px-2 py-1 text-left font-mono text-xs text-foreground-muted hover:bg-background-1 hover:text-foreground"
-                      onClick={() => copy(url, t('common.copied'), t('common.copyFailed'))}
-                    >
-                      {url}
-                    </button>
-                  ))}
+                <div className="mt-5 flex flex-col items-center gap-4">
+                  {stepIndex === 0 ? (
+                    <>
+                      <p className="max-w-sm text-center text-xs leading-5 text-foreground-muted">
+                        {isDevView
+                          ? t('sidebar.mobileConnection.localExpoDescription')
+                          : t('sidebar.mobileConnection.installDescription')}
+                      </p>
+                      <QRBox
+                        value={isDevView ? localExpoUrl : installUrl || null}
+                        disabledLabel={
+                          isDevView
+                            ? t('sidebar.mobileConnection.localExpoUnavailable')
+                            : t('sidebar.mobileConnection.installUnavailable')
+                        }
+                      />
+                      <div className="w-full">
+                        {isDevView ? (
+                          <InfoRow
+                            label={t('sidebar.mobileConnection.localExpoUrl')}
+                            value={localExpoUrl ?? t('common.loading')}
+                            copyLabel={t('sidebar.mobileConnection.copyLocalExpoUrl')}
+                            disabled={!localExpoUrl}
+                          />
+                        ) : (
+                          <InfoRow
+                            label={t('sidebar.mobileConnection.installUrl')}
+                            value={installUrl || t('common.loading')}
+                            copyLabel={t('sidebar.mobileConnection.installTitle')}
+                            disabled={!installUrl}
+                          />
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="max-w-sm text-center text-xs leading-5 text-foreground-muted">
+                        {t('sidebar.mobileConnection.connectDescription')}
+                      </p>
+                      <QRBox
+                        value={isReady ? pairingUrl : null}
+                        disabledLabel={t('sidebar.mobileConnection.connectUnavailable')}
+                      />
+                      <div className="flex w-full items-start gap-2 rounded-lg border border-border bg-background-quaternary-1 px-3 py-2 text-xs leading-5 text-foreground-muted">
+                        <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+                        <span>{t('sidebar.mobileConnection.securityNote')}</span>
+                      </div>
+                      <Collapsible className="w-full">
+                        <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-xs text-foreground-muted hover:text-foreground">
+                          <span>{t('sidebar.mobileConnection.advancedDetails')}</span>
+                          <ChevronDown className="size-4 transition-transform group-data-[panel-open]:rotate-180" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-2 grid gap-2">
+                            <InfoRow
+                              label={t('sidebar.mobileConnection.gatewayUrl')}
+                              value={primaryUrl || t('common.loading')}
+                              copyLabel={t('sidebar.mobileConnection.copyGatewayUrl')}
+                              disabled={!primaryUrl}
+                            />
+                            <InfoRow
+                              label={t('sidebar.mobileConnection.token')}
+                              value={data?.token ?? t('common.loading')}
+                              copyLabel={t('sidebar.mobileConnection.copyToken')}
+                              disabled={!data?.token}
+                            />
+                            {data && data.urls.length > 1 ? (
+                              <div className="grid gap-1">
+                                <div className="text-[10px] font-mono uppercase tracking-wide text-foreground-tertiary-passive">
+                                  {t('sidebar.mobileConnection.otherAddresses')}
+                                </div>
+                                {data.urls.slice(1).map((url) => (
+                                  <button
+                                    key={url}
+                                    type="button"
+                                    className="truncate rounded-md px-2 py-1 text-left font-mono text-xs text-foreground-muted hover:bg-background-1 hover:text-foreground"
+                                    onClick={() =>
+                                      copy(url, t('common.copied'), t('common.copyFailed'))
+                                    }
+                                  >
+                                    {url}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </>
+                  )}
                 </div>
-              ) : null}
 
-              <div className="flex items-start gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs leading-5 text-foreground-muted">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
-                <span>{t('sidebar.mobileConnection.securityNote')}</span>
+                <div className="mt-5 flex items-center justify-between">
+                  {stepIndex > 0 ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setStepIndex(0)}>
+                      <ChevronLeft className="size-4" />
+                      {t('common.back')}
+                    </Button>
+                  ) : (
+                    <span />
+                  )}
+                  {stepIndex === 0 ? (
+                    <Button type="button" size="sm" onClick={() => setStepIndex(1)}>
+                      {t('common.next')}
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             </>
           )}
