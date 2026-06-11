@@ -13,6 +13,7 @@ export type FocusView =
   | 'file'
   | 'settings'
   | 'skills'
+  | 'skill'
   | 'mcp'
   | 'agentManager'
   | 'agents'

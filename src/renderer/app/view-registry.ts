@@ -10,6 +10,7 @@ import { projectFileView } from '@renderer/features/project-file/view';
 import { projectView } from '@renderer/features/projects/view';
 import { roadmapView } from '@renderer/features/roadmap/roadmap-view';
 import { settingsView } from '@renderer/features/settings/settings-view';
+import { skillDetailView } from '@renderer/features/skills/skill-detail-view';
 import { skillsView } from '@renderer/features/skills/skills-view';
 import { taskView } from '@renderer/features/tasks/view';
 import { usageView } from '@renderer/features/usage/usage-view';
@@ -24,6 +25,7 @@ export const views = {
   maas: maasView,
   usage: usageView,
   skills: skillsView,
+  skill: skillDetailView,
   mcp: mcpView,
   mobile: mobileView,
   roadmap: roadmapView,

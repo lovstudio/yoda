@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
-import type { CatalogIndex, CatalogSkill } from '@shared/skills/types';
+import type { CatalogIndex } from '@shared/skills/types';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
@@ -12,8 +12,6 @@ export function useSkills() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
 
   const { data: catalog = null, isPending: isLoading } = useQuery({
     queryKey: CATALOG_QUERY_KEY,
@@ -63,7 +61,8 @@ export function useSkills() {
         title: 'Skill installed',
         description: `${skillId} is now available across your agents`,
       });
-      void queryClient.invalidateQueries({ queryKey: CATALOG_QUERY_KEY });
+      // Broad key: refreshes the catalog and any open skill-detail tabs.
+      void queryClient.invalidateQueries({ queryKey: ['skills'] });
     },
   });
 
@@ -96,7 +95,7 @@ export function useSkills() {
       captureTelemetry('skill_uninstalled');
 
       toast({ title: 'Skill removed', description: 'Skill has been uninstalled' });
-      void queryClient.invalidateQueries({ queryKey: CATALOG_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['skills'] });
     },
   });
 
@@ -149,31 +148,6 @@ export function useSkills() {
     [setDisabledMutation]
   );
 
-  const { data: detailData, isFetching: isDetailLoading } = useQuery({
-    queryKey: ['skills', 'detail', selectedSkillId],
-    queryFn: async () => {
-      const result = await rpc.skills.getDetail({ skillId: selectedSkillId! });
-      if (result.success && result.data) return result.data;
-      throw new Error('Failed to load skill detail');
-    },
-    enabled: !!selectedSkillId && showDetailModal,
-  });
-
-  const selectedSkill = useMemo<CatalogSkill | null>(() => {
-    if (!selectedSkillId || !showDetailModal) return null;
-    return detailData ?? catalog?.skills.find((s) => s.id === selectedSkillId) ?? null;
-  }, [selectedSkillId, showDetailModal, detailData, catalog]);
-
-  const openDetail = useCallback((skill: CatalogSkill) => {
-    setSelectedSkillId(skill.id);
-    setShowDetailModal(true);
-  }, []);
-
-  const closeDetail = useCallback(() => {
-    setShowDetailModal(false);
-    setSelectedSkillId(null);
-  }, []);
-
   const filteredSkills = useMemo(() => {
     if (!catalog) return [];
     const q = searchQuery.toLowerCase().trim();
@@ -202,9 +176,6 @@ export function useSkills() {
     isRefreshing: refreshMutation.isPending,
     searchQuery,
     setSearchQuery,
-    selectedSkill,
-    isDetailLoading,
-    showDetailModal,
     filteredSkills,
     installedSkills,
     recommendedSkills,
@@ -212,7 +183,5 @@ export function useSkills() {
     install,
     uninstall,
     setDisabled,
-    openDetail,
-    closeDetail,
   };
 }

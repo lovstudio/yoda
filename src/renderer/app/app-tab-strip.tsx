@@ -295,6 +295,10 @@ export function describeTab(
       }
       return { label: t('appTabs.file'), icon: lucideIcon(FileText) };
     }
+    case 'skill': {
+      const { skillId, displayName } = tab.params as { skillId?: string; displayName?: string };
+      return { label: displayName ?? skillId ?? t('sidebar.skills'), icon: lucideIcon(Puzzle) };
+    }
     default:
       // Global views reuse the sidebar nav labels so the tab always matches
       // the nav item that opened it.

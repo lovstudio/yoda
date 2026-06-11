@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -6,12 +7,12 @@ import {
   FileText,
   FolderOpen,
   Hash,
+  Loader2,
   Power,
   PowerOff,
   Route,
   Sparkles,
   Trash2,
-  X,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -23,59 +24,12 @@ import { rpc } from '@renderer/lib/ipc';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
-import {
-  Dialog,
-  DialogContent,
-  DialogContentArea,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@renderer/lib/ui/dialog';
+import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { cn } from '@renderer/utils/utils';
 import { getSkillUsageStats, skillUsageStatsChangedEvent } from '../skill-usage-stats';
 import SkillIconRenderer from './SkillIconRenderer';
-
-interface SkillDetailModalProps {
-  skill: CatalogSkill | null;
-  isOpen: boolean;
-  onClose: () => void;
-  onInstall: (skillId: string) => Promise<boolean>;
-  onUninstall: (skillId: string) => Promise<boolean>;
-  onSetDisabled: (skillId: string, disabled: boolean) => Promise<boolean>;
-  onOpenTerminal?: (skillPath: string) => void;
-  isLoadingDetail?: boolean;
-}
-
-const SkillDetailModal: React.FC<SkillDetailModalProps> = ({
-  skill,
-  isOpen,
-  onClose,
-  onInstall,
-  onUninstall,
-  onSetDisabled,
-  onOpenTerminal,
-  isLoadingDetail = false,
-}) => {
-  if (!skill) return null;
-
-  return (
-    <SkillDetailModalContent
-      skill={skill}
-      isOpen={isOpen}
-      onClose={onClose}
-      onInstall={onInstall}
-      onUninstall={onUninstall}
-      onSetDisabled={onSetDisabled}
-      onOpenTerminal={onOpenTerminal}
-      isLoadingDetail={isLoadingDetail}
-    />
-  );
-};
-
-interface SkillDetailModalContentProps extends Omit<SkillDetailModalProps, 'skill'> {
-  skill: CatalogSkill;
-}
+import { useSkills } from './useSkills';
 
 type TextStats = {
   characters: number;
@@ -124,16 +78,55 @@ function formatLastUsedAt(value: string | null, formatter: Intl.DateTimeFormat):
   return formatter.format(date);
 }
 
-const SkillDetailModalContent: React.FC<SkillDetailModalContentProps> = ({
-  skill,
-  isOpen,
-  onClose,
-  onInstall,
-  onUninstall,
-  onSetDisabled,
-  onOpenTerminal,
-  isLoadingDetail = false,
-}) => {
+/** Full-page skill detail — rendered by the `skill` view as its own app tab. */
+const SkillDetailPanel: React.FC<{ skillId: string }> = ({ skillId }) => {
+  const { t } = useTranslation();
+  const { catalog, isLoading: isCatalogLoading, install, uninstall, setDisabled } = useSkills();
+
+  const { data: detailData, isFetching: isDetailLoading } = useQuery({
+    queryKey: ['skills', 'detail', skillId],
+    queryFn: async () => {
+      const result = await rpc.skills.getDetail({ skillId });
+      if (result.success && result.data) return result.data;
+      throw new Error('Failed to load skill detail');
+    },
+  });
+
+  const skill = detailData ?? catalog?.skills.find((s) => s.id === skillId) ?? null;
+
+  if (!skill) {
+    if (isCatalogLoading || isDetailLoading) {
+      return (
+        <div className="flex h-full items-center justify-center bg-background text-foreground">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    return (
+      <div className="h-full bg-background text-foreground">
+        <EmptyState label={t('skills.detail.unavailable')} description={skillId} />
+      </div>
+    );
+  }
+
+  return (
+    <SkillDetailContent
+      skill={skill}
+      isLoadingDetail={isDetailLoading}
+      onInstall={install}
+      onUninstall={uninstall}
+      onSetDisabled={setDisabled}
+    />
+  );
+};
+
+const SkillDetailContent: React.FC<{
+  skill: CatalogSkill;
+  isLoadingDetail: boolean;
+  onInstall: (skillId: string) => Promise<boolean>;
+  onUninstall: (skillId: string) => Promise<boolean>;
+  onSetDisabled: (skillId: string, disabled: boolean) => Promise<boolean>;
+}> = ({ skill, isLoadingDetail, onInstall, onUninstall, onSetDisabled }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -191,22 +184,20 @@ const SkillDetailModalContent: React.FC<SkillDetailModalContentProps> = ({
   const handleInstall = useCallback(async () => {
     setIsProcessing(true);
     try {
-      const success = await onInstall(skill.id);
-      if (success) onClose();
+      await onInstall(skill.id);
     } finally {
       setIsProcessing(false);
     }
-  }, [skill, onInstall, onClose]);
+  }, [skill.id, onInstall]);
 
   const handleUninstall = useCallback(async () => {
     setIsProcessing(true);
     try {
       await onUninstall(skill.id);
-      onClose();
     } finally {
       setIsProcessing(false);
     }
-  }, [skill, onUninstall, onClose]);
+  }, [skill.id, onUninstall]);
 
   const handleSetDisabled = useCallback(
     async (disabled: boolean) => {
@@ -221,10 +212,8 @@ const SkillDetailModalContent: React.FC<SkillDetailModalContentProps> = ({
   );
 
   const handleOpen = useCallback(() => {
-    if (skill.localPath && onOpenTerminal) {
-      onOpenTerminal(skill.localPath);
-    }
-  }, [skill, onOpenTerminal]);
+    if (skill.localPath) void rpc.app.openIn({ app: 'terminal', path: skill.localPath });
+  }, [skill.localPath]);
 
   const handleOpenSource = useCallback(() => {
     if (skill.sourceUrl) void rpc.app.openExternal(skill.sourceUrl);
@@ -267,68 +256,91 @@ const SkillDetailModalContent: React.FC<SkillDetailModalContentProps> = ({
         : t('skills.detail.unavailable');
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && !isProcessing && onClose()}>
-      <DialogContent className="group/skill-detail sm:max-w-3xl">
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={onClose}
-          disabled={isProcessing}
-          aria-label={t('common.close')}
-          title={t('common.close')}
-          className={cn(
-            'absolute right-4 top-4 z-10',
-            hoverActionBaseClass,
-            'group-hover/skill-detail:opacity-100 group-focus-within/skill-detail:opacity-100'
-          )}
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-        <DialogHeader showCloseButton={false} className="w-full min-w-0 items-start pr-9">
-          <div className="flex w-full min-w-0 items-start gap-3">
-            <SkillIconRenderer skill={skill} size="md" />
-            <div className="min-w-0 flex-1 pr-1">
-              <DialogTitle className="truncate text-base font-sans normal-case tracking-normal text-foreground">
-                {skill.displayName}
-              </DialogTitle>
-              <div className="group/description mt-1 flex min-w-0 items-start gap-1.5">
-                <p className="min-w-0 flex-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
-                  {descriptionText}
-                </p>
-                {descriptionText && (
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => void handleCopy(descriptionText)}
-                    aria-label={t('skills.detail.copyDescription')}
-                    title={t('skills.detail.copyDescription')}
-                    className={cn(
-                      '-mt-1 shrink-0',
-                      hoverActionBaseClass,
-                      'group-hover/description:opacity-100 group-focus-within/description:opacity-100'
-                    )}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <Badge variant={skill.installed && !skill.disabled ? 'default' : 'secondary'}>
-                  {skill.installed
-                    ? skill.disabled
-                      ? t('skills.disabled')
-                      : t('skills.installed')
-                    : t('skills.detail.notInstalled')}
-                </Badge>
-                <Badge variant="outline">{sourceLabel(skill.source)}</Badge>
-                <Badge variant="secondary" className="font-mono">
-                  {skill.id}
-                </Badge>
-              </div>
+    <div className="h-full overflow-y-auto bg-background text-foreground">
+      <div className="mx-auto w-full max-w-3xl px-8 py-8">
+        {/* Header */}
+        <div className="mb-6 flex items-start gap-3">
+          <SkillIconRenderer skill={skill} size="md" />
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-base font-semibold">{skill.displayName}</h1>
+            <div className="group/description mt-1 flex min-w-0 items-start gap-1.5">
+              <p className="min-w-0 flex-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+                {descriptionText}
+              </p>
+              {descriptionText && (
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => void handleCopy(descriptionText)}
+                  aria-label={t('skills.detail.copyDescription')}
+                  title={t('skills.detail.copyDescription')}
+                  className={cn(
+                    '-mt-1 shrink-0',
+                    hoverActionBaseClass,
+                    'group-hover/description:opacity-100 group-focus-within/description:opacity-100'
+                  )}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <Badge variant={skill.installed && !skill.disabled ? 'default' : 'secondary'}>
+                {skill.installed
+                  ? skill.disabled
+                    ? t('skills.disabled')
+                    : t('skills.installed')
+                  : t('skills.detail.notInstalled')}
+              </Badge>
+              <Badge variant="outline">{sourceLabel(skill.source)}</Badge>
+              <Badge variant="secondary" className="font-mono">
+                {skill.id}
+              </Badge>
             </div>
           </div>
-        </DialogHeader>
-        <DialogContentArea className="gap-4">
+          {/* Actions */}
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {skill.installed ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleSetDisabled(!skill.disabled)}
+                  disabled={isProcessing}
+                >
+                  {skill.disabled ? (
+                    <Power className="mr-1.5 h-3.5 w-3.5" />
+                  ) : (
+                    <PowerOff className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {skill.disabled ? t('skills.enable') : t('skills.disable')}
+                </Button>
+                {skill.localPath && (
+                  <Button variant="outline" size="sm" onClick={handleOpen}>
+                    <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+                    {t('common.open')}
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void handleUninstall()}
+                  disabled={isProcessing}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  {t('skills.uninstall')}
+                </Button>
+              </>
+            ) : (
+              <ConfirmButton size="sm" onClick={() => void handleInstall()} disabled={isProcessing}>
+                {isProcessing ? t('skills.installing') : t('skills.install')}
+              </ConfirmButton>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <MetricTile
               icon={FileText}
@@ -482,7 +494,7 @@ const SkillDetailModalContent: React.FC<SkillDetailModalContentProps> = ({
                 </div>
               }
             >
-              <pre className="wrap-break-word max-h-40 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/30 px-3 py-2 text-xs text-foreground">
+              <pre className="wrap-break-word whitespace-pre-wrap rounded-md bg-muted/30 px-3 py-2 text-xs text-foreground">
                 {skill.defaultPrompt}
               </pre>
             </DetailSection>
@@ -512,54 +524,13 @@ const SkillDetailModalContent: React.FC<SkillDetailModalContentProps> = ({
               <MarkdownRenderer
                 content={body}
                 variant="compact"
-                className="max-h-72 overflow-y-auto rounded-md bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+                className="rounded-md bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
               />
             </DetailSection>
           )}
-        </DialogContentArea>
-
-        <DialogFooter className="gap-2 sm:gap-2">
-          {skill.installed && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void handleSetDisabled(!skill.disabled)}
-                disabled={isProcessing}
-              >
-                {skill.disabled ? (
-                  <Power className="mr-1.5 h-3.5 w-3.5" />
-                ) : (
-                  <PowerOff className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                {skill.disabled ? t('skills.enable') : t('skills.disable')}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleUninstall}
-                disabled={isProcessing}
-                className="text-destructive hover:text-destructive"
-              >
-                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                {t('skills.uninstall')}
-              </Button>
-              {skill.localPath && onOpenTerminal && (
-                <Button variant="outline" size="sm" onClick={handleOpen}>
-                  <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-                  {t('common.open')}
-                </Button>
-              )}
-            </>
-          )}
-          {!skill.installed && (
-            <ConfirmButton size="sm" onClick={() => void handleInstall()} disabled={isProcessing}>
-              {isProcessing ? t('skills.installing') : t('skills.install')}
-            </ConfirmButton>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -743,4 +714,4 @@ function MetadataItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default SkillDetailModal;
+export default SkillDetailPanel;

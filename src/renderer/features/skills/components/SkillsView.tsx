@@ -1,14 +1,14 @@
 import { Loader2, Plus, RefreshCw, Search } from 'lucide-react';
 import React from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { rpc } from '@renderer/lib/ipc';
+import type { CatalogSkill } from '@shared/skills/types';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { cn } from '@renderer/utils/utils';
 import SkillCard from './SkillCard';
-import SkillDetailModal from './SkillDetailModal';
 import { useSkills } from './useSkills';
 
 const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
@@ -20,17 +20,10 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
     isRefreshing,
     searchQuery,
     setSearchQuery,
-    selectedSkill,
-    showDetailModal,
     installedSkills,
     recommendedSkills,
     refresh,
     install,
-    uninstall,
-    setDisabled,
-    openDetail,
-    closeDetail,
-    isDetailLoading,
   } = useSkills();
   const showCreateSkillModal = useShowModal('createSkillModal');
   const focusedSkillId =
@@ -49,8 +42,9 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
     []
   );
 
-  const handleOpenTerminal = (skillPath: string) => {
-    void rpc.app.openIn({ app: 'terminal', path: skillPath });
+  // Skill click opens (or focuses) the detail as a top-level app tab.
+  const openDetail = (skill: CatalogSkill) => {
+    appState.appTabs.openTab('skill', { skillId: skill.id, displayName: skill.displayName });
   };
 
   React.useEffect(() => {
@@ -243,17 +237,6 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
           </div>
         )}
       </div>
-
-      <SkillDetailModal
-        skill={selectedSkill}
-        isOpen={showDetailModal}
-        onClose={closeDetail}
-        onInstall={install}
-        onUninstall={uninstall}
-        onSetDisabled={setDisabled}
-        onOpenTerminal={handleOpenTerminal}
-        isLoadingDetail={isDetailLoading}
-      />
     </div>
   );
 };

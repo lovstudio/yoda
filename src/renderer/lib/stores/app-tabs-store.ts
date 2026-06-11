@@ -42,6 +42,11 @@ export function routeKey(viewId: ViewId | string, params: Record<string, unknown
     return JSON.stringify(['project', projectId, view ?? 'overview']);
   }
   if (viewId === 'file') return JSON.stringify(['file', params]);
+  if (viewId === 'skill') {
+    const { skillId } = params as { skillId?: string };
+    // displayName is display-only — it must not fork tab identity.
+    return JSON.stringify(['skill', skillId]);
+  }
   // Global views (home, settings, skills, …) are singletons — their params
   // (e.g. home's projectId preselect, settings' inner tab) are transient
   // address-bar state and must not fork tab identity, otherwise
@@ -90,6 +95,7 @@ export type ProjectPageView = (typeof PROJECT_PAGE_VIEWS)[number];
  *
  *   task tabs            → task:{projectId}:{taskId}
  *   project + file tabs  → project:{projectId}   (project-root files belong to the project)
+ *   skill detail tabs    → view:skills           (they sit next to the Skills index tab)
  *   global views         → view:{viewId}
  */
 export function tabScopeKey(viewId: ViewId | string, params: Record<string, unknown>): string {
@@ -101,6 +107,7 @@ export function tabScopeKey(viewId: ViewId | string, params: Record<string, unkn
     const { projectId } = params as { projectId?: string };
     if (projectId) return `project:${projectId}`;
   }
+  if (viewId === 'skill') return 'view:skills';
   return `view:${viewId}`;
 }
 
@@ -114,7 +121,7 @@ export function isIndexTab(tab: AppTabEntry): boolean {
     const target = tab.params.tab as { kind?: string } | undefined;
     return !target || target.kind === 'overview';
   }
-  return tab.viewId !== 'file';
+  return tab.viewId !== 'file' && tab.viewId !== 'skill';
 }
 
 /**
@@ -239,12 +246,14 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
           return;
         }
 
-        // Task and project-page routes are tab-granular: navigation to a new
-        // target always means a new tab, never rewriting whichever tab happens
-        // to be active (that's how duplicate Overview tabs were born).
+        // Task, project-page, and skill-detail routes are tab-granular:
+        // navigation to a new target always means a new tab, never rewriting
+        // whichever tab happens to be active (that's how duplicate Overview
+        // tabs were born).
         if (
           viewId !== 'task' &&
           viewId !== 'project' &&
+          viewId !== 'skill' &&
           tabScopeKey(viewId, nextParams) === tabScopeKey(tab.viewId, tab.params)
         ) {
           tab.viewId = viewId;
@@ -317,6 +326,14 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       if (!projectId || !taskId) return stored;
       const params = { projectId, taskId, tab: { kind: 'overview' } };
       return [{ id: syntheticTabId('task', params), viewId: 'task' as ViewId, params }];
+    }
+
+    // Skill detail tabs share the skills scope — the Skills catalog is the
+    // scope's index tab, synthesized when a detail tab was opened from
+    // elsewhere (e.g. the settings hub) before the catalog tab existed.
+    if (active.viewId === 'skill') {
+      if (stored.length > 0) return stored;
+      return [{ id: syntheticTabId('skills', {}), viewId: 'skills' as ViewId, params: {} }];
     }
 
     // Global view scopes: the single stored tab (the active one) is the set.
