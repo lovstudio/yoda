@@ -280,7 +280,7 @@
       "description": "Configure how new tasks are created and run."
     },
     "sessionsTab": {
-      "description": "Configure session naming, summaries, and archiving."
+      "description": "Configure session naming, summaries, archiving, and how sessions run."
     },
     "account": {
       "description": "Manage your Yoda account.",

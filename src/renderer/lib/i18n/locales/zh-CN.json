@@ -280,7 +280,7 @@
       "description": "配置新任务的创建与运行方式。"
     },
     "sessionsTab": {
-      "description": "管理会话的命名、摘要与归档。"
+      "description": "管理会话的命名、摘要、归档与运行方式。"
     },
     "account": {
       "description": "管理你的 Yoda 账户。",
