@@ -171,11 +171,13 @@ export const MaasView: React.FC<{ embedded?: boolean }> = ({ embedded = false })
   return (
     <div
       className={cn(
-        'flex min-h-0 bg-background text-foreground',
+        // Container queries — this view also lives embedded in the narrow
+        // settings side pane where viewport breakpoints lie.
+        '@container flex min-h-0 bg-background text-foreground',
         embedded ? 'h-[560px] overflow-hidden rounded-xl border border-border' : 'h-full'
       )}
     >
-      <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-background-tertiary">
+      <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-background-tertiary @max-3xl:w-44">
         {!embedded && (
           <div className="border-b border-border px-4 py-4">
             <div className="flex items-center gap-2">
@@ -211,7 +213,7 @@ export const MaasView: React.FC<{ embedded?: boolean }> = ({ embedded = false })
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="@container flex min-w-0 flex-1 flex-col">
         <ConnectionPanel
           key={`${selectedConnection.platformId}:${selectedConnection.keyFingerprint ?? 'empty'}`}
           connection={selectedConnection}
@@ -416,7 +418,7 @@ const ConnectionPanel: React.FC<{ connection: MaasConnection }> = ({ connection 
         </Button>
       </div>
 
-      <form onSubmit={handleSubmit} className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
+      <form onSubmit={handleSubmit} className="mt-4 grid gap-3 @2xl:grid-cols-[1fr_1fr_1fr_auto]">
         <label className="grid gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">
             {t('maas.connection.displayName')}
@@ -558,7 +560,7 @@ const RecordFeed: React.FC<{
   return (
     <div ref={scrollRef} onScroll={maybeLoadMore} className="min-h-0 flex-1 overflow-y-auto">
       {filterKind === 'image' && hasImagePreviews ? (
-        <div className="grid grid-cols-1 gap-3 p-4 xl:grid-cols-2 2xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 p-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
           {records.map((record) => (
             <ImageRecordCard key={record.id} record={record} />
           ))}
