@@ -1,18 +1,27 @@
+import type { Terminal } from '@xterm/xterm';
 import { Check, ChevronDown, MessageSquareText, Sparkles } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { ClaudeSessionPrompt } from '@shared/conversations';
 import {
   SESSION_STATUS_BAR_SOURCE_IDS,
   type SessionStatusBarSource,
 } from '@shared/session-status-bar';
+import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
 import { displaySessionPromptText } from '@renderer/features/tasks/context-panel-prompt-display';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
 import {
+  SessionPromptsPreview,
   SummaryInlineControls,
   useSessionPrompts,
   useSessionSummary,
 } from '@renderer/features/tasks/session-info-panel';
+import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import {
+  collectTerminalSearchMatches,
+  type TerminalSearchBufferLike,
+} from '@renderer/lib/pty/terminal-search';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
@@ -24,8 +33,6 @@ type StatusBarContent = {
   body: string;
   /** Tooltip / aria description. */
   tooltip: string;
-  /** Click action (e.g. open prompt history), if any. */
-  onClick?: () => void;
   /** Hover-revealed controls on the right (e.g. summary regenerate/config). */
   controls?: React.ReactNode;
 };
@@ -36,9 +43,12 @@ const SOURCE_ICONS: Record<Exclude<SessionStatusBarSource, 'off'>, React.ReactNo
   recentPrompt: <MessageSquareText className="size-3" />,
 };
 
+const BODY_CLASS =
+  'min-w-0 truncate text-center text-[13px] leading-5 text-[var(--xterm-fg)] opacity-75';
+
 /**
  * The strip below the terminal. Shows ONE configurable content source at a
- * time (session summary, latest user prompt, …) with a switcher to change it.
+ * time (latest user prompt, session summary, …) with a switcher to change it.
  * The selected source is a global task setting.
  */
 export const SessionStatusBar = observer(function SessionStatusBar({
@@ -70,37 +80,26 @@ export const SessionStatusBar = observer(function SessionStatusBar({
           onSelect={(next) => taskSettings.updateStatusBarSource(next)}
           className="absolute inset-y-0 left-1.5 flex items-center"
         />
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              content.onClick ? (
-                <button
-                  type="button"
-                  onClick={content.onClick}
-                  className="flex min-w-0 flex-1 items-center justify-center"
-                  aria-label={content.tooltip}
-                />
-              ) : (
+        {source === 'recentPrompt' && prompts.hasPrompts ? (
+          <PromptHistoryExpander prompts={prompts} body={content.body} label={content.tooltip} />
+        ) : (
+          <Tooltip>
+            <TooltipTrigger
+              render={
                 <div
                   role="status"
                   className="flex min-w-0 flex-1 items-center justify-center"
                   aria-label={content.tooltip}
                 />
-              )
-            }
-          >
-            <span
-              className={cn(
-                'min-w-0 truncate text-center text-[13px] leading-5 text-[var(--xterm-fg)] opacity-75',
-                content.onClick && 'transition-opacity hover:opacity-100'
-              )}
-              title={content.body}
+              }
             >
-              {content.body}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{content.tooltip}</TooltipContent>
-        </Tooltip>
+              <span className={BODY_CLASS} title={content.body}>
+                {content.body}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{content.tooltip}</TooltipContent>
+          </Tooltip>
+        )}
         {content.controls ? (
           <div className="absolute inset-y-0 right-1.5 flex items-center opacity-0 transition-opacity group-hover/status:opacity-100 focus-within:opacity-100">
             {content.controls}
@@ -128,7 +127,6 @@ function resolveContent(
       hasConversation: prompts.hasConversation,
       body: text || t('tasks.sessionPanel.statusBar.recentPromptEmpty'),
       tooltip: t('tasks.sessionPanel.statusBar.recentPromptTooltip'),
-      onClick: prompts.hasPrompts ? prompts.openPromptsModal : undefined,
     };
   }
 
@@ -149,6 +147,108 @@ function resolveContent(
     tooltip: t('tasks.sessionPanel.recentProgressTooltip'),
     controls: <SummaryInlineControls summary={summary} />,
   };
+}
+
+/**
+ * The latest-prompt body as a popover trigger: clicking expands the prompt
+ * history (first/last few, middle elided) above the bar. Clicking a prompt
+ * scrolls the terminal to where it was submitted; the elided-middle row opens
+ * the full history modal.
+ */
+const PromptHistoryExpander = observer(function PromptHistoryExpander({
+  prompts,
+  body,
+  label,
+}: {
+  prompts: ReturnType<typeof useSessionPrompts>;
+  body: string;
+  label: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const provisionedTask = useProvisionedTask();
+  const conversation = getTaskMenuConversation(provisionedTask);
+  const terminal = conversation
+    ? provisionedTask.conversations.conversations.get(conversation.id)?.session.pty?.terminal
+    : undefined;
+
+  const scrollToPrompt = (prompt: ClaudeSessionPrompt, promptIndex: number) => {
+    if (!terminal) return;
+    // Repeated prompts produce identical buffer matches — pick the occurrence
+    // matching this prompt's position in the history.
+    const line = firstPromptLine(prompt.text);
+    const occurrence = prompts.prompts
+      .slice(0, promptIndex - 1)
+      .filter((p) => firstPromptLine(p.text) === line).length;
+    scrollTerminalToPromptText(terminal, line, occurrence);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center justify-center"
+            aria-label={label}
+          />
+        }
+      >
+        <span className={cn(BODY_CLASS, 'transition-opacity hover:opacity-100')} title={body}>
+          {body}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="center"
+        className="max-h-80 w-[min(40rem,90vw)] gap-0 overflow-y-auto p-1.5"
+      >
+        <SessionPromptsPreview
+          prompts={prompts.prompts}
+          isLoading={prompts.isLoading}
+          onOpenAll={() => {
+            setOpen(false);
+            prompts.openPromptsModal();
+          }}
+          onPromptClick={scrollToPrompt}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+});
+
+/** First non-empty line of a prompt, as displayed — the buffer search needle. */
+function firstPromptLine(text: string): string {
+  return (
+    displaySessionPromptText(text)
+      .split('\n')
+      .map((line) => line.trim())
+      .find(Boolean) ?? ''
+  );
+}
+
+/**
+ * Scroll the terminal to the `occurrence`-th place the prompt's first line
+ * appears in the scrollback, selecting the match for visibility. CLIs may
+ * hard-wrap long prompts at their input-box width (those rows are NOT marked
+ * as wrapped), so progressively shorter prefixes are retried until one hits.
+ */
+function scrollTerminalToPromptText(terminal: Terminal, line: string, occurrence: number): void {
+  const buffer = terminal.buffer?.active as TerminalSearchBufferLike | undefined;
+  if (!buffer || !line) return;
+  const prefixLengths = [...new Set([line.length, 60, 30, 15].filter((n) => n <= line.length))];
+  for (const length of prefixLengths) {
+    const query = line.slice(0, length).trim();
+    if (!query) continue;
+    const matches = collectTerminalSearchMatches(buffer, query);
+    if (matches.length === 0) continue;
+    const match = matches[Math.min(occurrence, matches.length - 1)];
+    try {
+      terminal.select(match.col, match.row, match.length);
+      const contextRows = Math.max(0, Math.floor(terminal.rows / 2));
+      terminal.scrollToLine(Math.max(0, match.row - contextRows));
+    } catch {}
+    return;
+  }
 }
 
 /** Compact dropdown to pick which source the status bar shows. */

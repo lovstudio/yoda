@@ -8,4 +8,4 @@ export const SESSION_STATUS_BAR_SOURCE_IDS = ['summary', 'recentPrompt', 'off'] 
 
 export type SessionStatusBarSource = (typeof SESSION_STATUS_BAR_SOURCE_IDS)[number];
 
-export const DEFAULT_SESSION_STATUS_BAR_SOURCE: SessionStatusBarSource = 'summary';
+export const DEFAULT_SESSION_STATUS_BAR_SOURCE: SessionStatusBarSource = 'recentPrompt';

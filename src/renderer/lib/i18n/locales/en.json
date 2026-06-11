@@ -1204,7 +1204,7 @@
       "recentProgressTooltip": "Conversation progress and next step",
       "statusBar": {
         "switchSource": "Change what this bar shows",
-        "recentPromptTooltip": "Your latest prompt in this session — click for full history",
+        "recentPromptTooltip": "Your latest prompt in this session — click to expand history; click an entry to jump to it in the terminal",
         "recentPromptEmpty": "No prompt yet",
         "source": {
           "summary": "Recent summary",

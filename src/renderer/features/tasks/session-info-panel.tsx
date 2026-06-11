@@ -902,14 +902,17 @@ async function resolveSessionPrompts(
   return [];
 }
 
-function SessionPromptsPreview({
+export function SessionPromptsPreview({
   prompts,
   isLoading,
   onOpenAll,
+  onPromptClick,
 }: {
   prompts: ClaudeSessionPrompt[];
   isLoading: boolean;
   onOpenAll: () => void;
+  /** When set, clicking a prompt row calls this instead of opening the full modal. */
+  onPromptClick?: (prompt: ClaudeSessionPrompt, promptIndex: number) => void;
 }) {
   const { t } = useTranslation();
   const previewItems = useMemo(() => buildPromptPreviewItems(prompts), [prompts]);
@@ -944,7 +947,9 @@ function SessionPromptsPreview({
                 key={item.prompt.id || `${item.promptIndex}-${index}`}
                 prompt={item.prompt}
                 promptIndex={item.promptIndex}
-                onClick={onOpenAll}
+                onClick={
+                  onPromptClick ? () => onPromptClick(item.prompt, item.promptIndex) : onOpenAll
+                }
               />
             )
           )}

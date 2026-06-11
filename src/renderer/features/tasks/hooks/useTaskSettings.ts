@@ -1,4 +1,7 @@
-import type { SessionStatusBarSource } from '@shared/session-status-bar';
+import {
+  DEFAULT_SESSION_STATUS_BAR_SOURCE,
+  type SessionStatusBarSource,
+} from '@shared/session-status-bar';
 import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
   DEFAULT_SUMMARY_CONTEXT_RECENT,
@@ -69,7 +72,7 @@ export function useTaskSettings(): TaskSettingsModel {
     namingAgentId: tasks?.namingAgentId ?? '',
     summaryAgentId: tasks?.summaryAgentId ?? '',
     summaryLanguage: tasks?.summaryLanguage ?? 'app',
-    statusBarSource: tasks?.statusBarSource ?? 'summary',
+    statusBarSource: tasks?.statusBarSource ?? DEFAULT_SESSION_STATUS_BAR_SOURCE,
     summaryContextRecent: tasks?.summaryContextRecent ?? DEFAULT_SUMMARY_CONTEXT_RECENT,
     summaryContextGlobal: tasks?.summaryContextGlobal ?? DEFAULT_SUMMARY_CONTEXT_GLOBAL,
     namingModel: tasks?.namingModel ?? '',
