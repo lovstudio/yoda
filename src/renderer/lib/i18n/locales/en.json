@@ -1240,7 +1240,8 @@
     },
     "bottomPanel": {
       "terminals": "Terminals",
-      "session": "Session"
+      "session": "Session",
+      "switchMode": "Switch bottom panel content"
     }
   },
   "commandPalette": {

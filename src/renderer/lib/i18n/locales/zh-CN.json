@@ -1240,7 +1240,8 @@
     },
     "bottomPanel": {
       "terminals": "终端",
-      "session": "会话"
+      "session": "会话",
+      "switchMode": "切换底部面板内容"
     }
   },
   "commandPalette": {
