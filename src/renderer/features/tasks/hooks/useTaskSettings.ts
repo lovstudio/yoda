@@ -9,6 +9,7 @@ import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-
 export interface TaskSettingsModel {
   autoGenerateName: boolean;
   initTaskNameFromSession: boolean;
+  branchNaming: 'hash' | 'ai';
   namingAgentId: string;
   summaryAgentId: string;
   summaryLanguage: 'app' | 'prompt' | 'en' | 'zh-CN';
@@ -31,6 +32,7 @@ export interface TaskSettingsModel {
     field:
       | 'autoGenerateName'
       | 'initTaskNameFromSession'
+      | 'branchNaming'
       | 'namingAgentId'
       | 'namingModel'
       | 'namingLanguage'
@@ -41,6 +43,7 @@ export interface TaskSettingsModel {
   ) => boolean;
   updateAutoGenerateName: (next: boolean) => void;
   updateInitTaskNameFromSession: (next: boolean) => void;
+  updateBranchNaming: (next: 'hash' | 'ai') => void;
   updateNamingAgentId: (next: string) => void;
   updateSummaryAgentId: (next: string) => void;
   updateSummaryLanguage: (next: 'app' | 'prompt' | 'en' | 'zh-CN') => void;
@@ -52,6 +55,7 @@ export interface TaskSettingsModel {
   updateAutoTrustWorktrees: (next: boolean) => void;
   resetAutoGenerateName: () => void;
   resetInitTaskNameFromSession: () => void;
+  resetBranchNaming: () => void;
   resetAutoTrustWorktrees: () => void;
 }
 
@@ -68,6 +72,7 @@ export function useTaskSettings(): TaskSettingsModel {
   return {
     autoGenerateName: tasks?.autoGenerateName ?? false,
     initTaskNameFromSession: tasks?.initTaskNameFromSession ?? true,
+    branchNaming: tasks?.branchNaming ?? 'hash',
     namingAgentId: tasks?.namingAgentId ?? '',
     summaryAgentId: tasks?.summaryAgentId ?? '',
     summaryLanguage: tasks?.summaryLanguage ?? 'app',
@@ -89,6 +94,7 @@ export function useTaskSettings(): TaskSettingsModel {
     isFieldOverridden,
     updateAutoGenerateName: (next) => update({ autoGenerateName: next }),
     updateInitTaskNameFromSession: (next) => update({ initTaskNameFromSession: next }),
+    updateBranchNaming: (next) => update({ branchNaming: next }),
     updateNamingAgentId: (next) => update({ namingAgentId: next }),
     updateSummaryAgentId: (next) => update({ summaryAgentId: next }),
     updateSummaryLanguage: (next) => update({ summaryLanguage: next }),
@@ -116,6 +122,7 @@ export function useTaskSettings(): TaskSettingsModel {
     updateAutoTrustWorktrees: (next) => update({ autoTrustWorktrees: next }),
     resetAutoGenerateName: () => resetField('autoGenerateName'),
     resetInitTaskNameFromSession: () => resetField('initTaskNameFromSession'),
+    resetBranchNaming: () => resetField('branchNaming'),
     resetAutoTrustWorktrees: () => resetField('autoTrustWorktrees'),
   };
 }

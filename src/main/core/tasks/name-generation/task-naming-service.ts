@@ -281,7 +281,7 @@ export function buildNamingPromptParts(input: {
     'Use this JSON context:',
     JSON.stringify({
       target: input.target,
-      includeBranchName: input.target === 'task' ? includeBranchName : undefined,
+      includeBranchName: includeBranchName || undefined,
       language: input.context.language,
       sources: input.context.sources.map((source) => ({
         id: source.id,
@@ -427,7 +427,9 @@ export async function generateTaskNames(
     if (!taskName && !branchName) {
       throw new Error('Model did not return a usable task name or branch name.');
     }
-    if (input.includeBranchName && !branchName) {
+    // For session-target naming the title is the primary deliverable; a missing
+    // branch slug just skips the branch rename instead of failing the run.
+    if (input.includeBranchName && !branchName && (input.target ?? 'task') === 'task') {
       throw new Error('Model did not return a usable branch name.');
     }
 
@@ -768,7 +770,7 @@ function buildNamingSystemPrompt(input: {
 }): string {
   const builtInPrompt =
     input.target === 'session'
-      ? buildSessionNamingSystemPrompt(input.language)
+      ? buildSessionNamingSystemPrompt(input.language, input.includeBranchName)
       : buildTaskNamingSystemPrompt(input.includeBranchName, input.language);
   const trimmedCustomSystemPrompt = input.customSystemPrompt?.trim();
   return trimmedCustomSystemPrompt
@@ -803,7 +805,7 @@ function buildTaskNamingSystemPrompt(includeBranchName: boolean, language: strin
   ].join('\n');
 }
 
-function buildSessionNamingSystemPrompt(language: string): string {
+function buildSessionNamingSystemPrompt(language: string, includeBranchName: boolean): string {
   const languageRule =
     language === 'zh-CN'
       ? 'Session title language: Simplified Chinese.'
@@ -818,8 +820,16 @@ function buildSessionNamingSystemPrompt(language: string): string {
     languageRule,
     'sessionTitle: human-readable, concise, and specific to this session only.',
     `sessionTitle max length: ${MAX_SESSION_TITLE_CHARS} characters.`,
-    'Do not generate a task name, branch name, project name, or generic status label.',
-    'JSON schema: {"sessionTitle":"..."}',
+    includeBranchName
+      ? [
+          'branchName: professional Git branch slug for the work this session does.',
+          'branchName must be lowercase ASCII kebab-case using only a-z, 0-9, and hyphen.',
+          `branchName max length: ${MAX_BRANCH_NAME_CHARS} characters.`,
+        ].join('\n')
+      : 'Do not generate a task name, branch name, project name, or generic status label.',
+    includeBranchName
+      ? 'JSON schema: {"sessionTitle":"...","branchName":"..."}'
+      : 'JSON schema: {"sessionTitle":"..."}',
   ].join('\n');
 }
 

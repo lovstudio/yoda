@@ -57,6 +57,12 @@ export const taskSettingsSchema = z.object({
   autoGenerateName: z.boolean(),
   /** Initialize the task name from the initial session's auto-generated title. */
   initTaskNameFromSession: z.boolean().catch(true),
+  /**
+   * How auto-created branches are named: 'hash' = short time hash at creation
+   * (stable, never renamed); 'ai' = semantic slug from the naming agent,
+   * applied by a background branch rename once naming completes.
+   */
+  branchNaming: z.enum(['hash', 'ai']).catch('hash'),
   /** Agent that drives task naming. Empty = use the built-in naming Agent. */
   namingAgentId: z.string().catch(''),
   /** Agent that drives session-summary generation. Empty = built-in summary Agent. */

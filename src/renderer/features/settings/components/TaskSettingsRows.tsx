@@ -8,6 +8,13 @@ import { useInstallTmux } from '@renderer/lib/components/tmux-install';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { isImeComposing } from '@renderer/utils/ime';
@@ -90,6 +97,43 @@ export const InitTaskNameFromSessionRow: React.FC = () => {
     />
   );
 };
+
+export const BranchNamingRow: React.FC = observer(() => {
+  const { t } = useTranslation();
+  const taskSettings = useTaskSettings();
+
+  return (
+    <SettingRow
+      title={t('settings.tasks.branchNaming')}
+      description={t('settings.tasks.branchNamingDescription')}
+      control={
+        <>
+          <ResetToDefaultButton
+            visible={taskSettings.isFieldOverridden('branchNaming')}
+            defaultLabel={t('settings.tasks.branchNamingHash')}
+            onReset={taskSettings.resetBranchNaming}
+            disabled={taskSettings.loading || taskSettings.saving}
+          />
+          <Select
+            value={taskSettings.branchNaming}
+            onValueChange={(value) => {
+              if (value === 'hash' || value === 'ai') taskSettings.updateBranchNaming(value);
+            }}
+            disabled={taskSettings.loading}
+          >
+            <SelectTrigger className="h-8 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="hash">{t('settings.tasks.branchNamingHash')}</SelectItem>
+              <SelectItem value="ai">{t('settings.tasks.branchNamingAi')}</SelectItem>
+            </SelectContent>
+          </Select>
+        </>
+      }
+    />
+  );
+});
 
 export const AutoTrustWorktreesRow: React.FC = () => {
   const { t } = useTranslation();

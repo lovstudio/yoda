@@ -36,6 +36,7 @@ import StatuslineSettingsCard from './StatuslineSettingsCard';
 import {
   AutoGenerateTaskNamesRow,
   AutoTrustWorktreesRow,
+  BranchNamingRow,
   EnableTmuxRow,
   InitTaskNameFromSessionRow,
   PreArchiveCommandRow,
@@ -204,6 +205,10 @@ export function SettingsPage({
         {
           id: 'init-task-name-from-session',
           component: <InitTaskNameFromSessionRow />,
+        },
+        {
+          id: 'branch-naming',
+          component: <BranchNamingRow />,
         },
         {
           id: 'auto-trust-worktrees',
