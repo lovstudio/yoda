@@ -146,6 +146,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   projectsCollapsed = false;
   projectTypeFilter: ProjectTypeFilter = 'all';
   hideProjectsWithoutActiveTasks = false;
+  /** Hide tasks that have no non-archived conversation yet. */
+  hideTasksWithoutActiveConversations = false;
   /** Sort tasks marked "稍后再读" (needsReview) to the bottom of their group. */
   sortNeedsReviewLast = false;
   /** Sort tasks with an archive in flight to the bottom of their group. */
@@ -229,6 +231,19 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   /**
+   * Task visibility for the main sidebar lists: active (non-archived), plus —
+   * when the conversation filter is on — at least one non-archived
+   * conversation. Unregistered tasks (creation in flight) always show; their
+   * initial conversation does not exist yet.
+   */
+  private isVisibleSidebarTask(task: TaskStore): boolean {
+    if (!isActiveSidebarTask(task)) return false;
+    if (!this.hideTasksWithoutActiveConversations) return true;
+    if (task.state === 'unregistered') return true;
+    return Object.values(task.conversationStats).some((count) => count > 0);
+  }
+
+  /**
    * Whether a project belongs to the active workspace selection. "All" matches
    * everything; "Default" matches projects with no workspace. Unregistered
    * projects (no DB row) use the workspace they will be assigned to on creation.
@@ -287,8 +302,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       if (project.state !== 'unregistered' && this.isProjectPinned(projectId)) continue;
       rows.push({ kind: 'project', projectId });
       if (this.expandedProjectIds.has(projectId) && project.mountedProject) {
-        const tasks = Array.from(project.mountedProject.taskManager.tasks.values()).filter(
-          isActiveSidebarTask
+        const tasks = Array.from(project.mountedProject.taskManager.tasks.values()).filter((task) =>
+          this.isVisibleSidebarTask(task)
         );
         rows.push(...this.buildTaskTreeRows(projectId, tasks));
       }
@@ -407,7 +422,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
         rows.push({ kind: 'project', projectId });
         if (this.expandedProjectIds.has(projectId) && project.mountedProject) {
           const tasks = Array.from(project.mountedProject.taskManager.tasks.values()).filter(
-            isActiveSidebarTask
+            (task) => this.isVisibleSidebarTask(task)
           );
           const ordered = this.sortTasksForSidebar(tasks);
           for (const task of ordered) {
@@ -456,7 +471,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       const projectId = project.state === 'unregistered' ? project.id : project.data!.id;
       if (project.state !== 'unregistered' && pinnedProjectIds.has(projectId)) continue;
       for (const task of project.mountedProject.taskManager.tasks.values()) {
-        if (!isActiveSidebarTask(task)) continue;
+        if (!this.isVisibleSidebarTask(task)) continue;
         if (task.data.isPinned) continue;
         pairs.push({ projectId, task });
       }
@@ -550,6 +565,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       pinnedCollapsed: this.pinnedCollapsed,
       projectsCollapsed: this.projectsCollapsed,
       hideProjectsWithoutActiveTasks: this.hideProjectsWithoutActiveTasks,
+      hideTasksWithoutActiveConversations: this.hideTasksWithoutActiveConversations,
       sortNeedsReviewLast: this.sortNeedsReviewLast,
       sortArchivingLast: this.sortArchivingLast,
       activeWorkspaceId: this.workspaceStore.activeWorkspaceId,
@@ -596,6 +612,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (snapshot.hideProjectsWithoutActiveTasks !== undefined) {
       this.hideProjectsWithoutActiveTasks = snapshot.hideProjectsWithoutActiveTasks === true;
     }
+    if (snapshot.hideTasksWithoutActiveConversations !== undefined) {
+      this.hideTasksWithoutActiveConversations =
+        snapshot.hideTasksWithoutActiveConversations === true;
+    }
     if (snapshot.sortNeedsReviewLast !== undefined) {
       this.sortNeedsReviewLast = snapshot.sortNeedsReviewLast === true;
     }
@@ -636,6 +656,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   setHideProjectsWithoutActiveTasks(hidden: boolean): void {
     this.hideProjectsWithoutActiveTasks = hidden;
+  }
+
+  setHideTasksWithoutActiveConversations(hidden: boolean): void {
+    this.hideTasksWithoutActiveConversations = hidden;
   }
 
   setSortNeedsReviewLast(enabled: boolean): void {
@@ -883,6 +907,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   private shouldShowProjectByTaskPresence(project: ProjectStore): boolean {
     if (!project.mountedProject) return true;
-    return Array.from(project.mountedProject.taskManager.tasks.values()).some(isActiveSidebarTask);
+    // Uses the full visibility predicate so the two hide filters compose: a
+    // project whose remaining tasks are all conversation-less hides too.
+    return Array.from(project.mountedProject.taskManager.tasks.values()).some((task) =>
+      this.isVisibleSidebarTask(task)
+    );
   }
 }

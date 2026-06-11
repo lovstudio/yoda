@@ -133,6 +133,8 @@
     "filterSsh": "仅 SSH",
     "hideProjectsWithoutActiveTasks": "隐藏无活动任务的项目",
     "hideProjectsWithoutActiveTasksDescription": "仅在侧边栏保留至少包含一个可见、未归档任务的项目，让项目导航聚焦于当前需要推进的工作。",
+    "hideTasksWithoutActiveConversations": "隐藏无活动会话的任务",
+    "hideTasksWithoutActiveConversationsDescription": "仅在侧边栏保留至少包含一个未归档会话的任务，隐藏尚未开始任何会话的空任务。",
     "sortNeedsReviewLast": "未读任务靠后",
     "sortNeedsReviewLastDescription": "开启后，标记为未读（稍后再读）的任务会自动沉到所在分组的末尾，让需要立即处理的任务保持在前。",
     "sortArchivingLast": "归档中任务靠后",

@@ -5,6 +5,7 @@ import {
   CircleDot,
   EyeOff,
   ListRestart,
+  MessageSquareOff,
   Settings2,
   Zap,
   type LucideIcon,
@@ -57,6 +58,7 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
     sidebarStore.taskSortBy !== 'updated-at' ||
     sidebarStore.taskGroupBy !== 'project' ||
     sidebarStore.hideProjectsWithoutActiveTasks ||
+    sidebarStore.hideTasksWithoutActiveConversations ||
     sidebarStore.sortNeedsReviewLast ||
     sidebarStore.sortArchivingLast ||
     expressMode;
@@ -176,6 +178,13 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         description={t('sidebar.hideProjectsWithoutActiveTasksDescription')}
         checked={sidebarStore.hideProjectsWithoutActiveTasks}
         onCheckedChange={(checked) => sidebarStore.setHideProjectsWithoutActiveTasks(checked)}
+      />
+      <SwitchRow
+        icon={MessageSquareOff}
+        label={t('sidebar.hideTasksWithoutActiveConversations')}
+        description={t('sidebar.hideTasksWithoutActiveConversationsDescription')}
+        checked={sidebarStore.hideTasksWithoutActiveConversations}
+        onCheckedChange={(checked) => sidebarStore.setHideTasksWithoutActiveConversations(checked)}
       />
       <SwitchRow
         icon={Zap}

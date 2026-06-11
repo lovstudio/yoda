@@ -133,6 +133,8 @@
     "filterSsh": "SSH only",
     "hideProjectsWithoutActiveTasks": "Hide projects without active tasks",
     "hideProjectsWithoutActiveTasksDescription": "Filters the sidebar to projects with at least one visible, non-archived task, keeping project navigation focused on current work.",
+    "hideTasksWithoutActiveConversations": "Hide tasks without active sessions",
+    "hideTasksWithoutActiveConversationsDescription": "Filters the sidebar to tasks with at least one non-archived session, hiding empty tasks that have not started any session yet.",
     "sortNeedsReviewLast": "Sort unread tasks last",
     "sortNeedsReviewLastDescription": "When enabled, tasks marked as unread (read later) sink to the bottom of their group, keeping actionable tasks on top.",
     "sortArchivingLast": "Sort archiving tasks last",

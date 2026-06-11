@@ -130,6 +130,8 @@ export type SidebarSnapshot = {
   pinnedCollapsed?: boolean;
   projectsCollapsed?: boolean;
   hideProjectsWithoutActiveTasks?: boolean;
+  /** Hide tasks that have no non-archived conversation yet. */
+  hideTasksWithoutActiveConversations?: boolean;
   /** Sort tasks marked "稍后再读" (needsReview) to the bottom of their group. */
   sortNeedsReviewLast?: boolean;
   /** Sort tasks with an archive in flight (archiveRequestedAt set) to the bottom of their group. */
