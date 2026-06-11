@@ -29,6 +29,8 @@ export type TabManagerSnapshot = {
   sidebarTabs?: TabDescriptor[];
   /** The pinned sidebar tab selected in the sidebar strip, if any. */
   activeSidebarTabId?: string;
+  /** Tabs pinned into the shell-level (cross-route) side pane. */
+  shellPinTabs?: TabDescriptor[];
 };
 
 export type EditorViewSnapshot = {
@@ -132,6 +134,17 @@ export type NavigationSnapshot = {
 export type AppTabsSnapshot = {
   tabs: { id: string; viewId: string; params: Record<string, unknown>; seq?: number }[];
   activeTabId: string | null;
+};
+
+/** A pin in the shell-level (cross-route) side pane. */
+export type SidePanePinSnapshot =
+  | { id: string; kind: 'view'; viewId: string; params: Record<string, unknown> }
+  | { id: string; kind: 'task'; projectId: string; taskId: string; tabId: string };
+
+/** Persisted shell-level side pane: pinned tabs that survive route changes. */
+export type AppSidePaneSnapshot = {
+  pins: SidePanePinSnapshot[];
+  activePinId: string | null;
 };
 
 export type SidebarTaskSortBy = 'created-at' | 'updated-at';

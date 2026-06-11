@@ -12,9 +12,15 @@ const MAIN_PANEL_MIN_SIZE = '30%';
 interface WorkspaceLayoutProps {
   leftSidebar: ReactNode;
   mainContent: ReactNode;
+  /**
+   * Shell-level right side pane (cross-route pins). Pass null to collapse the
+   * column entirely. Lives at the workspace level so main-area navigation
+   * never unmounts it.
+   */
+  rightPane?: ReactNode;
 }
 
-export function WorkspaceLayout({ leftSidebar, mainContent }: WorkspaceLayoutProps) {
+export function WorkspaceLayout({ leftSidebar, mainContent, rightPane }: WorkspaceLayoutProps) {
   const { leftPanelRef, setIsLeftOpen, isLeftOpen } = useWorkspaceLayoutContext();
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: 'workspace-outer',
@@ -54,6 +60,20 @@ export function WorkspaceLayout({ leftSidebar, mainContent }: WorkspaceLayoutPro
       >
         {mainContent}
       </ResizablePanel>
+      {rightPane ? (
+        <>
+          <ResizableHandle className="items-center justify-center transition-colors hover:bg-border/80" />
+          <ResizablePanel
+            id="workspace-right-pane"
+            defaultSize="30%"
+            minSize="280px"
+            maxSize="50%"
+            className="min-h-0 min-w-0 overflow-hidden border-l border-border bg-background text-foreground"
+          >
+            {rightPane}
+          </ResizablePanel>
+        </>
+      ) : null}
     </ResizablePanelGroup>
   );
 }

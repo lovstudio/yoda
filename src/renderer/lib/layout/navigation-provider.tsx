@@ -1,4 +1,11 @@
-import { Fragment, useCallback, type ComponentType, type ReactNode } from 'react';
+import {
+  createContext,
+  Fragment,
+  useCallback,
+  useContext,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import {
   views,
   type ViewDefinition,
@@ -73,6 +80,22 @@ export function useWorkspaceWrapParams(): WrapParamsContextValue {
   }));
 }
 
+/**
+ * Detaches a subtree's view params from the global navigation route. Hosts
+ * that render a view outside the active route (the shell side pane's pinned
+ * views) provide this so `useParams(viewId)` reads/writes the pin's own
+ * params instead of the address bar's.
+ */
+export type ViewParamsOverride = {
+  viewId: ViewId;
+  getParams: () => Record<string, unknown>;
+  setParams: (params: Record<string, unknown>) => void;
+};
+
+const ViewParamsOverrideContext = createContext<ViewParamsOverride | null>(null);
+
+export const ViewParamsOverrideProvider = ViewParamsOverrideContext.Provider;
+
 export function useParams<TId extends ViewId>(
   viewId: TId
 ): {
@@ -81,15 +104,27 @@ export function useParams<TId extends ViewId>(
     update: Partial<WrapParams<TId>> | ((prev: WrapParams<TId>) => WrapParams<TId>)
   ) => void;
 } {
+  const override = useContext(ViewParamsOverrideContext);
+  // Only the hosted view's own params detach; other viewIds (e.g. a pinned
+  // project view's components asking about the task route) stay global.
+  const active = override && override.viewId === viewId ? override : null;
   const setParams = useCallback(
     (update: Partial<WrapParams<TId>> | ((prev: WrapParams<TId>) => WrapParams<TId>)) => {
+      if (active) {
+        const prev = active.getParams() as WrapParams<TId>;
+        const next = typeof update === 'function' ? update(prev) : { ...prev, ...update };
+        active.setParams(next as Record<string, unknown>);
+        return;
+      }
       appState.navigation.updateViewParams(viewId, update);
     },
     // viewId is a stable string literal
-    [viewId]
+    [viewId, active]
   );
   return useMobxValue(() => ({
-    params: (appState.navigation.viewParamsStore[viewId] ?? {}) as WrapParams<TId>,
+    params: (active
+      ? active.getParams()
+      : (appState.navigation.viewParamsStore[viewId] ?? {})) as WrapParams<TId>,
     setParams,
   }));
 }

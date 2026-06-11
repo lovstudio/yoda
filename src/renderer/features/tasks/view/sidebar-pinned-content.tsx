@@ -20,10 +20,12 @@ import { rpc } from '@renderer/lib/ipc';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import { PtyPane } from '@renderer/lib/pty/pty-pane';
 import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
+import { OverviewPanel } from './overview-panel';
 
 /**
- * Renders the content of a tab pinned into the task sidebar strip
- * (conversation PTY, file editor, or diff), filling the sidebar body.
+ * Renders the content of a pinned tab (conversation PTY, file editor, diff,
+ * or the task overview), filling its host pane — the task sidebar strip or
+ * the shell-level side pane.
  */
 export const SidebarPinnedContent = observer(function SidebarPinnedContent({
   entry,
@@ -31,6 +33,14 @@ export const SidebarPinnedContent = observer(function SidebarPinnedContent({
   entry: TabEntry;
 }) {
   const { conversations } = useProvisionedTask();
+
+  if (entry.kind === 'overview') {
+    return (
+      <div key={entry.tabId} className="h-full overflow-y-auto">
+        <OverviewPanel />
+      </div>
+    );
+  }
 
   if (entry.kind === 'conversation') {
     const conversation = conversations.conversations.get(entry.conversationId);

@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { AppSidePane } from '@renderer/app/app-side-pane';
 import { LeftSidebar } from '@renderer/features/sidebar/left-sidebar';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { CommandShortcutBinder } from '@renderer/lib/commands/command-shortcut-binder';
@@ -66,6 +67,13 @@ export const Workspace = observer(function Workspace() {
               <WorkspaceViewContent />
             </ErrorBoundary>
           </WrapView>
+        }
+        rightPane={
+          appState.sidePane.isVisible ? (
+            <ErrorBoundary variant="inline" componentName="AppSidePane">
+              <AppSidePane />
+            </ErrorBoundary>
+          ) : null
         }
       />
       <Toaster />

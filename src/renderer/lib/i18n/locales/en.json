@@ -1,6 +1,7 @@
 {
   "appTabs": {
     "closeTab": "Close tab",
+    "openInGlobalSidePane": "Open in global sidebar",
     "overview": "Overview",
     "home": "Home",
     "project": "Project",
@@ -98,14 +99,8 @@
     "roadmap": "Roadmap",
     "docs": "Docs",
     "giveFeedback": "Give feedback",
-    "account": {
-      "openMenu": "Open account menu",
-      "manage": "Manage account",
-      "signInPrompt": "Sign in",
-      "signInHint": "Connect your Yoda account",
-      "showNav": "Show sidebar navigation",
-      "hideNav": "Hide sidebar navigation"
-    },
+    "showNav": "Show sidebar navigation",
+    "hideNav": "Hide sidebar navigation",
     "dropToAddProject": "Drop to add project",
     "projects": "Projects",
     "tasks": "Tasks",

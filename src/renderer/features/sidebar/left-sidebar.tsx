@@ -1,23 +1,19 @@
 import {
   BookOpen,
-  Download,
   ExternalLink,
   FolderInput,
   MessageSquareShare,
   Milestone,
   Puzzle,
-  RefreshCw,
   Search,
   Settings,
   Smartphone,
   SquarePen,
-  Tag,
   Workflow,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { PRODUCT_NAME } from '@shared/app-identity';
 import { YODA_DOCS_URL } from '@shared/urls';
 import {
   useSkillValidationIssues,
@@ -32,13 +28,12 @@ import {
   useWorkspaceSlots,
 } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
+import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { cn } from '@renderer/utils/utils';
 import { SidebarPinnedTaskList } from './pinned-task-list';
 import { SidebarProjectlessTaskList } from './projectless-task-list';
 import { ProjectsGroupLabel, ProjectsSettingsMenu } from './projects-group-label';
-import { SidebarAccount } from './sidebar-account';
 import {
   SidebarContainer,
   SidebarContent,
@@ -49,6 +44,7 @@ import {
   SidebarMenuButton,
 } from './sidebar-primitives';
 import { SidebarSpace } from './sidebar-space';
+import { SidebarVersionAnchor } from './sidebar-version-anchor';
 import { SidebarVirtualList } from './sidebar-virtual-list';
 import { useSidebarDrop } from './use-sidebar-drop';
 
@@ -59,9 +55,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
 
   const showCommandPalette = useShowModal('commandPaletteModal');
   const showFeedbackModal = useShowModal('feedbackModal');
-  const update = appState.update;
-  const versionLabel = `V${update.currentVersion || '...'}`;
-  const productVersionLabel = `${PRODUCT_NAME} ${versionLabel}`;
   const { count: skillIssueCount, firstIssue: firstSkillIssue } = useSkillValidationIssues();
   const { isDragOver, onDragOver, onDragEnter, onDragLeave, onDrop } = useSidebarDrop();
 
@@ -244,49 +237,11 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 <MessageSquareShare className="h-5 w-5 sm:h-4 sm:w-4" />
                 {t('sidebar.giveFeedback')}
               </SidebarMenuButton>
-              {update.hasUpdate ? (
-                <SidebarMenuButton
-                  onClick={() => navigate('settings', { tab: 'general' })}
-                  aria-label={t('sidebar.update')}
-                  className="w-full justify-between text-accent"
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <Download className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
-                    <span className="truncate">{t('sidebar.update')}</span>
-                  </span>
-                  {update.availableVersion && (
-                    <span className="ml-auto font-mono text-xs">V{update.availableVersion}</span>
-                  )}
-                </SidebarMenuButton>
-              ) : (
-                <SidebarMenuButton
-                  onClick={() => void update.check({ notify: true })}
-                  disabled={update.state.status === 'checking'}
-                  aria-label={`${productVersionLabel} ${t('settings.update.checkForUpdates')}`}
-                  className="group/version w-full justify-between"
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <Tag className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
-                    <span className="truncate">{PRODUCT_NAME}</span>
-                  </span>
-                  <span className="ml-auto grid shrink-0 items-center justify-items-end text-xs text-foreground-tertiary-passive">
-                    <span className="col-start-1 row-start-1 font-mono text-[10px] transition-opacity group-hover/version:opacity-0">
-                      {versionLabel}
-                    </span>
-                    <span className="col-start-1 row-start-1 flex items-center gap-1 whitespace-nowrap opacity-0 transition-opacity group-hover/version:opacity-100">
-                      {update.state.status === 'checking' && (
-                        <RefreshCw className="h-3 w-3 animate-spin" />
-                      )}
-                      {t('settings.update.checkForUpdates')}
-                    </span>
-                  </span>
-                </SidebarMenuButton>
-              )}
             </SidebarMenu>
           )}
           <div className="flex items-center gap-0.5 pr-2">
             <div className="min-w-0 flex-1">
-              <SidebarAccount />
+              <SidebarVersionAnchor />
             </div>
             {quickNavItems.map(({ key, icon: Icon, label, title, onClick, showIssueDot }) => (
               <button

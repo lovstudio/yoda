@@ -5,6 +5,24 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.7.0 — 2026-06-11
+
+### Added
+
+- **In-app browser pane**: URLs clicked in the terminal (smart links, OSC 8
+  hyperlinks, link gestures) open in a sidebar webview tab with back / forward
+  / refresh, an address bar, and an open-in-system-browser action. Re-clicking
+  the same URL activates its existing tab; tab position and title persist with
+  view snapshots. `_blank` popups navigate in place and non-http(s) URLs are
+  denied.
+
+### Changed
+
+- **Sidebar version anchor**: the bottom account row is replaced by a
+  logo + product name + version anchor that toggles the nav section; when an
+  update is available the version turns accent-colored with a download
+  shortcut to Settings → General.
+
 ## 0.6.0 — 2026-06-11
 
 ### Added

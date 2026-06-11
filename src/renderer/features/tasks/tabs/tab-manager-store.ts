@@ -180,6 +180,14 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   sidebarTabIds: string[] = [];
   /** The pinned sidebar tab currently selected in the sidebar strip, if any. */
   activeSidebarTabId: string | undefined = undefined;
+  /**
+   * Tabs pinned into the shell-level (cross-route) side pane. Same move
+   * semantics as `sidebarTabIds`: entries stay in `entries` but live in
+   * exactly one placement list at a time. Selection/order of the shell pane
+   * itself lives in AppSidePaneStore — this list only marks ownership so the
+   * model/PTY lifecycle (`_allTabIds`) keeps pinned entities alive.
+   */
+  shellPinTabIds: string[] = [];
 
   /** Used by resolvedTabs and FileModelLifecycleStore to build buffer URIs. */
   readonly modelRootPath: string;
@@ -217,6 +225,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       isVisible: observable,
       sidebarTabIds: observable,
       activeSidebarTabId: observable,
+      shellPinTabIds: observable,
       resolvedSidebarTabs: computed,
       activeSidebarConversation: computed,
       resolvedActiveTabId: computed,
@@ -253,6 +262,8 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       setTabActiveIndex: action,
       moveTabToSidebar: action,
       moveSidebarTabBack: action,
+      moveTabToShellPin: action,
+      moveShellPinBack: action,
       setActiveSidebarTab: action,
       setVisible: action,
       updateRenderer: action,
@@ -331,6 +342,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     if (
       this.activeTabId &&
       !this.sidebarTabIds.includes(this.activeTabId) &&
+      !this.shellPinTabIds.includes(this.activeTabId) &&
       this.entries.has(this.activeTabId)
     ) {
       return this.activeTabId;
@@ -469,11 +481,19 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       const descriptor = this._describeTab(entry);
       if (descriptor) sidebarTabs.push(descriptor);
     }
+    const shellPinTabs: TabDescriptor[] = [];
+    for (const id of this.shellPinTabIds) {
+      const entry = this.entries.get(id);
+      if (!entry) continue;
+      const descriptor = this._describeTab(entry);
+      if (descriptor) shellPinTabs.push(descriptor);
+    }
     return {
       tabs,
       activeTabId: this.activeTabId,
       sidebarTabs,
       activeSidebarTabId: this.activeSidebarTabId,
+      shellPinTabs,
     };
   }
 
@@ -838,6 +858,55 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     this.activeSidebarTabId = tabId && this.sidebarTabIds.includes(tabId) ? tabId : undefined;
   }
 
+  // ---------------------------------------------------------------------------
+  // Actions — shell-pane pinned tabs (cross-route)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Move a tab out of the strip into the shell-level side pane. The overview
+   * tab is fixed and shell pins of it use copy semantics at the call site —
+   * it never enters this list.
+   */
+  moveTabToShellPin(tabId: string): void {
+    const entry = this.entries.get(tabId);
+    if (!entry || entry.kind === 'overview' || this.shellPinTabIds.includes(tabId)) return;
+    // Pinning aside is a deliberate act — never keep preview semantics.
+    entry.isPreview = false;
+    removeTabId(this, tabId);
+    this._unpinSidebarTab(tabId);
+    this.shellPinTabIds.push(tabId);
+    // The entity changes HOST without its new container resizing, so mounted
+    // terminals must re-measure explicitly.
+    scheduleTerminalRelayout();
+  }
+
+  /**
+   * Move a shell-pane pin back to the end of the strip without activating it —
+   * closing a pin shouldn't yank the main area away from its current tab.
+   */
+  moveShellPinBack(tabId: string): void {
+    if (!this._unpinShellTab(tabId)) return;
+    if (!this.entries.has(tabId)) return;
+    addTabId(this, tabId);
+  }
+
+  /** Resolve a single entry for hosts outside the strip (shell pane chips/bodies). */
+  resolveTab(tabId: string): ResolvedTab | undefined {
+    const entry = this.entries.get(tabId);
+    if (!entry) return undefined;
+    return this._resolveTab(entry, false);
+  }
+
+  /** Remove a tab from the shell-pin list. Returns true when it was pinned there. */
+  private _unpinShellTab(tabId: string): boolean {
+    const idx = this.shellPinTabIds.indexOf(tabId);
+    if (idx === -1) return false;
+    this.shellPinTabIds.splice(idx, 1);
+    // The entity returns to a container whose size didn't change — re-measure.
+    scheduleTerminalRelayout();
+    return true;
+  }
+
   /** Remove a tab from the pinned list, fixing selection. Returns true when it was pinned. */
   private _unpinSidebarTab(tabId: string): boolean {
     const idx = this.sidebarTabIds.indexOf(tabId);
@@ -907,6 +976,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       this.tabOrder = [];
       this.sidebarTabIds = [];
       this.activeSidebarTabId = undefined;
+      this.shellPinTabIds = [];
       for (const t of snapshot.tabs) {
         const entry = this._entryFromDescriptor(t);
         if (!entry) continue;
@@ -920,6 +990,12 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
         if (!entry) continue;
         this.entries.set(entry.tabId, entry);
         this.sidebarTabIds.push(entry.tabId);
+      }
+      for (const t of snapshot.shellPinTabs ?? []) {
+        const entry = this._entryFromDescriptor(t);
+        if (!entry) continue;
+        this.entries.set(entry.tabId, entry);
+        this.shellPinTabIds.push(entry.tabId);
       }
       if (snapshot.activeSidebarTabId && this.sidebarTabIds.includes(snapshot.activeSidebarTabId)) {
         this.activeSidebarTabId = snapshot.activeSidebarTabId;
@@ -959,10 +1035,11 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  /** All tab ids that hold a live entry: the strip order plus the sidebar pins. */
+  /** All tab ids that hold a live entry: the strip order plus both pin lists. */
   private *_allTabIds(): Iterable<string> {
     yield* this.tabOrder;
     yield* this.sidebarTabIds;
+    yield* this.shellPinTabIds;
   }
 
   /**
@@ -973,7 +1050,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
    * successful.
    */
   private _activateExisting(tabId: string): void {
-    if (this._unpinSidebarTab(tabId)) {
+    if (this._unpinSidebarTab(tabId) || this._unpinShellTab(tabId)) {
       addTabId(this, tabId);
     }
     this.activeTabId = tabId;
@@ -1135,6 +1212,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       this.lastClosedConversationId = entry.conversationId;
     }
     this._unpinSidebarTab(id);
+    this._unpinShellTab(id);
     this.entries.delete(id);
     removeTabId(this, id);
   }

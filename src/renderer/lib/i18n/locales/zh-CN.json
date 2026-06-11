@@ -1,6 +1,7 @@
 {
   "appTabs": {
     "closeTab": "关闭标签页",
+    "openInGlobalSidePane": "在全局侧边栏打开",
     "overview": "概览",
     "home": "主页",
     "project": "项目",
@@ -98,14 +99,8 @@
     "roadmap": "Roadmap",
     "docs": "文档",
     "giveFeedback": "反馈建议",
-    "account": {
-      "openMenu": "打开账户菜单",
-      "manage": "管理账户",
-      "signInPrompt": "登录",
-      "signInHint": "连接你的 Yoda 账户",
-      "showNav": "显示侧边栏导航",
-      "hideNav": "隐藏侧边栏导航"
-    },
+    "showNav": "显示侧边栏导航",
+    "hideNav": "隐藏侧边栏导航",
     "dropToAddProject": "拖入以添加项目",
     "projects": "项目",
     "tasks": "任务",

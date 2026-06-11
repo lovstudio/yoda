@@ -263,7 +263,8 @@ function lucideIcon(Icon: LucideIcon): ReactNode {
   return <Icon className="size-3.5" />;
 }
 
-function describeTab(
+/** Label + icon for any top-level tab entry. Shared with the shell side pane's chips. */
+export function describeTab(
   tab: AppTabEntry,
   t: (key: string) => string,
   branchPrefix: string

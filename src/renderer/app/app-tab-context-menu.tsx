@@ -6,6 +6,7 @@ import {
   Link,
   ListX,
   PanelRight,
+  PanelRightOpen,
   Pencil,
   RefreshCw,
   Settings2,
@@ -28,6 +29,10 @@ import { archiveConversationFlow } from '@renderer/features/tasks/archive-task';
 import { copyTaskLink } from '@renderer/features/tasks/components/task-context-menu';
 import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  OVERVIEW_TAB_ID,
+  type TabManagerStore,
+} from '@renderer/features/tasks/tabs/tab-manager-store';
 import { openTaskTabInWindow } from '@renderer/features/tasks/tabs/tab-meta';
 import { FilePathMenuItems, type FilePathTarget } from '@renderer/lib/components/file-path-actions';
 import { APP_SHORTCUTS } from '@renderer/lib/hooks/useKeyboardShortcuts';
@@ -96,9 +101,28 @@ export type Translate = Parameters<typeof copyTaskLink>[1];
 function buildTabSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
   if (tab.viewId === 'task') return buildTaskSections(tab, t);
   if (tab.viewId === 'file') {
-    return [buildProjectFileSection(tab), buildCloseSection(tab, t)];
+    return [[buildGlobalPinItem(tab, t)], buildProjectFileSection(tab), buildCloseSection(tab, t)];
   }
-  return [buildCloseSection(tab, t)];
+  // Every other tab (project pages, global views, home) can at least be
+  // pinned into the shell side pane.
+  return [[buildGlobalPinItem(tab, t)], buildCloseSection(tab, t)];
+}
+
+/**
+ * "Open in global sidebar" for non-task tabs — copy semantics: the pane gets
+ * an independent instance of the view; the tab itself stays in the strip.
+ */
+function buildGlobalPinItem(tab: AppTabEntry, t: Translate): ReactNode {
+  return (
+    <ContextMenuItem
+      key="global-pin"
+      className="whitespace-nowrap"
+      onClick={() => appState.sidePane.pinView(tab.viewId, tab.params)}
+    >
+      <PanelRightOpen className="size-4" />
+      {t('appTabs.openInGlobalSidePane')}
+    </ContextMenuItem>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -110,8 +134,23 @@ function buildTaskSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
   const target = (tab.params.tab as TaskWindowTabTarget | undefined) ?? { kind: 'overview' };
   if (!projectId || !taskId) return [];
   // The index tab itself isn't closeable, but it's a natural place to sweep
-  // the rest of the strip from.
-  if (target.kind === 'overview') return [buildCloseSection(tab, t)];
+  // the rest of the strip from. Its shell-pane pin is a copy — the overview
+  // stays the scope's fixed index tab.
+  if (target.kind === 'overview') {
+    return [
+      [
+        <ContextMenuItem
+          key="global-pin"
+          className="whitespace-nowrap"
+          onClick={() => appState.sidePane.pinTask(projectId, taskId, OVERVIEW_TAB_ID)}
+        >
+          <PanelRightOpen className="size-4" />
+          {t('appTabs.openInGlobalSidePane')}
+        </ContextMenuItem>,
+      ],
+      buildCloseSection(tab, t),
+    ];
+  }
 
   const provisioned = asProvisioned(getTaskStore(projectId, taskId));
 
@@ -125,6 +164,14 @@ function buildTaskSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
       >
         <PanelRight className="size-4" />
         {t('tasks.tabs.openInSidePane')}
+      </ContextMenuItem>,
+      <ContextMenuItem
+        key="global-pin"
+        className="whitespace-nowrap"
+        onClick={() => void moveTopTabToShellPane(tab, provisioned, projectId, taskId, target)}
+      >
+        <PanelRightOpen className="size-4" />
+        {t('appTabs.openInGlobalSidePane')}
       </ContextMenuItem>
     );
   }
@@ -397,7 +444,45 @@ async function moveTopTabToSidebar(
   target: TaskWindowTabTarget
 ): Promise<void> {
   const tabManager = provisioned.taskView.tabManager;
+  const internalId = await ensureInternalTab(provisioned, tabManager, target);
+  if (!internalId) return;
 
+  tabManager.moveTabToSidebar(internalId);
+  // Pinning while the sidebar is hidden would silently swallow the tab.
+  provisioned.taskView.setSidebarCollapsed(false);
+  appState.appTabs.closeTab(tab.id);
+}
+
+/**
+ * Pins a top-level task tab into the shell-level side pane: same move
+ * semantics as the task-sidebar pin, but the entity lands in the cross-route
+ * pane — it stays visible while the main area navigates anywhere.
+ */
+async function moveTopTabToShellPane(
+  tab: AppTabEntry,
+  provisioned: ProvisionedTask,
+  projectId: string,
+  taskId: string,
+  target: TaskWindowTabTarget
+): Promise<void> {
+  const tabManager = provisioned.taskView.tabManager;
+  const internalId = await ensureInternalTab(provisioned, tabManager, target);
+  if (!internalId) return;
+
+  tabManager.moveTabToShellPin(internalId);
+  appState.sidePane.pinTask(projectId, taskId, internalId);
+  appState.appTabs.closeTab(tab.id);
+}
+
+/**
+ * Ensures the internal tab entry for a target exists (replaying the target
+ * below the bridge when needed) and returns its id.
+ */
+async function ensureInternalTab(
+  provisioned: ProvisionedTask,
+  tabManager: TabManagerStore,
+  target: TaskWindowTabTarget
+): Promise<string | undefined> {
   let internalId = findInternalTabId(tabManager, target);
   if (!internalId) {
     const bridge = tabManager.topLevelBridge;
@@ -410,12 +495,7 @@ async function moveTopTabToSidebar(
     }
     internalId = findInternalTabId(tabManager, target);
   }
-  if (!internalId) return;
-
-  tabManager.moveTabToSidebar(internalId);
-  // Pinning while the sidebar is hidden would silently swallow the tab.
-  provisioned.taskView.setSidebarCollapsed(false);
-  appState.appTabs.closeTab(tab.id);
+  return internalId;
 }
 
 // ---------------------------------------------------------------------------
