@@ -32,7 +32,8 @@ export const SETTINGS_DEFAULTS = {
     tmuxByDefault: true,
   },
   localProject: () => ({
-    defaultProjectsDirectory: join(homedir(), 'yoda', 'repositories'),
+    defaultProjectsDirectory: join(homedir(), 'Yoda', 'repositories'),
+    worktreeLocationMode: 'central' as const,
     defaultWorktreeDirectory: getDefaultLocalWorktreeDirectory(),
     writeAgentConfigToGitIgnore: true,
   }),

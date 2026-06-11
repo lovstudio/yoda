@@ -356,10 +356,13 @@
       "autoPushAria": "Enable automatic push on create",
       "autoUpdateGitignore": "Auto-update .gitignore",
       "autoUpdateGitignoreAria": "Enable .gitignore updates for CLI hook configs",
-      "defaultWorktreeDirectory": "Default worktree directory",
-      "defaultWorktreeDirectoryDescription": "Where task worktrees are created for local projects. Each project can override this in its project settings.",
-      "defaultWorktreeDirectoryAria": "Default worktree directory",
-      "defaultWorktreeDirectoryBrowse": "Choose directory"
+      "worktreeLocation": "Worktree location",
+      "worktreeLocationDescription": "Where task worktrees are created for local projects. Each project can override this in its project settings.",
+      "worktreeLocationProject": "Inside each project",
+      "worktreeLocationProjectDescription": "Worktrees move with the project, but running git clean -fdx in the project will delete them. Created under",
+      "worktreeLocationCentral": "Central directory",
+      "worktreeLocationCentralDescription": "All projects share one worktree pool, one folder per project.",
+      "worktreeLocationBrowse": "Choose directory"
     },
     "archivedProjects": {
       "title": "Archived projects",

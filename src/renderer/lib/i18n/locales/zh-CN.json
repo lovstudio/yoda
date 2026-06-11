@@ -356,10 +356,13 @@
       "autoPushAria": "启用创建后自动 push",
       "autoUpdateGitignore": "自动更新 .gitignore",
       "autoUpdateGitignoreAria": "启用 CLI hook 配置的 .gitignore 更新",
-      "defaultWorktreeDirectory": "默认 worktree 目录",
-      "defaultWorktreeDirectoryDescription": "本地项目创建任务 worktree 的默认位置，每个项目可在项目设置中单独覆盖。",
-      "defaultWorktreeDirectoryAria": "默认 worktree 目录",
-      "defaultWorktreeDirectoryBrowse": "选择目录"
+      "worktreeLocation": "Worktree 位置",
+      "worktreeLocationDescription": "本地项目创建任务 worktree 的位置，每个项目可在项目设置中单独覆盖。",
+      "worktreeLocationProject": "项目目录内",
+      "worktreeLocationProjectDescription": "worktree 随项目移动，但在项目里执行 git clean -fdx 会将其删除。存放于",
+      "worktreeLocationCentral": "统一目录",
+      "worktreeLocationCentralDescription": "所有项目共用一个 worktree 池，按项目分文件夹。",
+      "worktreeLocationBrowse": "选择目录"
     },
     "archivedProjects": {
       "title": "已归档的项目",

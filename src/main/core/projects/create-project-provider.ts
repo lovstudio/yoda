@@ -29,6 +29,35 @@ import { WorktreeService } from './worktrees/worktree-service';
 const hasGitHubToken = async (): Promise<boolean> =>
   (await githubConnectionService.getToken()) !== null;
 
+/** When the worktree directory lives inside the project, keep it out of git
+ *  status via `.git/info/exclude` (local-only, never touches tracked files). */
+async function ensureWorktreeDirectoryExcluded(
+  projectPath: string,
+  worktreeDirectory: string
+): Promise<void> {
+  const rel = path.relative(projectPath, worktreeDirectory);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return;
+  try {
+    // `.git` may be a file (the project itself is a worktree/submodule); only
+    // handle the plain-directory case and skip otherwise.
+    const gitDir = path.join(projectPath, '.git');
+    if (!(await fs.promises.stat(gitDir)).isDirectory()) return;
+    const excludePath = path.join(gitDir, 'info', 'exclude');
+    const entry = `/${rel.split(path.sep).join('/')}/`;
+    const existing = await fs.promises.readFile(excludePath, 'utf8').catch(() => '');
+    if (existing.split(/\r?\n/).includes(entry)) return;
+    await fs.promises.mkdir(path.dirname(excludePath), { recursive: true });
+    const prefix = existing && !existing.endsWith('\n') ? `${existing}\n` : existing;
+    await fs.promises.writeFile(excludePath, `${prefix}${entry}\n`);
+  } catch (error) {
+    log.warn('ensureWorktreeDirectoryExcluded: failed', {
+      projectPath,
+      worktreeDirectory,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export async function createProvider(project: LocalProject | SshProject): Promise<ProjectProvider> {
   if (project.type === 'ssh') {
     return createSshProvider(project);
@@ -45,6 +74,7 @@ async function createLocalProvider(project: LocalProject): Promise<ProjectProvid
   const settings = new LocalProjectSettingsProvider(project.id, project.path, project.baseRef);
   const worktreeDirectory = await settings.getWorktreeDirectory();
   await fs.promises.mkdir(worktreeDirectory, { recursive: true });
+  await ensureWorktreeDirectoryExcluded(project.path, worktreeDirectory);
   const worktreePoolPath = path.join(worktreeDirectory, safePathSegment(project.name, project.id));
   const worktreeHost = await LocalWorktreeHost.create({
     allowedRoots: [project.path, worktreeDirectory],

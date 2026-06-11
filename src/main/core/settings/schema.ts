@@ -32,6 +32,9 @@ export const projectSettingsSchema = z.object({
 
 export const localProjectSettingsSchema = z.object({
   defaultProjectsDirectory: z.string(),
+  /** Where task worktrees live: inside each project (`<project>/.worktrees`)
+   *  or in the central pool at `defaultWorktreeDirectory`. */
+  worktreeLocationMode: z.enum(['project', 'central']).catch('central'),
   defaultWorktreeDirectory: z.string(),
   writeAgentConfigToGitIgnore: z.boolean(),
 });
