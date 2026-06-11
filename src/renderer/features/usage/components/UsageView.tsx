@@ -35,7 +35,12 @@ export function UsageView({ embedded = false }: { embedded?: boolean } = {}) {
 
   return (
     <div
-      className={cn('bg-background text-foreground', !embedded && 'h-full min-h-0 overflow-y-auto')}
+      className={cn(
+        // Container queries (not viewport breakpoints) — this view also lives
+        // embedded in the narrow settings side pane.
+        '@container bg-background text-foreground',
+        !embedded && 'h-full min-h-0 overflow-y-auto'
+      )}
     >
       <div className={cn('flex w-full flex-col gap-8', !embedded && 'mx-auto max-w-4xl px-8 py-8')}>
         {!embedded && (
@@ -78,7 +83,7 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
 
   return (
     <>
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section className="grid grid-cols-1 gap-3 @md:grid-cols-2 @3xl:grid-cols-4">
         <StatCard
           label={t('usage.cards.tasksArchived')}
           value={String(overview.tasksArchived)}
@@ -138,7 +143,7 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
         overview.byModel.length > 0 ||
         overview.byRuntime.length > 0 ||
         overview.byAuthProvider.length > 0) && (
-        <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <section className="grid grid-cols-1 gap-3 @3xl:grid-cols-2">
           {overview.byProject.length > 0 && (
             <BreakdownCard title={t('usage.byProject')} caliber={t('usage.caliber.byProject')}>
               {overview.byProject.map((entry) => (
@@ -378,7 +383,7 @@ function TopTasks({ overview }: { overview: UsageOverview }) {
                 <Archive className="size-3 shrink-0 text-foreground-passive" aria-hidden />
               )}
             </span>
-            <span className="h-1 w-24 shrink-0 overflow-hidden rounded-full bg-background-tertiary-2">
+            <span className="h-1 w-24 shrink-0 overflow-hidden rounded-full bg-background-tertiary-2 @max-md:hidden">
               <span
                 className="block h-full rounded-full bg-accent/60"
                 style={{
