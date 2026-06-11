@@ -100,6 +100,8 @@ export type TaskSidebarViewSnapshot = {
   isBottomPanelOpen?: boolean;
   /** Which content the bottom drawer shows (terminals / scripts / session history). */
   bottomPanelTab?: BottomPanelTab;
+  /** Drawer spans the full window width (under the sidebar) vs. only the main column. */
+  isBottomPanelFullWidth?: boolean;
 };
 
 export type ProjectViewSnapshot = {

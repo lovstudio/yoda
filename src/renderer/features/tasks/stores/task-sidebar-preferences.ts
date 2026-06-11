@@ -21,6 +21,7 @@ const DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS = ['basic'];
 
 const DEFAULT_BOTTOM_PANEL_OPEN = false;
 const DEFAULT_BOTTOM_PANEL_TAB: BottomPanelTab = 'terminals';
+const DEFAULT_BOTTOM_PANEL_FULL_WIDTH = true;
 
 type LegacyTaskSidebarSnapshot = Pick<
   TaskViewSnapshot,
@@ -199,6 +200,7 @@ export class TaskSidebarPreferenceStore {
   openSidebarGroups: SidebarTabGroup[] = [];
   isBottomPanelOpen: boolean = DEFAULT_BOTTOM_PANEL_OPEN;
   bottomPanelTab: BottomPanelTab = DEFAULT_BOTTOM_PANEL_TAB;
+  isBottomPanelFullWidth: boolean = DEFAULT_BOTTOM_PANEL_FULL_WIDTH;
   private isHydrated: boolean = false;
 
   constructor() {
@@ -216,6 +218,7 @@ export class TaskSidebarPreferenceStore {
       openSidebarGroups: [...this.openSidebarGroups],
       isBottomPanelOpen: this.isBottomPanelOpen,
       bottomPanelTab: this.bottomPanelTab,
+      isBottomPanelFullWidth: this.isBottomPanelFullWidth,
     };
   }
 
@@ -234,6 +237,10 @@ export class TaskSidebarPreferenceStore {
     this.openSidebarGroups = resolveOpenSidebarGroups(sharedSnapshot);
     this.isBottomPanelOpen = resolveBottomPanelOpen(sharedSnapshot, legacySnapshot);
     this.bottomPanelTab = resolveBottomPanelTab(sharedSnapshot, legacySnapshot);
+    this.isBottomPanelFullWidth =
+      typeof sharedSnapshot?.isBottomPanelFullWidth === 'boolean'
+        ? sharedSnapshot.isBottomPanelFullWidth
+        : DEFAULT_BOTTOM_PANEL_FULL_WIDTH;
     this.isHydrated = true;
 
     viewStateCache.set(TASK_SIDEBAR_VIEW_STATE_KEY, this.snapshot);
@@ -269,6 +276,12 @@ export class TaskSidebarPreferenceStore {
   setBottomPanelTab(tab: BottomPanelTab): void {
     if (this.bottomPanelTab === tab) return;
     this.bottomPanelTab = tab;
+    this.persist();
+  }
+
+  setBottomPanelFullWidth(fullWidth: boolean): void {
+    if (this.isBottomPanelFullWidth === fullWidth) return;
+    this.isBottomPanelFullWidth = fullWidth;
     this.persist();
   }
 

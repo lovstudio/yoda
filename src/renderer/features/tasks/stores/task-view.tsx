@@ -275,6 +275,15 @@ export class TaskViewStore {
     return taskSidebarPreferenceStore.bottomPanelTab;
   }
 
+  /** Drawer spans the full window width vs. only the main column. */
+  get isBottomPanelFullWidth(): boolean {
+    return taskSidebarPreferenceStore.isBottomPanelFullWidth;
+  }
+
+  setBottomPanelFullWidth(fullWidth: boolean): void {
+    taskSidebarPreferenceStore.setBottomPanelFullWidth(fullWidth);
+  }
+
   setTerminalDrawerOpen(open: boolean): void {
     taskSidebarPreferenceStore.setBottomPanelOpen(open);
     if (open && this.bottomPanelTab === 'terminals' && this.terminalTabs.tabs.length === 0) {

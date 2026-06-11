@@ -1,6 +1,7 @@
 import {
   Check,
   ChevronsUpDown,
+  FoldHorizontal,
   MessageSquareText,
   Pause,
   Play,
@@ -8,6 +9,7 @@ import {
   ScrollText,
   Settings,
   Terminal,
+  UnfoldHorizontal,
   X,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
@@ -215,6 +217,7 @@ export const BottomPanel = observer(function BottomPanel() {
               <Settings className="size-3" />
             </button>
           ) : null}
+          <BottomPanelWidthToggle />
           <button
             type="button"
             className={ICON_BUTTON_CLASS}
@@ -238,6 +241,33 @@ export const BottomPanel = observer(function BottomPanel() {
         </Activity>
       </div>
     </div>
+  );
+});
+
+/**
+ * Toggles whether the drawer spans the full window width (under the sidebar)
+ * or yields to a full-height sidebar. Disabled while the sidebar is collapsed
+ * — without a sidebar both layouts are identical.
+ */
+const BottomPanelWidthToggle = observer(function BottomPanelWidthToggle() {
+  const { t } = useTranslation();
+  const { taskView } = useProvisionedTask();
+  const fullWidth = taskView.isBottomPanelFullWidth;
+  const disabled = taskView.isSidebarCollapsed;
+  const label = fullWidth
+    ? t('tasks.bottomPanel.layoutBesideSidebar')
+    : t('tasks.bottomPanel.layoutFullWidth');
+  return (
+    <button
+      type="button"
+      className={cn(ICON_BUTTON_CLASS, disabled && 'pointer-events-none opacity-40')}
+      disabled={disabled}
+      onClick={() => taskView.setBottomPanelFullWidth(!fullWidth)}
+      aria-label={label}
+      title={label}
+    >
+      {fullWidth ? <FoldHorizontal className="size-3" /> : <UnfoldHorizontal className="size-3" />}
+    </button>
   );
 });
 
