@@ -293,7 +293,12 @@ const SourceSwitcher = observer(function SourceSwitcher({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const label = (id: SessionStatusBarSource) => t(`tasks.sessionPanel.statusBar.source.${id}`);
+  // 'off' hides the bar entirely, so this menu disappears with it — point the
+  // user at Settings as the way back.
+  const label = (id: SessionStatusBarSource) =>
+    id === 'off'
+      ? t('tasks.sessionPanel.statusBar.offWithSettingsHint')
+      : t(`tasks.sessionPanel.statusBar.source.${id}`);
   return (
     <div className="flex items-center">
       <Popover open={open} onOpenChange={setOpen}>

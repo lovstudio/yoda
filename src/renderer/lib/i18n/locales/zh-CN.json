@@ -1213,6 +1213,7 @@
         "recentPromptTooltip": "本会话最近一次提问 —— 点击展开历史",
         "recentPromptEmpty": "暂无提问",
         "collapseHistory": "收起历史",
+        "offWithSettingsHint": "隐藏（前往设置恢复）",
         "source": {
           "summary": "近期摘要",
           "recentPrompt": "最近提问",

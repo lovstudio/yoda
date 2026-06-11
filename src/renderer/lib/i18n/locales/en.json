@@ -1213,6 +1213,7 @@
         "recentPromptTooltip": "Your latest prompt in this session — click to expand history",
         "recentPromptEmpty": "No prompt yet",
         "collapseHistory": "Collapse prompt history",
+        "offWithSettingsHint": "Hidden (re-enable in Settings)",
         "source": {
           "summary": "Recent summary",
           "recentPrompt": "Latest prompt",
