@@ -1270,10 +1270,15 @@
       "transcript": "实录"
     },
     "browser": {
+      "title": "浏览器",
       "back": "后退",
       "forward": "前进",
       "reload": "刷新",
       "address": "地址",
+      "addressPlaceholder": "输入 URL",
+      "newTab": "新标签页",
+      "recent": "最近访问",
+      "emptyHint": "输入 URL，或点击终端里的链接",
       "openExternal": "在系统浏览器中打开"
     },
     "sidePane": {
@@ -1285,7 +1290,8 @@
       "emptyHint": "点击 + 添加面板",
       "cardDescSession": "会话信息、对话记录与 Agent 运行时",
       "cardDescChanges": "审阅工作区的文件改动",
-      "cardDescFiles": "浏览任务的工作目录"
+      "cardDescFiles": "浏览任务的工作目录",
+      "cardDescBrowser": "预览链接与本地服务"
     },
     "setParent": {
       "title": "设置父任务",

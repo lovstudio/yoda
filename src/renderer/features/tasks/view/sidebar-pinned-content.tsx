@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef } from 'react';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
-import { BrowserPane } from '@renderer/features/tasks/browser/browser-pane';
 import { FileActionsOverlay } from '@renderer/features/tasks/components/file-actions';
 import type { ConversationStore } from '@renderer/features/tasks/conversations/conversation-manager';
 import { getResumeInitialSize } from '@renderer/features/tasks/conversations/conversations-panel';
@@ -57,10 +56,6 @@ export const SidebarPinnedContent = observer(function SidebarPinnedContent({
 
   if (entry.kind === 'file') {
     return <SidebarPinnedFile key={entry.tabId} file={entry} />;
-  }
-
-  if (entry.kind === 'browser') {
-    return <BrowserPane key={entry.tabId} tab={entry} />;
   }
 
   return null;

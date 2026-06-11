@@ -1,5 +1,6 @@
 import { computed, makeAutoObservable, reaction, runInAction } from 'mobx';
 import type { BottomPanelTab, TaskSidebarViewSnapshot, TaskViewSnapshot } from '@shared/view-state';
+import { TaskBrowserStore } from '@renderer/features/tasks/browser/browser-store';
 import type { ConversationManagerStore } from '@renderer/features/tasks/conversations/conversation-manager';
 import { DiffTabLifecycleStore } from '@renderer/features/tasks/diff-view/stores/diff-tab-lifecycle-store';
 import { DiffViewStore } from '@renderer/features/tasks/diff-view/stores/diff-view-store';
@@ -65,6 +66,8 @@ export class TaskViewStore {
   readonly terminalTabs: TerminalTabViewStore;
   readonly editorView: FileModelLifecycleStore;
   readonly diffView: DiffViewStore;
+  /** The task's single resident in-app browser card. */
+  readonly browser: TaskBrowserStore;
   private readonly diffTabLifecycle: DiffTabLifecycleStore;
   private readonly terminalsMgr: TerminalManagerStore;
   private readonly disposers: (() => void)[] = [];
@@ -83,6 +86,7 @@ export class TaskViewStore {
     this.tabManager = new TabManagerStore(resources.conversations, resources.workspaceId);
     this.terminalTabs = new TerminalTabViewStore(resources.terminals);
     this.diffView = new DiffViewStore(resources.git, resources.pr);
+    this.browser = new TaskBrowserStore(savedSnapshot?.browser);
 
     // Restore tab state from the unified tabManager snapshot.
     if (savedSnapshot?.tabManager) {
@@ -163,6 +167,7 @@ export class TaskViewStore {
       terminalTabs: false,
       editorView: false,
       diffView: false,
+      browser: false,
       activeRenderer: computed,
     });
   }
@@ -213,6 +218,7 @@ export class TaskViewStore {
     return {
       focusedRegion: this.focusedRegion,
       tabManager: this.tabManager.snapshot,
+      browser: this.browser.snapshot,
       terminals: this.terminalTabs.snapshot,
       editor: this.editorView.snapshot,
       diffView: this.diffView.snapshot,
@@ -238,6 +244,18 @@ export class TaskViewStore {
 
   openSidebarGroup(group: SidebarTabGroup): void {
     taskSidebarPreferenceStore.openSidebarGroup(group);
+  }
+
+  /**
+   * Navigate the resident browser card and surface it (terminal smart URL
+   * links land here so the session stays visible).
+   */
+  openBrowser(url?: string): void {
+    if (url) this.browser.navigate(url);
+    // Yield the sidebar body from any pinned tab back to the builtin panels.
+    this.tabManager.setActiveSidebarTab(undefined);
+    this.setSidebarTab('browser');
+    this.setSidebarCollapsed(false);
   }
 
   closeSidebarGroup(group: SidebarTabGroup): void {

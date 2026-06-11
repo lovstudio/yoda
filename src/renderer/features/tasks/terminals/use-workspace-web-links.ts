@@ -4,8 +4,8 @@ import type { TerminalWebLinkOptions } from '@renderer/lib/pty/terminal-web-link
 
 /**
  * Web-link options for workspace-bound PTY panes: clicking a smart URL link
- * opens it in the task sidebar's in-app browser so the pane stays visible.
- * The right-click link menu keeps the system-browser escape hatch.
+ * navigates the task sidebar's resident browser card so the pane stays
+ * visible. The right-click link menu keeps the system-browser escape hatch.
  */
 export function useWorkspaceWebLinks(): TerminalWebLinkOptions {
   const provisionedTask = useProvisionedTask();
@@ -13,8 +13,7 @@ export function useWorkspaceWebLinks(): TerminalWebLinkOptions {
   return useMemo<TerminalWebLinkOptions>(
     () => ({
       onOpen: (url) => {
-        provisionedTask.taskView.tabManager.openUrlInSidebar(url);
-        provisionedTask.taskView.setSidebarCollapsed(false);
+        provisionedTask.taskView.openBrowser(url);
       },
     }),
     [provisionedTask.taskView]

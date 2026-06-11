@@ -8,7 +8,6 @@ export type TabViewSnapshot = {
 export type TabDescriptor =
   | { kind: 'conversation'; tabId: string; conversationId: string; isPreview: boolean }
   | { kind: 'file'; tabId: string; path: string; isPreview: boolean }
-  | { kind: 'browser'; tabId: string; url: string; isPreview: boolean }
   | {
       kind: 'diff';
       tabId: string;
@@ -67,6 +66,17 @@ export interface ActiveFile {
 
 export type BottomPanelTab = 'terminals' | 'scripts' | 'session';
 
+/** One visited page in the task's in-app browser history (most recent first). */
+export type BrowserHistoryEntry = { url: string; title: string };
+
+/** Persisted state of the task's single resident in-app browser card. */
+export type TaskBrowserSnapshot = {
+  /** Current page; null/absent = the empty new-tab (history) state. */
+  url?: string | null;
+  title?: string;
+  history?: BrowserHistoryEntry[];
+};
+
 export type TaskViewSnapshot = {
   /** @deprecated Sidebar chrome is now stored globally in TaskSidebarViewSnapshot. */
   sidebarTab?: string;
@@ -78,6 +88,8 @@ export type TaskViewSnapshot = {
   /** @deprecated Bottom drawer chrome is now stored globally in TaskSidebarViewSnapshot. */
   bottomPanelTab?: BottomPanelTab;
   tabManager?: TabManagerSnapshot;
+  /** The task's resident in-app browser card (current page + visit history). */
+  browser?: TaskBrowserSnapshot;
   /** @deprecated Legacy field from before the unified tab refactor. Used only for migration. */
   conversations?: TabViewSnapshot;
   terminals?: TabViewSnapshot;

@@ -1270,10 +1270,15 @@
       "transcript": "Transcript"
     },
     "browser": {
+      "title": "Browser",
       "back": "Back",
       "forward": "Forward",
       "reload": "Reload",
       "address": "Address",
+      "addressPlaceholder": "Enter URL",
+      "newTab": "New tab",
+      "recent": "Recently visited",
+      "emptyHint": "Enter a URL, or click a link in the terminal",
       "openExternal": "Open in system browser"
     },
     "sidePane": {
@@ -1285,7 +1290,8 @@
       "emptyHint": "Click + to add a panel",
       "cardDescSession": "Session info, prompts, and the agent runtime",
       "cardDescChanges": "Review file changes in the worktree",
-      "cardDescFiles": "Browse the task's working directory"
+      "cardDescFiles": "Browse the task's working directory",
+      "cardDescBrowser": "Preview links and local services"
     },
     "setParent": {
       "title": "Set parent task",

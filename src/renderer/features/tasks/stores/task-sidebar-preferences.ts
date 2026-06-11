@@ -39,6 +39,7 @@ function isSidebarTab(value: unknown): value is SidebarTab {
     value === 'conversations' ||
     value === 'changes' ||
     value === 'files' ||
+    value === 'browser' ||
     value === 'context' ||
     value === 'hooks' ||
     value === 'rename'

@@ -3,10 +3,9 @@ import {
   ArrowLeftToLine,
   ChevronDown,
   ChevronUp,
-  Copy,
-  ExternalLink,
   Folder,
   GitCompare,
+  Globe,
   Maximize2,
   MessageSquare,
   Minimize2,
@@ -22,6 +21,7 @@ import { Activity, Fragment } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildConversationSections, fileTarget } from '@renderer/app/app-tab-context-menu';
 import { openTaskTopTab } from '@renderer/app/open-task-target';
+import { BrowserPane } from '@renderer/features/tasks/browser/browser-pane';
 import type { ResolvedTab } from '@renderer/features/tasks/tabs/tab-manager-store';
 import {
   buildTaskWindowTarget,
@@ -30,7 +30,6 @@ import {
 } from '@renderer/features/tasks/tabs/tab-meta';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { FilePathMenuItems } from '@renderer/lib/components/file-path-actions';
-import { rpc } from '@renderer/lib/ipc';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
 import {
   ContextMenu,
@@ -70,6 +69,8 @@ function groupLabelKey(group: SidebarTabGroup): string {
       return 'tasks.changes';
     case 'files':
       return 'tasks.files';
+    case 'browser':
+      return 'tasks.browser.title';
   }
 }
 
@@ -82,6 +83,8 @@ function groupDescKey(group: SidebarTabGroup): string {
       return 'tasks.sidePane.cardDescChanges';
     case 'files':
       return 'tasks.sidePane.cardDescFiles';
+    case 'browser':
+      return 'tasks.sidePane.cardDescBrowser';
   }
 }
 
@@ -93,6 +96,8 @@ function groupIcon(group: SidebarTabGroup): React.ReactNode {
       return <GitCompare className="size-3.5" />;
     case 'files':
       return <Folder className="size-3.5" />;
+    case 'browser':
+      return <Globe className="size-3.5" />;
   }
 }
 
@@ -131,13 +136,12 @@ export const TaskSidebar = observer(function TaskSidebar() {
     }
   };
 
-  // Closing a pinned chip: files/diffs/browser tabs (e.g. smart-path or
-  // smart-URL opens) are stateless and reopenable — just close them, never
-  // surface them in the main area. Conversations return to the strip as a
-  // background top-level tab so the session stays reachable without stealing
-  // the main area's active tab.
+  // Closing a pinned chip: files/diffs (e.g. smart-path cmd+click opens) are
+  // stateless and reopenable — just close them, never surface them in the main
+  // area. Conversations return to the strip as a background top-level tab so
+  // the session stays reachable without stealing the main area's active tab.
   const closePinned = (tab: ResolvedTab) => {
-    if (tab.kind === 'file' || tab.kind === 'diff' || tab.kind === 'browser') {
+    if (tab.kind === 'file' || tab.kind === 'diff') {
       tabManager.closeTab(tab.tabId);
       return;
     }
@@ -150,40 +154,6 @@ export const TaskSidebar = observer(function TaskSidebar() {
   // Right-click menu sections for a pinned chip, mirroring the top strip's
   // AppTabContextMenu: placement, then kind-specific actions.
   const pinnedSections = (tab: ResolvedTab): React.ReactNode[][] => {
-    // Browser tabs are sidebar-only: no top-level/window placement actions.
-    if (tab.kind === 'browser') {
-      return [
-        [
-          <ContextMenuItem
-            key="open-external"
-            className="whitespace-nowrap"
-            onClick={() => void rpc.app.openExternal(tab.url)}
-          >
-            <ExternalLink className="size-4" />
-            {t('tasks.browser.openExternal')}
-          </ContextMenuItem>,
-          <ContextMenuItem
-            key="copy-url"
-            className="whitespace-nowrap"
-            onClick={() => void navigator.clipboard.writeText(tab.url)}
-          >
-            <Copy className="size-4" />
-            {t('terminal.linkMenu.copyUrl')}
-          </ContextMenuItem>,
-        ],
-        [
-          <ContextMenuItem
-            key="close"
-            className="whitespace-nowrap"
-            onClick={() => closePinned(tab)}
-          >
-            <X className="size-4" />
-            {t('common.close')}
-          </ContextMenuItem>,
-        ],
-      ];
-    }
-
     const placement: React.ReactNode[] = [];
     if (tab.kind === 'conversation') {
       placement.push(
@@ -313,7 +283,7 @@ export const TaskSidebar = observer(function TaskSidebar() {
                     icon={meta.icon}
                     isActive={activePinnedId === tab.tabId}
                     closeLabel={t(
-                      tab.kind === 'file' || tab.kind === 'diff' || tab.kind === 'browser'
+                      tab.kind === 'file' || tab.kind === 'diff'
                         ? 'common.close'
                         : 'tasks.sidePane.moveBack'
                     )}
@@ -391,6 +361,9 @@ export const TaskSidebar = observer(function TaskSidebar() {
           </Activity>
           <Activity mode={activeGroup === 'files' ? 'visible' : 'hidden'}>
             <EditorFileTree />
+          </Activity>
+          <Activity mode={activeGroup === 'browser' ? 'visible' : 'hidden'}>
+            <BrowserPane store={taskView.browser} />
           </Activity>
           {/* Each pinned entity keeps its own Activity so background PTYs stay alive. */}
           {pinnedTabs.map((tab) => {

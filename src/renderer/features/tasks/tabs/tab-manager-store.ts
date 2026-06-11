@@ -6,7 +6,6 @@ import type {
   ConversationManagerStore,
   ConversationStore,
 } from '@renderer/features/tasks/conversations/conversation-manager';
-import { BrowserTabStore } from '@renderer/features/tasks/tabs/browser-tab-store';
 import { DiffTabStore } from '@renderer/features/tasks/tabs/diff-tab-store';
 import { FileTabStore } from '@renderer/features/tasks/tabs/file-tab-store';
 import type { FileRendererData } from '@renderer/features/tasks/types';
@@ -65,12 +64,7 @@ export class OverviewTabEntry {
 /** Stable id for the singleton overview tab. */
 export const OVERVIEW_TAB_ID = 'overview';
 
-export type TabEntry =
-  | FileTabStore
-  | DiffTabStore
-  | BrowserTabStore
-  | ConversationTabEntry
-  | OverviewTabEntry;
+export type TabEntry = FileTabStore | DiffTabStore | ConversationTabEntry | OverviewTabEntry;
 
 // ---------------------------------------------------------------------------
 // Resolved tabs — enriched with live store references and derived state
@@ -115,20 +109,10 @@ export type ResolvedOverviewTab = {
   isActive: boolean;
 };
 
-export type ResolvedBrowserTab = {
-  kind: 'browser';
-  tabId: string;
-  url: string;
-  title: string;
-  isPreview: false;
-  isActive: boolean;
-};
-
 export type ResolvedTab =
   | ResolvedConversationTab
   | ResolvedFileTab
   | ResolvedDiffTab
-  | ResolvedBrowserTab
   | ResolvedOverviewTab;
 
 interface OpenFileOptions {
@@ -252,7 +236,6 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       openConversationPreview: action,
       openFile: action,
       openFileInSidebar: action,
-      openUrlInSidebar: action,
       openFilePreview: action,
       openDiff: action,
       openDiffPreview: action,
@@ -396,8 +379,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
    */
   get activeTopLevelTarget(): TaskWindowTabTarget | null {
     const desc = this.activeDescriptor;
-    // Browser tabs are sidebar-only and never enter tabOrder; guard anyway.
-    if (!desc || desc.kind === 'overview' || desc.kind === 'browser') return null;
+    if (!desc || desc.kind === 'overview') return null;
     if (desc.kind === 'conversation') {
       return { kind: 'conversation', conversationId: desc.conversationId };
     }
@@ -628,23 +610,6 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     this.activeSidebarTabId = tab.tabId;
   }
 
-  /**
-   * Open a URL in an in-app browser tab pinned into the task sidebar
-   * (terminal smart web links land here so the session stays visible).
-   * Browser tabs are sidebar-only — they never enter the main strip.
-   */
-  openUrlInSidebar(url: string): void {
-    const existing = this._findBrowserEntryByUrl(url);
-    if (existing) {
-      this.activeSidebarTabId = existing.tabId;
-      return;
-    }
-    const tab = new BrowserTabStore(url);
-    this.entries.set(tab.tabId, tab);
-    this.sidebarTabIds.push(tab.tabId);
-    this.activeSidebarTabId = tab.tabId;
-  }
-
   openFilePreview(path: string): void {
     // Top level has no preview semantics yet (Phase 2b) — open as a full tab.
     if (this._forwardToTopLevel({ kind: 'file', path })) return;
@@ -863,12 +828,6 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
    * it — closing a pin shouldn't yank the main area away from its current tab.
    */
   moveSidebarTabBack(tabId: string): void {
-    // Browser tabs are sidebar-only (the main area has no webview host) —
-    // "moving back" means closing.
-    if (this.entries.get(tabId)?.kind === 'browser') {
-      this._removeTab(tabId);
-      return;
-    }
     if (!this._unpinSidebarTab(tabId)) return;
     if (!this.entries.has(tabId)) return;
     addTabId(this, tabId);
@@ -950,6 +909,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       this.activeSidebarTabId = undefined;
       for (const t of snapshot.tabs) {
         const entry = this._entryFromDescriptor(t);
+        if (!entry) continue;
         this.entries.set(entry.tabId, entry);
         this.tabOrder.push(entry.tabId);
       }
@@ -957,6 +917,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       const pinned = snapshot.sidebarTabs ?? (snapshot.sidePaneTab ? [snapshot.sidePaneTab] : []);
       for (const t of pinned) {
         const entry = this._entryFromDescriptor(t);
+        if (!entry) continue;
         this.entries.set(entry.tabId, entry);
         this.sidebarTabIds.push(entry.tabId);
       }
@@ -1048,16 +1009,6 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
         isActive,
       };
     }
-    if (entry.kind === 'browser') {
-      return {
-        kind: 'browser',
-        tabId: entry.tabId,
-        url: entry.url,
-        title: entry.title,
-        isPreview: false,
-        isActive,
-      };
-    }
     const bufferUri = buildMonacoModelPath(this.modelRootPath, entry.path);
     return {
       kind: 'file',
@@ -1094,18 +1045,15 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
         isPreview: entry.isPreview,
       };
     }
-    if (entry.kind === 'browser') {
-      return { kind: 'browser', tabId: entry.tabId, url: entry.url, isPreview: false };
-    }
     return { kind: 'file', tabId: entry.tabId, path: entry.path, isPreview: entry.isPreview };
   }
 
-  private _entryFromDescriptor(t: TabDescriptor): TabEntry {
+  private _entryFromDescriptor(t: TabDescriptor): TabEntry | null {
+    // Tolerate stale descriptors from retired tab kinds (e.g. the short-lived
+    // pinned 'browser' tabs) — skip instead of mis-restoring as a file tab.
+    if (t.kind !== 'conversation' && t.kind !== 'diff' && t.kind !== 'file') return null;
     if (t.kind === 'conversation') {
       return new ConversationTabEntry(t.conversationId, t.isPreview, t.tabId);
-    }
-    if (t.kind === 'browser') {
-      return new BrowserTabStore(t.url, t.tabId);
     }
     if (t.kind === 'diff') {
       return new DiffTabStore(
@@ -1139,14 +1087,6 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     for (const id of this.tabOrder) {
       const entry = this.entries.get(id);
       if (entry?.kind === 'conversation' && entry.isPreview) return entry;
-    }
-    return undefined;
-  }
-
-  private _findBrowserEntryByUrl(url: string): BrowserTabStore | undefined {
-    for (const id of this._allTabIds()) {
-      const entry = this.entries.get(id);
-      if (entry?.kind === 'browser' && entry.url === url) return entry;
     }
     return undefined;
   }

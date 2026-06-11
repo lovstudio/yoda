@@ -4,6 +4,7 @@ export type SidebarTab =
   | 'conversations'
   | 'changes'
   | 'files'
+  | 'browser'
   | 'context'
   | 'hooks'
   | 'rename';
@@ -114,9 +115,14 @@ export function isSessionFamilyTab(tab: SidebarTab): boolean {
  * tabs. Each card is an independently addable/closable chip in the sidebar
  * strip (extensible later).
  */
-export type SidebarTabGroup = 'session' | 'changes' | 'files';
+export type SidebarTabGroup = 'session' | 'changes' | 'files' | 'browser';
 
-export const SIDEBAR_TAB_GROUPS: readonly SidebarTabGroup[] = ['session', 'changes', 'files'];
+export const SIDEBAR_TAB_GROUPS: readonly SidebarTabGroup[] = [
+  'session',
+  'changes',
+  'files',
+  'browser',
+];
 
 export function isSidebarTabGroup(value: unknown): value is SidebarTabGroup {
   return SIDEBAR_TAB_GROUPS.includes(value as SidebarTabGroup);
@@ -124,7 +130,7 @@ export function isSidebarTabGroup(value: unknown): value is SidebarTabGroup {
 
 /** Which sidebar tab group a (legacy) sidebar tab belongs to. */
 export function sidebarGroupForTab(tab: SidebarTab): SidebarTabGroup {
-  if (tab === 'changes' || tab === 'files') return tab;
+  if (tab === 'changes' || tab === 'files' || tab === 'browser') return tab;
   return 'session';
 }
 
