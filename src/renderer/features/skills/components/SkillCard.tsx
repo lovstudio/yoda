@@ -65,22 +65,29 @@ const SkillCard: React.FC<SkillCardProps> = ({ skill, usage, onSelect, onInstall
         )}
       </div>
 
-      {/* Usage */}
-      {usage && usage.total > 0 && (
-        <span
-          className="flex shrink-0 items-center gap-1 self-center text-[11px] tabular-nums text-muted-foreground"
-          title={t('skills.usageTitle', { manual: usage.manual, auto: usage.auto })}
-        >
-          <ChartNoAxesColumn className="h-3 w-3" />
-          {usage.total}
-        </span>
+      {/* Usage / edit affordance — for installed skills the hover pen swaps
+          into the stat slot in place (stacked grid keeps the width stable) */}
+      {(skill.installed || (usage && usage.total > 0)) && (
+        <div className="grid shrink-0 place-items-center self-center">
+          {usage && usage.total > 0 && (
+            <span
+              className={cn(
+                'col-start-1 row-start-1 flex items-center gap-1 text-[11px] tabular-nums text-muted-foreground',
+                skill.installed && 'transition-opacity group-hover:opacity-0'
+              )}
+              title={t('skills.usageTitle', { manual: usage.manual, auto: usage.auto })}
+            >
+              <ChartNoAxesColumn className="h-3 w-3" />
+              {usage.total}
+            </span>
+          )}
+          {skill.installed && (
+            <Pencil className="col-start-1 row-start-1 h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+          )}
+        </div>
       )}
-
-      {/* Action */}
-      <div className="shrink-0 self-center">
-        {skill.installed ? (
-          <Pencil className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-        ) : (
+      {!skill.installed && (
+        <div className="shrink-0 self-center">
           <button
             type="button"
             onClick={(e) => {
@@ -92,8 +99,8 @@ const SkillCard: React.FC<SkillCardProps> = ({ skill, usage, onSelect, onInstall
           >
             <Plus className="h-4 w-4" />
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </motion.div>
   );
 };
