@@ -1,7 +1,7 @@
 import type { Terminal } from '@xterm/xterm';
 import { Check, ChevronDown, MessageSquareText, MoreHorizontal, Sparkles } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ClaudeSessionPrompt } from '@shared/conversations';
 import {
@@ -65,23 +65,75 @@ export const SessionStatusBar = observer(function SessionStatusBar({
   // never spawns work.
   const summary = useSessionSummary(active && source === 'summary', 'recent');
   const prompts = useSessionPrompts(active && source === 'recentPrompt');
+  const jumpToPrompt = usePromptTerminalJump(prompts);
 
   if (source === 'off') return null;
 
   const content = resolveContent(source, { summary, prompts, t });
   if (!content.hasConversation) return null;
 
+  // The bar itself always shows the newest prompt; the blind above it only
+  // unfolds the OLDER ones, stacked oldest-to-newest so the bar reads as the
+  // bottom entry of the list.
+  const isPromptSource = source === 'recentPrompt';
+  const olderPrompts = isPromptSource ? prompts.prompts.slice(0, -1) : [];
+  const expanded =
+    isPromptSource && taskSettings.statusBarPromptsExpanded && olderPrompts.length > 0;
+
+  const handlePromptBarClick = () => {
+    if (olderPrompts.length === 0) {
+      // Single prompt: nothing to unfold — jump straight to it.
+      const latest = prompts.prompts[prompts.prompts.length - 1];
+      if (latest) jumpToPrompt(latest, prompts.prompts.length);
+      return;
+    }
+    taskSettings.updateStatusBarPromptsExpanded(!taskSettings.statusBarPromptsExpanded);
+  };
+
   return (
     <section className="group/status relative min-w-0 shrink-0 bg-[var(--xterm-bg)]">
       <div aria-hidden className="h-0.5 bg-[var(--xterm-bg)]" />
+      {olderPrompts.length > 0 ? (
+        // In-flow blind: animating the grid row pushes the terminal above it
+        // up/down instead of overlaying it.
+        <div
+          className={cn(
+            'grid transition-[grid-template-rows] duration-200',
+            expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <PromptHistoryRows
+              prompts={olderPrompts}
+              head={taskSettings.statusBarPromptHead}
+              tail={taskSettings.statusBarPromptTail}
+              onJump={jumpToPrompt}
+              onOpenAll={prompts.openPromptsModal}
+            />
+          </div>
+        </div>
+      ) : null}
       <div className="relative flex h-7 w-full min-w-0 items-center border-t border-foreground/10 bg-[var(--xterm-bg)] px-9">
         <SourceSwitcher
           source={source}
           onSelect={(next) => taskSettings.updateStatusBarSource(next)}
           className="absolute inset-y-0 left-1.5 flex items-center"
         />
-        {source === 'recentPrompt' && prompts.hasPrompts ? (
-          <PromptHistoryBlind prompts={prompts} body={content.body} label={content.tooltip} />
+        {isPromptSource && prompts.hasPrompts ? (
+          <button
+            type="button"
+            onClick={handlePromptBarClick}
+            className="flex min-w-0 flex-1 items-center justify-center"
+            aria-label={content.tooltip}
+            aria-expanded={expanded}
+          >
+            <span
+              className={cn(BODY_CLASS, 'transition-opacity hover:opacity-100')}
+              title={content.body}
+            >
+              {content.body}
+            </span>
+          </button>
         ) : (
           <Tooltip>
             <TooltipTrigger
@@ -150,52 +202,17 @@ function resolveContent(
 }
 
 /**
- * The latest-prompt body as a blind toggle: clicking slides the OLDER prompts
- * out above the bar (first/last few, middle elided), stacked oldest-to-newest
- * so the bar itself remains the newest entry at the bottom. Clicking a row
- * scrolls the terminal to where that prompt was submitted; the elided-middle
- * row opens the full history modal. The blind overlays the terminal instead of
- * resizing it.
+ * Resolves the active conversation's terminal and returns a jump function that
+ * scrolls it to where a given prompt was submitted.
  */
-const PromptHistoryBlind = observer(function PromptHistoryBlind({
-  prompts,
-  body,
-  label,
-}: {
-  prompts: ReturnType<typeof useSessionPrompts>;
-  body: string;
-  label: string;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+function usePromptTerminalJump(prompts: ReturnType<typeof useSessionPrompts>) {
   const provisionedTask = useProvisionedTask();
   const conversation = getTaskMenuConversation(provisionedTask);
   const terminal = conversation
     ? provisionedTask.conversations.conversations.get(conversation.id)?.session.pty?.terminal
     : undefined;
 
-  // The bar already shows the newest prompt; the blind only reveals the rest.
-  const olderPrompts = prompts.prompts.slice(0, -1);
-  const items = buildPromptPreviewItems(olderPrompts);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown, true);
-    document.addEventListener('keydown', onKeyDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-      document.removeEventListener('keydown', onKeyDown, true);
-    };
-  }, [open]);
-
-  const scrollToPrompt = (prompt: ClaudeSessionPrompt, promptIndex: number) => {
+  return (prompt: ClaudeSessionPrompt, promptIndex: number) => {
     if (!terminal) return;
     // Repeated prompts produce identical buffer matches — pick the occurrence
     // matching this prompt's position in the history.
@@ -205,62 +222,52 @@ const PromptHistoryBlind = observer(function PromptHistoryBlind({
       .filter((p) => firstPromptLine(p.text) === line).length;
     scrollTerminalToPromptText(terminal, line, occurrence);
   };
+}
 
-  const handleBarClick = () => {
-    if (olderPrompts.length === 0) {
-      // Single prompt: nothing to unfold — jump straight to it.
-      const latest = prompts.prompts[prompts.prompts.length - 1];
-      if (latest) scrollToPrompt(latest, prompts.prompts.length);
-      return;
-    }
-    setOpen((prev) => !prev);
-  };
-
+/**
+ * The unfolded prompt history above the bar: first `head` / last `tail`
+ * prompts with the middle elided. Clicking a row scrolls the terminal to that
+ * prompt; the elided-middle row opens the full history modal.
+ */
+function PromptHistoryRows({
+  prompts,
+  head,
+  tail,
+  onJump,
+  onOpenAll,
+}: {
+  prompts: ClaudeSessionPrompt[];
+  head: number;
+  tail: number;
+  onJump: (prompt: ClaudeSessionPrompt, promptIndex: number) => void;
+  onOpenAll: () => void;
+}) {
+  const { t } = useTranslation();
+  const items = buildPromptPreviewItems(prompts, head, tail);
   return (
-    <div ref={containerRef} className="flex min-w-0 flex-1">
-      <button
-        type="button"
-        onClick={handleBarClick}
-        className="flex min-w-0 flex-1 items-center justify-center"
-        aria-label={label}
-        aria-expanded={open}
-      >
-        <span className={cn(BODY_CLASS, 'transition-opacity hover:opacity-100')} title={body}>
-          {body}
-        </span>
-      </button>
-      {open ? (
-        // Outer layer clips so the list appears to slide up from behind the bar.
-        <div className="absolute inset-x-0 bottom-full z-20 overflow-hidden">
-          <div className="flex flex-col border-t border-foreground/10 bg-[var(--xterm-bg)] py-0.5 shadow-[0_-10px_24px_-16px_rgba(0,0,0,0.5)] duration-150 animate-in fade-in-0 slide-in-from-bottom-[100%]">
-            {items.map((item) =>
-              item.type === 'truncated' ? (
-                <button
-                  key="truncated"
-                  type="button"
-                  className="flex h-6 w-full items-center justify-center gap-1.5 text-[11px] leading-5 text-[var(--xterm-fg)] opacity-45 transition-opacity hover:opacity-100"
-                  onClick={() => {
-                    setOpen(false);
-                    prompts.openPromptsModal();
-                  }}
-                >
-                  <MoreHorizontal className="size-3" />
-                  {t('tasks.sessionInfo.truncatedPrompts', { count: item.hiddenCount })}
-                </button>
-              ) : (
-                <BlindPromptRow
-                  key={item.prompt.id || `prompt-${item.promptIndex}`}
-                  prompt={item.prompt}
-                  onClick={() => scrollToPrompt(item.prompt, item.promptIndex)}
-                />
-              )
-            )}
-          </div>
-        </div>
-      ) : null}
+    <div className="flex flex-col border-t border-foreground/10 py-0.5">
+      {items.map((item) =>
+        item.type === 'truncated' ? (
+          <button
+            key="truncated"
+            type="button"
+            className="flex h-6 w-full items-center justify-center gap-1.5 text-[11px] leading-5 text-[var(--xterm-fg)] opacity-45 transition-opacity hover:opacity-100"
+            onClick={onOpenAll}
+          >
+            <MoreHorizontal className="size-3" />
+            {t('tasks.sessionInfo.truncatedPrompts', { count: item.hiddenCount })}
+          </button>
+        ) : (
+          <BlindPromptRow
+            key={item.prompt.id || `prompt-${item.promptIndex}`}
+            prompt={item.prompt}
+            onClick={() => onJump(item.prompt, item.promptIndex)}
+          />
+        )
+      )}
     </div>
   );
-});
+}
 
 /** One older prompt inside the blind, styled like a dimmer copy of the bar. */
 function BlindPromptRow({ prompt, onClick }: { prompt: ClaudeSessionPrompt; onClick: () => void }) {

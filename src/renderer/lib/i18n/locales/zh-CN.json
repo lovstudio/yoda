@@ -460,6 +460,12 @@
       "summaryLanguageLabel": "摘要语言",
       "statusBarSourceLabel": "状态栏",
       "statusBarSourceHint": "终端下方那条显示什么。选「隐藏」即可隐藏它。",
+      "statusBarPromptEdgesLabel": "展开历史行数",
+      "statusBarPromptEdgesHint": "展开时显示最早 / 最近各几条 prompt，中间省略。",
+      "statusBarPrompt": {
+        "head": "开头",
+        "tail": "结尾"
+      },
       "summaryContext": {
         "recentLabel": "近期摘要输入",
         "globalLabel": "全局摘要输入",

@@ -1,5 +1,8 @@
 import {
+  clampStatusBarPromptEdge,
   DEFAULT_SESSION_STATUS_BAR_SOURCE,
+  DEFAULT_STATUS_BAR_PROMPT_HEAD,
+  DEFAULT_STATUS_BAR_PROMPT_TAIL,
   type SessionStatusBarSource,
 } from '@shared/session-status-bar';
 import {
@@ -16,6 +19,9 @@ export interface TaskSettingsModel {
   summaryAgentId: string;
   summaryLanguage: 'app' | 'prompt' | 'en' | 'zh-CN';
   statusBarSource: SessionStatusBarSource;
+  statusBarPromptsExpanded: boolean;
+  statusBarPromptHead: number;
+  statusBarPromptTail: number;
   summaryContextRecent: SummaryContext;
   summaryContextGlobal: SummaryContext;
   namingModel: string;
@@ -47,6 +53,8 @@ export interface TaskSettingsModel {
   updateSummaryAgentId: (next: string) => void;
   updateSummaryLanguage: (next: 'app' | 'prompt' | 'en' | 'zh-CN') => void;
   updateStatusBarSource: (next: SessionStatusBarSource) => void;
+  updateStatusBarPromptsExpanded: (next: boolean) => void;
+  updateStatusBarPromptEdges: (next: { head?: number; tail?: number }) => void;
   updateSummaryContext: (scope: 'recent' | 'global', next: Partial<SummaryContext>) => void;
   updateNamingLanguage: (next: 'app' | 'prompt' | 'en' | 'zh-CN') => void;
   updateNamingContext: (next: Partial<TaskSettingsModel['namingContext']>) => void;
@@ -73,6 +81,9 @@ export function useTaskSettings(): TaskSettingsModel {
     summaryAgentId: tasks?.summaryAgentId ?? '',
     summaryLanguage: tasks?.summaryLanguage ?? 'app',
     statusBarSource: tasks?.statusBarSource ?? DEFAULT_SESSION_STATUS_BAR_SOURCE,
+    statusBarPromptsExpanded: tasks?.statusBarPromptsExpanded ?? false,
+    statusBarPromptHead: tasks?.statusBarPromptHead ?? DEFAULT_STATUS_BAR_PROMPT_HEAD,
+    statusBarPromptTail: tasks?.statusBarPromptTail ?? DEFAULT_STATUS_BAR_PROMPT_TAIL,
     summaryContextRecent: tasks?.summaryContextRecent ?? DEFAULT_SUMMARY_CONTEXT_RECENT,
     summaryContextGlobal: tasks?.summaryContextGlobal ?? DEFAULT_SUMMARY_CONTEXT_GLOBAL,
     namingModel: tasks?.namingModel ?? '',
@@ -94,6 +105,26 @@ export function useTaskSettings(): TaskSettingsModel {
     updateSummaryAgentId: (next) => update({ summaryAgentId: next }),
     updateSummaryLanguage: (next) => update({ summaryLanguage: next }),
     updateStatusBarSource: (next) => update({ statusBarSource: next }),
+    updateStatusBarPromptsExpanded: (next) => update({ statusBarPromptsExpanded: next }),
+    updateStatusBarPromptEdges: (next) =>
+      update({
+        ...(next.head === undefined
+          ? {}
+          : {
+              statusBarPromptHead: clampStatusBarPromptEdge(
+                next.head,
+                DEFAULT_STATUS_BAR_PROMPT_HEAD
+              ),
+            }),
+        ...(next.tail === undefined
+          ? {}
+          : {
+              statusBarPromptTail: clampStatusBarPromptEdge(
+                next.tail,
+                DEFAULT_STATUS_BAR_PROMPT_TAIL
+              ),
+            }),
+      }),
     updateSummaryContext: (scope, next) => {
       const key = scope === 'recent' ? 'summaryContextRecent' : 'summaryContextGlobal';
       const base =

@@ -460,6 +460,12 @@
       "summaryLanguageLabel": "Summary language",
       "statusBarSourceLabel": "Status bar",
       "statusBarSourceHint": "What the strip below the terminal shows. Choose \"Hidden\" to hide it.",
+      "statusBarPromptEdgesLabel": "Expanded history rows",
+      "statusBarPromptEdgesHint": "How many oldest / newest prompts the expanded bar shows; the middle is elided.",
+      "statusBarPrompt": {
+        "head": "First",
+        "tail": "Last"
+      },
       "summaryContext": {
         "recentLabel": "Recent summary inputs",
         "globalLabel": "Global summary inputs",

@@ -15,10 +15,11 @@ export type PromptPreviewItem =
 
 export function buildPromptPreviewItems(
   prompts: ClaudeSessionPrompt[],
-  edgeCount = PROMPT_PREVIEW_EDGE_COUNT
+  headCount = PROMPT_PREVIEW_EDGE_COUNT,
+  tailCount = headCount
 ): PromptPreviewItem[] {
-  const visibleLimit = edgeCount * 2;
-  if (edgeCount <= 0 || prompts.length <= visibleLimit) {
+  const visibleLimit = Math.max(0, headCount) + Math.max(0, tailCount);
+  if (visibleLimit <= 0 || prompts.length <= visibleLimit) {
     return prompts.map((prompt, index) => ({
       type: 'prompt',
       prompt,
@@ -26,12 +27,12 @@ export function buildPromptPreviewItems(
     }));
   }
 
-  const head = prompts.slice(0, edgeCount).map((prompt, index) => ({
+  const head = prompts.slice(0, Math.max(0, headCount)).map((prompt, index) => ({
     type: 'prompt' as const,
     prompt,
     promptIndex: index + 1,
   }));
-  const tailStartIndex = prompts.length - edgeCount;
+  const tailStartIndex = prompts.length - Math.max(0, tailCount);
   const tail = prompts.slice(tailStartIndex).map((prompt, index) => ({
     type: 'prompt' as const,
     prompt,
