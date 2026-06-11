@@ -1212,6 +1212,7 @@
         "switchSource": "Change what this bar shows",
         "recentPromptTooltip": "Your latest prompt in this session — click to expand history",
         "recentPromptEmpty": "No prompt yet",
+        "collapseHistory": "Collapse prompt history",
         "source": {
           "summary": "Recent summary",
           "recentPrompt": "Latest prompt",

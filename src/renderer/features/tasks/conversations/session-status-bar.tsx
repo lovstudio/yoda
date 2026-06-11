@@ -1,4 +1,12 @@
-import { Check, MessageSquareText, MoreHorizontal, Settings2, Sparkles } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  MessageSquareText,
+  MoreHorizontal,
+  Settings2,
+  Sparkles,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -38,6 +46,15 @@ const SOURCE_ICONS: Record<Exclude<SessionStatusBarSource, 'off'>, React.ReactNo
 
 const BODY_CLASS =
   'min-w-0 truncate text-left text-[13px] leading-5 text-[var(--xterm-fg)] opacity-75';
+
+/** Small solid-background chip so an affordance icon stays readable over text. */
+function AffordanceChip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="flex h-5 items-center justify-center rounded-sm bg-[var(--xterm-bg)] px-1.5 text-[var(--xterm-fg)] ring-1 ring-foreground/15">
+      {children}
+    </span>
+  );
+}
 
 /**
  * The strip below the terminal. Shows ONE configurable content source at a
@@ -84,7 +101,7 @@ export const SessionStatusBar = observer(function SessionStatusBar({
             expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
           )}
         >
-          <div className="min-h-0 overflow-hidden">
+          <div className="relative min-h-0 overflow-hidden">
             <PromptHistoryRows
               prompts={olderPrompts}
               head={taskSettings.statusBarPromptHead}
@@ -92,6 +109,18 @@ export const SessionStatusBar = observer(function SessionStatusBar({
               tail={taskSettings.statusBarPromptTail - 1}
               onOpenAll={prompts.openPromptsModal}
             />
+            {/* Collapse affordance: centered on the topmost row, hover-revealed. */}
+            <button
+              type="button"
+              onClick={() => taskSettings.updateStatusBarPromptsExpanded(false)}
+              className="absolute left-1/2 top-1 z-10 -translate-x-1/2 opacity-0 transition-opacity group-hover/status:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+              aria-label={t('tasks.sessionPanel.statusBar.collapseHistory')}
+              title={t('tasks.sessionPanel.statusBar.collapseHistory')}
+            >
+              <AffordanceChip>
+                <ChevronDown className="size-3" />
+              </AffordanceChip>
+            </button>
           </div>
         </div>
       ) : null}
@@ -109,7 +138,7 @@ export const SessionStatusBar = observer(function SessionStatusBar({
             onClick={() =>
               taskSettings.updateStatusBarPromptsExpanded(!taskSettings.statusBarPromptsExpanded)
             }
-            className="flex min-w-0 flex-1 items-center justify-start"
+            className="relative flex min-w-0 flex-1 items-center justify-start"
             aria-label={content.tooltip}
             aria-expanded={expanded}
           >
@@ -119,6 +148,17 @@ export const SessionStatusBar = observer(function SessionStatusBar({
             >
               {content.body}
             </span>
+            {!expanded ? (
+              // Expand affordance: centered on the bar, hover-revealed.
+              <span
+                aria-hidden
+                className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/status:opacity-100"
+              >
+                <AffordanceChip>
+                  <ChevronUp className="size-3" />
+                </AffordanceChip>
+              </span>
+            ) : null}
           </button>
         ) : (
           <Tooltip>
