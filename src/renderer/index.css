@@ -224,15 +224,15 @@
   }
 
   .ydark {
-    --background: color(display-p3 0.067 0.067 0.067);
-    --background-1: color(display-p3 0.098 0.098 0.098);
-    --background-2: color(display-p3 0.135 0.135 0.135);
-    --background-3: color(display-p3 0.163 0.163 0.163);
+    --background: #111111;
+    --background-1: #171717;
+    --background-2: #1e1e1d;
+    --background-3: #262624;
 
-    --foreground: color(display-p3 0.933 0.933 0.933);
-    --foreground-inverse: color(display-p3 0.067 0.067 0.067);
-    --foreground-muted: color(display-p3 0.706 0.706 0.706);
-    --foreground-passive: color(display-p3 0.431 0.431 0.431);
+    --foreground: #e9e9e6;
+    --foreground-inverse: #111111;
+    --foreground-muted: #8c8c86;
+    --foreground-passive: #5e5e59;
 
     --background-secondary: var(--background);
     --background-secondary-1: var(--background-1);
@@ -256,69 +256,69 @@
     --background-quaternary-1: var(--background-2);
     --background-quaternary-2: var(--background-3);
 
-    --background-destructive: color(display-p3 0.211 0.081 0.099);
-    --background-destructive-1: color(display-p3 0.25 0.102 0.122);
-    --foreground-destructive: color(display-p3 0.83 0.329 0.324);
-    --foreground-destructive-muted: color(display-p3 0.661 0.263 0.26);
+    --background-destructive: #432723;
+    --background-destructive-1: #4f2c28;
+    --foreground-destructive: #e06c5e;
+    --foreground-destructive-muted: #c87569;
 
-    --background-neutral: color(display-p3 0.933 0.933 0.933);
-    --foreground-neutral: color(display-p3 0.067 0.067 0.067);
+    --background-neutral: #e9e9e6;
+    --foreground-neutral: #111111;
 
-    --primary-button-background: color(display-p3 0.102 0.228 0.177);
-    --primary-button-background-hover: color(display-p3 0.133 0.279 0.221);
-    --primary-button-foreground: color(display-p3 0.734 0.934 0.838);
-    --primary-button-border: color(display-p3 0.219 0.402 0.335);
+    --primary-button-background: #7fe0a7;
+    --primary-button-background-hover: #93eab6;
+    --primary-button-foreground: #0e1f16;
+    --primary-button-border: #5ec98f;
 
-    --border: color(display-p3 0.228 0.228 0.228);
-    --border-1: color(display-p3 0.283 0.283 0.283);
-    --border-2: color(display-p3 0.375 0.375 0.375);
-    --border-destructive: color(display-p3 0.659 0.298 0.297);
-    --border-primary: color(display-p3 0.553 0.553 0.553);
+    --border: #262624;
+    --border-1: #31312e;
+    --border-2: #403f3b;
+    --border-destructive: #9f544a;
+    --border-primary: #403f3b;
 
-    --ring: hsl(0 0% 3.9%);
+    --ring: #403f3b;
     --radius: 0.5rem;
 
-    --selection: color(display-p3 0.709 0.843 0.976);
-    --selection-foreground: color(display-p3 0.102 0.193 0.379);
+    --selection: #4e8364;
+    --selection-foreground: #e9e9e6;
 
-    --status-in-progress: color(display-p3 0.64 0.4 0);
-    --status-in-review: color(display-p3 0.344 0.598 0.342);
-    --status-done: color(display-p3 0.553 0.553 0.553);
-    --status-todo: color(display-p3 0.553 0.553 0.553);
-    --status-cancelled: color(display-p3 0.553 0.553 0.553);
+    --status-in-progress: #c9a227;
+    --status-in-review: #6ac08a;
+    --status-done: #7a7a74;
+    --status-todo: #7a7a74;
+    --status-cancelled: #66665f;
 
     /* Monaco editor */
-    --monaco-bg: color(display-p3 0.098 0.098 0.098);
-    --monaco-fg: color(display-p3 0.706 0.706 0.706);
-    --monaco-error-fg: color(display-p3 1 0.592 0.49);
+    --monaco-bg: var(--background-1);
+    --monaco-fg: #8c8c86;
+    --monaco-error-fg: #e06c5e;
 
-    --monaco-line-highlight: color(display-p3 0.192 0.192 0.192);
-    --monaco-line-number: color(display-p3 0.227 0.227 0.227);
+    --monaco-line-highlight: #1e1e1d;
+    --monaco-line-number: #5e5e59;
     --monaco-gutter: var(--monaco-bg);
-    --monaco-inserted-text-bg: color(display-p3 0.145 0.282 0.176);
-    --monaco-inserted-line-bg: color(display-p3 0.106 0.165 0.118);
-    --monaco-inserted-text-border: color(display-p3 0.145 0.282 0.176);
-    --monaco-removed-text-bg: color(display-p3 0.38 0.086 0.137);
-    --monaco-removed-line-bg: color(display-p3 0.231 0.071 0.098);
-    --monaco-removed-text-border: color(display-p3 0.38 0.086 0.137);
-    --monaco-unchanged-region-bg: color(display-p3 0.165 0.165 0.165);
-    --monaco-diff-border: color(display-p3 0.227 0.227 0.227);
-    --monaco-diff-diagonal-fill: color(display-p3 0.165 0.165 0.165);
-    --monaco-selection-bg: color(display-p3 0 0.2 0.384);
-    --monaco-selection-fg: color(display-p3 0.439 0.722 1);
-    --monaco-inactive-selection-bg: color(display-p3 1 1 1 / 0.133);
+    --monaco-inserted-text-bg: rgba(94, 201, 143, 0.32);
+    --monaco-inserted-line-bg: rgba(94, 201, 143, 0.14);
+    --monaco-inserted-text-border: rgba(94, 201, 143, 0.45);
+    --monaco-removed-text-bg: rgba(224, 108, 94, 0.34);
+    --monaco-removed-line-bg: rgba(224, 108, 94, 0.16);
+    --monaco-removed-text-border: rgba(224, 108, 94, 0.45);
+    --monaco-unchanged-region-bg: #1e1e1d;
+    --monaco-diff-border: #262624;
+    --monaco-diff-diagonal-fill: #1e1e1d;
+    --monaco-selection-bg: #4e8364;
+    --monaco-selection-fg: #e9e9e6;
+    --monaco-inactive-selection-bg: rgba(233, 233, 230, 0.16);
 
     /* xterm terminals */
     --xterm-bg: var(--background-1);
     --xterm-fg: var(--foreground);
     --xterm-cursor: var(--foreground);
     --xterm-cursor-accent: var(--background-1);
-    --xterm-selection-bg: color(display-p3 0.033 0.197 0.37);
-    --xterm-selection-fg: color(display-p3 0.49 0.72 1);
+    --xterm-selection-bg: #4e8364;
+    --xterm-selection-fg: #e9e9e6;
 
-    --foreground-diff-added: color(display-p3 0.426 0.694 0.426);
-    --foreground-diff-modified: color(display-p3 1 0.77 0.26);
-    --foreground-diff-deleted: color(display-p3 0.83 0.329 0.324);
+    --foreground-diff-added: #5ec98f;
+    --foreground-diff-modified: #c9a227;
+    --foreground-diff-deleted: #e06c5e;
   }
 }
 

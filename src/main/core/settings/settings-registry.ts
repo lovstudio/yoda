@@ -71,7 +71,12 @@ export const SETTINGS_DEFAULTS = {
     autoCopyOnSelection: true,
     scrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
   },
-  theme: null,
+  // Fresh installs boot into the brand theme; null = explicit follow-system.
+  theme: 'ygreen' as const,
+  systemThemes: {
+    light: 'ylight' as const,
+    dark: 'ydark' as const,
+  },
   customThemes: {
     items: [],
   },

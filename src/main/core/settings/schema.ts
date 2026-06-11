@@ -171,19 +171,29 @@ export const terminalSettingsSchema = z.object({
 });
 
 const legacyThemeSchema = z
-  .enum(['ylight', 'ydark', 'ywarm', 'emlight', 'emdark'])
+  .enum(['ylight', 'ydark', 'ywarm', 'ygreen', 'ylight2', 'ymatrix', 'emlight', 'emdark'])
   .transform((value) => {
     if (value === 'emlight') return 'ylight' as const;
     if (value === 'emdark') return 'ydark' as const;
+    // 'ymatrix' graduated into the ydark base palette.
+    if (value === 'ymatrix') return 'ydark' as const;
     return value;
   });
 
-export const themeSchema = z
-  .union([legacyThemeSchema, customThemeSelectionSchema])
-  .nullable()
-  .catch(null)
-  .optional()
-  .default(null);
+const themeSelectionSchema = z.union([legacyThemeSchema, customThemeSelectionSchema]);
+
+// Default for fresh installs is Yoda Green (the brand theme). `null` remains
+// the explicit "follow system" choice.
+export const themeSchema = themeSelectionSchema.nullable().catch('ygreen').default('ygreen');
+
+/** Which theme each system appearance maps to when "follow system" is active. */
+export const systemThemesSchema = z
+  .object({
+    light: themeSelectionSchema.catch('ylight'),
+    dark: themeSelectionSchema.catch('ydark'),
+  })
+  .catch({ light: 'ylight', dark: 'ydark' })
+  .default({ light: 'ylight', dark: 'ydark' });
 
 export const defaultRuntimeSchema = z.optional(z.enum(RUNTIME_IDS)).default(DEFAULT_RUNTIME_ID);
 
@@ -381,6 +391,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   keyboard: keyboardSettingsSchema,
   notifications: notificationSettingsSchema,
   theme: themeSchema,
+  systemThemes: systemThemesSchema,
   openIn: openInSettingsSchema,
   interface: interfaceSettingsSchema,
   terminal: terminalSettingsSchema,
@@ -403,6 +414,7 @@ export const appSettingsSchema = z.object({
   keyboard: keyboardSettingsSchema,
   notifications: notificationSettingsSchema,
   theme: themeSchema,
+  systemThemes: systemThemesSchema,
   openIn: openInSettingsSchema,
   interface: interfaceSettingsSchema,
   terminal: terminalSettingsSchema,

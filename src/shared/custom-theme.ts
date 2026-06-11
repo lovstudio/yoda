@@ -4,7 +4,10 @@ export const CUSTOM_THEME_SCHEMA_VERSION = 1;
 export const CUSTOM_THEME_SELECTION_PREFIX = 'custom:';
 export const CUSTOM_THEME_EXAMPLE_FILE_NAME = 'yoda-theme-example.json';
 
-export type BuiltInTheme = 'ylight' | 'ydark' | 'ywarm';
+export type BuiltInTheme = 'ylight' | 'ydark' | 'ywarm' | 'ygreen' | 'ylight2';
+
+/** A non-null theme selection, as stored in the system light/dark pair. */
+export type ResolvedThemeSelection = Exclude<ThemeSelection, null>;
 export type CustomThemeMode = 'light' | 'dark';
 export type CustomThemeSelection = `${typeof CUSTOM_THEME_SELECTION_PREFIX}${string}`;
 export type ThemeSelection = BuiltInTheme | CustomThemeSelection | null;
@@ -140,6 +143,77 @@ export const YODA_WARM_THEME: CustomTheme = {
     diffAdded: '#5f7f4f',
     diffModified: '#c29242',
     diffDeleted: '#c86655',
+  },
+};
+
+// Built-in "Yoda Green" palette — full phosphor CRT: green-tinted dark
+// backgrounds, not just green accents (those now live in the ydark base).
+// Selected via the 'ygreen' built-in theme and applied through the
+// custom-theme CSS var pipeline.
+export const YODA_GREEN_THEME: CustomTheme = {
+  schemaVersion: CUSTOM_THEME_SCHEMA_VERSION,
+  id: 'ygreen',
+  name: 'Yoda Green',
+  mode: 'dark',
+  colors: {
+    background: '#0b130e',
+    background1: '#101a13',
+    background2: '#15221a',
+    background3: '#1c2c21',
+    foreground: '#d9eadf',
+    foregroundMuted: '#8aa593',
+    foregroundPassive: '#5a7363',
+    border: '#1c2c21',
+    border1: '#27392c',
+    border2: '#344a3a',
+    primaryButtonBackground: '#5ecf95',
+    primaryButtonBackgroundHover: '#74dba6',
+    primaryButtonForeground: '#08130d',
+    primaryButtonBorder: '#46b87e',
+    statusInProgress: '#c9a227',
+    statusInReview: '#6cc0e0',
+    statusDone: '#6f8f7d',
+    statusTodo: '#6f8f7d',
+    statusCancelled: '#55695c',
+    diffAdded: '#54d68d',
+    diffModified: '#c9a227',
+    diffDeleted: '#e0705f',
+  },
+};
+
+// Built-in "Yoda Light II" palette — celadon paper: green-tinted whites with
+// the Yoda-green accent family, the light-mode counterpart of the ydark
+// phosphor base. A/B candidate against the neutral 'ylight'. Selected via the
+// 'ylight2' built-in theme and applied through the custom-theme CSS var
+// pipeline.
+export const YODA_LIGHT2_THEME: CustomTheme = {
+  schemaVersion: CUSTOM_THEME_SCHEMA_VERSION,
+  id: 'ylight2',
+  name: 'Yoda Light II',
+  mode: 'light',
+  colors: {
+    background: '#f5f7f3',
+    background1: '#eef1ea',
+    background2: '#e4e9e0',
+    background3: '#d7ded2',
+    foreground: '#1c1f1b',
+    foregroundMuted: '#5c655c',
+    foregroundPassive: '#98a195',
+    border: '#d7ded2',
+    border1: '#c2cbbc',
+    border2: '#a0ab99',
+    primaryButtonBackground: '#2f9e63',
+    primaryButtonBackgroundHover: '#288a56',
+    primaryButtonForeground: '#ffffff',
+    primaryButtonBorder: '#288a56',
+    statusInProgress: '#9a6700',
+    statusInReview: '#2f7d8f',
+    statusDone: '#6b7268',
+    statusTodo: '#6b7268',
+    statusCancelled: '#98a195',
+    diffAdded: '#2f8f57',
+    diffModified: '#b7791f',
+    diffDeleted: '#c2473d',
   },
 };
 

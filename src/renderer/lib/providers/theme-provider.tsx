@@ -1,6 +1,11 @@
-import { createContext, useEffect, useLayoutEffect, type ReactNode } from 'react';
+import { createContext, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import type { Theme } from '@shared/app-settings';
-import { findCustomTheme, YODA_WARM_THEME } from '@shared/custom-theme';
+import {
+  findCustomTheme,
+  YODA_GREEN_THEME,
+  YODA_LIGHT2_THEME,
+  YODA_WARM_THEME,
+} from '@shared/custom-theme';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useLocalStorage } from '@renderer/lib/hooks/useLocalStorage';
 import { applyThemeToAll } from '@renderer/lib/pty/pty';
@@ -15,6 +20,20 @@ type EffectiveTheme = 'ylight' | 'ydark';
 function getSystemTheme(): EffectiveTheme {
   if (typeof window === 'undefined') return 'ylight';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'ydark' : 'ylight';
+}
+
+/** Built-in themes that ship as custom-theme overlays over the base classes. */
+function findBuiltInOverlay(selection: Theme) {
+  switch (selection) {
+    case 'ywarm':
+      return YODA_WARM_THEME;
+    case 'ygreen':
+      return YODA_GREEN_THEME;
+    case 'ylight2':
+      return YODA_LIGHT2_THEME;
+    default:
+      return undefined;
+  }
 }
 
 function applyTheme(effective: EffectiveTheme, customTheme?: ReturnType<typeof findCustomTheme>) {
@@ -51,21 +70,39 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const { value: themeValue, isLoading, update } = useAppSettingsKey('theme');
   const { value: customThemesValue, isLoading: customThemesLoading } =
     useAppSettingsKey('customThemes');
+  const { value: systemThemesValue, isLoading: systemThemesLoading } =
+    useAppSettingsKey('systemThemes');
   const [, setCachedTheme] = useLocalStorage<Theme>('yoda-theme', null);
+
+  // OS appearance, kept reactive so follow-system re-resolves on change.
+  const [systemMode, setSystemMode] = useState<EffectiveTheme>(getSystemTheme);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => setSystemMode(mq.matches ? 'ydark' : 'ylight');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const theme: Theme = themeValue ?? null;
   const customThemes = customThemesValue?.items ?? [];
+  const systemThemes = systemThemesValue ?? { light: 'ylight' as const, dark: 'ydark' as const };
+
+  // null = follow system: resolve through the configured light/dark pair.
+  const activeSelection: Theme =
+    theme ?? (systemMode === 'ydark' ? systemThemes.dark : systemThemes.light);
+
   const selectedCustomTheme =
-    theme === 'ywarm' ? YODA_WARM_THEME : findCustomTheme(customThemes, theme);
+    findBuiltInOverlay(activeSelection) ?? findCustomTheme(customThemes, activeSelection);
   const effectiveTheme: EffectiveTheme = selectedCustomTheme
     ? selectedCustomTheme.mode === 'dark'
       ? 'ydark'
       : 'ylight'
-    : theme === 'ylight' || theme === 'ydark'
-      ? theme
-      : getSystemTheme();
+    : activeSelection === 'ylight' || activeSelection === 'ydark'
+      ? activeSelection
+      : systemMode;
   const themeFingerprint = getCustomThemeFingerprint(selectedCustomTheme);
-  const isThemeLoading = isLoading || customThemesLoading;
+  const isThemeLoading = isLoading || customThemesLoading || systemThemesLoading;
 
   useLayoutEffect(() => {
     if (isThemeLoading) return;
@@ -76,21 +113,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (isThemeLoading) return;
     setCachedTheme(theme);
   }, [theme, isThemeLoading, setCachedTheme]);
-
-  // Subscribe to system color scheme changes when no explicit preference is set.
-  useEffect(() => {
-    if (theme !== null) return;
-
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => {
-      if (isThemeLoading) return;
-      const newEffective = mq.matches ? 'ydark' : 'ylight';
-      applyTheme(newEffective);
-      applyThemeToAll();
-    };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, [theme, isThemeLoading]);
 
   // Re-apply xterm theme after CSS classes have been updated by the effect above.
   useEffect(() => {

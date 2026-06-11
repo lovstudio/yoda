@@ -14,6 +14,7 @@ import {
   type runtimeModelCandidatesSettingsSchema,
   type statuslineSettingsSchema,
   type statuslineTemplateSchema,
+  type systemThemesSchema,
   type taskSettingsSchema,
   type terminalSettingsSchema,
 } from '@main/core/settings/schema';
@@ -32,6 +33,7 @@ export type TerminalSettings = z.infer<typeof terminalSettingsSchema>;
 export type StatuslineTemplate = z.infer<typeof statuslineTemplateSchema>;
 export type StatuslineSettings = z.infer<typeof statuslineSettingsSchema>;
 export type Theme = ThemeSelection;
+export type SystemThemes = z.infer<typeof systemThemesSchema>;
 export type { CustomTheme, CustomThemesSettings };
 
 export type InterfaceSettings = z.infer<typeof interfaceSettingsSchema>;
