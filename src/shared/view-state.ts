@@ -64,15 +64,18 @@ export interface ActiveFile {
   prNumber?: number;
 }
 
+export type BottomPanelTab = 'terminals' | 'scripts' | 'session';
+
 export type TaskViewSnapshot = {
   /** @deprecated Sidebar chrome is now stored globally in TaskSidebarViewSnapshot. */
   sidebarTab?: string;
   /** @deprecated Sidebar chrome is now stored globally in TaskSidebarViewSnapshot. */
   isSidebarCollapsed?: boolean;
   focusedRegion: 'main' | 'bottom';
+  /** @deprecated Bottom drawer chrome is now stored globally in TaskSidebarViewSnapshot. */
   isTerminalDrawerOpen?: boolean;
-  /** Which content the bottom drawer shows (terminals / scripts / session history). */
-  bottomPanelTab?: 'terminals' | 'scripts' | 'session';
+  /** @deprecated Bottom drawer chrome is now stored globally in TaskSidebarViewSnapshot. */
+  bottomPanelTab?: BottomPanelTab;
   tabManager?: TabManagerSnapshot;
   /** @deprecated Legacy field from before the unified tab refactor. Used only for migration. */
   conversations?: TabViewSnapshot;
@@ -93,6 +96,10 @@ export type TaskSidebarViewSnapshot = {
   sessionPanelHiddenUnits?: string[];
   /** Open ids for ad-hoc disclosures (`<details>`, group toggles) across panels. */
   disclosureOpenIds?: string[];
+  /** Whether the bottom drawer is open (global across tasks). */
+  isBottomPanelOpen?: boolean;
+  /** Which content the bottom drawer shows (terminals / scripts / session history). */
+  bottomPanelTab?: BottomPanelTab;
 };
 
 export type ProjectViewSnapshot = {

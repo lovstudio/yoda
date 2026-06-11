@@ -37,6 +37,7 @@ describe('TaskSidebarPreferenceStore', () => {
         isSidebarCollapsed: false,
         sessionPanelOpenSectionIds: ['conversation'],
         disclosureOpenIds: [],
+        isBottomPanelOpen: false,
       },
       { sidebarTab: 'changes', isSidebarCollapsed: true }
     );
@@ -66,6 +67,8 @@ describe('TaskSidebarPreferenceStore', () => {
       sessionPanelHiddenUnits: [],
       disclosureOpenIds: [],
       openSidebarGroups: [],
+      isBottomPanelOpen: false,
+      bottomPanelTab: 'terminals',
     });
     expect(mocks.save).not.toHaveBeenCalled();
   });
@@ -99,6 +102,8 @@ describe('TaskSidebarPreferenceStore', () => {
       sessionPanelHiddenUnits: [],
       disclosureOpenIds: [],
       openSidebarGroups: [],
+      isBottomPanelOpen: false,
+      bottomPanelTab: 'terminals',
     });
   });
 
@@ -140,6 +145,8 @@ describe('TaskSidebarPreferenceStore', () => {
       sessionPanelHiddenUnits: [],
       disclosureOpenIds: [],
       openSidebarGroups: [],
+      isBottomPanelOpen: false,
+      bottomPanelTab: 'terminals',
     });
     expect(mocks.save).toHaveBeenNthCalledWith(2, TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'context',
@@ -163,6 +170,8 @@ describe('TaskSidebarPreferenceStore', () => {
       sessionPanelHiddenUnits: [],
       disclosureOpenIds: [],
       openSidebarGroups: [],
+      isBottomPanelOpen: false,
+      bottomPanelTab: 'terminals',
     });
   });
 
@@ -220,6 +229,8 @@ describe('TaskSidebarPreferenceStore', () => {
       sessionPanelHiddenUnits: [],
       disclosureOpenIds: [],
       openSidebarGroups: [],
+      isBottomPanelOpen: false,
+      bottomPanelTab: 'terminals',
     });
   });
 

@@ -1,5 +1,5 @@
 import { computed, makeAutoObservable, reaction, runInAction } from 'mobx';
-import type { TaskSidebarViewSnapshot, TaskViewSnapshot } from '@shared/view-state';
+import type { BottomPanelTab, TaskSidebarViewSnapshot, TaskViewSnapshot } from '@shared/view-state';
 import type { ConversationManagerStore } from '@renderer/features/tasks/conversations/conversation-manager';
 import { DiffTabLifecycleStore } from '@renderer/features/tasks/diff-view/stores/diff-tab-lifecycle-store';
 import { DiffViewStore } from '@renderer/features/tasks/diff-view/stores/diff-view-store';
@@ -56,13 +56,8 @@ function isTaskViewHistoryEntry(entry: HistoryEntry, projectId: string, taskId: 
   return params.projectId === projectId && params.taskId === taskId;
 }
 
-export type BottomPanelTab = 'terminals' | 'scripts' | 'session';
-
 export class TaskViewStore {
   focusedRegion: 'main' | 'bottom';
-  isTerminalDrawerOpen: boolean;
-  /** Which content the bottom drawer shows. */
-  bottomPanelTab: BottomPanelTab;
   /** Ephemeral: sidebar expanded over the whole upper main view. */
   isSidebarMaximized = false;
 
@@ -83,10 +78,6 @@ export class TaskViewStore {
     this.taskId = resources.taskId;
     taskSidebarPreferenceStore.hydrate(sharedSidebarSnapshot ?? null, savedSnapshot ?? null);
     this.focusedRegion = savedSnapshot?.focusedRegion === 'bottom' ? 'bottom' : 'main';
-    this.isTerminalDrawerOpen = savedSnapshot?.isTerminalDrawerOpen ?? false;
-    const savedBottomTab = savedSnapshot?.bottomPanelTab;
-    this.bottomPanelTab =
-      savedBottomTab === 'session' || savedBottomTab === 'scripts' ? savedBottomTab : 'terminals';
     this.terminalsMgr = resources.terminals;
 
     this.tabManager = new TabManagerStore(resources.conversations, resources.workspaceId);
@@ -221,8 +212,6 @@ export class TaskViewStore {
   get snapshot(): TaskViewSnapshot {
     return {
       focusedRegion: this.focusedRegion,
-      isTerminalDrawerOpen: this.isTerminalDrawerOpen,
-      bottomPanelTab: this.bottomPanelTab,
       tabManager: this.tabManager.snapshot,
       terminals: this.terminalTabs.snapshot,
       editor: this.editorView.snapshot,
@@ -277,24 +266,34 @@ export class TaskViewStore {
     });
   }
 
+  /** Bottom drawer chrome is a global preference shared across tasks. */
+  get isTerminalDrawerOpen(): boolean {
+    return taskSidebarPreferenceStore.isBottomPanelOpen;
+  }
+
+  get bottomPanelTab(): BottomPanelTab {
+    return taskSidebarPreferenceStore.bottomPanelTab;
+  }
+
   setTerminalDrawerOpen(open: boolean): void {
-    this.isTerminalDrawerOpen = open;
+    taskSidebarPreferenceStore.setBottomPanelOpen(open);
     if (open && this.bottomPanelTab === 'terminals' && this.terminalTabs.tabs.length === 0) {
       void this.terminalsMgr.createDefaultTerminal();
     }
   }
 
   setBottomPanelTab(tab: BottomPanelTab): void {
-    this.bottomPanelTab = tab;
+    taskSidebarPreferenceStore.setBottomPanelTab(tab);
     // Switching to terminals in an open drawer must not land on an empty pane.
     if (tab === 'terminals' && this.isTerminalDrawerOpen && this.terminalTabs.tabs.length === 0) {
       void this.terminalsMgr.createDefaultTerminal();
     }
   }
 
-  /** Opens the terminal drawer and always creates a new terminal session. */
+  /** Opens the terminal drawer in terminals mode and creates a new session. */
   openNewTerminal(): void {
-    this.isTerminalDrawerOpen = true;
+    taskSidebarPreferenceStore.setBottomPanelOpen(true);
+    taskSidebarPreferenceStore.setBottomPanelTab('terminals');
     void this.terminalsMgr.createDefaultTerminal();
   }
 

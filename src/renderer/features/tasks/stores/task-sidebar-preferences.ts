@@ -1,5 +1,5 @@
 import { makeAutoObservable } from 'mobx';
-import type { TaskSidebarViewSnapshot, TaskViewSnapshot } from '@shared/view-state';
+import type { BottomPanelTab, TaskSidebarViewSnapshot, TaskViewSnapshot } from '@shared/view-state';
 import {
   isSessionPanelUnit,
   isSidebarTabGroup,
@@ -19,7 +19,17 @@ const DEFAULT_SIDEBAR_COLLAPSED = true;
 /** The merged Session panel opens to its Basic blind by default. */
 const DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS = ['basic'];
 
-type LegacyTaskSidebarSnapshot = Pick<TaskViewSnapshot, 'sidebarTab' | 'isSidebarCollapsed'>;
+const DEFAULT_BOTTOM_PANEL_OPEN = false;
+const DEFAULT_BOTTOM_PANEL_TAB: BottomPanelTab = 'terminals';
+
+type LegacyTaskSidebarSnapshot = Pick<
+  TaskViewSnapshot,
+  'sidebarTab' | 'isSidebarCollapsed' | 'isTerminalDrawerOpen' | 'bottomPanelTab'
+>;
+
+function isBottomPanelTab(value: unknown): value is BottomPanelTab {
+  return value === 'terminals' || value === 'scripts' || value === 'session';
+}
 
 function isSidebarTab(value: unknown): value is SidebarTab {
   return (
@@ -50,6 +60,12 @@ function hasSessionPanelSnapshotValue(snapshot: TaskSidebarViewSnapshot | null):
 
 function hasDisclosureSnapshotValue(snapshot: TaskSidebarViewSnapshot | null): boolean {
   return isStringArray(snapshot?.disclosureOpenIds);
+}
+
+function hasBottomPanelSnapshotValue(snapshot: TaskSidebarViewSnapshot | null): boolean {
+  return (
+    typeof snapshot?.isBottomPanelOpen === 'boolean' || isBottomPanelTab(snapshot?.bottomPanelTab)
+  );
 }
 
 function resolveSidebarTab(
@@ -150,6 +166,29 @@ function resolveSessionPanelHiddenUnits(
   return [...new Set(sharedSnapshot.sessionPanelHiddenUnits.filter(isSessionPanelUnit))];
 }
 
+function resolveBottomPanelOpen(
+  sharedSnapshot: TaskSidebarViewSnapshot | null,
+  legacySnapshot: LegacyTaskSidebarSnapshot | null
+): boolean {
+  if (typeof sharedSnapshot?.isBottomPanelOpen === 'boolean') {
+    return sharedSnapshot.isBottomPanelOpen;
+  }
+  // Legacy: the open state used to live per-task in TaskViewSnapshot.
+  if (typeof legacySnapshot?.isTerminalDrawerOpen === 'boolean') {
+    return legacySnapshot.isTerminalDrawerOpen;
+  }
+  return DEFAULT_BOTTOM_PANEL_OPEN;
+}
+
+function resolveBottomPanelTab(
+  sharedSnapshot: TaskSidebarViewSnapshot | null,
+  legacySnapshot: LegacyTaskSidebarSnapshot | null
+): BottomPanelTab {
+  if (isBottomPanelTab(sharedSnapshot?.bottomPanelTab)) return sharedSnapshot.bottomPanelTab;
+  if (isBottomPanelTab(legacySnapshot?.bottomPanelTab)) return legacySnapshot.bottomPanelTab;
+  return DEFAULT_BOTTOM_PANEL_TAB;
+}
+
 export class TaskSidebarPreferenceStore {
   sidebarTab: SidebarTab = DEFAULT_SIDEBAR_TAB;
   isSidebarCollapsed: boolean = DEFAULT_SIDEBAR_COLLAPSED;
@@ -158,6 +197,8 @@ export class TaskSidebarPreferenceStore {
   sessionPanelHiddenUnits: SessionPanelUnit[] = [];
   disclosureOpenIds: string[] = [];
   openSidebarGroups: SidebarTabGroup[] = [];
+  isBottomPanelOpen: boolean = DEFAULT_BOTTOM_PANEL_OPEN;
+  bottomPanelTab: BottomPanelTab = DEFAULT_BOTTOM_PANEL_TAB;
   private isHydrated: boolean = false;
 
   constructor() {
@@ -173,6 +214,8 @@ export class TaskSidebarPreferenceStore {
       sessionPanelHiddenUnits: [...this.sessionPanelHiddenUnits],
       disclosureOpenIds: [...this.disclosureOpenIds],
       openSidebarGroups: [...this.openSidebarGroups],
+      isBottomPanelOpen: this.isBottomPanelOpen,
+      bottomPanelTab: this.bottomPanelTab,
     };
   }
 
@@ -189,6 +232,8 @@ export class TaskSidebarPreferenceStore {
     this.sessionPanelHiddenUnits = resolveSessionPanelHiddenUnits(sharedSnapshot);
     this.disclosureOpenIds = resolveDisclosureOpenIds(sharedSnapshot);
     this.openSidebarGroups = resolveOpenSidebarGroups(sharedSnapshot);
+    this.isBottomPanelOpen = resolveBottomPanelOpen(sharedSnapshot, legacySnapshot);
+    this.bottomPanelTab = resolveBottomPanelTab(sharedSnapshot, legacySnapshot);
     this.isHydrated = true;
 
     viewStateCache.set(TASK_SIDEBAR_VIEW_STATE_KEY, this.snapshot);
@@ -196,7 +241,8 @@ export class TaskSidebarPreferenceStore {
     if (
       (!hasSidebarSnapshotValue(sharedSnapshot) && hasSidebarSnapshotValue(legacySnapshot)) ||
       !hasSessionPanelSnapshotValue(sharedSnapshot) ||
-      !hasDisclosureSnapshotValue(sharedSnapshot)
+      !hasDisclosureSnapshotValue(sharedSnapshot) ||
+      !hasBottomPanelSnapshotValue(sharedSnapshot)
     ) {
       this.persist();
     }
@@ -211,6 +257,18 @@ export class TaskSidebarPreferenceStore {
   setSidebarCollapsed(collapsed: boolean): void {
     if (this.isSidebarCollapsed === collapsed) return;
     this.isSidebarCollapsed = collapsed;
+    this.persist();
+  }
+
+  setBottomPanelOpen(open: boolean): void {
+    if (this.isBottomPanelOpen === open) return;
+    this.isBottomPanelOpen = open;
+    this.persist();
+  }
+
+  setBottomPanelTab(tab: BottomPanelTab): void {
+    if (this.bottomPanelTab === tab) return;
+    this.bottomPanelTab = tab;
     this.persist();
   }
 

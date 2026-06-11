@@ -13,8 +13,8 @@ import {
 import { observer } from 'mobx-react-lite';
 import { Activity, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { BottomPanelTab } from '@shared/view-state';
 import { SessionHistoryPanel } from '@renderer/features/tasks/conversations/session-history-panel';
-import type { BottomPanelTab } from '@renderer/features/tasks/stores/task-view';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
