@@ -1474,6 +1474,7 @@
       "license": "许可证",
       "lines": "行数",
       "metadata": "元数据",
+      "moreActions": "更多操作",
       "neverUsed": "尚未调用",
       "noLocalPath": "安装后显示本地路径。",
       "notInstalled": "未安装",

@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Hash,
   Loader2,
+  MoreHorizontal,
   Power,
   PowerOff,
   Route,
@@ -28,6 +29,13 @@ import { rpc } from '@renderer/lib/ipc';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { cn } from '@renderer/utils/utils';
@@ -287,50 +295,79 @@ const SkillDetailContent: React.FC<{
               </Badge>
             </div>
           </div>
-          {/* Actions */}
+          {/* Actions — full buttons on wide containers, one overflow menu on narrow ones */}
           <div className="flex shrink-0 items-center justify-end gap-2">
             {skill.installed ? (
               <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleSetDisabled(!skill.disabled)}
-                  disabled={isProcessing}
-                  title={skill.disabled ? t('skills.enable') : t('skills.disable')}
-                  className="px-2 @xl:px-3"
-                >
-                  {skill.disabled ? (
-                    <Power className="h-3.5 w-3.5 @xl:mr-1.5" />
-                  ) : (
-                    <PowerOff className="h-3.5 w-3.5 @xl:mr-1.5" />
-                  )}
-                  <span className="hidden @xl:inline">
-                    {skill.disabled ? t('skills.enable') : t('skills.disable')}
-                  </span>
-                </Button>
-                {skill.localPath && (
+                <div className="hidden items-center gap-2 @xl:flex">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleOpen}
-                    title={t('common.open')}
-                    className="px-2 @xl:px-3"
+                    onClick={() => void handleSetDisabled(!skill.disabled)}
+                    disabled={isProcessing}
                   >
-                    <FolderOpen className="h-3.5 w-3.5 @xl:mr-1.5" />
-                    <span className="hidden @xl:inline">{t('common.open')}</span>
+                    {skill.disabled ? (
+                      <Power className="mr-1.5 h-3.5 w-3.5" />
+                    ) : (
+                      <PowerOff className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {skill.disabled ? t('skills.enable') : t('skills.disable')}
                   </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void handleUninstall()}
-                  disabled={isProcessing}
-                  title={t('skills.uninstall')}
-                  className="px-2 text-destructive hover:text-destructive @xl:px-3"
-                >
-                  <Trash2 className="h-3.5 w-3.5 @xl:mr-1.5" />
-                  <span className="hidden @xl:inline">{t('skills.uninstall')}</span>
-                </Button>
+                  {skill.localPath && (
+                    <Button variant="outline" size="sm" onClick={handleOpen}>
+                      <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+                      {t('common.open')}
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void handleUninstall()}
+                    disabled={isProcessing}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                    {t('skills.uninstall')}
+                  </Button>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={t('skills.detail.moreActions')}
+                        className="@xl:hidden"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                  <DropdownMenuContent align="end" className="min-w-40">
+                    <DropdownMenuItem
+                      disabled={isProcessing}
+                      onClick={() => void handleSetDisabled(!skill.disabled)}
+                    >
+                      {skill.disabled ? <Power /> : <PowerOff />}
+                      {skill.disabled ? t('skills.enable') : t('skills.disable')}
+                    </DropdownMenuItem>
+                    {skill.localPath && (
+                      <DropdownMenuItem onClick={handleOpen}>
+                        <FolderOpen />
+                        {t('common.open')}
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={isProcessing}
+                      onClick={() => void handleUninstall()}
+                    >
+                      <Trash2 />
+                      {t('skills.uninstall')}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             ) : (
               <ConfirmButton size="sm" onClick={() => void handleInstall()} disabled={isProcessing}>

@@ -1474,6 +1474,7 @@
       "license": "License",
       "lines": "Lines",
       "metadata": "Metadata",
+      "moreActions": "More actions",
       "neverUsed": "No calls yet",
       "noLocalPath": "No local path until installed.",
       "notInstalled": "Not installed",
