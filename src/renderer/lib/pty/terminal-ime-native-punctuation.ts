@@ -34,12 +34,13 @@ interface PendingPunctuation {
   timer: ReturnType<typeof setTimeout>;
 }
 
+// Default-on; localStorage value '0'/'false' is the kill switch if some IME misbehaves.
 function isEnabled(): boolean {
   try {
     const value = window.localStorage.getItem(NATIVE_PUNCTUATION_STORAGE_KEY);
-    return value === '1' || value === 'true';
+    return value !== '0' && value !== 'false';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -56,6 +57,10 @@ function isAsciiPrintable(value: string): boolean {
 function shouldUseNativeTextInput(event: KeyboardEvent): boolean {
   if (!isEnabled()) return false;
   if (!isMacPlatform()) return false;
+  // During IME composition (or keyCode 229, i.e. the key was consumed by the
+  // IME) these keys select candidates — deferring would also arm a fallback
+  // that injects a stray ASCII char after the composition commits.
+  if (event.isComposing || event.keyCode === 229) return false;
   if (event.ctrlKey || event.altKey || event.metaKey) return false;
   if (!PUNCTUATION_CODES.has(event.code)) return false;
   return isAsciiPrintable(event.key);
