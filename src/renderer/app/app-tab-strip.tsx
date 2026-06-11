@@ -33,6 +33,7 @@ import {
   getProjectStore,
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { archiveConversationFlow } from '@renderer/features/tasks/archive-task';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -204,7 +205,10 @@ const AppTab = observer(function AppTab({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const { label, icon } = describeTab(tab, t);
+  // Branch prefix is display noise on the index tab ("yoda / yoda/feat-x" →
+  // "yoda / feat-x"), so describeTab strips it from branch labels.
+  const { value: projectSettings } = useAppSettingsKey('project');
+  const { label, icon } = describeTab(tab, t, projectSettings?.branchPrefix ?? '');
 
   return (
     <div
@@ -261,7 +265,8 @@ function lucideIcon(Icon: LucideIcon): ReactNode {
 
 function describeTab(
   tab: AppTabEntry,
-  t: (key: string) => string
+  t: (key: string) => string,
+  branchPrefix: string
 ): { label: string; icon: ReactNode } {
   switch (tab.viewId) {
     case 'home':
@@ -269,7 +274,7 @@ function describeTab(
     case 'project':
       return describeProjectTab(tab, t);
     case 'task':
-      return describeTaskTab(tab, t);
+      return describeTaskTab(tab, t, branchPrefix);
     case 'file': {
       const filePath = tab.params.filePath;
       if (typeof filePath === 'string') {
@@ -311,7 +316,8 @@ function describeProjectTab(
 
 function describeTaskTab(
   tab: AppTabEntry,
-  t: (key: string) => string
+  t: (key: string) => string,
+  branchPrefix: string
 ): { label: string; icon: ReactNode } {
   const { projectId, taskId } = tab.params as { projectId?: string; taskId?: string };
   const target = (tab.params.tab as TaskWindowTabTarget | undefined) ?? { kind: 'overview' };
@@ -329,7 +335,13 @@ function describeTaskTab(
       const branchName =
         asProvisioned(taskStore)?.workspace.git.branchName ??
         (taskStore && 'taskBranch' in taskStore.data ? taskStore.data.taskBranch : undefined);
-      const label = [projectName, branchName ?? taskStore?.data.name].filter(Boolean).join(' / ');
+      const displayBranch =
+        branchPrefix && branchName?.startsWith(`${branchPrefix}/`)
+          ? branchName.slice(branchPrefix.length + 1)
+          : branchName;
+      const label = [projectName, displayBranch ?? taskStore?.data.name]
+        .filter(Boolean)
+        .join(' / ');
       return { label: label || t('appTabs.overview'), icon: lucideIcon(LayoutDashboard) };
     }
     case 'conversation': {

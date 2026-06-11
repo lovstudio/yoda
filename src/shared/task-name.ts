@@ -12,7 +12,9 @@ export const normalizeTaskDisplayName = (input: string): string =>
 const slugify = (input: string): string =>
   input
     .toLowerCase()
-    .replace(/\s+/g, '-')
+    // Separator-like characters become hyphens (so "feat/app" → "feat-app",
+    // not "featapp"); everything else non-alphanumeric is dropped.
+    .replace(/[\s/\\_.:]+/g, '-')
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '')
