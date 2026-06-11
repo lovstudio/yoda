@@ -183,11 +183,40 @@ const TaskSetupRecovery = observer(function TaskSetupRecovery({
 });
 
 /**
- * Bottom-bar-first layout: the outer split is vertical so the terminal drawer
- * spans the full width (under the sidebar too); the main|sidebar horizontal
- * split only occupies the upper region.
+ * Two bottom-drawer layouts, switched by the global `isBottomPanelFullWidth`
+ * preference (toggle in the drawer's own strip):
+ * - Full width: the outer split is vertical so the drawer spans the whole
+ *   window (under the sidebar too); main|sidebar only occupies the upper region.
+ * - Beside sidebar: the drawer lives inside the main column, so the sidebar
+ *   runs the full window height.
  */
 const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
+  const { taskView } = useProvisionedTask();
+
+  if (taskView.isBottomPanelFullWidth) {
+    return (
+      <DrawerVerticalSplit>
+        <TaskUpperSplit />
+      </DrawerVerticalSplit>
+    );
+  }
+  return (
+    <TaskUpperSplit
+      mainContent={
+        <DrawerVerticalSplit>
+          <TaskMainAreaSplit />
+        </DrawerVerticalSplit>
+      }
+    />
+  );
+});
+
+/** Vertical split: `children` on top, the (collapsible) bottom drawer below. */
+const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { taskView } = useProvisionedTask();
   const bottomPanelRef = usePanelRef();
   const [isHandleDragging, setIsHandleDragging] = useState(false);
@@ -216,7 +245,7 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
         className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
       >
-        <TaskUpperSplit />
+        {children}
       </ResizablePanel>
       <ResizableHandle
         onPointerDown={(e) => {
@@ -274,7 +303,12 @@ function loadSidebarPx(): number {
  * structural: only this divider can change the sidebar width — the main
  * column absorbs every outer change.
  */
-const TaskUpperSplit = observer(function TaskUpperSplit() {
+const TaskUpperSplit = observer(function TaskUpperSplit({
+  mainContent,
+}: {
+  /** Main column content below the titlebar (defaults to the tab content). */
+  mainContent?: React.ReactNode;
+}) {
   const { projectId, taskId } = useTaskViewContext();
   const { taskView } = useProvisionedTask();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -309,9 +343,7 @@ const TaskUpperSplit = observer(function TaskUpperSplit() {
         className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       >
         <ActiveTaskTitlebar projectId={projectId} taskId={taskId} />
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <TaskMainAreaSplit />
-        </div>
+        <div className="min-h-0 flex-1 overflow-hidden">{mainContent ?? <TaskMainAreaSplit />}</div>
       </div>
       <div
         role="separator"

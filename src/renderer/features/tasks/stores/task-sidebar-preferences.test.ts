@@ -69,6 +69,7 @@ describe('TaskSidebarPreferenceStore', () => {
       openSidebarGroups: [],
       isBottomPanelOpen: false,
       bottomPanelTab: 'terminals',
+      isBottomPanelFullWidth: true,
     });
     expect(mocks.save).not.toHaveBeenCalled();
   });
@@ -104,6 +105,7 @@ describe('TaskSidebarPreferenceStore', () => {
       openSidebarGroups: [],
       isBottomPanelOpen: false,
       bottomPanelTab: 'terminals',
+      isBottomPanelFullWidth: true,
     });
   });
 
@@ -147,6 +149,7 @@ describe('TaskSidebarPreferenceStore', () => {
       openSidebarGroups: [],
       isBottomPanelOpen: false,
       bottomPanelTab: 'terminals',
+      isBottomPanelFullWidth: true,
     });
     expect(mocks.save).toHaveBeenNthCalledWith(2, TASK_SIDEBAR_VIEW_STATE_KEY, {
       sidebarTab: 'context',
@@ -172,6 +175,7 @@ describe('TaskSidebarPreferenceStore', () => {
       openSidebarGroups: [],
       isBottomPanelOpen: false,
       bottomPanelTab: 'terminals',
+      isBottomPanelFullWidth: true,
     });
   });
 
@@ -231,6 +235,7 @@ describe('TaskSidebarPreferenceStore', () => {
       openSidebarGroups: [],
       isBottomPanelOpen: false,
       bottomPanelTab: 'terminals',
+      isBottomPanelFullWidth: true,
     });
   });
 

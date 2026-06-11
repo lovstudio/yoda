@@ -1299,7 +1299,9 @@
     "bottomPanel": {
       "terminals": "Terminals",
       "session": "Session",
-      "switchMode": "Switch bottom panel content"
+      "switchMode": "Switch bottom panel content",
+      "layoutFullWidth": "Span full width",
+      "layoutBesideSidebar": "Yield to sidebar"
     }
   },
   "commandPalette": {

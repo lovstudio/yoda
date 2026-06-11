@@ -1299,7 +1299,9 @@
     "bottomPanel": {
       "terminals": "终端",
       "session": "会话",
-      "switchMode": "切换底部面板内容"
+      "switchMode": "切换底部面板内容",
+      "layoutFullWidth": "底栏铺满全宽",
+      "layoutBesideSidebar": "底栏避开侧边栏"
     }
   },
   "commandPalette": {
