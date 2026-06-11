@@ -4,8 +4,8 @@ import {
   Leaf,
   Monitor,
   Moon,
+  Sprout,
   Sun,
-  SunDim,
   Sunset,
   Trash2,
   Upload,
@@ -40,6 +40,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/toolti
 import { captureTelemetry } from '@renderer/utils/telemetryClient';
 import { cn } from '@renderer/utils/utils';
 
+// Two pairs and a standalone: neutral 白/黑, brand 浅绿/暗绿, fixed 暖.
+const BUILT_IN_THEME_BUTTONS = [
+  { value: 'ylight', Icon: Sun, label: 'yodaLight', aria: 'ariaLight' },
+  { value: 'ydark', Icon: Moon, label: 'yodaDark', aria: 'ariaDark' },
+  { value: 'ylight2', Icon: Sprout, label: 'yodaLightGreen', aria: 'ariaLightGreen' },
+  { value: 'ygreen', Icon: Leaf, label: 'yodaDarkGreen', aria: 'ariaDarkGreen' },
+  { value: 'ywarm', Icon: Sunset, label: 'yodaWarm', aria: 'ariaWarm' },
+] as const;
+
 const ThemeCard: React.FC = () => {
   const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
@@ -52,6 +61,19 @@ const ThemeCard: React.FC = () => {
   const customThemes = useMemo(() => customThemesValue?.items ?? [], [customThemesValue?.items]);
   const selectedCustomThemeId = getCustomThemeId(theme);
   const systemThemes: SystemThemes = systemThemesValue ?? { light: 'ylight', dark: 'ydark' };
+
+  // Any theme can fill either system slot — light/dark mode of a theme is a
+  // preset, not a restriction. Defaults are 尤达白 / 尤达黑.
+  const systemSlotOptions = [
+    ...BUILT_IN_THEME_BUTTONS.map(({ value, label }) => ({
+      value: value as SystemThemes['light'],
+      label: t(`settings.theme.${label}`),
+    })),
+    ...customThemes.map((item) => ({
+      value: toCustomThemeSelection(item.id),
+      label: item.name,
+    })),
+  ];
 
   const handleSetTheme = (next: Theme) => {
     if (theme !== next) {
@@ -300,82 +322,32 @@ const ThemeCard: React.FC = () => {
           <Monitor className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="text-center">{t('settings.theme.system')}</span>
         </button>
-        <button
-          type="button"
-          onClick={() => handleSetTheme('ylight')}
-          className={`${buttonBase} ${theme === 'ylight' ? activeClass : inactiveClass}`}
-          aria-pressed={theme === 'ylight'}
-          aria-label={t('settings.theme.ariaLight')}
-        >
-          <Sun className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="text-center">{t('settings.theme.yodaLight')}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleSetTheme('ylight2')}
-          className={`${buttonBase} ${theme === 'ylight2' ? activeClass : inactiveClass}`}
-          aria-pressed={theme === 'ylight2'}
-          aria-label={t('settings.theme.ariaLight2')}
-        >
-          <SunDim className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="text-center">{t('settings.theme.yodaLight2')}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleSetTheme('ydark')}
-          className={`${buttonBase} ${theme === 'ydark' ? activeClass : inactiveClass}`}
-          aria-pressed={theme === 'ydark'}
-          aria-label={t('settings.theme.ariaDark')}
-        >
-          <Moon className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="text-center">{t('settings.theme.yodaDark')}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleSetTheme('ywarm')}
-          className={`${buttonBase} ${theme === 'ywarm' ? activeClass : inactiveClass}`}
-          aria-pressed={theme === 'ywarm'}
-          aria-label={t('settings.theme.ariaWarm')}
-        >
-          <Sunset className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="text-center">{t('settings.theme.yodaWarm')}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleSetTheme('ygreen')}
-          className={`${buttonBase} ${theme === 'ygreen' ? activeClass : inactiveClass}`}
-          aria-pressed={theme === 'ygreen'}
-          aria-label={t('settings.theme.ariaGreen')}
-        >
-          <Leaf className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="text-center">{t('settings.theme.yodaGreen')}</span>
-        </button>
+        {BUILT_IN_THEME_BUTTONS.map(({ value, Icon, label, aria }) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => handleSetTheme(value)}
+            className={`${buttonBase} ${theme === value ? activeClass : inactiveClass}`}
+            aria-pressed={theme === value}
+            aria-label={t(`settings.theme.${aria}`)}
+          >
+            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="text-center">{t(`settings.theme.${label}`)}</span>
+          </button>
+        ))}
       </div>
       {theme === null && (
         <div className="grid grid-cols-1 gap-2 rounded-md border border-border/60 bg-background-1 px-3 py-2.5 sm:grid-cols-2">
           <SystemSlotSelect
             label={t('settings.theme.systemLight')}
             value={systemThemes.light}
-            options={[
-              { value: 'ylight', label: t('settings.theme.yodaLight') },
-              { value: 'ylight2', label: t('settings.theme.yodaLight2') },
-              { value: 'ywarm', label: t('settings.theme.yodaWarm') },
-              ...customThemes
-                .filter((item) => item.mode === 'light')
-                .map((item) => ({ value: toCustomThemeSelection(item.id), label: item.name })),
-            ]}
+            options={systemSlotOptions}
             onChange={(next) => updateSystemThemes({ ...systemThemes, light: next })}
           />
           <SystemSlotSelect
             label={t('settings.theme.systemDark')}
             value={systemThemes.dark}
-            options={[
-              { value: 'ydark', label: t('settings.theme.yodaDark') },
-              { value: 'ygreen', label: t('settings.theme.yodaGreen') },
-              ...customThemes
-                .filter((item) => item.mode === 'dark')
-                .map((item) => ({ value: toCustomThemeSelection(item.id), label: item.name })),
-            ]}
+            options={systemSlotOptions}
             onChange={(next) => updateSystemThemes({ ...systemThemes, dark: next })}
           />
         </div>
