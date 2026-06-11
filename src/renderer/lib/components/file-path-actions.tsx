@@ -1,11 +1,21 @@
-import { Copy, ExternalLink, FolderOpen, MoreHorizontal, TerminalSquare } from 'lucide-react';
+import {
+  Copy,
+  ExternalLink,
+  FileText,
+  FolderOpen,
+  MoreHorizontal,
+  PanelRightOpen,
+  TerminalSquare,
+} from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAppById, type OpenInAppId } from '@shared/openInApps';
+import { openProjectFileTab } from '@renderer/features/project-file/project-file-session';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useOpenInApps } from '@renderer/lib/hooks/useOpenInApps';
 import { rpc } from '@renderer/lib/ipc';
+import { appState } from '@renderer/lib/stores/app-state';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -240,6 +250,46 @@ export function FilePathActionsDropdown({
         />
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * Dropdown for standalone files outside any project/task (agent-home files:
+ * SKILL.md, user CLAUDE.md, …): the base path actions plus in-app placement —
+ * open in the main area / the global side pane — backed by the project-less
+ * `file` view. Task surfaces use features/tasks/components/file-actions
+ * instead, which adds the task-sidebar placement on top.
+ */
+export function GlobalFileActionsDropdown({
+  absolutePath,
+  className,
+}: {
+  absolutePath: string;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <FilePathActionsDropdown target={{ absolutePath, kind: 'file' }} className={className}>
+      <DropdownMenuItem
+        onClick={(event) => {
+          event.stopPropagation();
+          openProjectFileTab(null, absolutePath);
+        }}
+      >
+        <FileText className="size-4" />
+        {t('fileActions.openInMainArea')}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        onClick={(event) => {
+          event.stopPropagation();
+          appState.sidePane.pinView('file', { filePath: absolutePath });
+        }}
+      >
+        <PanelRightOpen className="size-4" />
+        {t('appTabs.openInGlobalSidePane')}
+      </DropdownMenuItem>
+    </FilePathActionsDropdown>
   );
 }
 
