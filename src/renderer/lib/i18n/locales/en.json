@@ -1485,6 +1485,9 @@
       "showInFolder": "Show in folder",
       "showInFolderFailed": "Could not show in folder",
       "tokens": "tokens",
+      "usageTrend": "Usage trend",
+      "usageTrendSummary": "{{count}} calls in the last 30 days",
+      "usageTrendEmpty": "No calls in the last 30 days",
       "unavailable": "Unavailable",
       "validation": "Validation"
     },

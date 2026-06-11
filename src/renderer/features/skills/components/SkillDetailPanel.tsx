@@ -30,6 +30,7 @@ import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { cn } from '@renderer/utils/utils';
 import { getSkillUsageStats, skillUsageStatsChangedEvent } from '../skill-usage-stats';
 import SkillIconRenderer from './SkillIconRenderer';
+import { SkillUsageTrend } from './SkillUsageTrend';
 import { useSkills } from './useSkills';
 
 type TextStats = {
@@ -392,6 +393,13 @@ const SkillDetailContent: React.FC<{
               />
             </DetailSection>
           )}
+
+          <DetailSection
+            title={t('skills.detail.usageTrend')}
+            action={<span className="text-[10px] text-muted-foreground">{usageDescription}</span>}
+          >
+            <SkillUsageTrend daily={usageStats.daily} />
+          </DetailSection>
 
           <DetailSection title={t('skills.detail.paths')}>
             {skill.localPath ? (

@@ -1485,6 +1485,9 @@
       "showInFolder": "在文件夹中显示",
       "showInFolderFailed": "无法在文件夹中显示",
       "tokens": "tokens",
+      "usageTrend": "调用趋势",
+      "usageTrendSummary": "近 30 天共 {{count}} 次调用",
+      "usageTrendEmpty": "近 30 天暂无调用",
       "unavailable": "不可用",
       "validation": "校验"
     },
