@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { Activity, useEffect, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -125,6 +126,17 @@ export const AppSidePane = observer(function AppSidePane() {
         {/* The active pin's view can hang a control at the row's right end
             (e.g. the settings tab picker). */}
         {activePin?.kind === 'view' ? <PaneHeaderAccessory pin={activePin} /> : null}
+        {/* Closes the whole pane: every pin goes through the per-pin close
+            policy, so conversations flow back to the strip instead of dying. */}
+        <button
+          type="button"
+          onClick={() => [...pins].forEach(closePin)}
+          aria-label={t('appTabs.closeGlobalSidePane')}
+          title={t('appTabs.closeGlobalSidePane')}
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-passive hover:bg-background-2 hover:text-foreground [-webkit-app-region:no-drag]"
+        >
+          <X className="size-4" />
+        </button>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         {/* Each pin keeps its own Activity so background PTYs/views stay alive. */}
