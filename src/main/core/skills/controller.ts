@@ -106,6 +106,7 @@ export const skillsController = createRPCController({
   tryTriggerQuery: async (args: { skillId: string; query: string }) => {
     try {
       const skill = await skillsService.getSkillDetail(args.skillId);
+      if (!skill) throw new Error(`Skill not found: ${args.skillId}`);
       const skillNames = [skill.id, skill.frontmatter.name].filter(Boolean);
       const result = await runSkillTriggerQuery({ query: args.query, skillNames });
       return { success: true, data: result };
@@ -123,6 +124,7 @@ export const skillsController = createRPCController({
   generateTriggerQueries: async (args: { skillId: string }) => {
     try {
       const skill = await skillsService.getSkillDetail(args.skillId);
+      if (!skill) throw new Error(`Skill not found: ${args.skillId}`);
       const prompt = [
         'You design trigger tests for an agent skill. A trigger test checks whether',
         'a coding agent invokes the skill for a given user query.',
