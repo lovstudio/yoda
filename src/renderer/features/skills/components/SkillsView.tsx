@@ -1,6 +1,6 @@
 import { ArrowDownWideNarrow, Loader2, Plus, RefreshCw, Search } from 'lucide-react';
 import React from 'react';
-import { Trans, useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import type { CatalogSkill } from '@shared/skills/types';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -17,6 +17,7 @@ import {
 import { cn } from '@renderer/utils/utils';
 import { SKILL_SORT_MODES, sortSkills, type SkillSortMode } from '../skill-sort';
 import SkillCard from './SkillCard';
+import SkillsCatalogHint from './SkillsCatalogHint';
 import { useSkills } from './useSkills';
 import { useSkillUsage } from './useSkillUsage';
 
@@ -133,7 +134,10 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
         {/* Header */}
         {!embedded && (
           <div className="mb-6">
-            <h1 className="text-lg font-semibold">{t('skills.title')}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold">{t('skills.title')}</h1>
+              <SkillsCatalogHint />
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">{t('skills.subtitle')}</p>
           </div>
         )}
@@ -187,40 +191,6 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             {t('skills.newSkill')}
           </Button>
-        </div>
-
-        <div className="mb-4 flex items-start gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            <Trans
-              i18nKey="skills.catalogDescription"
-              components={{
-                openai: (
-                  <a
-                    href="https://github.com/openai/skills"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-foreground underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-foreground"
-                  />
-                ),
-                anthropic: (
-                  <a
-                    href="https://github.com/anthropics/skills"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-foreground underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-foreground"
-                  />
-                ),
-                standard: (
-                  <a
-                    href="https://agentskills.io"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-foreground underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-foreground"
-                  />
-                ),
-              }}
-            />
-          </p>
         </div>
 
         {installedSkills.length > 0 && (

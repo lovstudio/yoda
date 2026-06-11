@@ -7,6 +7,7 @@ import { AutomationMainPanel } from '@renderer/features/automation/automation-vi
 import { MaasView } from '@renderer/features/maas/components/MaasView';
 import { McpView } from '@renderer/features/mcp/components/McpView';
 import { MobileView } from '@renderer/features/mobile/mobile-view';
+import SkillsCatalogHint from '@renderer/features/skills/components/SkillsCatalogHint';
 import SkillsView from '@renderer/features/skills/components/SkillsView';
 import { NamingConfigFields } from '@renderer/features/tasks/components/naming-config-fields';
 import { SummaryConfigFields } from '@renderer/features/tasks/components/summary-config-fields';
@@ -174,7 +175,7 @@ export function SettingsPage({
 
   const tabContent: Record<
     string,
-    { title: string; description: string; sections: SectionConfig[] }
+    { title: string; titleHint?: React.ReactNode; description: string; sections: SectionConfig[] }
   > = {
     general: {
       title: t('settings.tabs.general'),
@@ -297,6 +298,7 @@ export function SettingsPage({
     },
     skills: {
       title: t('skills.title'),
+      titleHint: <SkillsCatalogHint />,
       description: t('skills.subtitle'),
       sections: [{ id: 'skills', component: <SkillsView embedded /> }],
     },
@@ -430,7 +432,10 @@ export function SettingsPage({
                 <div className="flex flex-col gap-6">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 flex-col gap-1">
-                      <h2 className="text-xl">{currentContent.title}</h2>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl">{currentContent.title}</h2>
+                        {currentContent.titleHint}
+                      </div>
                       <p className="text-sm text-foreground-muted">{currentContent.description}</p>
                     </div>
                     {/* Narrow main-area fallback — in the side pane the

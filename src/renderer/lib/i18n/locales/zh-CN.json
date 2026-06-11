@@ -1436,6 +1436,7 @@
     "subtitle": "通过可复用的技能模块扩展代理能力",
     "searchPlaceholder": "搜索技能…",
     "refreshAria": "刷新目录",
+    "catalogHintAria": "技能目录说明",
     "newSkill": "新建技能",
     "installed": "已安装",
     "recommended": "推荐",

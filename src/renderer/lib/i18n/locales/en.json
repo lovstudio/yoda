@@ -1436,6 +1436,7 @@
     "subtitle": "Extend your agents with reusable skill modules",
     "searchPlaceholder": "Search skills…",
     "refreshAria": "Refresh catalog",
+    "catalogHintAria": "About the skills catalog",
     "newSkill": "New Skill",
     "installed": "Installed",
     "recommended": "Recommended",
