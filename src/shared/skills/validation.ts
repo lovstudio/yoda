@@ -1,6 +1,24 @@
 import type { SkillFrontmatter, SkillValidationIssue } from './types';
 
 export const CODEX_SKILL_DESCRIPTION_MAX_LENGTH = 1024;
+export const SPEC_SKILL_COMPATIBILITY_MAX_LENGTH = 500;
+
+/**
+ * Fields accepted in SKILL.md frontmatter: the Agent Skills spec set
+ * (anthropics/skills quick_validate.py) plus documented Claude Code extensions.
+ */
+const KNOWN_FRONTMATTER_FIELDS = new Set([
+  'name',
+  'description',
+  'license',
+  'allowed-tools',
+  'metadata',
+  'compatibility',
+  'argument-hint',
+  'model',
+  'disable-model-invocation',
+  'user-invocable',
+]);
 
 /** Validate a skill name: lowercase, hyphens, 1-64 chars */
 export function isValidSkillName(name: string): boolean {
@@ -11,17 +29,26 @@ export function isValidSkillName(name: string): boolean {
 export function parseFrontmatter(content: string): {
   frontmatter: SkillFrontmatter;
   body: string;
+  /** False when the leading --- block is missing entirely */
+  hasFrontmatter: boolean;
+  /** Top-level keys not in the Agent Skills spec / Claude Code field set */
+  unknownFields: string[];
 } {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!match) {
     return {
       frontmatter: { name: '', description: '' },
       body: content,
+      hasFrontmatter: false,
+      unknownFields: [],
     };
   }
 
   const body = match[2];
   const frontmatter = parseYamlFrontmatterFields(match[1]);
+  const unknownFields = Object.keys(frontmatter).filter(
+    (key) => !KNOWN_FRONTMATTER_FIELDS.has(key)
+  );
 
   return {
     frontmatter: {
@@ -32,15 +59,96 @@ export function parseFrontmatter(content: string): {
       'allowed-tools': frontmatter['allowed-tools'],
     },
     body,
+    hasFrontmatter: true,
+    unknownFields,
   };
+}
+
+export function skillIssueAgentLabel(agent: SkillValidationIssue['agent']): string {
+  return agent === 'codex' ? 'Codex' : 'Spec';
 }
 
 export function validateSkillFrontmatter(
   frontmatter: SkillFrontmatter,
-  options: { skillFilePath?: string } = {}
+  options: {
+    skillFilePath?: string;
+    hasFrontmatter?: boolean;
+    unknownFields?: string[];
+  } = {}
 ): SkillValidationIssue[] {
   const description = frontmatter.description ?? '';
+  const name = frontmatter.name ?? '';
   const issues: SkillValidationIssue[] = [];
+
+  if (options.hasFrontmatter === false) {
+    issues.push({
+      severity: 'error',
+      agent: 'spec',
+      field: 'frontmatter',
+      code: 'spec-frontmatter-missing',
+      message: 'SKILL.md is missing the leading YAML frontmatter (--- block)',
+      path: options.skillFilePath,
+    });
+    return issues;
+  }
+
+  if (!name.trim()) {
+    issues.push({
+      severity: 'warning',
+      agent: 'spec',
+      field: 'name',
+      code: 'spec-name-missing',
+      message: 'frontmatter has no name field; agents fall back to the directory name',
+      path: options.skillFilePath,
+    });
+  } else if (!isValidSkillName(name)) {
+    issues.push({
+      severity: 'error',
+      agent: 'spec',
+      field: 'name',
+      code: 'spec-name-invalid',
+      message:
+        'invalid name: must be kebab-case (lowercase letters, digits, hyphens), max 64 chars',
+      path: options.skillFilePath,
+    });
+  }
+
+  if (/[<>]/.test(description)) {
+    issues.push({
+      severity: 'warning',
+      agent: 'spec',
+      field: 'description',
+      code: 'spec-description-angle-brackets',
+      message: 'description contains angle brackets (< or >), forbidden by the skill spec',
+      path: options.skillFilePath,
+    });
+  }
+
+  const compatibility = frontmatter.compatibility ?? '';
+  if (compatibility.length > SPEC_SKILL_COMPATIBILITY_MAX_LENGTH) {
+    issues.push({
+      severity: 'warning',
+      agent: 'spec',
+      field: 'compatibility',
+      code: 'spec-compatibility-too-long',
+      message: `compatibility exceeds maximum length of ${SPEC_SKILL_COMPATIBILITY_MAX_LENGTH} characters`,
+      path: options.skillFilePath,
+      max: SPEC_SKILL_COMPATIBILITY_MAX_LENGTH,
+      actual: compatibility.length,
+    });
+  }
+
+  const unknownFields = options.unknownFields ?? [];
+  if (unknownFields.length > 0) {
+    issues.push({
+      severity: 'warning',
+      agent: 'spec',
+      field: 'frontmatter',
+      code: 'spec-unknown-fields',
+      message: `unknown frontmatter field(s): ${unknownFields.join(', ')}`,
+      path: options.skillFilePath,
+    });
+  }
 
   if (!description.trim()) {
     issues.push({

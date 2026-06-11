@@ -9,7 +9,8 @@ export interface SkillFrontmatter {
 
 export interface SkillValidationIssue {
   severity: 'error' | 'warning';
-  agent: 'codex';
+  /** 'codex' = Codex runtime compatibility; 'spec' = Agent Skills format spec */
+  agent: 'codex' | 'spec';
   field: string;
   code: string;
   message: string;
@@ -53,6 +54,20 @@ export interface CatalogIndex {
   version: number;
   lastUpdated: string;
   skills: CatalogSkill[];
+}
+
+/** One trigger-test query for a skill, with the expected outcome. */
+export interface SkillTriggerQuery {
+  text: string;
+  shouldTrigger: boolean;
+}
+
+export interface SkillTriggerRunResult {
+  status: 'triggered' | 'not-triggered' | 'other-skill' | 'error' | 'timeout';
+  /** Skill actually invoked when one was, e.g. for other-skill diagnostics */
+  matchedSkill?: string;
+  durationMs: number;
+  error?: string;
 }
 
 export interface DetectedAgent {

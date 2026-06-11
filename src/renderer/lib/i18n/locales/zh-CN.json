@@ -1445,7 +1445,7 @@
     "usageTitle": "手动调用 {{manual}} 次 / Agent 调用 {{auto}} 次",
     "sort": {
       "ariaLabel": "技能排序",
-      "default": "默认排序",
+      "name": "名称字母序",
       "total": "调用最多",
       "manual": "手动最多",
       "auto": "Agent 调用最多",

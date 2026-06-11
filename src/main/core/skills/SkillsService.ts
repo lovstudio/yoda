@@ -578,9 +578,13 @@ export class SkillsService {
     content: string,
     options: { disabled?: boolean } = {}
   ): CatalogSkill {
-    const { frontmatter } = parseFrontmatter(content);
+    const { frontmatter, hasFrontmatter, unknownFields } = parseFrontmatter(content);
     const skillFilePath = path.join(skillDir, 'SKILL.md');
-    const validationIssues = validateSkillFrontmatter(frontmatter, { skillFilePath });
+    const validationIssues = validateSkillFrontmatter(frontmatter, {
+      skillFilePath,
+      hasFrontmatter,
+      unknownFields,
+    });
 
     return {
       id,

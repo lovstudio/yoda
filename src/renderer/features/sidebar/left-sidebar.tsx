@@ -15,6 +15,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { skillIssueAgentLabel } from '@shared/skills/validation';
 import { YODA_DOCS_URL } from '@shared/urls';
 import type { ViewId } from '@renderer/app/view-registry';
 import {
@@ -367,5 +368,5 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
 
 function formatSkillIssueTitle(entry: SkillValidationIssueEntry): string {
   const location = entry.issue.path ? `${entry.issue.path}: ` : '';
-  return `${entry.skill.displayName}: Codex: ${location}${entry.issue.message}`;
+  return `${entry.skill.displayName}: ${skillIssueAgentLabel(entry.issue.agent)}: ${location}${entry.issue.message}`;
 }

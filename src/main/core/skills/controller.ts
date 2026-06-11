@@ -1,7 +1,25 @@
+import os from 'node:os';
 import { createRPCController } from '@/shared/ipc/rpc';
+import type { SkillTriggerQuery } from '@shared/skills/types';
 import { getSkillUsageStats } from '@main/core/skills/getUsageStats';
 import { skillsService } from '@main/core/skills/SkillsService';
+import { cancelSkillTriggerRuns, runSkillTriggerQuery } from '@main/core/skills/trigger-test';
+import { requestUtilityAgentJson } from '@main/core/tasks/name-generation/task-naming-service';
 import { log } from '@main/lib/logger';
+
+function parseTriggerQueries(raw: unknown): SkillTriggerQuery[] {
+  if (!Array.isArray(raw)) return [];
+  const queries: SkillTriggerQuery[] = [];
+  for (const entry of raw) {
+    const candidate = entry as { text?: unknown; shouldTrigger?: unknown };
+    if (typeof candidate.text !== 'string' || !candidate.text.trim()) continue;
+    queries.push({
+      text: candidate.text.trim(),
+      shouldTrigger: candidate.shouldTrigger !== false,
+    });
+  }
+  return queries;
+}
 
 export const skillsController = createRPCController({
   getCatalog: async (args?: { projectPath?: string }) => {
@@ -81,6 +99,51 @@ export const skillsController = createRPCController({
     } catch (error) {
       // Expected when the skillusage CLI is not installed; the UI degrades.
       log.warn('Failed to get skill usage stats:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  tryTriggerQuery: async (args: { skillId: string; query: string }) => {
+    try {
+      const skill = await skillsService.getSkillDetail(args.skillId);
+      const skillNames = [skill.id, skill.frontmatter.name].filter(Boolean);
+      const result = await runSkillTriggerQuery({ query: args.query, skillNames });
+      return { success: true, data: result };
+    } catch (error) {
+      log.error('Failed to run skill trigger query:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  cancelTriggerTest: async () => {
+    cancelSkillTriggerRuns();
+    return { success: true };
+  },
+
+  generateTriggerQueries: async (args: { skillId: string }) => {
+    try {
+      const skill = await skillsService.getSkillDetail(args.skillId);
+      const prompt = [
+        'You design trigger tests for an agent skill. A trigger test checks whether',
+        'a coding agent invokes the skill for a given user query.',
+        'Return strict JSON only. Do not include markdown, code fences, or explanations.',
+        'Rules:',
+        '- Produce exactly 3 queries that SHOULD trigger the skill: realistic user requests,',
+        '  varied phrasing, written in the same language as the skill description.',
+        '- Produce exactly 2 queries that should NOT trigger it: adjacent but out-of-scope',
+        '  requests that a careless description would wrongly match.',
+        '- Keep each query under 120 characters.',
+        'JSON schema: {"queries":[{"text":"...","shouldTrigger":true}]}',
+        '',
+        `Skill name: ${skill.frontmatter.name || skill.id}`,
+        `Skill description: ${skill.description}`,
+      ].join('\n');
+      const payload = await requestUtilityAgentJson({ prompt, cwd: os.homedir() });
+      const queries = parseTriggerQueries(payload.queries);
+      if (queries.length === 0) throw new Error('Model returned no trigger queries.');
+      return { success: true, data: queries };
+    } catch (error) {
+      log.error('Failed to generate trigger queries:', error);
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   },

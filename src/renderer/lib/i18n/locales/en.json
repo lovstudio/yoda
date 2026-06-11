@@ -1445,7 +1445,7 @@
     "usageTitle": "{{manual}} manual / {{auto}} agent invocations",
     "sort": {
       "ariaLabel": "Sort skills",
-      "default": "Default",
+      "name": "Name (A-Z)",
       "total": "Most used",
       "manual": "Most manual",
       "auto": "Most agent-invoked",

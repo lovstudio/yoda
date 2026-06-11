@@ -3,7 +3,7 @@ import { AlertTriangle, ChartNoAxesColumn, Pencil, Plus, PowerOff } from 'lucide
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CatalogSkill, SkillUsageStat, SkillValidationIssue } from '@shared/skills/types';
-import { parseFrontmatter } from '@shared/skills/validation';
+import { parseFrontmatter, skillIssueAgentLabel } from '@shared/skills/validation';
 import { cn } from '@renderer/utils/utils';
 import SkillIconRenderer from './SkillIconRenderer';
 
@@ -113,12 +113,12 @@ function isYamlBlockMarker(value: string): boolean {
 }
 
 function formatValidationIssueSummary(issue: SkillValidationIssue): string {
-  return `Codex: ${issue.message}`;
+  return `${skillIssueAgentLabel(issue.agent)}: ${issue.message}`;
 }
 
 function formatValidationIssueTitle(issue: SkillValidationIssue): string {
   return issue.path
-    ? `Codex: ${issue.path}: ${issue.message}`
+    ? `${skillIssueAgentLabel(issue.agent)}: ${issue.path}: ${issue.message}`
     : formatValidationIssueSummary(issue);
 }
 

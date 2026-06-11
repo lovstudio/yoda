@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@renderer/lib/ui/select';
 import { cn } from '@renderer/utils/utils';
-import { SKILL_SORT_MODES, sortSkillsByUsage, type SkillSortMode } from '../skill-sort';
+import { SKILL_SORT_MODES, sortSkills, type SkillSortMode } from '../skill-sort';
 import SkillCard from './SkillCard';
 import { useSkills } from './useSkills';
 import { useSkillUsage } from './useSkillUsage';
@@ -35,15 +35,15 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
     install,
   } = useSkills();
   const { usage, lookupUsage } = useSkillUsage();
-  const [sortMode, setSortMode] = React.useState<SkillSortMode>('default');
+  const [sortMode, setSortMode] = React.useState<SkillSortMode>('name');
   const usageAvailable = usage !== null && Object.keys(usage.bySkill).length > 0;
 
   const sortedInstalledSkills = React.useMemo(
-    () => sortSkillsByUsage(installedSkills, sortMode, lookupUsage),
+    () => sortSkills(installedSkills, sortMode, lookupUsage),
     [installedSkills, sortMode, lookupUsage]
   );
   const sortedRecommendedSkills = React.useMemo(
-    () => sortSkillsByUsage(recommendedSkills, sortMode, lookupUsage),
+    () => sortSkills(recommendedSkills, sortMode, lookupUsage),
     [recommendedSkills, sortMode, lookupUsage]
   );
 

@@ -19,7 +19,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import type { CatalogSkill, SkillValidationIssue } from '@shared/skills/types';
-import { parseFrontmatter } from '@shared/skills/validation';
+import { parseFrontmatter, skillIssueAgentLabel } from '@shared/skills/validation';
 import {
   FilePathActionsDropdown,
   GlobalFileActionsDropdown,
@@ -682,7 +682,9 @@ function ValidationIssueRow({ issue }: { issue: SkillValidationIssue }) {
     >
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <div className="min-w-0 space-y-1">
-        <div className="font-medium">Codex: {issue.message}</div>
+        <div className="font-medium">
+          {skillIssueAgentLabel(issue.agent)}: {issue.message}
+        </div>
         {issue.path && (
           <div className="truncate font-mono text-[10px] opacity-80" title={issue.path}>
             {issue.path}
