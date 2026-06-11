@@ -113,25 +113,26 @@ async function listLocalRelativePath(
   };
 }
 
-/** Read-only whitelist roots for agent session transcripts (see readFile). */
-const AGENT_TRANSCRIPT_ROOTS = [
-  path.join(homedir(), '.claude', 'projects'),
-  path.join(homedir(), '.codex', 'sessions'),
-];
+/**
+ * Read-only whitelist roots for agent home files (see readFile): session
+ * transcripts, user-level CLAUDE.md / settings, global skills — everything the
+ * context panel surfaces from the agent CLIs' home dirs.
+ */
+const AGENT_HOME_READ_ROOTS = [path.join(homedir(), '.claude'), path.join(homedir(), '.codex')];
 
-function isAgentTranscriptPath(filePath: string): boolean {
+function isAgentHomePath(filePath: string): boolean {
   if (!path.isAbsolute(filePath)) return false;
   const resolved = path.resolve(filePath);
-  return AGENT_TRANSCRIPT_ROOTS.some((root) => resolved.startsWith(root + path.sep));
+  return AGENT_HOME_READ_ROOTS.some((root) => resolved.startsWith(root + path.sep));
 }
 
 // Transcripts are plain JSONL and frequently exceed the workspace default of
 // 200 KiB; give them a viewer-friendly cap instead.
-const TRANSCRIPT_MAX_BYTES = 5 * 1024 * 1024;
+const AGENT_HOME_MAX_BYTES = 5 * 1024 * 1024;
 
-async function readAgentTranscriptFile(
+async function readAgentHomeFile(
   filePath: string,
-  maxBytes: number = TRANSCRIPT_MAX_BYTES
+  maxBytes: number = AGENT_HOME_MAX_BYTES
 ): Promise<{ content: string; truncated: boolean; totalSize: number }> {
   const resolved = path.resolve(filePath);
   const stat = await nativeFs.stat(resolved);
@@ -289,13 +290,13 @@ export const filesController = createRPCController({
   },
 
   readFile: async (projectId: string, workspaceId: string, filePath: string, maxBytes?: number) => {
-    // Agent transcript escape: session JSONL files (Claude transcript / Codex
-    // rollout) live under the agent CLIs' home dirs, outside any workspace
-    // jail. Allow READ-ONLY access to exactly those roots so the regular file
-    // viewer can open them; writes are not extended.
-    if (isAgentTranscriptPath(filePath)) {
+    // Agent home escape: transcripts, user CLAUDE.md, global skills etc. live
+    // under the agent CLIs' home dirs, outside any workspace jail. Allow
+    // READ-ONLY access to exactly those roots so the regular file viewer can
+    // open them; writes are not extended.
+    if (isAgentHomePath(filePath)) {
       try {
-        return ok(await readAgentTranscriptFile(filePath, maxBytes));
+        return ok(await readAgentHomeFile(filePath, maxBytes));
       } catch (e) {
         return err({ type: 'fs_error' as const, message: String(e) });
       }

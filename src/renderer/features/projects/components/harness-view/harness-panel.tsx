@@ -264,7 +264,7 @@ function HarnessFileDropdown({ target }: { target: FilePathTarget }) {
           }}
         >
           <AppWindow className="size-4" />
-          {t('fileActions.openInYoda')}
+          {t('fileActions.openInMainArea')}
         </DropdownMenuItem>
       ) : null}
     </FilePathActionsDropdown>

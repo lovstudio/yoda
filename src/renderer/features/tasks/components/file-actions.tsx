@@ -99,7 +99,7 @@ export function FileActionsDropdown({
         }}
       >
         <FileText className="size-4" />
-        {t('fileActions.openInYoda')}
+        {t('fileActions.openInMainArea')}
       </DropdownMenuItem>
       <DropdownMenuItem
         onClick={(event) => {
@@ -206,7 +206,7 @@ export function FileActionsMenuItems({
             <>
               <ContextMenuItem className="whitespace-nowrap" onClick={openInEditor}>
                 <FileText className="size-4" />
-                {t('fileActions.openInYoda')}
+                {t('fileActions.openInMainArea')}
               </ContextMenuItem>
               <ContextMenuItem className="whitespace-nowrap" onClick={openInSidebar}>
                 <PanelRight className="size-4" />

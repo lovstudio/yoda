@@ -140,7 +140,7 @@ function FileMenuItems({
           }}
         >
           <FileText className="size-4" />
-          {t('fileActions.openInYoda')}
+          {t('fileActions.openInMainArea')}
         </MenuItem>
       ) : null}
       <MenuItem

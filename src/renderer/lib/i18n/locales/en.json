@@ -11,7 +11,7 @@
   },
   "fileActions": {
     "label": "File actions",
-    "openInYoda": "Open in Yoda",
+    "openInMainArea": "Open in main area",
     "openInApp": "Open in {{app}}",
     "openFile": "Open file",
     "revealInFolder": "Reveal in folder",

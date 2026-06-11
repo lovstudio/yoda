@@ -11,7 +11,7 @@
   },
   "fileActions": {
     "label": "文件操作",
-    "openInYoda": "在 Yoda 中打开",
+    "openInMainArea": "在主区域打开",
     "openInApp": "在 {{app}} 中打开",
     "openFile": "打开文件",
     "revealInFolder": "在文件夹中显示",
