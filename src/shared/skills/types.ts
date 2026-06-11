@@ -61,3 +61,24 @@ export interface DetectedAgent {
   configDir: string;
   installed: boolean;
 }
+
+/** Per-skill invocation stats parsed from local runtime data via the skillusage CLI. */
+export interface SkillUsageStat {
+  /** Normalized skill name as reported by skillusage */
+  skill: string;
+  total: number;
+  /** User-typed invocations (slash command / $prefix) */
+  manual: number;
+  /** Agent-initiated invocations */
+  auto: number;
+  /** ISO 8601, null when never used */
+  lastUsedAt: string | null;
+  /** Local-timezone YYYY-MM-DD -> count */
+  daily: Record<string, number>;
+}
+
+export interface SkillUsageIndex {
+  generatedAt: string;
+  /** Lookup keyed by lowercased normalized skill name and every raw alias */
+  bySkill: Record<string, SkillUsageStat>;
+}

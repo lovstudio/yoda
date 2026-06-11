@@ -1442,6 +1442,15 @@
     "noMatches": "No skills match your search.",
     "noSkills": "No skills available.",
     "disabled": "Disabled",
+    "usageTitle": "{{manual}} manual / {{auto}} agent invocations",
+    "sort": {
+      "ariaLabel": "Sort skills",
+      "default": "Default",
+      "total": "Most used",
+      "manual": "Most manual",
+      "auto": "Most agent-invoked",
+      "recent": "Recently used"
+    },
     "catalogDescription": "Skills from the <openai>OpenAI</openai> and <anthropic>Anthropic</anthropic> catalogs. Install a skill to make it available across all your coding agents. Skills follow the open <standard>Agent Skills</standard> standard. If you want to use skills from another library, feel free to let us know through the feedback modal.",
     "create": {
       "validation": {

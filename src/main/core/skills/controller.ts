@@ -1,4 +1,5 @@
 import { createRPCController } from '@/shared/ipc/rpc';
+import { getSkillUsageStats } from '@main/core/skills/getUsageStats';
 import { skillsService } from '@main/core/skills/SkillsService';
 import { log } from '@main/lib/logger';
 
@@ -69,6 +70,17 @@ export const skillsController = createRPCController({
       return { success: true, data: agents };
     } catch (error) {
       log.error('Failed to detect agents:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  getUsageStats: async (args?: { refresh?: boolean }) => {
+    try {
+      const stats = await getSkillUsageStats(args?.refresh);
+      return { success: true, data: stats };
+    } catch (error) {
+      // Expected when the skillusage CLI is not installed; the UI degrades.
+      log.warn('Failed to get skill usage stats:', error);
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   },

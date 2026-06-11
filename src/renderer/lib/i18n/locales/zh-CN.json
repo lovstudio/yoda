@@ -1442,6 +1442,15 @@
     "noMatches": "没有匹配的技能。",
     "noSkills": "暂无可用技能。",
     "disabled": "已禁用",
+    "usageTitle": "手动调用 {{manual}} 次 / Agent 调用 {{auto}} 次",
+    "sort": {
+      "ariaLabel": "技能排序",
+      "default": "默认排序",
+      "total": "调用最多",
+      "manual": "手动最多",
+      "auto": "Agent 调用最多",
+      "recent": "最近使用"
+    },
     "catalogDescription": "技能来自 <openai>OpenAI</openai> 和 <anthropic>Anthropic</anthropic> 目录。安装技能后，它会在所有编码代理中可用。技能遵循开放的 <standard>Agent Skills</standard> 标准。如果你想使用其他库中的技能，欢迎通过反馈弹窗告诉我们。",
     "create": {
       "validation": {

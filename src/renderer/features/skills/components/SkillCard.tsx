@@ -1,19 +1,21 @@
 import { motion } from 'framer-motion';
-import { AlertTriangle, Pencil, Plus, PowerOff } from 'lucide-react';
+import { AlertTriangle, ChartNoAxesColumn, Pencil, Plus, PowerOff } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { CatalogSkill, SkillValidationIssue } from '@shared/skills/types';
+import type { CatalogSkill, SkillUsageStat, SkillValidationIssue } from '@shared/skills/types';
 import { parseFrontmatter } from '@shared/skills/validation';
 import { cn } from '@renderer/utils/utils';
 import SkillIconRenderer from './SkillIconRenderer';
 
 interface SkillCardProps {
   skill: CatalogSkill;
+  /** Real invocation stats from skillusage; undefined when unavailable/unused */
+  usage?: SkillUsageStat;
   onSelect: (skill: CatalogSkill) => void;
   onInstall: (skillId: string) => void;
 }
 
-const SkillCard: React.FC<SkillCardProps> = ({ skill, onSelect, onInstall }) => {
+const SkillCard: React.FC<SkillCardProps> = ({ skill, usage, onSelect, onInstall }) => {
   const { t } = useTranslation();
   const description = React.useMemo(() => getDisplayDescription(skill), [skill]);
   const primaryIssue = skill.validationIssues?.[0];
@@ -62,6 +64,17 @@ const SkillCard: React.FC<SkillCardProps> = ({ skill, onSelect, onInstall }) => 
           </p>
         )}
       </div>
+
+      {/* Usage */}
+      {usage && usage.total > 0 && (
+        <span
+          className="flex shrink-0 items-center gap-1 self-center text-[11px] tabular-nums text-muted-foreground"
+          title={t('skills.usageTitle', { manual: usage.manual, auto: usage.auto })}
+        >
+          <ChartNoAxesColumn className="h-3 w-3" />
+          {usage.total}
+        </span>
+      )}
 
       {/* Action */}
       <div className="shrink-0 self-center">

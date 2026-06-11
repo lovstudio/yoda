@@ -1,4 +1,4 @@
-import { Loader2, Plus, RefreshCw, Search } from 'lucide-react';
+import { ArrowDownWideNarrow, Loader2, Plus, RefreshCw, Search } from 'lucide-react';
 import React from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import type { CatalogSkill } from '@shared/skills/types';
@@ -7,9 +7,18 @@ import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
 import { cn } from '@renderer/utils/utils';
+import { SKILL_SORT_MODES, sortSkillsByUsage, type SkillSortMode } from '../skill-sort';
 import SkillCard from './SkillCard';
 import { useSkills } from './useSkills';
+import { useSkillUsage } from './useSkillUsage';
 
 const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const { t } = useTranslation();
@@ -25,6 +34,19 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
     refresh,
     install,
   } = useSkills();
+  const { usage, lookupUsage } = useSkillUsage();
+  const [sortMode, setSortMode] = React.useState<SkillSortMode>('default');
+  const usageAvailable = usage !== null && Object.keys(usage.bySkill).length > 0;
+
+  const sortedInstalledSkills = React.useMemo(
+    () => sortSkillsByUsage(installedSkills, sortMode, lookupUsage),
+    [installedSkills, sortMode, lookupUsage]
+  );
+  const sortedRecommendedSkills = React.useMemo(
+    () => sortSkillsByUsage(recommendedSkills, sortMode, lookupUsage),
+    [recommendedSkills, sortMode, lookupUsage]
+  );
+
   const showCreateSkillModal = useShowModal('createSkillModal');
   const focusedSkillId =
     typeof skillsParams.focusSkillId === 'string' ? skillsParams.focusSkillId : undefined;
@@ -132,6 +154,24 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
               className="pl-9"
             />
           </div>
+          {usageAvailable && (
+            <Select value={sortMode} onValueChange={(value) => setSortMode(value as SkillSortMode)}>
+              <SelectTrigger
+                className="w-auto gap-1.5 text-xs text-muted-foreground"
+                aria-label={t('skills.sort.ariaLabel')}
+              >
+                <ArrowDownWideNarrow className="h-3.5 w-3.5 shrink-0" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {SKILL_SORT_MODES.map((mode) => (
+                  <SelectItem key={mode} value={mode} className="text-xs">
+                    {t(`skills.sort.${mode}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -189,7 +229,7 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
               {t('skills.installed')}
             </h2>
             <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
-              {installedSkills.map((skill) => (
+              {sortedInstalledSkills.map((skill) => (
                 <div
                   key={skill.id}
                   ref={setSkillCardRef(skill.id)}
@@ -199,7 +239,12 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
                       'ring-2 ring-amber-400 ring-offset-2 ring-offset-background'
                   )}
                 >
-                  <SkillCard skill={skill} onSelect={openDetail} onInstall={install} />
+                  <SkillCard
+                    skill={skill}
+                    usage={lookupUsage(skill.id)}
+                    onSelect={openDetail}
+                    onInstall={install}
+                  />
                 </div>
               ))}
             </div>
@@ -212,7 +257,7 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
               {t('skills.recommended')}
             </h2>
             <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
-              {recommendedSkills.map((skill) => (
+              {sortedRecommendedSkills.map((skill) => (
                 <div
                   key={skill.id}
                   ref={setSkillCardRef(skill.id)}
@@ -222,7 +267,12 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
                       'ring-2 ring-amber-400 ring-offset-2 ring-offset-background'
                   )}
                 >
-                  <SkillCard skill={skill} onSelect={openDetail} onInstall={install} />
+                  <SkillCard
+                    skill={skill}
+                    usage={lookupUsage(skill.id)}
+                    onSelect={openDetail}
+                    onInstall={install}
+                  />
                 </div>
               ))}
             </div>
