@@ -1,55 +1,36 @@
-import { Pause, Play, Plus, Settings, Terminal, X } from 'lucide-react';
+import { Pause, Play, Terminal, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type LifecycleScriptsStore } from '@renderer/features/tasks/stores/lifecycle-scripts';
 import { type TerminalTabViewStore } from '@renderer/features/tasks/terminals/terminal-tab-view-store';
-import { useNavigate } from '@renderer/lib/layout/navigation-provider';
-import { MicroLabel } from '@renderer/lib/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import { scriptIcon } from './terminal-tabs';
 
-/** Sidebar of the terminals drawer mode: the terminal list. */
+/**
+ * Sidebar of the terminals drawer mode: the terminal list. Chrome actions
+ * (new terminal, close drawer) live in the BottomPanel tab strip.
+ */
 export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
   terminalTabView,
   activeTerminalId,
   onSelectTerminal,
-  onAddTerminal,
   onRemoveTerminal,
   onRenameTerminal,
-  onClose,
   className,
 }: {
   terminalTabView: TerminalTabViewStore;
   activeTerminalId: string | undefined;
   onSelectTerminal: (id: string) => void;
-  onAddTerminal: () => void;
   onRemoveTerminal: (id: string) => void;
   onRenameTerminal: (id: string, name: string) => void;
-  onClose: () => void;
   className?: string;
 }) {
   const { t } = useTranslation();
   return (
-    <SidebarShell
-      className={className}
-      title={t('tasks.terminals.title')}
-      actions={
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button className={HEADER_BUTTON_CLASS} onClick={onAddTerminal}>
-                <Plus className="size-3" />
-              </button>
-            }
-          />
-          <TooltipContent>{t('tasks.terminals.newTerminal')}</TooltipContent>
-        </Tooltip>
-      }
-      onClose={onClose}
-    >
+    <SidebarList className={className}>
       {terminalTabView.tabs.map((terminal) => (
         <SidebarRow
           key={terminal.data.id}
@@ -78,19 +59,20 @@ export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
           }
         />
       ))}
-    </SidebarShell>
+    </SidebarList>
   );
 });
 
-/** Sidebar of the scripts drawer mode: lifecycle scripts with run/stop. */
+/**
+ * Sidebar of the scripts drawer mode: lifecycle scripts with run/stop.
+ * Chrome actions (configure, close drawer) live in the BottomPanel tab strip.
+ */
 export const ScriptsDrawerSidebar = observer(function ScriptsDrawerSidebar({
   lifecycleScriptsMgr,
   activeScriptId,
   onSelectScript,
   onRunScript,
   onStopScript,
-  onClose,
-  projectId,
   className,
 }: {
   lifecycleScriptsMgr: LifecycleScriptsStore | null;
@@ -98,35 +80,13 @@ export const ScriptsDrawerSidebar = observer(function ScriptsDrawerSidebar({
   onSelectScript: (id: string) => void;
   onRunScript: () => void;
   onStopScript: () => void;
-  onClose: () => void;
-  projectId: string;
   className?: string;
 }) {
   const { t } = useTranslation();
-  const { navigate } = useNavigate();
   const scripts = lifecycleScriptsMgr?.tabs ?? [];
 
   return (
-    <SidebarShell
-      className={className}
-      title={t('tasks.terminals.scripts')}
-      actions={
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                onClick={() => navigate('project', { projectId, view: 'settings' })}
-                className={HEADER_BUTTON_CLASS}
-              >
-                <Settings className="size-3" />
-              </button>
-            }
-          />
-          <TooltipContent>{t('tasks.terminals.configureInProjectSettings')}</TooltipContent>
-        </Tooltip>
-      }
-      onClose={onClose}
-    >
+    <SidebarList className={className}>
       {scripts.map((script) => {
         const isActive = activeScriptId === script.data.id;
         return (
@@ -169,46 +129,13 @@ export const ScriptsDrawerSidebar = observer(function ScriptsDrawerSidebar({
           />
         );
       })}
-    </SidebarShell>
+    </SidebarList>
   );
 });
 
-const HEADER_BUTTON_CLASS =
-  'flex items-center justify-center size-5 rounded hover:bg-background-2 text-foreground-muted hover:text-foreground';
-
-/** Shared chrome: header (title + actions + close) above a row list. */
-function SidebarShell({
-  title,
-  actions,
-  onClose,
-  className,
-  children,
-}: {
-  title: string;
-  actions?: ReactNode;
-  onClose: () => void;
-  className?: string;
-  children: ReactNode;
-}) {
-  const { t } = useTranslation();
+function SidebarList({ className, children }: { className?: string; children: ReactNode }) {
   return (
     <div className={cn('flex flex-col overflow-y-auto text-sm', className)}>
-      <div className="flex items-center justify-between px-4 pt-2">
-        <MicroLabel className="text-foreground">{title}</MicroLabel>
-        <div className="flex items-center gap-0.5">
-          {actions}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button className={HEADER_BUTTON_CLASS} onClick={onClose}>
-                  <X className="size-3" />
-                </button>
-              }
-            />
-            <TooltipContent>{t('common.close')}</TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
       <div className="flex flex-col gap-0.5 p-2">{children}</div>
     </div>
   );

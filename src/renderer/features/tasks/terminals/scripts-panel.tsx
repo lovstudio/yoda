@@ -99,13 +99,11 @@ export const ScriptsPanel = observer(function ScriptsPanel() {
       <ResizablePanel id="scripts-drawer-sidebar" defaultSize="25%" minSize="150px" maxSize="50%">
         <ScriptsDrawerSidebar
           className="h-full"
-          projectId={projectId}
           lifecycleScriptsMgr={lifecycleScriptsMgr}
           activeScriptId={activeScript?.data.id}
           onSelectScript={(id) => lifecycleScriptsMgr?.setActiveTab(id)}
           onRunScript={handleRun}
           onStopScript={handleStop}
-          onClose={() => provisionedTask.taskView.setTerminalDrawerOpen(false)}
         />
       </ResizablePanel>
     </ResizablePanelGroup>

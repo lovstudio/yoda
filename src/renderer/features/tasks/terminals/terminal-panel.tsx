@@ -15,11 +15,10 @@ import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
-import { log } from '@renderer/utils/logger';
 import { useIsActiveTask } from '../hooks/use-is-active-task';
 import { TerminalDrawerSidebar } from './terminal-drawer-sidebar';
 import { TerminalPtyContent } from './terminal-pty-content';
-import { getTerminalsPaneSize, nextTerminalName } from './terminal-tabs';
+import { useCreateTerminal } from './use-create-terminal';
 import { useWorkspaceFileLinks } from './use-workspace-file-links';
 
 export const TerminalsPanel = observer(function TerminalsPanel() {
@@ -53,24 +52,7 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
 
   useTabShortcuts(terminalTabView, { focused: isPanelFocused });
 
-  const handleCreate = async () => {
-    if (!terminalMgr) return;
-    provisionedTask.taskView.setFocusedRegion('bottom');
-    const id = crypto.randomUUID();
-    const name = nextTerminalName((terminalTabView.tabs ?? []).map((s) => s.data.name));
-    try {
-      await terminalMgr.createTerminal({
-        id,
-        projectId,
-        taskId,
-        name,
-        initialSize: getTerminalsPaneSize(),
-      });
-      terminalTabView.setActiveTab(id);
-    } catch (error) {
-      log.error('Failed to create terminal:', error);
-    }
-  };
+  const handleCreate = useCreateTerminal();
 
   useHotkey(getHotkeyRegistration('newTerminal', keyboard), () => void handleCreate(), {
     enabled: newTerminalHotkey !== null,
@@ -132,10 +114,8 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
           terminalTabView={terminalTabView}
           activeTerminalId={activeTerminalId}
           onSelectTerminal={(id) => terminalTabView.setActiveTab(id)}
-          onAddTerminal={() => void handleCreate()}
           onRemoveTerminal={(id) => terminalTabView.removeTab(id)}
           onRenameTerminal={(id, name) => void terminalMgr?.renameTerminal(id, name)}
-          onClose={() => provisionedTask.taskView.setTerminalDrawerOpen(false)}
         />
       </ResizablePanel>
     </ResizablePanelGroup>
