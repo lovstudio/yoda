@@ -29,6 +29,10 @@ import type { TaskWindowTabTarget } from '@shared/task-window';
 import { AppTabContextMenu } from '@renderer/app/app-tab-context-menu';
 import { closeTaskTopTab } from '@renderer/app/open-task-target';
 import type { ViewId } from '@renderer/app/view-registry';
+import {
+  getProjectStore,
+  projectDisplayName,
+} from '@renderer/features/projects/stores/project-selectors';
 import { archiveConversationFlow } from '@renderer/features/tasks/archive-task';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -317,10 +321,17 @@ function describeTaskTab(
       : undefined;
 
   switch (target.kind) {
-    case 'overview':
-      // The titlebar's left slot already shows project/task identity — the
-      // index tab represents the task's overview page.
-      return { label: t('appTabs.overview'), icon: lucideIcon(LayoutDashboard) };
+    case 'overview': {
+      // The index tab carries the scope's identity: "project / branch",
+      // falling back to the task name for tasks without a worktree branch.
+      const projectName =
+        typeof projectId === 'string' ? projectDisplayName(getProjectStore(projectId)) : undefined;
+      const branchName =
+        asProvisioned(taskStore)?.workspace.git.branchName ??
+        (taskStore && 'taskBranch' in taskStore.data ? taskStore.data.taskBranch : undefined);
+      const label = [projectName, branchName ?? taskStore?.data.name].filter(Boolean).join(' / ');
+      return { label: label || t('appTabs.overview'), icon: lucideIcon(LayoutDashboard) };
+    }
     case 'conversation': {
       const provisioned = asProvisioned(taskStore);
       const data = provisioned?.conversations.conversations.get(target.conversationId)?.data;
