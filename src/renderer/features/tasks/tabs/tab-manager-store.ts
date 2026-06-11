@@ -245,6 +245,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       openConversationPreview: action,
       openFile: action,
       openFileInSidebar: action,
+      openFileInShellPin: action,
       openFilePreview: action,
       openDiff: action,
       openDiffPreview: action,
@@ -628,6 +629,26 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     this.entries.set(tab.tabId, tab);
     this.sidebarTabIds.push(tab.tabId);
     this.activeSidebarTabId = tab.tabId;
+  }
+
+  /**
+   * Open a file directly as a shell-pane pinned tab (cross-route). Returns the
+   * tab id so the caller can register the matching pin in AppSidePaneStore —
+   * the pane's own selection/order lives there, never in this store.
+   */
+  openFileInShellPin(path: string, options?: OpenFileOptions): string {
+    const existing = this._findFileEntryByPath(path);
+    if (existing) {
+      existing.isPreview = false;
+      existing.revealLocation(options?.line, options?.column);
+      this.moveTabToShellPin(existing.tabId);
+      return existing.tabId;
+    }
+    const tab = new FileTabStore(path, false);
+    tab.revealLocation(options?.line, options?.column);
+    this.entries.set(tab.tabId, tab);
+    this.shellPinTabIds.push(tab.tabId);
+    return tab.tabId;
   }
 
   openFilePreview(path: string): void {

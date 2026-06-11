@@ -1,4 +1,4 @@
-import { FileText, PanelRightOpen } from 'lucide-react';
+import { FileText, FolderTree, PanelRight, PanelRightOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import {
@@ -6,6 +6,7 @@ import {
   FilePathMenuItems,
   type FilePathTarget,
 } from '@renderer/lib/components/file-path-actions';
+import { appState } from '@renderer/lib/stores/app-state';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -24,6 +25,7 @@ export function useFileActions(sourcePath: string) {
   const { t } = useTranslation();
   const provisioned = useProvisionedTask();
   const relativePath = toWorkspaceRelativePath(sourcePath, provisioned.path);
+  const placement = useTaskFilePlacementActions(relativePath);
 
   const target: FilePathTarget = {
     absolutePath: sourcePath,
@@ -47,7 +49,30 @@ export function useFileActions(sourcePath: string) {
     );
   };
 
-  return { t, relativePath, target, openInEditor, revealInFileTree };
+  return { t, relativePath, target, openInEditor, revealInFileTree, ...placement };
+}
+
+/**
+ * Sidebar placement actions for any path the task tab manager can open —
+ * workspace-relative or absolute (e.g. transcript JSONLs outside the worktree).
+ */
+export function useTaskFilePlacementActions(path: string | null | undefined) {
+  const provisioned = useProvisionedTask();
+
+  const openInSidebar = () => {
+    if (!path) return;
+    provisioned.taskView.tabManager.openFileInSidebar(path);
+    // Pinning while the sidebar is hidden would silently swallow the tab.
+    provisioned.taskView.setSidebarCollapsed(false);
+  };
+
+  const openInGlobalSidebar = () => {
+    if (!path) return;
+    const tabId = provisioned.taskView.tabManager.openFileInShellPin(path);
+    appState.sidePane.pinTask(provisioned.projectId, provisioned.taskId, tabId);
+  };
+
+  return { openInSidebar, openInGlobalSidebar };
 }
 
 export function FileActionsDropdown({
@@ -57,7 +82,15 @@ export function FileActionsDropdown({
   sourcePath: string;
   className?: string;
 }) {
-  const { t, relativePath, target, openInEditor, revealInFileTree } = useFileActions(sourcePath);
+  const {
+    t,
+    relativePath,
+    target,
+    openInEditor,
+    openInSidebar,
+    openInGlobalSidebar,
+    revealInFileTree,
+  } = useFileActions(sourcePath);
 
   return (
     <FilePathActionsDropdown target={target} className={className}>
@@ -75,10 +108,28 @@ export function FileActionsDropdown({
           <DropdownMenuItem
             onClick={(event) => {
               event.stopPropagation();
-              revealInFileTree();
+              openInSidebar();
+            }}
+          >
+            <PanelRight className="size-4" />
+            {t('tasks.tabs.openInSidePane')}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={(event) => {
+              event.stopPropagation();
+              openInGlobalSidebar();
             }}
           >
             <PanelRightOpen className="size-4" />
+            {t('appTabs.openInGlobalSidePane')}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={(event) => {
+              event.stopPropagation();
+              revealInFileTree();
+            }}
+          >
+            <FolderTree className="size-4" />
             {t('tasks.panel.revealInFileTree')}
           </DropdownMenuItem>
         </>
@@ -148,20 +199,38 @@ export function FileActionsMenuItems({
   sourcePath: string;
   kind?: 'file' | 'directory';
 }) {
-  const { t, relativePath, target, openInEditor, revealInFileTree } = useFileActions(sourcePath);
+  const {
+    t,
+    relativePath,
+    target,
+    openInEditor,
+    openInSidebar,
+    openInGlobalSidebar,
+    revealInFileTree,
+  } = useFileActions(sourcePath);
 
   return (
     <>
       {relativePath ? (
         <>
           {kind === 'file' ? (
-            <ContextMenuItem className="whitespace-nowrap" onClick={openInEditor}>
-              <FileText className="size-4" />
-              {t('fileActions.openInYoda')}
-            </ContextMenuItem>
+            <>
+              <ContextMenuItem className="whitespace-nowrap" onClick={openInEditor}>
+                <FileText className="size-4" />
+                {t('fileActions.openInYoda')}
+              </ContextMenuItem>
+              <ContextMenuItem className="whitespace-nowrap" onClick={openInSidebar}>
+                <PanelRight className="size-4" />
+                {t('tasks.tabs.openInSidePane')}
+              </ContextMenuItem>
+              <ContextMenuItem className="whitespace-nowrap" onClick={openInGlobalSidebar}>
+                <PanelRightOpen className="size-4" />
+                {t('appTabs.openInGlobalSidePane')}
+              </ContextMenuItem>
+            </>
           ) : null}
           <ContextMenuItem className="whitespace-nowrap" onClick={revealInFileTree}>
-            <PanelRightOpen className="size-4" />
+            <FolderTree className="size-4" />
             {t('tasks.panel.revealInFileTree')}
           </ContextMenuItem>
           <ContextMenuSeparator />
