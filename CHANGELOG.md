@@ -5,6 +5,51 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.8.0 — 2026-06-12
+
+### Added
+
+- **Theme lineup**: the Matrix palette is promoted to a first-class `ydark`
+  theme, joined by 尤达绿 II / 尤达白 II variants; follow-system mode lets you
+  pick which light/dark pair to alternate between.
+- **Kernel-boot startup screen**: a boot-log style splash that exits on the
+  app's ready signal.
+- **Browser as a persistent card**: the in-app browser is now a standing
+  feature card (Codex-style single page + history) instead of ad-hoc tabs.
+- **Skills overhaul**: skill detail opens as a top-level tab instead of a
+  modal; invocation stats gain daily history with a 30-day trend chart;
+  skills support pinning; the detail page is responsive in narrow containers
+  (actions collapse into an icon row / overflow menu).
+- **Settings reorganization**: a new "Session" tab groups naming, summary,
+  and pre-archive skill options (tmux moved there too); branch auto-naming is
+  configurable (time-hash default / AI semantic); worktree location is a
+  two-way choice (in-project `.worktrees` / unified directory) with a global
+  default; settings pages and embedded views adapt via container queries,
+  with a chip-row tab switcher in the sidebar.
+- **Side-pane everywhere**: all top-level tabs can open in the sidebar with
+  the shell-level cross-route side pane restored; nav items and shortcut
+  icons support right-click / Opt+click to open in the global side pane,
+  which gains a close button.
+- **File actions**: the shared file menu supports opening in the sidebar or
+  global sidebar, covers out-of-workspace and global files uniformly, and
+  agent-home read-only access extends to `~/.claude` and `~/.codex`.
+- Tab polish: the tab icon slot morphs into a close button on hover (no
+  trailing close slot); the "+" button stays pinned at the right edge on
+  overflow; the app menu is regrouped (About + Updates first, Restart next
+  to Quit).
+
+### Changed
+
+- **Naming direction flipped**: the session name is now the source of truth —
+  task names follow it, and branch names are decoupled from titles.
+
+### Fixed
+
+- Explicitly stored `null` settings are no longer treated as missing and
+  reset to defaults.
+- Force turn-started when an answered interactive tool resolves
+  awaiting-input, fixing stuck run states.
+
 ## 0.7.0 — 2026-06-11
 
 ### Added
