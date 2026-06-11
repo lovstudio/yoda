@@ -53,19 +53,15 @@ export async function setupApplicationMenu(): Promise<void> {
                 label: `About ${app.name} (${appVersion})`,
                 click: () => app.showAboutPanel(),
               },
+              {
+                label: 'Check for Updates\u2026',
+                click: () => events.emit(menuCheckForUpdatesChannel, undefined),
+              },
               { type: 'separator' as const },
               {
                 label: 'Settings\u2026',
                 accelerator: 'CmdOrCtrl+,',
                 click: () => events.emit(menuOpenSettingsChannel, undefined),
-              },
-              {
-                label: 'Check for Updates\u2026',
-                click: () => events.emit(menuCheckForUpdatesChannel, undefined),
-              },
-              {
-                label: `Restart ${app.name}`,
-                click: restartApp,
               },
               { type: 'separator' as const },
               { role: 'services' as const },
@@ -73,6 +69,11 @@ export async function setupApplicationMenu(): Promise<void> {
               { role: 'hide' as const },
               { role: 'hideOthers' as const },
               { role: 'unhide' as const },
+              { type: 'separator' as const },
+              {
+                label: `Restart ${app.name}`,
+                click: restartApp,
+              },
               { type: 'separator' as const },
               {
                 label: `Quit ${app.name}`,
@@ -95,11 +96,11 @@ export async function setupApplicationMenu(): Promise<void> {
                 accelerator: 'CmdOrCtrl+,',
                 click: () => events.emit(menuOpenSettingsChannel, undefined),
               },
+              { type: 'separator' as const },
               {
                 label: `Restart ${app.name}`,
                 click: restartApp,
               },
-              { type: 'separator' as const },
             ]
           : []),
         isMac

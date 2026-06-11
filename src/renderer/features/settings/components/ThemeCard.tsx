@@ -1,7 +1,18 @@
-import { Download, FileJson, Monitor, Moon, Sun, Sunset, Trash2, Upload } from 'lucide-react';
+import {
+  Download,
+  FileJson,
+  Leaf,
+  Monitor,
+  Moon,
+  Sun,
+  SunDim,
+  Sunset,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import React, { useCallback, useMemo, useRef, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Theme } from '@shared/app-settings';
+import type { SystemThemes, Theme } from '@shared/app-settings';
 import {
   createCustomThemeCollection,
   CUSTOM_THEME_EXAMPLE,
@@ -18,6 +29,13 @@ import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { captureTelemetry } from '@renderer/utils/telemetryClient';
 import { cn } from '@renderer/utils/utils';
@@ -26,11 +44,14 @@ const ThemeCard: React.FC = () => {
   const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
   const { value: customThemesValue, update, isSaving } = useAppSettingsKey('customThemes');
+  const { value: systemThemesValue, update: updateSystemThemes } =
+    useAppSettingsKey('systemThemes');
   const { toast } = useToast();
   const showConfirm = useShowModal('confirmActionModal');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const customThemes = useMemo(() => customThemesValue?.items ?? [], [customThemesValue?.items]);
   const selectedCustomThemeId = getCustomThemeId(theme);
+  const systemThemes: SystemThemes = systemThemesValue ?? { light: 'ylight', dark: 'ydark' };
 
   const handleSetTheme = (next: Theme) => {
     if (theme !== next) {
@@ -291,6 +312,16 @@ const ThemeCard: React.FC = () => {
         </button>
         <button
           type="button"
+          onClick={() => handleSetTheme('ylight2')}
+          className={`${buttonBase} ${theme === 'ylight2' ? activeClass : inactiveClass}`}
+          aria-pressed={theme === 'ylight2'}
+          aria-label={t('settings.theme.ariaLight2')}
+        >
+          <SunDim className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="text-center">{t('settings.theme.yodaLight2')}</span>
+        </button>
+        <button
+          type="button"
           onClick={() => handleSetTheme('ydark')}
           className={`${buttonBase} ${theme === 'ydark' ? activeClass : inactiveClass}`}
           aria-pressed={theme === 'ydark'}
@@ -309,7 +340,46 @@ const ThemeCard: React.FC = () => {
           <Sunset className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="text-center">{t('settings.theme.yodaWarm')}</span>
         </button>
+        <button
+          type="button"
+          onClick={() => handleSetTheme('ygreen')}
+          className={`${buttonBase} ${theme === 'ygreen' ? activeClass : inactiveClass}`}
+          aria-pressed={theme === 'ygreen'}
+          aria-label={t('settings.theme.ariaGreen')}
+        >
+          <Leaf className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="text-center">{t('settings.theme.yodaGreen')}</span>
+        </button>
       </div>
+      {theme === null && (
+        <div className="grid grid-cols-1 gap-2 rounded-md border border-border/60 bg-background-1 px-3 py-2.5 sm:grid-cols-2">
+          <SystemSlotSelect
+            label={t('settings.theme.systemLight')}
+            value={systemThemes.light}
+            options={[
+              { value: 'ylight', label: t('settings.theme.yodaLight') },
+              { value: 'ylight2', label: t('settings.theme.yodaLight2') },
+              { value: 'ywarm', label: t('settings.theme.yodaWarm') },
+              ...customThemes
+                .filter((item) => item.mode === 'light')
+                .map((item) => ({ value: toCustomThemeSelection(item.id), label: item.name })),
+            ]}
+            onChange={(next) => updateSystemThemes({ ...systemThemes, light: next })}
+          />
+          <SystemSlotSelect
+            label={t('settings.theme.systemDark')}
+            value={systemThemes.dark}
+            options={[
+              { value: 'ydark', label: t('settings.theme.yodaDark') },
+              { value: 'ygreen', label: t('settings.theme.yodaGreen') },
+              ...customThemes
+                .filter((item) => item.mode === 'dark')
+                .map((item) => ({ value: toCustomThemeSelection(item.id), label: item.name })),
+            ]}
+            onChange={(next) => updateSystemThemes({ ...systemThemes, dark: next })}
+          />
+        </div>
+      )}
       <div className="mt-1 grid gap-2">
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs font-medium text-foreground-muted">
@@ -377,6 +447,44 @@ const ThemeCard: React.FC = () => {
     </div>
   );
 };
+
+function SystemSlotSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: SystemThemes['light'];
+  options: Array<{ value: SystemThemes['light']; label: string }>;
+  onChange: (next: SystemThemes['light']) => void;
+}) {
+  const selected = options.find((option) => option.value === value);
+  return (
+    <label className="flex min-w-0 items-center justify-between gap-2">
+      <span className="shrink-0 text-xs text-foreground-muted">{label}</span>
+      <div className="w-36 min-w-0">
+        <Select
+          value={value}
+          onValueChange={(next) => {
+            if (next) onChange(next as SystemThemes['light']);
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue>{() => selected?.label ?? value}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </label>
+  );
+}
 
 function ThemeSwatches({ theme }: { theme: CustomTheme }) {
   const swatches = [

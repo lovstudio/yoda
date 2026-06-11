@@ -2,6 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useState } from 'react';
 import { AppMenuEvents } from './app/app-menu-events';
+import { BootScreen } from './app/boot-screen';
 import { WelcomeScreen } from './app/welcome';
 import { Workspace } from './app/workspace';
 import { IntegrationsProvider } from './features/integrations/integrations-provider';
@@ -32,6 +33,9 @@ const AppContent = observer(function AppContent() {
   const { data: session, isLoading: sessionLoading } = useAccountSession();
 
   const isLoading = sessionLoading;
+
+  // Boot splash: main/full-app windows only — task windows pop open instantly.
+  const [bootScreenDone, setBootScreenDone] = useState(isTaskWindowLaunch);
 
   // Computed once when queries first resolve while in onboarding. Never updated
   // after that so query refetches mid-onboarding cannot shrink the step list
@@ -87,7 +91,15 @@ const AppContent = observer(function AppContent() {
               <WorkspaceViewProvider>
                 <AppMenuEvents onOpenSettings={handleOpenSettingsFromMenu} />
                 <RightSidebarProvider>
-                  <ThemeProvider>{renderContent()}</ThemeProvider>
+                  <ThemeProvider>
+                    {renderContent()}
+                    {!bootScreenDone && (
+                      <BootScreen
+                        ready={!isLoading && !(view === 'onboarding' && frozenSteps === null)}
+                        onFinished={() => setBootScreenDone(true)}
+                      />
+                    )}
+                  </ThemeProvider>
                 </RightSidebarProvider>
               </WorkspaceViewProvider>
             </IntegrationsProvider>

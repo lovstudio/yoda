@@ -4,6 +4,7 @@ import {
   FolderInput,
   MessageSquareShare,
   Milestone,
+  PanelRightOpen,
   Puzzle,
   Search,
   Settings,
@@ -15,6 +16,7 @@ import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { YODA_DOCS_URL } from '@shared/urls';
+import type { ViewId } from '@renderer/app/view-registry';
 import {
   useSkillValidationIssues,
   type SkillValidationIssueEntry,
@@ -28,8 +30,15 @@ import {
   useWorkspaceSlots,
 } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { sidebarStore } from '@renderer/lib/stores/app-state';
+import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@renderer/lib/ui/context-menu';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import { SidebarPinnedTaskList } from './pinned-task-list';
 import { SidebarProjectlessTaskList } from './projectless-task-list';
@@ -48,10 +57,75 @@ import { SidebarVersionAnchor } from './sidebar-version-anchor';
 import { SidebarVirtualList } from './sidebar-virtual-list';
 import { useSidebarDrop } from './use-sidebar-drop';
 
+/** Tracks whether the Alt/Option key is held, resetting on window blur. */
+function useAltKeyHeld(): boolean {
+  const [held, setHeld] = React.useState(false);
+  React.useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Alt') setHeld(true);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Alt') setHeld(false);
+    };
+    const onBlur = () => setHeld(false);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
+  return held;
+}
+
+/**
+ * Wraps a sidebar control that routes to a registered view: right-click offers
+ * "open in global sidebar" (copy semantics — the pane gets an independent
+ * instance), and while Alt/Option is held a hover tooltip hints that clicking
+ * pins the view into the shell side pane instead of navigating.
+ */
+const GlobalSidePaneTarget: React.FC<{
+  viewId: ViewId;
+  params?: Record<string, unknown>;
+  altHeld: boolean;
+  tooltipSide?: 'top' | 'right';
+  children: React.ReactElement;
+}> = ({ viewId, params, altHeld, tooltipSide = 'right', children }) => {
+  const { t } = useTranslation();
+  const [hovered, setHovered] = React.useState(false);
+  const label = t('appTabs.openInGlobalSidePane');
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger
+        className="shrink-0"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <Tooltip open={altHeld && hovered}>
+          <TooltipTrigger render={children} />
+          <TooltipContent side={tooltipSide}>{label}</TooltipContent>
+        </Tooltip>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem
+          className="whitespace-nowrap"
+          onClick={() => appState.sidePane.pinView(viewId, params ?? {})}
+        >
+          <PanelRightOpen className="size-4" />
+          {label}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+};
+
 export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const { currentView } = useWorkspaceSlots();
+  const altHeld = useAltKeyHeld();
 
   const showCommandPalette = useShowModal('commandPaletteModal');
   const showFeedbackModal = useShowModal('feedbackModal');
@@ -96,6 +170,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
     label: string;
     title?: string;
     onClick: () => void;
+    pinParams?: Record<string, unknown>;
     showIssueDot?: boolean;
   }[] = [
     {
@@ -104,6 +179,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       label: t('sidebar.skills'),
       title: skillIssueTitle ?? t('sidebar.skills'),
       onClick: skillIssueCount > 0 ? handleOpenFirstSkillIssue : () => navigate('skills'),
+      pinParams: firstSkillIssue ? { focusSkillId: firstSkillIssue.skill.id } : undefined,
       showIssueDot: skillIssueCount > 0,
     },
     {
@@ -200,24 +276,32 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
           <div className="mx-2 my-1 border-t border-border" />
           {!sidebarStore.navSectionHidden && (
             <SidebarMenu className="px-2">
-              <SidebarMenuButton
-                isActive={isCurrentView(currentView, 'settings')}
-                onClick={() => navigate('settings')}
-                aria-label={t('sidebar.settings')}
-                className="w-full justify-start"
-              >
-                <Settings className="h-5 w-5 sm:h-4 sm:w-4" />
-                {t('sidebar.settings')}
-              </SidebarMenuButton>
-              <SidebarMenuButton
-                isActive={isCurrentView(currentView, 'roadmap')}
-                onClick={() => navigate('roadmap')}
-                aria-label={t('sidebar.roadmap')}
-                className="w-full justify-start"
-              >
-                <Milestone className="h-5 w-5 sm:h-4 sm:w-4" />
-                {t('sidebar.roadmap')}
-              </SidebarMenuButton>
+              <GlobalSidePaneTarget viewId="settings" altHeld={altHeld}>
+                <SidebarMenuButton
+                  isActive={isCurrentView(currentView, 'settings')}
+                  onClick={(e) =>
+                    e.altKey ? appState.sidePane.pinView('settings', {}) : navigate('settings')
+                  }
+                  aria-label={t('sidebar.settings')}
+                  className="w-full justify-start"
+                >
+                  <Settings className="h-5 w-5 sm:h-4 sm:w-4" />
+                  {t('sidebar.settings')}
+                </SidebarMenuButton>
+              </GlobalSidePaneTarget>
+              <GlobalSidePaneTarget viewId="roadmap" altHeld={altHeld}>
+                <SidebarMenuButton
+                  isActive={isCurrentView(currentView, 'roadmap')}
+                  onClick={(e) =>
+                    e.altKey ? appState.sidePane.pinView('roadmap', {}) : navigate('roadmap')
+                  }
+                  aria-label={t('sidebar.roadmap')}
+                  className="w-full justify-start"
+                >
+                  <Milestone className="h-5 w-5 sm:h-4 sm:w-4" />
+                  {t('sidebar.roadmap')}
+                </SidebarMenuButton>
+              </GlobalSidePaneTarget>
               <SidebarMenuButton
                 onClick={() => void rpc.app.openExternal(YODA_DOCS_URL)}
                 aria-label={t('sidebar.docs')}
@@ -243,25 +327,37 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
             <div className="min-w-0 flex-1">
               <SidebarVersionAnchor />
             </div>
-            {quickNavItems.map(({ key, icon: Icon, label, title, onClick, showIssueDot }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={onClick}
-                aria-label={label}
-                title={title ?? label}
-                className={cn(
-                  'relative flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-tertiary-passive transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  isCurrentView(currentView, key) &&
-                    'bg-background-tertiary-1 text-foreground-tertiary'
-                )}
-              >
-                <Icon className="size-4" />
-                {showIssueDot && (
-                  <span className="absolute right-1 top-1 size-1.5 rounded-full bg-amber-500" />
-                )}
-              </button>
-            ))}
+            {quickNavItems.map(
+              ({ key, icon: Icon, label, title, onClick, pinParams, showIssueDot }) => (
+                <GlobalSidePaneTarget
+                  key={key}
+                  viewId={key}
+                  params={pinParams}
+                  altHeld={altHeld}
+                  tooltipSide="top"
+                >
+                  <button
+                    type="button"
+                    onClick={(e) =>
+                      e.altKey ? appState.sidePane.pinView(key, pinParams ?? {}) : onClick()
+                    }
+                    aria-label={label}
+                    // Native title would fight the Alt-hint tooltip.
+                    title={altHeld ? undefined : (title ?? label)}
+                    className={cn(
+                      'relative flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-tertiary-passive transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      isCurrentView(currentView, key) &&
+                        'bg-background-tertiary-1 text-foreground-tertiary'
+                    )}
+                  >
+                    <Icon className="size-4" />
+                    {showIssueDot && (
+                      <span className="absolute right-1 top-1 size-1.5 rounded-full bg-amber-500" />
+                    )}
+                  </button>
+                </GlobalSidePaneTarget>
+              )
+            )}
           </div>
         </div>
       </SidebarContainer>
