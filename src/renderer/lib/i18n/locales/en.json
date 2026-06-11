@@ -1506,7 +1506,31 @@
     "disable": "Disable",
     "enable": "Enable",
     "installing": "Installing...",
-    "install": "Install"
+    "install": "Install",
+    "triggerTest": {
+      "title": "Trigger test",
+      "hint": "Check whether this skill gets invoked when it should. Each query starts one headless Claude session and uses a small amount of quota; runs are manual only.",
+      "empty": "Generate queries with AI or add them manually to verify the skill's trigger behavior.",
+      "generate": "Generate queries",
+      "generating": "Generating…",
+      "generateFailed": "Failed to generate trigger queries",
+      "addQuery": "Add query",
+      "run": "Run",
+      "stop": "Stop",
+      "summary": "{{passed}}/{{total}} passed",
+      "expectTrigger": "Should trigger",
+      "expectNoTrigger": "Should not trigger",
+      "toggleExpected": "Toggle expected outcome",
+      "queryPlaceholder": "Type what a user might say…",
+      "removeQuery": "Remove query",
+      "status": {
+        "triggered": "Triggered",
+        "notTriggered": "Not triggered",
+        "otherSkill": "Triggered {{skill}}",
+        "timeout": "Timed out",
+        "error": "Error"
+      }
+    }
   },
   "agentManager": {
     "title": "Agents",
