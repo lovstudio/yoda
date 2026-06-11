@@ -262,7 +262,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     onArchive: handleArchiveWithNote,
     onArchiveWithSkill: () => handleArchive(),
     hasArchiveSkill: hasPreArchiveCommand,
-    onConfigureArchiveSkill: () => navigate('settings', { tab: 'tasks' }),
+    onConfigureArchiveSkill: () => navigate('settings', { tab: 'sessions' }),
     onCopyYodaLink: handleCopyYodaLink,
     onReconnect: handleReconnect,
     onRestartSession: handleRestartSession,

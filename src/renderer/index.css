@@ -130,10 +130,10 @@
 
 @layer base {
   .ylight {
-    --background: color(display-p3 0.988 0.988 0.988);
-    --background-1: color(display-p3 0.975 0.975 0.975);
-    --background-2: color(display-p3 0.939 0.939 0.939);
-    --background-3: color(display-p3 0.908 0.908 0.908);
+    --background: color(display-p3 1 1 1);
+    --background-1: color(display-p3 0.98 0.98 0.98);
+    --background-2: color(display-p3 0.949 0.949 0.949);
+    --background-3: color(display-p3 0.918 0.918 0.918);
 
     --foreground: color(display-p3 0.125 0.125 0.125);
     --foreground-inverse: white;

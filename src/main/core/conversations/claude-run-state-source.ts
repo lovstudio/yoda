@@ -236,6 +236,8 @@ class ClaudeTranscriptStateTailer implements ClaudeRunStateWatcher {
    * is harmless (it also feeds the watchdog's `updatedAt`).
    */
   private lastFingerprint: string | undefined;
+  /** Previous classified state — needed to detect awaiting-input → working. */
+  private lastState: ClaudeTurnState | undefined;
   private stopped = false;
 
   constructor(
@@ -332,17 +334,31 @@ class ClaudeTranscriptStateTailer implements ClaudeRunStateWatcher {
     const first = this.lastFingerprint === undefined;
     if (fingerprint === this.lastFingerprint) return;
     this.lastFingerprint = fingerprint;
+    const previousState = this.lastState;
+    this.lastState = state;
     // On the very first read, only act if the session is actively running — a
     // first-read `idle` is the steady state and must not fire a spurious
     // `completed` (green dot) for a session that simply isn't running.
     if (first && state === 'idle') return;
-    this.dispatch(eventForClaudeVerdict(state, verdict));
+    this.dispatch(eventForClaudeVerdict(state, verdict, previousState));
   }
 }
 
-function eventForClaudeVerdict(state: ClaudeTurnState, verdict: ClaudeTurnVerdict): RunStateEvent {
+function eventForClaudeVerdict(
+  state: ClaudeTurnState,
+  verdict: ClaudeTurnVerdict,
+  previousState?: ClaudeTurnState
+): RunStateEvent {
   switch (state) {
     case 'working':
+      // awaiting-input → working means the transcript recorded the tool_result
+      // for the pending interactive tool — the user answered. Force the
+      // transition so the reducer's "keep awaiting-input on non-forced starts"
+      // guard doesn't pin the stale prompt state when the PostToolUse hook is
+      // missed (mirrors the Codex rollout tailer's resolved-call handling).
+      if (previousState === 'awaiting-input') {
+        return { kind: 'turn-started', at: Date.now(), force: true };
+      }
       // NOT forced: the tailer only *observes* that a turn is in progress, so it
       // must not clear a more specific awaiting-input sub-state set elsewhere.
       return { kind: 'turn-started', at: Date.now() };

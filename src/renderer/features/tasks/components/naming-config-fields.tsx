@@ -29,8 +29,8 @@ const MAX_NAMING_TIMEOUT_SECONDS = Math.floor(MAX_TASK_NAMING_TIMEOUT_MS / 1_000
 
 /**
  * Shared task-naming configuration controls (naming Agent, target language,
- * context sources). Rendered both in the Tasks settings tab and inline in the
- * task rename panel so the two surfaces stay aligned by construction.
+ * context sources). Rendered both in the Sessions settings tab and inline in
+ * the task rename panel so the two surfaces stay aligned by construction.
  */
 export const NamingConfigFields = observer(function NamingConfigFields({
   className,

@@ -2,6 +2,7 @@
   "appTabs": {
     "closeTab": "Close tab",
     "openInGlobalSidePane": "Open in global sidebar",
+    "closeGlobalSidePane": "Close global sidebar",
     "overview": "Overview",
     "home": "Home",
     "project": "Project",
@@ -256,6 +257,7 @@
       "account": "Account",
       "agents": "Runtime",
       "tasks": "Tasks",
+      "sessions": "Sessions",
       "integrations": "Integrations",
       "openIn": "Open in",
       "mcp": "MCP",
@@ -275,7 +277,10 @@
       "description": "Manage your account, privacy settings, notifications, and app updates."
     },
     "tasksTab": {
-      "description": "Configure how new tasks are created, named, and run."
+      "description": "Configure how new tasks are created and run."
+    },
+    "sessionsTab": {
+      "description": "Configure session naming, summaries, and archiving."
     },
     "account": {
       "description": "Manage your Yoda account.",
@@ -381,16 +386,16 @@
       "chooseHowYodaLooks": "Choose how Yoda looks.",
       "system": "System",
       "yodaLight": "Yoda Light",
-      "yodaLight2": "Yoda Light II",
+      "yodaLightGreen": "Yoda Light Green",
       "yodaDark": "Yoda Dark",
       "yodaWarm": "Yoda Warm",
-      "yodaGreen": "Yoda Green",
+      "yodaDarkGreen": "Yoda Dark Green",
       "ariaSystem": "Set theme to system preference",
       "ariaLight": "Set theme to Yoda Light",
-      "ariaLight2": "Set theme to Yoda Light II",
+      "ariaLightGreen": "Set theme to Yoda Light Green",
       "ariaDark": "Set theme to Yoda Dark",
       "ariaWarm": "Set theme to Yoda Warm",
-      "ariaGreen": "Set theme to Yoda Green",
+      "ariaDarkGreen": "Set theme to Yoda Dark Green",
       "systemLight": "Light appearance",
       "systemDark": "Dark appearance",
       "exampleJson": "Example JSON",

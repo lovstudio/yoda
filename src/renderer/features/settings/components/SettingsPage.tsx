@@ -49,6 +49,7 @@ export type SettingsPageTab =
   | 'account'
   | 'clis-models'
   | 'tasks'
+  | 'sessions'
   | 'integrations'
   | 'open-in'
   | 'mcp'
@@ -88,10 +89,11 @@ function useSettingsTabGroups(): SettingsTabEntry[][] {
       { id: 'terminal', label: t('settings.tabs.terminal') },
       { id: 'keyboard-shortcuts', label: t('settings.tabs.keyboardShortcuts') },
     ],
-    // Projects and the tasks that run inside them.
+    // Projects, the tasks that run inside them, and the agent sessions inside tasks.
     [
       { id: 'repository', label: t('settings.tabs.repository') },
       { id: 'tasks', label: t('settings.tabs.tasks') },
+      { id: 'sessions', label: t('settings.tabs.sessions') },
     ],
     // Agent execution: runtimes and their capabilities.
     [
@@ -199,6 +201,20 @@ export function SettingsPage({
       description: t('settings.tasksTab.description'),
       sections: [
         {
+          id: 'auto-trust-worktrees',
+          component: <AutoTrustWorktreesRow />,
+        },
+        {
+          id: 'enable-tmux',
+          component: <EnableTmuxRow />,
+        },
+      ],
+    },
+    sessions: {
+      title: t('settings.tabs.sessions'),
+      description: t('settings.sessionsTab.description'),
+      sections: [
+        {
           id: 'auto-generate-task-names',
           component: <AutoGenerateTaskNamesRow />,
         },
@@ -225,14 +241,6 @@ export function SettingsPage({
               <SummaryConfigFields />
             </div>
           ),
-        },
-        {
-          id: 'auto-trust-worktrees',
-          component: <AutoTrustWorktreesRow />,
-        },
-        {
-          id: 'enable-tmux',
-          component: <EnableTmuxRow />,
         },
         {
           id: 'pre-archive-command',

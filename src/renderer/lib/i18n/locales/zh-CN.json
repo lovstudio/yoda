@@ -2,6 +2,7 @@
   "appTabs": {
     "closeTab": "关闭标签页",
     "openInGlobalSidePane": "在全局侧边栏打开",
+    "closeGlobalSidePane": "关闭全局侧边栏",
     "overview": "概览",
     "home": "主页",
     "project": "项目",
@@ -256,6 +257,7 @@
       "account": "账户",
       "agents": "Runtime",
       "tasks": "任务",
+      "sessions": "会话",
       "integrations": "集成",
       "openIn": "打开方式",
       "mcp": "MCP",
@@ -275,7 +277,10 @@
       "description": "管理你的账户、隐私设置、通知与应用更新。"
     },
     "tasksTab": {
-      "description": "配置新任务的创建、命名与运行方式。"
+      "description": "配置新任务的创建与运行方式。"
+    },
+    "sessionsTab": {
+      "description": "管理会话的命名、摘要与归档。"
     },
     "account": {
       "description": "管理你的 Yoda 账户。",
@@ -381,16 +386,16 @@
       "chooseHowYodaLooks": "选择 Yoda 的外观。",
       "system": "跟随系统",
       "yodaLight": "尤达白",
-      "yodaLight2": "尤达白 II",
+      "yodaLightGreen": "尤达浅绿",
       "yodaDark": "尤达黑",
       "yodaWarm": "尤达暖",
-      "yodaGreen": "尤达绿",
+      "yodaDarkGreen": "尤达暗绿",
       "ariaSystem": "设置主题为跟随系统",
       "ariaLight": "设置主题为尤达白",
-      "ariaLight2": "设置主题为尤达白 II",
+      "ariaLightGreen": "设置主题为尤达浅绿",
       "ariaDark": "设置主题为尤达黑",
       "ariaWarm": "设置主题为尤达暖",
-      "ariaGreen": "设置主题为尤达绿",
+      "ariaDarkGreen": "设置主题为尤达暗绿",
       "systemLight": "浅色模式使用",
       "systemDark": "深色模式使用",
       "exampleJson": "示例 JSON",

@@ -213,6 +213,34 @@ describe('watchClaudeRunState (live tailer)', () => {
     expect(events.map((e) => e.kind)).toEqual(['turn-started', 'turn-completed']);
   });
 
+  it('forces turn-started when a pending interactive tool is answered', async () => {
+    // Regression: the reducer keeps `awaiting-input` on non-forced starts, so
+    // when the PostToolUse hook is missed the tailer's plain turn-started was
+    // swallowed and the sidebar stayed pinned at awaiting-input after the user
+    // answered an AskUserQuestion.
+    const askUse = {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', name: 'AskUserQuestion', id: 'tu_1' }],
+      },
+    };
+    const answer = {
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_1' }] },
+      timestamp: '2026-06-10T00:00:05.000Z',
+    };
+    writeTranscript('s6', [stop, userMsg, askUse]); // pending question = awaiting-input
+    const events: RunStateEvent[] = [];
+    const w = watchClaudeRunState({ cwd: '/repo', conversationId: 's6' }, (e) => events.push(e));
+    await waitFor(() => events.some((e) => e.kind === 'awaiting-input'));
+    writeTranscript('s6', [stop, userMsg, askUse, answer]); // answered → back to working
+    await waitFor(() => events.some((e) => e.kind === 'turn-started'));
+    w.stop();
+    const started = events.find((e) => e.kind === 'turn-started');
+    expect(started).toMatchObject({ kind: 'turn-started', force: true });
+  });
+
   it('fires turn-interrupted when a working session later writes an interrupt sentinel', async () => {
     const interrupt = {
       type: 'user',

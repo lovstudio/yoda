@@ -193,7 +193,7 @@ export const TaskRow = observer(function TaskRow({
       onArchive={handleArchive}
       onArchiveWithSkill={handleArchiveWithSkill}
       hasArchiveSkill={hasPreArchiveCommand}
-      onConfigureArchiveSkill={() => navigate('settings', { tab: 'tasks' })}
+      onConfigureArchiveSkill={() => navigate('settings', { tab: 'sessions' })}
       onCopyYodaLink={handleCopyYodaLink}
       onRestore={handleRestore}
       onRestartSession={handleRestartSession}

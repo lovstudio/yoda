@@ -422,7 +422,7 @@ function ConversationArchiveSubmenu({
         </ContextMenuItem>
         <ContextMenuItem
           className="whitespace-nowrap"
-          onClick={() => navigate('settings', { tab: 'tasks' })}
+          onClick={() => navigate('settings', { tab: 'sessions' })}
         >
           <Settings2 className="size-4" />
           {t('tasks.context.configureArchiveSkill')}

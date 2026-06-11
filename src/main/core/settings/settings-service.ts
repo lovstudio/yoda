@@ -36,13 +36,18 @@ export class SettingsStore implements IInitializable {
     return next;
   }
 
+  /**
+   * Returns `undefined` when the key has never been stored (or is corrupt).
+   * A stored JSON `null` round-trips as `null` — it is a real value (e.g.
+   * theme's explicit "follow system"), not "missing".
+   */
   private async readRaw(key: AppSettingsKey): Promise<unknown> {
     const [row] = await db.select().from(appSettings).where(eq(appSettings.key, key)).execute();
-    if (!row) return null;
+    if (!row) return undefined;
     try {
       return JSON.parse(row.value);
     } catch {
-      return null;
+      return undefined;
     }
   }
 
@@ -66,7 +71,7 @@ export class SettingsStore implements IInitializable {
     const raw = await this.readRaw(key);
 
     let value: AppSettings[K];
-    if (raw === null || raw === undefined) {
+    if (raw === undefined) {
       value = defaults;
     } else if (isPlainObject(raw) && isPlainObject(defaults)) {
       value = mergeDeep(defaults as Record<string, unknown>, raw) as AppSettings[K];
@@ -88,7 +93,7 @@ export class SettingsStore implements IInitializable {
     const defaults = getDefaultForKey(key);
     const raw = await this.readRaw(key);
 
-    if (raw === null || raw === undefined) {
+    if (raw === undefined) {
       return { value: defaults, defaults, overrides: {} as Partial<AppSettings[K]> };
     }
 
