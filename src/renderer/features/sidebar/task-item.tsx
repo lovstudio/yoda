@@ -294,8 +294,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       <SidebarMenuRow
         className={cn(
           // Two-line row: task name on top, branch below. Height is intrinsic
-          // (min-h-8 keeps branch-less rows at the original 32px).
-          'group/row flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1',
+          // (min-h-8 keeps branch-less rows at the original 32px). `relative`
+          // anchors the compact branch gutter inside the pl-8 icon column.
+          'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1',
           taskIndentClass
         )}
         isActive={isActive}
@@ -367,23 +368,41 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               })}
             </span>
           )}
-          {branchDisplay === 'compact' && (
-            <span
-              title={branchName}
-              className={cn(
-                // Leading fixed-width gutter, sibling of (not inside) the
-                // label block: generated suffixes are always 5 chars, so
-                // `w-[5ch]` lines task names up across rows. Longer fallbacks
-                // (custom/Linear basenames) truncate inside the same column,
-                // and branch-less rows keep the empty gutter so their names
-                // stay aligned too.
-                'shrink-0 w-[5ch] truncate font-mono text-[10px] text-foreground-tertiary-passive',
-                (isBootstrapping || isArchiving) && 'opacity-40'
-              )}
-            >
-              {compactBranchName}
-            </span>
-          )}
+          {branchDisplay === 'compact' &&
+            (rowVariant === 'underProject' ? (
+              // The suffix lives INSIDE the pl-8 icon column (same column as
+              // the project rows' chevron/icon), absolutely positioned so the
+              // label keeps its exact indent and stays aligned across rows.
+              // Parent rows reuse that column for the hover collapse chevron —
+              // the suffix fades out as the chevron fades in.
+              compactBranchName && (
+                <span
+                  title={branchName}
+                  className={cn(
+                    'pointer-events-none absolute inset-y-0 left-0 flex w-8 items-center justify-center overflow-hidden',
+                    hasRootToggle && 'transition-opacity duration-150 group-hover/row:opacity-0',
+                    (isBootstrapping || isArchiving) && 'opacity-40'
+                  )}
+                >
+                  <span className="truncate font-mono text-[9px] text-foreground-tertiary-passive">
+                    {compactBranchName}
+                  </span>
+                </span>
+              )
+            ) : (
+              // Flat/pinned rows have no icon column — a fixed-width leading
+              // gutter keeps their labels mutually aligned instead (kept empty
+              // for branch-less rows so names don't drift).
+              <span
+                title={branchName}
+                className={cn(
+                  'shrink-0 w-[5ch] truncate font-mono text-[10px] text-foreground-tertiary-passive',
+                  (isBootstrapping || isArchiving) && 'opacity-40'
+                )}
+              >
+                {compactBranchName}
+              </span>
+            ))}
           <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
             <div className="flex min-w-0 items-center gap-1">
               <span
