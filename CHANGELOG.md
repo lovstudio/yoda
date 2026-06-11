@@ -5,6 +5,60 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.5.0 — 2026-06-11
+
+Version note: 0.5.0 skips the 0.3.12–0.4.x range, which is occupied by
+preserved pre-Yoda release tags.
+
+### Added
+
+- **Scoped app tabs**: a top-level tab system with per-scope tab strips — tabs
+  can be pinned to the task sidebar strip, duplicated into full windows (Window
+  → Duplicate), and the task title bar is slimmed down to three controls.
+- **Usage stats**: a new stats domain parses Claude/Codex transcripts into
+  token usage — usage overview view with a token heatmap, per-session usage
+  chips, a project token-usage card, and task diff snapshots.
+- **Nested subtasks**: tasks support arbitrary-depth parent/child hierarchies
+  with collapsible sidebar trees and a new-subtask modal.
+- **Session panel overhaul**: section visibility/order management, summary
+  snapshots, a Statusline section with template switching, hooks section
+  counts, and per-session token usage grouping.
+- **Composer attachments**: native image paste and file chips as inline atomic
+  tokens, injected in text order with configurable transfer modes.
+- **Roadmap view**: an embedded research roadmap with report states.
+- Built-in **Yoda Warm** theme; PDF inline preview in the editor; built-in
+  Agent entities for internal LLM utilities; subscription account service with
+  official-API probe and model pricing table; Fumadocs docs site.
+
+### Changed
+
+- **Terminology: provider → runtime** across settings, selectors, registry,
+  and i18n — a Runtime is the CLI execution environment, an Agent is the
+  prompt+skills entity.
+- Sidebar navigation consolidated into a settings hub; account row hosts quick
+  icons; workspace switcher menus flattened with attention-count badges.
+- Task area reworked to a bottom-bar-first layout with a full-width terminal
+  drawer in tabbed layout; two-axis task sorting with a view-options panel.
+- Archive orchestration moved into the main process — archives survive
+  renderer reloads, with task/conversation archive two-way linking.
+- Terminal resize pipeline rebuilt: freeze layer + rAF-throttled commits
+  eliminate white flashes, jitter, and rubber-banding; sidebar exit is
+  pixel-isolated via flexbox.
+- Session titles prefer user > yoda > agent naming; home greeting rewritten.
+
+### Fixed
+
+- Smart path links survive Claude Code's hard-wrapped lines (cross-line
+  reassembly for paths and URLs); path detection stops at ASCII brackets.
+- Interrupt markers suppress zombie "working" states from stateless
+  re-derivation; questionnaire awaiting states sync correctly.
+- Multiline prompt injection no longer renders literal `\n`; per-session
+  resize IPC dedup fixes narrow CLI rendering after unpin.
+- Cmd+Z works in the composer again; unified IME composition guards across
+  inputs; tooltip triggers no longer collapse icon-button heights.
+- Renaming an unprovisioned task no longer fails silently; Metro lazy-starts
+  and cleans up orphaned processes on mobile.
+
 ## 0.3.11 — 2026-06-09
 
 ### Added
