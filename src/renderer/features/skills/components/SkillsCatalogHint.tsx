@@ -13,6 +13,8 @@ const SkillsCatalogHint: React.FC = () => {
   return (
     <Popover>
       <PopoverTrigger
+        openOnHover
+        delay={150}
         className="inline-flex shrink-0 cursor-help items-center text-muted-foreground transition-colors hover:text-foreground"
         aria-label={t('skills.catalogHintAria')}
       >
