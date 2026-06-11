@@ -18,6 +18,12 @@ vi.mock('@renderer/lib/ipc', () => ({
   },
 }));
 
+// file-actions reaches appState for the side-pane placement actions; the
+// real singleton drags in the whole store graph, which this unit doesn't need.
+vi.mock('@renderer/lib/stores/app-state', () => ({
+  appState: {},
+}));
+
 describe('toWorkspaceRelativePath', () => {
   it('returns null when either path is missing', () => {
     expect(toWorkspaceRelativePath(undefined, '/repo')).toBeNull();

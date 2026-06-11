@@ -66,6 +66,14 @@ export class ProvisionedTask {
     return this._taskData.taskBranch;
   }
 
+  get projectId(): string {
+    return this._taskData.projectId;
+  }
+
+  get taskId(): string {
+    return this._taskData.id;
+  }
+
   constructor(
     taskStore: TaskStore,
     path: string,
