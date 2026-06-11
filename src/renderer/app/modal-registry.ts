@@ -13,6 +13,7 @@ import { ShareProjectConfigModal } from '@renderer/features/projects/components/
 import { CreateSkillModal } from '@renderer/features/skills/components/CreateSkillModal';
 import { AddRemoteModal } from '@renderer/features/tasks/add-remote-modal';
 import { ArchiveTaskWithNoteModal } from '@renderer/features/tasks/archive-task-with-note-modal';
+import { ArchivedSessionTranscriptModal } from '@renderer/features/tasks/archived-session-transcript-modal';
 import { CreateTaskModal } from '@renderer/features/tasks/create-task-modal/create-task-modal';
 import { CreatePrModal } from '@renderer/features/tasks/diff-view/changes-panel/components/pr-entry/create-pr-modal';
 import { ConflictDialog } from '@renderer/features/tasks/editor/conflict-dialog';
@@ -71,6 +72,7 @@ export const modalRegistry = {
   renameProjectModal: createModal(RenameProjectModal, { size: 'xs' }),
   createWorkspaceModal: createModal(CreateWorkspaceModal, { size: 'xs' }),
   archiveTaskWithNoteModal: createModal(ArchiveTaskWithNoteModal, { size: 'xs' }),
+  archivedSessionTranscriptModal: createModal(ArchivedSessionTranscriptModal, { size: 'lg' }),
   shareProjectConfigModal: createModal(ShareProjectConfigModal, { size: 'md' }),
   manageRunScriptsModal: createModal(ManageRunScriptsModal, { size: 'md' }),
   manageQuickActionsModal: createModal(ManageQuickActionsModal, { size: 'md' }),

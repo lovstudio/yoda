@@ -772,7 +772,14 @@
           "yoda-maas": "MaaS"
         }
       },
-      "subtasks": "子任务（{{count}}）"
+      "subtasks": "子任务（{{count}}）",
+      "archivedSubtasks": "已归档（{{count}}）"
+    },
+    "archivedSession": {
+      "readOnly": "只读",
+      "archivedLabel": "归档于",
+      "restore": "恢复会话",
+      "viewTranscript": "查看转录"
     },
     "files": "文件",
     "toggleTerminal": "切换终端",
