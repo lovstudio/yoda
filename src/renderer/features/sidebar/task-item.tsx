@@ -384,7 +384,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                     (isBootstrapping || isArchiving) && 'opacity-40'
                   )}
                 >
-                  <span className="truncate font-mono text-[9px] text-foreground-tertiary-passive">
+                  {/* 8px keeps 5 mono chars (~24px) comfortably inside the
+                      32px column — at 9px the text nearly touched the row's
+                      rounded background edge. */}
+                  <span className="truncate font-mono text-[8px] tracking-tight text-foreground-tertiary-passive">
                     {compactBranchName}
                   </span>
                 </span>
