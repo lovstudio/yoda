@@ -1,18 +1,17 @@
-import { ArchiveRestore, ChevronRight, GitBranch, MessageSquarePlus } from 'lucide-react';
+import { ChevronRight, GitBranch, MessageSquarePlus } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Conversation } from '@shared/conversations';
-import {
-  conversationArchivedChannel,
-  conversationUnarchivedChannel,
-} from '@shared/events/conversationEvents';
 import type { ConversationUsageSummary } from '@shared/stats';
 import {
   getProjectStore,
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
+import { ArchivedConversationRow } from '@renderer/features/tasks/conversations/archived-conversation-row';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
+import {
+  conversationTime,
+  useArchivedConversations,
+} from '@renderer/features/tasks/conversations/use-archived-conversations';
 import {
   getTaskStore,
   taskAncestors,
@@ -20,16 +19,15 @@ import {
 } from '@renderer/features/tasks/stores/task-selectors';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import AgentLogo from '@renderer/lib/components/agent-logo';
-import { events, rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { agentConfig } from '@renderer/utils/agentConfig';
-import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import { AgentStatusIndicator } from '../components/agent-status-indicator';
+import { ArchivedDisclosure } from '../components/archived-disclosure';
 import { SessionUsageChip } from '../components/session-usage-chip';
 import { TaskStatsStrip } from '../components/task-stats-strip';
 import { useTaskStats } from '../hooks/useTaskStats';
@@ -49,7 +47,7 @@ export const OverviewPanel = observer(function OverviewPanel() {
   const showNewConversationModal = useShowModal('newConversationModal');
 
   const sessions = Array.from(provisioned.conversations.conversations.values()).sort(
-    (a, b) => sessionTime(b.data.lastInteractedAt) - sessionTime(a.data.lastInteractedAt)
+    (a, b) => conversationTime(b.data.lastInteractedAt) - conversationTime(a.data.lastInteractedAt)
   );
 
   const archived = useArchivedConversations(projectId, taskId);
@@ -152,77 +150,30 @@ export const OverviewPanel = observer(function OverviewPanel() {
               ))}
             </ul>
           )}
+
+          {archived.length > 0 && (
+            <ArchivedDisclosure
+              label={t('tasks.overview.archivedSessions', { count: archived.length })}
+            >
+              <ul className="flex flex-col gap-1">
+                {archived.map((conversation) => (
+                  <li key={conversation.id}>
+                    <ArchivedConversationRow
+                      conversation={conversation}
+                      usage={usageByConversation.get(conversation.id)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </ArchivedDisclosure>
+          )}
         </section>
 
         <SubtaskList projectId={projectId} taskId={taskId} />
-
-        {archived.length > 0 && (
-          <section className="flex flex-col gap-2">
-            <h2 className="text-sm font-medium text-foreground-passive">
-              {t('tasks.overview.archivedSessions', { count: archived.length })}
-            </h2>
-            <ul className="flex flex-col gap-1">
-              {archived.map((conversation) => (
-                <ArchivedSessionRow
-                  key={conversation.id}
-                  conversation={conversation}
-                  usage={usageByConversation.get(conversation.id)}
-                />
-              ))}
-            </ul>
-          </section>
-        )}
       </div>
     </div>
   );
 });
-
-/**
- * Archived conversations are filtered out of the active conversation manager
- * store (and dropped from it on archive events), so the overview fetches them
- * on demand. Re-fetches whenever an archive/unarchive event lands for this task
- * so the two lists stay in sync.
- */
-function useArchivedConversations(projectId: string, taskId: string): Conversation[] {
-  const [archived, setArchived] = useState<Conversation[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const refresh = () => {
-      void rpc.conversations
-        .getArchivedConversationsForTask(projectId, taskId)
-        .then((rows) => {
-          if (cancelled) return;
-          setArchived(
-            rows.sort((a, b) => sessionTime(b.lastInteractedAt) - sessionTime(a.lastInteractedAt))
-          );
-        })
-        .catch((error: unknown) => {
-          log.warn('OverviewPanel: failed to load archived conversations', {
-            projectId,
-            taskId,
-            error,
-          });
-        });
-    };
-
-    refresh();
-    const offArchived = events.on(conversationArchivedChannel, (event) => {
-      if (event.projectId === projectId && event.taskId === taskId) refresh();
-    });
-    const offUnarchived = events.on(conversationUnarchivedChannel, (event) => {
-      if (event.projectId === projectId && event.taskId === taskId) refresh();
-    });
-    return () => {
-      cancelled = true;
-      offArchived();
-      offUnarchived();
-    };
-  }, [projectId, taskId]);
-
-  return archived;
-}
 
 const SessionRow = observer(function SessionRow({
   conversationId,
@@ -279,84 +230,3 @@ const SessionRow = observer(function SessionRow({
     </li>
   );
 });
-
-const ArchivedSessionRow = observer(function ArchivedSessionRow({
-  conversation,
-  usage,
-}: {
-  conversation: Conversation;
-  usage?: ConversationUsageSummary;
-}) {
-  const { t } = useTranslation();
-  const provisioned = useProvisionedTask();
-  const { tabManager } = provisioned.taskView;
-  const [busy, setBusy] = useState(false);
-
-  const config = agentConfig[conversation.runtimeId];
-  const displayTitle = formatConversationTitleForDisplay(
-    conversation.runtimeId,
-    conversation.title
-  );
-
-  const handleReopen = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await rpc.conversations.unarchiveConversation(
-        conversation.projectId,
-        conversation.taskId,
-        conversation.id
-      );
-      await provisioned.conversations.ensureConversation(conversation.id);
-      tabManager.openConversation(conversation.id);
-    } catch (error) {
-      log.warn('OverviewPanel: failed to reopen archived conversation', {
-        conversationId: conversation.id,
-        error,
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={handleReopen}
-        disabled={busy}
-        title={t('tasks.tabs.archiveConversation')}
-        className={cn(
-          'group flex w-full items-center gap-3 rounded-lg border border-border/40 px-3 py-2.5 text-left text-sm text-foreground-passive transition-colors hover:bg-background-1 hover:text-foreground-muted',
-          busy && 'opacity-60'
-        )}
-      >
-        <span className="shrink-0 opacity-60">
-          <AgentLogo
-            logo={config.logo}
-            alt={config.alt}
-            isSvg={config.isSvg}
-            invertInDark={config.invertInDark}
-            className="size-4"
-          />
-        </span>
-        <span className="min-w-0 flex-1 truncate line-through decoration-1" title={displayTitle}>
-          {displayTitle}
-        </span>
-        <SessionUsageChip usage={usage} />
-        <ArchiveRestore className="size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
-        <RelativeTime
-          value={conversation.lastInteractedAt ?? ''}
-          className="shrink-0 font-mono text-xs text-foreground-passive"
-          compact
-        />
-      </button>
-    </li>
-  );
-});
-
-function sessionTime(value: string | null | undefined): number {
-  if (!value) return 0;
-  const ts = new Date(value).getTime();
-  return Number.isNaN(ts) ? 0 : ts;
-}
