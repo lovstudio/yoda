@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import type { CatalogSkill, SkillValidationIssue } from '@shared/skills/types';
 import { parseFrontmatter } from '@shared/skills/validation';
+import { FilePathActionsDropdown } from '@renderer/lib/components/file-path-actions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { Badge } from '@renderer/lib/ui/badge';
@@ -219,22 +220,6 @@ const SkillDetailContent: React.FC<{
     if (skill.sourceUrl) void rpc.app.openExternal(skill.sourceUrl);
   }, [skill.sourceUrl]);
 
-  const handleRevealPath = useCallback(
-    async (pathToReveal: string) => {
-      try {
-        const result = await rpc.app.openIn({ app: 'finder', path: pathToReveal, reveal: true });
-        if (!result?.success) throw new Error(result?.error ?? t('common.unknownError'));
-      } catch (error) {
-        toast({
-          title: t('skills.detail.showInFolderFailed'),
-          description: error instanceof Error ? error.message : String(error),
-          variant: 'destructive',
-        });
-      }
-    },
-    [t, toast]
-  );
-
   const handleCopy = useCallback(
     async (text: string) => {
       try {
@@ -386,9 +371,8 @@ const SkillDetailContent: React.FC<{
                   value={skill.localPath}
                   onCopy={() => void handleCopy(skill.localPath!)}
                   extraAction={
-                    <ShowInFolderButton
-                      label={t('skills.detail.showInFolder')}
-                      onClick={() => void handleRevealPath(skill.localPath!)}
+                    <FilePathActionsDropdown
+                      target={{ absolutePath: skill.localPath, kind: 'directory' }}
                     />
                   }
                 />
@@ -398,9 +382,8 @@ const SkillDetailContent: React.FC<{
                     value={localSkillFilePath}
                     onCopy={() => void handleCopy(localSkillFilePath)}
                     extraAction={
-                      <ShowInFolderButton
-                        label={t('skills.detail.showInFolder')}
-                        onClick={() => void handleRevealPath(localSkillFilePath)}
+                      <FilePathActionsDropdown
+                        target={{ absolutePath: localSkillFilePath, kind: 'file' }}
                       />
                     }
                   />
@@ -623,21 +606,6 @@ function ValueRow({
         <Copy className="h-3.5 w-3.5" />
       </Button>
     </div>
-  );
-}
-
-function ShowInFolderButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className="shrink-0"
-    >
-      <FolderOpen className="h-3.5 w-3.5" />
-    </Button>
   );
 }
 
