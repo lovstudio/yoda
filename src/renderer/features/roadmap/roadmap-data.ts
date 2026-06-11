@@ -67,12 +67,20 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped' },
           codex: { status: 'shipped' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/lifecycle/version',
+        },
       },
       {
         id: 'install',
         cells: {
           claude: { status: 'shipped' },
           codex: { status: 'shipped' },
+        },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/lifecycle/install',
         },
       },
       {
@@ -81,8 +89,19 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped' },
           codex: { status: 'shipped' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/lifecycle/launch',
+        },
       },
-      { id: 'doctor', cells: {} },
+      {
+        id: 'doctor',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/lifecycle/doctor',
+        },
+      },
     ],
   },
   {
@@ -94,7 +113,10 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped', noteKey: 'sessionNameSync.claude' },
           codex: { status: 'shipped', noteKey: 'sessionNameSync.codex' },
         },
-        report: { status: 'draft' },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/session/session-name-sync',
+        },
       },
       {
         id: 'sessionAutoRename',
@@ -102,7 +124,10 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped', noteKey: 'sessionAutoRename.claude' },
           codex: { status: 'shipped', noteKey: 'sessionAutoRename.codex' },
         },
-        report: { status: 'draft' },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/session/session-auto-rename',
+        },
       },
       {
         id: 'sessionStateSync',
@@ -110,7 +135,10 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped', noteKey: 'sessionStateSync.claude' },
           codex: { status: 'testing', noteKey: 'sessionStateSync.codex' },
         },
-        report: { status: 'draft' },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/session/session-state-sync',
+        },
       },
       {
         id: 'sessionResume',
@@ -118,9 +146,27 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped' },
           codex: { status: 'shipped' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/session/session-resume',
+        },
       },
-      { id: 'compaction', cells: {} },
-      { id: 'checkpointing', cells: {} },
+      {
+        id: 'compaction',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/session/compaction',
+        },
+      },
+      {
+        id: 'checkpointing',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/session/checkpointing',
+        },
+      },
     ],
   },
   {
@@ -132,6 +178,10 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped' },
           codex: { status: 'shipped' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/context/project-prompt',
+        },
       },
       {
         id: 'systemPrompt',
@@ -139,9 +189,27 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped' },
           codex: { status: 'shipped' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/context/system-prompt',
+        },
       },
-      { id: 'memory', cells: {} },
-      { id: 'fileContext', cells: {} },
+      {
+        id: 'memory',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/context/memory',
+        },
+      },
+      {
+        id: 'fileContext',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/context/file-context',
+        },
+      },
     ],
   },
   {
@@ -153,6 +221,10 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped' },
           codex: { status: 'shipped' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/extensibility/mcp',
+        },
       },
       {
         id: 'skills',
@@ -160,27 +232,91 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped' },
           codex: { status: 'shipped', noteKey: 'skills.codex' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/extensibility/skills',
+        },
       },
-      { id: 'plugins', cells: {} },
-      { id: 'subagents', cells: {} },
+      {
+        id: 'plugins',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/extensibility/plugins',
+        },
+      },
+      {
+        id: 'subagents',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/extensibility/subagents',
+        },
+      },
       {
         id: 'hooks',
         cells: {
           claude: { status: 'shipped' },
           codex: { status: 'researching', noteKey: 'hooks.codex' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/extensibility/hooks',
+        },
       },
-      { id: 'slashCommands', cells: {} },
-      { id: 'outputStyles', cells: {} },
+      {
+        id: 'slashCommands',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/extensibility/slash-commands',
+        },
+      },
+      {
+        id: 'outputStyles',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/extensibility/output-styles',
+        },
+      },
     ],
   },
   {
     id: 'control',
     features: [
-      { id: 'permissions', cells: {} },
-      { id: 'sandboxing', cells: {} },
-      { id: 'managedSettings', cells: {} },
-      { id: 'trustModel', cells: {} },
+      {
+        id: 'permissions',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/control/permissions',
+        },
+      },
+      {
+        id: 'sandboxing',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/control/sandboxing',
+        },
+      },
+      {
+        id: 'managedSettings',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/control/managed-settings',
+        },
+      },
+      {
+        id: 'trustModel',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/control/trust-model',
+        },
+      },
     ],
   },
   {
@@ -192,6 +328,10 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped' },
           codex: { status: 'shipped' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/account/auth-sync',
+        },
       },
       {
         id: 'usageSync',
@@ -199,9 +339,27 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped', noteKey: 'usageSync.claude' },
           codex: { status: 'shipped' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/account/usage-sync',
+        },
       },
-      { id: 'modelConfig', cells: {} },
-      { id: 'providers', cells: {} },
+      {
+        id: 'modelConfig',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/account/model-config',
+        },
+      },
+      {
+        id: 'providers',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/account/providers',
+        },
+      },
     ],
   },
   {
@@ -213,11 +371,43 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped' },
           codex: { status: 'shipped' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/workflow/worktrees',
+        },
       },
-      { id: 'codeReview', cells: {} },
-      { id: 'headlessCi', cells: {} },
-      { id: 'sdk', cells: {} },
-      { id: 'ideAcp', cells: {} },
+      {
+        id: 'codeReview',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/workflow/code-review',
+        },
+      },
+      {
+        id: 'headlessCi',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/workflow/headless-ci',
+        },
+      },
+      {
+        id: 'sdk',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/workflow/sdk',
+        },
+      },
+      {
+        id: 'ideAcp',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/workflow/ide-acp',
+        },
+      },
     ],
   },
   {
@@ -229,28 +419,82 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
           claude: { status: 'shipped' },
           codex: { status: 'researching', noteKey: 'statusline.codex' },
         },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/surface/statusline',
+        },
       },
-      { id: 'notifications', cells: {} },
-      { id: 'keybindings', cells: {} },
-      { id: 'planMode', cells: {} },
+      {
+        id: 'notifications',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/surface/notifications',
+        },
+      },
+      {
+        id: 'keybindings',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/surface/keybindings',
+        },
+      },
+      {
+        id: 'planMode',
+        cells: {},
+        report: { status: 'draft' },
+      },
     ],
   },
   {
     id: 'orchestration',
     features: [
-      { id: 'agentTeams', cells: {} },
-      { id: 'routines', cells: {} },
-      { id: 'remoteExecution', cells: {} },
+      {
+        id: 'agentTeams',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/orchestration/agent-teams',
+        },
+      },
+      {
+        id: 'routines',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/orchestration/routines',
+        },
+      },
+      {
+        id: 'remoteExecution',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/orchestration/remote-execution',
+        },
+      },
     ],
   },
   {
     id: 'observability',
     features: [
-      { id: 'telemetry', cells: {} },
+      {
+        id: 'telemetry',
+        cells: {},
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/observability/telemetry',
+        },
+      },
       {
         id: 'costTracking',
         cells: {
           claude: { status: 'shipped' },
+        },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/observability/cost-tracking',
         },
       },
       {
@@ -258,6 +502,10 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
         cells: {
           claude: { status: 'shipped' },
           codex: { status: 'shipped' },
+        },
+        report: {
+          status: 'published',
+          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/observability/transcript',
         },
       },
     ],
