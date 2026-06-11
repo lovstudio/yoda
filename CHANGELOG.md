@@ -5,6 +5,54 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.6.0 — 2026-06-11
+
+### Added
+
+- **Branch finish flow**: a status-aware titlebar CTA with review / merge /
+  archive panels — local squash merge via RPC, AI-generated commit messages,
+  and a conflict-resolution agent.
+- **Branch display modes**: sidebar task rows support three branch-display
+  tiers (hidden / compact / full); compact mode shows the branch suffix in a
+  fixed leading gutter, with two-line layout in full mode.
+- **Prompt history blinds**: the status bar expands prompt history in-place
+  with a push-up "blinds" layout — click to jump to the matching terminal
+  position, configurable head/tail line counts, persisted expansion.
+- **Archived review**: archived sessions and subtasks expand in place for
+  inspection, with a read-only transcript viewer; session archiving gains
+  sub-options (direct / with skill / configure).
+- **Project-level token stats** with multi-dimensional visualizations; the
+  token usage card now auto-refreshes incrementally as turns complete.
+- **Workspace ownership**: projects belong to a single workspace — conflicts
+  surface an explicit three-way dialog, and moving a project follows it with
+  the view.
+- **Roadmap reports**: all learn-agent-design research reports are published
+  and linked from the roadmap view.
+- Device-flow login dialog redesigned with prefetched codes for instant
+  display; mobile connect page reworked into a two-step guide; task index
+  tabs show "project / branch".
+
+### Changed
+
+- **Bottom panel rebuilt as tabs**: the drawer is now a multi-content tab bar
+  (terminal / session), scripts split into a standalone mode, the drawer
+  sidebar removed, and a horizontal expand toggle controls how the bottom bar
+  relates to the sidebar. Visibility and mode are global preferences persisted
+  across tasks and sessions.
+- Terminal settings promoted to a top-level tab with auto-copy on by default;
+  prompt history migrated into the session tab.
+- Status bar truncation counts centered, toggle entry moved to a config icon,
+  hover expand/collapse arrows added.
+
+### Fixed
+
+- OSC 52 handled in the PTY so tmux copy-mode selections reach the clipboard.
+- Project tabs persist with an explicit view, fixing intermittent dead clicks
+  when opening project details; pinned tabs are synthesized from visibleTabs.
+- Slug separators normalized to hyphens; tab titles strip the branch prefix.
+- "Configure in project settings" jumps directly to the project settings page;
+  compact-tier indentation unified across sidebar task lists.
+
 ## 0.5.0 — 2026-06-11
 
 Version note: 0.5.0 skips the 0.3.12–0.4.x range, which is occupied by
