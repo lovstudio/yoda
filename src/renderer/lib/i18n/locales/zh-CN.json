@@ -475,14 +475,6 @@
       "summaryAgentLabel": "摘要 Agent",
       "summaryAgentHint": "负责生成会话摘要的 Agent，完全使用其自身的 Runtime 与模型运行；即使当前会话的运行时已不可用，摘要仍可正常生成。",
       "summaryLanguageLabel": "摘要语言",
-      "statusBarSourceLabel": "状态栏",
-      "statusBarSourceHint": "终端下方那条显示什么。选「隐藏」即可隐藏它。",
-      "statusBarPromptEdgesLabel": "展开历史行数",
-      "statusBarPromptEdgesHint": "展开时显示最早 / 最近各几条 prompt，中间省略；结尾计数包含底部常驻的最新一条。",
-      "statusBarPrompt": {
-        "head": "开头",
-        "tail": "结尾"
-      },
       "summaryContext": {
         "recentLabel": "近期摘要输入",
         "globalLabel": "全局摘要输入",
@@ -1262,18 +1254,6 @@
       "summaryRegenerate": "重新生成摘要",
       "summaryConfigure": "配置摘要 Agent",
       "recentProgressTooltip": "会话进展与下一步",
-      "statusBar": {
-        "switchSource": "切换状态栏显示内容",
-        "recentPromptTooltip": "本会话最近一次提问 —— 点击展开历史",
-        "recentPromptEmpty": "暂无提问",
-        "collapseHistory": "收起历史",
-        "offWithSettingsHint": "隐藏（前往设置恢复）",
-        "source": {
-          "summary": "近期摘要",
-          "recentPrompt": "最近提问",
-          "off": "隐藏"
-        }
-      },
       "summaryEmpty": "暂无摘要",
       "summaryEmptyDescription": "当有可总结的内容后，这里会显示摘要。",
       "summaryGenerating": "正在生成摘要…",
@@ -1311,6 +1291,10 @@
       "loading": "正在加载实录…",
       "empty": "暂无实录内容",
       "earlierLines": "前面还有 {{count}} 行 — 打开完整文件"
+    },
+    "bottomPanel": {
+      "terminals": "终端",
+      "session": "会话"
     }
   },
   "commandPalette": {

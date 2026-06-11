@@ -1,14 +1,6 @@
 import { Plus, Settings2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
-import {
-  clampStatusBarPromptEdge,
-  DEFAULT_STATUS_BAR_PROMPT_HEAD,
-  DEFAULT_STATUS_BAR_PROMPT_TAIL,
-  SESSION_STATUS_BAR_SOURCE_IDS,
-  STATUS_BAR_PROMPT_EDGE_MAX,
-  STATUS_BAR_PROMPT_TAIL_MIN,
-} from '@shared/session-status-bar';
 import { SUMMARY_CONTEXT_SOURCE_IDS } from '@shared/session-summary';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
@@ -16,7 +8,6 @@ import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
-import { Input } from '@renderer/lib/ui/input';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import {
   Select,
@@ -146,93 +137,7 @@ export const SummaryConfigFields = observer(function SummaryConfigFields({
 
       <SummaryContextGroup scope="recent" disabled={disabled} />
       <SummaryContextGroup scope="global" disabled={disabled} />
-
-      <div className="mt-1 flex min-w-0 flex-col gap-1">
-        <MicroLabel className="text-foreground-passive">
-          {t('settings.tasks.statusBarSourceLabel')}
-        </MicroLabel>
-        <Select
-          value={taskSettings.statusBarSource}
-          onValueChange={(value) =>
-            taskSettings.updateStatusBarSource(value as typeof taskSettings.statusBarSource)
-          }
-          disabled={disabled}
-        >
-          <SelectTrigger size="sm" className="h-8 w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SESSION_STATUS_BAR_SOURCE_IDS.map((id) => (
-              <SelectItem key={id} value={id}>
-                {t(`tasks.sessionPanel.statusBar.source.${id}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-[11px] leading-relaxed text-foreground-passive">
-          {t('settings.tasks.statusBarSourceHint')}
-        </p>
-      </div>
-
-      {taskSettings.statusBarSource === 'recentPrompt' ? (
-        <div className="mt-1 flex min-w-0 flex-col gap-1">
-          <MicroLabel className="text-foreground-passive">
-            {t('settings.tasks.statusBarPromptEdgesLabel')}
-          </MicroLabel>
-          <div className="flex items-center gap-3">
-            <PromptEdgeInput edge="head" disabled={disabled} />
-            <PromptEdgeInput edge="tail" disabled={disabled} />
-          </div>
-          <p className="text-[11px] leading-relaxed text-foreground-passive">
-            {t('settings.tasks.statusBarPromptEdgesHint')}
-          </p>
-        </div>
-      ) : null}
     </div>
-  );
-});
-
-/** Number input for one edge (head/tail) of the expanded prompt-history blind. */
-const PromptEdgeInput = observer(function PromptEdgeInput({
-  edge,
-  disabled,
-}: {
-  edge: 'head' | 'tail';
-  disabled?: boolean;
-}) {
-  const { t } = useTranslation();
-  const taskSettings = useTaskSettings();
-  const value =
-    edge === 'head' ? taskSettings.statusBarPromptHead : taskSettings.statusBarPromptTail;
-  const fallback =
-    edge === 'head' ? DEFAULT_STATUS_BAR_PROMPT_HEAD : DEFAULT_STATUS_BAR_PROMPT_TAIL;
-  // The tail count includes the bar's always-visible newest entry, so it can
-  // never drop below 1.
-  const min = edge === 'tail' ? STATUS_BAR_PROMPT_TAIL_MIN : 0;
-  const label = t(`settings.tasks.statusBarPrompt.${edge}`);
-  return (
-    <label className="flex min-w-0 items-center gap-1.5 text-xs text-foreground-muted">
-      <span className="shrink-0">{label}</span>
-      <Input
-        key={value}
-        type="number"
-        min={min}
-        max={STATUS_BAR_PROMPT_EDGE_MAX}
-        step={1}
-        defaultValue={value}
-        disabled={disabled}
-        aria-label={label}
-        onBlur={(e) => {
-          const next = clampStatusBarPromptEdge(Number(e.target.value), fallback, min);
-          e.target.value = String(next);
-          if (next !== value) taskSettings.updateStatusBarPromptEdges({ [edge]: next });
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur();
-        }}
-        className="h-8 w-16"
-      />
-    </label>
   );
 });
 

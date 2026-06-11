@@ -31,7 +31,6 @@ import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
 import type { ConversationStore } from './conversation-manager';
-import { SessionStatusBar } from './session-status-bar';
 
 export function getResumeInitialSize(
   pty: FrontendPty,
@@ -90,7 +89,6 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
   const activeConversation: ConversationStore | undefined = tm.activeConversation;
   const activeSession = activeConversation?.session ?? null;
   const activeSessionId = activeSession?.sessionId ?? null;
-  const statusBarActive = provisioned.taskView.activeRenderer === 'agents';
   const hasConversationTabs = tm.resolvedTabs.some((t) => t.kind === 'conversation');
   const conversationStores = Array.from(conversations.conversations.values()).sort((a, b) => {
     const aTime = a.data.lastInteractedAt ? Date.parse(a.data.lastInteractedAt) : 0;
@@ -307,7 +305,6 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
           </PaneSizingProvider>
         </div>
       </div>
-      <SessionStatusBar active={statusBarActive} />
     </div>
   );
 });

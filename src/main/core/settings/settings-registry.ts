@@ -4,11 +4,6 @@ import type { AppSettings, AppSettingsKey } from '@shared/app-settings';
 import { MAAS_PLATFORMS } from '@shared/maas';
 import type { OpenInAppId } from '@shared/openInApps';
 import {
-  DEFAULT_SESSION_STATUS_BAR_SOURCE,
-  DEFAULT_STATUS_BAR_PROMPT_HEAD,
-  DEFAULT_STATUS_BAR_PROMPT_TAIL,
-} from '@shared/session-status-bar';
-import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
   DEFAULT_SUMMARY_CONTEXT_RECENT,
 } from '@shared/session-summary';
@@ -46,10 +41,6 @@ export const SETTINGS_DEFAULTS = {
     namingAgentId: '',
     summaryAgentId: '',
     summaryLanguage: 'app' as const,
-    statusBarSource: DEFAULT_SESSION_STATUS_BAR_SOURCE,
-    statusBarPromptsExpanded: false,
-    statusBarPromptHead: DEFAULT_STATUS_BAR_PROMPT_HEAD,
-    statusBarPromptTail: DEFAULT_STATUS_BAR_PROMPT_TAIL,
     summaryContextRecent: DEFAULT_SUMMARY_CONTEXT_RECENT,
     summaryContextGlobal: DEFAULT_SUMMARY_CONTEXT_GLOBAL,
     namingModel: DEFAULT_TASK_NAMING_MODEL,

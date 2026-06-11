@@ -56,9 +56,13 @@ function isTaskViewHistoryEntry(entry: HistoryEntry, projectId: string, taskId: 
   return params.projectId === projectId && params.taskId === taskId;
 }
 
+export type BottomPanelTab = 'terminals' | 'session';
+
 export class TaskViewStore {
   focusedRegion: 'main' | 'bottom';
   isTerminalDrawerOpen: boolean;
+  /** Which content the bottom drawer shows. */
+  bottomPanelTab: BottomPanelTab;
   /** Ephemeral: sidebar expanded over the whole upper main view. */
   isSidebarMaximized = false;
 
@@ -80,6 +84,7 @@ export class TaskViewStore {
     taskSidebarPreferenceStore.hydrate(sharedSidebarSnapshot ?? null, savedSnapshot ?? null);
     this.focusedRegion = savedSnapshot?.focusedRegion === 'bottom' ? 'bottom' : 'main';
     this.isTerminalDrawerOpen = savedSnapshot?.isTerminalDrawerOpen ?? false;
+    this.bottomPanelTab = savedSnapshot?.bottomPanelTab === 'session' ? 'session' : 'terminals';
     this.terminalsMgr = resources.terminals;
 
     this.tabManager = new TabManagerStore(resources.conversations, resources.workspaceId);
@@ -215,6 +220,7 @@ export class TaskViewStore {
     return {
       focusedRegion: this.focusedRegion,
       isTerminalDrawerOpen: this.isTerminalDrawerOpen,
+      bottomPanelTab: this.bottomPanelTab,
       tabManager: this.tabManager.snapshot,
       terminals: this.terminalTabs.snapshot,
       editor: this.editorView.snapshot,
@@ -271,7 +277,15 @@ export class TaskViewStore {
 
   setTerminalDrawerOpen(open: boolean): void {
     this.isTerminalDrawerOpen = open;
-    if (open && this.terminalTabs.tabs.length === 0) {
+    if (open && this.bottomPanelTab === 'terminals' && this.terminalTabs.tabs.length === 0) {
+      void this.terminalsMgr.createDefaultTerminal();
+    }
+  }
+
+  setBottomPanelTab(tab: BottomPanelTab): void {
+    this.bottomPanelTab = tab;
+    // Switching to terminals in an open drawer must not land on an empty pane.
+    if (tab === 'terminals' && this.isTerminalDrawerOpen && this.terminalTabs.tabs.length === 0) {
       void this.terminalsMgr.createDefaultTerminal();
     }
   }

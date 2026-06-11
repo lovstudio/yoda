@@ -6,14 +6,6 @@ import { quickActionSchema } from '@shared/project-settings';
 import { RUNTIME_MODEL_CANDIDATE_SOURCES } from '@shared/runtime-model-candidates';
 import { AGENT_ACCOUNT_PROVIDER_IDS, RUNTIME_IDS, RUNTIMES } from '@shared/runtime-registry';
 import {
-  DEFAULT_SESSION_STATUS_BAR_SOURCE,
-  DEFAULT_STATUS_BAR_PROMPT_HEAD,
-  DEFAULT_STATUS_BAR_PROMPT_TAIL,
-  SESSION_STATUS_BAR_SOURCE_IDS,
-  STATUS_BAR_PROMPT_EDGE_MAX,
-  STATUS_BAR_PROMPT_TAIL_MIN,
-} from '@shared/session-status-bar';
-import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
   DEFAULT_SUMMARY_CONTEXT_RECENT,
   SUMMARY_CONTEXT_SOURCE_IDS,
@@ -66,24 +58,6 @@ export const taskSettingsSchema = z.object({
   summaryAgentId: z.string().catch(''),
   /** Output language for generated session summaries. */
   summaryLanguage: z.enum(['app', 'prompt', 'en', 'zh-CN']).catch('app'),
-  /** Which content source the session status bar (below the terminal) shows. */
-  statusBarSource: z.enum(SESSION_STATUS_BAR_SOURCE_IDS).catch(DEFAULT_SESSION_STATUS_BAR_SOURCE),
-  /** Whether the latest-prompt history blind in the status bar is unfolded. */
-  statusBarPromptsExpanded: z.boolean().catch(false),
-  /** How many oldest prompts the unfolded blind shows (middle is elided). */
-  statusBarPromptHead: z
-    .number()
-    .int()
-    .min(0)
-    .max(STATUS_BAR_PROMPT_EDGE_MAX)
-    .catch(DEFAULT_STATUS_BAR_PROMPT_HEAD),
-  /** How many newest prompts the unfolded blind shows, INCLUDING the bar's own. */
-  statusBarPromptTail: z
-    .number()
-    .int()
-    .min(STATUS_BAR_PROMPT_TAIL_MIN)
-    .max(STATUS_BAR_PROMPT_EDGE_MAX)
-    .catch(DEFAULT_STATUS_BAR_PROMPT_TAIL),
   /** Which transcript parts feed the `recent` summary (defaults to user-only for speed). */
   summaryContextRecent: summaryContextSchema.catch(DEFAULT_SUMMARY_CONTEXT_RECENT),
   /** Which transcript parts feed the `global` summary (defaults to everything). */

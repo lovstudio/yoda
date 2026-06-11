@@ -475,14 +475,6 @@
       "summaryAgentLabel": "Summary agent",
       "summaryAgentHint": "The agent that generates session summaries. It runs entirely on its own runtime and model, so summaries keep working even if the session's own runtime is unavailable.",
       "summaryLanguageLabel": "Summary language",
-      "statusBarSourceLabel": "Status bar",
-      "statusBarSourceHint": "What the strip below the terminal shows. Choose \"Hidden\" to hide it.",
-      "statusBarPromptEdgesLabel": "Expanded history rows",
-      "statusBarPromptEdgesHint": "How many oldest / newest prompts the expanded bar shows (middle elided). The newest count includes the always-visible bottom row.",
-      "statusBarPrompt": {
-        "head": "First",
-        "tail": "Last"
-      },
       "summaryContext": {
         "recentLabel": "Recent summary inputs",
         "globalLabel": "Global summary inputs",
@@ -1262,18 +1254,6 @@
       "summaryRegenerate": "Regenerate summary",
       "summaryConfigure": "Configure summary agent",
       "recentProgressTooltip": "Conversation progress and next step",
-      "statusBar": {
-        "switchSource": "Change what this bar shows",
-        "recentPromptTooltip": "Your latest prompt in this session — click to expand history",
-        "recentPromptEmpty": "No prompt yet",
-        "collapseHistory": "Collapse prompt history",
-        "offWithSettingsHint": "Hidden (re-enable in Settings)",
-        "source": {
-          "summary": "Recent summary",
-          "recentPrompt": "Latest prompt",
-          "off": "Hidden"
-        }
-      },
       "summaryEmpty": "No summary yet",
       "summaryEmptyDescription": "A summary appears once there is something to summarize.",
       "summaryGenerating": "Generating summary…",
@@ -1311,6 +1291,10 @@
       "loading": "Loading transcript…",
       "empty": "No transcript yet",
       "earlierLines": "{{count}} earlier lines — open the full file"
+    },
+    "bottomPanel": {
+      "terminals": "Terminals",
+      "session": "Session"
     }
   },
   "commandPalette": {

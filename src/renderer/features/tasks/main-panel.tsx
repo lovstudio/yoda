@@ -18,6 +18,7 @@ import { Input } from '@renderer/lib/ui/input';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
+import { BottomPanel } from './bottom-panel';
 import { FileActionsDropdown, FileActionsOverlay } from './components/file-actions';
 import { ConversationsPanel } from './conversations/conversations-panel';
 import { DiffView } from './diff-view/main-panel/diff-view';
@@ -25,7 +26,6 @@ import { EditorMainPanel } from './editor/editor-main-panel';
 import { useEditorContext } from './editor/editor-provider';
 import { MarkdownEditorPanel } from './editor/markdown-editor-panel';
 import { ActiveTaskTitlebar } from './task-titlebar';
-import { TerminalsPanel } from './terminals/terminal-panel';
 import { OverviewPanel } from './view/overview-panel';
 import { TaskSidebar } from './view/task-sidebar';
 
@@ -245,7 +245,7 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
           }
         }}
       >
-        <TerminalsPanel />
+        <BottomPanel />
       </ResizablePanel>
     </ResizablePanelGroup>
   );
