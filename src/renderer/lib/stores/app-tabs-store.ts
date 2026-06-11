@@ -51,11 +51,15 @@ export function routeKey(viewId: ViewId | string, params: Record<string, unknown
 }
 
 /**
- * Stored task tabs always carry an explicit `tab` target. A tab-less route is
- * a scope-entry command (resolved to the scope's last-active tab) — persisting
- * it on the entry would turn every later click on that tab back into a scope
- * entry, which bounces to the task's internal active tab instead of showing
- * the overview.
+ * Stored tabs always carry an explicit target (`tab` for tasks, `view` for
+ * projects). A target-less route is a scope-entry command (resolved to the
+ * scope's last-active tab) — persisting it on the entry would turn every later
+ * activation of that tab back into a scope entry. For task tabs that bounces
+ * to the internal active tab instead of the overview; for project tabs it's
+ * worse: the scope-entry restore re-applies the target-less params, which
+ * re-triggers the route-sync reaction in a cycle until MobX aborts after 100
+ * iterations and drops pending observer re-renders (the UI freezes on the
+ * previous view with the previous scope's tabs).
  */
 function normalizeTabParams(
   viewId: ViewId | string,
@@ -63,6 +67,9 @@ function normalizeTabParams(
 ): Record<string, unknown> {
   if (viewId === 'task' && params.tab === undefined) {
     return { ...params, tab: { kind: 'overview' } };
+  }
+  if (viewId === 'project' && params.view === undefined) {
+    return { ...params, view: 'overview' };
   }
   return params;
 }
@@ -198,6 +205,10 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
           const remembered =
             scope === tabScopeKey(tab.viewId, tab.params) ? tab : this._lastActiveInScope(scope);
           if (remembered) {
+            // Heal target-less stored params (pre-normalization entries) —
+            // re-applying them verbatim would re-enter this scope-entry branch
+            // forever (see normalizeTabParams).
+            remembered.params = normalizeTabParams(remembered.viewId, remembered.params);
             this._activate(remembered);
             this.navigation._applyNavigation(
               remembered.viewId,
