@@ -96,6 +96,15 @@ const ViewParamsOverrideContext = createContext<ViewParamsOverride | null>(null)
 
 export const ViewParamsOverrideProvider = ViewParamsOverrideContext.Provider;
 
+/**
+ * Whether the subtree renders inside a pin host (shell side pane) rather than
+ * the routed main area — lets views adapt chrome they'd otherwise duplicate
+ * (e.g. settings hides its in-content tab picker; the pane header hosts one).
+ */
+export function useIsPinHosted(): boolean {
+  return useContext(ViewParamsOverrideContext) !== null;
+}
+
 export function useParams<TId extends ViewId>(
   viewId: TId
 ): {

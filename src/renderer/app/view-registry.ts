@@ -39,6 +39,12 @@ export type ViewDefinition<TParams extends object = Record<never, never>> = {
   TitlebarSlot?: ComponentType;
   MainPanel: ComponentType;
   /**
+   * Optional accessory rendered at the right end of the shell side pane's
+   * chip-strip row while this view is the active pin (e.g. the settings
+   * view's tab picker). Rendered inside the pin's WrapView + params override.
+   */
+  PaneHeaderSlot?: ComponentType;
+  /**
    * Factory called by Workspace whenever this view becomes active.
    * The returned CommandProvider is registered in commandRegistry and
    * unregistered when the view changes or the params change.

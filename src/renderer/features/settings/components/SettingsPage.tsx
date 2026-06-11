@@ -1,3 +1,4 @@
+import { Check, Menu } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { AgentManagerView } from '@renderer/features/agents-config/agent-manager-view';
@@ -10,6 +11,14 @@ import SkillsView from '@renderer/features/skills/components/SkillsView';
 import { NamingConfigFields } from '@renderer/features/tasks/components/naming-config-fields';
 import { SummaryConfigFields } from '@renderer/features/tasks/components/summary-config-fields';
 import { UsageView } from '@renderer/features/usage/components/UsageView';
+import { useIsPinHosted } from '@renderer/lib/layout/navigation-provider';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { Separator } from '@renderer/lib/ui/separator';
 import { cn } from '@renderer/utils/utils';
 import { AccountTab } from './AccountTab';
@@ -61,18 +70,12 @@ interface SectionConfig {
   component: React.ReactNode;
 }
 
-export function SettingsPage({
-  tab: activeTab,
-  onTabChange,
-}: {
-  tab: SettingsPageTab;
-  onTabChange: (tab: SettingsPageTab) => void;
-}) {
-  const { t } = useTranslation();
+type SettingsTabEntry = { id: SettingsPageTab; label: string };
 
-  type TabEntry = { id: SettingsPageTab; label: string };
-  // Grouped tabs; groups are visually separated. Account leads the first group.
-  const tabGroups: TabEntry[][] = [
+/** Grouped tabs; groups are visually separated. Account leads the first group. */
+function useSettingsTabGroups(): SettingsTabEntry[][] {
+  const { t } = useTranslation();
+  return [
     // Identity: account + its usage.
     [
       { id: 'account', label: t('settings.tabs.account') },
@@ -106,6 +109,64 @@ export function SettingsPage({
       { id: 'mobile', label: t('settings.tabs.mobile') },
     ],
   ];
+}
+
+/**
+ * Compact tab picker for hosts without room for the nav column: the shell
+ * side pane's chip-strip row (via the settings PaneHeaderSlot) and, as a
+ * fallback, the content header in narrow main-area windows.
+ */
+export function SettingsTabsDropdown({
+  tab: activeTab,
+  onTabChange,
+  className,
+}: {
+  tab: SettingsPageTab;
+  onTabChange: (tab: SettingsPageTab) => void;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  const tabGroups = useSettingsTabGroups();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={t('common.settings')}
+        title={t('common.settings')}
+        className={cn(
+          'flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground',
+          className
+        )}
+      >
+        <Menu className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        {tabGroups.map((group, groupIndex) => (
+          <React.Fragment key={group[0]?.id ?? groupIndex}>
+            {groupIndex > 0 && <DropdownMenuSeparator />}
+            {group.map((tab) => (
+              <DropdownMenuItem key={tab.id} onClick={() => onTabChange(tab.id)}>
+                {tab.label}
+                {tab.id === activeTab && <Check className="ml-auto size-3.5" />}
+              </DropdownMenuItem>
+            ))}
+          </React.Fragment>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function SettingsPage({
+  tab: activeTab,
+  onTabChange,
+}: {
+  tab: SettingsPageTab;
+  onTabChange: (tab: SettingsPageTab) => void;
+}) {
+  const { t } = useTranslation();
+  const tabGroups = useSettingsTabGroups();
+  // In the side pane the chip-strip row hosts the tab picker — don't double it.
+  const isPinHosted = useIsPinHosted();
 
   const tabContent: Record<
     string,
@@ -314,9 +375,11 @@ export function SettingsPage({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1060px] flex-col gap-6 px-8">
-        <div className="grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)] gap-8 overflow-hidden">
-          <div className="py-10">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1060px] flex-col gap-6 px-8 @max-2xl:px-4">
+        {/* Narrow containers (shell side pane, slim windows) hide the nav
+            column; tab switching moves into the content header's dropdown. */}
+        <div className="grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)] gap-8 overflow-hidden @max-2xl:grid-cols-1 @max-2xl:grid-rows-[minmax(0,1fr)]">
+          <div className="py-10 @max-2xl:hidden">
             <nav className="flex min-h-0 w-52 flex-col gap-0.5 overflow-y-auto">
               {tabGroups.map((group, groupIndex) => (
                 <React.Fragment key={group[0]?.id ?? groupIndex}>
@@ -345,11 +408,22 @@ export function SettingsPage({
           {/* Content container */}
           {currentContent && (
             <div className="min-h-0 min-w-0 flex-1 justify-center overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]">
-              <div className="mx-auto w-full max-w-4xl space-y-8 py-10 pr-4 pl-1">
+              <div className="mx-auto w-full max-w-4xl space-y-8 py-10 pr-4 pl-1 @max-2xl:py-4 @max-2xl:pr-0 @max-2xl:pl-0">
                 <div className="flex flex-col gap-6">
-                  <div className="flex flex-col gap-1">
-                    <h2 className="text-xl">{currentContent.title}</h2>
-                    <p className="text-sm text-foreground-muted">{currentContent.description}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <h2 className="text-xl">{currentContent.title}</h2>
+                      <p className="text-sm text-foreground-muted">{currentContent.description}</p>
+                    </div>
+                    {/* Narrow main-area fallback — in the side pane the
+                        chip-strip row hosts the picker instead. */}
+                    {!isPinHosted && (
+                      <SettingsTabsDropdown
+                        tab={activeTab}
+                        onTabChange={onTabChange}
+                        className="hidden @max-2xl:flex"
+                      />
+                    )}
                   </div>
                   <Separator />
                 </div>

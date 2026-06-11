@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import {
   SettingsPage,
+  SettingsTabsDropdown,
   type SettingsPageTab,
 } from '@renderer/features/settings/components/SettingsPage';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
@@ -44,10 +45,18 @@ export function SettingsTitlebar() {
   return <Titlebar />;
 }
 
+/** Tab picker hung at the right end of the side pane's chip-strip row. */
+export function SettingsPaneHeaderSlot() {
+  const { tab, onTabChange } = useSettingsTab();
+  return <SettingsTabsDropdown tab={tab} onTabChange={onTabChange} />;
+}
+
 export function SettingsMainPanel() {
   const { tab, onTabChange } = useSettingsTab();
   return (
-    <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden bg-background">
+    // @container so SettingsPage adapts to its host's width (full window,
+    // shell side pane, …) instead of the viewport.
+    <div className="@container relative z-10 flex min-h-0 flex-1 overflow-hidden bg-background">
       <SettingsPage tab={tab} onTabChange={onTabChange} />
     </div>
   );
@@ -57,4 +66,5 @@ export const settingsView = {
   WrapView: SettingsViewWrapper,
   TitlebarSlot: SettingsTitlebar,
   MainPanel: SettingsMainPanel,
+  PaneHeaderSlot: SettingsPaneHeaderSlot,
 };

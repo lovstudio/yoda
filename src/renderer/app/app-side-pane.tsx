@@ -39,7 +39,7 @@ export const AppSidePane = observer(function AppSidePane() {
   const { t } = useTranslation();
   const { value: projectSettings } = useAppSettingsKey('project');
   const branchPrefix = projectSettings?.branchPrefix ?? '';
-  const { pins, activePinId } = appState.sidePane;
+  const { pins, activePinId, activePin } = appState.sidePane;
 
   // A moved task entity reclaimed by the main area (route replay, dedupe
   // reopen) leaves `shellPinTabIds` — drop its pin so no ghost chip remains.
@@ -122,6 +122,9 @@ export const AppSidePane = observer(function AppSidePane() {
             );
           })}
         </div>
+        {/* The active pin's view can hang a control at the row's right end
+            (e.g. the settings tab picker). */}
+        {activePin?.kind === 'view' ? <PaneHeaderAccessory pin={activePin} /> : null}
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         {/* Each pin keeps its own Activity so background PTYs/views stay alive. */}
@@ -151,21 +154,15 @@ const ShellPinnedTaskBody = observer(function ShellPinnedTaskBody({ tabId }: { t
   return <SidebarPinnedContent entry={entry} />;
 });
 
-/**
- * Generic host for a pinned view: renders the registered view's MainPanel
- * (inside its WrapView when defined) with params detached from the global
- * route via the override layer — the pane shows ITS pin's params even when
- * the main area navigates the same view elsewhere.
- */
-const ViewPinHost = observer(function ViewPinHost({
-  pin,
-}: {
-  pin: Extract<SidePanePin, { kind: 'view' }>;
-}) {
-  const def = (views as unknown as Record<string, ViewDefinition<Record<string, unknown>>>)[
-    pin.viewId
-  ];
-  const override = useMemo<ViewParamsOverride>(
+type ViewPin = Extract<SidePanePin, { kind: 'view' }>;
+
+function viewDefinition(viewId: string): ViewDefinition<Record<string, unknown>> | undefined {
+  return (views as unknown as Record<string, ViewDefinition<Record<string, unknown>>>)[viewId];
+}
+
+/** The pin's params override, shared by the body host and the header accessory. */
+function usePinParamsOverride(pin: ViewPin): ViewParamsOverride {
+  return useMemo(
     () => ({
       viewId: pin.viewId,
       getParams: () => pin.params,
@@ -173,11 +170,49 @@ const ViewPinHost = observer(function ViewPinHost({
     }),
     [pin]
   );
+}
+
+/**
+ * Right-end slot of the chip-strip row: the active pinned view's
+ * PaneHeaderSlot, rendered under the same WrapView + params override as its
+ * body so hooks like useParams/useSettingsTab resolve to the pin.
+ */
+const PaneHeaderAccessory = observer(function PaneHeaderAccessory({ pin }: { pin: ViewPin }) {
+  const def = viewDefinition(pin.viewId);
+  const override = usePinParamsOverride(pin);
+  if (!def?.PaneHeaderSlot) return null;
+
+  const slot = <def.PaneHeaderSlot />;
+  return (
+    <div className="flex shrink-0 items-center [-webkit-app-region:no-drag]">
+      <ViewParamsOverrideProvider value={override}>
+        {def.WrapView ? (
+          <def.WrapView {...(pin.params as WrapParams<ViewId>)}>{slot}</def.WrapView>
+        ) : (
+          slot
+        )}
+      </ViewParamsOverrideProvider>
+    </div>
+  );
+});
+
+/**
+ * Generic host for a pinned view: renders the registered view's MainPanel
+ * (inside its WrapView when defined) with params detached from the global
+ * route via the override layer — the pane shows ITS pin's params even when
+ * the main area navigates the same view elsewhere.
+ */
+const ViewPinHost = observer(function ViewPinHost({ pin }: { pin: ViewPin }) {
+  const def = viewDefinition(pin.viewId);
+  const override = usePinParamsOverride(pin);
   if (!def) return null;
 
   const content = <def.MainPanel />;
   return (
-    <div className="h-full min-h-0 overflow-hidden">
+    // Flex column so MainPanels sized with flex-1 (the norm in
+    // WorkspaceContentLayout) get a bounded height here too — otherwise inner
+    // scroll areas grow past the pane and clip instead of scrolling.
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <ViewParamsOverrideProvider value={override}>
         {def.WrapView ? (
           <def.WrapView {...(pin.params as WrapParams<ViewId>)}>{content}</def.WrapView>
