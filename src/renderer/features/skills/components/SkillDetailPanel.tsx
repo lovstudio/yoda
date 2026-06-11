@@ -241,7 +241,7 @@ const SkillDetailContent: React.FC<{
         : t('skills.detail.unavailable');
 
   return (
-    <div className="h-full overflow-y-auto bg-background text-foreground">
+    <div className="@container h-full overflow-y-auto bg-background text-foreground">
       <div className="mx-auto w-full max-w-3xl px-8 py-8">
         {/* Header */}
         <div className="mb-6 flex items-start gap-3">
@@ -326,7 +326,7 @@ const SkillDetailContent: React.FC<{
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
             <MetricTile
               icon={FileText}
               label={t('skills.detail.estimatedTokens')}
@@ -360,6 +360,36 @@ const SkillDetailContent: React.FC<{
                   />
                 ))}
               </div>
+            </DetailSection>
+          )}
+
+          {/* The SKILL.md body — the part agents actually execute — leads the page. */}
+          {body && (
+            <DetailSection
+              title={t('skills.detail.instructions')}
+              action={
+                skill.skillMdContent ? (
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => void handleCopy(skill.skillMdContent!)}
+                    aria-label={t('skills.detail.copySkillMd')}
+                    title={t('skills.detail.copySkillMd')}
+                    className={cn(
+                      hoverActionBaseClass,
+                      'group-hover/detail-section:opacity-100 group-focus-within/detail-section:opacity-100'
+                    )}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null
+              }
+            >
+              <MarkdownRenderer
+                content={body}
+                variant="compact"
+                className="rounded-md bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+              />
             </DetailSection>
           )}
 
@@ -415,7 +445,7 @@ const SkillDetailContent: React.FC<{
           </DetailSection>
 
           <DetailSection title={t('skills.detail.invocation')}>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2 @2xl:grid-cols-2">
               <CommandCopyButton
                 label="Codex"
                 command={codexCommand}
@@ -431,7 +461,7 @@ const SkillDetailContent: React.FC<{
 
           {(frontmatter.license || frontmatter.compatibility || frontmatter['allowed-tools']) && (
             <DetailSection title={t('skills.detail.metadata')}>
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 @2xl:grid-cols-3">
                 {frontmatter.license && (
                   <MetadataItem label={t('skills.detail.license')} value={frontmatter.license} />
                 )}
@@ -478,35 +508,6 @@ const SkillDetailContent: React.FC<{
               <pre className="wrap-break-word whitespace-pre-wrap rounded-md bg-muted/30 px-3 py-2 text-xs text-foreground">
                 {skill.defaultPrompt}
               </pre>
-            </DetailSection>
-          )}
-
-          {body && (
-            <DetailSection
-              title={t('skills.detail.instructions')}
-              action={
-                skill.skillMdContent ? (
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => void handleCopy(skill.skillMdContent!)}
-                    aria-label={t('skills.detail.copySkillMd')}
-                    title={t('skills.detail.copySkillMd')}
-                    className={cn(
-                      hoverActionBaseClass,
-                      'group-hover/detail-section:opacity-100 group-focus-within/detail-section:opacity-100'
-                    )}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
-                ) : null
-              }
-            >
-              <MarkdownRenderer
-                content={body}
-                variant="compact"
-                className="rounded-md bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
-              />
             </DetailSection>
           )}
         </div>

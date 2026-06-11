@@ -337,7 +337,7 @@ const ThemeCard: React.FC = () => {
         ))}
       </div>
       {theme === null && (
-        <div className="grid grid-cols-1 gap-2 rounded-md border border-border/60 bg-background-1 px-3 py-2.5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 rounded-md border border-border/60 bg-background-1 px-3 py-2.5 @2xl:grid-cols-2">
           <SystemSlotSelect
             label={t('settings.theme.systemLight')}
             value={systemThemes.light}

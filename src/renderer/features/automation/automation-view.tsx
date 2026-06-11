@@ -241,7 +241,7 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
   return (
     <div
       className={cn(
-        'flex bg-background text-foreground',
+        '@container flex bg-background text-foreground',
         !embedded && 'h-full min-h-0 overflow-y-auto'
       )}
     >
@@ -320,7 +320,7 @@ function AutomationEditor({
       onSubmit={onSave}
       className="mt-10 grid gap-4 rounded-lg border border-border bg-background-secondary p-4"
     >
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_14rem]">
+      <div className="grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_14rem]">
         <label className="grid gap-1.5">
           <span className="text-xs text-foreground-muted">{t('automation.form.title')}</span>
           <Input
@@ -340,7 +340,7 @@ function AutomationEditor({
           />
         </label>
       </div>
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_14rem_10rem]">
+      <div className="grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_14rem_10rem]">
         <label className="grid gap-1.5">
           <span className="text-xs text-foreground-muted">{t('automation.form.workspace')}</span>
           <Input

@@ -77,7 +77,7 @@ export const McpView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) 
   return (
     <div
       className={cn(
-        'flex flex-col bg-background text-foreground',
+        '@container flex flex-col bg-background text-foreground',
         embedded ? 'w-full' : 'h-full overflow-y-auto'
       )}
     >
@@ -124,7 +124,7 @@ export const McpView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) 
             <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground">
               {t('mcp.added')}
             </h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
               {filteredInstalled.map((server) => (
                 <McpCard
                   key={server.name}
@@ -143,7 +143,7 @@ export const McpView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) 
             <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground">
               {t('mcp.recommended')}
             </h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
               {filteredCatalog.map((entry) => (
                 <McpCard
                   key={entry.key}

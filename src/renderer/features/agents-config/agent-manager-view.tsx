@@ -121,7 +121,7 @@ export function AgentManagerView({ embedded = false }: { embedded?: boolean }) {
   return (
     <div
       className={cn(
-        'flex w-full flex-col min-h-0',
+        '@container flex w-full flex-col min-h-0',
         !embedded && 'mx-auto h-full max-w-4xl px-6 pt-6'
       )}
     >
@@ -168,7 +168,7 @@ export function AgentManagerView({ embedded = false }: { embedded?: boolean }) {
             )}
           </div>
         ) : (
-          <div className={cn('grid gap-3 sm:grid-cols-2')}>
+          <div className={cn('grid gap-3 @2xl:grid-cols-2')}>
             {filtered.map((agent) => (
               <AgentCard
                 key={agent.id}

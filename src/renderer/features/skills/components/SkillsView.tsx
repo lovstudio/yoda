@@ -103,7 +103,7 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   return (
     <div
       className={cn(
-        'flex flex-col bg-background text-foreground',
+        '@container flex flex-col bg-background text-foreground',
         !embedded && 'h-full overflow-y-auto'
       )}
     >
@@ -188,7 +188,7 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
             <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground">
               {t('skills.installed')}
             </h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
               {installedSkills.map((skill) => (
                 <div
                   key={skill.id}
@@ -211,7 +211,7 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
             <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground">
               {t('skills.recommended')}
             </h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
               {recommendedSkills.map((skill) => (
                 <div
                   key={skill.id}
