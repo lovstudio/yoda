@@ -19,7 +19,10 @@ import { useTranslation } from 'react-i18next';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import type { CatalogSkill, SkillValidationIssue } from '@shared/skills/types';
 import { parseFrontmatter } from '@shared/skills/validation';
-import { FilePathActionsDropdown } from '@renderer/lib/components/file-path-actions';
+import {
+  FilePathActionsDropdown,
+  GlobalFileActionsDropdown,
+} from '@renderer/lib/components/file-path-actions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { Badge } from '@renderer/lib/ui/badge';
@@ -379,11 +382,7 @@ const SkillDetailContent: React.FC<{
                   <ValueRow
                     label={t('skills.detail.skillFile')}
                     value={localSkillFilePath}
-                    extraAction={
-                      <FilePathActionsDropdown
-                        target={{ absolutePath: localSkillFilePath, kind: 'file' }}
-                      />
-                    }
+                    extraAction={<GlobalFileActionsDropdown absolutePath={localSkillFilePath} />}
                   />
                 )}
               </>

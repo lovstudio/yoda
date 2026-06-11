@@ -504,7 +504,17 @@ async function ensureInternalTab(
 
 function buildProjectFileSection(tab: AppTabEntry): ReactNode[] {
   const { projectId, filePath } = tab.params as { projectId?: string; filePath?: string };
-  if (!projectId || !filePath) return [];
+  if (!filePath) return [];
+  // Project-less (agent-home) file tab — the path itself is absolute.
+  if (!projectId) {
+    return [
+      <FilePathMenuItems
+        key="file-actions"
+        target={{ absolutePath: filePath, kind: 'file' }}
+        components={{ Item: ContextMenuItem, Separator: ContextMenuSeparator }}
+      />,
+    ];
+  }
   const project = getProjectStore(projectId);
   const data = project && 'data' in project ? project.data : undefined;
   if (!data || typeof data !== 'object' || !('path' in data)) return [];

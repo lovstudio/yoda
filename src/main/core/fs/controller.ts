@@ -114,16 +114,22 @@ async function listLocalRelativePath(
 }
 
 /**
- * Read-only whitelist roots for agent home files (see readFile): session
+ * Whitelist roots for agent home files (see readFile/writeFile): session
  * transcripts, user-level CLAUDE.md / settings, global skills — everything the
- * context panel surfaces from the agent CLIs' home dirs.
+ * context panel and skills views surface from the agent CLIs' home dirs.
+ * These are the user's own config dirs, so editing them in-app is legitimate.
  */
-const AGENT_HOME_READ_ROOTS = [path.join(homedir(), '.claude'), path.join(homedir(), '.codex')];
+const AGENT_HOME_ROOTS = [
+  path.join(homedir(), '.claude'),
+  path.join(homedir(), '.codex'),
+  path.join(homedir(), '.agents'),
+  path.join(homedir(), '.agentskills'),
+];
 
 function isAgentHomePath(filePath: string): boolean {
   if (!path.isAbsolute(filePath)) return false;
   const resolved = path.resolve(filePath);
-  return AGENT_HOME_READ_ROOTS.some((root) => resolved.startsWith(root + path.sep));
+  return AGENT_HOME_ROOTS.some((root) => resolved.startsWith(root + path.sep));
 }
 
 // Transcripts are plain JSONL and frequently exceed the workspace default of
@@ -292,8 +298,8 @@ export const filesController = createRPCController({
   readFile: async (projectId: string, workspaceId: string, filePath: string, maxBytes?: number) => {
     // Agent home escape: transcripts, user CLAUDE.md, global skills etc. live
     // under the agent CLIs' home dirs, outside any workspace jail. Allow
-    // READ-ONLY access to exactly those roots so the regular file viewer can
-    // open them; writes are not extended.
+    // access to exactly those roots so the regular file viewer/editor can
+    // open them (writeFile carries the matching escape).
     if (isAgentHomePath(filePath)) {
       try {
         return ok(await readAgentHomeFile(filePath, maxBytes));
@@ -315,6 +321,19 @@ export const filesController = createRPCController({
   },
 
   writeFile: async (projectId: string, workspaceId: string, filePath: string, content: string) => {
+    // Agent home escape — mirrors readFile so files opened from there can be
+    // saved back (user CLAUDE.md, SKILL.md, settings).
+    if (isAgentHomePath(filePath)) {
+      try {
+        const resolved = path.resolve(filePath);
+        await nativeFs.writeFile(resolved, content, 'utf8');
+        const stat = await nativeFs.stat(resolved);
+        return ok({ success: true, bytesWritten: stat.size });
+      } catch (e) {
+        return err({ type: 'fs_error' as const, message: String(e) });
+      }
+    }
+
     const env = resolveWorkspace(projectId, workspaceId);
     if (!env)
       return err({ type: 'not_found' as const, entity: 'filesystem' as const, detail: undefined });

@@ -21,7 +21,8 @@ import { ProjectFileEditor } from './project-file-editor';
 import { getProjectFileSession, type ProjectFileSession } from './project-file-session';
 
 type ProjectFileViewParams = {
-  projectId: string;
+  /** Absent for project-less (agent-home) files — see project-file-session. */
+  projectId?: string;
   filePath: string;
 };
 
@@ -45,11 +46,11 @@ const ProjectFileMainPanel = observer(function ProjectFileMainPanel() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!projectId || !filePath) return;
+    if (!filePath) return;
     let cancelled = false;
     setSession(null);
     setError(null);
-    getProjectFileSession(projectId, filePath)
+    getProjectFileSession(projectId ?? null, filePath)
       .then((next) => {
         if (!cancelled) setSession(next);
       })
@@ -61,7 +62,7 @@ const ProjectFileMainPanel = observer(function ProjectFileMainPanel() {
     };
   }, [projectId, filePath]);
 
-  if (!projectId || !filePath) return null;
+  if (!filePath) return null;
 
   if (error) {
     return <EmptyState label={t('common.error')} description={error} />;
@@ -75,7 +76,7 @@ const ProjectFileMainPanel = observer(function ProjectFileMainPanel() {
     );
   }
 
-  return <ProjectFileContent key={`${projectId}::${filePath}`} session={session} />;
+  return <ProjectFileContent key={`${projectId ?? ''}::${filePath}`} session={session} />;
 });
 
 const ProjectFileContent = observer(function ProjectFileContent({

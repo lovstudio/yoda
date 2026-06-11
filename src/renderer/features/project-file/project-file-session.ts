@@ -15,9 +15,13 @@ import { appState } from '@renderer/lib/stores/app-state';
  * backed by the project-view workspace (acquired lazily, shared per project).
  * Sessions outlive view mounts — tab switches keep models (and unsaved edits)
  * alive; the session is disposed only when its app tab closes.
+ *
+ * `projectId: null` is the global variant: an absolute path with no project
+ * (agent-home files like SKILL.md). No workspace is acquired — the main
+ * process resolves those paths via the agent-home escape in fs.readFile.
  */
 export type ProjectFileSession = {
-  readonly projectId: string;
+  readonly projectId: string | null;
   readonly filePath: string;
   readonly workspaceId: string;
   readonly fileTab: FileTabStore;
@@ -53,30 +57,31 @@ const sessions = new Map<string, ProjectFileSession>();
 const workspaceIds = new Map<string, Promise<string>>();
 let tabCloseWired = false;
 
-function sessionKey(projectId: string, filePath: string): string {
-  return `${projectId}::${filePath}`;
+function sessionKey(projectId: string | null, filePath: string): string {
+  return `${projectId ?? ''}::${filePath}`;
 }
 
 /**
- * Opens (or focuses) the app tab for a project file. Browser semantics:
- * an existing tab for the same file is activated instead of duplicated.
+ * Opens (or focuses) the app tab for a project file (or a project-less
+ * absolute path when `projectId` is null). Browser semantics: an existing tab
+ * for the same file is activated instead of duplicated.
  */
-export function openProjectFileTab(projectId: string, filePath: string): void {
+export function openProjectFileTab(projectId: string | null, filePath: string): void {
   const existing = appState.appTabs.tabs.find(
     (tab) =>
       tab.viewId === 'file' &&
-      tab.params.projectId === projectId &&
+      (tab.params.projectId ?? null) === projectId &&
       tab.params.filePath === filePath
   );
   if (existing) {
     appState.appTabs.activateTab(existing.id);
     return;
   }
-  appState.appTabs.openTab('file', { projectId, filePath });
+  appState.appTabs.openTab('file', projectId ? { projectId, filePath } : { filePath });
 }
 
 export async function getProjectFileSession(
-  projectId: string,
+  projectId: string | null,
   filePath: string
 ): Promise<ProjectFileSession> {
   wireTabCloseDisposal();
@@ -85,7 +90,9 @@ export async function getProjectFileSession(
   const existing = sessions.get(key);
   if (existing) return existing;
 
-  const workspaceId = await getProjectViewWorkspaceId(projectId);
+  // Global files need no workspace — fs RPCs resolve them via the agent-home
+  // escape; the sentinel only namespaces the Monaco model root.
+  const workspaceId = projectId ? await getProjectViewWorkspaceId(projectId) : 'global';
 
   // Re-check after the await — a concurrent caller may have created it.
   const raced = sessions.get(key);
@@ -94,7 +101,7 @@ export async function getProjectFileSession(
   const fileTab = new FileTabStore(filePath, false);
   const lifecycle = new FileModelLifecycleStore(
     new SingleFileHost(fileTab),
-    projectId,
+    projectId ?? '',
     workspaceId
   );
   const session: ProjectFileSession = { projectId, filePath, workspaceId, fileTab, lifecycle };
@@ -131,7 +138,7 @@ function disposeSession(key: string): void {
   modelRegistry.unregisterModel(modelRegistry.toGitUri(uri, HEAD_REF));
   // Hot-exit: keep the crash-recovery buffer for dirty files so reopening the
   // tab restores unsaved edits; clean files release their buffer immediately.
-  if (!dirty) {
+  if (!dirty && session.projectId) {
     void rpc.editorBuffer.clearBuffer(session.projectId, session.workspaceId, session.filePath);
   }
 }
@@ -142,8 +149,8 @@ function wireTabCloseDisposal(): void {
   appState.appTabs.onTabClose((tab) => {
     if (tab.viewId !== 'file') return;
     const { projectId, filePath } = tab.params as { projectId?: string; filePath?: string };
-    if (typeof projectId === 'string' && typeof filePath === 'string') {
-      disposeSession(sessionKey(projectId, filePath));
+    if (typeof filePath === 'string') {
+      disposeSession(sessionKey(projectId ?? null, filePath));
     }
   });
 }
