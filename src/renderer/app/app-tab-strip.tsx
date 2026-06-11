@@ -219,7 +219,7 @@ const AppTab = observer(function AppTab({
       tabIndex={0}
       title={label}
       className={cn(
-        'group flex h-7 max-w-44 min-w-0 cursor-default select-none items-center gap-1.5 rounded-md border border-transparent py-1 pl-2 pr-1 text-xs [-webkit-app-region:no-drag]',
+        'group flex h-7 max-w-44 min-w-0 cursor-default select-none items-center gap-1.5 rounded-md border border-transparent py-1 px-2 text-xs [-webkit-app-region:no-drag]',
         isActive
           ? 'border-border bg-background-1 text-foreground'
           : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
@@ -232,12 +232,20 @@ const AppTab = observer(function AppTab({
         if (event.key === 'Enter' || event.key === ' ') onSelect();
       }}
     >
-      <span className="flex size-3.5 shrink-0 items-center justify-center">{icon}</span>
-      <span className="min-w-0 truncate">{label}</span>
-      {/* Constant-width close slot keeps every tab's structure identical;
-          the button appears on hover, or persistently while dismissal is
-          pending (e.g. a session archiving through its pre-archive command). */}
-      <span className="flex size-4 shrink-0 items-center justify-center">
+      {/* One leading slot: the icon morphs into the close action on hover —
+          or persistently while dismissal is pending (e.g. a session archiving
+          through its pre-archive command) — so tabs never spend an extra slot
+          on a trailing ×. */}
+      <span className="relative flex size-4 shrink-0 items-center justify-center">
+        <span
+          className={cn(
+            'flex items-center justify-center',
+            closeable && 'group-hover:invisible',
+            closePending && 'invisible'
+          )}
+        >
+          {icon}
+        </span>
         {closeable ? (
           <button
             type="button"
@@ -245,8 +253,8 @@ const AppTab = observer(function AppTab({
             title={closeLabel}
             disabled={closePending}
             className={cn(
-              'flex size-4 items-center justify-center rounded-sm text-foreground-passive hover:bg-background-2 hover:text-foreground',
-              closePending ? 'visible' : 'invisible group-hover:visible'
+              'absolute inset-0 items-center justify-center rounded-sm text-foreground-passive hover:bg-background-2 hover:text-foreground',
+              closePending ? 'flex' : 'hidden group-hover:flex'
             )}
             onClick={(event) => {
               event.stopPropagation();
@@ -257,6 +265,7 @@ const AppTab = observer(function AppTab({
           </button>
         ) : null}
       </span>
+      <span className="min-w-0 truncate">{label}</span>
     </div>
   );
 });
