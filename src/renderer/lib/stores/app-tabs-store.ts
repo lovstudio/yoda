@@ -68,9 +68,10 @@ function normalizeTabParams(
 }
 
 /**
- * The fixed page set of a project scope — every page is a permanent top-level
- * tab (mirrors the former in-panel ToggleGroup). Keep in sync with the
- * ProjectView union in features/projects/stores/project-view.ts.
+ * The fixed page set of a project scope — every page always shows as a
+ * top-level tab (mirrors the former in-panel ToggleGroup); missing ones are
+ * synthesized by `visibleTabs`, never persisted upfront. Keep in sync with
+ * the ProjectView union in features/projects/stores/project-view.ts.
  */
 export const PROJECT_PAGE_VIEWS = ['overview', 'tasks', 'sessions', 'harness', 'settings'] as const;
 export type ProjectPageView = (typeof PROJECT_PAGE_VIEWS)[number];
@@ -109,12 +110,13 @@ export function isIndexTab(tab: AppTabEntry): boolean {
   return tab.viewId !== 'file';
 }
 
-/** Fixed display order for a scope's index tabs (project page set order). */
-function indexOrder(tab: AppTabEntry): number {
-  if (tab.viewId !== 'project') return 0;
-  const view = (tab.params.view as string | undefined) ?? 'overview';
-  const index = (PROJECT_PAGE_VIEWS as readonly string[]).indexOf(view);
-  return index === -1 ? PROJECT_PAGE_VIEWS.length : index;
+/**
+ * Deterministic id for a fixed tab synthesized by `visibleTabs`. Stable across
+ * recomputes (it derives from the route), so React keys and active-id
+ * comparisons hold; if the tab gets activated it is stored under this same id.
+ */
+function syntheticTabId(viewId: ViewId, params: Record<string, unknown>): string {
+  return `synth:${routeKey(viewId, params)}`;
 }
 
 export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
@@ -226,11 +228,12 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
           return;
         }
 
-        // Task routes are tab-granular: navigation to a new target always
-        // means a new tab, never rewriting whichever tab happens to be active
-        // (that's how duplicate Overview tabs were born).
+        // Task and project-page routes are tab-granular: navigation to a new
+        // target always means a new tab, never rewriting whichever tab happens
+        // to be active (that's how duplicate Overview tabs were born).
         if (
           viewId !== 'task' &&
+          viewId !== 'project' &&
           tabScopeKey(viewId, nextParams) === tabScopeKey(tab.viewId, tab.params)
         ) {
           tab.viewId = viewId;
@@ -241,7 +244,6 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
         const next: AppTabEntry = { id: createTabId(), viewId, params: nextParams };
         this.tabs.splice(this._insertIndex(viewId, nextParams), 0, next);
         this._activate(next);
-        this._ensureScopeIndexTab(next);
       })
     );
   }
@@ -265,17 +267,49 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
     return this.tabs.find((tab) => tab.id === this.activeTabId);
   }
 
-  get activeScope(): string {
-    const tab = this.activeTab;
-    return tab ? tabScopeKey(tab.viewId, tab.params) : 'view:home';
+  /** The strip's contents: only tabs of the active scope, fixed tabs first. */
+  get visibleTabs(): AppTabEntry[] {
+    const active = this.activeTab;
+    if (!active) return [];
+    const scope = tabScopeKey(active.viewId, active.params);
+    const scoped = this.tabs.filter((tab) => tabScopeKey(tab.viewId, tab.params) === scope);
+    return [...this._fixedTabs(active, scoped), ...scoped.filter((tab) => !isIndexTab(tab))];
   }
 
-  /** The strip's contents: only tabs of the active scope, index tabs first. */
-  get visibleTabs(): AppTabEntry[] {
-    const scope = this.activeScope;
-    const scoped = this.tabs.filter((tab) => tabScopeKey(tab.viewId, tab.params) === scope);
-    const indexTabs = scoped.filter(isIndexTab).sort((a, b) => indexOrder(a) - indexOrder(b));
-    return [...indexTabs, ...scoped.filter((tab) => !isIndexTab(tab))];
+  /**
+   * The fixed tab set of the active scope, synthesized from the scope identity
+   * rather than materialized into `tabs`. Stored entries (which carry id and
+   * activation memory) take their slot; missing pages are filled with
+   * deterministic synthetic entries — so the set always shows complete, no
+   * matter how the scope was seeded or restored. Synthetic tabs are stored
+   * only once activated (see `_activateVisible`).
+   */
+  private _fixedTabs(active: AppTabEntry, scoped: AppTabEntry[]): AppTabEntry[] {
+    const stored = scoped.filter(isIndexTab);
+
+    if (active.viewId === 'project' || active.viewId === 'file') {
+      const { projectId } = active.params as { projectId?: string };
+      if (!projectId) return stored;
+      return PROJECT_PAGE_VIEWS.map((view) => {
+        const entry = stored.find(
+          (candidate) => ((candidate.params.view as string | undefined) ?? 'overview') === view
+        );
+        if (entry) return entry;
+        const params = { projectId, view };
+        return { id: syntheticTabId('project', params), viewId: 'project' as ViewId, params };
+      });
+    }
+
+    if (active.viewId === 'task') {
+      if (stored.length > 0) return stored;
+      const { projectId, taskId } = active.params as { projectId?: string; taskId?: string };
+      if (!projectId || !taskId) return stored;
+      const params = { projectId, taskId, tab: { kind: 'overview' } };
+      return [{ id: syntheticTabId('task', params), viewId: 'task' as ViewId, params }];
+    }
+
+    // Global view scopes: the single stored tab (the active one) is the set.
+    return stored;
   }
 
   /**
@@ -310,7 +344,6 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
     const tab: AppTabEntry = { id: createTabId(), viewId, params: normalizedParams };
     this.tabs.splice(this._insertIndex(viewId, normalizedParams), 0, tab);
     if (activate) this._activate(tab);
-    this._ensureScopeIndexTab(tab);
     if (activate) this.navigation._applyNavigation(tab.viewId, tab.params as WrapParams<T>);
   }
 
@@ -322,57 +355,6 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
     }
     const activeIndex = this.tabs.findIndex((entry) => entry.id === this.activeTabId);
     return activeIndex + 1;
-  }
-
-  /**
-   * Materializes a scope's fixed tabs when entering it:
-   * - task scope: the overview index tab (entering via a session/file deep
-   *   link creates it on the fly, without activating it)
-   * - project scope: the full page set (overview/tasks/sessions/harness/
-   *   settings) — every page is a permanent top-level tab
-   */
-  private _ensureScopeIndexTab(tab: AppTabEntry): void {
-    const scope = tabScopeKey(tab.viewId, tab.params);
-
-    if (tab.viewId === 'project' || tab.viewId === 'file') {
-      const { projectId } = tab.params as { projectId?: string };
-      if (!projectId) return;
-      const presentViews = new Set(
-        this.tabs
-          .filter((entry) => entry.viewId === 'project' && entry.params.projectId === projectId)
-          .map((entry) => (entry.params.view as string | undefined) ?? 'overview')
-      );
-      const missing = PROJECT_PAGE_VIEWS.filter((view) => !presentViews.has(view)).map(
-        (view): AppTabEntry => ({
-          id: createTabId(),
-          viewId: 'project',
-          params: { projectId, view },
-        })
-      );
-      if (missing.length === 0) return;
-      const firstScopeIndex = this.tabs.findIndex(
-        (entry) => tabScopeKey(entry.viewId, entry.params) === scope
-      );
-      this.tabs.splice(Math.max(firstScopeIndex, 0), 0, ...missing);
-      return;
-    }
-
-    if (tab.viewId !== 'task' || isIndexTab(tab)) return;
-    const { projectId, taskId } = tab.params as { projectId?: string; taskId?: string };
-    if (!projectId || !taskId) return;
-    const hasIndex = this.tabs.some(
-      (entry) => tabScopeKey(entry.viewId, entry.params) === scope && isIndexTab(entry)
-    );
-    if (hasIndex) return;
-    const indexTab: AppTabEntry = {
-      id: createTabId(),
-      viewId: 'task',
-      params: { projectId, taskId, tab: { kind: 'overview' } },
-    };
-    const firstScopeIndex = this.tabs.findIndex(
-      (entry) => tabScopeKey(entry.viewId, entry.params) === scope
-    );
-    this.tabs.splice(Math.max(firstScopeIndex, 0), 0, indexTab);
   }
 
   /** Closes every tab matching the predicate (e.g. all tabs of an archived task). */
@@ -416,35 +398,56 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
   /** Switches tabs without pushing navigation history. */
   activateTab(tabId: string): void {
     if (tabId === this.activeTabId) return;
-    const tab = this.tabs.find((entry) => entry.id === tabId);
+    const tab =
+      this.tabs.find((entry) => entry.id === tabId) ??
+      // Synthesized fixed tabs live only in visibleTabs until first activated.
+      this.visibleTabs.find((entry) => entry.id === tabId);
     if (!tab) return;
-    // Order matters: set activeTabId first so the route-sync reaction triggered
-    // by _applyNavigation writes into the NEW tab (a no-op) instead of clobbering
-    // the old one.
-    this._activate(tab);
-    this.navigation._applyNavigation(tab.viewId, tab.params as WrapParams<ViewId>);
+    this._activateVisible(tab);
+  }
+
+  /**
+   * Activates a tab from the visible strip, materializing a synthesized fixed
+   * tab into the store first (so activation memory and persistence see it).
+   * Order matters: set activeTabId before _applyNavigation so the route-sync
+   * reaction writes into the NEW tab (a no-op) instead of clobbering the old one.
+   */
+  private _activateVisible(tab: AppTabEntry): void {
+    let stored = this.tabs.find((entry) => entry.id === tab.id);
+    if (!stored) {
+      this.tabs.splice(this._insertIndex(tab.viewId, tab.params), 0, tab);
+      // Re-resolve: the deep-observable array stores a converted proxy, not
+      // the inserted object — the seq stamp must land on the stored entry.
+      stored = this.tabs.find((entry) => entry.id === tab.id) ?? tab;
+    }
+    this._activate(stored);
+    this.navigation._applyNavigation(stored.viewId, stored.params as WrapParams<ViewId>);
   }
 
   closeTab(tabId: string): void {
     const index = this.tabs.findIndex((entry) => entry.id === tabId);
     if (index === -1) return;
-    const closedScope = tabScopeKey(this.tabs[index].viewId, this.tabs[index].params);
-    const [closed] = this.tabs.splice(index, 1);
+    const closed = this.tabs[index];
+
+    // Pick the successor from the strip order BEFORE removal — it may be a
+    // synthesized fixed tab (e.g. closing the scope's last dynamic tab lands
+    // on a fixed page instead of jumping to another scope).
+    let successor: AppTabEntry | undefined;
+    if (this.activeTabId === closed.id) {
+      const visible = this.visibleTabs;
+      const visibleIndex = visible.findIndex((entry) => entry.id === closed.id);
+      successor =
+        visibleIndex === -1 ? undefined : (visible[visibleIndex + 1] ?? visible[visibleIndex - 1]);
+    }
+
+    this.tabs.splice(index, 1);
     for (const listener of this.closeListeners) listener(closed);
 
     if (this.activeTabId !== closed.id) return;
 
-    // Prefer staying in the same scope; fall back to any neighbour.
-    const scopedNeighbour = this.tabs.filter(
-      (entry) => tabScopeKey(entry.viewId, entry.params) === closedScope
-    );
-    const next =
-      scopedNeighbour[Math.min(index, scopedNeighbour.length - 1)] ??
-      this.tabs[index] ??
-      this.tabs[index - 1];
+    const next = successor ?? this.tabs[index] ?? this.tabs[index - 1];
     if (next) {
-      this.activeTabId = next.id;
-      this.navigation._applyNavigation(next.viewId, next.params as WrapParams<ViewId>);
+      this._activateVisible(next);
       return;
     }
 

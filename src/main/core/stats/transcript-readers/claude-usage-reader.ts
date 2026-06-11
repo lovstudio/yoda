@@ -1,5 +1,7 @@
+import { dirname } from 'node:path';
 import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
 import { iterateLines } from '@main/utils/text-lines';
+import { listClaudeSessionTranscriptPaths } from './claude-session-files';
 import {
   aggregateUsageEntries,
   makeUsageEntry,
@@ -13,12 +15,18 @@ import {
  * `message.usage` with `input_tokens` (non-cached), `output_tokens`,
  * `cache_read_input_tokens`, `cache_creation_input_tokens`. Claude writes one
  * row per content block, repeating the same `message.id` + usage — dedupe by
- * message id (last row wins, usage is cumulative per message). Sidechain
- * (subagent) rows are real burn and intentionally included.
+ * message id (last row wins, usage is cumulative per message).
+ *
+ * Subagent (Task tool) burn lives in separate transcripts under
+ * `<projectDir>/<sessionId>/subagents/*.jsonl` — real cost, included.
+ * Verified against local data: their message ids never overlap the parent
+ * file, so per-file message-id dedupe stays sufficient (ccusage parity).
  */
 export const claudeUsageReader: TranscriptUsageReader = {
-  resolveTranscriptPath: ({ cwd, conversationId }) =>
-    Promise.resolve(resolveClaudeTranscriptPath(cwd, conversationId)),
+  resolveTranscriptPaths: ({ cwd, conversationId }) => {
+    const main = resolveClaudeTranscriptPath(cwd, conversationId);
+    return listClaudeSessionTranscriptPaths(dirname(main), conversationId);
+  },
   parseUsage: parseClaudeUsage,
 };
 
@@ -36,6 +44,8 @@ export function parseClaudeUsage(raw: string): SessionTokenUsage | null {
     if (!usage) continue;
 
     const messageId = stringValue(message?.id) ?? `row-${fallbackIndex++}`;
+    // `<synthetic>` marks locally-generated rows with no real model (ccusage parity).
+    const model = stringValue(message?.model);
     byMessage.set(
       messageId,
       makeUsageEntry(
@@ -46,7 +56,8 @@ export function parseClaudeUsage(raw: string): SessionTokenUsage | null {
           cacheCreation: numberValue(usage.cache_creation_input_tokens),
           reasoning: 0,
         },
-        stringValue(row.timestamp)
+        stringValue(row.timestamp),
+        model === '<synthetic>' ? null : model
       )
     );
   }

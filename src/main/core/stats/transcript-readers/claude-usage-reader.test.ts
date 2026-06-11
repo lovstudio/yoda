@@ -8,12 +8,13 @@ const DAY_TWO = '2026-03-03T12:00:00.000Z';
 function assistantRow(
   messageId: string,
   usage: Record<string, number>,
-  timestamp: string = DAY_ONE
+  timestamp: string = DAY_ONE,
+  model?: string
 ): string {
   return JSON.stringify({
     type: 'assistant',
     timestamp,
-    message: { id: messageId, usage },
+    message: { id: messageId, usage, ...(model ? { model } : {}) },
   });
 }
 
@@ -72,6 +73,23 @@ describe('parseClaudeUsage', () => {
         date: formatLocalDateKey(new Date(DAY_TWO)),
         tokens: { input: 8, output: 10, cacheRead: 0, cacheCreation: 0, reasoning: 0, total: 18 },
       },
+    ]);
+  });
+
+  it('attributes usage to message.model, mapping <synthetic> to null', () => {
+    const raw = [
+      assistantRow('msg-1', { input_tokens: 10, output_tokens: 1 }, DAY_ONE, 'claude-opus-4-8'),
+      assistantRow('msg-2', { input_tokens: 20, output_tokens: 2 }, DAY_ONE, 'claude-opus-4-8'),
+      assistantRow('msg-3', { input_tokens: 5, output_tokens: 1 }, DAY_ONE, 'claude-haiku-4-5'),
+      assistantRow('msg-4', { input_tokens: 0, output_tokens: 1 }, DAY_ONE, '<synthetic>'),
+    ].join('\n');
+
+    const usage = parseClaudeUsage(raw);
+
+    expect(usage?.byModel.map((m) => [m.model, m.tokens.total])).toEqual([
+      ['claude-opus-4-8', 33],
+      ['claude-haiku-4-5', 6],
+      [null, 1],
     ]);
   });
 

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import {
+  useAccountAuthWarmUp,
   useAccountHealth,
   useAccountSession,
   useAccountSignIn,
@@ -27,6 +28,8 @@ export function AccountTab() {
   const user = session?.user ?? null;
   const isSignedIn = session?.isSignedIn ?? false;
   const hasAccount = session?.hasAccount ?? false;
+
+  useAccountAuthWarmUp(!isLoading && !isSignedIn);
 
   const handleSignIn = () => {
     setError(null);

@@ -32,6 +32,11 @@ export const accountController = createRPCController({
     return { success: true };
   },
 
+  warmUpAuth: async () => {
+    yodaAccountService.warmUp();
+    return { success: true };
+  },
+
   signOut: async () => {
     try {
       await yodaAccountService.signOut();

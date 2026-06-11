@@ -2,7 +2,7 @@ import { Archive, ChartColumn, Info, Loader2 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentAccountProviderId } from '@shared/runtime-registry';
-import type { TokenBuckets, UsageOverview } from '@shared/stats';
+import type { ProjectUsage, TokenBuckets, UsageOverview } from '@shared/stats';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Badge } from '@renderer/lib/ui/badge';
@@ -134,8 +134,34 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
         </section>
       )}
 
-      {(overview.byRuntime.length > 0 || overview.byAuthProvider.length > 0) && (
+      {(overview.byProject.length > 0 ||
+        overview.byModel.length > 0 ||
+        overview.byRuntime.length > 0 ||
+        overview.byAuthProvider.length > 0) && (
         <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {overview.byProject.length > 0 && (
+            <BreakdownCard title={t('usage.byProject')} caliber={t('usage.caliber.byProject')}>
+              {overview.byProject.map((entry) => (
+                <ProjectRow key={entry.projectId} entry={entry} />
+              ))}
+            </BreakdownCard>
+          )}
+          {overview.byModel.length > 0 && (
+            <BreakdownCard title={t('usage.byModel')} caliber={t('usage.caliber.byModel')}>
+              {overview.byModel.map((entry) => (
+                <BreakdownRow
+                  key={entry.model ?? 'unknown'}
+                  leading={
+                    <span className="truncate font-mono text-xs" title={entry.model ?? undefined}>
+                      {entry.model ?? t('usage.modelUnknown')}
+                    </span>
+                  }
+                  meta={t('usage.sessionCount', { count: entry.sessionCount })}
+                  tokens={entry.tokens}
+                />
+              ))}
+            </BreakdownCard>
+          )}
           {overview.byRuntime.length > 0 && (
             <BreakdownCard title={t('usage.byRuntime')} caliber={t('usage.caliber.byRuntime')}>
               {overview.byRuntime.map((entry) => (
@@ -258,6 +284,50 @@ function BreakdownRow({
         {formatCompactNumber(tokens.total)}
       </span>
     </div>
+  );
+}
+
+function ProjectRow({ entry }: { entry: ProjectUsage }) {
+  const { t } = useTranslation();
+  const { navigate } = useNavigate();
+  const body = (
+    <>
+      <span
+        className={cn(
+          'min-w-0 flex-1 truncate text-sm text-foreground-muted',
+          !entry.external && 'transition-colors group-hover:text-foreground'
+        )}
+        title={entry.name}
+      >
+        {entry.name}
+      </span>
+      <span className="shrink-0 text-[11px] text-foreground-passive">
+        {t('usage.sessionCount', { count: entry.sessionCount })}
+      </span>
+      <span
+        className="shrink-0 font-mono text-xs tabular-nums text-foreground-muted"
+        title={tokenBreakdownTitle(entry.tokens, t)}
+      >
+        {formatCompactNumber(entry.tokens.total)}
+      </span>
+    </>
+  );
+  // External rows are plain directories — nothing to navigate to.
+  if (entry.external) {
+    return (
+      <div className="flex items-center gap-2 border-b border-border/40 py-2 last:border-b-0">
+        {body}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('project', { projectId: entry.projectId })}
+      className="group flex items-center gap-2 border-b border-border/40 py-2 text-left last:border-b-0"
+    >
+      {body}
+    </button>
   );
 }
 

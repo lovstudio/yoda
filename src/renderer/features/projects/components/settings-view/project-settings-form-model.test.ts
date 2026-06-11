@@ -24,6 +24,7 @@ function makeForm(overrides: Partial<FormState> = {}): FormState {
     worktreeDirectory: '',
     defaultBranch: null,
     remote: '',
+    statsAuxiliaryPaths: '',
     provisionCommand: '',
     terminateCommand: '',
     ...overrides,
@@ -63,6 +64,7 @@ describe('project settings form model', () => {
       worktreeDirectory: '../worktrees',
       defaultBranch: { type: 'remote', branch: 'main', remote: upstream },
       remote: 'upstream',
+      statsAuxiliaryPaths: '',
       provisionCommand: './provision.sh',
       terminateCommand: './terminate.sh',
     });

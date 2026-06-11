@@ -13,6 +13,7 @@ import { ShareProjectConfigModal } from '@renderer/features/projects/components/
 import { CreateSkillModal } from '@renderer/features/skills/components/CreateSkillModal';
 import { AddRemoteModal } from '@renderer/features/tasks/add-remote-modal';
 import { ArchiveTaskWithNoteModal } from '@renderer/features/tasks/archive-task-with-note-modal';
+import { ArchivedSessionTranscriptModal } from '@renderer/features/tasks/archived-session-transcript-modal';
 import { CreateTaskModal } from '@renderer/features/tasks/create-task-modal/create-task-modal';
 import { CreatePrModal } from '@renderer/features/tasks/diff-view/changes-panel/components/pr-entry/create-pr-modal';
 import { ConflictDialog } from '@renderer/features/tasks/editor/conflict-dialog';
@@ -21,6 +22,7 @@ import { RenameTaskModal } from '@renderer/features/tasks/rename-task-modal';
 import { SessionPromptsModal } from '@renderer/features/tasks/session-prompts-modal';
 import { SetParentTaskModal } from '@renderer/features/tasks/set-parent-task-modal';
 import { CreateWorkspaceModal } from '@renderer/features/workspaces/create-workspace-modal';
+import { ProjectWorkspaceConflictModal } from '@renderer/features/workspaces/project-workspace-conflict-modal';
 import { AccountDeviceFlowModalOverlay } from '@renderer/lib/components/account-device-flow-modal';
 import { AddSshConnModal } from '@renderer/lib/components/add-ssh-conn-modal';
 import { ChangeProjectConnectionModal } from '@renderer/lib/components/change-project-connection-modal';
@@ -55,8 +57,8 @@ export const modalRegistry = {
   addProjectModal: createModal(AddProjectModal),
   addSshConnModal: createModal(AddSshConnModal),
   changeProjectConnectionModal: createModal(ChangeProjectConnectionModal, { size: 'sm' }),
-  githubDeviceFlowModal: createModal(GithubDeviceFlowModalOverlay, { size: 'md' }),
-  accountDeviceFlowModal: createModal(AccountDeviceFlowModalOverlay, { size: 'md' }),
+  githubDeviceFlowModal: createModal(GithubDeviceFlowModalOverlay, { size: 'sm' }),
+  accountDeviceFlowModal: createModal(AccountDeviceFlowModalOverlay, { size: 'sm' }),
   confirmActionModal: createModal(ConfirmActionDialog, { size: 'xs' }),
   feedbackModal: createModal(FeedbackModal),
   mcpServerModal: createModal(McpModal),
@@ -70,7 +72,9 @@ export const modalRegistry = {
   sessionPromptsModal: createModal(SessionPromptsModal, { size: 'lg' }),
   renameProjectModal: createModal(RenameProjectModal, { size: 'xs' }),
   createWorkspaceModal: createModal(CreateWorkspaceModal, { size: 'xs' }),
+  projectWorkspaceConflictModal: createModal(ProjectWorkspaceConflictModal, { size: 'sm' }),
   archiveTaskWithNoteModal: createModal(ArchiveTaskWithNoteModal, { size: 'xs' }),
+  archivedSessionTranscriptModal: createModal(ArchivedSessionTranscriptModal, { size: 'lg' }),
   shareProjectConfigModal: createModal(ShareProjectConfigModal, { size: 'md' }),
   manageRunScriptsModal: createModal(ManageRunScriptsModal, { size: 'md' }),
   manageQuickActionsModal: createModal(ManageQuickActionsModal, { size: 'md' }),

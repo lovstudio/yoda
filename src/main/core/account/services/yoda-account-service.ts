@@ -85,6 +85,9 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
   private cachedProfile: CachedProfile | null = null;
   private sessionToken: string | null = null;
   private cancelSignal: AbortController | null = null;
+  private lastWarmUpAttemptAt = 0;
+  private prefetchedStart: { start: DeviceStartResponse; fetchedAt: number } | null = null;
+  private prefetchInFlight: Promise<void> | null = null;
 
   on<K extends keyof AccountServiceHooks>(name: K, handler: AccountServiceHooks[K]) {
     return this._hooks.on(name, handler);
@@ -129,6 +132,48 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
     }
   }
 
+  /**
+   * Pre-warm a sign-in while the sign-in affordance is merely visible:
+   * actually start a device flow and cache the issued code, so a later
+   * signIn() can surface it instantly instead of paying the server
+   * roundtrip after the click. Unused codes simply expire server-side.
+   * Failures are irrelevant by design — signIn() falls back to a live call.
+   */
+  warmUp(): void {
+    if (this.sessionToken) return;
+    if (this.getFreshPrefetchedStart() || this.prefetchInFlight) return;
+    const now = Date.now();
+    if (now - this.lastWarmUpAttemptAt < 30_000) return;
+    this.lastWarmUpAttemptAt = now;
+
+    const { baseUrl } = ACCOUNT_CONFIG.authServer;
+    this.prefetchInFlight = this.startDeviceFlow(baseUrl, AbortSignal.timeout(15_000))
+      .then((start) => {
+        this.prefetchedStart = { start, fetchedAt: Date.now() };
+      })
+      .catch(() => {})
+      .finally(() => {
+        this.prefetchInFlight = null;
+      });
+  }
+
+  /**
+   * Return the prefetched device-flow start with its TTL adjusted for the
+   * time it spent in the cache, or null when it is too stale to hand out.
+   * Codes are valid for 10 minutes; require a generous remainder so the
+   * user never starts against an about-to-expire code.
+   */
+  private getFreshPrefetchedStart(): DeviceStartResponse | null {
+    if (!this.prefetchedStart) return null;
+    const elapsedSec = Math.floor((Date.now() - this.prefetchedStart.fetchedAt) / 1000);
+    const remaining = this.prefetchedStart.start.expiresIn - elapsedSec;
+    if (remaining < 300) {
+      this.prefetchedStart = null;
+      return null;
+    }
+    return { ...this.prefetchedStart.start, expiresIn: remaining };
+  }
+
   async signIn(_provider?: string): Promise<SignInResult> {
     this.cancelSignIn();
     const cancelSignal = new AbortController();
@@ -137,7 +182,14 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
     const { baseUrl, authTimeoutMs } = ACCOUNT_CONFIG.authServer;
 
     try {
-      const start = await this.startDeviceFlow(baseUrl, cancelSignal.signal);
+      // A prefetch may be mid-flight from warmUp(); ride it instead of racing it.
+      if (this.prefetchInFlight) await this.prefetchInFlight;
+      let start = this.getFreshPrefetchedStart();
+      if (start) {
+        this.prefetchedStart = null; // single use
+      } else {
+        start = await this.startDeviceFlow(baseUrl, cancelSignal.signal);
+      }
 
       events.emit(accountAuthDeviceCodeChannel, {
         userCode: start.userCode,

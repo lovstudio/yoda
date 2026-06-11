@@ -1,19 +1,16 @@
-import { AlertCircle, Check, Copy, ExternalLink } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import yodaLogo from '@/assets/images/yoda/yoda_logo_white.svg';
 import {
   githubAuthDeviceCodeChannel,
   githubAuthErrorChannel,
   githubAuthSuccessChannel,
 } from '@shared/events/githubEvents';
 import type { GitHubUser } from '@shared/github';
+import { DeviceFlowPanel } from '@renderer/lib/components/device-flow-panel';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { events, rpc } from '@renderer/lib/ipc';
 import type { BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { useGithubContext } from '@renderer/lib/providers/github-context-provider';
-import { Button } from '@renderer/lib/ui/button';
-import { Spinner } from '@renderer/lib/ui/spinner';
 import { log } from '@renderer/utils/logger';
 
 interface GithubDeviceFlowModalProps {
@@ -57,6 +54,8 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
   const [browserOpenCountdown, setBrowserOpenCountdown] = useState(3);
 
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const autoOpenTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoOpenCountdownRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutocopied = useRef(false);
   const hasOpenedBrowser = useRef(false);
   const authSucceededRef = useRef(false);
@@ -92,20 +91,11 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
     };
   }, [success, error, t]);
 
-  // Reset state on mount (new auth flow)
-  useEffect(() => {
-    setSuccess(false);
-    setError(null);
-    setUser(null);
-    setCopied(false);
-    hasAutocopied.current = false;
-    hasOpenedBrowser.current = false;
-  }, []);
-
   const copyToClipboard = useCallback(
     async (code: string, isAutomatic = false) => {
+      if (!code) return;
       try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
+        if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(code);
         } else {
           // Fallback for older browsers
@@ -145,6 +135,7 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
 
   const openGitHub = useCallback(() => {
     if (verificationUri) {
+      hasOpenedBrowser.current = true;
       void rpc.app.openExternal(verificationUri);
     }
   }, [verificationUri]);
@@ -165,15 +156,17 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
         // Show countdown and open browser after 3 seconds
         setBrowserOpening(true);
         let countdown = 3;
-        const countdownTimer = setInterval(() => {
+        autoOpenCountdownRef.current = setInterval(() => {
           countdown--;
           setBrowserOpenCountdown(countdown);
-          if (countdown <= 0) {
-            clearInterval(countdownTimer);
+          if (countdown <= 0 && autoOpenCountdownRef.current) {
+            clearInterval(autoOpenCountdownRef.current);
+            autoOpenCountdownRef.current = null;
           }
         }, 1000);
 
-        setTimeout(() => {
+        autoOpenTimerRef.current = setTimeout(() => {
+          autoOpenTimerRef.current = null;
           setBrowserOpening(false);
           if (!hasOpenedBrowser.current) {
             hasOpenedBrowser.current = true;
@@ -192,7 +185,7 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
       // Auto-close after showing success animation
       setTimeout(() => {
         onClose();
-      }, 1000); // 1 second is enough to see success
+      }, 1000);
     });
 
     // Auth error
@@ -215,28 +208,26 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
       cleanupDeviceCode();
       cleanupSuccess();
       cleanupError();
+      // The modal is gone — a pending auto-open must not pop the browser.
+      if (autoOpenTimerRef.current) {
+        clearTimeout(autoOpenTimerRef.current);
+        autoOpenTimerRef.current = null;
+      }
+      if (autoOpenCountdownRef.current) {
+        clearInterval(autoOpenCountdownRef.current);
+        autoOpenCountdownRef.current = null;
+      }
     };
   }, [copyToClipboard, onError, onClose, toast, t]);
 
-  const handleClose = () => {
-    onClose();
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Keyboard shortcuts (Escape is handled by DialogContent's onEscapeKeyDown)
+  // Keyboard shortcuts (Escape is handled by the dialog itself)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+        if (window.getSelection()?.toString()) return;
         e.preventDefault();
         void copyToClipboard(userCode);
-      } else if (e.key === 'Enter') {
-        openGitHub();
-      } else if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+      } else if (e.key === 'Enter' || ((e.metaKey || e.ctrlKey) && e.key === 'r')) {
         e.preventDefault();
         openGitHub();
       }
@@ -247,21 +238,26 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
   }, [copyToClipboard, openGitHub, userCode]);
 
   return (
-    <>
-      <div className="flex flex-col items-center px-8 py-12">
-        <img src={yodaLogo} alt="Yoda" className="mb-8 h-8 opacity-90" />
-
-        {success ? (
-          // Success State
-          <div className="flex flex-col items-center space-y-6 duration-300 animate-in fade-in zoom-in">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500 duration-500 animate-in zoom-in">
-              <Check className="h-8 w-8 text-white" strokeWidth={3} />
-            </div>
-            <div className="space-y-2 text-center">
-              <h2 className="text-2xl font-semibold">{t('common.success')}</h2>
-              <p className="text-sm text-muted-foreground">{t('auth.github.connected')}</p>
-              {user && (
-                <div className="mt-4 flex items-center justify-center gap-2">
+    <DeviceFlowPanel
+      title={t('auth.github.connectTitle')}
+      description={t('auth.github.pasteCodeDescription')}
+      openLabel={t('auth.openService', { service: 'GitHub' })}
+      userCode={userCode}
+      timeRemaining={timeRemaining}
+      copied={copied}
+      browserOpening={browserOpening}
+      browserOpenCountdown={browserOpenCountdown}
+      canOpen={Boolean(verificationUri)}
+      onCopy={() => copyToClipboard(userCode)}
+      onOpen={openGitHub}
+      onCancel={onClose}
+      success={
+        success
+          ? {
+              title: t('common.success'),
+              description: t('auth.github.connected'),
+              detail: user ? (
+                <div className="flex items-center justify-center gap-2">
                   {user.avatar_url && (
                     <img src={user.avatar_url} alt={user.name} className="h-10 w-10 rounded-full" />
                   )}
@@ -270,129 +266,20 @@ export function GithubDeviceFlowModal({ onClose, onError }: GithubDeviceFlowModa
                     <p className="text-xs text-muted-foreground">@{user.login}</p>
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-        ) : error ? (
-          // Error State
-          <div className="flex w-full flex-col items-center space-y-6">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500/20">
-              <AlertCircle className="h-8 w-8 text-red-500" />
-            </div>
-            <div className="space-y-2 text-center">
-              <h2 className="text-xl font-semibold">{t('auth.github.authenticationFailed')}</h2>
-              <p className="text-sm text-muted-foreground">{error}</p>
-            </div>
-            <Button onClick={handleClose} variant="outline" className="w-full">
-              {t('common.close')}
-            </Button>
-          </div>
-        ) : (
-          // Waiting State
-          <div className="flex w-full flex-col items-center space-y-6">
-            <div className="space-y-2 text-center">
-              <h2 className="text-2xl font-semibold">{t('auth.github.connectTitle')}</h2>
-              <p className="text-sm text-muted-foreground">{t('auth.github.authorize')}</p>
-            </div>
-
-            {userCode && (
-              <>
-                <div className="w-full space-y-3 rounded-lg bg-muted/30 p-6">
-                  <p className="text-center text-xs font-medium text-muted-foreground">
-                    {t('auth.yourCode')}
-                  </p>
-                  <p className="select-all text-center font-mono text-4xl font-bold tracking-wider">
-                    {userCode}
-                  </p>
-                </div>
-
-                <Button
-                  onClick={() => copyToClipboard(userCode)}
-                  variant="outline"
-                  className="w-full"
-                  disabled={copied}
-                >
-                  {copied ? (
-                    <>
-                      <Check className="mr-2 h-4 w-4" />
-                      {t('common.copied')}
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="mr-2 h-4 w-4" />
-                      {t('auth.copyCode')}
-                    </>
-                  )}
-                </Button>
-              </>
-            )}
-
-            <div className="w-full space-y-3 text-sm">
-              <div className="flex items-start gap-3">
-                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold">
-                  1
-                </div>
-                <p className="text-muted-foreground">
-                  {t('auth.github.stepPaste')}{' '}
-                  <span className="font-medium text-foreground">{t('auth.alreadyCopied')}</span>
-                </p>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold">
-                  2
-                </div>
-                <p className="text-muted-foreground">{t('auth.github.stepAuthorize')}</p>
-              </div>
-            </div>
-
-            {browserOpening && (
-              <div className="w-full rounded-lg border border-blue-500/20 bg-blue-500/10 p-4">
-                <p className="text-center text-sm text-blue-600 dark:text-blue-400">
-                  {t('auth.openingService', { service: 'GitHub', seconds: browserOpenCountdown })}
-                </p>
-              </div>
-            )}
-
-            <div className="flex flex-col items-center gap-2 text-center">
-              <Spinner className="h-5 w-5 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">{t('auth.waiting')}</p>
-              {timeRemaining > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {t('auth.codeExpiresIn', { time: formatTime(timeRemaining) })}
-                </p>
-              )}
-            </div>
-
-            {verificationUri && !browserOpening && (
-              <Button onClick={openGitHub} className="w-full" size="lg">
-                <ExternalLink className="mr-2 h-4 w-4" />
-                {t('auth.openService', { service: 'GitHub' })}
-              </Button>
-            )}
-
-            <div className="w-full border-t pt-4">
-              <p className="text-center text-xs text-muted-foreground">
-                {t('auth.having')}{' '}
-                <button
-                  onClick={() => rpc.app.openExternal('https://github.com/lovstudio/yoda/issues')}
-                  className="text-primary hover:underline focus:underline focus:outline-none"
-                >
-                  {t('auth.trouble')}
-                </button>
-                ?
-              </p>
-            </div>
-
-            <div className="space-x-3 text-center text-xs text-muted-foreground">
-              <span>{t('auth.shortcutCopy')}</span>
-              <span>•</span>
-              <span>{t('auth.shortcutReopen')}</span>
-              <span>•</span>
-              <span>{t('auth.shortcutCancel')}</span>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
+              ) : undefined,
+            }
+          : null
+      }
+      error={error ? { title: t('auth.github.authenticationFailed'), message: error } : null}
+      footer={
+        <button
+          type="button"
+          onClick={() => rpc.app.openExternal('https://github.com/lovstudio/yoda/issues')}
+          className="mt-3 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus:underline focus:outline-none"
+        >
+          {t('auth.troubleLink')}
+        </button>
+      }
+    />
   );
 }

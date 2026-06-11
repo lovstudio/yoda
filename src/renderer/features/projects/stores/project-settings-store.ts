@@ -10,6 +10,7 @@ import {
 import type { UpdateProjectSettingsError } from '@shared/projects';
 import type { Result } from '@shared/result';
 import { events, rpc } from '@renderer/lib/ipc';
+import { queryClient } from '@renderer/lib/query-client';
 import { Resource } from '@renderer/lib/stores/resource';
 
 export class ProjectSettingsStore {
@@ -65,6 +66,8 @@ export class ProjectSettingsStore {
       const current = this.pageData.data;
       if (current) this.pageData.setValue({ ...current, settings: result.data });
       else this.pageData.invalidate();
+      // Settings shape usage stats (statsAuxiliaryPaths) — refresh usage queries.
+      void queryClient.invalidateQueries({ queryKey: ['usage', 'overview'] });
     }
     return result;
   }

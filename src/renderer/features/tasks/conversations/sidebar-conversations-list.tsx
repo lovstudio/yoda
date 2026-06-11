@@ -3,7 +3,9 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ArchivedConversationRow } from '@renderer/features/tasks/conversations/archived-conversation-row';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
+import { useArchivedConversations } from '@renderer/features/tasks/conversations/use-archived-conversations';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -21,6 +23,7 @@ import { agentConfig } from '@renderer/utils/agentConfig';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import { AgentStatusIndicator } from '../components/agent-status-indicator';
+import { ArchivedDisclosure } from '../components/archived-disclosure';
 
 const ROW_HEIGHT = 32;
 
@@ -145,10 +148,12 @@ const ConversationRow = observer(function ConversationRow({
 });
 
 export const SidebarConversationsList = observer(function SidebarConversationsList() {
+  const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
   const { tabManager } = provisioned.taskView;
   const showNewConversationModal = useShowModal('newConversationModal');
+  const archived = useArchivedConversations(projectId, taskId);
   const conversationIds = Array.from(provisioned.conversations.conversations.values())
     .sort((a, b) => {
       const aTime = a.data.lastInteractedAt ? new Date(a.data.lastInteractedAt).getTime() : 0;
@@ -207,6 +212,23 @@ export const SidebarConversationsList = observer(function SidebarConversationsLi
             );
           })}
         </div>
+        {archived.length > 0 && (
+          <div className="pb-2 pt-1">
+            <ArchivedDisclosure
+              label={t('tasks.overview.archivedSessions', { count: archived.length })}
+            >
+              <div className="flex flex-col">
+                {archived.map((conversation) => (
+                  <ArchivedConversationRow
+                    key={conversation.id}
+                    conversation={conversation}
+                    compact
+                  />
+                ))}
+              </div>
+            </ArchivedDisclosure>
+          </div>
+        )}
       </div>
     </div>
   );

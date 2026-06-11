@@ -16,6 +16,8 @@ export type FormState = {
   worktreeDirectory: string;
   defaultBranch: Branch | null;
   remote: string;
+  /** Newline-separated directory paths contributing transcripts to usage stats. */
+  statsAuxiliaryPaths: string;
   provisionCommand: string;
   terminateCommand: string;
   /** Carried through opaque — managed by the dedicated quick-actions modal. */
@@ -58,6 +60,7 @@ export function settingsToForm(
     defaultBranch:
       projectDefaultBranchToBranch(s.defaultBranch, configuredRemoteMeta, remotes) ?? null,
     remote: s.remote ?? '',
+    statsAuxiliaryPaths: (s.statsAuxiliaryPaths ?? []).join('\n'),
     provisionCommand: s.workspaceProvider?.provisionCommand ?? '',
     terminateCommand: s.workspaceProvider?.terminateCommand ?? '',
     quickActions: s.quickActions,
@@ -81,6 +84,10 @@ export function formToSettings(f: FormState): ProjectSettings {
     run: blankToUndefined(f.scriptRun),
     teardown: blankToUndefined(f.scriptTeardown),
   };
+  const statsAuxiliaryPaths = f.statsAuxiliaryPaths
+    .split('\n')
+    .map((p) => p.trim())
+    .filter(Boolean);
   const provisionCommand = blankToUndefined(f.provisionCommand);
   const terminateCommand = blankToUndefined(f.terminateCommand);
   const hasScripts = Object.values(scripts).some((value) => value !== undefined);
@@ -91,6 +98,7 @@ export function formToSettings(f: FormState): ProjectSettings {
     worktreeDirectory: blankToUndefined(f.worktreeDirectory),
     defaultBranch,
     remote: blankToUndefined(f.remote),
+    statsAuxiliaryPaths: statsAuxiliaryPaths.length > 0 ? statsAuxiliaryPaths : undefined,
     workspaceProvider:
       provisionCommand && terminateCommand
         ? {

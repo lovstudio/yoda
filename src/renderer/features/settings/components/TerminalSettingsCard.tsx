@@ -56,7 +56,7 @@ const TerminalSettingsCard: React.FC = () => {
   const [loadingFonts, setLoadingFonts] = useState<boolean>(false);
 
   const fontFamily = terminal?.fontFamily ?? '';
-  const autoCopyOnSelection = terminal?.autoCopyOnSelection ?? false;
+  const autoCopyOnSelection = terminal?.autoCopyOnSelection ?? true;
   const scrollbackLines = normalizeTerminalScrollbackLines(terminal?.scrollbackLines);
   const [scrollbackDraft, setScrollbackDraft] = useState<string>(String(scrollbackLines));
   const skipScrollbackCommitRef = useRef(false);

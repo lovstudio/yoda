@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { rpc } from '@renderer/lib/ipc';
 
 export const ACCOUNT_SESSION_KEY = ['account:session'] as const;
@@ -23,6 +24,17 @@ export function useAccountSignIn() {
       void queryClient.invalidateQueries({ queryKey: ['feature-flags'] });
     },
   });
+}
+
+/**
+ * Pre-warm the auth server (DNS + TLS + serverless cold start) while a
+ * sign-in affordance is visible, so the device-code request is fast when
+ * the user actually clicks. Main process dedupes calls to once a minute.
+ */
+export function useAccountAuthWarmUp(enabled: boolean) {
+  useEffect(() => {
+    if (enabled) void rpc.account.warmUpAuth();
+  }, [enabled]);
 }
 
 export function useAccountSignOut() {

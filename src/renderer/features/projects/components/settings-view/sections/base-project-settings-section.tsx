@@ -1,10 +1,14 @@
+import { FolderPlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Branch, Remote } from '@shared/git';
 import { ProjectBranchSelector } from '@renderer/lib/components/project-branch-selector';
+import { rpc } from '@renderer/lib/ipc';
+import { Button } from '@renderer/lib/ui/button';
 import { Field, FieldDescription, FieldTitle } from '@renderer/lib/ui/field';
 import { Input } from '@renderer/lib/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@renderer/lib/ui/select';
 import { Separator } from '@renderer/lib/ui/separator';
+import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 import type { FormState, FormUpdate } from '../project-settings-form-model';
 
@@ -103,6 +107,40 @@ export function BaseProjectSettingsSection({
             )}
           </SelectContent>
         </Select>
+      </Field>
+
+      <Separator />
+
+      <Field>
+        <FieldTitle>{t('projects.settings.statsAuxiliaryPaths')}</FieldTitle>
+        <FieldDescription className="text-foreground-muted">
+          {t('projects.settings.statsAuxiliaryPathsDescription')}
+        </FieldDescription>
+        <Textarea
+          rows={3}
+          className="font-mono text-xs"
+          placeholder={t('projects.settings.statsAuxiliaryPathsPlaceholder')}
+          value={form.statsAuxiliaryPaths}
+          onChange={(e) => update('statsAuxiliaryPaths', e.target.value)}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          onClick={async () => {
+            const path = await rpc.app.openSelectDirectoryDialog({
+              title: t('projects.settings.statsAuxiliaryPathsBrowseTitle'),
+              message: t('projects.settings.statsAuxiliaryPathsBrowseMessage'),
+            });
+            if (!path) return;
+            const current = form.statsAuxiliaryPaths.trim();
+            update('statsAuxiliaryPaths', current ? `${current}\n${path}` : path);
+          }}
+        >
+          <FolderPlus className="size-3.5" />
+          {t('projects.settings.statsAuxiliaryPathsBrowse')}
+        </Button>
       </Field>
     </>
   );

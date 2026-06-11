@@ -58,6 +58,9 @@ export async function createSshProject(params: CreateSshProjectParams): Promise<
           name: params.name,
           baseRef,
           archivedAt: null,
+          // Resurrecting an archived project counts as re-adding it: it joins
+          // the workspace it was re-added from. Live rows keep their workspace.
+          ...(existing.archivedAt !== null ? { workspaceId: params.workspaceId ?? null } : {}),
           updatedAt: sql`CURRENT_TIMESTAMP`,
         })
         .where(eq(projects.id, existing.id))

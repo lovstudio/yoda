@@ -2,7 +2,11 @@ import { ChevronsUpDown, LogIn, User } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAccountSession, useAccountSignIn } from '@renderer/lib/hooks/useAccount';
+import {
+  useAccountAuthWarmUp,
+  useAccountSession,
+  useAccountSignIn,
+} from '@renderer/lib/hooks/useAccount';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
@@ -24,6 +28,8 @@ export const SidebarAccount: React.FC = observer(function SidebarAccount() {
 
   const user = session?.user ?? null;
   const isSignedIn = session?.isSignedIn ?? false;
+
+  useAccountAuthWarmUp(!isLoading && !isSignedIn);
 
   const handleToggleSidebarNav = React.useCallback(() => {
     sidebarStore.toggleNavSectionHidden();

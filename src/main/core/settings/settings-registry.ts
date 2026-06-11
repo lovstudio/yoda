@@ -69,7 +69,7 @@ export const SETTINGS_DEFAULTS = {
     soundFocusMode: 'always' as const,
   },
   terminal: {
-    autoCopyOnSelection: false,
+    autoCopyOnSelection: true,
     scrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
   },
   theme: null,

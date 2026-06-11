@@ -118,6 +118,10 @@
     "groupByNone": "No grouping",
     "groupByType": "By type",
     "groupByActivity": "By recent activity",
+    "branchDisplay": "Branch",
+    "branchDisplayHidden": "Hidden",
+    "branchDisplayCompact": "Compact",
+    "branchDisplayFull": "Full",
     "activityBucket": {
       "today": "Today",
       "thisWeek": "This week",
@@ -210,6 +214,15 @@
       "title": "Mobile connection",
       "heading": "Connect Yoda Mobile",
       "description": "Scan the install code first, then scan the connection code to pair this desktop.",
+      "modeDev": "Dev",
+      "modeProd": "Prod",
+      "devHeading": "Development connection",
+      "devDescription": "Open the mobile app in Expo Go for local development, then scan the connection code to pair this desktop.",
+      "prodHeading": "Connect Yoda Mobile",
+      "prodDescription": "Scan the install code first, then scan the connection code to pair this desktop.",
+      "devUnavailableInProd": "Development connection methods are only available in a dev build of the desktop app.",
+      "stepLabel": "Step {{n}}",
+      "advancedDetails": "Connection details",
       "running": "Gateway is running",
       "notReady": "Gateway is starting or unavailable",
       "disabled": "Gateway is disabled",
@@ -258,6 +271,7 @@
       "repository": "Project",
       "github": "GitHub",
       "interface": "Interface",
+      "terminal": "Terminal",
       "keyboardShortcuts": "Keyboard shortcuts"
     },
     "general": {
@@ -351,6 +365,9 @@
     "interfaceTab": {
       "description": "Customize the appearance and behavior of the app.",
       "keyboardShortcuts": "Keyboard shortcuts"
+    },
+    "terminalTab": {
+      "description": "Configure terminal font, history, and clipboard behavior."
     },
     "keyboardShortcutsTab": {
       "description": "Customize keyboard shortcuts for app actions."
@@ -772,7 +789,14 @@
           "yoda-maas": "MaaS"
         }
       },
-      "subtasks": "Subtasks ({{count}})"
+      "subtasks": "Subtasks ({{count}})",
+      "archivedSubtasks": "Archived ({{count}})"
+    },
+    "archivedSession": {
+      "readOnly": "Read-only",
+      "archivedLabel": "Archived",
+      "restore": "Restore session",
+      "viewTranscript": "View transcript"
     },
     "files": "Files",
     "toggleTerminal": "Toggle terminal",
@@ -1967,6 +1991,9 @@
       "less": "Less",
       "more": "More"
     },
+    "byProject": "By project",
+    "byModel": "By model",
+    "modelUnknown": "Unknown model",
     "byRuntime": "By runtime",
     "bySource": "By source",
     "sessionCount": "{{count}} sessions",
@@ -1974,10 +2001,12 @@
     "topTasks": "Top tasks by tokens",
     "caliber": {
       "tasks": "How it's counted: tasks with a non-null archive date (archiving is the completion act). The sub-line is all tasks ever created.",
-      "tokens": "How it's counted: parsed from local Claude / Codex session transcripts. Total = input + output + cache read + cache write. Other runtimes have no transcript reader and count as zero.",
+      "tokens": "How it's counted: parsed from local Claude / Codex session transcripts, including subagent transcripts and any auxiliary directories configured in project settings. Total = input + output + cache read + cache write. Other runtimes have no transcript reader and count as zero.",
       "lines": "How it's counted: per task = committed diff vs source branch (merge-base) + uncommitted working-tree changes. Live for active tasks; archived tasks use their last snapshot (tasks archived before this feature shipped have none and count as zero).",
       "activeDays": "How it's counted: local calendar days with any token usage in session transcripts.",
       "heatmap": "How it's counted: each session's tokens are bucketed into the local date they were consumed. Color levels are quantiles (25/50/75) of non-zero days.",
+      "byProject": "How it's counted: each session is attributed to its task's project; untracked auxiliary-directory sessions go to the project that configured the path (sessions tracked by another project stay there — the global total never double-counts).",
+      "byModel": "How it's counted: each transcript row is attributed to its provider-reported model id (Claude: message.model; Codex: the active turn_context model). Rows without one count as unknown.",
       "byRuntime": "How it's counted: grouped by the runtime that ran each session; only sessions with parseable transcripts are included.",
       "bySource": "How it's counted: the account mode recorded when each session was spawned. Sessions from before tracking landed are attributed to the runtime's current setting (estimate).",
       "topTasks": "How it's counted: sum of all session tokens per task, top 10."
@@ -2079,37 +2108,29 @@
     "codeCopied": "Code copied",
     "copyFailed": "Copy failed",
     "copyFailedDescription": "Copy the code manually and paste it in the browser.",
-    "yourCode": "Your code",
-    "copyCode": "Copy code",
     "alreadyCopied": "Copied",
-    "openingService": "Opening service...",
     "waiting": "Waiting for authorization...",
-    "codeExpiresIn": "Code expires in {{time}}",
-    "openService": "Open service",
-    "shortcutCopy": "Copy code",
-    "shortcutReopen": "Reopen browser",
+    "openService": "Open {{service}} in browser",
+    "shortcutCopy": "Copy",
+    "shortcutReopen": "Open",
     "shortcutCancel": "Cancel",
-    "having": "Having",
-    "trouble": "trouble?",
     "signedIn": "Signed in",
     "lovstudio": {
       "signInTitle": "Sign in to Yoda",
       "signInFailed": "Sign in failed",
       "signedInWelcome": "Welcome back.",
-      "authorize": "Authorize Yoda",
-      "pasteCodeDescription": "Paste this code in the browser to finish signing in.",
-      "stepSignIn": "Sign in",
-      "stepConfirm": "Confirm"
+      "pasteCodeDescription": "Paste this code in the browser to finish signing in."
     },
     "github": {
       "connectTitle": "Connect GitHub",
       "authenticationFailed": "GitHub authentication failed",
       "connected": "GitHub connected",
-      "authorize": "Authorize GitHub",
-      "pasteCodeDescription": "Paste this code in GitHub to finish connecting your account.",
-      "stepAuthorize": "Authorize",
-      "stepPaste": "Paste code"
-    }
+      "pasteCodeDescription": "Paste this code in GitHub to finish connecting your account."
+    },
+    "clickToCopy": "Click to copy",
+    "autoOpening": "Opening browser in {{seconds}}s…",
+    "troubleLink": "Having trouble?",
+    "requestingCode": "Requesting code…"
   },
   "ssh": {
     "validation": {
@@ -2571,7 +2592,8 @@
       "cacheRead": "Cache read",
       "cacheWrite": "Cache write",
       "daily": "Last 30 days",
-      "topTasks": "Top tasks"
+      "topTasks": "Top tasks",
+      "thisProject": "{{name}} (this project)"
     },
     "projectNotReady": "Project is not ready",
     "sessionsView": {
@@ -2675,6 +2697,12 @@
       "workspaceProviderDescription": "Choose how task workspaces are created.",
       "worktreeDirectory": "Worktree directory",
       "worktreeDirectoryDescription": "Directory where task worktrees are created.",
+      "statsAuxiliaryPaths": "Usage stats: auxiliary directories",
+      "statsAuxiliaryPathsDescription": "Claude sessions run in these directories (outside Yoda) also count toward this project's token usage — research folders, or the project's previous location after a move. One absolute path per line; paths that no longer exist still work, transcripts are matched by the recorded working directory.",
+      "statsAuxiliaryPathsPlaceholder": "/path/to/related-research\n/previous/location/of/this-project",
+      "statsAuxiliaryPathsBrowse": "Add directory",
+      "statsAuxiliaryPathsBrowseTitle": "Select auxiliary directory",
+      "statsAuxiliaryPathsBrowseMessage": "Claude sessions from this directory will count toward the project's usage stats",
       "lifecycleScripts": "Lifecycle scripts",
       "lifecycleScriptsDescription": "Commands that run when setting up or tearing down task workspaces.",
       "provisionCommand": "Provision command",
@@ -2753,6 +2781,10 @@
     "rename": "Rename",
     "remove": "Remove",
     "moveToWorkspace": "Move to workspace",
+    "projectInOtherWorkspace": "Project in another workspace",
+    "projectInOtherWorkspaceDescription": "\"{{project}}\" already belongs to the workspace \"{{workspace}}\".",
+    "goToWorkspace": "Go to {{workspace}}",
+    "moveToCurrentWorkspace": "Move to current workspace",
     "createFailed": "Failed to create workspace",
     "renameFailed": "Failed to rename workspace",
     "removeFailed": "Failed to remove workspace",

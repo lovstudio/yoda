@@ -12,7 +12,11 @@ import {
 import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { SidebarTaskGroupBy, SidebarTaskSortBy } from '@shared/view-state';
+import type {
+  SidebarBranchDisplay,
+  SidebarTaskGroupBy,
+  SidebarTaskSortBy,
+} from '@shared/view-state';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
@@ -56,6 +60,7 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
     sidebarStore.projectTypeFilter !== 'all' ||
     sidebarStore.taskSortBy !== 'updated-at' ||
     sidebarStore.taskGroupBy !== 'project' ||
+    sidebarStore.taskBranchDisplay !== 'compact' ||
     sidebarStore.hideProjectsWithoutActiveTasks ||
     sidebarStore.sortNeedsReviewLast ||
     sidebarStore.sortArchivingLast ||
@@ -137,6 +142,20 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
         >
           <ToggleGroupItem value="created-at">{t('sidebar.sortByCreatedAt')}</ToggleGroupItem>
           <ToggleGroupItem value="updated-at">{t('sidebar.sortByUpdatedAt')}</ToggleGroupItem>
+        </ToggleGroup>
+      </PanelRow>
+      <PanelRow label={t('sidebar.branchDisplay')}>
+        <ToggleGroup
+          size="xs"
+          multiple={false}
+          value={[sidebarStore.taskBranchDisplay]}
+          onValueChange={([value]) => {
+            if (value) sidebarStore.setTaskBranchDisplay(value as SidebarBranchDisplay);
+          }}
+        >
+          <ToggleGroupItem value="hidden">{t('sidebar.branchDisplayHidden')}</ToggleGroupItem>
+          <ToggleGroupItem value="compact">{t('sidebar.branchDisplayCompact')}</ToggleGroupItem>
+          <ToggleGroupItem value="full">{t('sidebar.branchDisplayFull')}</ToggleGroupItem>
         </ToggleGroup>
       </PanelRow>
       <PanelRow label={t('sidebar.filterByType')}>

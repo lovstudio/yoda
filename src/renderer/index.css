@@ -31,6 +31,12 @@
   --color-foreground-muted: var(--foreground-muted);
   --color-foreground-passive: var(--foreground-passive);
 
+  /* shadcn-convention aliases — large parts of the codebase use bg-muted /
+     text-muted-foreground assuming these exist; without them the classes
+     silently compile to nothing. */
+  --color-muted: var(--background-2);
+  --color-muted-foreground: var(--foreground-muted);
+
   --color-background-secondary: var(--background-secondary);
   --color-background-secondary-1: var(--background-secondary-1);
   --color-background-secondary-2: var(--background-secondary-2);

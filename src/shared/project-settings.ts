@@ -53,6 +53,13 @@ export const baseProjectSettingsSchema = z.object({
   worktreeDirectory: z.string().trim().optional(),
   defaultBranch: defaultBranchSettingSchema.optional(),
   remote: z.string().optional(),
+  /**
+   * Extra directories whose Claude session transcripts count toward this
+   * project's usage stats — work done outside Yoda (research dirs, previous
+   * locations after a move). Entries are matched against `~/.claude/projects`
+   * by their encoded cwd, so paths that no longer exist on disk still work.
+   */
+  statsAuxiliaryPaths: z.array(z.string().trim()).optional(),
   workspaceProvider: z
     .object({
       type: z.literal('script'),

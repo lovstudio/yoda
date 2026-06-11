@@ -114,6 +114,14 @@ export type SidebarTaskSortBy = 'created-at' | 'updated-at';
 
 export type SidebarTaskGroupBy = 'project' | 'none' | 'type' | 'activity';
 
+/**
+ * How task rows render their branch name:
+ * - `hidden`: no branch info.
+ * - `compact`: subtle trailing mono label on the name line (32px row kept).
+ * - `full`: dedicated second line with the full branch name.
+ */
+export type SidebarBranchDisplay = 'hidden' | 'compact' | 'full';
+
 /** Persisted sidebar UI state; fields may be absent in older DB blobs. */
 export type SidebarSnapshot = {
   expandedProjectIds?: string[];
@@ -126,6 +134,7 @@ export type SidebarSnapshot = {
   projectActivityById?: Record<string, string>;
   taskSortBy?: SidebarTaskSortBy;
   taskGroupBy?: SidebarTaskGroupBy;
+  taskBranchDisplay?: SidebarBranchDisplay;
   pinnedProjectIds?: string[];
   pinnedCollapsed?: boolean;
   projectsCollapsed?: boolean;

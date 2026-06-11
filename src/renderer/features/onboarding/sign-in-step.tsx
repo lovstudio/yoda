@@ -1,7 +1,11 @@
 import { CheckCircle, LogIn, User } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAccountSession, useAccountSignIn } from '@renderer/lib/hooks/useAccount';
+import {
+  useAccountAuthWarmUp,
+  useAccountSession,
+  useAccountSignIn,
+} from '@renderer/lib/hooks/useAccount';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 
@@ -11,6 +15,8 @@ export function SignInStep({ onComplete }: { onComplete: () => void }) {
   const signInMutation = useAccountSignIn();
   const showAccountDeviceFlow = useShowModal('accountDeviceFlowModal');
   const [error, setError] = useState<string | null>(null);
+
+  useAccountAuthWarmUp(!sessionLoading && !(session?.isSignedIn ?? false));
 
   const handleSignIn = () => {
     setError(null);

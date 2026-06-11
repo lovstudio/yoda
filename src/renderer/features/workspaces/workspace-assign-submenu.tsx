@@ -1,7 +1,7 @@
 import { FolderInput, Plus } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
-import { ALL_WORKSPACES_ID } from '@shared/workspaces';
+import { ALL_WORKSPACES_ID, DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
 import { showModal } from '@renderer/lib/modal/modal-provider';
 import { workspaceStore } from '@renderer/lib/stores/app-state';
 import {
@@ -33,10 +33,25 @@ interface WorkspaceAssignSubmenuProps {
   onAssign: (workspaceId: string | null) => void;
 }
 
+/**
+ * Assign the item, then follow it: switch the active workspace to the target
+ * so the moved item stays in view. No-op in the "All" view, where the item
+ * remains visible anyway.
+ */
+function assignAndFollow(
+  onAssign: (workspaceId: string | null) => void,
+  workspaceId: string | null
+): void {
+  onAssign(workspaceId);
+  if (workspaceStore.isFiltering) {
+    workspaceStore.setActiveWorkspaceId(workspaceId ?? DEFAULT_WORKSPACE_ID);
+  }
+}
+
 /** Prompts for a workspace name via modal, then assigns the item to the new workspace. */
 function promptCreateWorkspaceAndAssign(onAssign: (workspaceId: string | null) => void): void {
   showModal('createWorkspaceModal', {
-    onSuccess: (workspace) => onAssign(workspace.id),
+    onSuccess: (workspace) => assignAndFollow(onAssign, workspace.id),
   });
 }
 
@@ -60,14 +75,17 @@ export const WorkspaceAssignContextSubmenu = observer(function WorkspaceAssignCo
         </ContextMenuSubTrigger>
         <ContextMenuSubContent>
           <ContextMenuRadioGroup value={currentWorkspaceId ?? DEFAULT_WORKSPACE_VALUE}>
-            <ContextMenuRadioItem value={DEFAULT_WORKSPACE_VALUE} onClick={() => onAssign(null)}>
+            <ContextMenuRadioItem
+              value={DEFAULT_WORKSPACE_VALUE}
+              onClick={() => assignAndFollow(onAssign, null)}
+            >
               {t('workspaces.defaultWorkspace')}
             </ContextMenuRadioItem>
             {workspaceStore.workspaces.map((workspace) => (
               <ContextMenuRadioItem
                 key={workspace.id}
                 value={workspace.id}
-                onClick={() => onAssign(workspace.id)}
+                onClick={() => assignAndFollow(onAssign, workspace.id)}
               >
                 {workspace.name}
               </ContextMenuRadioItem>
@@ -100,14 +118,17 @@ export const WorkspaceAssignDropdownSubmenu = observer(function WorkspaceAssignD
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent>
           <DropdownMenuRadioGroup value={currentWorkspaceId ?? DEFAULT_WORKSPACE_VALUE}>
-            <DropdownMenuRadioItem value={DEFAULT_WORKSPACE_VALUE} onClick={() => onAssign(null)}>
+            <DropdownMenuRadioItem
+              value={DEFAULT_WORKSPACE_VALUE}
+              onClick={() => assignAndFollow(onAssign, null)}
+            >
               {t('workspaces.defaultWorkspace')}
             </DropdownMenuRadioItem>
             {workspaceStore.workspaces.map((workspace) => (
               <DropdownMenuRadioItem
                 key={workspace.id}
                 value={workspace.id}
-                onClick={() => onAssign(workspace.id)}
+                onClick={() => assignAndFollow(onAssign, workspace.id)}
               >
                 {workspace.name}
               </DropdownMenuRadioItem>

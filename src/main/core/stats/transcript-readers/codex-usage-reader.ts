@@ -26,7 +26,7 @@ import {
  * all conversations for usage rollups. Unresolved threads count as zero.
  */
 export const codexUsageReader: TranscriptUsageReader = {
-  resolveTranscriptPath: ({ cwd, conversationId, conversationTitle, conversationCreatedAt }) => {
+  resolveTranscriptPaths: ({ cwd, conversationId, conversationTitle, conversationCreatedAt }) => {
     const statePath = resolveCodexStatePath();
     const thread = resolveCodexThreadForConversation({
       conversationId,
@@ -35,8 +35,9 @@ export const codexUsageReader: TranscriptUsageReader = {
       createdAt: conversationCreatedAt,
       statePath,
     });
-    if (!thread) return Promise.resolve(null);
-    return Promise.resolve(readCodexThreadRolloutPath(statePath, thread.id) ?? null);
+    if (!thread) return Promise.resolve([]);
+    const path = readCodexThreadRolloutPath(statePath, thread.id);
+    return Promise.resolve(path ? [path] : []);
   },
   parseUsage: parseCodexUsage,
 };
@@ -51,12 +52,22 @@ type CumulativeUsage = {
 export function parseCodexUsage(raw: string): SessionTokenUsage | null {
   const entries: UsageEntry[] = [];
   let previous: CumulativeUsage = { input: 0, cached: 0, output: 0, reasoning: 0 };
+  // Rollouts carry the active model on `turn_context` rows; each token_count
+  // delta is attributed to the most recent one (ccusage parity).
+  let currentModel: string | null = null;
 
   for (const line of iterateLines(raw)) {
     // Cheap pre-filter — rollouts are dominated by response_item rows.
-    if (!line || !line.includes('"token_count"')) continue;
+    if (!line) continue;
+    const isTokenCount = line.includes('"token_count"');
+    if (!isTokenCount && !line.includes('"turn_context"')) continue;
     const row = safeParse(line);
-    if (!row || row.type !== 'event_msg') continue;
+    if (!row) continue;
+    if (row.type === 'turn_context') {
+      currentModel = stringValue(objectValue(row.payload)?.model) ?? currentModel;
+      continue;
+    }
+    if (!isTokenCount || row.type !== 'event_msg') continue;
     const payload = objectValue(row.payload);
     if (payload?.type !== 'token_count') continue;
     const total = objectValue(objectValue(payload.info)?.total_token_usage);
@@ -81,7 +92,8 @@ export function parseCodexUsage(raw: string): SessionTokenUsage | null {
           cacheCreation: 0,
           reasoning: delta.reasoning,
         },
-        stringValue(row.timestamp)
+        stringValue(row.timestamp),
+        currentModel
       )
     );
   }

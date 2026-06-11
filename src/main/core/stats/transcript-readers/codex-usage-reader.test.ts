@@ -80,6 +80,24 @@ describe('parseCodexUsage', () => {
     expect(usage?.total.output).toBe(120);
   });
 
+  it('attributes deltas to the active turn_context model', () => {
+    const turnContext = (model: string) =>
+      JSON.stringify({ type: 'turn_context', timestamp: DAY_ONE, payload: { model } });
+    const raw = [
+      turnContext('gpt-5.3-codex'),
+      tokenCountRow({ input_tokens: 100, output_tokens: 10 }),
+      turnContext('gpt-5.3-codex-mini'),
+      tokenCountRow({ input_tokens: 160, output_tokens: 16 }),
+    ].join('\n');
+
+    const usage = parseCodexUsage(raw);
+
+    expect(usage?.byModel.map((m) => [m.model, m.tokens.total])).toEqual([
+      ['gpt-5.3-codex', 110],
+      ['gpt-5.3-codex-mini', 66],
+    ]);
+  });
+
   it('ignores info-less events and returns null when nothing counted', () => {
     const raw = [
       tokenCountRow(null),

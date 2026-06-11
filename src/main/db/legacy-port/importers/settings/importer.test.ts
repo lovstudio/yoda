@@ -158,7 +158,7 @@ describe('portLegacySettings', () => {
       .run('localProject', JSON.stringify({ defaultProjectsDirectory: '/beta/projects' }));
     appSqlite
       .prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)')
-      .run('terminal', JSON.stringify({ autoCopyOnSelection: true }));
+      .run('terminal', JSON.stringify({ autoCopyOnSelection: false }));
     appSqlite
       .prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)')
       .run(
@@ -216,7 +216,7 @@ describe('portLegacySettings', () => {
     expect(readRawSetting(appSqlite, 'theme')).toBe('ydark');
 
     const terminal = readRawSetting(appSqlite, 'terminal') as Record<string, unknown>;
-    expect(terminal.autoCopyOnSelection).toBe(true);
+    expect(terminal.autoCopyOnSelection).toBe(false);
     expect(terminal.fontFamily).toBe('Fira Code');
 
     // Non-mapped keys stay untouched.

@@ -29,10 +29,29 @@ export type RuntimeUsage = {
   sessionCount: number;
 };
 
+export type ModelUsage = {
+  /** Provider-reported model id; null when transcript rows carried none. */
+  model: string | null;
+  tokens: TokenBuckets;
+  /** Sessions in which this model appears. */
+  sessionCount: number;
+};
+
 export type AuthProviderUsage = {
   /** Null = sessions spawned before auth tracking landed. */
   authProvider: AgentAccountProviderId | null;
   tokens: TokenBuckets;
+};
+
+export type ProjectUsage = {
+  /** Project id, or a `dir:<path>` key for unregistered auxiliary directories. */
+  projectId: string;
+  name: string;
+  /** True when the source is an auxiliary directory not registered as a project. */
+  external?: boolean;
+  tokens: TokenBuckets;
+  /** Sessions with parseable usage, including auxiliary-directory sessions. */
+  sessionCount: number;
 };
 
 export type TaskUsage = {
@@ -56,6 +75,8 @@ export type UsageOverview = {
   /** Merged per-local-day burn across all sessions, ascending by date. */
   daily: DailyTokenUsage[];
   /** Sorted by token total, descending. */
+  byProject: ProjectUsage[];
+  byModel: ModelUsage[];
   byRuntime: RuntimeUsage[];
   byAuthProvider: AuthProviderUsage[];
   topTasks: TaskUsage[];

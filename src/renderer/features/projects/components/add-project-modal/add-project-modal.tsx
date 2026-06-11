@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { SshConnectionSelector } from '@renderer/features/projects/components/add-project-modal/ssh-connection-selector';
 import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { resolveProjectWorkspaceConflict } from '@renderer/features/workspaces/project-workspace-conflict';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal, type BaseModalProps } from '@renderer/lib/modal/modal-provider';
@@ -161,8 +162,12 @@ export const AddProjectModal = observer(function AddProjectModal({
           : { type: 'local', path: pickState.path }
       );
       if (inspection.existingProject) {
-        navigate('project', { projectId: inspection.existingProject.id });
+        const existing = inspection.existingProject;
+        // Close first: the workspace-conflict dialog (if any) replaces this modal.
         onClose();
+        if (await resolveProjectWorkspaceConflict(existing)) {
+          navigate('project', { projectId: existing.id });
+        }
         return;
       }
     } catch (e) {

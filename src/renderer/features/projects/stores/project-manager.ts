@@ -2,6 +2,7 @@ import { makeObservable, observable, runInAction } from 'mobx';
 import { sshConnectionEventChannel } from '@shared/events/sshEvents';
 import { type LocalProject, type SshProject } from '@shared/projects';
 import type { ProjectViewSnapshot } from '@shared/view-state';
+import { resolveProjectWorkspaceConflict } from '@renderer/features/workspaces/project-workspace-conflict';
 import { events, rpc } from '@renderer/lib/ipc';
 import { appState } from '@renderer/lib/stores/app-state';
 import { viewStateCache } from '@renderer/lib/stores/view-state-cache';
@@ -100,7 +101,12 @@ export class ProjectManagerStore {
         ? { type: 'ssh', path: data.path, connectionId: projectType.connectionId }
         : { type: 'local', path: data.path }
     );
-    if (inspection.existingProject) return inspection.existingProject.id;
+    if (inspection.existingProject) {
+      // The path may already be registered under another workspace — surface
+      // that instead of silently reusing the record there.
+      const proceed = await resolveProjectWorkspaceConflict(inspection.existingProject);
+      return proceed ? inspection.existingProject.id : undefined;
+    }
 
     const projectTelemetryType: 'local' | 'ssh' = isSsh ? 'ssh' : 'local';
     const projectTelemetryStrategy: 'open' | 'create' | 'clone' =

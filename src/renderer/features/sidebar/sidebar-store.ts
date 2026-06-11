@@ -1,6 +1,11 @@
 import { computed, makeAutoObservable, observable, reaction, runInAction } from 'mobx';
 import { type LocalProject, type SshProject } from '@shared/projects';
-import type { SidebarSnapshot, SidebarTaskGroupBy, SidebarTaskSortBy } from '@shared/view-state';
+import type {
+  SidebarBranchDisplay,
+  SidebarSnapshot,
+  SidebarTaskGroupBy,
+  SidebarTaskSortBy,
+} from '@shared/view-state';
 import {
   type ProjectStore,
   type UnregisteredProject,
@@ -22,6 +27,10 @@ function parseSidebarTaskGroupBy(value: unknown): SidebarTaskGroupBy | undefined
   return value === 'project' || value === 'none' || value === 'type' || value === 'activity'
     ? value
     : undefined;
+}
+
+function parseSidebarBranchDisplay(value: unknown): SidebarBranchDisplay | undefined {
+  return value === 'hidden' || value === 'compact' || value === 'full' ? value : undefined;
 }
 
 export type ActivityBucket = 'today' | 'thisWeek' | 'thisMonth' | 'earlier';
@@ -142,6 +151,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   pinnedProjectIds = observable.set<string>();
   taskSortBy: SidebarTaskSortBy = 'updated-at';
   taskGroupBy: SidebarTaskGroupBy = 'project';
+  taskBranchDisplay: SidebarBranchDisplay = 'compact';
   pinnedCollapsed = false;
   projectsCollapsed = false;
   projectTypeFilter: ProjectTypeFilter = 'all';
@@ -546,6 +556,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       projectActivityById: { ...this.projectActivityById },
       taskSortBy: this.taskSortBy,
       taskGroupBy: this.taskGroupBy,
+      taskBranchDisplay: this.taskBranchDisplay,
       pinnedProjectIds: [...this.pinnedProjectIds],
       pinnedCollapsed: this.pinnedCollapsed,
       projectsCollapsed: this.projectsCollapsed,
@@ -583,6 +594,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (snapshot.taskGroupBy !== undefined) {
       const v = parseSidebarTaskGroupBy(snapshot.taskGroupBy);
       if (v !== undefined) this.taskGroupBy = v;
+    }
+    if (snapshot.taskBranchDisplay !== undefined) {
+      const v = parseSidebarBranchDisplay(snapshot.taskBranchDisplay);
+      if (v !== undefined) this.taskBranchDisplay = v;
     }
     if (snapshot.pinnedProjectIds !== undefined) {
       this.pinnedProjectIds.replace(snapshot.pinnedProjectIds);
@@ -648,6 +663,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   setSortArchivingLast(enabled: boolean): void {
     this.sortArchivingLast = enabled;
+  }
+
+  setTaskBranchDisplay(display: SidebarBranchDisplay): void {
+    this.taskBranchDisplay = display;
   }
 
   setNavSectionHidden(hidden: boolean): void {

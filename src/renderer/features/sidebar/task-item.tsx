@@ -1,4 +1,4 @@
-import { Archive, ChevronRight, Loader2, MoreHorizontal } from 'lucide-react';
+import { Archive, ChevronRight, GitBranch, Loader2, MoreHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -151,6 +151,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const branchName =
     provisionedTask?.workspace.git.branchName ??
     ('taskBranch' in task.data ? task.data.taskBranch : undefined);
+  const branchDisplay = sidebarStore.taskBranchDisplay;
+  // Compact mode drops the namespace prefix (`yoda/feat-x` → `feat-x`): the
+  // basename carries the distinguishing part, the prefix is shared noise.
+  const compactBranchName = branchName?.slice(branchName.lastIndexOf('/') + 1);
   const workspace = provisionedTask?.workspace;
   const handleReconnect =
     workspace?.connectionState != null ? () => workspace.reconnect() : undefined;
@@ -284,7 +288,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     >
       <SidebarMenuRow
         className={cn(
-          'group/row flex items-center justify-between px-1 h-8 gap-1',
+          // Two-line row: task name on top, branch below. Height is intrinsic
+          // (min-h-8 keeps branch-less rows at the original 32px).
+          'group/row flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1',
           taskIndentClass
         )}
         isActive={isActive}
@@ -356,25 +362,52 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               })}
             </span>
           )}
-          <span
-            className={cn(
-              'min-w-0 truncate text-left transition-colors',
-              (isBootstrapping || isArchiving) && 'text-foreground/40'
+          <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
+            <div className="flex min-w-0 items-center gap-1">
+              <span
+                className={cn(
+                  'min-w-0 truncate text-left transition-colors',
+                  (isBootstrapping || isArchiving) && 'text-foreground/40'
+                )}
+              >
+                {taskName}
+              </span>
+              {isCollapsed && (
+                <span className="shrink-0 rounded-sm bg-background-tertiary-2 px-1 text-[10px] tabular-nums text-foreground-tertiary">
+                  {childCount}
+                </span>
+              )}
+              {rowVariant === 'flat' && (
+                <span className="shrink-0 truncate max-w-[8rem] rounded-sm bg-background-tertiary-2 px-1 text-[10px] uppercase tracking-wide text-foreground-tertiary">
+                  {projectName}
+                </span>
+              )}
+              {branchDisplay === 'compact' && compactBranchName && (
+                <span
+                  className={cn(
+                    'shrink-0 truncate max-w-[7rem] font-mono text-[10px] text-foreground-tertiary-passive',
+                    (isBootstrapping || isArchiving) && 'opacity-40'
+                  )}
+                >
+                  {compactBranchName}
+                </span>
+              )}
+              <RenderPrBadge task={task} />
+            </div>
+            {branchDisplay === 'full' && branchName && (
+              <div
+                className={cn(
+                  'flex min-w-0 items-center gap-1 text-foreground-tertiary-passive',
+                  (isBootstrapping || isArchiving) && 'opacity-40'
+                )}
+              >
+                <GitBranch className="size-3 shrink-0" />
+                <span className="min-w-0 truncate font-mono text-[10px] leading-4">
+                  {branchName}
+                </span>
+              </div>
             )}
-          >
-            {taskName}
-          </span>
-          {isCollapsed && (
-            <span className="shrink-0 rounded-sm bg-background-tertiary-2 px-1 text-[10px] tabular-nums text-foreground-tertiary">
-              {childCount}
-            </span>
-          )}
-          {rowVariant === 'flat' && (
-            <span className="shrink-0 truncate max-w-[8rem] rounded-sm bg-background-tertiary-2 px-1 text-[10px] uppercase tracking-wide text-foreground-tertiary">
-              {projectName}
-            </span>
-          )}
-          <RenderPrBadge task={task} />
+          </div>
         </div>
         <div
           className={cn(

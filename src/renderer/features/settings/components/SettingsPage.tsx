@@ -51,6 +51,7 @@ export type SettingsPageTab =
   | 'mobile'
   | 'repository'
   | 'interface'
+  | 'terminal'
   | 'keyboard-shortcuts';
 
 interface SectionConfig {
@@ -81,6 +82,7 @@ export function SettingsPage({
     [
       { id: 'general', label: t('settings.tabs.general') },
       { id: 'interface', label: t('settings.tabs.interface') },
+      { id: 'terminal', label: t('settings.tabs.terminal') },
       { id: 'keyboard-shortcuts', label: t('settings.tabs.keyboardShortcuts') },
     ],
     // Projects and the tasks that run inside them.
@@ -289,10 +291,12 @@ export function SettingsPage({
     interface: {
       title: t('settings.tabs.interface'),
       description: t('settings.interfaceTab.description'),
-      sections: [
-        { id: 'theme', component: <ThemeCard /> },
-        { id: 'terminal', component: <TerminalSettingsCard /> },
-      ],
+      sections: [{ id: 'theme', component: <ThemeCard /> }],
+    },
+    terminal: {
+      title: t('settings.tabs.terminal'),
+      description: t('settings.terminalTab.description'),
+      sections: [{ id: 'terminal', component: <TerminalSettingsCard /> }],
     },
     'keyboard-shortcuts': {
       title: t('settings.tabs.keyboardShortcuts'),

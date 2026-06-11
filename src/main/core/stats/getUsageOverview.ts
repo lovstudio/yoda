@@ -1,10 +1,14 @@
+import { basename } from 'node:path';
 import { and, eq, inArray } from 'drizzle-orm';
+import { baseProjectSettingsSchema } from '@shared/project-settings';
 import type { AgentAccountProviderId } from '@shared/runtime-registry';
 import {
   addTokenBuckets,
   emptyTokenBuckets,
   type AuthProviderUsage,
   type DailyTokenUsage,
+  type ModelUsage,
+  type ProjectUsage,
   type RuntimeUsage,
   type TaskUsage,
   type TokenBuckets,
@@ -12,11 +16,13 @@ import {
 } from '@shared/stats';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { db } from '@main/db/client';
-import { conversations, projects, tasks } from '@main/db/schema';
+import { conversations, projects, projectSettings, tasks } from '@main/db/schema';
 import { log } from '@main/lib/logger';
 import { resolveTaskCwd } from './task-cwd';
 import { getTaskDiffTotals } from './task-diff-snapshot';
+import { listClaudeSessionsForDirectory } from './transcript-readers/claude-session-files';
 import { TRANSCRIPT_USAGE_PROVIDER_IDS } from './transcript-readers/registry';
+import type { SessionTokenUsage } from './transcript-readers/types';
 import { sessionUsageCache } from './usage-cache';
 
 const TOP_TASKS_LIMIT = 10;
@@ -38,6 +44,26 @@ async function mapWithConcurrency<T, R>(
     })
   );
   return results;
+}
+
+/** Deduped `statsAuxiliaryPaths` across the targeted projects' settings. */
+async function loadStatsAuxiliaryPaths(projectId?: string): Promise<string[]> {
+  const settingsRows = projectId
+    ? await db.select().from(projectSettings).where(eq(projectSettings.projectId, projectId))
+    : await db.select().from(projectSettings);
+  const paths = new Set<string>();
+  for (const row of settingsRows) {
+    try {
+      const parsed = baseProjectSettingsSchema.safeParse(JSON.parse(row.baseProjectSettingsJson));
+      if (!parsed.success) continue;
+      for (const path of parsed.data.statsAuxiliaryPaths ?? []) {
+        if (path) paths.add(path);
+      }
+    } catch {
+      // Malformed settings JSON — skip, the settings page surfaces it.
+    }
+  }
+  return [...paths];
 }
 
 /**
@@ -115,15 +141,42 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
 
   let tokens: TokenBuckets | null = null;
   const dailyByDate = new Map<string, TokenBuckets>();
+  const byProject = new Map<string, ProjectUsage>();
+  const byModel = new Map<string | null, ModelUsage>();
   const byRuntime = new Map<string, RuntimeUsage>();
   const byAuthProvider = new Map<string, AuthProviderUsage>();
   const tokensByTask = new Map<string, TokenBuckets>();
 
-  for (let index = 0; index < rows.length; index++) {
-    const { conversation, task } = rows[index]!;
-    const usage = usages[index];
-    if (!usage) continue;
+  const projectRows = await db
+    .select({ id: projects.id, name: projects.name, path: projects.path })
+    .from(projects);
+  const projectNameById = new Map(projectRows.map((row) => [row.id, row.name]));
+  const projectByPath = new Map(projectRows.map((row) => [row.path, row]));
+  const addProjectUsage = (
+    usageProjectId: string,
+    usage: SessionTokenUsage,
+    source?: { name: string; external: boolean }
+  ) => {
+    const entry = byProject.get(usageProjectId);
+    if (entry) {
+      addTokenBuckets(entry.tokens, usage.total);
+      entry.sessionCount += 1;
+    } else {
+      byProject.set(usageProjectId, {
+        projectId: usageProjectId,
+        name: source?.name ?? projectNameById.get(usageProjectId) ?? usageProjectId,
+        ...(source?.external ? { external: true } : {}),
+        tokens: { ...usage.total },
+        sessionCount: 1,
+      });
+    }
+  };
 
+  const accumulate = (
+    usage: SessionTokenUsage,
+    runtimeId: string,
+    authProvider: AgentAccountProviderId
+  ) => {
     tokens = addTokenBuckets(tokens ?? emptyTokenBuckets(), usage.total);
 
     for (const day of usage.daily) {
@@ -132,7 +185,20 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
       else dailyByDate.set(day.date, { ...day.tokens });
     }
 
-    const runtimeId = conversation.runtime ?? 'unknown';
+    for (const model of usage.byModel) {
+      const modelUsage = byModel.get(model.model);
+      if (modelUsage) {
+        addTokenBuckets(modelUsage.tokens, model.tokens);
+        modelUsage.sessionCount += 1;
+      } else {
+        byModel.set(model.model, {
+          model: model.model,
+          tokens: { ...model.tokens },
+          sessionCount: 1,
+        });
+      }
+    }
+
     const runtimeUsage = byRuntime.get(runtimeId);
     if (runtimeUsage) {
       addTokenBuckets(runtimeUsage.tokens, usage.total);
@@ -145,15 +211,80 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
       });
     }
 
-    const authProvider =
-      conversation.authProvider ?? fallbackAuthByRuntime.get(runtimeId) ?? 'official-subscription';
     const authUsage = byAuthProvider.get(authProvider);
     if (authUsage) addTokenBuckets(authUsage.tokens, usage.total);
     else byAuthProvider.set(authProvider, { authProvider, tokens: { ...usage.total } });
+  };
+
+  for (let index = 0; index < rows.length; index++) {
+    const { conversation, task } = rows[index]!;
+    const usage = usages[index];
+    if (!usage) continue;
+
+    const runtimeId = conversation.runtime ?? 'unknown';
+    accumulate(
+      usage,
+      runtimeId,
+      conversation.authProvider ?? fallbackAuthByRuntime.get(runtimeId) ?? 'official-subscription'
+    );
+
+    addProjectUsage(task.projectId, usage);
 
     const taskTokens = tokensByTask.get(task.id);
     if (taskTokens) addTokenBuckets(taskTokens, usage.total);
     else tokensByTask.set(task.id, { ...usage.total });
+  }
+
+  // Auxiliary directories: Claude sessions from other dirs (research dirs,
+  // previous project locations) configured per project in settings. The
+  // dedupe scope is deliberately asymmetric:
+  // - Project scope: skip only THIS project's conversations. An aux dir that
+  //   is itself another Yoda project still contributes here — pulling that
+  //   work into this project's numbers is the point of the setting.
+  // - Global scope: `rows` covers every tracked conversation, so sessions
+  //   already attributed to their own project are skipped and the global
+  //   total never double-counts.
+  const auxPaths = await loadStatsAuxiliaryPaths(projectId);
+  if (auxPaths.length > 0) {
+    const trackedConversationIds = new Set(rows.map((row) => row.conversation.id));
+    const auxSessions = (
+      await Promise.all(
+        auxPaths.map(async (path) => {
+          // byProject attribution: the source directory's own project when it
+          // is one, otherwise a synthetic per-directory row.
+          const source = projectByPath.get(path);
+          const sourceId = source?.id ?? `dir:${path}`;
+          const sourceName = source?.name ?? basename(path);
+          return (await listClaudeSessionsForDirectory(path)).map((session) => ({
+            ...session,
+            sourceId,
+            sourceName,
+            external: !source,
+          }));
+        })
+      )
+    )
+      .flat()
+      .filter((session) => !trackedConversationIds.has(session.sessionId));
+    const auxUsages = await mapWithConcurrency(auxSessions, PARSE_CONCURRENCY, (session) =>
+      sessionUsageCache.getUsageForPaths('claude', session.paths)
+    );
+    const claudeFallbackAuth = fallbackAuthByRuntime.get('claude') ?? 'official-subscription';
+    for (let index = 0; index < auxSessions.length; index++) {
+      const usage = auxUsages[index];
+      if (!usage) continue;
+      const session = auxSessions[index]!;
+      accumulate(usage, 'claude', claudeFallbackAuth);
+      addProjectUsage(session.sourceId, usage, {
+        name: session.sourceName,
+        external: session.external,
+      });
+    }
+    log.info('stats: auxiliary path sessions parsed', {
+      paths: auxPaths.length,
+      sessions: auxSessions.length,
+      parsed: auxUsages.filter(Boolean).length,
+    });
   }
 
   const taskById = new Map(allTasks.map((task) => [task.id, task]));
@@ -185,6 +316,8 @@ export async function getUsageOverview(projectId?: string): Promise<UsageOvervie
     linesDeleted,
     tokens,
     daily,
+    byProject: [...byProject.values()].sort((a, b) => b.tokens.total - a.tokens.total),
+    byModel: [...byModel.values()].sort((a, b) => b.tokens.total - a.tokens.total),
     byRuntime: [...byRuntime.values()].sort((a, b) => b.tokens.total - a.tokens.total),
     byAuthProvider: [...byAuthProvider.values()].sort((a, b) => b.tokens.total - a.tokens.total),
     topTasks,

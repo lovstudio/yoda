@@ -1,7 +1,7 @@
-import { Archive, ChartColumn, Info, Loader2 } from 'lucide-react';
+import { Archive, ArrowUpRight, ChartColumn, Info, Loader2 } from 'lucide-react';
 import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TokenBuckets, UsageOverview } from '@shared/stats';
+import type { ProjectUsage, TokenBuckets, UsageOverview } from '@shared/stats';
 import { useUsageOverview } from '@renderer/features/usage/useUsageOverview';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -128,8 +128,39 @@ function TokenUsageContent({
       <CompositionBar tokens={tokens} />
       <DailyBurnChart daily={overview.daily} />
 
-      {(overview.byRuntime.length > 0 || overview.topTasks.length > 0) && (
+      {(overview.byProject.length > 1 ||
+        overview.byModel.length > 0 ||
+        overview.byRuntime.length > 0 ||
+        overview.topTasks.length > 0) && (
         <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+          {overview.byProject.length > 1 && (
+            <BreakdownList title={t('usage.byProject')}>
+              {overview.byProject.map((entry) => (
+                <ProjectBreakdownRow
+                  key={entry.projectId}
+                  entry={entry}
+                  currentProjectId={projectId}
+                  maxTotal={overview.byProject[0]!.tokens.total}
+                />
+              ))}
+            </BreakdownList>
+          )}
+          {overview.byModel.length > 0 && (
+            <BreakdownList title={t('usage.byModel')}>
+              {overview.byModel.map((entry) => (
+                <BreakdownRow
+                  key={entry.model ?? 'unknown'}
+                  leading={
+                    <span className="truncate font-mono text-xs" title={entry.model ?? undefined}>
+                      {entry.model ?? t('usage.modelUnknown')}
+                    </span>
+                  }
+                  total={entry.tokens.total}
+                  maxTotal={overview.byModel[0]!.tokens.total}
+                />
+              ))}
+            </BreakdownList>
+          )}
           {overview.byRuntime.length > 0 && (
             <BreakdownList title={t('usage.byRuntime')}>
               {overview.byRuntime.map((entry) => (
@@ -273,6 +304,72 @@ function BreakdownRow({
         {formatCompactNumber(total)}
       </span>
     </div>
+  );
+}
+
+/**
+ * One source in the per-project split. Registered auxiliary projects navigate
+ * to their own project view for details; the current project and plain
+ * directories are static rows.
+ */
+function ProjectBreakdownRow({
+  entry,
+  currentProjectId,
+  maxTotal,
+}: {
+  entry: ProjectUsage;
+  currentProjectId: string;
+  maxTotal: number;
+}) {
+  const { t } = useTranslation();
+  const { navigate } = useNavigate();
+  const isCurrent = entry.projectId === currentProjectId;
+  const clickable = !isCurrent && !entry.external;
+
+  const body = (
+    <>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span
+          className={cn(
+            'truncate text-xs text-foreground-muted',
+            clickable && 'transition-colors group-hover:text-foreground'
+          )}
+          title={entry.name}
+        >
+          {isCurrent ? t('projects.tokenUsage.thisProject', { name: entry.name }) : entry.name}
+        </span>
+        {clickable && (
+          <ArrowUpRight
+            className="size-3 shrink-0 text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100"
+            aria-hidden
+          />
+        )}
+      </span>
+      <span className="shrink-0 text-[11px] text-foreground-passive">
+        {t('usage.sessionCount', { count: entry.sessionCount })}
+      </span>
+      <ProportionBar total={entry.tokens.total} maxTotal={maxTotal} />
+      <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-foreground-muted">
+        {formatCompactNumber(entry.tokens.total)}
+      </span>
+    </>
+  );
+
+  if (!clickable) {
+    return (
+      <div className="flex items-center gap-2 border-b border-border/40 py-1.5 last:border-b-0">
+        {body}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('project', { projectId: entry.projectId })}
+      className="group flex w-full items-center gap-2 border-b border-border/40 py-1.5 text-left last:border-b-0"
+    >
+      {body}
+    </button>
   );
 }
 
