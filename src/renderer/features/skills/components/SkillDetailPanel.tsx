@@ -41,6 +41,7 @@ import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { cn } from '@renderer/utils/utils';
 import { getSkillUsageStats, skillUsageStatsChangedEvent } from '../skill-usage-stats';
 import SkillIconRenderer from './SkillIconRenderer';
+import { SkillTriggerTest } from './SkillTriggerTest';
 import { SkillUsageTrend } from './SkillUsageTrend';
 import { useSkills } from './useSkills';
 
@@ -442,6 +443,12 @@ const SkillDetailContent: React.FC<{
                 variant="compact"
                 className="rounded-md bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
               />
+            </DetailSection>
+          )}
+
+          {skill.installed && !skill.disabled && (
+            <DetailSection title={t('skills.triggerTest.title')}>
+              <SkillTriggerTest skillId={skill.id} />
             </DetailSection>
           )}
 
