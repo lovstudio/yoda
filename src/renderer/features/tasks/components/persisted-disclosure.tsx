@@ -1,19 +1,26 @@
 import { observer } from 'mobx-react-lite';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useState } from 'react';
+import { useProvisionedTaskOrNull } from '@renderer/features/tasks/task-view-context';
 
 /**
  * Reads/writes a persisted open state for an ad-hoc disclosure (a `<details>`,
  * a group toggle, …). The id must be stable across renders so the remembered
  * state reattaches after a remount. `defaultOpen` is used until the user has
- * explicitly toggled this id.
+ * explicitly toggled this id. Outside a task view (no ProvisionedTaskProvider,
+ * e.g. the composer popover) the state falls back to plain component state.
  */
 export function usePersistedDisclosure(
   id: string,
   defaultOpen = false
 ): [boolean, (open: boolean) => void] {
-  const { taskView } = useProvisionedTask();
-  const open = taskView.isDisclosureOpen(id, defaultOpen);
-  return [open, (next: boolean) => taskView.setDisclosureOpen(id, next)];
+  const provisioned = useProvisionedTaskOrNull();
+  const [localOpen, setLocalOpen] = useState(defaultOpen);
+  if (!provisioned) return [localOpen, setLocalOpen];
+  const { taskView } = provisioned;
+  return [
+    taskView.isDisclosureOpen(id, defaultOpen),
+    (next: boolean) => taskView.setDisclosureOpen(id, next),
+  ];
 }
 
 /**

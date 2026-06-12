@@ -5,6 +5,8 @@ import {
   FileActionsDropdown,
 } from '@renderer/features/tasks/components/file-actions';
 import { PersistedDetails } from '@renderer/features/tasks/components/persisted-disclosure';
+import { useProvisionedTaskOrNull } from '@renderer/features/tasks/task-view-context';
+import { FilePathActionsDropdown } from '@renderer/lib/components/file-path-actions';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { cn } from '@renderer/utils/utils';
 
@@ -29,6 +31,10 @@ export function ContextItem({
   sourcePath?: string;
   renderMode?: 'markdown' | 'plain';
 }) {
+  // Outside a task view (e.g. the composer popover) the task-scoped actions
+  // (open in editor, reveal in file tree) have no workspace to act on — fall
+  // back to the context-free path actions.
+  const taskScoped = useProvisionedTaskOrNull() !== null;
   const item = (
     <PersistedDetails
       id={`context:item:${label}`}
@@ -39,7 +45,7 @@ export function ContextItem({
           <span className="min-w-0 flex-1 truncate" title={label}>
             {label}
           </span>
-          <ContextItemTrailing meta={meta} sourcePath={sourcePath} />
+          <ContextItemTrailing meta={meta} sourcePath={sourcePath} taskScoped={taskScoped} />
         </summary>
       }
     >
@@ -53,7 +59,7 @@ export function ContextItem({
     </PersistedDetails>
   );
 
-  if (!sourcePath) return item;
+  if (!sourcePath || !taskScoped) return item;
   return <FileActionsContextMenu sourcePath={sourcePath}>{item}</FileActionsContextMenu>;
 }
 
@@ -76,7 +82,15 @@ export function MarkdownContextContent({
   );
 }
 
-function ContextItemTrailing({ meta, sourcePath }: { meta?: string; sourcePath?: string }) {
+function ContextItemTrailing({
+  meta,
+  sourcePath,
+  taskScoped,
+}: {
+  meta?: string;
+  sourcePath?: string;
+  taskScoped: boolean;
+}) {
   if (!sourcePath) {
     return meta ? (
       <span className="shrink-0 font-mono text-[10px] text-foreground-passive">{meta}</span>
@@ -91,7 +105,11 @@ function ContextItemTrailing({ meta, sourcePath }: { meta?: string; sourcePath?:
         </span>
       ) : null}
       <span className="absolute right-0 flex opacity-0 transition-opacity group-hover/context-item:opacity-100 group-focus-within/context-item:opacity-100">
-        <FileActionsDropdown sourcePath={sourcePath} />
+        {taskScoped ? (
+          <FileActionsDropdown sourcePath={sourcePath} />
+        ) : (
+          <FilePathActionsDropdown target={{ absolutePath: sourcePath }} />
+        )}
       </span>
     </span>
   );

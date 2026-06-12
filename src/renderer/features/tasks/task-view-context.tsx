@@ -29,6 +29,11 @@ export const ProvisionedTaskProvider = observer(function ProvisionedTaskProvider
   );
 });
 
+/** Nullable. For components that also render outside a task view (e.g. the composer popover). */
+export function useProvisionedTaskOrNull(): ProvisionedTask | null {
+  return useContext(ProvisionedTaskContext);
+}
+
 /** Non-nullable. Only call inside a ProvisionedTaskProvider subtree (kind === 'ready'). */
 export function useProvisionedTask(): ProvisionedTask {
   const ctx = useContext(ProvisionedTaskContext);
