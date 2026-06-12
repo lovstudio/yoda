@@ -205,17 +205,19 @@ export class LocalConversationProvider implements ConversationProvider {
       rows: initialSize.rows,
     });
 
+    // Log the logical agent command, not the resolved PTY spawn (the tmux
+    // wrapper around it is launch plumbing, useless for debugging the run).
+    // The initial prompt arg is dropped — it's recorded in the prompt field.
     const invocationLogId = await aiLogService.start({
       purpose: 'interactive-session',
       mode: 'interactive',
       runtime: conversation.runtimeId,
-      command: [resolved.command, ...resolved.args].join(' '),
+      command: [command, ...args.filter((arg) => arg !== effectiveInitialPrompt)].join(' '),
       prompt: effectiveInitialPrompt ?? null,
       metadata: {
         projectId: conversation.projectId,
         taskId: conversation.taskId,
         conversationId: conversation.id,
-        sessionId,
         resuming: String(isResuming),
       },
     });
