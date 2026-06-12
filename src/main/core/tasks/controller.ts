@@ -8,6 +8,7 @@ import { archiveTask } from './operations/archiveTask';
 import { createTask, retryTaskSetup } from './operations/createTask';
 import { deleteTask } from './operations/deleteTask';
 import { generateTaskCommitMessage } from './operations/generateTaskCommitMessage';
+import { getTaskPreview } from './operations/getTaskPreview';
 import { getTasks } from './operations/getTasks';
 import { getWorkspaceSettings } from './operations/getWorkspaceSettings';
 import { mergeTaskBranch } from './operations/mergeTaskBranch';
@@ -27,6 +28,7 @@ export const taskController = createRPCController({
   createTask,
   retryTaskSetup,
   getTasks,
+  getTaskPreview,
   deleteTask,
   generateTaskName,
   regenerateTaskName,

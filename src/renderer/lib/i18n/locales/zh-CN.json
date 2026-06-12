@@ -2088,6 +2088,9 @@
       "remove": "移除 Hook",
       "add": "添加 Hook",
       "empty": "该列还没有配置 Hook。"
+    },
+    "preview": {
+      "noSummary": "还没有概要——打开任务后可生成。"
     }
   },
   "usage": {

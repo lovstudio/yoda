@@ -2088,6 +2088,9 @@
       "remove": "Remove hook",
       "add": "Add hook",
       "empty": "No hooks for this column yet."
+    },
+    "preview": {
+      "noSummary": "No summary yet — open the task to generate one."
     }
   },
   "usage": {
