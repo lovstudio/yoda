@@ -60,15 +60,6 @@ function branchSeed(strategy: CreateTaskParams['strategy']): string | undefined 
   return undefined;
 }
 
-/**
- * Short time-based branch seed. Branch names are decoupled from generated
- * titles: when auto-naming owns the branch, it gets this hash up front instead
- * of being renamed once the LLM title arrives.
- */
-function timeBranchSeed(): string {
-  return Date.now().toString(36);
-}
-
 function formatCreateBranchError(error: CreateBranchError): string {
   switch (error.type) {
     case 'already_exists':
@@ -222,8 +213,11 @@ async function setupBranch(options: {
 
   switch (strategy.kind) {
     case 'new-branch': {
+      // An explicit empty seed (hash mode) yields a suffix-only branch name.
       const rawBranch =
-        deriveTaskSlug(branchSeedName ?? strategy.taskBranch) || strategy.taskBranch;
+        branchSeedName === undefined
+          ? deriveTaskSlug(strategy.taskBranch) || strategy.taskBranch
+          : deriveTaskSlug(branchSeedName);
       const taskBranch = resolveTaskBranchName({
         rawBranch,
         branchPrefix,
@@ -275,7 +269,9 @@ async function setupBranch(options: {
     case 'from-pull-request': {
       if (strategy.taskBranch) {
         const rawBranch =
-          deriveTaskSlug(branchSeedName ?? strategy.taskBranch) || strategy.taskBranch;
+          branchSeedName === undefined
+            ? deriveTaskSlug(strategy.taskBranch) || strategy.taskBranch
+            : deriveTaskSlug(branchSeedName);
         const taskBranch = resolveTaskBranchName({
           rawBranch,
           branchPrefix,
@@ -444,14 +440,12 @@ export async function createTask(
   // naming manually later once the task has content.
   const hasInitialPrompt = Boolean(params.initialConversation?.initialPrompt?.trim());
   const shouldGenerate = taskSettings.autoGenerateName && hasInitialPrompt;
-  // When auto-naming owns the branch: 'hash' mode bakes a short time hash into
-  // the seed up front; 'ai' mode keeps the placeholder seed and renames the
-  // branch in the background once the naming agent returns a semantic slug.
+  // When auto-naming owns the branch: 'hash' mode passes an empty seed so the
+  // branch is just `prefix/<suffix>`; 'ai' mode keeps the placeholder seed and
+  // renames the branch in the background once the naming agent returns a slug.
   const autoNamesBranch = shouldGenerate && createTaskStrategyRequiresBranchName(strategy);
   const branchSeedName =
-    autoNamesBranch && taskSettings.branchNaming === 'hash'
-      ? timeBranchSeed()
-      : branchSeed(strategy);
+    autoNamesBranch && taskSettings.branchNaming === 'hash' ? '' : branchSeed(strategy);
   const namingPromise = shouldGenerate
     ? generateTaskNames({
         taskId: params.id,
@@ -651,16 +645,14 @@ export async function retryTaskSetup(
   const hasInitialPrompt = Boolean(params.initialConversation?.initialPrompt?.trim());
   const shouldGenerate = taskSettings.autoGenerateName && hasInitialPrompt;
   // Naming runs in the background and never blocks provisioning. 'hash' branch
-  // naming bakes a time hash into the seed; 'ai' renames the branch later.
+  // naming uses a suffix-only branch name; 'ai' renames the branch later.
   const autoNamesBranch =
     !manualBranchName?.trim() &&
     taskSettings.autoGenerateName &&
     createTaskStrategyRequiresBranchName(params.strategy);
   const nextBranchSeed =
     manualBranchName?.trim() ||
-    (autoNamesBranch && taskSettings.branchNaming === 'hash'
-      ? timeBranchSeed()
-      : branchSeed(params.strategy));
+    (autoNamesBranch && taskSettings.branchNaming === 'hash' ? '' : branchSeed(params.strategy));
 
   const branchSetup = await setupBranch({
     project,

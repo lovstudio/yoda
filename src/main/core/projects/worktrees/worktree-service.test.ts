@@ -89,8 +89,34 @@ describe('WorktreeService', () => {
 
       expect(result.success).toBe(true);
       if (!result.success) throw new Error('expected success');
-      expect(result.data).toBe(path.join(poolDir, 'task', 'local-checkout'));
+      expect(result.data).toBe(path.join(poolDir, 'local-checkout'));
       expect(fs.existsSync(result.data)).toBe(true);
+    });
+
+    it('falls back to the flattened branch name when the leaf directory is taken', async () => {
+      await git(['branch', 'task-a/same-leaf'], { cwd: repoDir });
+      await git(['branch', 'task-b/same-leaf'], { cwd: repoDir });
+      const svc = makeService();
+
+      const first = await svc.checkoutBranchWorktree(
+        { type: 'local', branch: 'main' },
+        'task-a/same-leaf'
+      );
+      expect(first.success).toBe(true);
+      if (!first.success) throw new Error('expected success');
+      expect(first.data).toBe(path.join(poolDir, 'same-leaf'));
+
+      const second = await svc.checkoutBranchWorktree(
+        { type: 'local', branch: 'main' },
+        'task-b/same-leaf'
+      );
+      expect(second.success).toBe(true);
+      if (!second.success) throw new Error('expected success');
+      expect(second.data).toBe(path.join(poolDir, 'task-b-same-leaf'));
+
+      // Both resolve back to their own paths by branch name.
+      expect(await svc.getWorktree('task-a/same-leaf')).toBe(fs.realpathSync(first.data));
+      expect(await svc.getWorktree('task-b/same-leaf')).toBe(fs.realpathSync(second.data));
     });
 
     it('creates a worktree from a remote source branch when branch is not local', async () => {

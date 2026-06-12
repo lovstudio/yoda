@@ -51,4 +51,13 @@ describe('resolveTaskBranchName', () => {
 
     expect(branchName).toBe('yoda/bugfix-login-xyz99');
   });
+
+  it('uses the suffix alone when rawBranch is empty (hash mode)', () => {
+    expect(resolveTaskBranchName({ rawBranch: '', branchPrefix: 'yoda', suffix: 'us84e' })).toBe(
+      'yoda/us84e'
+    );
+    expect(resolveTaskBranchName({ rawBranch: '', branchPrefix: '', suffix: 'us84e' })).toBe(
+      'us84e'
+    );
+  });
 });

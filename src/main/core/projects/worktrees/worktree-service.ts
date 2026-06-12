@@ -94,6 +94,41 @@ export class WorktreeService {
     return [configuredRemote, DEFAULT_REMOTE_NAME];
   }
 
+  /**
+   * Directory candidates for a branch's worktree, flat under the pool. The
+   * leaf segment is preferred ("yoda/us84e" -> "us84e") — prefix segments add
+   * no entropy and would nest directories. The fully flattened name is the
+   * fallback when the leaf is occupied by another branch's worktree.
+   */
+  private worktreeDirCandidates(branchName: string): string[] {
+    const leaf = branchName.split('/').pop() || branchName;
+    const flat = branchName.replace(/\//g, '-');
+    return leaf === flat ? [leaf] : [leaf, flat];
+  }
+
+  /**
+   * Picks a free directory for a new worktree of `branchName`. Only called
+   * after findCheckedOutPathForBranch missed, so a valid worktree occupying a
+   * candidate belongs to a different branch — skip to the next candidate.
+   * Stale (non-worktree) leftovers are removed and the path reused.
+   */
+  private async resolveWorktreeTargetPath(
+    branchName: string
+  ): Promise<Result<string, ServeWorktreeError>> {
+    for (const dirName of this.worktreeDirCandidates(branchName)) {
+      const targetPath = path.join(this.worktreePoolPath, dirName);
+      if (!(await this.host.existsAbsolute(targetPath))) return ok(targetPath);
+      if (await this.isValidWorktree(targetPath)) continue;
+      const cleanup = await this.removeStaleWorktreeDir(targetPath);
+      if (!cleanup.success) return cleanup;
+      return ok(targetPath);
+    }
+    return err({
+      type: 'worktree-setup-failed',
+      cause: new Error(`All worktree directory candidates for "${branchName}" are occupied`),
+    });
+  }
+
   private async findCheckedOutPathForBranch(branchName: string): Promise<string | undefined> {
     try {
       const { stdout } = await this.ctx.exec('git', ['worktree', 'list', '--porcelain']);
@@ -141,22 +176,14 @@ export class WorktreeService {
   }
 
   async getWorktree(branchName: string): Promise<string | undefined> {
-    const worktreePath = path.join(this.worktreePoolPath, branchName);
-    if (await this.host.existsAbsolute(worktreePath)) {
-      if (await this.isValidWorktree(worktreePath)) return worktreePath;
-      await this.host.removeAbsolute(worktreePath, { recursive: true }).catch(() => {});
-    }
-
+    // Worktree directories are not derivable from the branch name alone
+    // (leaf naming with collision fallback, plus legacy nested layouts), so
+    // resolve through `git worktree list` and keep only pool-resident paths.
+    const checkedOutPath = await this.findCheckedOutPathForBranch(branchName);
+    if (!checkedOutPath) return undefined;
     try {
       const realPoolPath = await this.host.realPathAbsolute(this.worktreePoolPath);
-      const { stdout } = await this.ctx.exec('git', ['worktree', 'list', '--porcelain']);
-      const branchLine = `branch refs/heads/${branchName}`;
-      for (const block of stdout.split('\n\n')) {
-        if (block.split('\n').some((line) => line === branchLine)) {
-          const match = /^worktree (.+)$/m.exec(block);
-          if (match?.[1]?.startsWith(realPoolPath)) return match[1];
-        }
-      }
+      if (checkedOutPath.startsWith(realPoolPath)) return checkedOutPath;
     } catch {}
     return undefined;
   }
@@ -178,12 +205,9 @@ export class WorktreeService {
       return ok(checkedOutPath);
     }
 
-    const targetPath = path.join(this.worktreePoolPath, branchName);
-    if (await this.host.existsAbsolute(targetPath)) {
-      if (await this.isValidWorktree(targetPath)) return ok(targetPath);
-      const cleanup = await this.removeStaleWorktreeDir(targetPath);
-      if (!cleanup.success) return cleanup;
-    }
+    const target = await this.resolveWorktreeTargetPath(branchName);
+    if (!target.success) return target;
+    const targetPath = target.data;
 
     try {
       let localExists = false;
@@ -230,14 +254,10 @@ export class WorktreeService {
       return ok(checkedOutPath);
     }
 
-    const targetPath = path.join(this.worktreePoolPath, branchName);
+    const target = await this.resolveWorktreeTargetPath(branchName);
+    if (!target.success) return target;
+    const targetPath = target.data;
     const remoteCandidates = await this.getRemoteCandidates();
-
-    if (await this.host.existsAbsolute(targetPath)) {
-      if (await this.isValidWorktree(targetPath)) return ok(targetPath);
-      const cleanup = await this.removeStaleWorktreeDir(targetPath);
-      if (!cleanup.success) return cleanup;
-    }
 
     try {
       await this.host.mkdirAbsolute(path.dirname(targetPath), { recursive: true });

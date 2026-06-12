@@ -20,5 +20,7 @@ export function resolveTaskBranchName({
     return linearBranchName;
   }
 
-  return branchPrefix ? `${branchPrefix}/${rawBranch}-${suffix}` : `${rawBranch}-${suffix}`;
+  // Empty rawBranch means the random suffix alone names the branch (hash mode).
+  const base = rawBranch ? `${rawBranch}-${suffix}` : suffix;
+  return branchPrefix ? `${branchPrefix}/${base}` : base;
 }

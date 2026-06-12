@@ -29,6 +29,13 @@ import { WorktreeService } from './worktrees/worktree-service';
 const hasGitHubToken = async (): Promise<boolean> =>
   (await githubConnectionService.getToken()) !== null;
 
+/** The per-project name bucket inside the pool only matters when multiple
+ *  projects share one pool root (e.g. ~/Yoda/worktrees). A pool inside the
+ *  project itself (.worktrees, .yoda/worktrees) is already project-scoped. */
+function isInsideProject(worktreeDirectory: string, projectPath: string, sep: string): boolean {
+  return worktreeDirectory.startsWith(projectPath + sep);
+}
+
 /** When the worktree directory lives inside the project, keep it out of git
  *  status via `.git/info/exclude` (local-only, never touches tracked files). */
 async function ensureWorktreeDirectoryExcluded(
@@ -75,7 +82,9 @@ async function createLocalProvider(project: LocalProject): Promise<ProjectProvid
   const worktreeDirectory = await settings.getWorktreeDirectory();
   await fs.promises.mkdir(worktreeDirectory, { recursive: true });
   await ensureWorktreeDirectoryExcluded(project.path, worktreeDirectory);
-  const worktreePoolPath = path.join(worktreeDirectory, safePathSegment(project.name, project.id));
+  const worktreePoolPath = isInsideProject(worktreeDirectory, project.path, path.sep)
+    ? worktreeDirectory
+    : path.join(worktreeDirectory, safePathSegment(project.name, project.id));
   const worktreeHost = await LocalWorktreeHost.create({
     allowedRoots: [project.path, worktreeDirectory],
   });
@@ -112,7 +121,10 @@ async function createSshProvider(project: SshProject): Promise<ProjectProvider> 
       project.path,
       baseCtx
     );
-    const worktreePoolPath = path.posix.join(await settings.getWorktreeDirectory(), project.name);
+    const sshWorktreeDirectory = await settings.getWorktreeDirectory();
+    const worktreePoolPath = isInsideProject(sshWorktreeDirectory, project.path, '/')
+      ? sshWorktreeDirectory
+      : path.posix.join(sshWorktreeDirectory, project.name);
     const worktreeHost = new SshWorktreeHost(rootFs);
     await worktreeHost.mkdirAbsolute(worktreePoolPath, { recursive: true });
 
