@@ -387,7 +387,9 @@ export function BootScreen({ ready, onFinished }: BootScreenProps) {
             className="ml-[0.18em] inline-block w-[0.5ch]"
             style={{ height: '0.74em', backgroundColor: MINT, transform: 'translateY(0.06em)' }}
             initial={{ opacity: 0 }}
-            animate={reducedMotion ? { opacity: 1 } : { opacity: [1, 1, 0, 0] }}
+            // Blink dims to a faint ghost instead of vanishing, so the wordmark
+            // keeps its visual right edge and the line never feels misaligned.
+            animate={reducedMotion ? { opacity: 1 } : { opacity: [1, 1, 0.22, 0.22] }}
             transition={
               reducedMotion
                 ? { delay: 0.2 }
