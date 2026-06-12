@@ -27,6 +27,8 @@ interface MarkdownRendererProps {
 }
 
 const FRONT_MATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
+/** BOM and/or blank lines tolerated before the opening front matter fence. */
+const LEADING_BLANK_RE = /^\uFEFF?(?:[ \t]*\r?\n)*/;
 
 /**
  * Splits YAML front matter off the markdown content. Returns the parsed
@@ -36,14 +38,15 @@ function parseFrontMatter(content: string): {
   data: Record<string, unknown> | null;
   body: string;
 } {
-  const match = FRONT_MATTER_RE.exec(content);
+  const offset = LEADING_BLANK_RE.exec(content)?.[0].length ?? 0;
+  const match = FRONT_MATTER_RE.exec(content.slice(offset));
   if (!match) return { data: null, body: content };
   try {
     const data: unknown = parseYaml(match[1]);
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       return { data: null, body: content };
     }
-    return { data: data as Record<string, unknown>, body: content.slice(match[0].length) };
+    return { data: data as Record<string, unknown>, body: content.slice(offset + match[0].length) };
   } catch {
     return { data: null, body: content };
   }
