@@ -7,6 +7,7 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import type { PluggableList } from 'unified';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { rpc } from '@renderer/lib/ipc';
 import { cn } from '@renderer/utils/utils';
@@ -24,6 +25,79 @@ interface MarkdownRendererProps {
    */
   resolveImage?: (src: string) => Promise<string | null>;
 }
+
+const FRONT_MATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
+
+/**
+ * Splits YAML front matter off the markdown content. Returns the parsed
+ * key-value data (or `null` when absent/invalid) and the remaining body.
+ */
+function parseFrontMatter(content: string): {
+  data: Record<string, unknown> | null;
+  body: string;
+} {
+  const match = FRONT_MATTER_RE.exec(content);
+  if (!match) return { data: null, body: content };
+  try {
+    const data: unknown = parseYaml(match[1]);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return { data: null, body: content };
+    }
+    return { data: data as Record<string, unknown>, body: content.slice(match[0].length) };
+  } catch {
+    return { data: null, body: content };
+  }
+}
+
+function formatFrontMatterValue(value: unknown): string {
+  if (value == null) return '';
+  if (Array.isArray(value) && value.every((item) => item === null || typeof item !== 'object')) {
+    return value.map(String).join(', ');
+  }
+  if (typeof value === 'object') return stringifyYaml(value).trimEnd();
+  return String(value);
+}
+
+/** Renders front matter as a subtle key-value table above the markdown body. */
+const FrontMatterBlock: React.FC<{ data: Record<string, unknown>; variant: Variant }> = ({
+  data,
+  variant,
+}) => {
+  const entries = Object.entries(data);
+  if (entries.length === 0) return null;
+  const isCompact = variant === 'compact';
+  const cellPadding = isCompact ? 'px-2 py-1' : 'px-3 py-1.5';
+  return (
+    <div
+      className={cn('overflow-hidden rounded-md border border-border', isCompact ? 'mb-2' : 'mb-3')}
+    >
+      <table className={cn('w-full border-collapse', isCompact ? 'text-[11px]' : 'text-xs')}>
+        <tbody>
+          {entries.map(([key, value]) => (
+            <tr key={key} className="border-t border-border first:border-t-0">
+              <td
+                className={cn(
+                  'whitespace-nowrap bg-muted/30 align-top font-medium text-muted-foreground',
+                  cellPadding
+                )}
+              >
+                {key}
+              </td>
+              <td
+                className={cn(
+                  'whitespace-pre-wrap break-words align-top text-foreground',
+                  cellPadding
+                )}
+              >
+                {formatFrontMatterValue(value)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 /** Sanitize schema that also allows data: URIs on images */
 const sanitizeSchema = {
@@ -313,10 +387,13 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       ? [rehypeRaw, [rehypeSanitize, sanitizeSchema]]
       : [[rehypeSanitize, sanitizeSchema]];
 
+  const { data: frontMatter, body } = useMemo(() => parseFrontMatter(content), [content]);
+
   return (
     <div className={cn(className)}>
+      {frontMatter && <FrontMatterBlock data={frontMatter} variant={variant} />}
       <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
-        {content}
+        {body}
       </Markdown>
     </div>
   );
