@@ -111,7 +111,12 @@ export const KanbanBoard = observer(function KanbanBoard() {
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
           {KANBAN_STATUSES.map((status) => (
-            <KanbanColumn key={status} status={status} cards={byStatus[status]} />
+            <KanbanColumn
+              key={status}
+              status={status}
+              cards={byStatus[status]}
+              dragActive={activeCard !== null}
+            />
           ))}
         </div>
       </div>
@@ -125,9 +130,11 @@ export const KanbanBoard = observer(function KanbanBoard() {
 const KanbanColumn = observer(function KanbanColumn({
   status,
   cards,
+  dragActive,
 }: {
   status: KanbanStatus;
   cards: BoardCard[];
+  dragActive: boolean;
 }) {
   const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: status });
@@ -152,7 +159,11 @@ const KanbanColumn = observer(function KanbanColumn({
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
         {cards.map((card) => (
-          <KanbanCard key={`${card.projectId}::${card.task.id}`} card={card} />
+          <KanbanCard
+            key={`${card.projectId}::${card.task.id}`}
+            card={card}
+            dragActive={dragActive}
+          />
         ))}
         {cards.length === 0 && (
           <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border py-8 text-xs text-foreground-tertiary-passive">
