@@ -31,6 +31,7 @@ import KeyboardSettingsCard from './KeyboardSettingsCard';
 import LanguageCard from './LanguageCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import OpenInAppsSettingsCard from './OpenInAppsSettingsCard';
+import PromptsSettingsCard from './PromptsSettingsCard';
 import { ReviewPromptResetButton, ReviewPromptSettingsCard } from './ReviewPromptSettingsCard';
 import StatuslineSettingsCard from './StatuslineSettingsCard';
 import {
@@ -55,6 +56,7 @@ export type SettingsPageTab =
   | 'integrations'
   | 'open-in'
   | 'mcp'
+  | 'prompts'
   | 'skills'
   | 'agent-manager'
   | 'maas'
@@ -101,6 +103,7 @@ function useSettingsTabGroups(): SettingsTabEntry[][] {
     [
       { id: 'maas', label: t('settings.tabs.maas') },
       { id: 'clis-models', label: t('settings.tabs.agents') },
+      { id: 'prompts', label: t('settings.tabs.prompts') },
       { id: 'skills', label: t('settings.tabs.skills') },
       { id: 'mcp', label: t('settings.tabs.mcp') },
       { id: 'agent-manager', label: t('settings.tabs.agentManager') },
@@ -294,6 +297,11 @@ export function SettingsPage({
           component: <AgentsView embedded />,
         },
       ],
+    },
+    prompts: {
+      title: t('settings.tabs.prompts'),
+      description: t('settings.promptsTab.description'),
+      sections: [{ id: 'prompt-principles', component: <PromptsSettingsCard /> }],
     },
     skills: {
       title: t('skills.title'),

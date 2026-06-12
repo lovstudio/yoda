@@ -68,6 +68,12 @@ export type RuntimeDefinition = {
    * e.g. '--session-id' for Claude Code.
    */
   sessionIdFlag?: string;
+  /**
+   * CLI flag that appends extra text after the runtime's own system prompt,
+   * e.g. '--append-system-prompt' for Claude Code. Used to inject the
+   * user-defined prompt principles. Runtimes without this flag run unmodified.
+   */
+  appendSystemPromptFlag?: string;
   newConversationFlag?: string;
   sessionIdOnResumeOnly?: boolean;
   defaultArgs?: string[];
@@ -226,6 +232,7 @@ export const RUNTIMES: RuntimeDefinition[] = [
     clipboardImagePaste: true,
     resumeFlag: '--resume',
     sessionIdFlag: '--session-id',
+    appendSystemPromptFlag: '--append-system-prompt',
     commandPrefix: '/',
     planActivateCommand: '/plan',
     namingCommand: 'claude --print --model {model} --output-format text --no-session-persistence',

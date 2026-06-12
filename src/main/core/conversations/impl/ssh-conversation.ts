@@ -30,6 +30,7 @@ import {
 } from '../session-stats-hooks';
 import { buildAgentCommand } from './agent-command';
 import { substituteImageMentions } from './image-attachments';
+import { getEnabledPromptPrinciplesText } from './prompt-principles';
 import { resolveRuntimeEnv, resolveRuntimeTmuxEnv } from './runtime-env';
 
 const DEFAULT_COLS = 80;
@@ -118,6 +119,7 @@ export class SshConversationProvider implements ConversationProvider {
       initialPrompt: isResuming
         ? initialPrompt
         : substituteImageMentions(initialPrompt, imagePaths ?? []),
+      appendSystemPrompt: await getEnabledPromptPrinciplesText(),
     });
 
     const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);

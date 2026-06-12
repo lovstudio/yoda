@@ -233,7 +233,9 @@ describe('LocalConversationProvider', () => {
       initialPromptFlag: '',
       sessionIdFlag: '--session-id',
     });
-    mocks.appSettingsGet.mockResolvedValue({ writeAgentConfigToGitIgnore: false });
+    mocks.appSettingsGet.mockImplementation(async (key: string) =>
+      key === 'promptPrinciples' ? { items: [] } : { writeAgentConfigToGitIgnore: false }
+    );
     mocks.maybeAutoTrustLocal.mockResolvedValue(undefined);
     mocks.prepareHookConfig.mockResolvedValue(undefined);
     mocks.ensureCodexThreadUnarchived.mockResolvedValue(undefined);

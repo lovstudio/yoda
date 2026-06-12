@@ -99,6 +99,7 @@ export function buildAgentCommand({
   sessionId,
   isResuming,
   workingDirectory,
+  appendSystemPrompt,
 }: {
   runtimeId: RuntimeId;
   providerConfig: RuntimeCustomConfig | undefined;
@@ -107,6 +108,8 @@ export function buildAgentCommand({
   sessionId: string;
   isResuming?: boolean;
   workingDirectory?: string;
+  /** Extra text appended after the runtime's system prompt (runtimes with appendSystemPromptFlag only). */
+  appendSystemPrompt?: string;
 }): AgentCommand {
   const providerDef = getRuntime(runtimeId);
   const [command, ...args] = parseCliPrefix(providerConfig?.cli, runtimeId);
@@ -135,6 +138,10 @@ export function buildAgentCommand({
 
   if (autoApprove && providerConfig?.autoApproveFlag) {
     args.push(...parseArgField(providerConfig.autoApproveFlag));
+  }
+
+  if (appendSystemPrompt && providerDef?.appendSystemPromptFlag) {
+    args.push(providerDef.appendSystemPromptFlag, appendSystemPrompt);
   }
 
   if (!isResuming && initialPrompt && !providerDef?.useKeystrokeInjection) {

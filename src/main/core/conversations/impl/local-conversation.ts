@@ -44,6 +44,7 @@ import {
 } from '../session-stats-hooks';
 import { buildAgentCommand } from './agent-command';
 import { injectClipboardImagesAndPrompt, substituteImageMentions } from './image-attachments';
+import { getEnabledPromptPrinciplesText } from './prompt-principles';
 import { resolveAgentApiEnvVars, resolveRuntimeEnv, resolveRuntimeTmuxEnv } from './runtime-env';
 
 const DEFAULT_COLS = 80;
@@ -156,6 +157,7 @@ export class LocalConversationProvider implements ConversationProvider {
       isResuming,
       initialPrompt: useClipboardImagePaste ? undefined : effectiveInitialPrompt,
       workingDirectory: this.taskPath,
+      appendSystemPrompt: await getEnabledPromptPrinciplesText(),
     });
     const args = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 

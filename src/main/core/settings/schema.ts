@@ -389,6 +389,19 @@ export const statuslineSettingsSchema = z.object({
   templates: z.array(statuslineTemplateSchema),
 });
 
+/** An atomic, user-defined operating principle for agent runtimes. */
+export const promptPrincipleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  text: z.string(),
+  /** Enabled principles are appended after the runtime's system prompt at spawn. */
+  enabled: z.boolean(),
+});
+
+export const promptPrinciplesSettingsSchema = z.object({
+  items: z.array(promptPrincipleSchema),
+});
+
 export const APP_SETTINGS_SCHEMA_MAP = {
   localProject: localProjectSettingsSchema,
   project: projectSettingsSchema,
@@ -410,6 +423,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   browserPreview: browserPreviewSettingsSchema,
   homeDraft: homeDraftSchema,
   statusline: statuslineSettingsSchema,
+  promptPrinciples: promptPrinciplesSettingsSchema,
 } as const;
 
 export const appSettingsSchema = z.object({
@@ -433,4 +447,5 @@ export const appSettingsSchema = z.object({
   browserPreview: browserPreviewSettingsSchema,
   homeDraft: homeDraftSchema,
   statusline: statuslineSettingsSchema,
+  promptPrinciples: promptPrinciplesSettingsSchema,
 });

@@ -142,6 +142,9 @@ export const SETTINGS_DEFAULTS = {
       },
     ],
   },
+  promptPrinciples: {
+    items: [],
+  },
 } satisfies SettingsDefaultsMap;
 
 export function getDefaultForKey<K extends AppSettingsKey>(key: K): AppSettings[K] {

@@ -261,6 +261,7 @@
       "integrations": "集成",
       "openIn": "打开方式",
       "mcp": "MCP",
+      "prompts": "Prompts",
       "skills": "技能",
       "agentManager": "Agent",
       "maas": "MaaS",
@@ -316,6 +317,18 @@
       "notDetected": "未检测到",
       "executionSettingsAria": "{{name}} 执行设置",
       "executionSettings": "执行设置"
+    },
+    "promptsTab": {
+      "description": "原子化的运行原则。勾选的原则会在会话启动时追加到 Runtime 的 system prompt 之后。"
+    },
+    "prompts": {
+      "description": "每条原则是一条原子化规则。开启后会嵌入到 Runtime 的 system prompt 之后，并显示在会话面板的人设章节中。",
+      "addPrinciple": "添加原则",
+      "namePlaceholder": "名称",
+      "textPlaceholder": "追加到 system prompt 之后的原则内容",
+      "toggle": "启用原则",
+      "remove": "移除原则",
+      "empty": "暂无原则。"
     },
     "statusline": {
       "title": "Statusline 模板",
@@ -1177,6 +1190,8 @@
       "noSystemPrompt": "暂无 system prompt 记录",
       "runtimeContext": "运行时上下文",
       "persona": "人设",
+      "promptPrinciples": "运行原则",
+      "promptPrincipleUntitled": "未命名原则",
       "instructionFiles": "指令文件",
       "noInstructionFiles": "未找到 CLAUDE.md 或 AGENTS.md",
       "memory": "记忆",

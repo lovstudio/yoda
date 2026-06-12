@@ -261,6 +261,7 @@
       "integrations": "Integrations",
       "openIn": "Open in",
       "mcp": "MCP",
+      "prompts": "Prompts",
       "skills": "Skills",
       "agentManager": "Agents",
       "maas": "MaaS",
@@ -316,6 +317,18 @@
       "notDetected": "Not detected",
       "executionSettingsAria": "{{name}} execution settings",
       "executionSettings": "Execution settings"
+    },
+    "promptsTab": {
+      "description": "Atomic operating principles. Enabled principles are appended after the runtime's system prompt when a session starts."
+    },
+    "prompts": {
+      "description": "Each principle is one atomic rule. Toggle a principle on to embed it after the runtime's system prompt; enabled principles also show in the session panel's Persona section.",
+      "addPrinciple": "Add principle",
+      "namePlaceholder": "Name",
+      "textPlaceholder": "Principle text appended after the system prompt",
+      "toggle": "Enable principle",
+      "remove": "Remove principle",
+      "empty": "No principles yet."
     },
     "statusline": {
       "title": "Statusline templates",
@@ -1177,6 +1190,8 @@
       "noSystemPrompt": "No system prompt recorded",
       "runtimeContext": "Runtime context",
       "persona": "Persona",
+      "promptPrinciples": "Prompt principles",
+      "promptPrincipleUntitled": "Untitled principle",
       "instructionFiles": "Instruction files",
       "noInstructionFiles": "No CLAUDE.md or AGENTS.md found",
       "memory": "Memory",

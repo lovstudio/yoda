@@ -9,6 +9,7 @@ import {
   Info,
   PanelBottom,
   Plug,
+  ScrollText,
   Search,
   Sparkles,
   SquareTerminal,
@@ -231,6 +232,7 @@ function ClaudeHarnessSection({
         <PersonaSection
           files={data.memoryFiles}
           systemPromptHint={t('tasks.panel.systemPromptHint')}
+          showPromptPrinciples
         />
       );
     case 'memory':
@@ -448,12 +450,19 @@ function PersonaSection({
   files,
   systemPromptHint,
   codexSystemPrompt,
+  showPromptPrinciples,
 }: {
   files: Array<ClaudeMemoryFile | CodexMemoryFile>;
   systemPromptHint?: string;
   codexSystemPrompt?: CodexSystemPrompt;
+  /** True for runtimes that inject the user's prompt principles at spawn. */
+  showPromptPrinciples?: boolean;
 }) {
   const { t } = useTranslation();
+  const { value: promptPrinciplesValue } = useAppSettingsKey('promptPrinciples');
+  const principles = showPromptPrinciples
+    ? (promptPrinciplesValue?.items ?? []).filter((p) => p.enabled && p.text.trim().length > 0)
+    : [];
   const base = codexSystemPrompt?.baseInstructions;
   const developerMessages = codexSystemPrompt?.developerMessages ?? [];
   const sourcePath = codexSystemPrompt?.sourcePath ?? undefined;
@@ -492,6 +501,21 @@ function PersonaSection({
           {!base && developerMessages.length === 0 && systemPromptHint ? (
             <Empty>{systemPromptHint}</Empty>
           ) : null}
+        </SubGroup>
+      ) : null}
+
+      {/* User-defined principles, appended after the system prompt at spawn. */}
+      {principles.length > 0 ? (
+        <SubGroup label={t('tasks.panel.promptPrinciples')}>
+          {principles.map((principle) => (
+            <ContextItem
+              key={principle.id}
+              icon={<ScrollText className="size-3.5" />}
+              label={principle.name || t('tasks.panel.promptPrincipleUntitled')}
+              meta={formatBytes(principle.text.length)}
+              text={principle.text}
+            />
+          ))}
         </SubGroup>
       ) : null}
 
