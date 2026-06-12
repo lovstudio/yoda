@@ -51,10 +51,10 @@ for (const appDir of appBundles) {
     'Resources',
     'app.asar.unpacked',
     'node_modules',
-    'sqlite3',
+    'better-sqlite3',
     'build',
     'Release',
-    'node_sqlite3.node'
+    'better_sqlite3.node'
   );
 
   if (expectedArch) {

@@ -23,7 +23,9 @@ const config: Configuration = {
   ],
   generateUpdatesFilesForAllChannels: false,
   extraResources: ['LICENSE.md'],
-  files: ['out/**/*', 'node_modules/**/*', 'drizzle/**/*'],
+  // node_modules 不写进 files：electron-builder 自动收集 production dependencies
+  // （仅 native 模块 + ssh2，其余依赖已由 electron-vite 打进 out/）
+  files: ['out/**/*', 'drizzle/**/*'],
   asarUnpack: [
     'node_modules/better-sqlite3/**',
     'node_modules/node-pty/**',
