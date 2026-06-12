@@ -524,6 +524,33 @@ export const appSecrets = sqliteTable(
   })
 );
 
+export const aiLabGenerations = sqliteTable(
+  'ai_lab_generations',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').notNull().default('logo'),
+    brandName: text('brand_name').notNull(),
+    description: text('description').notNull().default(''),
+    styleId: text('style_id').notNull(),
+    engine: text('engine').notNull(), // 'zenmux' | 'codex'
+    model: text('model').notNull(),
+    prompt: text('prompt').notNull(),
+    status: text('status').notNull(), // 'succeeded' | 'failed'
+    error: text('error'),
+    // Image file names under the app's ai-lab/images directory.
+    images: text('images', { mode: 'json' })
+      .notNull()
+      .$type<string[]>()
+      .default(sql`'[]'`),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    createdAtIdx: index('idx_ai_lab_generations_created_at').on(table.createdAt),
+  })
+);
+
 export const sshConnectionsRelations = relations(sshConnections, ({ many }) => ({
   projects: many(projects),
 }));

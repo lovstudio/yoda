@@ -320,6 +320,21 @@ export class MaasService {
     );
   }
 
+  /**
+   * Endpoint + stored API key for a connected platform, for features that call
+   * the platform's inference APIs directly (e.g. AI Lab image generation).
+   */
+  async getInferenceCredentials(
+    platformId: MaasPlatformId
+  ): Promise<{ endpoint: string; apiKey: string } | undefined> {
+    const settings = await appSettingsService.get('maas');
+    const connection = getConnectedPlatform(settings, platformId);
+    if (!connection) return undefined;
+    const apiKey = await encryptedAppSecretsStore.getSecret(secretKey(platformId));
+    if (!apiKey) return undefined;
+    return { endpoint: connection.endpoint, apiKey };
+  }
+
   async connectPlatform(
     input: MaasConnectInput
   ): Promise<{ success: boolean; connection?: MaasConnection; error?: string }> {

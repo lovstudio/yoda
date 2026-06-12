@@ -1,6 +1,7 @@
 import {
   BookOpen,
   ExternalLink,
+  FlaskConical,
   FolderInput,
   MessageSquareShare,
   Milestone,
@@ -319,6 +320,19 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 >
                   <Milestone className="h-5 w-5 sm:h-4 sm:w-4" />
                   {t('sidebar.roadmap')}
+                </SidebarMenuButton>
+              </GlobalSidePaneTarget>
+              <GlobalSidePaneTarget viewId="aiLab" altHeld={altHeld}>
+                <SidebarMenuButton
+                  isActive={isCurrentView(currentView, 'aiLab')}
+                  onClick={(e) =>
+                    e.altKey ? appState.sidePane.pinView('aiLab', {}) : navigate('aiLab')
+                  }
+                  aria-label={t('sidebar.aiLab')}
+                  className="w-full justify-start"
+                >
+                  <FlaskConical className="h-5 w-5 sm:h-4 sm:w-4" />
+                  {t('sidebar.aiLab')}
                 </SidebarMenuButton>
               </GlobalSidePaneTarget>
               <SidebarMenuButton

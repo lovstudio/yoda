@@ -18,6 +18,7 @@ export type FocusView =
   | 'agentManager'
   | 'agents'
   | 'maas'
+  | 'aiLab'
   | 'automation'
   | 'mobile'
   | 'usage'
@@ -68,6 +69,7 @@ export type TelemetryEventProperties = {
   mcp_viewed: { from_view: FocusView | null };
   agents_viewed: { from_view: FocusView | null };
   maas_viewed: { from_view: FocusView | null };
+  ai_lab_viewed: { from_view: FocusView | null };
   usage_viewed: { from_view: FocusView | null };
   roadmap_viewed: { from_view: FocusView | null };
   kanban_viewed: { from_view: FocusView | null };
@@ -140,6 +142,13 @@ export type TelemetryEventProperties = {
   mcp_server_removed: EmptyProps;
 
   maas_platform_connected: { platform: MaasPlatformId };
+  ai_lab_logo_generated: {
+    engine: string;
+    model: string;
+    status: string;
+    count: number;
+    durationMs: number;
+  };
   maas_platform_disconnected: { platform: MaasPlatformId };
 
   skill_installed: { source?: string };

@@ -5,6 +5,7 @@ import {
   Cloud,
   Cpu,
   FileText,
+  FlaskConical,
   GitCompare,
   House,
   LayoutDashboard,
@@ -58,6 +59,7 @@ import { cn } from '@renderer/utils/utils';
  * Keep in sync with the sidebar nav items in features/sidebar/left-sidebar.tsx.
  */
 const VIEW_ICONS: Partial<Record<ViewId, LucideIcon>> = {
+  aiLab: FlaskConical,
   settings: Settings,
   skills: Puzzle,
   mcp: Server,

@@ -99,6 +99,7 @@
     "mobile": "Mobile",
     "settings": "Settings",
     "roadmap": "Roadmap",
+    "aiLab": "AI Lab",
     "docs": "Docs",
     "giveFeedback": "Give feedback",
     "showNav": "Show sidebar navigation",
@@ -2112,6 +2113,50 @@
       "noSummary": "No summary yet — open the task to generate one."
     },
     "alphaHint": "Early preview — rough edges expected."
+  },
+  "aiLab": {
+    "title": "AI Lab",
+    "subtitle": "Experimental AI tools. First up: brand logo generation.",
+    "logo": {
+      "title": "Logo Studio",
+      "subtitle": "Describe your brand, pick a style, and generate logo candidates.",
+      "brandName": "Brand name",
+      "brandNamePlaceholder": "e.g. Yoda",
+      "description": "About the brand",
+      "descriptionPlaceholder": "One line about the product or brand (optional)",
+      "style": "Style",
+      "styles": {
+        "minimal": "Minimal",
+        "geometric": "Geometric",
+        "wordmark": "Wordmark",
+        "badge": "Badge",
+        "mascot": "Mascot",
+        "gradient": "Gradient"
+      },
+      "engine": "Engine",
+      "engineZenmux": "ZenMux API",
+      "engineCodex": "Codex CLI",
+      "engineUnavailableZenmux": "Connect ZenMux with an API key to use this engine.",
+      "engineUnavailableCodex": "Codex CLI not found. Install and sign in to use it.",
+      "connectZenmux": "Connect ZenMux",
+      "model": "Model",
+      "count": "Candidates",
+      "generate": "Generate",
+      "generating": "Generating…",
+      "generatingCodexHint": "Codex renders images through its agent loop — this can take a few minutes.",
+      "history": "History",
+      "emptyTitle": "No logos yet",
+      "emptyDescription": "Generated logos will show up here.",
+      "failed": "Generation failed",
+      "rerun": "Run again",
+      "delete": "Delete",
+      "save": "Save PNG",
+      "saved": "Saved",
+      "saveFailed": "Save failed",
+      "copy": "Copy image",
+      "copied": "Image copied",
+      "copyFailed": "Copy failed"
+    }
   },
   "usage": {
     "title": "Usage",

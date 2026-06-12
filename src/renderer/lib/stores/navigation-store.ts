@@ -27,6 +27,7 @@ export const viewEvents: Record<
   | 'usage_viewed'
   | 'roadmap_viewed'
   | 'kanban_viewed'
+  | 'ai_lab_viewed'
 > = {
   home: 'home_viewed',
   project: 'project_viewed',
@@ -44,6 +45,7 @@ export const viewEvents: Record<
   usage: 'usage_viewed',
   roadmap: 'roadmap_viewed',
   kanban: 'kanban_viewed',
+  aiLab: 'ai_lab_viewed',
 };
 
 export class NavigationStore implements Snapshottable<NavigationSnapshot> {

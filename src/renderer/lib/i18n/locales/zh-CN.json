@@ -99,6 +99,7 @@
     "mobile": "移动端",
     "settings": "设置",
     "roadmap": "Roadmap",
+    "aiLab": "AI Lab",
     "docs": "文档",
     "giveFeedback": "反馈建议",
     "showNav": "显示侧边栏导航",
@@ -2112,6 +2113,50 @@
       "noSummary": "还没有概要——打开任务后可生成。"
     },
     "alphaHint": "早期预览，功能尚在打磨。"
+  },
+  "aiLab": {
+    "title": "AI Lab",
+    "subtitle": "实验性 AI 工具，第一站：品牌 Logo 生成。",
+    "logo": {
+      "title": "Logo 工坊",
+      "subtitle": "描述你的品牌、选择风格，一键生成 Logo 候选。",
+      "brandName": "品牌名",
+      "brandNamePlaceholder": "例如 Yoda",
+      "description": "品牌简介",
+      "descriptionPlaceholder": "一句话描述产品或品牌（可选）",
+      "style": "风格",
+      "styles": {
+        "minimal": "极简",
+        "geometric": "几何",
+        "wordmark": "字标",
+        "badge": "徽章",
+        "mascot": "吉祥物",
+        "gradient": "渐变"
+      },
+      "engine": "引擎",
+      "engineZenmux": "ZenMux API",
+      "engineCodex": "Codex CLI",
+      "engineUnavailableZenmux": "连接 ZenMux 并填入 API Key 后即可使用该引擎。",
+      "engineUnavailableCodex": "未检测到 Codex CLI，安装并登录后可用。",
+      "connectZenmux": "连接 ZenMux",
+      "model": "模型",
+      "count": "张数",
+      "generate": "生成",
+      "generating": "生成中…",
+      "generatingCodexHint": "Codex 通过 agent 流程出图，可能需要几分钟。",
+      "history": "历史记录",
+      "emptyTitle": "还没有生成过 Logo",
+      "emptyDescription": "生成的 Logo 会出现在这里。",
+      "failed": "生成失败",
+      "rerun": "再来一批",
+      "delete": "删除",
+      "save": "保存 PNG",
+      "saved": "已保存",
+      "saveFailed": "保存失败",
+      "copy": "复制图片",
+      "copied": "已复制图片",
+      "copyFailed": "复制失败"
+    }
   },
   "usage": {
     "title": "用量统计",
