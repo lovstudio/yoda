@@ -52,18 +52,18 @@ export function closeTaskTopTab(tab: AppTabEntry): void {
  * entity (task-sidebar pin or shell-pane pin) returns to its scope's strip; a
  * shell view/overview pin reopens its tab there and unpins.
  *
- * `activate` follows the drop target's meaning: the central column means
- * "show it HERE" (route follows — otherwise cross-scope drops vanish from
- * sight), while the strip itself means "put it back" without stealing the
- * main area's focus.
+ * Always activates: dragging back to the main window means "show it" — a
+ * cross-scope tab placed in the background is invisible and reads as data
+ * loss. The quiet no-activate path stays available via the chips' context
+ * menus ("move back").
  */
-export function moveDraggedTabToStrip(payload: TabDragPayload, activate: boolean): void {
+export function moveDraggedTabToStrip(payload: TabDragPayload): void {
   if (payload.kind === 'shell-pin') {
     const { pin } = payload;
     if (pin.kind === 'view') {
-      appState.appTabs.openTab(pin.viewId, pin.params, { activate });
+      appState.appTabs.openTab(pin.viewId, pin.params, { activate: true });
     } else {
-      openTaskTopTab(pin.projectId, pin.taskId, { kind: 'overview' }, { activate });
+      openTaskTopTab(pin.projectId, pin.taskId, { kind: 'overview' }, { activate: true });
     }
     appState.sidePane.unpin(pin.id);
     return;
@@ -77,7 +77,7 @@ export function moveDraggedTabToStrip(payload: TabDragPayload, activate: boolean
     tabManager.moveShellPinBack(payload.tabId);
     if (payload.pinId) appState.sidePane.unpin(payload.pinId);
   }
-  openTaskTopTab(payload.projectId, payload.taskId, payload.target, { activate });
+  openTaskTopTab(payload.projectId, payload.taskId, payload.target, { activate: true });
 }
 
 /** Resolves a top-level tab target to the matching internal tab id, if open. */

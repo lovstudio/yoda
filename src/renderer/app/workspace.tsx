@@ -95,7 +95,7 @@ function WorkspaceViewContent() {
   const { isOver, dropRef } = useTabDropZone({
     canDrop: (payload) =>
       (payload.kind === 'task-entity' && payload.from !== 'strip') || payload.kind === 'shell-pin',
-    onDrop: (payload) => moveDraggedTabToStrip(payload, true),
+    onDrop: moveDraggedTabToStrip,
   });
 
   return (

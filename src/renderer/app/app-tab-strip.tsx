@@ -123,11 +123,11 @@ export const AppTabStrip = observer(function AppTabStrip() {
   const newSessionDisabled = Boolean(taskId && !provisionedTask);
 
   // Dropping a pinned entity or shell pin on the strip moves/reopens it here
-  // in the background — the strip is a shelf, not a "show me now" target.
+  // and shows it — same meaning as dropping on the central column.
   const dropZone = useTabDropZone({
     canDrop: (payload) =>
       (payload.kind === 'task-entity' && payload.from !== 'strip') || payload.kind === 'shell-pin',
-    onDrop: (payload) => moveDraggedTabToStrip(payload, false),
+    onDrop: moveDraggedTabToStrip,
   });
 
   return (
