@@ -403,12 +403,12 @@ export function SettingsPage({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1060px] flex-col gap-6 px-8 @max-2xl:px-4">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1060px] flex-col gap-6 px-8 @max-xl:px-4">
         {/* Narrow containers (shell side pane, slim windows) hide the nav
             column; tab switching moves into the content header's dropdown. */}
-        <div className="grid min-h-0 flex-1 grid-cols-[13rem_minmax(0,1fr)] gap-8 overflow-hidden @max-2xl:grid-cols-1 @max-2xl:grid-rows-[minmax(0,1fr)]">
-          <div className="py-10 @max-2xl:hidden">
-            <nav className="flex min-h-0 w-52 flex-col gap-0.5 overflow-y-auto">
+        <div className="grid min-h-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-6 overflow-hidden @max-xl:grid-cols-1 @max-xl:grid-rows-[minmax(0,1fr)]">
+          <div className="py-10 @max-xl:hidden">
+            <nav className="flex min-h-0 w-max min-w-28 flex-col gap-0.5 overflow-y-auto">
               {tabGroups.map((group, groupIndex) => (
                 <React.Fragment key={group[0]?.id ?? groupIndex}>
                   {groupIndex > 0 && <Separator className="my-2" />}
@@ -436,7 +436,7 @@ export function SettingsPage({
           {/* Content container */}
           {currentContent && (
             <div className="min-h-0 min-w-0 flex-1 justify-center overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]">
-              <div className="mx-auto w-full max-w-4xl space-y-8 py-10 pr-4 pl-1 @max-2xl:py-4 @max-2xl:pr-0 @max-2xl:pl-0">
+              <div className="mx-auto w-full max-w-4xl space-y-8 py-10 pr-4 pl-1 @max-xl:py-4 @max-xl:pr-0 @max-xl:pl-0">
                 <div className="flex flex-col gap-6">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 flex-col gap-1">
@@ -452,7 +452,7 @@ export function SettingsPage({
                       <SettingsTabsDropdown
                         tab={activeTab}
                         onTabChange={onTabChange}
-                        className="hidden @max-2xl:flex"
+                        className="hidden @max-xl:flex"
                       />
                     )}
                   </div>
