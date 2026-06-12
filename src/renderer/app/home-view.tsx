@@ -2900,7 +2900,7 @@ export const HomeComposer = observer(function HomeComposer({
               >
                 <Settings2 className="size-3.5" />
               </PopoverTrigger>
-              <PopoverContent align="end" className="w-96 p-3">
+              <PopoverContent align="end" className="w-96 p-2.5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span className="text-xs text-foreground">
@@ -2917,7 +2917,7 @@ export const HomeComposer = observer(function HomeComposer({
                     onCheckedChange={setAttachImagesAsPaths}
                   />
                 </div>
-                <div className="mt-3 flex flex-col gap-1.5 border-t border-border/60 pt-2.5">
+                <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
                   <ComposerSettingsHeader
                     label={t('home.promptPrinciplesLabel')}
                     action={
@@ -3006,7 +3006,7 @@ function InstructionFilesSection({ projectPath }: { projectPath?: string }) {
   });
 
   return (
-    <div className="mt-3 flex flex-col gap-1.5 border-t border-border/60 pt-2.5">
+    <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
       <ComposerSettingsHeader
         label={t('home.instructionFilesLabel')}
         hint={t('home.instructionFilesHint')}
