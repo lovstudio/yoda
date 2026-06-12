@@ -5,6 +5,44 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.9.0 — 2026-06-12
+
+### Added
+
+- **Cross-project Agent kanban (Alpha)**: a board view spanning projects —
+  drag tasks between status columns, per-column configurable hooks, and card
+  hover peek showing the summary, diff stats, and session state.
+- **Skills, round two**: trigger testing (one-click verify that a skill would
+  actually fire), generalized AI iteration (free-form edits, fork copies,
+  linked trigger tests), a tree layout grouping skills by name prefix
+  (brand/author) with count and length sorting, real invocation stats with
+  multi-dimensional sorting (alphabetical by default), and skills treated as
+  files via the shared file-action components; detail header reworked with
+  actions consolidated into a single overflow menu.
+- **Custom run principles**: a new Prompts settings page whose content is
+  injected as a system prompt at session start, with a persona section
+  rendered in the context panel.
+- **Status aggregation**: sidebar task rows roll up session states by display
+  priority — awaiting input > awaiting review > running > marked unread >
+  idle; session tab icons reflect run state, and the task-level icon keeps
+  only a notification signal that jumps to the pending session on click.
+- **Branch controls split**: branch selection and fork-or-not are independent
+  controls; non-fork runs can check out an existing branch.
+- File menu settled into three groups (in-app locations / IDE incl. Finder /
+  copy path); the "(current)" marker is detected at runtime; global files can
+  open in the sidebar of the current task.
+
+### Fixed
+
+- Third-party IME Chinese punctuation fix is enabled by default, with
+  composition guards.
+- Dropping a file onto the prompt input attaches it instead of opening a new
+  window.
+- Stale worktree directory removal failures are surfaced instead of
+  swallowed.
+- RelativeTime "ago" mode no longer renders a literal `{{time}}` or
+  duplicated suffixes; attachment chip labels are no longer clipped.
+
 ## 0.8.0 — 2026-06-12
 
 ### Added
