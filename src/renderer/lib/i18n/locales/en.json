@@ -706,6 +706,7 @@
     "instructionFilesLabel": "Instruction files",
     "instructionFilesHint": "The runtime's built-in system prompt is not editable. The global CLAUDE.md acts as your user-level system prompt; the project's CLAUDE.md / AGENTS.md are the project-level prompts. Click to expand, hover a row to open and edit.",
     "noInstructionFiles": "No instruction files found",
+    "manage": "Manage",
     "imageTokenLabel": "Image {{index}}",
     "tokenCopyPath": "Copy path",
     "tokenRevealInFinder": "Reveal in Finder",

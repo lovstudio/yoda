@@ -111,6 +111,7 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
+import { MicroLabel } from '@renderer/lib/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
@@ -2902,7 +2903,7 @@ export const HomeComposer = observer(function HomeComposer({
               <PopoverContent align="end" className="w-96 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <span className="text-sm font-medium text-foreground">
+                    <span className="text-xs text-foreground">
                       {t('home.attachImagesAsPathsLabel')}
                     </span>
                     <InfoTooltip
@@ -2910,17 +2911,32 @@ export const HomeComposer = observer(function HomeComposer({
                       content={t('home.attachImagesAsPathsDesc')}
                     />
                   </div>
-                  <Switch checked={attachImagesAsPaths} onCheckedChange={setAttachImagesAsPaths} />
+                  <Switch
+                    size="sm"
+                    checked={attachImagesAsPaths}
+                    onCheckedChange={setAttachImagesAsPaths}
+                  />
                 </div>
-                {promptPrinciples.length > 0 && (
-                  <div className="mt-3 flex flex-col gap-2 border-t border-border/60 pt-3">
-                    <span className="text-sm font-medium text-foreground">
-                      {t('home.promptPrinciplesLabel')}
-                    </span>
-                    {promptPrinciples.map((principle) => (
+                <div className="mt-3 flex flex-col gap-1.5 border-t border-border/60 pt-2.5">
+                  <ComposerSettingsHeader
+                    label={t('home.promptPrinciplesLabel')}
+                    action={
+                      <button
+                        type="button"
+                        className="font-mono text-[10px] uppercase tracking-widest text-foreground-passive transition-colors hover:text-foreground"
+                        onClick={() => navigate('settings', { tab: 'prompts' })}
+                      >
+                        {t('home.manage')}
+                      </button>
+                    }
+                  />
+                  {promptPrinciples.length === 0 ? (
+                    <p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>
+                  ) : (
+                    promptPrinciples.map((principle) => (
                       <div key={principle.id} className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-1.5">
-                          <span className="min-w-0 truncate text-xs text-foreground-muted">
+                          <span className="min-w-0 truncate text-xs text-foreground">
                             {principle.name || t('home.promptPrincipleUnnamed')}
                           </span>
                           {principle.text ? (
@@ -2941,9 +2957,9 @@ export const HomeComposer = observer(function HomeComposer({
                           aria-label={t('settings.prompts.toggle')}
                         />
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  )}
+                </div>
                 <InstructionFilesSection projectPath={skillProjectPath} />
               </PopoverContent>
             </Popover>
@@ -2953,6 +2969,27 @@ export const HomeComposer = observer(function HomeComposer({
     </div>
   );
 });
+
+/** Quiet micro-header for a composer-settings popover section: label + optional hint + trailing action. */
+function ComposerSettingsHeader({
+  label,
+  hint,
+  action,
+}: {
+  label: string;
+  hint?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <MicroLabel className="text-[10px]">{label}</MicroLabel>
+        {hint ? <InfoTooltip label={label} content={hint} /> : null}
+      </div>
+      {action}
+    </div>
+  );
+}
 
 /**
  * Composer-settings view onto the instruction files that will feed the next
@@ -2969,16 +3006,11 @@ function InstructionFilesSection({ projectPath }: { projectPath?: string }) {
   });
 
   return (
-    <div className="mt-3 flex flex-col gap-2 border-t border-border/60 pt-3">
-      <div className="flex items-center gap-1.5">
-        <span className="text-sm font-medium text-foreground">
-          {t('home.instructionFilesLabel')}
-        </span>
-        <InfoTooltip
-          label={t('home.instructionFilesLabel')}
-          content={t('home.instructionFilesHint')}
-        />
-      </div>
+    <div className="mt-3 flex flex-col gap-1.5 border-t border-border/60 pt-2.5">
+      <ComposerSettingsHeader
+        label={t('home.instructionFilesLabel')}
+        hint={t('home.instructionFilesHint')}
+      />
       {files.length === 0 ? (
         <p className="text-xs text-foreground-passive">{t('home.noInstructionFiles')}</p>
       ) : (

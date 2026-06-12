@@ -706,6 +706,7 @@
     "instructionFilesLabel": "指令文件",
     "instructionFilesHint": "Runtime 内置 system prompt 不可编辑。全局 CLAUDE.md 充当用户级 system prompt，项目 CLAUDE.md / AGENTS.md 是项目级 prompt。点击展开查看，悬停行尾可打开编辑。",
     "noInstructionFiles": "未找到指令文件",
+    "manage": "管理",
     "imageTokenLabel": "图 {{index}}",
     "tokenCopyPath": "复制路径",
     "tokenRevealInFinder": "在 Finder 中显示",
