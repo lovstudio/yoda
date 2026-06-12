@@ -4,6 +4,7 @@ import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ClaudeSessionMetadata, ClaudeTodo } from '@shared/conversations';
+import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
 import { MicroLabel } from '@renderer/lib/ui/label';
@@ -24,15 +25,17 @@ export function useTaskTodos(): {
   loading: boolean;
 } {
   const provisioned = useProvisionedTask();
-  const activeConversation = provisioned.taskView.tabManager.activeConversation;
-  const isClaude = activeConversation?.data.runtimeId === 'claude';
+  // Falls back to the task's most recent conversation when the active main-area
+  // tab is a file/diff — the todo list must not vanish on tab switches.
+  const conversation = getTaskMenuConversation(provisioned);
+  const isClaude = conversation?.runtimeId === 'claude';
   const cwd = provisioned.path;
-  const sessionId = activeConversation?.data.id ?? '';
+  const sessionId = conversation?.id ?? '';
 
   const { data, isPending } = useQuery<ClaudeSessionMetadata | null>({
     queryKey: ['claudeSessionMetadata', cwd, sessionId],
     queryFn: () => rpc.conversations.getClaudeSessionMetadata(cwd, sessionId),
-    enabled: Boolean(isClaude && activeConversation),
+    enabled: Boolean(isClaude && conversation),
     refetchInterval: REFRESH_MS,
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: false,
@@ -44,7 +47,7 @@ export function useTaskTodos(): {
     todos,
     done: todos.filter((todo) => todo.status === 'completed').length,
     isClaude: Boolean(isClaude),
-    hasConversation: Boolean(activeConversation),
+    hasConversation: Boolean(conversation),
     loading: isPending,
   };
 }
