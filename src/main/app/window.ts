@@ -114,8 +114,16 @@ function createAppWindow(
   // Route external links to the user’s default browser
   registerExternalLinkHandlers(win, import.meta.env.DEV);
 
-  // Warm windows stay hidden until claimed; the claimer shows them.
-  if (!options.warm) {
+  if (!isTaskWindow) {
+    // Show the shell immediately instead of waiting for ready-to-show: the
+    // renderer bundle takes seconds to load, and the native backgroundColor
+    // plus the static splash in index.html paint the same #111111 the boot
+    // screen uses — no flash, just a window that exists right away.
+    win.show();
+  } else if (!options.warm) {
+    // Task windows keep the ready-to-show gate (they normally claim a
+    // pre-warmed, already-rendered window). Warm windows stay hidden until
+    // claimed; the claimer shows them.
     win.once('ready-to-show', () => {
       win.show();
     });

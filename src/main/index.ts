@@ -165,7 +165,9 @@ void app.whenReady().then(async () => {
     // Deferred so it doesn't compete with the main window's own boot.
     setTimeout(() => warmTaskWindowPool(), 1500);
   });
-  __win.once('ready-to-show', () => __bootMark('window ready-to-show (user sees UI)'));
+  // The window is shown immediately on creation; ready-to-show now only marks
+  // the renderer's first paint (splash → boot screen handoff).
+  __win.once('ready-to-show', () => __bootMark('window ready-to-show (first renderer paint)'));
 
   // Everything below is non-blocking for first paint — kick off in parallel.
   telemetryService.initialize({ installSource: app.isPackaged ? 'dmg' : 'dev' }).catch((e) => {
