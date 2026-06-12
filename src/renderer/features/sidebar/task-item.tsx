@@ -24,7 +24,7 @@ import {
   asProvisioned,
   getTaskManagerStore,
   getTaskStore,
-  taskAgentStatus,
+  taskNotificationStatus,
 } from '@renderer/features/tasks/stores/task-selectors';
 import { OVERVIEW_TAB_ID } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { rpc } from '@renderer/lib/ipc';
@@ -97,7 +97,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     task.state === 'unregistered' ||
     (task.state === 'unprovisioned' &&
       (task.phase === 'provision' || task.phase === 'provision-error'));
-  const isAgentWorking = taskAgentStatus(task) === 'working';
+  // A pending notification pins the status slot (it's a click target for
+  // jumping to the session); plain running state no longer blocks the
+  // hover action buttons — the session tabs spin on their own.
+  const hasAgentNotification = taskNotificationStatus(task) !== null;
 
   const taskName = task.data.name;
   const treeDepth = rowVariant === 'underProject' ? Math.min(depth, TASK_TREE_MAX_VISUAL_DEPTH) : 0;
@@ -442,7 +445,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
             'items-center gap-0.5',
             isMenuOpen || isArchiving || isArchiveConfirming
               ? 'flex'
-              : isAgentWorking
+              : hasAgentNotification
                 ? 'hidden'
                 : 'hidden group-hover/row:flex'
           )}
@@ -508,7 +511,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
             'items-center',
             isMenuOpen || isArchiving || isArchiveConfirming
               ? 'hidden'
-              : isAgentWorking
+              : hasAgentNotification
                 ? 'flex'
                 : 'flex group-hover/row:hidden'
           )}

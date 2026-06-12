@@ -152,6 +152,7 @@
     "clearManualOrder": "重置任务顺序",
     "update": "更新",
     "creatingWorkspace": "正在创建任务工作区…",
+    "openPendingSession": "查看下一条待处理会话",
     "loading": "加载中",
     "projectNotFound": "项目路径未找到",
     "reconnect": "重新连接",

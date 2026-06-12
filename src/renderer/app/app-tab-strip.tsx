@@ -36,6 +36,7 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { archiveConversationFlow } from '@renderer/features/tasks/archive-task';
+import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
@@ -364,16 +365,23 @@ function describeTaskTab(
     }
     case 'conversation': {
       const provisioned = asProvisioned(taskStore);
-      const data = provisioned?.conversations.conversations.get(target.conversationId)?.data;
+      const conversation = provisioned?.conversations.conversations.get(target.conversationId);
+      const data = conversation?.data;
       const config = data ? agentConfig[data.runtimeId] : undefined;
       const label = data
         ? formatConversationTitleForDisplay(data.runtimeId, data.title).trim() ||
           config?.name ||
           data.runtimeId
         : t('appTabs.task');
+      // The session's run state takes over the icon slot while it has one
+      // (working / awaiting-input / unread error/completed) — same indicator
+      // as the conversations list — and falls back to the runtime logo.
+      const status = conversation?.indicatorStatus ?? null;
       return {
         label,
-        icon: config ? (
+        icon: status ? (
+          <AgentStatusIndicator status={status} disableTooltip boxClassName="size-4" />
+        ) : config ? (
           <AgentLogo
             logo={config.logo}
             alt={config.alt}

@@ -115,6 +115,47 @@ export function taskAgentStatus(store: TaskStore): AgentStatus | null {
   return asProvisioned(store)?.conversations.taskStatus ?? null;
 }
 
+/**
+ * Task-level notification signal: only statuses that need the user
+ * (awaiting-input, or unread error/completed). `working` is a session-level
+ * concern — the session tabs spin on their own — so it never surfaces here.
+ */
+export function taskNotificationStatus(store: TaskStore): AgentStatus | null {
+  const status = taskAgentStatus(store);
+  return status === 'working' || status === 'idle' ? null : status;
+}
+
+/**
+ * The next session that needs consuming: awaiting-input first, then unread
+ * error/completed, in conversation order. Cycles past `afterConversationId`
+ * (the one currently in view) so repeated clicks walk the pending list.
+ */
+export function nextAttentionConversationId(
+  store: TaskStore,
+  afterConversationId?: string
+): string | undefined {
+  const provisioned = asProvisioned(store);
+  let candidates: string[];
+  if (provisioned) {
+    const awaiting: string[] = [];
+    const finished: string[] = [];
+    for (const conversation of provisioned.conversations.conversations.values()) {
+      const status = conversation.indicatorStatus;
+      if (status === 'awaiting-input') awaiting.push(conversation.data.id);
+      else if (status === 'error' || status === 'completed') finished.push(conversation.data.id);
+    }
+    candidates = [...awaiting, ...finished];
+  } else {
+    const task = registeredTaskData(store);
+    candidates = task
+      ? appState.agentRuntime.attentionConversationIds(task.projectId, task.id)
+      : [];
+  }
+  if (candidates.length === 0) return undefined;
+  const index = afterConversationId ? candidates.indexOf(afterConversationId) : -1;
+  return candidates[(index + 1) % candidates.length];
+}
+
 export type TaskViewKind =
   | 'missing'
   | 'project-mounting' // project is still opening — task data not yet available

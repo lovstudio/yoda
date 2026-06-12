@@ -154,6 +154,7 @@
     "expressModeDescription": "The “+” on a project row skips the home configuration and creates a task immediately: auto-named, branched off the default branch, with a session started on the last-used runtime. If the runtime or default branch is not ready yet, the home view opens instead so you can fill it in.",
     "update": "Update",
     "creatingWorkspace": "Creating task workspace…",
+    "openPendingSession": "Open next pending session",
     "loading": "Loading",
     "projectNotFound": "Project not found at path",
     "reconnect": "Reconnect",

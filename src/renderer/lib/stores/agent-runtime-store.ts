@@ -103,6 +103,25 @@ export class AgentRuntimeStore {
     return null;
   }
 
+  /**
+   * Conversation ids of this task that want the user's attention, ordered
+   * awaiting-input first, then error/completed. Drives the sidebar's
+   * "jump to next pending session" affordance for tasks that aren't mounted
+   * (mounted tasks use the finer-grained per-conversation `seen` flags).
+   */
+  attentionConversationIds(projectId: string, taskId: string): string[] {
+    const prefix = `${taskKey(projectId, taskId)}\0`;
+    const awaiting: string[] = [];
+    const finished: string[] = [];
+    for (const [key, status] of this.statuses) {
+      if (!key.startsWith(prefix)) continue;
+      if (status === 'awaiting-input') awaiting.push(key.slice(prefix.length));
+      else if (status === 'error' || status === 'completed')
+        finished.push(key.slice(prefix.length));
+    }
+    return [...awaiting, ...finished];
+  }
+
   /** Conversation ids of this task whose sessions are currently `working`. */
   workingConversationIds(projectId: string, taskId: string): string[] {
     const prefix = `${taskKey(projectId, taskId)}\0`;

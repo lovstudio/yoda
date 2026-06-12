@@ -9,6 +9,8 @@ export type AgentIndicatorStatus = AgentStatus | null;
 interface AgentStatusIndicatorProps {
   status: AgentIndicatorStatus;
   className?: string;
+  /** Overrides the size-6 wrapper box (e.g. `size-4` in the top tab strip's icon slot). */
+  boxClassName?: string;
   disableTooltip?: boolean;
   /** When set and status is `working`, hover swaps the spinner for a stop icon and click interrupts. */
   onInterrupt?: () => void;
@@ -17,6 +19,7 @@ interface AgentStatusIndicatorProps {
 export function AgentStatusIndicator({
   status,
   className,
+  boxClassName,
   disableTooltip,
   onInterrupt,
 }: AgentStatusIndicatorProps) {
@@ -93,7 +96,9 @@ export function AgentStatusIndicator({
   };
 
   const indicator = (
-    <span className="size-6 flex items-center justify-center">{renderIndicator()}</span>
+    <span className={cn('size-6 flex items-center justify-center', boxClassName)}>
+      {renderIndicator()}
+    </span>
   );
 
   if (disableTooltip) return indicator;
