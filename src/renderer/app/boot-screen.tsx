@@ -389,7 +389,7 @@ export function BootScreen({ ready, onFinished }: BootScreenProps) {
             className="ml-[0.18em] inline-block w-[0.5ch]"
             style={{
               height: '0.74em',
-              border: `1px solid ${MINT}`,
+              border: `1px solid ${MUTED}`,
               transform: 'translateY(0.06em)',
             }}
             initial={{ opacity: 0 }}
