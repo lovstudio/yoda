@@ -6,7 +6,7 @@ import {
 } from '@renderer/features/tasks/components/file-actions';
 import { PersistedDetails } from '@renderer/features/tasks/components/persisted-disclosure';
 import { useProvisionedTaskOrNull } from '@renderer/features/tasks/task-view-context';
-import { FilePathActionsDropdown } from '@renderer/lib/components/file-path-actions';
+import { GlobalFileActionsDropdown } from '@renderer/lib/components/file-path-actions';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { cn } from '@renderer/utils/utils';
 
@@ -108,7 +108,7 @@ function ContextItemTrailing({
         {taskScoped ? (
           <FileActionsDropdown sourcePath={sourcePath} />
         ) : (
-          <FilePathActionsDropdown target={{ absolutePath: sourcePath }} />
+          <GlobalFileActionsDropdown absolutePath={sourcePath} />
         )}
       </span>
     </span>
