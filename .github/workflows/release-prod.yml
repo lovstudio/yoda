@@ -77,6 +77,11 @@ jobs:
             printf 'Release v%s\n' "$VERSION" > release-notes.md
           fi
 
+      - name: Pin versioned URLs in update manifests
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: node --experimental-strip-types scripts/release/pin-feed-urls.ts
+
       - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
@@ -183,6 +188,11 @@ jobs:
           if [ ! -s release-notes.md ]; then
             printf 'Release v%s\n' "$VERSION" > release-notes.md
           fi
+
+      - name: Pin versioned URLs in update manifests
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: node --experimental-strip-types scripts/release/pin-feed-urls.ts
 
       - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -319,6 +329,11 @@ jobs:
           if [ ! -s release-notes.md ]; then
             printf 'Release v%s\n' "$VERSION" > release-notes.md
           fi
+
+      - name: Pin versioned URLs in update manifests
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: node --experimental-strip-types scripts/release/pin-feed-urls.ts
 
       - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
