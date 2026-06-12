@@ -2,11 +2,14 @@
   <img src="docs/images/cover.png" alt="Yoda 封面图" width="100%">
 </p>
 
-<h1 align="center">Yoda</h1>
+<h1 align="center">
+  <img src="docs/public/yoda-app-icon.svg" width="34" height="34" alt="Yoda logo" align="top">
+  Yoda
+</h1>
 
 <p align="center">
-  <strong>Harness for your Agent Workspace</strong><br>
-  <sub>把 Claude Code、Codex、Gemini 等 27 种 Runtime 收进同一个工作区——按任务挑选、并行开工、互相 review，Skills / Hooks / Memory / 上下文尽收眼底。</sub>
+  <strong>Your Orchestra of Delegated Agents</strong><br>
+  <sub>Harness for your Agent Workspace——把 Claude Code、Codex、Gemini 等 27 种 Runtime 收进同一个工作区：按任务挑选、并行开工、互相 review，Skills / Hooks / Memory / 上下文尽收眼底。</sub>
 </p>
 
 <div align="center">
@@ -33,7 +36,7 @@
 
 <br><br>
 
-[文档](https://yoda.lovstudio.ai/docs) · [为什么选择](#why-yoda) · [亮点](#highlights) · [安装](#installation) · [Runtime](#providers) · [架构](#architecture) · [技术栈](#tech-stack) · [贡献](#contributing) · [FAQ](#faq)
+[文档](https://yoda.lovstudio.ai/docs) · [设计语言](https://yoda.lovstudio.ai/design/) · [为什么选择](#why-yoda) · [亮点](#highlights) · [安装](#installation) · [Runtime](#providers) · [架构](#architecture) · [技术栈](#tech-stack) · [贡献](#contributing) · [FAQ](#faq)
 
 </div>
 
