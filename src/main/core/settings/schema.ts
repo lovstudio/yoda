@@ -333,6 +333,15 @@ export const homeDraftSchema = z.preprocess(
     selectedProjectId: z.string().nullable(),
     strategyKind: z.enum(['new-branch', 'no-worktree']),
     reviewStrategyKind: z.enum(['new-branch', 'no-worktree']),
+    /** User-picked base branch for forked tasks. null = project default branch.
+     *  Cleared whenever the composer switches projects. */
+    baseBranch: z
+      .object({
+        type: z.enum(['local', 'remote']),
+        branch: z.string(),
+        remoteName: z.string().optional(),
+      })
+      .nullable(),
     runtimeOverride: z.enum(RUNTIME_IDS).nullable(),
     runMode: homeRunModeSchema,
     compareRuntimes: z.array(z.enum(RUNTIME_IDS)),

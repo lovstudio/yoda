@@ -12,6 +12,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  GitBranch,
   GitCompare,
   GitFork,
   Image as ImageIcon,
@@ -57,6 +58,7 @@ import {
 } from '@shared/agent-command-prefix';
 import type { Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
+import type { Branch } from '@shared/git';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import type { CatalogIndex } from '@shared/skills/types';
@@ -78,6 +80,7 @@ import { useRuntimeAutoApproveDefaults } from '@renderer/features/tasks/hooks/us
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { AgentSlotSelector } from '@renderer/lib/components/agent-slot/agent-slot-selector';
+import { ProjectBranchSelector } from '@renderer/lib/components/project-branch-selector';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useAccountSession } from '@renderer/lib/hooks/useAccount';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
@@ -876,16 +879,22 @@ export const HomeComposer = observer(function HomeComposer({
   const setSelectedProjectId = useCallback(
     (next: string | undefined) => {
       if (isProjectLocked) return;
-      updateDraft({ selectedProjectId: next ?? null });
+      // The picked base branch belongs to the previous project — reset it.
+      updateDraft({ selectedProjectId: next ?? null, baseBranch: null });
     },
     [isProjectLocked, updateDraft]
   );
 
+  const draftProjectId = draft?.selectedProjectId ?? null;
   useEffect(() => {
     if (!homeProjectId || isProjectLocked) return;
-    updateDraft({ selectedProjectId: homeProjectId });
+    updateDraft(
+      homeProjectId === draftProjectId
+        ? { selectedProjectId: homeProjectId }
+        : { selectedProjectId: homeProjectId, baseBranch: null }
+    );
     setHomeParams({ projectId: undefined });
-  }, [homeProjectId, setHomeParams, isProjectLocked, updateDraft]);
+  }, [homeProjectId, setHomeParams, isProjectLocked, updateDraft, draftProjectId]);
 
   const projectStore = selectedProjectId
     ? projectManager.projects.get(selectedProjectId)
@@ -913,29 +922,63 @@ export const HomeComposer = observer(function HomeComposer({
   const repo = selectedProjectId ? getRepositoryStore(selectedProjectId) : undefined;
   const defaultBranch = repo?.defaultBranch;
   const isUnborn = repo?.isUnborn ?? false;
-  const branchLabel = parentBranchName ?? defaultBranch?.branch ?? repo?.currentBranch ?? 'main';
+
+  // Base branch for forked tasks: the persisted pick, resolved against the
+  // live branch list so a stale pick silently falls back to the default.
+  const draftBaseBranch = draft?.baseBranch ?? null;
+  const pickedBaseBranch = draftBaseBranch
+    ? repo?.branches.find(
+        (b) =>
+          b.type === draftBaseBranch.type &&
+          b.branch === draftBaseBranch.branch &&
+          (b.type !== 'remote' || b.remote.name === draftBaseBranch.remoteName)
+      )
+    : undefined;
+  const setBaseBranch = useCallback(
+    (next: Branch) => {
+      updateDraft({
+        baseBranch: {
+          type: next.type,
+          branch: next.branch,
+          ...(next.type === 'remote' ? { remoteName: next.remote.name } : {}),
+        },
+      });
+    },
+    [updateDraft]
+  );
+  // Subtasks always branch off the parent task's branch.
+  const forkBaseBranch: Branch | undefined = useMemo(
+    () =>
+      parentBranchName
+        ? { type: 'local', branch: parentBranchName }
+        : (pickedBaseBranch ?? defaultBranch),
+    [parentBranchName, pickedBaseBranch, defaultBranch]
+  );
+  const forkBaseLabel = forkBaseBranch
+    ? forkBaseBranch.type === 'remote'
+      ? `${forkBaseBranch.remote.name}/${forkBaseBranch.branch}`
+      : forkBaseBranch.branch
+    : 'main';
+  // No-worktree tasks run in place, i.e. on whatever is currently checked out.
+  const inPlaceBranchLabel = repo?.currentBranch ?? forkBaseLabel;
   const runHostKind: RunHostKind = projectData?.type === 'ssh' ? 'ssh' : 'local';
   const strategyLabels = useMemo(
     () => ({
-      chipNewBranch: t('home.strategyChipNewBranch', { branch: branchLabel }),
-      chipNoWorktree: t('home.strategyChipNoWorktree', { branch: branchLabel }),
-      newBranchTitle: t('home.strategyNewBranchTitle', { branch: branchLabel }),
-      newBranchDesc: t('home.strategyNewBranchDesc', { branch: branchLabel }),
-      noWorktreeTitle: t('home.strategyNoWorktreeTitle', { branch: branchLabel }),
+      newBranchTitle: t('home.strategyNewBranchTitle', { branch: forkBaseLabel }),
+      newBranchDesc: t('home.strategyNewBranchDesc', { branch: forkBaseLabel }),
+      noWorktreeTitle: t('home.strategyNoWorktreeTitle', { branch: inPlaceBranchLabel }),
       noWorktreeDesc: t('home.strategyNoWorktreeDesc'),
     }),
-    [branchLabel, t]
+    [forkBaseLabel, inPlaceBranchLabel, t]
   );
   const reviewStrategyLabels = useMemo(
     () => ({
-      chipNewBranch: t('home.reviewStrategyChipNewBranch', { branch: branchLabel }),
-      chipNoWorktree: t('home.reviewStrategyChipSameBranch', { branch: branchLabel }),
-      newBranchTitle: t('home.reviewStrategyNewBranchTitle', { branch: branchLabel }),
-      newBranchDesc: t('home.reviewStrategyNewBranchDesc', { branch: branchLabel }),
-      noWorktreeTitle: t('home.reviewStrategySameBranchTitle', { branch: branchLabel }),
+      newBranchTitle: t('home.reviewStrategyNewBranchTitle', { branch: forkBaseLabel }),
+      newBranchDesc: t('home.reviewStrategyNewBranchDesc', { branch: forkBaseLabel }),
+      noWorktreeTitle: t('home.reviewStrategySameBranchTitle', { branch: inPlaceBranchLabel }),
       noWorktreeDesc: t('home.reviewStrategySameBranchDesc'),
     }),
-    [branchLabel, t]
+    [forkBaseLabel, inPlaceBranchLabel, t]
   );
 
   const providerOverrideValue = draft?.runtimeOverride ?? null;
@@ -1822,9 +1865,12 @@ export const HomeComposer = observer(function HomeComposer({
           id: taskId,
           projectId: mounted.data.id,
           name: taskName,
-          sourceBranch: parentBranchName
-            ? { type: 'local', branch: parentBranchName }
-            : defaultBranch,
+          sourceBranch:
+            args.strategyKind === 'new-branch'
+              ? (forkBaseBranch ?? defaultBranch)
+              : parentBranchName
+                ? { type: 'local', branch: parentBranchName }
+                : defaultBranch,
           strategy,
           parentTaskId: parentTarget?.taskId,
           initialConversation: {
@@ -1999,6 +2045,7 @@ export const HomeComposer = observer(function HomeComposer({
     targetProvisionedTask,
     runtimeId,
     defaultBranch,
+    forkBaseBranch,
     promptTokens,
     attachImagesAsPaths,
     clearPromptTokens,
@@ -2681,22 +2728,48 @@ export const HomeComposer = observer(function HomeComposer({
               <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
             )}
             {!taskScopedTarget && mounted && runMode === 'normal' && (
-              <StrategyChip
-                strategyKind={effectiveStandardStrategyKind}
-                disabled={isUnborn}
-                onChange={setStrategyKind}
-                ariaLabel={t('home.strategyAria')}
-                labels={strategyLabels}
-              />
+              <>
+                <BaseBranchChip
+                  projectId={mounted.data.id}
+                  forking={effectiveStandardStrategyKind === 'new-branch'}
+                  locked={Boolean(parentBranchName)}
+                  value={forkBaseBranch}
+                  forkLabel={forkBaseLabel}
+                  inPlaceLabel={inPlaceBranchLabel}
+                  onChange={setBaseBranch}
+                  ariaLabel={t('home.baseBranchAria')}
+                />
+                <ForkSwitchChip
+                  checked={effectiveStandardStrategyKind === 'new-branch'}
+                  disabled={isUnborn}
+                  onChange={(forked) => setStrategyKind(forked ? 'new-branch' : 'no-worktree')}
+                  ariaLabel={t('home.strategyAria')}
+                  labels={strategyLabels}
+                />
+              </>
             )}
             {!taskScopedTarget && mounted && runMode === 'review' && (
-              <StrategyChip
-                strategyKind={effectiveReviewStrategyKind}
-                disabled={isUnborn}
-                onChange={setReviewStrategyKind}
-                ariaLabel={t('home.reviewStrategyAria')}
-                labels={reviewStrategyLabels}
-              />
+              <>
+                <BaseBranchChip
+                  projectId={mounted.data.id}
+                  forking={effectiveReviewStrategyKind === 'new-branch'}
+                  locked={Boolean(parentBranchName)}
+                  value={forkBaseBranch}
+                  forkLabel={forkBaseLabel}
+                  inPlaceLabel={inPlaceBranchLabel}
+                  onChange={setBaseBranch}
+                  ariaLabel={t('home.baseBranchAria')}
+                />
+                <ForkSwitchChip
+                  checked={effectiveReviewStrategyKind === 'new-branch'}
+                  disabled={isUnborn}
+                  onChange={(forked) =>
+                    setReviewStrategyKind(forked ? 'new-branch' : 'no-worktree')
+                  }
+                  ariaLabel={t('home.reviewStrategyAria')}
+                  labels={reviewStrategyLabels}
+                />
+              </>
             )}
             <RunModeSelector
               mode={runMode}
@@ -3164,8 +3237,6 @@ function RunModeSelector({
 }
 
 interface StrategyChipLabels {
-  chipNewBranch: string;
-  chipNoWorktree: string;
   newBranchTitle: string;
   newBranchDesc: string;
   noWorktreeTitle: string;
@@ -3479,70 +3550,118 @@ function RunHostSelector({ kind }: RunHostSelectorProps) {
   );
 }
 
-interface StrategyChipProps {
-  strategyKind: TaskStrategyKind;
-  disabled: boolean;
-  onChange: (next: TaskStrategyKind) => void;
+interface BaseBranchChipProps {
+  projectId: string;
+  /** Whether the task will fork (new-branch strategy). Only then is the base branch pickable. */
+  forking: boolean;
+  /** Subtasks are pinned to the parent task's branch. */
+  locked: boolean;
+  value: Branch | undefined;
+  forkLabel: string;
+  inPlaceLabel: string;
+  onChange: (next: Branch) => void;
   ariaLabel: string;
-  labels: StrategyChipLabels;
 }
 
-function StrategyChip({ strategyKind, disabled, onChange, ariaLabel, labels }: StrategyChipProps) {
-  const isNewBranch = strategyKind === 'new-branch';
-  const Icon = isNewBranch ? GitFork : Anchor;
-  const chipLabel = isNewBranch ? labels.chipNewBranch : labels.chipNoWorktree;
-
-  if (disabled) {
+function BaseBranchChip({
+  projectId,
+  forking,
+  locked,
+  value,
+  forkLabel,
+  inPlaceLabel,
+  onChange,
+  ariaLabel,
+}: BaseBranchChipProps) {
+  if (!forking || locked) {
+    // Not forking → the task runs on whatever is checked out; forking but
+    // locked → the base is dictated by the parent task. Read-only either way.
     return (
       <span className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground">
-        <Icon className="size-3.5 text-foreground-muted" />
-        {chipLabel}
+        {forking ? (
+          <GitBranch className="size-3.5 text-foreground-muted" />
+        ) : (
+          <Anchor className="size-3.5 text-foreground-muted" />
+        )}
+        {forking ? forkLabel : inPlaceLabel}
       </span>
     );
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
+    <ProjectBranchSelector
+      projectId={projectId}
+      value={value}
+      onValueChange={onChange}
+      trigger={
+        <ComboboxTrigger
+          aria-label={ariaLabel}
+          className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
+        >
+          <GitBranch className="size-3.5 text-foreground-muted" />
+          <ComboboxValue />
+          <ChevronDown className="size-3 text-foreground-muted" />
+        </ComboboxTrigger>
+      }
+    />
+  );
+}
+
+interface ForkSwitchChipProps {
+  checked: boolean;
+  disabled: boolean;
+  onChange: (forked: boolean) => void;
+  ariaLabel: string;
+  labels: StrategyChipLabels;
+}
+
+function ForkSwitchChip({ checked, disabled, onChange, ariaLabel, labels }: ForkSwitchChipProps) {
+  const { t } = useTranslation();
+  const title = checked ? labels.newBranchTitle : labels.noWorktreeTitle;
+  const desc = checked ? labels.newBranchDesc : labels.noWorktreeDesc;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
         render={
           <button
             type="button"
+            role="switch"
+            aria-checked={checked}
             aria-label={ariaLabel}
-            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
+            disabled={disabled}
+            onClick={() => onChange(!checked)}
+            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:pointer-events-none disabled:opacity-50"
           >
-            <Icon className="size-3.5 text-foreground-muted" />
-            <span>{chipLabel}</span>
-            <ChevronDown className="size-3 text-foreground-muted" />
+            <GitFork className="size-3.5 text-foreground-muted" />
+            <span>{t('home.forkChipLabel')}</span>
+            {/* Visual-only mini switch (the chip button carries the switch role);
+                mirrors the sm Switch in @renderer/lib/ui/switch. */}
+            <span
+              className={cn(
+                'relative inline-flex h-[14px] w-[24px] shrink-0 items-center rounded-full border border-border-1 transition-colors',
+                checked ? 'bg-background-neutral' : 'bg-background'
+              )}
+            >
+              <span
+                className={cn(
+                  'pointer-events-none block size-3 rounded-full transition-transform',
+                  checked
+                    ? 'translate-x-[calc(100%-2px)] bg-background-3'
+                    : 'translate-x-0 bg-background-neutral/50'
+                )}
+              />
+            </span>
           </button>
         }
       />
-      <DropdownMenuContent align="start" className="w-80 p-1.5">
-        <DropdownMenuItem
-          onClick={() => onChange('no-worktree')}
-          className="items-start gap-3 rounded-md px-2.5 py-2"
-        >
-          <Anchor className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
-          <div className="flex flex-col gap-0.5">
-            <span className="text-sm font-medium text-foreground">{labels.noWorktreeTitle}</span>
-            <span className="text-xs leading-snug text-foreground-muted">
-              {labels.noWorktreeDesc}
-            </span>
-          </div>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => onChange('new-branch')}
-          className="items-start gap-3 rounded-md px-2.5 py-2"
-        >
-          <GitFork className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
-          <div className="flex flex-col gap-0.5">
-            <span className="text-sm font-medium text-foreground">{labels.newBranchTitle}</span>
-            <span className="text-xs leading-snug text-foreground-muted">
-              {labels.newBranchDesc}
-            </span>
-          </div>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      <TooltipContent align="start" className="max-w-72">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium">{title}</span>
+          <span className="text-foreground-muted">{desc}</span>
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
