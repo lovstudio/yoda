@@ -1,13 +1,17 @@
 import { action, observable } from 'mobx';
-import { useState, type DragEvent, type HTMLAttributes } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TaskWindowTabTarget } from '@shared/task-window';
 import type { SidebarTabGroup } from '@renderer/features/tasks/types';
 import type { AppTabEntry } from '@renderer/lib/stores/app-tabs-store';
 
 /**
  * Cross-area tab dragging (top strip ↔ task sidebar strip ↔ shell side pane),
- * built on native HTML5 drag-and-drop: the strips live in unrelated React
- * subtrees, so a shared module-level payload replaces a common DnD context.
+ * built on pointer events — NOT HTML5 drag-and-drop. The OS drag loop that
+ * HTML5 DnD enters on macOS doesn't reliably deliver dragover/drop inside this
+ * frameless window (titlebar `-webkit-app-region: drag` interplay), while
+ * pointer-driven dragging — the same model dnd-kit uses for the kanban board —
+ * works everywhere. The strips live in unrelated React subtrees, so a
+ * module-level payload + drop-zone registry replaces a common DnD context.
  * Each strip declares what it accepts and performs the move with the same
  * store methods its context menu uses.
  */
@@ -33,9 +37,24 @@ export type TabDragPayload =
   /** A task-sidebar feature card — reorders within the sidebar strip only. */
   | { kind: 'sidebar-group'; group: SidebarTabGroup };
 
-const TAB_DRAG_MIME = 'application/x-yoda-tab';
+/** What a drop handler receives: the zone element plus the pointer position. */
+export type TabDropEvent = { currentTarget: HTMLElement; clientX: number };
 
-/** Observable so strips can react (e.g. lift the window drag region) while a drag runs. */
+export type TabDragSourceProps = { onMouseDown: React.MouseEventHandler<HTMLElement> };
+
+type DropZone = {
+  node: HTMLElement;
+  canDrop: (payload: TabDragPayload) => boolean;
+  onDrop: (payload: TabDragPayload, event: TabDropEvent) => void;
+  setIsOver: (over: boolean) => void;
+};
+
+const zones = new Set<DropZone>();
+
+/** Movement (px) from mousedown before the gesture becomes a drag, not a click. */
+const DRAG_THRESHOLD_PX = 4;
+
+/** Observable so observer components can react while a drag runs. */
 const currentDrag = observable.box<TabDragPayload | null>(null, { deep: false });
 const setCurrentDrag = action((payload: TabDragPayload | null) => currentDrag.set(payload));
 
@@ -44,75 +63,184 @@ export function activeTabDrag(): TabDragPayload | null {
   return currentDrag.get();
 }
 
-export type TabDragSourceProps = Pick<
-  HTMLAttributes<HTMLElement>,
-  'draggable' | 'onDragStart' | 'onDragEnd'
->;
+let pending: { payload: () => TabDragPayload; x: number; y: number; source: HTMLElement } | null =
+  null;
+let active: { payload: TabDragPayload; ghost: HTMLElement; over: DropZone | null } | null = null;
 
 /** Drag-source DOM props for a chip/tab. The payload is built lazily at drag start. */
 export function tabDragSource(payload: () => TabDragPayload): TabDragSourceProps {
   return {
-    draggable: true,
-    onDragStart: (event) => {
-      const data = payload();
-      setCurrentDrag(data);
-      event.dataTransfer.effectAllowed = 'move';
-      // Marks the native session as ours; drop logic reads the module state.
-      event.dataTransfer.setData(TAB_DRAG_MIME, JSON.stringify(data));
+    onMouseDown: (event) => {
+      if (event.button !== 0) return;
+      // The chip's close (×) button must keep its plain click behavior.
+      if ((event.target as HTMLElement).closest('button')) return;
+      pending = {
+        payload,
+        x: event.clientX,
+        y: event.clientY,
+        source: event.currentTarget as HTMLElement,
+      };
+      window.addEventListener('mousemove', onMouseMove, true);
+      window.addEventListener('mouseup', onMouseUp, true);
+      window.addEventListener('keydown', onKeyDown, true);
     },
-    onDragEnd: () => setCurrentDrag(null),
   };
 }
 
+function onMouseMove(event: MouseEvent): void {
+  if (pending && !active) {
+    if (Math.hypot(event.clientX - pending.x, event.clientY - pending.y) < DRAG_THRESHOLD_PX) {
+      return;
+    }
+    beginDrag();
+  }
+  if (!active) return;
+  event.preventDefault();
+  positionGhost(active.ghost, event);
+  updateOver(event);
+}
+
+function beginDrag(): void {
+  if (!pending) return;
+  const ghost = buildGhost(pending.source);
+  active = { payload: pending.payload(), ghost, over: null };
+  setCurrentDrag(active.payload);
+  document.body.style.cursor = 'grabbing';
+}
+
+/** Highlight the zone under the pointer that accepts the payload, if any. */
+function updateOver(event: MouseEvent): void {
+  if (!active) return;
+  const el = document.elementFromPoint(event.clientX, event.clientY);
+  let next: DropZone | null = null;
+  if (el) {
+    for (const zone of zones) {
+      if (zone.node.contains(el) && zone.canDrop(active.payload)) {
+        next = zone;
+        break;
+      }
+    }
+  }
+  if (active.over === next) return;
+  active.over?.setIsOver(false);
+  next?.setIsOver(true);
+  active.over = next;
+}
+
+function onMouseUp(event: MouseEvent): void {
+  const finished = active;
+  if (finished) {
+    event.preventDefault();
+    event.stopPropagation();
+    suppressNextClick();
+  }
+  endDrag();
+  if (finished?.over) {
+    finished.over.onDrop(finished.payload, {
+      currentTarget: finished.over.node,
+      clientX: event.clientX,
+    });
+  }
+}
+
+function onKeyDown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') endDrag();
+}
+
+function endDrag(): void {
+  window.removeEventListener('mousemove', onMouseMove, true);
+  window.removeEventListener('mouseup', onMouseUp, true);
+  window.removeEventListener('keydown', onKeyDown, true);
+  active?.over?.setIsOver(false);
+  active?.ghost.remove();
+  document.body.style.cursor = '';
+  pending = null;
+  active = null;
+  setCurrentDrag(null);
+}
+
 /**
- * Drop-zone DOM props for a strip container. `canDrop` gates the dragover
+ * A completed drag's mouseup still dispatches a click at the common ancestor —
+ * swallow that one so dropping never doubles as selecting. The browser fires
+ * it synchronously after mouseup, so a 0-timeout safely retires the guard when
+ * no click materializes.
+ */
+function suppressNextClick(): void {
+  const swallow = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  window.addEventListener('click', swallow, { capture: true, once: true });
+  setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 0);
+}
+
+/** Semi-transparent clone of the dragged chip, following the pointer. */
+function buildGhost(source: HTMLElement): HTMLElement {
+  const ghost = source.cloneNode(true) as HTMLElement;
+  const rect = source.getBoundingClientRect();
+  ghost.style.position = 'fixed';
+  ghost.style.left = '0';
+  ghost.style.top = '0';
+  ghost.style.width = `${rect.width}px`;
+  ghost.style.height = `${rect.height}px`;
+  ghost.style.pointerEvents = 'none';
+  ghost.style.opacity = '0.7';
+  ghost.style.zIndex = '9999';
+  ghost.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
+  document.body.appendChild(ghost);
+  return ghost;
+}
+
+function positionGhost(ghost: HTMLElement, event: MouseEvent): void {
+  ghost.style.transform = `translate(${event.clientX + 8}px, ${event.clientY + 8}px)`;
+}
+
+/**
+ * Registers a strip container as a drop zone. `canDrop` gates the hover
  * highlight and the drop; `onDrop` performs the move (use `tabDropIndex` for
- * the insertion position among the container's marked chips).
+ * the insertion position among the container's marked chips). Attach the
+ * returned `dropRef` to the container element.
  */
 export function useTabDropZone({
   canDrop,
   onDrop,
 }: {
   canDrop: (payload: TabDragPayload) => boolean;
-  onDrop: (payload: TabDragPayload, event: DragEvent<HTMLDivElement>) => void;
-}): {
-  isOver: boolean;
-  dropProps: Pick<HTMLAttributes<HTMLDivElement>, 'onDragOver' | 'onDragLeave' | 'onDrop'>;
-} {
+  onDrop: (payload: TabDragPayload, event: TabDropEvent) => void;
+}): { isOver: boolean; dropRef: (node: HTMLElement | null) => void } {
   const [isOver, setIsOver] = useState(false);
-  return {
-    isOver,
-    dropProps: {
-      onDragOver: (event) => {
-        const payload = activeTabDrag();
-        if (!payload || !canDrop(payload)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'move';
-        setIsOver(true);
-      },
-      onDragLeave: (event) => {
-        // dragleave fires when crossing into children — only real exits count.
-        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-        setIsOver(false);
-      },
-      onDrop: (event) => {
-        setIsOver(false);
-        const payload = activeTabDrag();
-        if (!payload || !canDrop(payload)) return;
-        event.preventDefault();
-        setCurrentDrag(null);
-        onDrop(payload, event);
-      },
-    },
-  };
+  // Latest-handler refs so the registered zone never goes stale.
+  const handlers = useRef({ canDrop, onDrop });
+  useEffect(() => {
+    handlers.current = { canDrop, onDrop };
+  });
+  const zoneRef = useRef<DropZone | null>(null);
+
+  const dropRef = useCallback((node: HTMLElement | null) => {
+    if (zoneRef.current) {
+      zones.delete(zoneRef.current);
+      zoneRef.current = null;
+    }
+    if (node) {
+      zoneRef.current = {
+        node,
+        canDrop: (payload) => handlers.current.canDrop(payload),
+        onDrop: (payload, event) => handlers.current.onDrop(payload, event),
+        setIsOver,
+      };
+      zones.add(zoneRef.current);
+    }
+  }, []);
+
+  return { isOver, dropRef };
 }
 
 /**
- * Raw insertion index at the pointer among the container's chips carrying
+ * Raw insertion index at the pointer among the zone's chips carrying
  * `data-tab-drop-marker={marker}` — computed BEFORE any removal, so reorder
  * methods must adjust when the dragged item precedes the index.
  */
-export function tabDropIndex(event: DragEvent<HTMLElement>, marker: string): number {
+export function tabDropIndex(event: TabDropEvent, marker: string): number {
   const chips = Array.from(
     event.currentTarget.querySelectorAll<HTMLElement>(`[data-tab-drop-marker="${marker}"]`)
   );

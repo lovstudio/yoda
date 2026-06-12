@@ -26,7 +26,7 @@ import {
   moveTopTabToSidebar,
 } from '@renderer/app/app-tab-context-menu';
 import { openTaskTopTab } from '@renderer/app/open-task-target';
-import { activeTabDrag, tabDragSource, tabDropIndex, useTabDropZone } from '@renderer/app/tab-drag';
+import { tabDragSource, tabDropIndex, useTabDropZone } from '@renderer/app/tab-drag';
 import { BrowserPane } from '@renderer/features/tasks/browser/browser-pane';
 import type { ResolvedTab } from '@renderer/features/tasks/tabs/tab-manager-store';
 import {
@@ -283,15 +283,12 @@ export const TaskSidebar = observer(function TaskSidebar() {
             pinned out of the top-level strip. */}
         <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-background-secondary px-2 [-webkit-app-region:drag] dark:bg-background">
           <div
+            ref={dropZone.dropRef}
             className={cn(
               'flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-md',
-              // Lift the window drag region while a tab drag runs so the
-              // strip's blank space receives drop events.
-              activeTabDrag() ? '[-webkit-app-region:no-drag]' : null,
               dropZone.isOver && 'bg-primary/10'
             )}
             style={{ scrollbarWidth: 'none' }}
-            {...dropZone.dropProps}
           >
             {openSidebarGroups.map((group) => (
               <ChipContextMenu

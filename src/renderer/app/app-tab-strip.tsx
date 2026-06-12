@@ -31,7 +31,6 @@ import type { TaskWindowTabTarget } from '@shared/task-window';
 import { AppTabContextMenu } from '@renderer/app/app-tab-context-menu';
 import { closeTaskTopTab, openTaskTopTab } from '@renderer/app/open-task-target';
 import {
-  activeTabDrag,
   tabDragSource,
   useTabDropZone,
   type TabDragPayload,
@@ -143,14 +142,11 @@ export const AppTabStrip = observer(function AppTabStrip() {
 
   return (
     <div
+      ref={dropZone.dropRef}
       className={cn(
         'flex items-center gap-1 overflow-x-auto rounded-md',
-        // Lift the window drag region while a tab drag runs so the strip's
-        // blank space receives drop events.
-        activeTabDrag() ? '[-webkit-app-region:no-drag]' : null,
         dropZone.isOver && 'bg-primary/10'
       )}
-      {...dropZone.dropProps}
     >
       {visibleTabs.map((tab) => {
         const dismiss = describeDismiss(tab, t);

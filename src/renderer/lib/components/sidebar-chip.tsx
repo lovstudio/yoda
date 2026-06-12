@@ -24,7 +24,7 @@ export function SidebarChip({
   onSelect: () => void;
   onClose?: () => void;
   /** Drag-source props (see app/tab-drag.ts) — chips stay presentation-only. */
-  drag?: Pick<React.HTMLAttributes<HTMLDivElement>, 'draggable' | 'onDragStart' | 'onDragEnd'>;
+  drag?: Pick<React.HTMLAttributes<HTMLDivElement>, 'onMouseDown'>;
   /** Marks the chip for drop-index math in its strip's drop zone. */
   dropMarker?: string;
 }) {

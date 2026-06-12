@@ -10,7 +10,6 @@ import {
 import { describeTab } from '@renderer/app/app-tab-strip';
 import { openTaskTopTab } from '@renderer/app/open-task-target';
 import {
-  activeTabDrag,
   tabDragSource,
   tabDropIndex,
   useTabDropZone,
@@ -291,15 +290,12 @@ export const AppSidePane = observer(function AppSidePane() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-background-secondary px-2 [-webkit-app-region:drag] dark:bg-background">
         <div
+          ref={dropZone.dropRef}
           className={cn(
             'flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-md',
-            // Lift the window drag region while a tab drag runs so the strip's
-            // blank space receives drop events.
-            activeTabDrag() ? '[-webkit-app-region:no-drag]' : null,
             dropZone.isOver && 'bg-primary/10'
           )}
           style={{ scrollbarWidth: 'none' }}
-          {...dropZone.dropProps}
         >
           {pins.map((pin) => {
             const meta = chipMeta(pin);
