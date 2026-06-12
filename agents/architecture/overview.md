@@ -7,7 +7,7 @@
 - `src/renderer/`: React UI — views, components, hooks, contexts, typed RPC client
 - `src/shared/`: Provider registry, IPC primitives (RPC + events), MCP types, skills types, shared domain types
 - `apps/mobile/`: Expo app that talks to the desktop through the token-protected mobile gateway
-- `docs/`: Separate Next.js + Fumadocs site
+- `docs/`: Landing page for yoda.lovstudio.ai (Vite static site, not the docs content) — see `agents/workflows/docs-site.md`
 
 ## Boot Sequence
 

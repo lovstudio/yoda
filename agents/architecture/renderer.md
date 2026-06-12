@@ -47,4 +47,4 @@
 - New modals must be registered in `src/renderer/core/modal/registry.ts`.
 - New views must be registered in `src/renderer/core/view/registry.ts`.
 - Only methods in `src/renderer/types/electron-api.d.ts` use direct `window.electronAPI` calls (PTY ops, fsList, openIn).
-- If you change user-visible workflows, update the matching page in `docs/` when appropriate.
+- If you change user-visible workflows, update the matching docs page when appropriate — the docs site lives outside this repo, see `agents/workflows/docs-site.md`.

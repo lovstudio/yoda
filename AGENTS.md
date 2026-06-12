@@ -53,6 +53,7 @@ Start here. Load only the linked `agents/` docs that are relevant to the task.
 - Worktree behavior or `.yoda.json`: `agents/workflows/worktrees.md`
 - SSH or remote project work: `agents/workflows/remote-development.md`
 - Provider integration or CLI behavior: `agents/integrations/providers.md`
+- Docs site or landing page (yoda.lovstudio.ai): `agents/workflows/docs-site.md`
 - MCP changes: `agents/integrations/mcp.md`
 
 ## High-Risk Areas
@@ -104,4 +105,4 @@ Start here. Load only the linked `agents/` docs that are relevant to the task.
 - New views must be registered in `src/renderer/core/view/registry.ts`.
 - Treat `src/main/core/pty/`, `src/main/core/ssh/`, `src/main/db/`, and updater code as high risk.
 - Avoid editing `dist/`, `release/`, and `build/` unless the task is explicitly about packaging or updater/signing behavior.
-- The docs app in `docs/` is separate from the Electron renderer and also defaults to port `3000`.
+- The landing page in `docs/` is separate from the Electron renderer and also defaults to port `3000`. The public docs content lives outside this repo — see `agents/workflows/docs-site.md`.

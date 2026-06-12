@@ -5,7 +5,7 @@
 - Node: `24.14.0` from `.nvmrc`
 - Package manager: `pnpm@10.28.2`
 - Electron app root: this repo
-- Docs app: `docs/`
+- Landing page: `docs/` (docs content lives outside this repo — see `agents/workflows/docs-site.md`)
 
 ## Core Commands
 

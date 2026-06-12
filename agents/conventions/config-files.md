@@ -16,5 +16,5 @@
 ## Repo Rules
 
 - avoid editing `dist/`, `release/`, and `build/` unless the task is explicitly about packaging or signing
-- the docs app in `docs/` is separate from the Electron renderer
+- the landing page in `docs/` is separate from the Electron renderer; public docs content lives outside this repo (`agents/workflows/docs-site.md`)
 - update the narrowest relevant page in `agents/` instead of growing `AGENTS.md`
