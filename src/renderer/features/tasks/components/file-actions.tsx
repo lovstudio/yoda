@@ -1,4 +1,5 @@
 import { FileText, FolderTree, PanelRight, PanelRightOpen } from 'lucide-react';
+import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import {
@@ -80,6 +81,27 @@ export function useTaskFilePlacementActions(path: string | null | undefined) {
   return { openInSidebar, openInGlobalSidebar };
 }
 
+/**
+ * Defers a menu action until the menu has fully closed. File-action menus live
+ * inside <Activity>-hidden surfaces (task sidebar tabs): an item that hides its
+ * own panel synchronously tears down the portal'd popup's effects mid-close,
+ * stranding the menu on screen. Panel-switching actions (open in sidebar,
+ * reveal in file tree) must go through `runAfterClose`.
+ */
+function useRunAfterMenuClose() {
+  const pendingRef = useRef<(() => void) | null>(null);
+  const runAfterClose = useCallback((action: () => void) => {
+    pendingRef.current = action;
+  }, []);
+  const onOpenChangeComplete = useCallback((open: boolean) => {
+    if (open) return;
+    const action = pendingRef.current;
+    pendingRef.current = null;
+    action?.();
+  }, []);
+  return { runAfterClose, onOpenChangeComplete };
+}
+
 export function FileActionsDropdown({
   sourcePath,
   className,
@@ -89,9 +111,14 @@ export function FileActionsDropdown({
 }) {
   const { t, target, openInEditor, openInSidebar, openInGlobalSidebar, revealInFileTree } =
     useFileActions(sourcePath);
+  const { runAfterClose, onOpenChangeComplete } = useRunAfterMenuClose();
 
   return (
-    <FilePathActionsDropdown target={target} className={className}>
+    <FilePathActionsDropdown
+      target={target}
+      className={className}
+      onOpenChangeComplete={onOpenChangeComplete}
+    >
       <DropdownMenuItem
         onClick={(event) => {
           event.stopPropagation();
@@ -104,7 +131,7 @@ export function FileActionsDropdown({
       <DropdownMenuItem
         onClick={(event) => {
           event.stopPropagation();
-          openInSidebar();
+          runAfterClose(openInSidebar);
         }}
       >
         <PanelRight className="size-4" />
@@ -113,7 +140,7 @@ export function FileActionsDropdown({
       <DropdownMenuItem
         onClick={(event) => {
           event.stopPropagation();
-          openInGlobalSidebar();
+          runAfterClose(openInGlobalSidebar);
         }}
       >
         <PanelRightOpen className="size-4" />
@@ -123,7 +150,7 @@ export function FileActionsDropdown({
         <DropdownMenuItem
           onClick={(event) => {
             event.stopPropagation();
-            revealInFileTree();
+            runAfterClose(revealInFileTree);
           }}
         >
           <FolderTree className="size-4" />
@@ -169,15 +196,16 @@ export function FileActionsContextMenu({
   mergeTrigger?: boolean;
   children: React.ReactNode;
 }) {
+  const { runAfterClose, onOpenChangeComplete } = useRunAfterMenuClose();
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChangeComplete={onOpenChangeComplete}>
       {mergeTrigger ? (
         <ContextMenuTrigger render={children as React.ReactElement} />
       ) : (
         <ContextMenuTrigger>{children}</ContextMenuTrigger>
       )}
       <ContextMenuContent className="w-52">
-        <FileActionsMenuItems sourcePath={sourcePath} kind={kind} />
+        <FileActionsMenuItems sourcePath={sourcePath} kind={kind} runAfterClose={runAfterClose} />
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -191,9 +219,12 @@ export function FileActionsContextMenu({
 export function FileActionsMenuItems({
   sourcePath,
   kind = 'file',
+  runAfterClose = (action) => action(),
 }: {
   sourcePath: string;
   kind?: 'file' | 'directory';
+  /** Defers panel-switching actions until the host menu has fully closed. */
+  runAfterClose?: (action: () => void) => void;
 }) {
   const { t, target, openInEditor, openInSidebar, openInGlobalSidebar, revealInFileTree } =
     useFileActions(sourcePath);
@@ -208,18 +239,27 @@ export function FileActionsMenuItems({
                 <FileText className="size-4" />
                 {t('fileActions.openInMainArea')}
               </ContextMenuItem>
-              <ContextMenuItem className="whitespace-nowrap" onClick={openInSidebar}>
+              <ContextMenuItem
+                className="whitespace-nowrap"
+                onClick={() => runAfterClose(openInSidebar)}
+              >
                 <PanelRight className="size-4" />
                 {t('tasks.tabs.openInSidePane')}
               </ContextMenuItem>
-              <ContextMenuItem className="whitespace-nowrap" onClick={openInGlobalSidebar}>
+              <ContextMenuItem
+                className="whitespace-nowrap"
+                onClick={() => runAfterClose(openInGlobalSidebar)}
+              >
                 <PanelRightOpen className="size-4" />
                 {t('appTabs.openInGlobalSidePane')}
               </ContextMenuItem>
             </>
           ) : null}
           {revealInFileTree ? (
-            <ContextMenuItem className="whitespace-nowrap" onClick={revealInFileTree}>
+            <ContextMenuItem
+              className="whitespace-nowrap"
+              onClick={() => runAfterClose(revealInFileTree)}
+            >
               <FolderTree className="size-4" />
               {t('tasks.panel.revealInFileTree')}
             </ContextMenuItem>

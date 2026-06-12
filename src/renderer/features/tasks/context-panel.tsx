@@ -113,15 +113,16 @@ export const HarnessSection = observer(function HarnessSection({
 }) {
   const { t } = useTranslation();
   const provisioned = useProvisionedTask();
-  const { taskView } = provisioned;
-  const activeConversation = taskView.tabManager.activeConversation;
-  const runtimeId = activeConversation?.data.runtimeId;
+  // Falls back to the task's most recent conversation when the active main-area
+  // tab is a file/diff — the harness context must not vanish on tab switches.
+  const conversation = getTaskMenuConversation(provisioned);
+  const runtimeId = conversation?.runtimeId;
 
   if (id === 'hooks') {
     return <HooksSection active={active} />;
   }
 
-  if (!activeConversation) {
+  if (!conversation) {
     return <HarnessPlaceholder id={id}>{t('tasks.panel.noActiveConversation')}</HarnessPlaceholder>;
   }
   if (id === 'statusline') {
@@ -134,18 +135,16 @@ export const HarnessSection = observer(function HarnessSection({
     );
   }
   if (runtimeId === 'claude') {
-    return (
-      <ClaudeHarnessSection id={id} cwd={provisioned.path} sessionId={activeConversation.data.id} />
-    );
+    return <ClaudeHarnessSection id={id} cwd={provisioned.path} sessionId={conversation.id} />;
   }
   if (runtimeId === 'codex') {
     return (
       <CodexHarnessSection
         id={id}
         cwd={provisioned.path}
-        conversationId={activeConversation.data.id}
-        conversationTitle={activeConversation.data.title}
-        conversationCreatedAt={activeConversation.data.createdAt ?? null}
+        conversationId={conversation.id}
+        conversationTitle={conversation.title}
+        conversationCreatedAt={conversation.createdAt ?? null}
       />
     );
   }

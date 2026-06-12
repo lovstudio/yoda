@@ -202,15 +202,18 @@ export function FilePathActionsDropdown({
   target,
   className,
   children,
+  onOpenChangeComplete,
 }: {
   target: FilePathTarget;
   className?: string;
   children?: ReactNode;
+  /** Fires after the open/close transition settles — used to defer panel-switching actions. */
+  onOpenChangeComplete?: (open: boolean) => void;
 }) {
   const { t } = useTranslation();
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChangeComplete={onOpenChangeComplete}>
       <DropdownMenuTrigger
         render={
           <button
