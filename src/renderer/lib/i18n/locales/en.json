@@ -2005,10 +2005,17 @@
   },
   "aiLab": {
     "title": "AI Lab",
-    "subtitle": "Experimental AI tools. First up: brand logo generation.",
+    "subtitle": "Your hub for AI mini-apps — vibe-coded tools live here, and the collection keeps growing.",
+    "back": "Back to AI Lab",
+    "comingSoonTitle": "More apps on the way",
+    "comingSoonDescription": "This hub is built to grow — the next idea becomes the next app.",
+    "apps": {
+      "logo-studio": {
+        "name": "Logo Studio",
+        "description": "Describe your brand, pick a style, and get logo candidates in one shot."
+      }
+    },
     "logo": {
-      "title": "Logo Studio",
-      "subtitle": "Describe your brand, pick a style, and generate logo candidates.",
       "brandName": "Brand name",
       "brandNamePlaceholder": "e.g. Yoda",
       "description": "About the brand",

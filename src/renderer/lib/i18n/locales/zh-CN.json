@@ -2005,10 +2005,17 @@
   },
   "aiLab": {
     "title": "AI Lab",
-    "subtitle": "实验性 AI 工具，第一站：品牌 Logo 生成。",
+    "subtitle": "你的 AI 应用中心——vibe coding 做出来的小应用都装在这里，持续上新。",
+    "back": "返回 AI Lab",
+    "comingSoonTitle": "更多应用在路上",
+    "comingSoonDescription": "这里会不断生长——下一个想法就是下一个应用。",
+    "apps": {
+      "logo-studio": {
+        "name": "Logo 生成",
+        "description": "描述品牌、挑个风格，一次拿到多张候选 Logo。"
+      }
+    },
     "logo": {
-      "title": "Logo 工坊",
-      "subtitle": "描述你的品牌、选择风格，一键生成 Logo 候选。",
       "brandName": "品牌名",
       "brandNamePlaceholder": "例如 Yoda",
       "description": "品牌简介",

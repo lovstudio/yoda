@@ -83,15 +83,7 @@ export const LogoStudio: React.FC<{
 
   return (
     <section className="rounded-xl border border-border bg-background-secondary p-5">
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-foreground-muted" />
-        <h2 className="text-sm font-semibold">{t('aiLab.logo.title')}</h2>
-      </div>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-        {t('aiLab.logo.subtitle')}
-      </p>
-
-      <div className="mt-4 space-y-4">
+      <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="ai-lab-brand-name">{t('aiLab.logo.brandName')}</Label>
           <Input
