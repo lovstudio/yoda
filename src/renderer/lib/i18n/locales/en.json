@@ -1454,6 +1454,8 @@
       "ariaLabel": "Sort skills",
       "name": "Name (A-Z)",
       "count": "Most skills",
+      "trigger": "Longest trigger text",
+      "body": "Longest body",
       "total": "Most used",
       "manual": "Most manual",
       "auto": "Most agent-invoked",

@@ -72,12 +72,13 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
     }
   }, []);
 
-  // 'name' always works; 'count' needs the tree; usage modes need stats.
+  // 'name' and the length rankings always work; 'count' needs the tree;
+  // usage modes need stats.
   const visibleSortModes = React.useMemo(
     () =>
       SKILL_SORT_MODES.filter((mode) => {
         if (mode === 'count') return layout === 'tree';
-        if (mode === 'name') return true;
+        if (mode === 'name' || mode === 'trigger' || mode === 'body') return true;
         return usageAvailable;
       }),
     [layout, usageAvailable]
@@ -195,7 +196,7 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
             !embedded && '-mx-8 px-8'
           )}
         >
-          <div className="relative flex-1">
+          <div className="relative min-w-0 flex-1">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={t('skills.searchPlaceholder')}
@@ -223,11 +224,14 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
           {visibleSortModes.length > 1 && (
             <Select value={sortMode} onValueChange={(value) => setSortMode(value as SkillSortMode)}>
               <SelectTrigger
-                className="w-auto gap-1.5 text-xs text-muted-foreground"
+                className="w-auto shrink-0 gap-1.5 text-xs text-muted-foreground"
                 aria-label={t('skills.sort.ariaLabel')}
               >
                 <ArrowDownWideNarrow className="h-3.5 w-3.5 shrink-0" />
-                <SelectValue />
+                {/* Narrow containers keep the icon-only trigger */}
+                <span className="hidden @xl:contents">
+                  <SelectValue />
+                </span>
               </SelectTrigger>
               <SelectContent align="end">
                 {visibleSortModes.map((mode) => (
@@ -249,9 +253,16 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
               className={`h-4 w-4 text-muted-foreground ${isRefreshing ? 'animate-spin' : ''}`}
             />
           </Button>
-          <Button variant="outline" size="sm" onClick={() => showCreateSkillModal({})}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            {t('skills.newSkill')}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => showCreateSkillModal({})}
+            aria-label={t('skills.newSkill')}
+            className="shrink-0"
+          >
+            <Plus className="h-3.5 w-3.5 @xl:mr-1.5" />
+            {/* Narrow containers collapse to the icon */}
+            <span className="hidden @xl:inline">{t('skills.newSkill')}</span>
           </Button>
         </div>
 

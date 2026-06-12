@@ -293,9 +293,13 @@ const SkillDetailContent: React.FC<{
                     : t('skills.detail.notInstalled')}
                 </Badge>
                 <Badge variant="outline">{sourceLabel(skill.source)}</Badge>
-                <Badge variant="secondary" className="font-mono">
-                  {skill.id}
-                </Badge>
+                {/* The directory id only adds information when it differs from
+                    the title (displayName falls back to the id otherwise) */}
+                {skill.id !== skill.displayName && (
+                  <Badge variant="secondary" className="font-mono">
+                    {skill.id}
+                  </Badge>
+                )}
               </div>
             </div>
             {/* Actions — everything lives in one overflow menu so new entries

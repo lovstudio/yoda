@@ -1454,6 +1454,8 @@
       "ariaLabel": "技能排序",
       "name": "名称字母序",
       "count": "数量最多",
+      "trigger": "触发文本最长",
+      "body": "正文最长",
       "total": "调用最多",
       "manual": "手动最多",
       "auto": "Agent 调用最多",
