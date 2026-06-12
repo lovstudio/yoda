@@ -13,8 +13,10 @@ import {
 import { useTabShortcuts } from '@renderer/lib/hooks/useTabShortcuts';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { useIsActiveTask } from '../hooks/use-is-active-task';
+import { TerminalDrawerSidebar } from './terminal-drawer-sidebar';
 import { TerminalPtyContent } from './terminal-pty-content';
 import { useCreateTerminal } from './use-create-terminal';
 import { useWorkspaceFileLinks } from './use-workspace-file-links';
@@ -24,6 +26,7 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const provisionedTask = useProvisionedTask();
+  const terminalMgr = provisionedTask.terminals;
   const terminalTabView = provisionedTask.taskView.terminalTabs;
   const { value: keyboard } = useAppSettingsKey('keyboard');
   const isActive = useIsActiveTask(taskId);
@@ -80,7 +83,9 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
   );
 
   return (
-    <div
+    <ResizablePanelGroup
+      orientation="horizontal"
+      id="terminal-drawer-inner"
       className="h-full"
       onFocus={() => {
         setIsPanelFocused(true);
@@ -92,17 +97,31 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
         }
       }}
     >
-      <TerminalPtyContent
-        className="h-full"
-        activeSession={activeSession}
-        allSessionIds={allSessionIds}
-        paneId="terminal-drawer"
-        autoFocus={autoFocus}
-        emptyState={emptyState}
-        remoteConnectionId={remoteConnectionId}
-        fileLinks={fileLinks}
-        webLinks={webLinks}
-      />
-    </div>
+      <ResizablePanel id="terminal-drawer-pty" minSize="30%">
+        <TerminalPtyContent
+          className="h-full"
+          activeSession={activeSession}
+          allSessionIds={allSessionIds}
+          paneId="terminal-drawer"
+          autoFocus={autoFocus}
+          emptyState={emptyState}
+          remoteConnectionId={remoteConnectionId}
+          fileLinks={fileLinks}
+          webLinks={webLinks}
+        />
+      </ResizablePanel>
+      <ResizableHandle className="hover:bg-background-2" />
+      <ResizablePanel id="terminal-drawer-sidebar" defaultSize="25%" minSize="150px" maxSize="50%">
+        <TerminalDrawerSidebar
+          className="h-full"
+          terminalTabView={terminalTabView}
+          activeTerminalId={activeTerminalId}
+          onSelectTerminal={(id) => terminalTabView.setActiveTab(id)}
+          onRemoveTerminal={(id) => terminalTabView.removeTab(id)}
+          onRenameTerminal={(id, name) => void terminalMgr?.renameTerminal(id, name)}
+          onCreateTerminal={() => void handleCreate()}
+        />
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 });

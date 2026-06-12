@@ -1,8 +1,6 @@
 import {
   FoldHorizontal,
   MessageSquareText,
-  Pause,
-  Play,
   Plus,
   ScrollText,
   Settings,
@@ -11,13 +9,12 @@ import {
   X,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { Activity, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Activity, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BottomPanelTab } from '@shared/view-state';
 import { SessionHistoryPanel } from '@renderer/features/tasks/conversations/session-history-panel';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { FeatureCard } from '@renderer/lib/components/feature-card';
-import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import {
   DropdownMenu,
@@ -25,12 +22,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
-import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import { ScriptsPanel } from './terminals/scripts-panel';
 import { TerminalsPanel } from './terminals/terminal-panel';
-import { scriptIcon } from './terminals/terminal-tabs';
-import { useCreateTerminal } from './terminals/use-create-terminal';
 
 const MODES: {
   id: BottomPanelTab;
@@ -64,10 +58,10 @@ const ICON_BUTTON_CLASS =
 /**
  * The abstracted bottom drawer, mirroring the task sidebar's strip: mode tabs
  * are individually closable, a "+" picker adds the remaining ones, and an
- * empty strip shows feature cards. The active mode's items (terminals /
- * scripts) render as tabs after a divider with their "new" action glued
- * after; config-type actions sit at the tail and close is last. All panels
- * stay mounted so PTY state survives switches.
+ * empty strip shows feature cards. Each mode's items (terminal list, script
+ * run/stop) live inside its panel as a resizable side column; config-type
+ * actions sit at the strip's tail and close is last. All panels stay mounted
+ * so PTY state survives switches.
  */
 export const BottomPanel = observer(function BottomPanel() {
   const { t } = useTranslation();
@@ -75,64 +69,26 @@ export const BottomPanel = observer(function BottomPanel() {
   const provisionedTask = useProvisionedTask();
   const { taskView } = provisionedTask;
   const { navigate } = useNavigate();
-  const createTerminal = useCreateTerminal();
   const openTabs = taskView.openBottomPanelTabs;
   const tab = taskView.activeBottomPanelTab;
   const openModes = openTabs.flatMap((id) => MODES.filter((m) => m.id === id));
   const availableModes = MODES.filter((m) => !openTabs.includes(m.id));
-
-  const terminalMgr = provisionedTask.terminals;
-  const terminalTabView = taskView.terminalTabs;
-  const lifecycleScriptsMgr = provisionedTask.workspace.lifecycleScripts ?? null;
-  const scripts = lifecycleScriptsMgr?.tabs ?? [];
-  const activeScript = lifecycleScriptsMgr?.activeTab ?? scripts[0];
-
-  const runActiveScript = () => {
-    if (!activeScript) return;
-    activeScript.markRunning();
-    void rpc.terminals
-      .runLifecycleScript({
-        projectId,
-        workspaceId: provisionedTask.workspaceId,
-        type: activeScript.data.type,
-      })
-      .catch(() => {
-        activeScript.markExited();
-      });
-  };
-
-  const stopActiveScript = () => {
-    if (!activeScript) return;
-    void rpc.pty.sendInput(activeScript.session.sessionId, '\x03');
-  };
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border px-2">
         {/* Mode tabs side by side (same interaction as the sidebar chip
             strip): each closable, "+" adds the remaining ones. */}
-        <div className="flex shrink-0 items-center gap-0.5">
+        <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
           {openModes.map(({ id, icon, labelKey }) => (
-            <ItemTab
+            <ModeTab
               key={id}
               icon={icon}
               label={t(labelKey)}
               isActive={tab === id}
               onSelect={() => taskView.setBottomPanelTab(id)}
-              action={
-                <button
-                  type="button"
-                  className="flex size-3.5 items-center justify-center rounded-sm text-foreground-passive opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover/tab:opacity-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    taskView.closeBottomPanelTab(id);
-                  }}
-                  aria-label={t('tasks.sidePane.removeCard')}
-                  title={t('tasks.sidePane.removeCard')}
-                >
-                  <X className="size-2.5" />
-                </button>
-              }
+              onClose={() => taskView.closeBottomPanelTab(id)}
+              closeLabel={t('tasks.sidePane.removeCard')}
             />
           ))}
           {availableModes.length > 0 ? (
@@ -155,86 +111,7 @@ export const BottomPanel = observer(function BottomPanel() {
             </DropdownMenu>
           ) : null}
         </div>
-        {tab ? <div aria-hidden className="mx-0.5 h-3.5 w-px shrink-0 bg-border" /> : null}
-        {/* Mode items as tabs + contextual "new" action glued after. */}
-        <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
-          {tab === 'terminals'
-            ? terminalTabView.tabs.map((terminal) => (
-                <ItemTab
-                  key={terminal.data.id}
-                  icon={<Terminal className="size-3" />}
-                  label={terminal.data.name}
-                  isActive={terminalTabView.activeTabId === terminal.data.id}
-                  onSelect={() => terminalTabView.setActiveTab(terminal.data.id)}
-                  onRename={(name) => void terminalMgr?.renameTerminal(terminal.data.id, name)}
-                  action={
-                    <button
-                      type="button"
-                      className="flex size-3.5 items-center justify-center rounded-sm text-foreground-passive opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover/tab:opacity-100"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        terminalTabView.removeTab(terminal.data.id);
-                      }}
-                      aria-label={t('tasks.terminals.closeTerminal')}
-                      title={t('tasks.terminals.closeTerminal')}
-                    >
-                      <X className="size-2.5" />
-                    </button>
-                  }
-                />
-              ))
-            : null}
-          {tab === 'scripts'
-            ? scripts.map((script) => {
-                const isActive = activeScript?.data.id === script.data.id;
-                return (
-                  <ItemTab
-                    key={script.data.id}
-                    icon={scriptIcon(script.data.type)}
-                    label={script.data.label}
-                    isActive={isActive}
-                    onSelect={() => lifecycleScriptsMgr?.setActiveTab(script.data.id)}
-                    action={
-                      isActive ? (
-                        <button
-                          type="button"
-                          className="flex size-3.5 items-center justify-center rounded-sm text-foreground-passive hover:bg-background hover:text-foreground"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (script.isRunning) {
-                              stopActiveScript();
-                            } else {
-                              runActiveScript();
-                            }
-                          }}
-                          aria-label={script.isRunning ? t('common.stop') : t('common.run')}
-                          title={script.isRunning ? t('common.stop') : t('common.run')}
-                        >
-                          {script.isRunning ? (
-                            <Pause className="size-2.5" />
-                          ) : (
-                            <Play className="size-2.5" />
-                          )}
-                        </button>
-                      ) : null
-                    }
-                  />
-                );
-              })
-            : null}
-        </div>
-        {tab === 'terminals' ? (
-          <button
-            type="button"
-            className={ICON_BUTTON_CLASS}
-            onClick={() => void createTerminal()}
-            aria-label={t('tasks.terminals.newTerminal')}
-            title={t('tasks.terminals.newTerminal')}
-          >
-            <Plus className="size-3" />
-          </button>
-        ) : null}
-        {/* Tail: config-type actions, then the mode switcher, close last. */}
+        {/* Tail: config-type actions, close last. */}
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
           {tab === 'scripts' ? (
             <button
@@ -319,28 +196,22 @@ const BottomPanelWidthToggle = observer(function BottomPanelWidthToggle() {
   );
 });
 
-/**
- * One mode item (terminal / script) as a strip tab: click selects,
- * double-click renames (when supported), trailing action slot for
- * close / run / stop.
- */
-function ItemTab({
+/** One mode tab in the strip: click selects, hover reveals its close action. */
+function ModeTab({
   icon,
   label,
   isActive,
   onSelect,
-  onRename,
-  action,
+  onClose,
+  closeLabel,
 }: {
   icon?: ReactNode;
   label: string;
   isActive: boolean;
   onSelect: () => void;
-  onRename?: (name: string) => void;
-  action?: ReactNode;
+  onClose: () => void;
+  closeLabel: string;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
-
   return (
     <div
       className={cn(
@@ -350,60 +221,24 @@ function ItemTab({
           : 'text-foreground-passive hover:text-foreground'
       )}
       onClick={onSelect}
-      onDoubleClick={(e) => {
-        if (!onRename) return;
-        e.stopPropagation();
-        setIsEditing(true);
+      onAuxClick={(event) => {
+        if (event.button === 1) onClose();
       }}
     >
       {icon ? <span className="shrink-0">{icon}</span> : null}
-      {isEditing && onRename ? (
-        <InlineRenameInput
-          initialValue={label}
-          onConfirm={(name) => {
-            setIsEditing(false);
-            if (name && name !== label) onRename(name);
-          }}
-          onCancel={() => setIsEditing(false)}
-        />
-      ) : (
-        <span className="max-w-32 truncate">{label}</span>
-      )}
-      {action}
+      <span className="max-w-32 truncate">{label}</span>
+      <button
+        type="button"
+        className="flex size-3.5 items-center justify-center rounded-sm text-foreground-passive opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover/tab:opacity-100"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        aria-label={closeLabel}
+        title={closeLabel}
+      >
+        <X className="size-2.5" />
+      </button>
     </div>
-  );
-}
-
-function InlineRenameInput({
-  initialValue,
-  onConfirm,
-  onCancel,
-}: {
-  initialValue: string;
-  onConfirm: (value: string) => void;
-  onCancel: () => void;
-}) {
-  const [value, setValue] = useState(initialValue);
-  const ref = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    ref.current?.focus();
-    ref.current?.select();
-  }, []);
-
-  return (
-    <input
-      ref={ref}
-      className="w-24 bg-transparent text-[11px] text-foreground outline-none"
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => onConfirm(value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && !isImeComposing(e)) onConfirm(value);
-        if (e.key === 'Escape') onCancel();
-        e.stopPropagation();
-      }}
-      onClick={(e) => e.stopPropagation()}
-    />
   );
 }
