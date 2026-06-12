@@ -1,4 +1,4 @@
-import { Download, Info } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +7,7 @@ import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings'
 import { useInstallTmux } from '@renderer/lib/components/tmux-install';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
+import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import { Input } from '@renderer/lib/ui/input';
 import {
   Select,
@@ -16,33 +17,9 @@ import {
   SelectValue,
 } from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { isImeComposing } from '@renderer/utils/ime';
 import { ResetToDefaultButton } from './ResetToDefaultButton';
 import { SettingRow } from './SettingRow';
-
-function InfoTooltip({ label, content }: { label: string; content: React.ReactNode }) {
-  return (
-    <TooltipProvider delay={150}>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              className="inline-flex h-4 w-4 items-center justify-center text-muted-foreground hover:text-foreground"
-              aria-label={label}
-            >
-              <Info className="h-3.5 w-3.5" />
-            </button>
-          }
-        />
-        <TooltipContent side="top" className="max-w-xs text-xs">
-          {content}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
 
 export const AutoGenerateTaskNamesRow: React.FC = () => {
   const { t } = useTranslation();

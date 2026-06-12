@@ -13,6 +13,7 @@ import {
   resolveClaudeTranscriptPath,
 } from '@main/core/session-title/claude-title-source';
 import { log } from '@main/lib/logger';
+import { getInstructionFiles } from './instruction-files';
 import { scanClaudeAgents } from './scanClaudeAgents';
 import { scanClaudeSkills } from './scanClaudeSkills';
 
@@ -78,7 +79,7 @@ export async function getClaudeSessionContext(
   }
 
   const [memoryFiles, memories, skills, scannedAgents] = await Promise.all([
-    loadMemoryFiles(cwd),
+    getInstructionFiles(cwd),
     loadMemories(cwd),
     scanClaudeSkills(cwd),
     scanClaudeAgents(cwd),
@@ -224,29 +225,6 @@ function stripWrapperTags(text: string): string {
     .replace(/<command-args>[\s\S]*?<\/command-args>\s*/g, '')
     .replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>\s*/g, '')
     .replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '');
-}
-
-async function loadMemoryFiles(cwd: string) {
-  const candidates: {
-    kind: 'global-claude' | 'project-claude' | 'project-agents';
-    path: string;
-  }[] = [
-    { kind: 'global-claude', path: join(homedir(), '.claude', 'CLAUDE.md') },
-    { kind: 'project-claude', path: join(cwd, 'CLAUDE.md') },
-    { kind: 'project-agents', path: join(cwd, 'AGENTS.md') },
-  ];
-
-  const out = await Promise.all(
-    candidates.map(async ({ kind, path }) => {
-      try {
-        const content = await readFile(path, 'utf8');
-        return { kind, path, content, bytes: content.length };
-      } catch {
-        return null;
-      }
-    })
-  );
-  return out.filter((x): x is NonNullable<typeof x> => x !== null);
 }
 
 /**

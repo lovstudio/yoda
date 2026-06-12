@@ -34,9 +34,10 @@ import type {
 } from '@shared/conversations';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
-  FileActionsContextMenu,
-  FileActionsDropdown,
-} from '@renderer/features/tasks/components/file-actions';
+  ContextItem,
+  MarkdownContextContent,
+  memoryFileLabel,
+} from '@renderer/features/tasks/components/context-item';
 import {
   PersistedDetails,
   usePersistedDisclosure,
@@ -47,7 +48,6 @@ import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks
 import { rpc } from '@renderer/lib/ipc';
 import { Input } from '@renderer/lib/ui/input';
 import { MicroLabel } from '@renderer/lib/ui/label';
-import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { formatBytes } from '@renderer/utils/formatBytes';
 import { cn } from '@renderer/utils/utils';
@@ -594,32 +594,6 @@ function SubGroup({ label, children }: { label: string; children: React.ReactNod
       {children}
     </div>
   );
-}
-
-function memoryFileLabel(
-  file: ClaudeMemoryFile | CodexMemoryFile,
-  t: (k: string) => string
-): string {
-  const kindLabel = memoryFileKindLabel(file.kind, t);
-  return `${kindLabel} · ${file.path}`;
-}
-
-function memoryFileKindLabel(
-  kind: (ClaudeMemoryFile | CodexMemoryFile)['kind'],
-  t: (k: string) => string
-): string {
-  switch (kind) {
-    case 'global-claude':
-      return t('tasks.panel.memoryGlobal');
-    case 'project-claude':
-      return t('tasks.panel.memoryProjectClaude');
-    case 'project-agents':
-      return t('tasks.panel.memoryProjectAgents');
-    case 'global-codex-agents':
-      return t('tasks.panel.memoryGlobalCodexAgents');
-    case 'project-codex-agents':
-      return t('tasks.panel.memoryProjectCodexAgents');
-  }
 }
 
 function ToolsSection({ tools }: { tools: string[] }) {
@@ -1301,83 +1275,6 @@ function SectionHint({ hint }: { hint: string }) {
         {hint}
       </TooltipContent>
     </Tooltip>
-  );
-}
-
-function ContextItem({
-  icon,
-  label,
-  meta,
-  text,
-  sourcePath,
-  renderMode = 'markdown',
-}: {
-  icon: React.ReactNode;
-  label: string;
-  meta?: string;
-  text: string;
-  sourcePath?: string;
-  renderMode?: 'markdown' | 'plain';
-}) {
-  const item = (
-    <PersistedDetails
-      id={`context:item:${label}`}
-      className="group/context-item relative min-w-0 rounded-sm border border-dashed border-border/80 bg-background-1/40 px-1.5 py-1"
-      summary={
-        <summary className="flex min-w-0 cursor-pointer select-none items-center gap-1.5 text-[11px]">
-          <span className="shrink-0">{icon}</span>
-          <span className="min-w-0 flex-1 truncate" title={label}>
-            {label}
-          </span>
-          <ContextItemTrailing meta={meta} sourcePath={sourcePath} />
-        </summary>
-      }
-    >
-      {renderMode === 'markdown' ? (
-        <MarkdownContextContent content={text} className="mt-1.5 max-h-56" />
-      ) : (
-        <pre className="mt-1.5 max-h-56 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-foreground-passive">
-          {text}
-        </pre>
-      )}
-    </PersistedDetails>
-  );
-
-  if (!sourcePath) return item;
-  return <FileActionsContextMenu sourcePath={sourcePath}>{item}</FileActionsContextMenu>;
-}
-
-function MarkdownContextContent({ content, className }: { content: string; className?: string }) {
-  return (
-    <MarkdownRenderer
-      content={content}
-      variant="compact"
-      className={cn(
-        'overflow-auto break-words text-[11px] leading-relaxed text-foreground-passive [&>*:last-child]:mb-0 [&_pre]:max-w-full',
-        className
-      )}
-    />
-  );
-}
-
-function ContextItemTrailing({ meta, sourcePath }: { meta?: string; sourcePath?: string }) {
-  if (!sourcePath) {
-    return meta ? (
-      <span className="shrink-0 font-mono text-[10px] text-foreground-passive">{meta}</span>
-    ) : null;
-  }
-
-  return (
-    <span className="relative flex h-5 min-w-5 shrink-0 items-center justify-end">
-      {meta ? (
-        <span className="font-mono text-[10px] text-foreground-passive transition-opacity group-hover/context-item:opacity-0 group-focus-within/context-item:opacity-0">
-          {meta}
-        </span>
-      ) : null}
-      <span className="absolute right-0 flex opacity-0 transition-opacity group-hover/context-item:opacity-100 group-focus-within/context-item:opacity-100">
-        <FileActionsDropdown sourcePath={sourcePath} />
-      </span>
-    </span>
   );
 }
 

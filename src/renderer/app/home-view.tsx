@@ -59,6 +59,7 @@ import {
 } from '@shared/agent-command-prefix';
 import type { Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
+import type { ClaudeMemoryFile } from '@shared/conversations';
 import type { Branch } from '@shared/git';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
@@ -73,6 +74,7 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { recordSkillInvocation } from '@renderer/features/skills/skill-usage-stats';
+import { ContextItem, memoryFileLabel } from '@renderer/features/tasks/components/context-item';
 import type { ConversationStore } from '@renderer/features/tasks/conversations/conversation-manager';
 import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
@@ -108,10 +110,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
+import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
+import { formatBytes } from '@renderer/utils/formatBytes';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import {
@@ -2895,21 +2899,18 @@ export const HomeComposer = observer(function HomeComposer({
               >
                 <Settings2 className="size-3.5" />
               </PopoverTrigger>
-              <PopoverContent align="end" className="w-80 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex flex-col gap-0.5">
+              <PopoverContent align="end" className="w-96 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-1.5">
                     <span className="text-sm font-medium text-foreground">
                       {t('home.attachImagesAsPathsLabel')}
                     </span>
-                    <span className="text-xs text-foreground-muted">
-                      {t('home.attachImagesAsPathsDesc')}
-                    </span>
+                    <InfoTooltip
+                      label={t('home.attachImagesAsPathsLabel')}
+                      content={t('home.attachImagesAsPathsDesc')}
+                    />
                   </div>
-                  <Switch
-                    checked={attachImagesAsPaths}
-                    onCheckedChange={setAttachImagesAsPaths}
-                    className="mt-0.5"
-                  />
+                  <Switch checked={attachImagesAsPaths} onCheckedChange={setAttachImagesAsPaths} />
                 </div>
                 {promptPrinciples.length > 0 && (
                   <div className="mt-3 flex flex-col gap-2 border-t border-border/60 pt-3">
@@ -2918,12 +2919,19 @@ export const HomeComposer = observer(function HomeComposer({
                     </span>
                     {promptPrinciples.map((principle) => (
                       <div key={principle.id} className="flex items-center justify-between gap-3">
-                        <span
-                          className="min-w-0 truncate text-xs text-foreground-muted"
-                          title={principle.text}
-                        >
-                          {principle.name || t('home.promptPrincipleUnnamed')}
-                        </span>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className="min-w-0 truncate text-xs text-foreground-muted">
+                            {principle.name || t('home.promptPrincipleUnnamed')}
+                          </span>
+                          {principle.text ? (
+                            <InfoTooltip
+                              label={principle.name || t('home.promptPrincipleUnnamed')}
+                              content={
+                                <span className="whitespace-pre-wrap">{principle.text}</span>
+                              }
+                            />
+                          ) : null}
+                        </div>
                         <Switch
                           size="sm"
                           checked={principle.enabled}
@@ -2936,6 +2944,7 @@ export const HomeComposer = observer(function HomeComposer({
                     ))}
                   </div>
                 )}
+                <InstructionFilesSection projectPath={skillProjectPath} />
               </PopoverContent>
             </Popover>
           </div>
@@ -2944,6 +2953,49 @@ export const HomeComposer = observer(function HomeComposer({
     </div>
   );
 });
+
+/**
+ * Composer-settings view onto the instruction files that will feed the next
+ * session's prompt: the user-global CLAUDE.md (user-level system prompt) and
+ * the project's CLAUDE.md / AGENTS.md (project prompt). View + open-to-edit;
+ * the runtime's built-in system prompt is not editable and only gets a hint.
+ */
+function InstructionFilesSection({ projectPath }: { projectPath?: string }) {
+  const { t } = useTranslation();
+  const { data: files = [] } = useQuery<ClaudeMemoryFile[]>({
+    queryKey: ['instructionFiles', projectPath ?? null],
+    queryFn: () => rpc.conversations.getInstructionFiles(projectPath),
+    refetchOnWindowFocus: false,
+  });
+
+  return (
+    <div className="mt-3 flex flex-col gap-2 border-t border-border/60 pt-3">
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm font-medium text-foreground">
+          {t('home.instructionFilesLabel')}
+        </span>
+        <InfoTooltip
+          label={t('home.instructionFilesLabel')}
+          content={t('home.instructionFilesHint')}
+        />
+      </div>
+      {files.length === 0 ? (
+        <p className="text-xs text-foreground-passive">{t('home.noInstructionFiles')}</p>
+      ) : (
+        files.map((file) => (
+          <ContextItem
+            key={file.path}
+            icon={<FileText className="size-3.5" />}
+            label={memoryFileLabel(file, t)}
+            meta={formatBytes(file.bytes)}
+            text={file.content}
+            sourcePath={file.path}
+          />
+        ))
+      )}
+    </div>
+  );
+}
 
 interface ChipProps {
   icon: ComponentType<{ className?: string }>;
