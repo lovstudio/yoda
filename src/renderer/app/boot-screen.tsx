@@ -398,7 +398,12 @@ export function BootScreen({ ready, onFinished }: BootScreenProps) {
                 ? { opacity: 1, backgroundColor: MINT }
                 : {
                     opacity: 1,
-                    backgroundColor: [MINT, MINT, 'rgba(127, 224, 167, 0)', 'rgba(127, 224, 167, 0)'],
+                    backgroundColor: [
+                      MINT,
+                      MINT,
+                      'rgba(127, 224, 167, 0)',
+                      'rgba(127, 224, 167, 0)',
+                    ],
                   }
             }
             transition={
