@@ -70,6 +70,7 @@ optional_env:
 - Renderer 模式（modals、views、PTY 前端、React Query contexts）：`agents/conventions/renderer-patterns.md`
 - TypeScript 与 React 规范：`agents/conventions/typescript.md`
 - 配置文件与仓库规则：`agents/conventions/config-files.md`
+- 复用与实体一致性：`agents/conventions/reuse.md`
 - 禁止 re-export，永远从原始源头 import
 
 ### 状态守卫约定（renderer stores）
@@ -98,6 +99,7 @@ optional_env:
 ## 铁律
 
 - 合并前必须跑 `pnpm run format`、`pnpm run lint`、`pnpm run typecheck`、`pnpm test`。
+- 同一实体在所有 surface 行为必须一致、文件展示必须走共享组件——见 `agents/conventions/reuse.md`，违反算 bug。
 - 不要手改带编号的 Drizzle 迁移文件或 `drizzle/meta/`。
 - 新 RPC 方法写进对应的 `src/main/core/*/controller.ts`，由 `src/main/rpc.ts` 自动注册。
 - 只有需要 `event.sender` 的方法才在 `electron-api.d.ts` 里走手动 IPC。
