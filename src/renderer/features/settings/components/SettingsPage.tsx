@@ -3,17 +3,21 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { AgentManagerView } from '@renderer/features/agents-config/agent-manager-view';
 import { AgentsView } from '@renderer/features/agents/components/AgentsView';
+import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
 import { AiLogsPanel } from '@renderer/features/ai-logs/components/AiLogsPanel';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
+import { KanbanBoard } from '@renderer/features/kanban/components/KanbanBoard';
 import { MaasView } from '@renderer/features/maas/components/MaasView';
 import { McpView } from '@renderer/features/mcp/components/McpView';
 import { MobileView } from '@renderer/features/mobile/mobile-view';
+import { RoadmapView } from '@renderer/features/roadmap/components/RoadmapView';
 import SkillsCatalogHint from '@renderer/features/skills/components/SkillsCatalogHint';
 import SkillsView from '@renderer/features/skills/components/SkillsView';
 import { NamingConfigFields } from '@renderer/features/tasks/components/naming-config-fields';
 import { SummaryConfigFields } from '@renderer/features/tasks/components/summary-config-fields';
 import { UsageView } from '@renderer/features/usage/components/UsageView';
 import { useIsPinHosted } from '@renderer/lib/layout/navigation-provider';
+import { Badge } from '@renderer/lib/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,7 +73,10 @@ export type SettingsPageTab =
   | 'repository'
   | 'interface'
   | 'terminal'
-  | 'keyboard-shortcuts';
+  | 'keyboard-shortcuts'
+  | 'kanban'
+  | 'ai-lab'
+  | 'roadmap';
 
 interface SectionConfig {
   id: string;
@@ -78,7 +85,7 @@ interface SectionConfig {
   component: React.ReactNode;
 }
 
-type SettingsTabEntry = { id: SettingsPageTab; label: string };
+type SettingsTabEntry = { id: SettingsPageTab; label: string; badge?: string };
 
 /** Grouped tabs; groups are visually separated. Account leads the first group. */
 function useSettingsTabGroups(): SettingsTabEntry[][] {
@@ -119,6 +126,12 @@ function useSettingsTabGroups(): SettingsTabEntry[][] {
       { id: 'automation', label: t('settings.tabs.automation') },
       { id: 'mobile', label: t('settings.tabs.mobile') },
     ],
+    // Early previews and outlook.
+    [
+      { id: 'kanban', label: t('settings.tabs.kanban'), badge: 'Alpha' },
+      { id: 'ai-lab', label: t('settings.tabs.aiLab'), badge: 'Alpha' },
+      { id: 'roadmap', label: t('settings.tabs.roadmap') },
+    ],
   ];
 }
 
@@ -157,6 +170,11 @@ export function SettingsTabsDropdown({
             {group.map((tab) => (
               <DropdownMenuItem key={tab.id} onClick={() => onTabChange(tab.id)}>
                 {tab.label}
+                {tab.badge && (
+                  <Badge variant="secondary" className="text-[10px]">
+                    {tab.badge}
+                  </Badge>
+                )}
                 {tab.id === activeTab && <Check className="ml-auto size-3.5" />}
               </DropdownMenuItem>
             ))}
@@ -405,6 +423,31 @@ export function SettingsPage({
         },
       ],
     },
+    kanban: {
+      title: t('kanban.title'),
+      description: t('kanban.subtitle'),
+      sections: [
+        {
+          id: 'kanban',
+          // The board fills its container height; columns scroll internally.
+          component: (
+            <div className="h-[65vh] min-h-80 overflow-hidden rounded-xl border border-border/70">
+              <KanbanBoard />
+            </div>
+          ),
+        },
+      ],
+    },
+    'ai-lab': {
+      title: t('aiLab.title'),
+      description: t('aiLab.subtitle'),
+      sections: [{ id: 'ai-lab', component: <AiLabView embedded /> }],
+    },
+    roadmap: {
+      title: t('roadmap.title'),
+      description: t('roadmap.subtitle'),
+      sections: [{ id: 'roadmap', component: <RoadmapView embedded /> }],
+    },
   };
 
   const currentContent = tabContent[activeTab as keyof typeof tabContent];
@@ -434,6 +477,11 @@ export function SettingsPage({
                         )}
                       >
                         <span className="text-left">{tab.label}</span>
+                        {tab.badge && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            {tab.badge}
+                          </Badge>
+                        )}
                       </button>
                     );
                   })}

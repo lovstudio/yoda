@@ -33,6 +33,14 @@ export default tseslint.config(
     },
   },
 
+  // Landing-page browser scripts (docs/ static site)
+  {
+    files: ['docs/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.es2020 },
+    },
+  },
+
   // Type-aware rules scoped to src/ only (config files like vitest.config.ts are not in tsconfig)
   {
     files: ['src/**/*.{ts,tsx}'],

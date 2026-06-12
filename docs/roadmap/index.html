@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Yoda Roadmap - Runtime capability matrix</title>
+    <meta
+      name="description"
+      content="What Yoda has shipped, is testing, or is still researching for each agent runtime — backed by source-level deep-dive reports."
+    />
+    <link rel="canonical" href="https://yoda.lovstudio.ai/roadmap/" />
+    <meta property="og:title" content="Yoda Roadmap - Runtime capability matrix" />
+    <meta
+      property="og:description"
+      content="What Yoda has shipped, is testing, or is still researching for each agent runtime."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://yoda.lovstudio.ai/roadmap/" />
+    <meta name="theme-color" content="#0b130e" />
+    <link rel="icon" type="image/svg+xml" href="/yoda-app-icon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,650;6..72,700&display=swap"
+      rel="stylesheet"
+    />
+    <script type="module" src="./main.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b130e;
+        --bg-2: #101a13;
+        --ink: #d9eadf;
+        --muted: #8aa593;
+        --soft: #b9d3c2;
+        --line: rgba(217, 234, 223, 0.16);
+        --line-strong: rgba(217, 234, 223, 0.32);
+        --panel: rgba(16, 26, 19, 0.86);
+        --panel-solid: #15221a;
+        --lime: #5ecf95;
+        --cyan: #9ef0c4;
+        --copper: #d69b63;
+        --red: #ff795f;
+        --sans: 'IBM Plex Sans', 'Aptos', 'Avenir Next', sans-serif;
+        --serif: 'Newsreader', 'Iowan Old Style', 'Times New Roman', serif;
+        --mono: 'IBM Plex Mono', 'SFMono-Regular', monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--sans);
+        line-height: 1.55;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 18px 24px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .brand img {
+        width: 22px;
+        height: 22px;
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 18px;
+        font-size: 0.86rem;
+      }
+
+      .nav-links a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+
+      .nav-links a:hover,
+      .nav-links a[aria-current='page'] {
+        color: var(--ink);
+      }
+
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 44px 24px 80px;
+        display: flex;
+        flex-direction: column;
+        gap: 34px;
+      }
+
+      .hero h1 {
+        margin: 0 0 10px;
+        font-family: var(--serif);
+        font-size: clamp(2rem, 4.5vw, 2.8rem);
+        font-weight: 650;
+        line-height: 1.12;
+      }
+
+      .hero p {
+        margin: 0;
+        max-width: 760px;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel);
+        padding: 22px 24px;
+      }
+
+      .card h2 {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+      }
+
+      .card .sub {
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      .book-counts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 18px;
+        margin-top: 12px;
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        color: var(--soft);
+      }
+
+      .book-counts strong {
+        color: var(--ink);
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 18px;
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+
+      .matrix-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.86rem;
+        min-width: 640px;
+      }
+
+      th,
+      td {
+        padding: 10px 16px;
+        text-align: left;
+        border-top: 1px solid var(--line);
+      }
+
+      thead th {
+        border-top: none;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        background: var(--bg-2);
+      }
+
+      th.runtime-col,
+      td.cell {
+        text-align: center;
+        width: 130px;
+        white-space: nowrap;
+      }
+
+      .runtime-progress {
+        display: block;
+        margin-top: 2px;
+        font-size: 0.68rem;
+        color: var(--soft);
+        text-transform: none;
+        letter-spacing: 0;
+      }
+
+      .upcoming-tag {
+        display: block;
+        margin-top: 2px;
+        font-size: 0.68rem;
+        color: var(--copper);
+        text-transform: none;
+        letter-spacing: 0;
+      }
+
+      tr.category th {
+        background: var(--bg-2);
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--cyan);
+      }
+
+      .feature-name {
+        font-weight: 500;
+      }
+
+      .feature-name a {
+        text-decoration: none;
+        border-bottom: 1px dotted var(--line-strong);
+      }
+
+      .feature-name a:hover {
+        color: var(--cyan);
+        border-bottom-color: var(--cyan);
+      }
+
+      .feature-desc {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 0.76rem;
+        max-width: 460px;
+        white-space: normal;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.76rem;
+        color: var(--soft);
+      }
+
+      .cta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+      }
+
+      .cta a {
+        display: inline-flex;
+        align-items: center;
+        padding: 9px 16px;
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        font-size: 0.84rem;
+        text-decoration: none;
+        background: var(--bg-2);
+      }
+
+      .cta a:hover {
+        border-color: var(--lime);
+        color: var(--lime);
+      }
+
+      footer {
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .footer-inner {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 18px 24px;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .footer-inner a {
+        color: var(--muted);
+        text-decoration: none;
+        margin-left: 14px;
+      }
+
+      .footer-inner a:hover {
+        color: var(--ink);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav class="nav" aria-label="Primary navigation">
+        <a class="brand" href="/" aria-label="Yoda home">
+          <img src="/yoda-mark.svg" alt="" />
+          <span>Yoda</span>
+        </a>
+        <div class="nav-links">
+          <a href="/#workflow">Workflow</a>
+          <a href="/#features">Features</a>
+          <a href="/roadmap/" aria-current="page">Roadmap</a>
+          <a href="/design/">Design</a>
+          <a href="/docs">Docs</a>
+        </div>
+      </nav>
+    </header>
+    <main id="roadmap-root">
+      <noscript>This page renders the live roadmap data and requires JavaScript.</noscript>
+    </main>
+    <footer>
+      <div class="footer-inner">
+        <span>Apache-2.0 - LovStudio</span>
+        <span>
+          <a href="https://github.com/lovstudio/yoda">GitHub</a>
+          <a href="/docs">Docs</a>
+          <a href="/">Home</a>
+        </span>
+      </div>
+    </footer>
+  </body>
+</html>

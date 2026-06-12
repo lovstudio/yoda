@@ -98,6 +98,7 @@
     "automation": "自动化",
     "mobile": "移动端",
     "settings": "设置",
+    "website": "官网",
     "roadmap": "Roadmap",
     "aiLab": "AI Lab",
     "docs": "文档",
@@ -277,7 +278,10 @@
       "github": "GitHub",
       "interface": "界面",
       "terminal": "终端",
-      "keyboardShortcuts": "快捷键"
+      "keyboardShortcuts": "快捷键",
+      "kanban": "看板",
+      "aiLab": "AI Lab",
+      "roadmap": "Roadmap"
     },
     "general": {
       "description": "管理你的账户、隐私设置、通知与应用更新。"
@@ -2094,6 +2098,8 @@
     }
   },
   "kanban": {
+    "title": "看板",
+    "subtitle": "跨项目任务看板：四列固定状态，拖拽卡片迁移，支持列级 Hooks。",
     "moveFailed": "移动任务失败",
     "emptyColumn": "暂无任务",
     "hooks": {

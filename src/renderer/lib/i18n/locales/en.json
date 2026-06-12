@@ -98,6 +98,7 @@
     "automation": "Automation",
     "mobile": "Mobile",
     "settings": "Settings",
+    "website": "Website",
     "roadmap": "Roadmap",
     "aiLab": "AI Lab",
     "docs": "Docs",
@@ -277,7 +278,10 @@
       "github": "GitHub",
       "interface": "Interface",
       "terminal": "Terminal",
-      "keyboardShortcuts": "Keyboard shortcuts"
+      "keyboardShortcuts": "Keyboard shortcuts",
+      "kanban": "Kanban",
+      "aiLab": "AI Lab",
+      "roadmap": "Roadmap"
     },
     "general": {
       "description": "Manage your account, privacy settings, notifications, and app updates."
@@ -2094,6 +2098,8 @@
     }
   },
   "kanban": {
+    "title": "Kanban",
+    "subtitle": "Cross-project task board: four fixed status columns, drag cards to move, with per-column hooks.",
     "moveFailed": "Failed to move task",
     "emptyColumn": "No tasks",
     "hooks": {

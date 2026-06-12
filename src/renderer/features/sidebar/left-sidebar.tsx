@@ -1,16 +1,14 @@
 import {
   BookOpen,
   ExternalLink,
-  FlaskConical,
   FolderInput,
+  Globe,
   MessageSquareShare,
-  Milestone,
   PanelRightOpen,
   Puzzle,
   Search,
   Settings,
   Smartphone,
-  SquareKanban,
   SquarePen,
   Workflow,
 } from 'lucide-react';
@@ -18,7 +16,7 @@ import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { skillIssueAgentLabel } from '@shared/skills/validation';
-import { YODA_DOCS_URL } from '@shared/urls';
+import { YODA_DOCS_URL, YODA_WEBSITE_URL } from '@shared/urls';
 import type { ViewId } from '@renderer/app/view-registry';
 import {
   useSkillValidationIssues,
@@ -34,7 +32,6 @@ import {
 } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
-import { Badge } from '@renderer/lib/ui/badge';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -280,22 +277,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
           <div className="mx-2 my-1 border-t border-border" />
           {!sidebarStore.navSectionHidden && (
             <SidebarMenu className="px-2">
-              <GlobalSidePaneTarget viewId="kanban" altHeld={altHeld}>
-                <SidebarMenuButton
-                  isActive={isCurrentView(currentView, 'kanban')}
-                  onClick={(e) =>
-                    e.altKey ? appState.sidePane.pinView('kanban', {}) : navigate('kanban')
-                  }
-                  aria-label={t('sidebar.kanban')}
-                  className="w-full justify-start"
-                >
-                  <SquareKanban className="h-5 w-5 sm:h-4 sm:w-4" />
-                  {t('sidebar.kanban')}
-                  <Badge variant="secondary" className="ml-auto text-[10px]">
-                    Alpha
-                  </Badge>
-                </SidebarMenuButton>
-              </GlobalSidePaneTarget>
               <GlobalSidePaneTarget viewId="settings" altHeld={altHeld}>
                 <SidebarMenuButton
                   isActive={isCurrentView(currentView, 'settings')}
@@ -309,32 +290,17 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                   {t('sidebar.settings')}
                 </SidebarMenuButton>
               </GlobalSidePaneTarget>
-              <GlobalSidePaneTarget viewId="roadmap" altHeld={altHeld}>
-                <SidebarMenuButton
-                  isActive={isCurrentView(currentView, 'roadmap')}
-                  onClick={(e) =>
-                    e.altKey ? appState.sidePane.pinView('roadmap', {}) : navigate('roadmap')
-                  }
-                  aria-label={t('sidebar.roadmap')}
-                  className="w-full justify-start"
-                >
-                  <Milestone className="h-5 w-5 sm:h-4 sm:w-4" />
-                  {t('sidebar.roadmap')}
-                </SidebarMenuButton>
-              </GlobalSidePaneTarget>
-              <GlobalSidePaneTarget viewId="aiLab" altHeld={altHeld}>
-                <SidebarMenuButton
-                  isActive={isCurrentView(currentView, 'aiLab')}
-                  onClick={(e) =>
-                    e.altKey ? appState.sidePane.pinView('aiLab', {}) : navigate('aiLab')
-                  }
-                  aria-label={t('sidebar.aiLab')}
-                  className="w-full justify-start"
-                >
-                  <FlaskConical className="h-5 w-5 sm:h-4 sm:w-4" />
-                  {t('sidebar.aiLab')}
-                </SidebarMenuButton>
-              </GlobalSidePaneTarget>
+              <SidebarMenuButton
+                onClick={() => void rpc.app.openExternal(YODA_WEBSITE_URL)}
+                aria-label={t('sidebar.website')}
+                className="w-full justify-between"
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <Globe className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
+                  <span className="truncate">{t('sidebar.website')}</span>
+                </span>
+                <ExternalLink className="ml-auto h-3 w-3 shrink-0 text-foreground-tertiary-passive" />
+              </SidebarMenuButton>
               <SidebarMenuButton
                 onClick={() => void rpc.app.openExternal(YODA_DOCS_URL)}
                 aria-label={t('sidebar.docs')}

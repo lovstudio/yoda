@@ -63,9 +63,33 @@ const MATRIX_GRID_STYLE: React.CSSProperties = {
  * is testing, or is still researching for each agent runtime. Content lives
  * in roadmap-data.ts; strings in i18n under `roadmap.*`.
  */
-export function RoadmapView() {
+/** `embedded` drops the outer scroll shell + header for hosting inside settings. */
+export function RoadmapView({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useTranslation();
   const showFeedbackModal = useShowModal('feedbackModal');
+
+  const content = (
+    <>
+      <BookManifestoSection />
+
+      <RuntimeMatrixSection />
+
+      <section className="flex items-center justify-between gap-4 rounded-xl border border-border/70 p-5">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h2 className="text-sm font-medium text-foreground">{t('roadmap.cta.title')}</h2>
+          <p className="text-xs leading-relaxed text-muted-foreground">{t('roadmap.cta.desc')}</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => showFeedbackModal({})}>
+          <MessageSquareShare className="size-3.5" />
+          {t('roadmap.cta.button')}
+        </Button>
+      </section>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex flex-col gap-8">{content}</div>;
+  }
 
   return (
     <div className="h-full min-h-0 overflow-y-auto bg-background text-foreground">
@@ -78,20 +102,7 @@ export function RoadmapView() {
           <p className="text-xs leading-relaxed text-muted-foreground">{t('roadmap.subtitle')}</p>
         </header>
 
-        <BookManifestoSection />
-
-        <RuntimeMatrixSection />
-
-        <section className="flex items-center justify-between gap-4 rounded-xl border border-border/70 p-5">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h2 className="text-sm font-medium text-foreground">{t('roadmap.cta.title')}</h2>
-            <p className="text-xs leading-relaxed text-muted-foreground">{t('roadmap.cta.desc')}</p>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => showFeedbackModal({})}>
-            <MessageSquareShare className="size-3.5" />
-            {t('roadmap.cta.button')}
-          </Button>
-        </section>
+        {content}
       </div>
     </div>
   );

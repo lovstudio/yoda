@@ -7,7 +7,8 @@ import { useGenerateLogo } from '../use-ai-lab';
 import { LogoHistory } from './LogoHistory';
 import { LogoStudio } from './LogoStudio';
 
-export const AiLabView: React.FC = () => {
+/** `embedded` drops the outer scroll shell + header for hosting inside settings. */
+export const AiLabView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const generateLogo = useGenerateLogo();
@@ -33,6 +34,22 @@ export const AiLabView: React.FC = () => {
     });
   };
 
+  const content = (
+    <>
+      <LogoStudio onGenerate={handleGenerate} isPending={generateLogo.isPending} />
+
+      <LogoHistory
+        pendingInput={generateLogo.isPending ? (generateLogo.variables ?? null) : null}
+        onRerun={handleGenerate}
+        rerunDisabled={generateLogo.isPending}
+      />
+    </>
+  );
+
+  if (embedded) {
+    return <div className="space-y-8">{content}</div>;
+  }
+
   return (
     <div className="@container flex h-full min-h-0 flex-col bg-background text-foreground">
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -47,13 +64,7 @@ export const AiLabView: React.FC = () => {
             </p>
           </header>
 
-          <LogoStudio onGenerate={handleGenerate} isPending={generateLogo.isPending} />
-
-          <LogoHistory
-            pendingInput={generateLogo.isPending ? (generateLogo.variables ?? null) : null}
-            onRerun={handleGenerate}
-            rerunDisabled={generateLogo.isPending}
-          />
+          {content}
         </div>
       </div>
     </div>
