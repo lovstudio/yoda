@@ -51,11 +51,31 @@ function parseFrontMatter(content: string): {
 
 function formatFrontMatterValue(value: unknown): string {
   if (value == null) return '';
-  if (Array.isArray(value) && value.every((item) => item === null || typeof item !== 'object')) {
-    return value.map(String).join(', ');
+  if (Array.isArray(value)) {
+    if (value.some((item) => item !== null && typeof item === 'object')) {
+      return stringifyYaml(value).trimEnd();
+    }
+    const items = value.map(String);
+    const inline = items.join(', ');
+    return inline.length <= 60 ? inline : items.join('\n');
   }
   if (typeof value === 'object') return stringifyYaml(value).trimEnd();
   return String(value);
+}
+
+/** Flattens nested front matter objects into dotted-path rows (e.g. `ports.dev`). */
+function flattenFrontMatter(
+  data: Record<string, unknown>,
+  prefix = ''
+): Array<{ key: string; value: string }> {
+  return Object.entries(data).flatMap(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const children = flattenFrontMatter(value as Record<string, unknown>, path);
+      return children.length > 0 ? children : [{ key: path, value: '' }];
+    }
+    return [{ key: path, value: formatFrontMatterValue(value) }];
+  });
 }
 
 /** Renders front matter as a subtle key-value table above the markdown body. */
@@ -63,8 +83,8 @@ const FrontMatterBlock: React.FC<{ data: Record<string, unknown>; variant: Varia
   data,
   variant,
 }) => {
-  const entries = Object.entries(data);
-  if (entries.length === 0) return null;
+  const rows = flattenFrontMatter(data);
+  if (rows.length === 0) return null;
   const isCompact = variant === 'compact';
   const cellPadding = isCompact ? 'px-2 py-1' : 'px-3 py-1.5';
   return (
@@ -73,7 +93,7 @@ const FrontMatterBlock: React.FC<{ data: Record<string, unknown>; variant: Varia
     >
       <table className={cn('w-full border-collapse', isCompact ? 'text-[11px]' : 'text-xs')}>
         <tbody>
-          {entries.map(([key, value]) => (
+          {rows.map(({ key, value }) => (
             <tr key={key} className="border-t border-border first:border-t-0">
               <td
                 className={cn(
@@ -89,7 +109,7 @@ const FrontMatterBlock: React.FC<{ data: Record<string, unknown>; variant: Varia
                   cellPadding
                 )}
               >
-                {formatFrontMatterValue(value)}
+                {value}
               </td>
             </tr>
           ))}
