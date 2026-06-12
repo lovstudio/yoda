@@ -217,15 +217,13 @@ export function BootScreen({ ready, onFinished }: BootScreenProps) {
   const shown2 = reducedMotion ? (done ? CODE_LEN_2 : 0) : count2;
   const codeTyping = (shown1 > 0 && shown1 < CODE_LEN_1) || (shown2 > 0 && shown2 < CODE_LEN_2);
 
-  // Once booted, wait for the operator: click the button or press Enter.
+  // Apple-boot behavior: once everything is loaded, let the bar visibly
+  // complete, then exit on our own — no operator interaction required.
   useEffect(() => {
     if (!done || exiting) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') setExiting(true);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [done, exiting]);
+    const t = setTimeout(() => setExiting(true), reducedMotion ? 150 : 600);
+    return () => clearTimeout(t);
+  }, [done, exiting, reducedMotion]);
 
   return (
     <motion.div
@@ -436,15 +434,17 @@ export function BootScreen({ ready, onFinished }: BootScreenProps) {
           gents
         </motion.div>
 
+        {/* Apple-boot progress bar — same geometry as the static splash bar in
+            index.html so the handoff reads as one continuous bar. */}
         <motion.div
-          className="mt-9 h-px w-56 overflow-hidden"
+          className="mt-9 h-[3px] w-56 overflow-hidden rounded-full"
           style={{ backgroundColor: FAINT }}
           initial={reducedMotion ? { opacity: 1 } : { opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, delay: 0.5 }}
         >
           <motion.div
-            className="h-full origin-left"
+            className="h-full origin-left rounded-full"
             style={{
               background: `linear-gradient(to right, ${MINT_DIM}, ${MINT})`,
               boxShadow: `0 0 8px ${MINT_DIM}`,
@@ -458,46 +458,6 @@ export function BootScreen({ ready, onFinished }: BootScreenProps) {
             }
           />
         </motion.div>
-
-        {/* Enter gate — fixed-height slot so the column doesn't shift. */}
-        <div className="mt-8 flex h-16 flex-col items-center gap-2.5">
-          {done && (
-            <>
-              <motion.button
-                type="button"
-                onClick={() => setExiting(true)}
-                className="cursor-pointer rounded-sm border px-5 py-2 font-mono text-[11px] uppercase outline-none"
-                style={{
-                  borderColor: MINT_DIM,
-                  color: MINT,
-                  letterSpacing: '0.28em',
-                  paddingLeft: 'calc(1.25rem + 0.28em)',
-                  backgroundColor: 'rgba(127, 224, 167, 0.06)',
-                }}
-                initial={reducedMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, ease: [0.2, 0.7, 0.3, 1], delay: 0.15 }}
-                whileHover={{
-                  scale: 1.04,
-                  backgroundColor: 'rgba(127, 224, 167, 0.13)',
-                  boxShadow: '0 0 24px rgba(127, 224, 167, 0.22)',
-                }}
-                whileTap={{ scale: 0.97 }}
-              >
-                Enter Workspace
-              </motion.button>
-              <motion.div
-                className="font-mono text-[10px]"
-                style={{ color: MUTED, letterSpacing: '0.14em' }}
-                initial={reducedMotion ? { opacity: 1 } : { opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5, delay: 0.5 }}
-              >
-                or press enter
-              </motion.div>
-            </>
-          )}
-        </div>
       </div>
 
       {/* Bottom-left: kernel-style boot log. */}
