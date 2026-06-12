@@ -2215,6 +2215,14 @@
       "failed": "Failed"
     },
     "clear": "Clear logs",
+    "col": {
+      "status": "Status",
+      "purpose": "Task",
+      "mode": "Mode",
+      "runtime": "Runtime",
+      "started": "Started",
+      "duration": "Duration"
+    },
     "emptyTitle": "No AI invocations yet",
     "emptyDescription": "Background AI work (naming, summaries, logo generation, …) will be logged here as it runs.",
     "runningSince": "started",

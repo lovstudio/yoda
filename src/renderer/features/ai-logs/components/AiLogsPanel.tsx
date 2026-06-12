@@ -2,10 +2,8 @@ import { CheckCircle2, ChevronRight, Trash2, XCircle } from 'lucide-react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AiInvocationLogRecord, AiLogStatus } from '@shared/ai-logs';
-import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
-import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { Spinner } from '@renderer/lib/ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
@@ -14,6 +12,8 @@ import { useAiLogs, useClearAiLogs } from '../use-ai-logs';
 type StatusFilter = AiLogStatus | 'all';
 
 const STATUS_FILTERS: StatusFilter[] = ['all', 'running', 'succeeded', 'failed'];
+
+const COLUMN_COUNT = 6;
 
 function formatDuration(durationMs: number): string {
   if (durationMs < 1000) return `${durationMs}ms`;
@@ -79,11 +79,31 @@ export const AiLogsPanel: React.FC = () => {
         <EmptyState label={t('aiLogs.emptyTitle')} description={t('aiLogs.emptyDescription')} />
       )}
 
-      <div className="flex flex-col gap-1.5">
-        {logs?.map((record) => (
-          <LogRow key={record.id} record={record} />
-        ))}
-      </div>
+      {!isLoading && (logs?.length ?? 0) > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-border bg-background-secondary text-left text-muted-foreground">
+                <th className="w-8 px-2 py-2" aria-label={t('aiLogs.col.status')} />
+                <th className="px-2 py-2 font-medium">{t('aiLogs.col.purpose')}</th>
+                <th className="px-2 py-2 font-medium">{t('aiLogs.col.mode')}</th>
+                <th className="px-2 py-2 font-medium">{t('aiLogs.col.runtime')}</th>
+                <th className="px-2 py-2 font-medium whitespace-nowrap">
+                  {t('aiLogs.col.started')}
+                </th>
+                <th className="px-2 py-2 font-medium whitespace-nowrap">
+                  {t('aiLogs.col.duration')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs?.map((record) => (
+                <LogTableRow key={record.id} record={record} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };
@@ -95,60 +115,69 @@ const StatusIcon: React.FC<{ status: AiLogStatus }> = ({ status }) => {
   return <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />;
 };
 
-const LogRow: React.FC<{ record: AiInvocationLogRecord }> = ({ record }) => {
+const LogTableRow: React.FC<{ record: AiInvocationLogRecord }> = ({ record }) => {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const purposeLabel = t(`aiLogs.purpose.${record.purpose}`, { defaultValue: record.purpose });
 
   return (
-    <div className="rounded-lg border border-border bg-background-secondary">
-      <button
-        type="button"
+    <>
+      <tr
         onClick={() => setExpanded((value) => !value)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        className={cn(
+          'cursor-pointer border-b border-border transition-colors last:border-b-0 hover:bg-background-secondary',
+          expanded && 'bg-background-secondary'
+        )}
       >
-        <ChevronRight
-          className={cn(
-            'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
-            expanded && 'rotate-90'
-          )}
-        />
-        <StatusIcon status={record.status} />
-        <span className="shrink-0 text-sm font-medium">{purposeLabel}</span>
-        <Badge variant="outline" className="shrink-0 text-[10px]">
+        <td className="px-2 py-2">
+          <span className="flex items-center gap-1">
+            <ChevronRight
+              className={cn(
+                'h-3 w-3 shrink-0 text-muted-foreground transition-transform',
+                expanded && 'rotate-90'
+              )}
+            />
+            <StatusIcon status={record.status} />
+          </span>
+        </td>
+        <td className="px-2 py-2 font-medium whitespace-nowrap">{purposeLabel}</td>
+        <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">
           {t(`aiLogs.mode.${record.mode}`)}
-        </Badge>
-        <Badge variant="outline" className="min-w-0 max-w-40 truncate text-[10px]">
+        </td>
+        <td className="max-w-44 truncate px-2 py-2 text-muted-foreground">
           {record.model ? `${record.runtime} · ${record.model}` : record.runtime}
-        </Badge>
-        <span className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+        </td>
+        <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">
+          {formatTimestamp(record.startedAt)}
+        </td>
+        <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">
           {record.status === 'running' ? (
-            <span>
-              {t('aiLogs.runningSince')} <RelativeTime value={record.startedAt} ago />
-            </span>
+            <span className="text-foreground">{t('aiLogs.filter.running')}</span>
+          ) : record.durationMs !== null ? (
+            formatDuration(record.durationMs)
           ) : (
-            <>
-              {record.durationMs !== null && <span>{formatDuration(record.durationMs)}</span>}
-              <RelativeTime value={record.startedAt} ago />
-            </>
+            '-'
           )}
-        </span>
-      </button>
-
+        </td>
+      </tr>
       {expanded && (
-        <div className="flex flex-col gap-3 border-t border-border px-3 py-3 text-xs">
-          <DetailGrid record={record} />
-          {record.error && (
-            <DetailBlock label={t('aiLogs.error')} value={record.error} destructive />
-          )}
-          {record.command && (
-            <DetailBlock label={t('aiLogs.command')} value={record.command} mono />
-          )}
-          {record.prompt && <DetailBlock label={t('aiLogs.prompt')} value={record.prompt} />}
-          {record.output && <DetailBlock label={t('aiLogs.output')} value={record.output} />}
-        </div>
+        <tr className="border-b border-border last:border-b-0">
+          <td colSpan={COLUMN_COUNT} className="bg-background-secondary/50 px-3 py-3">
+            <div className="flex flex-col gap-3">
+              <DetailGrid record={record} />
+              {record.error && (
+                <DetailBlock label={t('aiLogs.error')} value={record.error} destructive />
+              )}
+              {record.command && (
+                <DetailBlock label={t('aiLogs.command')} value={record.command} mono />
+              )}
+              {record.prompt && <DetailBlock label={t('aiLogs.prompt')} value={record.prompt} />}
+              {record.output && <DetailBlock label={t('aiLogs.output')} value={record.output} />}
+            </div>
+          </td>
+        </tr>
       )}
-    </div>
+    </>
   );
 };
 

@@ -2215,6 +2215,14 @@
       "failed": "失败"
     },
     "clear": "清空日志",
+    "col": {
+      "status": "状态",
+      "purpose": "任务",
+      "mode": "模式",
+      "runtime": "运行时",
+      "started": "开始时间",
+      "duration": "耗时"
+    },
     "emptyTitle": "还没有 AI 调用记录",
     "emptyDescription": "后台 AI 任务（命名、摘要、Logo 生成等）运行时会记录在这里。",
     "runningSince": "开始于",
