@@ -3,8 +3,6 @@ import { observer } from 'mobx-react-lite';
 import { Activity, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePanelRef } from 'react-resizable-panels';
-import { moveDraggedTabToStrip } from '@renderer/app/open-task-target';
-import { useTabDropZone } from '@renderer/app/tab-drag';
 import {
   getTaskManagerStore,
   getTaskStore,
@@ -408,21 +406,9 @@ const TaskMainAreaSplit = observer(function TaskMainAreaSplit() {
 const UnifiedMainContent = observer(function UnifiedMainContent() {
   const { taskView } = useProvisionedTask();
 
-  // The whole main area accepts a dragged pin (task sidebar / shell pane):
-  // dropping "into the main window" reads as moving the entity back, without
-  // requiring a precise drop on the narrow titlebar strip.
-  const dropZone = useTabDropZone({
-    canDrop: (payload) => payload.kind === 'task-entity' && payload.from !== 'strip',
-    onDrop: moveDraggedTabToStrip,
-  });
-
   return (
     <div
-      ref={dropZone.dropRef}
-      className={cn(
-        'flex h-full flex-col overflow-hidden bg-background text-foreground',
-        dropZone.isOver && 'ring-2 ring-inset ring-primary/40'
-      )}
+      className="flex h-full flex-col overflow-hidden bg-background text-foreground"
       onFocus={() => taskView.setFocusedRegion('main')}
       onPointerDown={() => taskView.setFocusedRegion('main')}
     >

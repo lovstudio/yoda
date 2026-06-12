@@ -1,5 +1,7 @@
 import { observer } from 'mobx-react-lite';
 import { AppSidePane } from '@renderer/app/app-side-pane';
+import { moveDraggedTabToStrip } from '@renderer/app/open-task-target';
+import { useTabDropZone } from '@renderer/app/tab-drag';
 import { LeftSidebar } from '@renderer/features/sidebar/left-sidebar';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { CommandShortcutBinder } from '@renderer/lib/commands/command-shortcut-binder';
@@ -18,6 +20,7 @@ import { WorkspaceContentLayout, WorkspaceLayout } from '@renderer/lib/layout/wo
 import { ModalRenderer } from '@renderer/lib/modal/modal-renderer';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Toaster } from '@renderer/lib/ui/toaster';
+import { cn } from '@renderer/utils/utils';
 
 /**
  * Global top-level tab shortcuts (Mod+W, Mod+Alt+arrows, Mod+1-9). Yields to
@@ -83,5 +86,26 @@ export const Workspace = observer(function Workspace() {
 
 function WorkspaceViewContent() {
   const { TitlebarSlot, MainPanel } = useWorkspaceSlots();
-  return <WorkspaceContentLayout titlebarSlot={<TitlebarSlot />} mainPanel={<MainPanel />} />;
+
+  // The whole central column — on every route — accepts a dragged pin (task
+  // sidebar / shell pane): dropping "into the main window" moves the entity
+  // back to the top strip and activates it, without requiring a precise drop
+  // on the strip itself. Inner strips keep priority via the innermost-zone
+  // rule in tab-drag.
+  const { isOver, dropRef } = useTabDropZone({
+    canDrop: (payload) => payload.kind === 'task-entity' && payload.from !== 'strip',
+    onDrop: moveDraggedTabToStrip,
+  });
+
+  return (
+    <div
+      ref={dropRef}
+      className={cn(
+        'h-full min-h-0 overflow-hidden',
+        isOver && 'ring-2 ring-inset ring-primary/40'
+      )}
+    >
+      <WorkspaceContentLayout titlebarSlot={<TitlebarSlot />} mainPanel={<MainPanel />} />
+    </div>
+  );
 }

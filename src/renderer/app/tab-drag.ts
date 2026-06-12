@@ -113,17 +113,19 @@ function beginDrag(): void {
   document.body.style.cursor = 'grabbing';
 }
 
-/** Highlight the zone under the pointer that accepts the payload, if any. */
+/**
+ * Highlight the zone under the pointer that accepts the payload, if any.
+ * Zones can nest (a strip inside the workspace column) — the innermost
+ * matching zone wins so precise targets keep priority over broad ones.
+ */
 function updateOver(event: MouseEvent): void {
   if (!active) return;
   const el = document.elementFromPoint(event.clientX, event.clientY);
   let next: DropZone | null = null;
   if (el) {
     for (const zone of zones) {
-      if (zone.node.contains(el) && zone.canDrop(active.payload)) {
-        next = zone;
-        break;
-      }
+      if (!zone.node.contains(el) || !zone.canDrop(active.payload)) continue;
+      if (!next || next.node.contains(zone.node)) next = zone;
     }
   }
   if (active.over === next) return;
