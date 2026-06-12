@@ -103,7 +103,7 @@ function WorkspaceViewContent() {
       ref={dropRef}
       className={cn(
         'h-full min-h-0 overflow-hidden',
-        isOver && 'ring-2 ring-inset ring-primary/40'
+        isOver && 'ring-2 ring-inset ring-border-primary'
       )}
     >
       <WorkspaceContentLayout titlebarSlot={<TitlebarSlot />} mainPanel={<MainPanel />} />

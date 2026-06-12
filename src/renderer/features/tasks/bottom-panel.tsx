@@ -97,7 +97,7 @@ export const BottomPanel = observer(function BottomPanel() {
           ref={dropZone.dropRef}
           className={cn(
             'flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-sm',
-            dropZone.isOver && 'bg-primary/10'
+            dropZone.isOver && 'bg-background-tertiary-1'
           )}
         >
           {openModes.map(({ id, icon, labelKey }) => (

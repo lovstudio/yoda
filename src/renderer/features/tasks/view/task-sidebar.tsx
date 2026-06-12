@@ -287,7 +287,7 @@ export const TaskSidebar = observer(function TaskSidebar() {
             ref={dropZone.dropRef}
             className={cn(
               'flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-md',
-              dropZone.isOver && 'bg-primary/10'
+              dropZone.isOver && 'bg-background-tertiary-1'
             )}
             style={{ scrollbarWidth: 'none' }}
           >

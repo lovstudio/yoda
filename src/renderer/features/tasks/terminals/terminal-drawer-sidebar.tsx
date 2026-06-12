@@ -186,7 +186,7 @@ function SidebarList({
       ref={dropRef}
       className={cn(
         'flex flex-col overflow-y-auto text-sm',
-        isDropOver && 'bg-primary/10',
+        isDropOver && 'bg-background-tertiary-1',
         className
       )}
     >

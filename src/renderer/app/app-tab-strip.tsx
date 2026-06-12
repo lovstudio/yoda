@@ -135,7 +135,7 @@ export const AppTabStrip = observer(function AppTabStrip() {
       ref={dropZone.dropRef}
       className={cn(
         'flex items-center gap-1 overflow-x-auto rounded-md',
-        dropZone.isOver && 'bg-primary/10'
+        dropZone.isOver && 'bg-background-tertiary-1'
       )}
     >
       {visibleTabs.map((tab) => {
