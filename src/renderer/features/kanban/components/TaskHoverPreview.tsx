@@ -20,7 +20,7 @@ export function TaskHoverPreview({ card }: { card: BoardCard }) {
   });
 
   return (
-    <div className="flex w-80 flex-col">
+    <div className="flex w-full min-w-0 flex-col">
       <div className="border-b border-border px-3 py-2">
         <div className="truncate text-sm font-medium text-foreground">{card.task.name}</div>
         <div className="flex items-center gap-2 text-xs text-foreground-tertiary-passive">
@@ -33,7 +33,7 @@ export function TaskHoverPreview({ card }: { card: BoardCard }) {
         </div>
       </div>
 
-      <div className="max-h-64 overflow-y-auto px-3 py-2">
+      <div className="max-h-64 min-w-0 overflow-y-auto overflow-x-hidden break-words [overflow-wrap:anywhere] px-3 py-2">
         {isLoading ? (
           <div className="flex justify-center py-4">
             <Spinner />

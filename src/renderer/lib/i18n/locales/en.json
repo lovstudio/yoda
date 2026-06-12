@@ -2021,7 +2021,8 @@
     },
     "preview": {
       "noSummary": "No summary yet — open the task to generate one."
-    }
+    },
+    "alphaHint": "Early preview — rough edges expected."
   },
   "usage": {
     "title": "Usage",

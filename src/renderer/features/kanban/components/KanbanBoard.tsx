@@ -20,6 +20,7 @@ import { registeredTaskData } from '@renderer/features/tasks/stores/task';
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
+import { Badge } from '@renderer/lib/ui/badge';
 import { cn } from '@renderer/utils/utils';
 import { ColumnHooksPopover } from './ColumnHooksPopover';
 import { KanbanCard, KanbanCardContent, suppressCardClicks, type BoardCard } from './KanbanCard';
@@ -109,6 +110,12 @@ export const KanbanBoard = observer(function KanbanBoard() {
       onDragCancel={() => setActiveCard(null)}
     >
       <div className="flex h-full min-h-0 flex-col">
+        <div className="flex items-center gap-2 px-4 pt-3">
+          <Badge variant="secondary" className="text-[10px]">
+            Alpha
+          </Badge>
+          <span className="text-xs text-foreground-tertiary-passive">{t('kanban.alphaHint')}</span>
+        </div>
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
           {KANBAN_STATUSES.map((status) => (
             <KanbanColumn

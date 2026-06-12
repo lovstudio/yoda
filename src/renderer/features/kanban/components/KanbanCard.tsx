@@ -64,7 +64,7 @@ export const KanbanCard = observer(function KanbanCard({
           </div>
         }
       />
-      <PopoverContent side="right" align="start" className="p-0">
+      <PopoverContent side="right" align="start" className="w-80 gap-0 overflow-hidden p-0">
         <TaskHoverPreview card={card} />
       </PopoverContent>
     </Popover>
