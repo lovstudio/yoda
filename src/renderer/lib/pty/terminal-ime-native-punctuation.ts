@@ -5,6 +5,7 @@ const FALLBACK_DELAY_MS = 30;
 
 const PUNCTUATION_CODES = new Set([
   'Backquote',
+  'Backslash',
   'BracketLeft',
   'BracketRight',
   'Comma',
