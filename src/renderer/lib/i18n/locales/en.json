@@ -7,7 +7,9 @@
     "home": "Home",
     "project": "Project",
     "task": "Task",
-    "file": "File"
+    "file": "File",
+    "droppedToBackground": "Moved to its tab strip (background)",
+    "goToTab": "Go there"
   },
   "fileActions": {
     "label": "File actions",

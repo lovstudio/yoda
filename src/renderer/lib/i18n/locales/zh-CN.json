@@ -7,7 +7,9 @@
     "home": "主页",
     "project": "项目",
     "task": "任务",
-    "file": "文件"
+    "file": "文件",
+    "droppedToBackground": "已放回标签栏（后台）",
+    "goToTab": "前往"
   },
   "fileActions": {
     "label": "文件操作",

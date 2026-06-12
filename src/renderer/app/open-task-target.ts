@@ -9,9 +9,11 @@ import {
   OVERVIEW_TAB_ID,
   type TabManagerStore,
 } from '@renderer/features/tasks/tabs/tab-manager-store';
+import { toast } from '@renderer/lib/hooks/use-toast';
+import i18n from '@renderer/lib/i18n';
 import type { NavigateFnTyped } from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
-import type { AppTabEntry } from '@renderer/lib/stores/app-tabs-store';
+import { tabScopeKey, type AppTabEntry } from '@renderer/lib/stores/app-tabs-store';
 import { log } from '@renderer/utils/logger';
 
 /**
@@ -52,32 +54,59 @@ export function closeTaskTopTab(tab: AppTabEntry): void {
  * entity (task-sidebar pin or shell-pane pin) returns to its scope's strip; a
  * shell view/overview pin reopens its tab there and unpins.
  *
- * Always activates: dragging back to the main window means "show it" — a
- * cross-scope tab placed in the background is invisible and reads as data
- * loss. The quiet no-activate path stays available via the chips' context
- * menus ("move back").
+ * Never activates — dropping must not yank the main area's route. When the
+ * tab lands in another scope's strip (invisible from here), a toast with a
+ * "go there" action keeps it from reading as data loss.
  */
 export function moveDraggedTabToStrip(payload: TabDragPayload): void {
   if (payload.kind === 'shell-pin') {
     const { pin } = payload;
-    if (pin.kind === 'view') {
-      appState.appTabs.openTab(pin.viewId, pin.params, { activate: true });
-    } else {
-      openTaskTopTab(pin.projectId, pin.taskId, { kind: 'overview' }, { activate: true });
-    }
+    const open = (activate: boolean) => {
+      if (pin.kind === 'view') {
+        appState.appTabs.openTab(pin.viewId, pin.params, { activate });
+      } else {
+        openTaskTopTab(pin.projectId, pin.taskId, { kind: 'overview' }, { activate });
+      }
+    };
+    open(false);
     appState.sidePane.unpin(pin.id);
+    const scope =
+      pin.kind === 'view'
+        ? tabScopeKey(pin.viewId, pin.params)
+        : tabScopeKey('task', { projectId: pin.projectId, taskId: pin.taskId });
+    notifyBackgroundDrop(scope, () => open(true));
     return;
   }
   if (payload.kind !== 'task-entity' || !payload.tabId) return;
-  const tabManager = asProvisioned(getTaskStore(payload.projectId, payload.taskId))?.taskView
-    .tabManager;
+  const { projectId, taskId, target } = payload;
+  const tabManager = asProvisioned(getTaskStore(projectId, taskId))?.taskView.tabManager;
   if (!tabManager) return;
   if (payload.from === 'taskSidebar') tabManager.moveSidebarTabBack(payload.tabId);
   if (payload.from === 'shellPane') {
     tabManager.moveShellPinBack(payload.tabId);
     if (payload.pinId) appState.sidePane.unpin(payload.pinId);
   }
-  openTaskTopTab(payload.projectId, payload.taskId, payload.target, { activate: true });
+  openTaskTopTab(projectId, taskId, target, { activate: false });
+  notifyBackgroundDrop(tabScopeKey('task', { projectId, taskId }), () =>
+    openTaskTopTab(projectId, taskId, target, { activate: true })
+  );
+}
+
+/**
+ * A tab dropped into a scope other than the visible one lands in a strip the
+ * user can't see — surface where it went, with a one-click way to follow.
+ */
+function notifyBackgroundDrop(scope: string, openNow: () => void): void {
+  const { currentViewId, viewParamsStore } = appState.navigation;
+  const activeScope = tabScopeKey(
+    currentViewId,
+    (viewParamsStore[currentViewId] ?? {}) as Record<string, unknown>
+  );
+  if (scope === activeScope) return;
+  toast({
+    title: i18n.t('appTabs.droppedToBackground'),
+    action: { label: i18n.t('appTabs.goToTab'), onClick: openNow },
+  });
 }
 
 /** Resolves a top-level tab target to the matching internal tab id, if open. */
