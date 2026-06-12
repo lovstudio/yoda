@@ -105,6 +105,28 @@ export function useIsPinHosted(): boolean {
   return useContext(ViewParamsOverrideContext) !== null;
 }
 
+/**
+ * Opens a view as a tab of the hosting surface: a side-pane pin when the
+ * subtree renders inside a pin host, a top-level app tab otherwise. Use for
+ * "open detail" actions (skill cards, …) so a pinned view adds a tab next to
+ * itself instead of hijacking the main area's route.
+ */
+export function useOpenViewTab(): { openViewTab: NavigateFnTyped } {
+  const isPinHosted = useIsPinHosted();
+  const openViewTab = useCallback(
+    (...args: unknown[]) => {
+      const [viewId, params] = args as [ViewId, WrapParams<ViewId> | undefined];
+      if (isPinHosted) {
+        appState.sidePane.pinView(viewId, (params ?? {}) as Record<string, unknown>);
+        return;
+      }
+      appState.appTabs.openTab(viewId, params);
+    },
+    [isPinHosted]
+  ) as NavigateFnTyped;
+  return { openViewTab };
+}
+
 export function useParams<TId extends ViewId>(
   viewId: TId
 ): {
