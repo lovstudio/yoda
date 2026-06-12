@@ -812,8 +812,8 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const greetingName = sessionUser?.name?.trim() || sessionUser?.username || '';
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto bg-background text-foreground">
-      <div className="mx-auto flex min-h-full w-full max-w-6xl flex-1 flex-col px-5 pb-8 pt-14 sm:px-8 lg:px-10">
+    <div className="@container flex h-full flex-col overflow-y-auto bg-background text-foreground">
+      <div className="mx-auto flex min-h-full w-full max-w-6xl flex-1 flex-col px-5 pb-8 pt-14 @2xl:px-8 @5xl:px-10">
         <div className="flex flex-1 flex-col justify-center gap-8 py-4">
           <div className="text-center">
             <div className="mb-4 flex items-center justify-center">
@@ -2771,199 +2771,191 @@ export const HomeComposer = observer(function HomeComposer({
       </div>
 
       <div className="mt-3 flex flex-col gap-2">
-        <div className="overflow-x-auto pb-1">
-          <div ref={runModeAnchorRef} className="flex min-w-max flex-wrap items-center gap-2">
-            {isProjectLocked ? (
-              <TaskScopedProjectButton
-                label={lockedProjectName ?? selectedProjectId ?? ''}
-                tooltip={
-                  taskScopedTarget
-                    ? t('home.taskConversationScopeTooltip')
-                    : t('home.subtaskScopeTooltip')
-                }
-              />
-            ) : (
-              <ProjectSelector
-                value={selectedProjectId}
-                onChange={setSelectedProjectId}
-                allowProjectless
-                initializeGitRepositoryOnPick
-                trigger={
-                  <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
-                    <FolderOpen className="size-3.5 text-foreground-muted" />
-                    <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
-                  </ComboboxTrigger>
-                }
-              />
-            )}
-            <RunHostSelector kind={runHostKind} />
-            {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
-            {!taskScopedTarget && mounted && runMode === 'compare' && (
-              <Chip icon={GitFork}>
-                {t('home.compareBranchPolicy', { count: compareRuntimes.length })}
-              </Chip>
-            )}
-            {!taskScopedTarget && mounted && runMode === 'team' && (
-              <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
-            )}
-            {!taskScopedTarget && mounted && runMode === 'normal' && (
-              <>
-                <BaseBranchChip
-                  projectId={mounted.data.id}
-                  forking={effectiveStandardStrategyKind === 'new-branch'}
-                  locked={Boolean(parentBranchName)}
-                  value={
-                    effectiveStandardStrategyKind === 'new-branch' ? forkBaseBranch : inPlaceValue
-                  }
-                  label={
-                    effectiveStandardStrategyKind === 'new-branch'
-                      ? forkBaseLabel
-                      : inPlaceBranchLabel
-                  }
-                  inPlace={
-                    effectiveStandardStrategyKind !== 'new-branch' && inPlaceKind === 'no-worktree'
-                  }
-                  onChange={setBaseBranch}
-                  ariaLabel={t('home.baseBranchAria')}
-                />
-                <ForkSwitchChip
-                  checked={effectiveStandardStrategyKind === 'new-branch'}
-                  disabled={isUnborn}
-                  onChange={(forked) => setStrategyKind(forked ? 'new-branch' : 'no-worktree')}
-                  ariaLabel={t('home.strategyAria')}
-                  labels={strategyLabels}
-                />
-              </>
-            )}
-            {!taskScopedTarget && mounted && runMode === 'review' && (
-              <>
-                <BaseBranchChip
-                  projectId={mounted.data.id}
-                  forking={effectiveReviewStrategyKind === 'new-branch'}
-                  locked={Boolean(parentBranchName)}
-                  value={
-                    effectiveReviewStrategyKind === 'new-branch' ? forkBaseBranch : inPlaceValue
-                  }
-                  label={
-                    effectiveReviewStrategyKind === 'new-branch'
-                      ? forkBaseLabel
-                      : inPlaceBranchLabel
-                  }
-                  inPlace={
-                    effectiveReviewStrategyKind !== 'new-branch' && inPlaceKind === 'no-worktree'
-                  }
-                  onChange={setBaseBranch}
-                  ariaLabel={t('home.baseBranchAria')}
-                />
-                <ForkSwitchChip
-                  checked={effectiveReviewStrategyKind === 'new-branch'}
-                  disabled={isUnborn}
-                  onChange={(forked) =>
-                    setReviewStrategyKind(forked ? 'new-branch' : 'no-worktree')
-                  }
-                  ariaLabel={t('home.reviewStrategyAria')}
-                  labels={reviewStrategyLabels}
-                />
-              </>
-            )}
-            <RunModeSelector
-              mode={runMode}
-              summary={runModeSummary}
-              onChange={setRunMode}
-              anchorRef={runModeAnchorRef}
-              renderConfiguration={(configurationMode) => (
-                <ModeConfigurationPanel
-                  mode={configurationMode}
-                  runtimeId={runtimeId}
-                  onRuntimeChange={setRuntimeOverride}
-                  compareRuntimes={compareRuntimes}
-                  onCompareProviderChange={setCompareProvider}
-                  onAddCompareRuntime={addCompareProvider}
-                  onRemoveCompareRuntime={removeCompareProvider}
-                  reviewerRuntime={reviewerRuntime}
-                  onReviewerProviderChange={setReviewerProvider}
-                  teamRuntimes={teamRuntimes}
-                  onTeamProviderChange={setTeamProvider}
-                  agents={userAgents}
-                  slotAgentId={slotAgentId}
-                  onSlotAgentChange={setSlotAgent}
-                  connectionId={connectionId}
-                  className="mt-2 border-t-0 pt-0"
-                />
-              )}
+        {/* Toolbar chips wrap to extra rows in narrow hosts — never min-w-max +
+            overflow-x-auto: macOS overlay scrollbars make clipped chips invisible. */}
+        <div ref={runModeAnchorRef} className="flex flex-wrap items-center gap-2">
+          {isProjectLocked ? (
+            <TaskScopedProjectButton
+              label={lockedProjectName ?? selectedProjectId ?? ''}
+              tooltip={
+                taskScopedTarget
+                  ? t('home.taskConversationScopeTooltip')
+                  : t('home.subtaskScopeTooltip')
+              }
             />
-            <Popover>
-              <PopoverTrigger
-                aria-label={t('home.composerSettingsAria')}
-                title={t('home.composerSettingsAria')}
-                className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
-              >
-                <Settings2 className="size-3.5" />
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-96 gap-0 p-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <span className="text-xs text-foreground">
-                      {t('home.attachImagesAsPathsLabel')}
-                    </span>
-                    <InfoTooltip
-                      label={t('home.attachImagesAsPathsLabel')}
-                      content={t('home.attachImagesAsPathsDesc')}
-                    />
-                  </div>
-                  <Switch
-                    size="sm"
-                    checked={attachImagesAsPaths}
-                    onCheckedChange={setAttachImagesAsPaths}
+          ) : (
+            <ProjectSelector
+              value={selectedProjectId}
+              onChange={setSelectedProjectId}
+              allowProjectless
+              initializeGitRepositoryOnPick
+              trigger={
+                <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+                  <FolderOpen className="size-3.5 text-foreground-muted" />
+                  <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
+                </ComboboxTrigger>
+              }
+            />
+          )}
+          <RunHostSelector kind={runHostKind} />
+          {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
+          {!taskScopedTarget && mounted && runMode === 'compare' && (
+            <Chip icon={GitFork}>
+              {t('home.compareBranchPolicy', { count: compareRuntimes.length })}
+            </Chip>
+          )}
+          {!taskScopedTarget && mounted && runMode === 'team' && (
+            <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
+          )}
+          {!taskScopedTarget && mounted && runMode === 'normal' && (
+            <>
+              <BaseBranchChip
+                projectId={mounted.data.id}
+                forking={effectiveStandardStrategyKind === 'new-branch'}
+                locked={Boolean(parentBranchName)}
+                value={
+                  effectiveStandardStrategyKind === 'new-branch' ? forkBaseBranch : inPlaceValue
+                }
+                label={
+                  effectiveStandardStrategyKind === 'new-branch'
+                    ? forkBaseLabel
+                    : inPlaceBranchLabel
+                }
+                inPlace={
+                  effectiveStandardStrategyKind !== 'new-branch' && inPlaceKind === 'no-worktree'
+                }
+                onChange={setBaseBranch}
+                ariaLabel={t('home.baseBranchAria')}
+              />
+              <ForkSwitchChip
+                checked={effectiveStandardStrategyKind === 'new-branch'}
+                disabled={isUnborn}
+                onChange={(forked) => setStrategyKind(forked ? 'new-branch' : 'no-worktree')}
+                ariaLabel={t('home.strategyAria')}
+                labels={strategyLabels}
+              />
+            </>
+          )}
+          {!taskScopedTarget && mounted && runMode === 'review' && (
+            <>
+              <BaseBranchChip
+                projectId={mounted.data.id}
+                forking={effectiveReviewStrategyKind === 'new-branch'}
+                locked={Boolean(parentBranchName)}
+                value={effectiveReviewStrategyKind === 'new-branch' ? forkBaseBranch : inPlaceValue}
+                label={
+                  effectiveReviewStrategyKind === 'new-branch' ? forkBaseLabel : inPlaceBranchLabel
+                }
+                inPlace={
+                  effectiveReviewStrategyKind !== 'new-branch' && inPlaceKind === 'no-worktree'
+                }
+                onChange={setBaseBranch}
+                ariaLabel={t('home.baseBranchAria')}
+              />
+              <ForkSwitchChip
+                checked={effectiveReviewStrategyKind === 'new-branch'}
+                disabled={isUnborn}
+                onChange={(forked) => setReviewStrategyKind(forked ? 'new-branch' : 'no-worktree')}
+                ariaLabel={t('home.reviewStrategyAria')}
+                labels={reviewStrategyLabels}
+              />
+            </>
+          )}
+          <RunModeSelector
+            mode={runMode}
+            summary={runModeSummary}
+            onChange={setRunMode}
+            anchorRef={runModeAnchorRef}
+            renderConfiguration={(configurationMode) => (
+              <ModeConfigurationPanel
+                mode={configurationMode}
+                runtimeId={runtimeId}
+                onRuntimeChange={setRuntimeOverride}
+                compareRuntimes={compareRuntimes}
+                onCompareProviderChange={setCompareProvider}
+                onAddCompareRuntime={addCompareProvider}
+                onRemoveCompareRuntime={removeCompareProvider}
+                reviewerRuntime={reviewerRuntime}
+                onReviewerProviderChange={setReviewerProvider}
+                teamRuntimes={teamRuntimes}
+                onTeamProviderChange={setTeamProvider}
+                agents={userAgents}
+                slotAgentId={slotAgentId}
+                onSlotAgentChange={setSlotAgent}
+                connectionId={connectionId}
+                className="mt-2 border-t-0 pt-0"
+              />
+            )}
+          />
+          <Popover>
+            <PopoverTrigger
+              aria-label={t('home.composerSettingsAria')}
+              title={t('home.composerSettingsAria')}
+              className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+            >
+              <Settings2 className="size-3.5" />
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-96 gap-0 p-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="text-xs text-foreground">
+                    {t('home.attachImagesAsPathsLabel')}
+                  </span>
+                  <InfoTooltip
+                    label={t('home.attachImagesAsPathsLabel')}
+                    content={t('home.attachImagesAsPathsDesc')}
                   />
                 </div>
-                <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
-                  <ComposerSettingsHeader
-                    label={t('home.promptPrinciplesLabel')}
-                    action={
-                      <button
-                        type="button"
-                        className="font-mono text-[10px] uppercase tracking-widest text-foreground-passive transition-colors hover:text-foreground"
-                        onClick={() => navigate('settings', { tab: 'prompts' })}
-                      >
-                        {t('home.manage')}
-                      </button>
-                    }
-                  />
-                  {promptPrinciples.length === 0 ? (
-                    <p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>
-                  ) : (
-                    promptPrinciples.map((principle) => (
-                      <div key={principle.id} className="flex items-center justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <span className="min-w-0 truncate text-xs text-foreground">
-                            {principle.name || t('home.promptPrincipleUnnamed')}
-                          </span>
-                          {principle.text ? (
-                            <InfoTooltip
-                              label={principle.name || t('home.promptPrincipleUnnamed')}
-                              content={
-                                <span className="whitespace-pre-wrap">{principle.text}</span>
-                              }
-                            />
-                          ) : null}
-                        </div>
-                        <Switch
-                          size="sm"
-                          checked={principle.enabled}
-                          onCheckedChange={(checked) =>
-                            setPromptPrincipleEnabled(principle.id, checked)
-                          }
-                          aria-label={t('settings.prompts.toggle')}
-                        />
+                <Switch
+                  size="sm"
+                  checked={attachImagesAsPaths}
+                  onCheckedChange={setAttachImagesAsPaths}
+                />
+              </div>
+              <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
+                <ComposerSettingsHeader
+                  label={t('home.promptPrinciplesLabel')}
+                  action={
+                    <button
+                      type="button"
+                      className="font-mono text-[10px] uppercase tracking-widest text-foreground-passive transition-colors hover:text-foreground"
+                      onClick={() => navigate('settings', { tab: 'prompts' })}
+                    >
+                      {t('home.manage')}
+                    </button>
+                  }
+                />
+                {promptPrinciples.length === 0 ? (
+                  <p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>
+                ) : (
+                  promptPrinciples.map((principle) => (
+                    <div key={principle.id} className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="min-w-0 truncate text-xs text-foreground">
+                          {principle.name || t('home.promptPrincipleUnnamed')}
+                        </span>
+                        {principle.text ? (
+                          <InfoTooltip
+                            label={principle.name || t('home.promptPrincipleUnnamed')}
+                            content={<span className="whitespace-pre-wrap">{principle.text}</span>}
+                          />
+                        ) : null}
                       </div>
-                    ))
-                  )}
-                </div>
-                <InstructionFilesSection projectPath={skillProjectPath} />
-              </PopoverContent>
-            </Popover>
-          </div>
+                      <Switch
+                        size="sm"
+                        checked={principle.enabled}
+                        onCheckedChange={(checked) =>
+                          setPromptPrincipleEnabled(principle.id, checked)
+                        }
+                        aria-label={t('settings.prompts.toggle')}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+              <InstructionFilesSection projectPath={skillProjectPath} />
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
     </div>
@@ -3490,9 +3482,11 @@ function ModeConfigurationPanel({
   });
 
   return (
-    <div className={cn('mt-3 border-t border-border/60 pt-3', className)}>
+    // @container: the panel renders in hosts of very different widths (composer
+    // popover, settings modal) — columns must track the panel, not the window.
+    <div className={cn('@container mt-3 border-t border-border/60 pt-3', className)}>
       {mode === 'normal' && (
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div className="mt-2 grid gap-2 @lg:grid-cols-2">
           <Agent
             icon={Bot}
             label={t('home.agentLabel')}
@@ -3505,7 +3499,7 @@ function ModeConfigurationPanel({
       )}
 
       {mode === 'brainstorm' && (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 @lg:grid-cols-2">
           <Agent
             icon={Lightbulb}
             label={t('home.brainstormAgent')}
@@ -3518,7 +3512,7 @@ function ModeConfigurationPanel({
       )}
 
       {mode === 'compare' && (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 @lg:grid-cols-2">
           {compareRuntimes.map((agent, index) => (
             <Agent
               key={`${agent}-${index}`}
@@ -3555,7 +3549,7 @@ function ModeConfigurationPanel({
       )}
 
       {mode === 'review' && (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 @lg:grid-cols-2">
           <Agent
             icon={Bot}
             label={t('home.reviewImplementer')}
@@ -3572,14 +3566,14 @@ function ModeConfigurationPanel({
             connectionId={connectionId}
             {...slotProps(REVIEW_REVIEWER_PROMPT_KEY)}
           />
-          <div className="sm:col-span-2 text-xs text-foreground-muted">
+          <div className="@lg:col-span-2 text-xs text-foreground-muted">
             {t('home.reviewRoundLimit', { count: REVIEW_MAX_ROUNDS })}
           </div>
         </div>
       )}
 
       {mode === 'team' && (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 @lg:grid-cols-2">
           {TEAM_ROLES.map((role) => (
             <Agent
               key={role.id}
