@@ -12,6 +12,7 @@ import { HookConfigWriter } from '@main/core/agent-hooks/hook-config';
 import { applyHookOverrides } from '@main/core/agent-hooks/inspect/hook-overrides-apply';
 import { hookOverridesStore } from '@main/core/agent-hooks/inspect/hook-overrides-store';
 import { aiLogService } from '@main/core/ai-logs/ai-log-service';
+import { interactiveTurnLogger } from '@main/core/ai-logs/interactive-turn-logger';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
 import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-interrupt-sniffer';
@@ -255,6 +256,7 @@ export class LocalConversationProvider implements ConversationProvider {
         status: typeof exitCode === 'number' && exitCode !== 0 ? 'failed' : 'succeeded',
         error: typeof exitCode === 'number' && exitCode !== 0 ? `Exit code ${exitCode}` : undefined,
       });
+      void interactiveTurnLogger.onSessionExit(conversation.id);
       detachSilenceReconciler();
       ptySessionRegistry.unregister(sessionId);
       this.sessions.delete(sessionId);

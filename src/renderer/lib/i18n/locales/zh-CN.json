@@ -2134,6 +2134,7 @@
       "logo-generation": "Logo 生成",
       "maas-chat": "MaaS 对话",
       "interactive-session": "交互式会话",
+      "interactive-turn": "对话轮次",
       "utility": "通用任务"
     }
   },

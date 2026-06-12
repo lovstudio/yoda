@@ -17,6 +17,9 @@ function normalizePayload(body: Record<string, unknown>): AgentEvent['payload'] 
     // "waiting on you: AskUserQuestion".
     title: (body.title as string | undefined) ?? toolName,
     message: body.message as string | undefined,
+    // UserPromptSubmit forwards the agent CLI's stdin JSON, which carries the
+    // submitted prompt text — recorded per turn in the AI invocation log.
+    prompt: body.prompt as string | undefined,
   };
 }
 

@@ -57,6 +57,8 @@ export interface AgentEvent {
     title?: string;
     message?: string;
     lastAssistantMessage?: string;
+    /** The submitted prompt text (UserPromptSubmit hook forwards its stdin JSON). */
+    prompt?: string;
   };
 }
 

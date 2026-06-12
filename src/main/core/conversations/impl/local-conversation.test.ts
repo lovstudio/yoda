@@ -52,6 +52,13 @@ vi.mock('@main/core/ai-logs/ai-log-service', () => ({
   },
 }));
 
+vi.mock('@main/core/ai-logs/interactive-turn-logger', () => ({
+  interactiveTurnLogger: {
+    onAgentEvent: vi.fn().mockResolvedValue(undefined),
+    onSessionExit: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 vi.mock('@main/core/agent-hooks/claude-trust-service', () => ({
   claudeTrustService: {
     maybeAutoTrustLocal: mocks.maybeAutoTrustLocal,

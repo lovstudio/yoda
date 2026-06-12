@@ -1,4 +1,5 @@
 import { agentEventChannel } from '@shared/events/agentEvents';
+import { interactiveTurnLogger } from '@main/core/ai-logs/interactive-turn-logger';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { events } from '@main/lib/events';
 import type { IDisposable, IInitializable } from '@main/lib/lifecycle';
@@ -20,6 +21,7 @@ class AgentHookService implements IInitializable, IDisposable {
       if (!event) return;
       event.source = 'hook';
       agentSessionRuntimeStore.setFromAgentEvent(event);
+      await interactiveTurnLogger.onAgentEvent(event);
       const appFocused = isAppFocused();
       await maybeShowNotification(event, appFocused);
       events.emit(agentEventChannel, { event, appFocused });
