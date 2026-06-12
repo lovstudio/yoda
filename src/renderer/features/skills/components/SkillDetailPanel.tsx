@@ -10,6 +10,7 @@ import {
   Hash,
   Loader2,
   MoreHorizontal,
+  PanelRightOpen,
   Power,
   PowerOff,
   Route,
@@ -21,8 +22,10 @@ import { useTranslation } from 'react-i18next';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import type { CatalogSkill, SkillValidationIssue } from '@shared/skills/types';
 import { parseFrontmatter, skillIssueAgentLabel } from '@shared/skills/validation';
+import { openProjectFileTab } from '@renderer/features/project-file/project-file-session';
 import {
   FilePathActionsDropdown,
+  FilePathMenuItems,
   GlobalFileActionsDropdown,
 } from '@renderer/lib/components/file-path-actions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -37,11 +40,15 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { cn } from '@renderer/utils/utils';
+import { skillFilePath } from '../skill-file-path';
 import { getSkillUsageStats, skillUsageStatsChangedEvent } from '../skill-usage-stats';
 import SkillIconRenderer from './SkillIconRenderer';
 import { SkillTriggerTest } from './SkillTriggerTest';
@@ -73,13 +80,6 @@ function getTextStats(text: string): TextStats {
     lines: trimmed ? text.split(/\r\n|\r|\n/).length : 0,
     tokens: estimateTokenCount(text),
   };
-}
-
-function skillFilePath(localPath: string, disabled = false): string {
-  const separator = localPath.includes('\\') && !localPath.includes('/') ? '\\' : '/';
-  return `${localPath.replace(/[\\/]+$/, '')}${separator}${
-    disabled ? 'SKILL.md.disabled' : 'SKILL.md'
-  }`;
 }
 
 function sourceLabel(source: CatalogSkill['source']): string {
@@ -228,10 +228,6 @@ const SkillDetailContent: React.FC<{
     [skill.id, onSetDisabled]
   );
 
-  const handleOpen = useCallback(() => {
-    if (skill.localPath) void rpc.app.openIn({ app: 'terminal', path: skill.localPath });
-  }, [skill.localPath]);
-
   const showReviseModal = useShowModal('reviseSkillModal');
   const showForkModal = useShowModal('forkSkillModal');
 
@@ -340,10 +336,42 @@ const SkillDetailContent: React.FC<{
                       {skill.disabled ? t('skills.enable') : t('skills.disable')}
                     </DropdownMenuItem>
                     {skill.localPath && (
-                      <DropdownMenuItem onClick={handleOpen}>
-                        <FolderOpen />
-                        {t('common.open')}
-                      </DropdownMenuItem>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <FolderOpen />
+                          {t('common.open')}
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-52">
+                          {localSkillFilePath && (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() => openProjectFileTab(null, localSkillFilePath)}
+                              >
+                                <FileText />
+                                {t('fileActions.openInMainArea')}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  appState.sidePane.pinView('file', {
+                                    filePath: localSkillFilePath,
+                                  })
+                                }
+                              >
+                                <PanelRightOpen />
+                                {t('appTabs.openInGlobalSidePane')}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
+                          <FilePathMenuItems
+                            target={{ absolutePath: skill.localPath, kind: 'directory' }}
+                            components={{
+                              Item: DropdownMenuItem,
+                              Separator: DropdownMenuSeparator,
+                            }}
+                          />
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
                     )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem

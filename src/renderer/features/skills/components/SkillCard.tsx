@@ -1,10 +1,20 @@
 import { motion } from 'framer-motion';
-import { AlertTriangle, ChartNoAxesColumn, Pencil, Plus, PowerOff } from 'lucide-react';
+import { AlertTriangle, ChartNoAxesColumn, FileText, Pencil, Plus, PowerOff } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CatalogSkill, SkillUsageStat, SkillValidationIssue } from '@shared/skills/types';
 import { parseFrontmatter, skillIssueAgentLabel } from '@shared/skills/validation';
+import { openProjectFileTab } from '@renderer/features/project-file/project-file-session';
+import { FilePathMenuItems } from '@renderer/lib/components/file-path-actions';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@renderer/lib/ui/context-menu';
 import { cn } from '@renderer/utils/utils';
+import { skillFilePath } from '../skill-file-path';
 import SkillIconRenderer from './SkillIconRenderer';
 
 interface SkillCardProps {
@@ -21,7 +31,7 @@ const SkillCard: React.FC<SkillCardProps> = ({ skill, usage, onSelect, onInstall
   const primaryIssue = skill.validationIssues?.[0];
   const hasValidationIssues = Boolean(primaryIssue);
 
-  return (
+  const card = (
     <motion.div
       role="button"
       tabIndex={0}
@@ -102,6 +112,26 @@ const SkillCard: React.FC<SkillCardProps> = ({ skill, usage, onSelect, onInstall
         </div>
       )}
     </motion.div>
+  );
+
+  // A skill on disk is a folder — give it the standard file context menu.
+  if (!skill.localPath) return card;
+  const mdPath = skillFilePath(skill.localPath, skill.disabled);
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger className="block w-full min-w-0">{card}</ContextMenuTrigger>
+      <ContextMenuContent className="w-52">
+        <ContextMenuItem onClick={() => openProjectFileTab(null, mdPath)}>
+          <FileText className="size-4" />
+          {t('fileActions.openInMainArea')}
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <FilePathMenuItems
+          target={{ absolutePath: skill.localPath, kind: 'directory' }}
+          components={{ Item: ContextMenuItem, Separator: ContextMenuSeparator }}
+        />
+      </ContextMenuContent>
+    </ContextMenu>
   );
 };
 
