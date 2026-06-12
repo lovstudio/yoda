@@ -54,21 +54,23 @@ export const RelativeTime: React.FC<RelativeTimeProps> = ({ value, className, co
 
   if (compact) {
     const short = toCompactLabel(date);
+    const label =
+      short === 'now' ? t('common.now') : ago ? t('common.ago', { time: short }) : short;
 
     return (
       <time className={className} dateTime={date.toISOString()}>
-        {short === 'now' ? t('common.now') : short}
-        {ago && <span className="text-foreground-muted"> {t('common.ago')}</span>}
+        {label}
       </time>
     );
   }
 
+  // `addSuffix` already renders the localized "ago"/"前" — the `ago` prop only
+  // matters for the compact form, whose short labels carry no suffix.
   const locale = i18n.language?.startsWith('zh') ? zhCN : enUS;
   const label = formatDistanceToNowStrict(date, { addSuffix: true, locale });
   return (
     <time className={className} dateTime={date.toISOString()}>
       {label}
-      {ago && t('common.ago')}
     </time>
   );
 };
