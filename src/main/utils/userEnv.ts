@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { exec } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -118,18 +118,27 @@ export async function resolveUserEnv(): Promise<void> {
   const baseEnv = buildExternalToolEnv();
 
   try {
-    const raw = execSync(`${shell} -ilc 'env'`, {
-      encoding: 'utf8',
-      timeout: 5_000,
-      // Route through buildExternalToolEnv so AppImage runtime vars (APPIMAGE,
-      // APPDIR, ARGV0, ...) and `/tmp/.mount_*` PATH entries don't leak into
-      // the probe shell. Otherwise login-shell hooks that resolve a binary by
-      // name through PATH (mise/starship/oh-my-zsh) can re-enter the AppImage
-      // and fork-bomb the app on Linux. See #1679.
-      env: {
-        ...baseEnv,
-        ...SHELL_ENV_CAPTURE_GUARD,
-      },
+    // Async exec — a heavy zsh init (mise/oh-my-zsh/starship) can take seconds,
+    // and execSync here used to freeze the main process (and first paint) for
+    // that whole duration.
+    const raw = await new Promise<string>((resolve, reject) => {
+      exec(
+        `${shell} -ilc 'env'`,
+        {
+          encoding: 'utf8',
+          timeout: 5_000,
+          // Route through buildExternalToolEnv so AppImage runtime vars (APPIMAGE,
+          // APPDIR, ARGV0, ...) and `/tmp/.mount_*` PATH entries don't leak into
+          // the probe shell. Otherwise login-shell hooks that resolve a binary by
+          // name through PATH (mise/starship/oh-my-zsh) can re-enter the AppImage
+          // and fork-bomb the app on Linux. See #1679.
+          env: {
+            ...baseEnv,
+            ...SHELL_ENV_CAPTURE_GUARD,
+          },
+        },
+        (err, stdout) => (err ? reject(err) : resolve(stdout))
+      );
     });
 
     const shellEnv = parseEnvOutput(raw);

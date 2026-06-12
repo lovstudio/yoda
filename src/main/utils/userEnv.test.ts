@@ -3,10 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const execSyncMock = vi.fn();
+type ExecCallback = (err: Error | null, stdout: string, stderr: string) => void;
+const execMock = vi.fn<(cmd: string, opts: object, cb: ExecCallback) => void>();
 
 vi.mock('node:child_process', () => ({
-  execSync: execSyncMock,
+  exec: execMock,
 }));
 
 const { ensureUserBinDirsInPath, ensureWindowsNpmGlobalBinInPath, resolveUserEnv } = await import(
@@ -70,8 +71,8 @@ describe('resolveUserEnv (AppImage env scrub)', () => {
   > = {};
 
   beforeEach(() => {
-    execSyncMock.mockReset();
-    execSyncMock.mockReturnValue('');
+    execMock.mockReset();
+    execMock.mockImplementation((_cmd, _opts, cb) => cb(null, '', ''));
     for (const key of [...SCRUBBED_KEYS, ...PATH_LIKE_KEYS]) {
       savedEnv[key] = process.env[key];
     }
@@ -85,7 +86,9 @@ describe('resolveUserEnv (AppImage env scrub)', () => {
   });
 
   it('strips AppImage runtime vars and /tmp/.mount_* path entries from the probe shell env and final PATH', async () => {
-    execSyncMock.mockReturnValue('PATH=/usr/local/bin:/usr/bin\n');
+    execMock.mockImplementation((_cmd, _opts, cb) =>
+      cb(null, 'PATH=/usr/local/bin:/usr/bin\n', '')
+    );
     process.env.APPIMAGE = '/home/user/yoda.AppImage';
     process.env.APPDIR = '/tmp/.mount_yodaTest';
     process.env.ARGV0 = '/home/user/yoda.AppImage';
@@ -98,8 +101,8 @@ describe('resolveUserEnv (AppImage env scrub)', () => {
 
     await resolveUserEnv();
 
-    expect(execSyncMock).toHaveBeenCalledTimes(1);
-    const opts = execSyncMock.mock.calls[0]?.[1] as { env?: NodeJS.ProcessEnv } | undefined;
+    expect(execMock).toHaveBeenCalledTimes(1);
+    const opts = execMock.mock.calls[0]?.[1] as { env?: NodeJS.ProcessEnv } | undefined;
     expect(opts?.env).toBeDefined();
     const probeEnv = opts!.env!;
     for (const key of SCRUBBED_KEYS) {
