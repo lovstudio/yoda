@@ -3,6 +3,8 @@ import { AppSidePane } from '@renderer/app/app-side-pane';
 import { moveDraggedTabToStrip } from '@renderer/app/open-task-target';
 import { useTabDropZone } from '@renderer/app/tab-drag';
 import { LeftSidebar } from '@renderer/features/sidebar/left-sidebar';
+import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
+import { TiledTaskGrid } from '@renderer/features/tasks/split-view/tiled-task-grid';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { CommandShortcutBinder } from '@renderer/lib/commands/command-shortcut-binder';
 import { AppKeyboardShortcuts } from '@renderer/lib/components/app-keyboard-shortcuts';
@@ -84,8 +86,12 @@ export const Workspace = observer(function Workspace() {
   );
 });
 
-function WorkspaceViewContent() {
+const WorkspaceViewContent = observer(function WorkspaceViewContent() {
   const { TitlebarSlot, MainPanel } = useWorkspaceSlots();
+  // Tile extra tasks beside the routed one — only on the task view, and only
+  // while extras exist. The primary keeps the outer route providers (it IS
+  // <MainPanel/>); the grid hosts the self-contained extras.
+  const isTiled = appState.navigation.currentViewId === 'task' && splitViewStore.count > 0;
 
   // The whole central column — on every route — accepts a dragged pin (task
   // sidebar / shell pane): dropping "into the main window" means "show it
@@ -106,7 +112,10 @@ function WorkspaceViewContent() {
         isOver && 'ring-2 ring-inset ring-border-primary'
       )}
     >
-      <WorkspaceContentLayout titlebarSlot={<TitlebarSlot />} mainPanel={<MainPanel />} />
+      <WorkspaceContentLayout
+        titlebarSlot={<TitlebarSlot />}
+        mainPanel={isTiled ? <TiledTaskGrid primary={<MainPanel />} /> : <MainPanel />}
+      />
     </div>
   );
-}
+});
