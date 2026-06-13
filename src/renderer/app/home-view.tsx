@@ -47,7 +47,6 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
-  type RefObject,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
@@ -106,6 +105,7 @@ import {
   ComboboxTrigger,
   ComboboxValue,
 } from '@renderer/lib/ui/combobox';
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@renderer/lib/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1388,7 +1388,6 @@ export const HomeComposer = observer(function HomeComposer({
       (draft.promptTokens ?? []).map((token) => ({ ...token, id: crypto.randomUUID() }))
     );
   }, [draft]);
-  const runModeAnchorRef = useRef<HTMLDivElement>(null);
   const promptWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!hydratedPromptRef.current) return;
@@ -2781,7 +2780,7 @@ export const HomeComposer = observer(function HomeComposer({
       <div className="mt-3 flex flex-col gap-2">
         {/* Toolbar chips wrap to extra rows in narrow hosts — never min-w-max +
             overflow-x-auto: macOS overlay scrollbars make clipped chips invisible. */}
-        <div ref={runModeAnchorRef} className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isProjectLocked ? (
             <TaskScopedProjectButton
               label={lockedProjectName ?? selectedProjectId ?? ''}
@@ -2873,7 +2872,6 @@ export const HomeComposer = observer(function HomeComposer({
             mode={runMode}
             summary={runModeSummary}
             onChange={setRunMode}
-            anchorRef={runModeAnchorRef}
             renderConfiguration={(configurationMode) => (
               <ModeConfigurationPanel
                 mode={configurationMode}
@@ -3341,24 +3339,17 @@ interface RunModeSelectorProps {
   summary?: string | null;
   onChange: (mode: HomeRunMode) => void;
   renderConfiguration: (mode: HomeRunMode) => ReactNode;
-  anchorRef?: RefObject<HTMLElement | null>;
 }
 
-function RunModeSelector({
-  mode,
-  summary,
-  onChange,
-  renderConfiguration,
-  anchorRef,
-}: RunModeSelectorProps) {
+function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunModeSelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const current = RUN_MODE_OPTIONS.find((option) => option.mode === mode) ?? RUN_MODE_OPTIONS[0];
   const CurrentIcon = current.icon;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
         render={
           <button
             type="button"
@@ -3379,12 +3370,12 @@ function RunModeSelector({
           </button>
         }
       />
-      <PopoverContent
-        align="start"
-        anchor={anchorRef}
-        className="max-h-[min(70dvh,40rem)] w-[min(44rem,calc(100vw-2rem))] gap-0 overflow-hidden p-0"
+      <DialogContent
+        showCloseButton={false}
+        className="h-[min(70dvh,40rem)] w-[min(44rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] gap-0 p-0 sm:max-w-[44rem]"
       >
-        <div className="flex min-h-0 max-h-[inherit] divide-x divide-border/60">
+        <DialogTitle className="sr-only">{t('home.modeAria')}</DialogTitle>
+        <div className="flex min-h-0 flex-1 divide-x divide-border/60">
           <div
             role="tablist"
             aria-label={t('home.modeAria')}
@@ -3430,8 +3421,8 @@ function RunModeSelector({
             {renderConfiguration(mode)}
           </div>
         </div>
-      </PopoverContent>
-    </Popover>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -3638,10 +3629,7 @@ function Agent({
 
   return (
     <div className="flex min-w-0 items-center gap-2 rounded-md border border-border/70 bg-background-1 py-1 pl-2 pr-1">
-      <span
-        title={label}
-        className="flex max-w-32 shrink-0 items-center gap-1.5 text-foreground-muted"
-      >
+      <span title={label} className="flex w-28 shrink-0 items-center gap-1.5 text-foreground-muted">
         <Icon className="size-3.5 shrink-0" />
         <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wide">
           {label}
