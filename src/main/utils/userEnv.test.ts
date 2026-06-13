@@ -116,4 +116,34 @@ describe('resolveUserEnv (AppImage env scrub)', () => {
     expect(probeEnv.DISABLE_AUTO_UPDATE).toBe('true');
     expect(probeEnv.ZSH_TMUX_AUTOSTART).toBe('false');
   });
+
+  it('ignores interactive-prompt noise outside the env sentinels', async () => {
+    // Simulates powerlevel10k instant prompt / banners bracketing the real env:
+    // only the PATH between the sentinels must survive.
+    execMock.mockImplementation((_cmd, _opts, cb) =>
+      cb(
+        null,
+        [
+          'p10k instant prompt garbage = not an env line',
+          'FAKE_BEFORE=/tmp/.mount_evil/bin',
+          '__YODA_ENV_START__',
+          'PATH=/opt/homebrew/bin:/usr/bin',
+          'GOOD_VAR=1',
+          '__YODA_ENV_END__',
+          'FAKE_AFTER=/tmp/.mount_evil/bin',
+        ].join('\n'),
+        ''
+      )
+    );
+    process.env.PATH = '/usr/bin';
+
+    await resolveUserEnv();
+
+    expect(process.env.PATH?.split(path.delimiter)).toEqual(['/opt/homebrew/bin', '/usr/bin']);
+    expect(process.env.GOOD_VAR).toBe('1');
+    expect(process.env.FAKE_BEFORE).toBeUndefined();
+    expect(process.env.FAKE_AFTER).toBeUndefined();
+
+    delete process.env.GOOD_VAR;
+  });
 });

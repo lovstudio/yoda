@@ -47,6 +47,27 @@ function pathEntryExists(entry: string): boolean {
   }
 }
 
+// Sentinels bracket the `env` output so interactive-shell noise — powerlevel10k
+// instant prompt, oh-my-zsh MOTDs, version-manager banners — printed to stdout
+// before/after `env` can't pollute the parsed PATH. Mirrors VS Code's shell-env
+// approach. Kept deliberately unusual to avoid colliding with real env values.
+const ENV_SENTINEL_START = '__YODA_ENV_START__';
+const ENV_SENTINEL_END = '__YODA_ENV_END__';
+
+/**
+ * Returns only the text between the sentinels. If a marker is missing (e.g. the
+ * shell errored before reaching it) the raw input is returned unchanged so the
+ * caller still gets a best-effort parse rather than nothing.
+ */
+function extractBetweenSentinels(raw: string): string {
+  const start = raw.indexOf(ENV_SENTINEL_START);
+  const end = raw.lastIndexOf(ENV_SENTINEL_END);
+  if (start === -1 || end === -1 || end <= start) return raw;
+  const afterStart = raw.indexOf('\n', start);
+  if (afterStart === -1 || afterStart >= end) return raw;
+  return raw.slice(afterStart + 1, end);
+}
+
 function parseEnvOutput(raw: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (const line of raw.split('\n')) {
@@ -123,7 +144,9 @@ export async function resolveUserEnv(): Promise<void> {
     // that whole duration.
     const raw = await new Promise<string>((resolve, reject) => {
       exec(
-        `${shell} -ilc 'env'`,
+        // Bracket `env` with sentinels so a noisy interactive prompt can't
+        // corrupt the captured PATH (see extractBetweenSentinels).
+        `${shell} -ilc 'echo ${ENV_SENTINEL_START}; env; echo ${ENV_SENTINEL_END}'`,
         {
           encoding: 'utf8',
           // Heavy zsh inits (mise/oh-my-zsh/starship) routinely exceed 5s on a
@@ -144,7 +167,7 @@ export async function resolveUserEnv(): Promise<void> {
       );
     });
 
-    const shellEnv = parseEnvOutput(raw);
+    const shellEnv = parseEnvOutput(extractBetweenSentinels(raw));
 
     for (const [key, value] of Object.entries(shellEnv)) {
       if (PRESERVE_KEYS.has(key)) continue;
