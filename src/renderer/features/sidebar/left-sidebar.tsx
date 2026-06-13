@@ -181,7 +181,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   // Quick-access icons docked to the right of the account row. Each view is
   // also reachable as an embedded settings tab.
   const quickNavItems: {
-    key: 'skills' | 'automation' | 'mobile';
+    key: 'automation' | 'mobile' | 'settings';
     icon: React.ComponentType<{ className?: string }>;
     label: string;
     title?: string;
@@ -189,15 +189,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
     pinParams?: Record<string, unknown>;
     showIssueDot?: boolean;
   }[] = [
-    {
-      key: 'skills',
-      icon: Puzzle,
-      label: t('sidebar.skills'),
-      title: skillIssueTitle ?? t('sidebar.skills'),
-      onClick: skillIssueCount > 0 ? handleOpenFirstSkillIssue : () => navigate('skills'),
-      pinParams: firstSkillIssue ? { focusSkillId: firstSkillIssue.skill.id } : undefined,
-      showIssueDot: skillIssueCount > 0,
-    },
     {
       key: 'automation',
       icon: Workflow,
@@ -209,6 +200,12 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       icon: Smartphone,
       label: t('sidebar.mobile'),
       onClick: () => navigate('mobile'),
+    },
+    {
+      key: 'settings',
+      icon: Settings,
+      label: t('sidebar.settings'),
+      onClick: () => navigate('settings'),
     },
   ];
 
@@ -269,6 +266,36 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               </span>
               <ShortcutHint settingsKey="commandPaletteTasks" />
             </SidebarMenuButton>
+            <GlobalSidePaneTarget
+              viewId="skills"
+              params={firstSkillIssue ? { focusSkillId: firstSkillIssue.skill.id } : undefined}
+              altHeld={altHeld}
+            >
+              <SidebarMenuButton
+                isActive={isCurrentView(currentView, 'skills')}
+                onClick={(e) =>
+                  e.altKey
+                    ? appState.sidePane.pinView(
+                        'skills',
+                        firstSkillIssue ? { focusSkillId: firstSkillIssue.skill.id } : {}
+                      )
+                    : skillIssueCount > 0
+                      ? handleOpenFirstSkillIssue()
+                      : navigate('skills')
+                }
+                aria-label={t('sidebar.skills')}
+                title={skillIssueTitle ?? t('sidebar.skills')}
+                className="w-full justify-start"
+              >
+                <span className="relative flex items-center gap-2 min-w-0 w-full">
+                  <Puzzle className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
+                  <span className="truncate min-w-0">{t('sidebar.skills')}</span>
+                  {skillIssueCount > 0 && (
+                    <span className="ml-auto size-1.5 shrink-0 rounded-full bg-amber-500" />
+                  )}
+                </span>
+              </SidebarMenuButton>
+            </GlobalSidePaneTarget>
             <div className="my-1 border-t border-border" />
           </SidebarMenu>
         </SidebarFooter>
@@ -292,19 +319,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
           <div className="mx-2 my-1 border-t border-border" />
           {!sidebarStore.navSectionHidden && (
             <SidebarMenu className="px-2">
-              <GlobalSidePaneTarget viewId="settings" altHeld={altHeld}>
-                <SidebarMenuButton
-                  isActive={isCurrentView(currentView, 'settings')}
-                  onClick={(e) =>
-                    e.altKey ? appState.sidePane.pinView('settings', {}) : navigate('settings')
-                  }
-                  aria-label={t('sidebar.settings')}
-                  className="w-full justify-start"
-                >
-                  <Settings className="h-5 w-5 sm:h-4 sm:w-4" />
-                  {t('sidebar.settings')}
-                </SidebarMenuButton>
-              </GlobalSidePaneTarget>
               <SidebarMenuButton
                 onClick={() => void rpc.app.openExternal(YODA_WEBSITE_URL)}
                 aria-label={t('sidebar.website')}
