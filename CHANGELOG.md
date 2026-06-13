@@ -23,6 +23,11 @@ is preserved in git tags only.
   widens to 260px so the placeholder isn't truncated.
 - Home: the inert "+" button is hidden when the app tab strip is hidden.
 - Boot screen: the bottom-right code block aligns with the left boot log.
+- **Login-shell env capture wrapped in sentinels** (`__YODA_ENV_START__` /
+  `__YODA_ENV_END__`, mirroring VS Code's shell-env): interactive-shell banner
+  noise (powerlevel10k instant prompt, oh-my-zsh, version-manager banners) no
+  longer pollutes the parsed `PATH`, fixing GUI launches where `claude` / `tmux`
+  and other CLIs went undetected despite being on the user's PATH.
 
 ## 0.10.3 — 2026-06-13
 
