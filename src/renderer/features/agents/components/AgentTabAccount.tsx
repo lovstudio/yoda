@@ -467,22 +467,27 @@ const AuthSourceRow: React.FC<{
           aria-label={t('agents.account.selectAria', { name: title })}
           onClick={(event) => event.stopPropagation()}
         />
-        <div className="min-w-0 flex-1">
-          <span className="text-sm font-medium">{title}</span>
+        <div className="min-w-0">
+          {/* truncate (not wrap) keeps the short label on one line; the long
+              status text beside it is what gives way on narrow widths. */}
+          <span className="block truncate text-sm font-medium">{title}</span>
           {selected && !available && (
             <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">
               {t('agents.account.selectedUnavailable')}
             </p>
           )}
         </div>
-        <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <span
+          className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"
+          title={statusLabel}
+        >
           <span
             className={cn(
-              'size-1.5 rounded-full',
+              'size-1.5 shrink-0 rounded-full',
               statusReady ? 'bg-emerald-500' : 'bg-muted-foreground/30'
             )}
           />
-          {statusLabel}
+          <span className="truncate">{statusLabel}</span>
         </span>
         <button
           type="button"
