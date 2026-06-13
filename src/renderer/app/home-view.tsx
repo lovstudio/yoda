@@ -3490,11 +3490,11 @@ function ModeConfigurationPanel({
   });
 
   return (
-    // @container: the panel renders in hosts of very different widths (composer
-    // popover, settings modal) — columns must track the panel, not the window.
-    <div className={cn('@container mt-3 border-t border-border/60 pt-3', className)}>
+    // Slots stack as single-line rows so the panel stays compact regardless of
+    // host width (composer popover, settings modal).
+    <div className={cn('mt-3 border-t border-border/60 pt-3', className)}>
       {mode === 'normal' && (
-        <div className="mt-2 grid gap-2 @lg:grid-cols-2">
+        <div className="mt-2 flex flex-col gap-1.5">
           <Agent
             icon={Bot}
             label={t('home.agentLabel')}
@@ -3507,7 +3507,7 @@ function ModeConfigurationPanel({
       )}
 
       {mode === 'brainstorm' && (
-        <div className="grid gap-2 @lg:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
           <Agent
             icon={Lightbulb}
             label={t('home.brainstormAgent')}
@@ -3520,7 +3520,7 @@ function ModeConfigurationPanel({
       )}
 
       {mode === 'compare' && (
-        <div className="grid gap-2 @lg:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
           {compareRuntimes.map((agent, index) => (
             <Agent
               key={`${agent}-${index}`}
@@ -3536,7 +3536,7 @@ function ModeConfigurationPanel({
                   aria-label={t('home.removeCompareAgent')}
                   disabled={compareRuntimes.length <= MIN_COMPARE_AGENTS}
                   onClick={() => onRemoveCompareRuntime(index)}
-                  className="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <X className="size-3.5" />
                 </button>
@@ -3547,9 +3547,9 @@ function ModeConfigurationPanel({
             <button
               type="button"
               onClick={onAddCompareRuntime}
-              className="flex min-h-24 items-center justify-center gap-2 rounded-md border border-dashed border-border bg-background-1 text-sm text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+              className="flex h-9 items-center justify-center gap-1.5 rounded-md border border-dashed border-border/70 bg-background-1 text-xs text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
             >
-              <Plus className="size-4" />
+              <Plus className="size-3.5" />
               <span>{t('home.addCompareAgent')}</span>
             </button>
           )}
@@ -3557,7 +3557,7 @@ function ModeConfigurationPanel({
       )}
 
       {mode === 'review' && (
-        <div className="grid gap-2 @lg:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
           <Agent
             icon={Bot}
             label={t('home.reviewImplementer')}
@@ -3574,14 +3574,14 @@ function ModeConfigurationPanel({
             connectionId={connectionId}
             {...slotProps(REVIEW_REVIEWER_PROMPT_KEY)}
           />
-          <div className="@lg:col-span-2 text-xs text-foreground-muted">
+          <div className="px-1 text-xs text-foreground-muted">
             {t('home.reviewRoundLimit', { count: REVIEW_MAX_ROUNDS })}
           </div>
         </div>
       )}
 
       {mode === 'team' && (
-        <div className="grid gap-2 @lg:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
           {TEAM_ROLES.map((role) => (
             <Agent
               key={role.id}
@@ -3637,31 +3637,33 @@ function Agent({
   const runtime = value ?? selectedAgent?.preferredRuntime ?? null;
 
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 bg-background-1 p-2.5">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-background-2 text-foreground-muted">
-          <Icon className="size-3" />
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-wide text-foreground-muted">
+    <div className="flex min-w-0 items-center gap-2 rounded-md border border-border/70 bg-background-1 py-1 pl-2 pr-1">
+      <span
+        title={label}
+        className="flex max-w-32 shrink-0 items-center gap-1.5 text-foreground-muted"
+      >
+        <Icon className="size-3.5 shrink-0" />
+        <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wide">
           {label}
         </span>
-        {action}
-      </div>
+      </span>
       <AgentSlotSelector
         selectedAgent={selectedAgent}
         agents={agents}
         onSelectAgent={onSelectAgent}
         onCreateAgent={() => showAgentModal({ onSuccess: (created) => onSelectAgent(created.id) })}
         onManageAgents={() => navigate('agentManager')}
+        className="h-8 min-w-0 flex-1 border-transparent bg-background-2/40 hover:bg-background-2"
       />
       {selectedAgent && (
         <AgentSelector
           value={runtime}
           onChange={onChange}
           connectionId={connectionId}
-          className="h-9 text-sm"
+          className="h-8 w-40 shrink-0 border-transparent bg-background-2/40 text-sm transition-colors hover:bg-background-2"
         />
       )}
+      {action}
     </div>
   );
 }
