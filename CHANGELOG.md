@@ -5,6 +5,13 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.11.1 — 2026-06-13
+
+### Changed
+
+- Run-mode selection switches to a card layout with explicit confirmation.
+- Compare mode groups its child tasks under a session-less parent task.
+
 ## 0.11.0 — 2026-06-13
 
 ### Added
