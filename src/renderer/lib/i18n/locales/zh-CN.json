@@ -723,6 +723,8 @@
     "searchSkills": "搜索 skills…",
     "developmentParadigm": "开发范式",
     "modeAria": "选择开发范式",
+    "modeGroupWorkflow": "工作流",
+    "modeGroupCompare": "对比",
     "modeNormal": "标准",
     "modeNormalDesc": "单 agent、单 session。",
     "modeBrainstorm": "Spec",

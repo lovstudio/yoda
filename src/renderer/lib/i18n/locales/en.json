@@ -723,6 +723,8 @@
     "searchSkills": "Search skills...",
     "developmentParadigm": "Development paradigm",
     "modeAria": "Choose development paradigm",
+    "modeGroupWorkflow": "Workflow",
+    "modeGroupCompare": "Compare",
     "modeNormal": "Standard",
     "modeNormalDesc": "One agent in one session.",
     "modeBrainstorm": "Spec",

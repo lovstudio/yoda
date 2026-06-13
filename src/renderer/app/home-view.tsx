@@ -3311,28 +3311,50 @@ function SkillShortcutSelector({
   );
 }
 
-const RUN_MODE_OPTIONS: Array<{
+interface RunModeOption {
   mode: HomeRunMode;
   icon: ComponentType<{ className?: string }>;
   labelKey: string;
   descKey: string;
-}> = [
-  { mode: 'normal', icon: Bot, labelKey: 'home.modeNormal', descKey: 'home.modeNormalDesc' },
+}
+
+// Modes split into two clusters. The first cluster runs a single converged
+// workflow; "compare" stands alone because it fans the same task out across
+// isolated branches — a different mental model, so it gets its own group.
+const RUN_MODE_GROUPS: Array<{ labelKey: string; options: RunModeOption[] }> = [
   {
-    mode: 'brainstorm',
-    icon: Lightbulb,
-    labelKey: 'home.modeBrainstorm',
-    descKey: 'home.modeBrainstormDesc',
+    labelKey: 'home.modeGroupWorkflow',
+    options: [
+      { mode: 'normal', icon: Bot, labelKey: 'home.modeNormal', descKey: 'home.modeNormalDesc' },
+      {
+        mode: 'brainstorm',
+        icon: Lightbulb,
+        labelKey: 'home.modeBrainstorm',
+        descKey: 'home.modeBrainstormDesc',
+      },
+      {
+        mode: 'review',
+        icon: Repeat2,
+        labelKey: 'home.modeReview',
+        descKey: 'home.modeReviewDesc',
+      },
+      { mode: 'team', icon: Users, labelKey: 'home.modeTeam', descKey: 'home.modeTeamDesc' },
+    ],
   },
   {
-    mode: 'compare',
-    icon: GitCompare,
-    labelKey: 'home.modeCompare',
-    descKey: 'home.modeCompareDesc',
+    labelKey: 'home.modeGroupCompare',
+    options: [
+      {
+        mode: 'compare',
+        icon: GitCompare,
+        labelKey: 'home.modeCompare',
+        descKey: 'home.modeCompareDesc',
+      },
+    ],
   },
-  { mode: 'review', icon: Repeat2, labelKey: 'home.modeReview', descKey: 'home.modeReviewDesc' },
-  { mode: 'team', icon: Users, labelKey: 'home.modeTeam', descKey: 'home.modeTeamDesc' },
 ];
+
+const RUN_MODE_OPTIONS: RunModeOption[] = RUN_MODE_GROUPS.flatMap((group) => group.options);
 
 interface RunModeSelectorProps {
   mode: HomeRunMode;
@@ -3380,37 +3402,50 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
             role="tablist"
             aria-label={t('home.modeAria')}
             aria-orientation="vertical"
-            className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto bg-background-1/50 p-2"
+            className="flex w-44 shrink-0 flex-col gap-1 overflow-y-auto bg-background-1/50 p-2"
           >
-            {RUN_MODE_OPTIONS.map((option) => {
-              const Icon = option.icon;
-              const active = option.mode === mode;
-              return (
-                <button
-                  key={option.mode}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  title={t(option.descKey)}
-                  onClick={() => onChange(option.mode)}
-                  className={cn(
-                    'flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors',
-                    active
-                      ? 'bg-primary/10 font-medium text-primary'
-                      : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
-                  )}
-                >
-                  <Icon
-                    className={cn(
-                      'size-4 shrink-0',
-                      active ? 'text-primary' : 'text-foreground-muted'
-                    )}
-                  />
-                  <span className="min-w-0 flex-1 truncate">{t(option.labelKey)}</span>
-                  {active && <Check className="size-3.5 shrink-0 text-primary" />}
-                </button>
-              );
-            })}
+            {RUN_MODE_GROUPS.map((group, groupIndex) => (
+              <div
+                key={group.labelKey}
+                className={cn(
+                  'flex flex-col gap-0.5',
+                  groupIndex > 0 && 'mt-1 border-t border-border/60 pt-2'
+                )}
+              >
+                <span className="px-2.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-foreground-muted/70">
+                  {t(group.labelKey)}
+                </span>
+                {group.options.map((option) => {
+                  const Icon = option.icon;
+                  const active = option.mode === mode;
+                  return (
+                    <button
+                      key={option.mode}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      title={t(option.descKey)}
+                      onClick={() => onChange(option.mode)}
+                      className={cn(
+                        'flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors',
+                        active
+                          ? 'bg-primary/10 font-medium text-primary'
+                          : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
+                      )}
+                    >
+                      <Icon
+                        className={cn(
+                          'size-4 shrink-0',
+                          active ? 'text-primary' : 'text-foreground-muted'
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{t(option.labelKey)}</span>
+                      {active && <Check className="size-3.5 shrink-0 text-primary" />}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
             <div className="flex items-center gap-2">
