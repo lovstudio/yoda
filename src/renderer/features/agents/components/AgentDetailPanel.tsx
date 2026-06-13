@@ -13,7 +13,6 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getRuntime, type RuntimeDefinition, type RuntimeId } from '@shared/runtime-registry';
 import { rpc } from '@renderer/lib/ipc';
-import { agentMeta } from '@renderer/lib/providers/meta';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
 import { cn } from '@renderer/utils/utils';
@@ -24,6 +23,7 @@ import { AgentTabModels } from './AgentTabModels';
 import { AgentTabRuntime } from './AgentTabRuntime';
 import { AgentTabSettings } from './AgentTabSettings';
 import { AgentTabSkills } from './AgentTabSkills';
+import { RuntimeLogo } from './RuntimeLogo';
 
 type TabId = 'account' | 'maas' | 'models' | 'memory' | 'hooks' | 'skills' | 'settings';
 
@@ -41,8 +41,8 @@ const TABS: Array<{
   { id: 'settings', icon: Settings2, labelKey: 'agents.tabs.settings' },
 ];
 
-export const AgentDetailPanel: React.FC<{ agentId: RuntimeId }> = observer(
-  function AgentDetailPanel({ agentId }) {
+export const AgentDetailPanel: React.FC<{ agentId: RuntimeId; hideHeader?: boolean }> = observer(
+  function AgentDetailPanel({ agentId, hideHeader = false }) {
     const { t } = useTranslation();
     const provider = getRuntime(agentId);
     const [activeTab, setActiveTab] = useState<TabId>('account');
@@ -57,7 +57,9 @@ export const AgentDetailPanel: React.FC<{ agentId: RuntimeId }> = observer(
 
     return (
       <div className="flex h-full flex-col">
-        <AgentHeader provider={provider} />
+        {/* The accordion row already plays the role of the header, so the
+            embedded panel drops its own to avoid a duplicated name+status. */}
+        {!hideHeader && <AgentHeader provider={provider} />}
         <div className="flex shrink-0 items-center gap-1 border-b border-border bg-background-secondary px-4">
           {TABS.map((tab) => {
             const Icon = tab.icon;
@@ -98,28 +100,12 @@ const AgentHeader: React.FC<{ provider: RuntimeDefinition }> = observer(function
   provider,
 }) {
   const { t } = useTranslation();
-  const meta = agentMeta[provider.id];
   const dep = appState.dependencies.agentStatuses[provider.id];
   const connected = dep?.status === 'available';
 
   return (
     <div className="flex shrink-0 items-start gap-3 border-b border-border px-6 py-4">
-      <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded">
-        {meta?.icon ? (
-          meta.isSvg ? (
-            <span
-              className={cn('h-full w-full', meta.invertInDark && 'dark:invert')}
-              dangerouslySetInnerHTML={{ __html: meta.icon }}
-            />
-          ) : (
-            <img
-              src={meta.icon}
-              alt={meta.alt ?? provider.name}
-              className="h-full w-full object-contain"
-            />
-          )
-        ) : null}
-      </span>
+      <RuntimeLogo runtimeId={provider.id} name={provider.name} className="h-10 w-10" />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2">
           <h2 className="text-base font-semibold">{provider.name}</h2>

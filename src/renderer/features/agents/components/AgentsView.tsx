@@ -1,13 +1,12 @@
-import { Sparkles } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DependencyState } from '@shared/dependencies';
 import { RUNTIMES, type RuntimeId } from '@shared/runtime-registry';
-import { agentMeta } from '@renderer/lib/providers/meta';
 import { appState } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
 import { AgentDetailPanel } from './AgentDetailPanel';
+import { RuntimeLogo } from './RuntimeLogo';
 
 type AgentRow = {
   id: RuntimeId;
@@ -81,8 +80,6 @@ const AgentListItem: React.FC<{
   onSelect: () => void;
 }> = ({ row, isActive, onSelect }) => {
   const { t } = useTranslation();
-  const meta = agentMeta[row.id];
-  const icon = meta?.icon;
   const connected = row.detected;
 
   return (
@@ -94,21 +91,7 @@ const AgentListItem: React.FC<{
         isActive ? 'bg-accent/40 text-foreground' : 'text-foreground-muted hover:bg-muted/30'
       )}
     >
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded">
-        {icon ? (
-          meta?.isSvg ? (
-            <span
-              className={cn('h-full w-full', meta.invertInDark && 'dark:invert')}
-              // SVGs are bundled raw — render inline.
-              dangerouslySetInnerHTML={{ __html: icon }}
-            />
-          ) : (
-            <img src={icon} alt={meta?.alt ?? row.name} className="h-full w-full object-contain" />
-          )
-        ) : (
-          <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-        )}
-      </span>
+      <RuntimeLogo runtimeId={row.id} name={row.name} className="h-6 w-6" />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-sm">{row.name}</span>
         <span className="truncate text-[10px] text-muted-foreground">

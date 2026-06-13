@@ -2,7 +2,7 @@ import { Check, Menu } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { AgentManagerView } from '@renderer/features/agents-config/agent-manager-view';
-import { AgentsView } from '@renderer/features/agents/components/AgentsView';
+import { RuntimeAccordion } from '@renderer/features/agents/components/RuntimeAccordion';
 import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
 import { AiLogsPanel } from '@renderer/features/ai-logs/components/AiLogsPanel';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
@@ -29,7 +29,7 @@ import { Separator } from '@renderer/lib/ui/separator';
 import { cn } from '@renderer/utils/utils';
 import { AccountTab } from './AccountTab';
 import ArchivedProjectsCard from './ArchivedProjectsCard';
-import { CliAgentsList, CliAgentsRescanButton } from './CliAgentsList';
+import { CliAgentsRescanButton } from './CliAgentsList';
 import DefaultRuntimeSettingsCard from './DefaultRuntimeSettingsCard';
 import GithubSettingsCard from './GithubSettingsCard';
 import IntegrationsCard from './IntegrationsCard';
@@ -301,16 +301,7 @@ export function SettingsPage({
           id: 'cli-agents',
           title: t('settings.agentsTab.cliAgents'),
           action: <CliAgentsRescanButton />,
-          component: (
-            <div className="rounded-xl border border-border/60 bg-muted/10 p-2">
-              <CliAgentsList />
-            </div>
-          ),
-        },
-        {
-          id: 'runtime-detail',
-          title: t('settings.agentsTab.runtimeDetail'),
-          component: <AgentsView embedded />,
+          component: <RuntimeAccordion />,
         },
       ],
     },
