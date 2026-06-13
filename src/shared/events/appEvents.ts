@@ -15,6 +15,7 @@ export const menuCheckForUpdatesChannel = defineEvent<void>('menu:check-for-upda
 export const menuUndoChannel = defineEvent<void>('menu:undo');
 export const menuRedoChannel = defineEvent<void>('menu:redo');
 export const menuCloseTabChannel = defineEvent<void>('menu:close-tab');
+export const menuToggleLeftSidebarChannel = defineEvent<void>('menu:toggle-left-sidebar');
 
 export const gitStatusChangedChannel = defineEvent<{
   taskPath: string;
