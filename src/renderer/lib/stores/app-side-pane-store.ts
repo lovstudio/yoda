@@ -28,16 +28,23 @@ export type SidePanePin =
 export class AppSidePaneStore implements Snapshottable<AppSidePaneSnapshot> {
   pins: SidePanePin[] = [];
   activePinId: string | null = null;
+  /**
+   * Transient: the pane overlays the workspace at full width (mirrors the
+   * task sidebar's maximize). Not persisted — reading mode resets per session.
+   */
+  isMaximized = false;
 
   constructor() {
     makeObservable(this, {
       pins: observable,
       activePinId: observable,
+      isMaximized: observable,
       pinView: action,
       pinTask: action,
       unpin: action,
       reorderPin: action,
       setActivePin: action,
+      setMaximized: action,
       updatePinParams: action,
       restoreSnapshot: action,
     });
@@ -97,6 +104,13 @@ export class AppSidePaneStore implements Snapshottable<AppSidePaneSnapshot> {
     if (this.activePinId === pinId) {
       this.activePinId = this.pins[idx]?.id ?? this.pins[idx - 1]?.id ?? null;
     }
+    // An empty pane can't be maximized — drop reading mode so a fresh pin
+    // doesn't reopen full-screen.
+    if (this.pins.length === 0) this.isMaximized = false;
+  }
+
+  setMaximized(maximized: boolean): void {
+    this.isMaximized = maximized;
   }
 
   /**

@@ -1,4 +1,4 @@
-import { AppWindow, ArrowLeftToLine, PanelRight, X } from 'lucide-react';
+import { AppWindow, ArrowLeftToLine, Maximize2, Minimize2, PanelRight, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { Activity, useEffect, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -61,7 +61,7 @@ export const AppSidePane = observer(function AppSidePane() {
   const { navigate } = useNavigate();
   const { value: projectSettings } = useAppSettingsKey('project');
   const branchPrefix = projectSettings?.branchPrefix ?? '';
-  const { pins, activePinId, activePin } = appState.sidePane;
+  const { pins, activePinId, activePin, isMaximized } = appState.sidePane;
 
   // A moved task entity reclaimed by the main area (route replay, dedupe
   // reopen) leaves `shellPinTabIds` — drop its pin so no ghost chip remains.
@@ -292,8 +292,22 @@ export const AppSidePane = observer(function AppSidePane() {
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-background-secondary px-2 [-webkit-app-region:drag] dark:bg-background">
+    <div
+      className={cn(
+        'flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground',
+        // Maximized: overlay the whole window (mirrors the task sidebar's
+        // maximize). `fixed` escapes the right-pane panel's overflow clip; the
+        // panel keeps its width underneath so restoring needs no relayout.
+        isMaximized && 'fixed inset-0 z-50'
+      )}
+    >
+      <div
+        className={cn(
+          'flex h-10 shrink-0 items-center gap-1 border-b border-border bg-background-secondary px-2 [-webkit-app-region:drag] dark:bg-background',
+          // Clear the macOS traffic lights when the header spans the full window.
+          isMaximized && 'pl-20'
+        )}
+      >
         <div
           ref={dropZone.dropRef}
           className={cn(
@@ -324,6 +338,17 @@ export const AppSidePane = observer(function AppSidePane() {
         {/* The active pin's view can hang a control at the row's right end
             (e.g. the settings tab picker). */}
         {activePin?.kind === 'view' ? <PaneHeaderAccessory pin={activePin} /> : null}
+        {/* Expand the pane over the whole workspace, mirroring the task
+            sidebar's maximize — a focused reading/working mode. */}
+        <button
+          type="button"
+          onClick={() => appState.sidePane.setMaximized(!isMaximized)}
+          aria-label={t(isMaximized ? 'tasks.sidePane.restore' : 'tasks.sidePane.maximize')}
+          title={t(isMaximized ? 'tasks.sidePane.restore' : 'tasks.sidePane.maximize')}
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-passive hover:bg-background-2 hover:text-foreground [-webkit-app-region:no-drag]"
+        >
+          {isMaximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+        </button>
         {/* Closes the whole pane: every pin goes through the per-pin close
             policy, so conversations flow back to the strip instead of dying. */}
         <button
