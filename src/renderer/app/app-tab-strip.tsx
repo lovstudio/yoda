@@ -130,6 +130,11 @@ export const AppTabStrip = observer(function AppTabStrip() {
     onDrop: moveDraggedTabToStrip,
   });
 
+  // On the home scope with nothing pinned, the strip would only carry the
+  // home tab itself and a "+" that no-ops (navigate('home') from home). Hide
+  // the whole row — HomeComposer already owns task creation.
+  if (visibleTabs.length === 1 && visibleTabs[0]?.viewId === 'home') return null;
+
   return (
     <div
       ref={dropZone.dropRef}
