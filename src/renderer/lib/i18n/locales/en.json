@@ -802,23 +802,23 @@
       "sessionExited": "The agent process exited."
     },
     "tabs": {
-      "close": "Close tab",
+      "close": "Close",
       "closeOthers": "Close others",
       "closeToRight": "Close to the right",
       "closeAll": "Close all",
       "pin": "Pin tab",
       "copyPath": "Copy path",
-      "copyYodaLink": "Copy session Yoda link",
+      "copyYodaLink": "Copy Yoda link",
       "openInSidePane": "Open in sidebar",
       "openInWindow": "Open in separate window",
       "openInWindowFailed": "Failed to open separate window",
       "returnFromWindowFailed": "Failed to return tab",
       "overview": "Overview",
       "newConversation": "New conversation",
-      "archiveConversation": "Archive session",
+      "archiveConversation": "Archive",
       "archiveConversationDirect": "Archive directly",
-      "reloadConversation": "Reload session",
-      "renameConversation": "Rename session",
+      "reloadConversation": "Reload",
+      "renameConversation": "Rename",
       "preview": "Preview"
     },
     "overview": {

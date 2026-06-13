@@ -802,23 +802,23 @@
       "sessionExited": "代理进程已退出。"
     },
     "tabs": {
-      "close": "关闭标签页",
+      "close": "关闭",
       "closeOthers": "关闭其他",
       "closeToRight": "关闭右侧",
       "closeAll": "全部关闭",
       "pin": "固定标签页",
       "copyPath": "复制路径",
-      "copyYodaLink": "复制会话 Yoda 链接",
+      "copyYodaLink": "复制 Yoda 链接",
       "openInSidePane": "在侧边栏打开",
       "openInWindow": "在独立窗口打开",
       "openInWindowFailed": "打开独立窗口失败",
       "returnFromWindowFailed": "恢复标签页失败",
       "overview": "概览",
       "newConversation": "新建会话",
-      "archiveConversation": "归档会话",
+      "archiveConversation": "归档",
       "archiveConversationDirect": "直接归档",
-      "reloadConversation": "重新加载会话",
-      "renameConversation": "重命名会话",
+      "reloadConversation": "重新加载",
+      "renameConversation": "重命名",
       "preview": "预览"
     },
     "overview": {
