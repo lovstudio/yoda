@@ -42,7 +42,10 @@ export function WorkspaceLayout({ leftSidebar, mainContent, rightPane }: Workspa
         minSize={LEFT_SIDEBAR_MIN_SIZE}
         maxSize={LEFT_SIDEBAR_MAX_SIZE}
         collapsedSize="0%"
-        onResize={() => setIsLeftOpen(!leftPanelRef.current?.isCollapsed())}
+        onResize={() => {
+          const open = !leftPanelRef.current?.isCollapsed();
+          if (open !== isLeftOpen) setIsLeftOpen(open);
+        }}
         collapsible
       >
         {leftSidebar}

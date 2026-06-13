@@ -26,13 +26,13 @@ export function useWorkspaceLayoutService() {
   const setCollapsed = useCallback(
     (side: 'left', collapsed: boolean) => {
       const panel = leftPanelRef.current;
-      if (panel) {
-        if (collapsed) {
-          panel.collapse();
-        } else {
-          panel.expand();
-        }
+      if (!panel) return;
+      if (collapsed) {
+        panel.collapse();
+      } else {
+        panel.expand();
       }
+      setIsLeftOpen(!collapsed);
     },
     [leftPanelRef]
   );
