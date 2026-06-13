@@ -199,14 +199,14 @@ export const AppSidePane = observer(function AppSidePane() {
     ];
 
     if (resolved.kind === 'conversation') {
-      const [management, copy, maintenance] = buildConversationSections(
+      const [management, copy] = buildConversationSections(
         provisioned,
         pin.projectId,
         pin.taskId,
         resolved.conversationId,
         t
       );
-      return [management ?? [], copy ?? [], placement, maintenance ?? []];
+      return [management ?? [], copy ?? [], placement];
     }
 
     // file / diff — path actions plus the plain close.

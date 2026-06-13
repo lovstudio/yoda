@@ -250,21 +250,14 @@ function buildTaskSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
   );
 
   if (target.kind === 'conversation') {
-    const [management, copy, maintenance] = buildConversationSections(
+    const [management, copy] = buildConversationSections(
       provisioned,
       projectId,
       taskId,
       target.conversationId,
       t
     );
-    // Final section: tab close actions + reload, the "get rid of it / fix it"
-    // cluster at the bottom.
-    return [
-      management ?? [],
-      copy ?? [],
-      placement,
-      [...buildCloseSection(tab, t), ...(maintenance ?? [])],
-    ];
+    return [management ?? [], copy ?? [], placement, buildCloseSection(tab, t)];
   }
 
   // file / diff target — path actions based on the task worktree.
@@ -368,8 +361,8 @@ export function buildConversationSections(
   conversationId: string,
   t: Translate
 ): ReactNode[][] {
-  // Session management: rename + archive — both routine ways of curating a
-  // session (archive is recoverable, so no destructive isolation).
+  // Session management: rename + archive + reload — routine curation actions
+  // (archive is recoverable, reload is a rare recovery action grouped with it).
   const management: ReactNode[] = [];
   if (provisioned) {
     management.push(
@@ -394,7 +387,15 @@ export function buildConversationSections(
         projectId={projectId}
         taskId={taskId}
         conversationId={conversationId}
-      />
+      />,
+      <ContextMenuItem
+        key="reload"
+        className="whitespace-nowrap"
+        onClick={() => void provisioned.conversations.restartConversation(conversationId)}
+      >
+        <RefreshCw className="size-4" />
+        {t('tasks.tabs.reloadConversation')}
+      </ContextMenuItem>
     );
   }
 
@@ -409,23 +410,7 @@ export function buildConversationSections(
     </ContextMenuItem>,
   ];
 
-  // Maintenance: reload is a rare recovery action — bottom, away from the
-  // daily items.
-  const maintenance: ReactNode[] = [];
-  if (provisioned) {
-    maintenance.push(
-      <ContextMenuItem
-        key="reload"
-        className="whitespace-nowrap"
-        onClick={() => void provisioned.conversations.restartConversation(conversationId)}
-      >
-        <RefreshCw className="size-4" />
-        {t('tasks.tabs.reloadConversation')}
-      </ContextMenuItem>
-    );
-  }
-
-  return [management, copy, maintenance];
+  return [management, copy];
 }
 
 /**

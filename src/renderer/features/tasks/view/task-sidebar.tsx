@@ -201,16 +201,16 @@ export const TaskSidebar = observer(function TaskSidebar() {
     );
 
     if (tab.kind === 'conversation') {
-      // Same ordering as the top strip: management first, copy second, open
-      // modes third, maintenance (reload) at the bottom.
-      const [management, copy, maintenance] = buildConversationSections(
+      // Same ordering as the top strip: management (rename / archive / reload)
+      // first, copy second, open modes last.
+      const [management, copy] = buildConversationSections(
         provisioned,
         projectId,
         taskId,
         tab.conversationId,
         t
       );
-      return [management ?? [], copy ?? [], placement, maintenance ?? []];
+      return [management ?? [], copy ?? [], placement];
     }
 
     if (tab.kind === 'file' || tab.kind === 'diff') {
