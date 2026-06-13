@@ -58,7 +58,8 @@ export const AgentDetailPanel: React.FC<{ agentId: RuntimeId; hideHeader?: boole
     return (
       // @container so the tab strip below keys off the panel's own width (the
       // settings content area), not the whole settings view incl. the nav column.
-      <div className="@container flex h-full flex-col">
+      // Embedded (accordion) grows with its content; standalone fills its host.
+      <div className={cn('@container flex flex-col', hideHeader ? '' : 'h-full')}>
         {/* The accordion row already plays the role of the header, so the
             embedded panel drops its own to avoid a duplicated name+status. */}
         {!hideHeader && <AgentHeader provider={provider} />}
@@ -90,7 +91,7 @@ export const AgentDetailPanel: React.FC<{ agentId: RuntimeId; hideHeader?: boole
             );
           })}
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className={hideHeader ? '' : 'flex-1 overflow-y-auto'}>
           {activeTab === 'account' && <AgentTabAccount agentId={agentId} />}
           {activeTab === 'maas' && <AgentTabRuntime agentId={agentId} />}
           {activeTab === 'models' && <AgentTabModels agentId={agentId} />}
