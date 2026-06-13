@@ -2058,24 +2058,44 @@ export const HomeComposer = observer(function HomeComposer({
             ceo.taskId,
             ceo.conversationId
           );
+          // Workers run as additional sessions inside the CEO's task (shared
+          // worktree), not as separate tasks — same as the task-scoped path.
+          const provisioned = asProvisioned(getTaskStore(mounted.data.id, ceo.taskId));
+          if (!provisioned) throw new Error('Team task is not ready for workers.');
+          const conversationTitleInputs = Array.from(
+            provisioned.conversations.conversations.values(),
+            (conversation) => ({
+              runtimeId: conversation.data.runtimeId,
+              title: conversation.data.title,
+            })
+          );
           const workerLaunches = TEAM_ROLES.filter((role) => role.id !== 'ceo').flatMap((role) => {
             const slot = resolveSlot(teamPromptKey(role.id), teamRuntimes[role.id]);
             if (!slot.provider) return [];
+            const title = initialConversationTitle(
+              slot.provider,
+              trimmed || undefined,
+              conversationTitleInputs
+            );
+            conversationTitleInputs.push({ runtimeId: slot.provider, title });
             return [
-              createProjectTask({
-                provider: slot.provider,
-                nameSeed: `${baseName}-${role.taskSuffix}`,
+              provisioned.conversations.createConversation({
+                id: crypto.randomUUID(),
+                projectId: mounted.data.id,
+                taskId: ceo.taskId,
+                runtime: slot.provider,
+                title,
                 initialPrompt: buildTeamRolePrompt({
                   requirement,
                   ceoPlan: ceoOutput || '(The CEO agent did not produce captured output.)',
                   systemPrompt: slot.systemPrompt,
                 }),
-                titlePrompt: trimmed || undefined,
-                strategyKind: 'new-branch',
+                imagePaths,
+                autoApprove: autoApproveDefaults.getDefault(slot.provider),
               }),
             ];
           });
-          reportFailures(await Promise.allSettled(workerLaunches.map((launch) => launch.promise)));
+          reportFailures(await Promise.allSettled(workerLaunches));
         })().catch((error: unknown) => {
           toast.error(error instanceof Error ? error.message : 'Agent team orchestration failed.');
         });
