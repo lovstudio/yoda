@@ -724,7 +724,7 @@
     "developmentParadigm": "开发范式",
     "modeAria": "选择开发范式",
     "modeGroupWorkflow": "工作流",
-    "modeGroupCompare": "对比",
+    "modeGroupExplore": "探索",
     "modeNormal": "标准",
     "modeNormalDesc": "单 agent、单 session。",
     "modeBrainstorm": "Spec",

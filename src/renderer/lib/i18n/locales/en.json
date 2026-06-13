@@ -724,7 +724,7 @@
     "developmentParadigm": "Development paradigm",
     "modeAria": "Choose development paradigm",
     "modeGroupWorkflow": "Workflow",
-    "modeGroupCompare": "Compare",
+    "modeGroupExplore": "Explore",
     "modeNormal": "Standard",
     "modeNormalDesc": "One agent in one session.",
     "modeBrainstorm": "Spec",
