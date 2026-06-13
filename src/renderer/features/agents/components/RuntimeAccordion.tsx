@@ -140,7 +140,7 @@ const RuntimeAccordionItem: React.FC<{
           } as React.CSSProperties
         }
       >
-        <div className="h-[26rem] border-t border-border/50 bg-background">
+        <div className="border-t border-border/50 bg-background">
           <AgentDetailPanel agentId={row.id} hideHeader />
         </div>
       </AccordionPrimitive.Content>
