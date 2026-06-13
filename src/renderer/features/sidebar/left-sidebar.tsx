@@ -181,7 +181,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   // Quick-access icons docked to the right of the account row. Each view is
   // also reachable as an embedded settings tab.
   const quickNavItems: {
-    key: 'automation' | 'mobile' | 'settings';
+    key: 'mobile' | 'settings';
     icon: React.ComponentType<{ className?: string }>;
     label: string;
     title?: string;
@@ -189,12 +189,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
     pinParams?: Record<string, unknown>;
     showIssueDot?: boolean;
   }[] = [
-    {
-      key: 'automation',
-      icon: Workflow,
-      label: t('sidebar.automation'),
-      onClick: () => navigate('automation'),
-    },
     {
       key: 'mobile',
       icon: Smartphone,
@@ -293,6 +287,21 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                   {skillIssueCount > 0 && (
                     <span className="ml-auto size-1.5 shrink-0 rounded-full bg-amber-500" />
                   )}
+                </span>
+              </SidebarMenuButton>
+            </GlobalSidePaneTarget>
+            <GlobalSidePaneTarget viewId="automation" altHeld={altHeld}>
+              <SidebarMenuButton
+                isActive={isCurrentView(currentView, 'automation')}
+                onClick={(e) =>
+                  e.altKey ? appState.sidePane.pinView('automation', {}) : navigate('automation')
+                }
+                aria-label={t('sidebar.automation')}
+                className="w-full justify-start"
+              >
+                <span className="flex items-center gap-2 min-w-0 w-full">
+                  <Workflow className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
+                  <span className="truncate min-w-0">{t('sidebar.automation')}</span>
                 </span>
               </SidebarMenuButton>
             </GlobalSidePaneTarget>
