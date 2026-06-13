@@ -57,21 +57,7 @@ import {
 } from '@renderer/lib/ui/context-menu';
 import { log } from '@renderer/utils/logger';
 
-/**
- * Right-click menu for top-level app tabs, built as sections separated
- * automatically. Section order follows frequency, with the destructive
- * lifecycle action isolated at the bottom:
- *
- *   conversation tabs: management (rename / archive) → copy link
- *                      → open modes (in sidebar / in window)
- *                      → close group + reload (always last)
- *   file/diff tabs:    placement → path actions → close group
- *   every other tab:   close group only
- *
- * Close-group items render conditionally (no "close others" without others,
- * no "close to the right" at the rightmost tab) and operate scope-wide on
- * the visible strip; index tabs are never closed.
- */
+/** Right-click menu for top-level app tabs; sections are separated automatically. */
 export const AppTabContextMenu = observer(function AppTabContextMenu({
   tab,
   children,
@@ -127,10 +113,7 @@ function buildTabSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
   return [[buildGlobalPinItem(tab, t)], buildCloseSection(tab, t)];
 }
 
-/**
- * "Open in global sidebar" for non-task tabs — copy semantics: the pane gets
- * an independent instance of the view; the tab itself stays in the strip.
- */
+/** "Open in global sidebar" — pane gets an independent view instance; tab stays. */
 function buildGlobalPinItem(tab: AppTabEntry, t: Translate): ReactNode {
   return (
     <ContextMenuItem
@@ -148,14 +131,7 @@ function buildGlobalPinItem(tab: AppTabEntry, t: Translate): ReactNode {
 // Task tabs (sessions, worktree files, diffs)
 // ---------------------------------------------------------------------------
 
-/**
- * Right-click menu for a task's overview tab — the task entity itself on the
- * strip. Reuses the shared task menu wiring (same items as the sidebar row and
- * the kanban row, see agents/conventions/reuse.md), then appends the tab
- * placement and close groups. The index tab itself isn't closeable, but it's a
- * natural place to sweep the rest of the strip from; its shell-pane pin is a
- * copy — the overview stays the scope's fixed index tab.
- */
+/** Overview tab menu — reuses shared task items (see agents/conventions/reuse.md). */
 const TaskOverviewTabMenu = observer(function TaskOverviewTabMenu({
   tab,
   projectId,
@@ -274,11 +250,7 @@ function buildTaskSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
   return [placement, file, buildCloseSection(tab, t)];
 }
 
-/**
- * Scope-wide close actions for the visible strip. Items appear only when they
- * would actually do something; the ⌘W hint shows only on the active tab since
- * the shortcut targets the active tab, not the right-clicked one.
- */
+/** Scope-wide close actions; items appear only when they have a target. */
 function buildCloseSection(tab: AppTabEntry, t: Translate): ReactNode[] {
   const visible = appState.appTabs.visibleTabs;
   const index = visible.findIndex((entry) => entry.id === tab.id);
@@ -350,10 +322,7 @@ function formatHotkey(hotkey: string | undefined): string | undefined {
   return hotkey?.replace('Mod', '⌘').replace('Shift', '⇧').replace('Alt', '⌥').replace(/\+/g, '');
 }
 
-/**
- * Conversation menu sections (management + copy + maintenance), shared between
- * the top-level tab strip and the task sidebar's pinned chips.
- */
+/** Shared menu sections [management, copy] for the top strip and sidebar chips. */
 export function buildConversationSections(
   provisioned: ProvisionedTask | undefined,
   projectId: string,
@@ -361,8 +330,6 @@ export function buildConversationSections(
   conversationId: string,
   t: Translate
 ): ReactNode[][] {
-  // Session management: rename + archive + reload — routine curation actions
-  // (archive is recoverable, reload is a rare recovery action grouped with it).
   const management: ReactNode[] = [];
   if (provisioned) {
     management.push(
@@ -413,11 +380,7 @@ export function buildConversationSections(
   return [management, copy];
 }
 
-/**
- * Archive entry as a submenu, mirroring the task context menu's archive
- * options: direct archive (skip the pre-archive skill), run the configured
- * skill then archive, and a shortcut to where the skill is configured.
- */
+/** Archive submenu — direct / run skill then archive / configure skill. */
 function ConversationArchiveSubmenu({
   projectId,
   taskId,
@@ -476,13 +439,7 @@ function ConversationArchiveSubmenu({
   );
 }
 
-/**
- * Pins a top-level task tab into the task sidebar strip: ensures the internal
- * tab entry exists (replaying the target below the bridge), moves it into the
- * sidebar, then closes the top-level tab — the entity now lives in the
- * sidebar, not the strip. Returns the internal tab id (shared with the
- * sidebar's drop zone, which positions the new chip afterwards).
- */
+/** Move a top-level tab into the task sidebar; returns the new internal tab id. */
 export async function moveTopTabToSidebar(
   tab: AppTabEntry,
   provisioned: ProvisionedTask,
@@ -499,12 +456,7 @@ export async function moveTopTabToSidebar(
   return internalId;
 }
 
-/**
- * Pins a top-level task tab into the shell-level side pane: same move
- * semantics as the task-sidebar pin, but the entity lands in the cross-route
- * pane — it stays visible while the main area navigates anywhere. Returns the
- * internal tab id (shared with the pane's drop zone).
- */
+/** Move a top-level tab into the cross-route shell side pane. */
 export async function moveTopTabToShellPane(
   tab: AppTabEntry,
   provisioned: ProvisionedTask,
@@ -522,10 +474,7 @@ export async function moveTopTabToShellPane(
   return internalId;
 }
 
-/**
- * Ensures the internal tab entry for a target exists (replaying the target
- * below the bridge when needed) and returns its id.
- */
+/** Ensures the internal tab entry exists for a target and returns its id. */
 async function ensureInternalTab(
   provisioned: ProvisionedTask,
   tabManager: TabManagerStore,
