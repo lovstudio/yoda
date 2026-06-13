@@ -213,6 +213,9 @@ importers:
       concurrently:
         specifier: ^8.2.2
         version: 8.2.2
+      croner:
+        specifier: ^10.0.1
+        version: 10.0.1
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
@@ -4375,6 +4378,10 @@ packages:
 
   crc@3.8.0:
     resolution: {integrity: sha512-iX3mfgcTMIq3ZKLIsVFAbv7+Mc10kxabAGQb8HvjA1o3T1PIYprbakQ65d3I+2HGHt6nSKkM9PYjgoJO2KcFBQ==}
+
+  croner@10.0.1:
+    resolution: {integrity: sha512-ixNtAJndqh173VQ4KodSdJEI6nuioBWI0V1ITNKhZZsO0pEMoDxz539T4FTTbSZ/xIOSuDnzxLVRqBVSvPNE2g==}
+    engines: {node: '>=18.0'}
 
   cross-fetch@3.2.0:
     resolution: {integrity: sha512-Q+xVJLoGOeIMXZmbUK4HYk+69cQH6LudR0Vu/pRm2YlU/hDV9CiS0gKUMaWY5f2NeUH9C1nV3bsTlCo0FsTV1Q==}
@@ -13330,6 +13337,8 @@ snapshots:
     dependencies:
       buffer: 5.7.1
     optional: true
+
+  croner@10.0.1: {}
 
   cross-fetch@3.2.0(encoding@0.1.13):
     dependencies:

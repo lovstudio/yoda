@@ -105,8 +105,11 @@ export const shellSessionStartedChannel = defineEvent<{
 /** Emitted whenever an AI invocation log row is inserted or updated. */
 export const aiLogUpdatedChannel = defineEvent<{ id: string }>('ai-log:updated');
 
-/** Emitted whenever an automation is created, updated, or deleted. */
+/** Emitted whenever an automation is created, updated, or deleted (CRUD). */
 export const automationsUpdatedChannel = defineEvent<void>('automations:updated');
+
+/** Emitted whenever an automation run starts or finishes. */
+export const automationRunsUpdatedChannel = defineEvent<void>('automation-runs:updated');
 
 /** Emitted after each dependency probe completes (path resolution or version check). */
 export const dependencyStatusUpdatedChannel = defineEvent<DependencyStatusUpdatedEvent>(

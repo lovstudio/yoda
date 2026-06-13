@@ -138,6 +138,13 @@ export const automations = sqliteTable('automations', {
   runtime: text('runtime').notNull(),
   scheduleLabel: text('schedule_label').notNull().default(''),
   status: text('status').notNull().default('active'), // 'active' | 'paused'
+  // Trigger engine (P1: 'manual' | 'cron'; events/webhook land later).
+  triggerKind: text('trigger_kind').notNull().default('manual'),
+  cronExpr: text('cron_expr'), // croner pattern when triggerKind='cron'
+  timezone: text('timezone'), // IANA tz for cron; null = system local
+  // Execution target: real project to run the agent task in. null = internal Drafts.
+  projectId: text('project_id'),
+  nextRunAt: text('next_run_at'), // cached croner nextRun() for UI; null when not scheduled
   sortOrder: integer('sort_order').notNull().default(0),
   lastRunAt: text('last_run_at'),
   createdAt: text('created_at')
@@ -148,6 +155,28 @@ export const automations = sqliteTable('automations', {
     .default(sql`CURRENT_TIMESTAMP`)
     .$onUpdate(() => new Date().toISOString()),
 });
+
+/** One execution of an automation (manual or scheduled). Audit + UI history. */
+export const automationRuns = sqliteTable(
+  'automation_runs',
+  {
+    id: text('id').primaryKey(),
+    automationId: text('automation_id')
+      .notNull()
+      .references(() => automations.id, { onDelete: 'cascade' }),
+    taskId: text('task_id'), // the task created for this run, if any
+    trigger: text('trigger').notNull(), // 'manual' | 'cron'
+    status: text('status').notNull(), // 'running' | 'success' | 'failed' | 'skipped'
+    startedAt: text('started_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    finishedAt: text('finished_at'),
+    error: text('error'),
+  },
+  (table) => ({
+    automationIdx: index('idx_automation_runs_automation_id').on(table.automationId),
+  })
+);
 
 export const tasks = sqliteTable(
   'tasks',

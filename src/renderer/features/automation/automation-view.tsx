@@ -13,20 +13,16 @@ import {
 import { observer } from 'mobx-react-lite';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Automation, AutomationUpdateInput } from '@shared/automation';
-import { INTERNAL_PROJECT_ID } from '@shared/projects';
+import type {
+  Automation,
+  AutomationCreateInput,
+  AutomationRun,
+  AutomationTriggerKind,
+} from '@shared/automation';
 import { isValidRuntimeId, RUNTIMES, type RuntimeId } from '@shared/runtime-registry';
-import { ensureUniqueTaskSlug } from '@shared/task-name';
-import {
-  asMounted,
-  getProjectManagerStore,
-} from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
-import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
-import { useRuntimeAutoApproveDefaults } from '@renderer/features/tasks/hooks/useRuntimeAutoApproveDefaults';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useToast } from '@renderer/lib/hooks/use-toast';
-import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
@@ -42,9 +38,11 @@ import { Textarea } from '@renderer/lib/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import {
+  useAutomationHistory,
   useAutomations,
   useCreateAutomation,
   useDeleteAutomation,
+  useRunAutomation,
   useUpdateAutomation,
 } from './use-automations';
 
@@ -52,9 +50,10 @@ type AutomationDraft = {
   title: string;
   workspaceName: string;
   runtime: RuntimeId;
-  scheduleLabel: string;
   prompt: string;
   status: Automation['status'];
+  triggerKind: AutomationTriggerKind;
+  cronExpr: string;
 };
 
 const DEFAULT_PROVIDER: RuntimeId = 'codex';
@@ -64,9 +63,10 @@ function makeDraft(runtime: RuntimeId): AutomationDraft {
     title: '',
     workspaceName: 'Yoda',
     runtime,
-    scheduleLabel: '',
     prompt: '',
     status: 'active',
+    triggerKind: 'manual',
+    cronExpr: '',
   };
 }
 
@@ -75,21 +75,35 @@ function draftFromEntry(entry: Automation): AutomationDraft {
     title: entry.title,
     workspaceName: entry.workspaceName,
     runtime: entry.runtime,
-    scheduleLabel: entry.scheduleLabel,
     prompt: entry.prompt,
     status: entry.status,
+    triggerKind: entry.triggerKind,
+    cronExpr: entry.cronExpr ?? '',
   };
 }
 
-function draftToInput(draft: AutomationDraft) {
+function draftToInput(draft: AutomationDraft): AutomationCreateInput {
   return {
     title: draft.title.trim(),
     workspaceName: draft.workspaceName.trim(),
     runtime: draft.runtime,
-    scheduleLabel: draft.scheduleLabel.trim(),
     prompt: draft.prompt.trim(),
     status: draft.status,
+    triggerKind: draft.triggerKind,
+    cronExpr: draft.triggerKind === 'cron' ? draft.cronExpr.trim() || null : null,
+    scheduleLabel: '',
+    timezone: null,
+    projectId: null,
   };
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export function AutomationTitlebar() {
@@ -103,27 +117,36 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
-  const { navigate } = useNavigate();
   const showConfirm = useShowModal('confirmActionModal');
-  const autoApproveDefaults = useRuntimeAutoApproveDefaults();
   const { value: defaultRuntime } = useAppSettingsKey('defaultRuntime');
   const { data: automationsData, isLoading } = useAutomations();
+  const { data: history } = useAutomationHistory();
   const createAutomation = useCreateAutomation();
   const updateAutomation = useUpdateAutomation();
   const deleteAutomation = useDeleteAutomation();
+  const runAutomation = useRunAutomation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AutomationDraft>(() => makeDraft(DEFAULT_PROVIDER));
-  const [runningId, setRunningId] = useState<string | null>(null);
 
   const defaultProvider = isValidRuntimeId(defaultRuntime) ? defaultRuntime : DEFAULT_PROVIDER;
   const items = useMemo(() => automationsData ?? [], [automationsData]);
   const currentItems = useMemo(() => items.filter((item) => item.status === 'active'), [items]);
   const pausedItems = useMemo(() => items.filter((item) => item.status === 'paused'), [items]);
+  // history is newest-first, so the first run seen per automation is the latest.
+  const latestRuns = useMemo(() => {
+    const map = new Map<string, AutomationRun>();
+    for (const run of history ?? []) {
+      if (!map.has(run.automationId)) map.set(run.automationId, run);
+    }
+    return map;
+  }, [history]);
+  const runningId = runAutomation.isPending ? (runAutomation.variables ?? null) : null;
   const editorOpen = editingId !== null;
   const canSave =
     draft.title.trim().length > 0 &&
     draft.workspaceName.trim().length > 0 &&
-    draft.prompt.trim().length > 0;
+    draft.prompt.trim().length > 0 &&
+    (draft.triggerKind !== 'cron' || draft.cronExpr.trim().length > 0);
 
   const openCreate = () => {
     setEditingId('new');
@@ -145,16 +168,18 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
     if (!canSave) return;
 
     const input = draftToInput(draft);
+    const onError = (error: unknown) =>
+      toast({
+        title: t('automation.saveFailed'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
     if (editingId && editingId !== 'new') {
-      updateAutomation.mutate({ id: editingId, patch: input });
+      updateAutomation.mutate({ id: editingId, patch: input }, { onError });
     } else {
-      createAutomation.mutate(input);
+      createAutomation.mutate(input, { onError });
     }
     closeEditor();
-  };
-
-  const updateEntry = (entry: Automation, patch: AutomationUpdateInput) => {
-    updateAutomation.mutate({ id: entry.id, patch });
   };
 
   const handleDelete = (entry: Automation) => {
@@ -169,50 +194,15 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
     });
   };
 
-  const handleRun = async (entry: Automation) => {
-    if (runningId) return;
-    setRunningId(entry.id);
-    try {
-      const projectManager = getProjectManagerStore();
-      await projectManager.mountProject(INTERNAL_PROJECT_ID).catch(() => {});
-      const internalProject = asMounted(projectManager.projects.get(INTERNAL_PROJECT_ID));
-      if (!internalProject) {
-        throw new Error('Internal project not available');
-      }
-      const existingNames = Array.from(
-        internalProject.taskManager.tasks.values(),
-        (t) => t.data.name
-      );
-      const taskName = ensureUniqueTaskSlug(entry.title, existingNames);
-      const taskId = crypto.randomUUID();
-      const conversationId = crypto.randomUUID();
-      await internalProject.taskManager.createTask({
-        id: taskId,
-        projectId: INTERNAL_PROJECT_ID,
-        name: taskName,
-        sourceBranch: { type: 'local', branch: 'main' },
-        strategy: { kind: 'no-worktree' },
-        initialConversation: {
-          id: conversationId,
-          projectId: INTERNAL_PROJECT_ID,
-          taskId,
-          runtime: entry.runtime,
-          title: initialConversationTitle(entry.runtime, entry.prompt, []),
-          initialPrompt: entry.prompt,
-          autoApprove: autoApproveDefaults.getDefault(entry.runtime),
-        },
-      });
-      updateEntry(entry, { lastRunAt: new Date().toISOString() });
-      navigate('task', { projectId: INTERNAL_PROJECT_ID, taskId });
-    } catch (error) {
-      toast({
-        title: t('automation.runFailed'),
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive',
-      });
-    } finally {
-      setRunningId(null);
-    }
+  const handleRun = (entry: Automation) => {
+    runAutomation.mutate(entry.id, {
+      onError: (error) =>
+        toast({
+          title: t('automation.runFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+        }),
+    });
   };
 
   if (isLoading) {
@@ -265,20 +255,26 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
             emptyLabel={t('automation.emptyCurrent')}
             items={currentItems}
             runningId={runningId}
+            latestRuns={latestRuns}
             onEdit={openEdit}
             onDelete={handleDelete}
             onRun={handleRun}
-            onToggle={(entry) => updateEntry(entry, { status: 'paused' })}
+            onToggle={(entry) =>
+              updateAutomation.mutate({ id: entry.id, patch: { status: 'paused' } })
+            }
           />
           <AutomationSection
             title={t('automation.paused')}
             emptyLabel={t('automation.emptyPaused')}
             items={pausedItems}
             runningId={runningId}
+            latestRuns={latestRuns}
             onEdit={openEdit}
             onDelete={handleDelete}
             onRun={handleRun}
-            onToggle={(entry) => updateEntry(entry, { status: 'active' })}
+            onToggle={(entry) =>
+              updateAutomation.mutate({ id: entry.id, patch: { status: 'active' } })
+            }
           />
         </div>
       </div>
@@ -320,16 +316,42 @@ function AutomationEditor({
           />
         </label>
         <label className="grid gap-1.5">
-          <span className="text-xs text-foreground-muted">{t('automation.form.schedule')}</span>
-          <Input
-            value={draft.scheduleLabel}
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, scheduleLabel: event.target.value }))
-            }
-            placeholder={t('automation.form.schedulePlaceholder')}
-          />
+          <span className="text-xs text-foreground-muted">{t('automation.form.trigger')}</span>
+          <Select
+            value={draft.triggerKind}
+            onValueChange={(value) => {
+              if (value !== 'manual' && value !== 'cron') return;
+              setDraft((current) => ({ ...current, triggerKind: value }));
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>
+                {draft.triggerKind === 'cron'
+                  ? t('automation.trigger.cron')
+                  : t('automation.trigger.manual')}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent align="start" alignItemWithTrigger={false}>
+              <SelectItem value="manual">{t('automation.trigger.manual')}</SelectItem>
+              <SelectItem value="cron">{t('automation.trigger.cron')}</SelectItem>
+            </SelectContent>
+          </Select>
         </label>
       </div>
+      {draft.triggerKind === 'cron' && (
+        <label className="grid gap-1.5">
+          <span className="text-xs text-foreground-muted">{t('automation.form.cron')}</span>
+          <Input
+            value={draft.cronExpr}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, cronExpr: event.target.value }))
+            }
+            placeholder={t('automation.form.cronPlaceholder')}
+            className="font-mono"
+          />
+          <span className="text-xs text-foreground-passive">{t('automation.form.cronHint')}</span>
+        </label>
+      )}
       <div className="grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_14rem_10rem]">
         <label className="grid gap-1.5">
           <span className="text-xs text-foreground-muted">{t('automation.form.workspace')}</span>
@@ -413,6 +435,7 @@ function AutomationSection({
   emptyLabel,
   items,
   runningId,
+  latestRuns,
   onEdit,
   onDelete,
   onRun,
@@ -422,6 +445,7 @@ function AutomationSection({
   emptyLabel: string;
   items: Automation[];
   runningId: string | null;
+  latestRuns: Map<string, AutomationRun>;
   onEdit: (entry: Automation) => void;
   onDelete: (entry: Automation) => void;
   onRun: (entry: Automation) => void;
@@ -441,6 +465,7 @@ function AutomationSection({
               key={entry.id}
               entry={entry}
               isRunning={runningId === entry.id}
+              lastRun={latestRuns.get(entry.id)}
               onEdit={onEdit}
               onDelete={onDelete}
               onRun={onRun}
@@ -453,9 +478,17 @@ function AutomationSection({
   );
 }
 
+const RUN_STATUS_DOT: Record<AutomationRun['status'], string> = {
+  running: 'bg-amber-500',
+  success: 'bg-emerald-500',
+  failed: 'bg-red-500',
+  skipped: 'bg-foreground-passive',
+};
+
 const AutomationRow = observer(function AutomationRow({
   entry,
   isRunning,
+  lastRun,
   onEdit,
   onDelete,
   onRun,
@@ -463,6 +496,7 @@ const AutomationRow = observer(function AutomationRow({
 }: {
   entry: Automation;
   isRunning: boolean;
+  lastRun: AutomationRun | undefined;
   onEdit: (entry: Automation) => void;
   onDelete: (entry: Automation) => void;
   onRun: (entry: Automation) => void;
@@ -471,10 +505,17 @@ const AutomationRow = observer(function AutomationRow({
   const { t } = useTranslation();
   const runtime = RUNTIMES.find((item) => item.id === entry.runtime);
   const detected = appState.dependencies.agentStatuses[entry.runtime]?.status === 'available';
-  const rightLabel =
-    entry.status === 'active'
-      ? entry.scheduleLabel || t('automation.scheduleManual')
-      : t('automation.pausedStatus');
+
+  let rightLabel: string;
+  if (entry.status !== 'active') {
+    rightLabel = t('automation.pausedStatus');
+  } else if (entry.triggerKind === 'cron') {
+    rightLabel = entry.nextRunAt
+      ? t('automation.nextRunLabel', { time: formatTime(entry.nextRunAt) })
+      : (entry.cronExpr ?? t('automation.scheduleManual'));
+  } else {
+    rightLabel = t('automation.scheduleManual');
+  }
 
   return (
     <div className="group grid min-h-[72px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-border py-3">
@@ -502,6 +543,12 @@ const AutomationRow = observer(function AutomationRow({
             <Bot className="size-3" />
             {runtime?.name ?? entry.runtime}
           </span>
+          {lastRun && (
+            <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-foreground-passive">
+              <span className={cn('size-1.5 rounded-full', RUN_STATUS_DOT[lastRun.status])} />
+              {t(`automation.runStatus.${lastRun.status}`)}
+            </span>
+          )}
         </span>
       </button>
       <div className="flex items-center gap-3">

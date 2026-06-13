@@ -1441,10 +1441,22 @@
     "emptyPaused": "暂无已暂停的自动化。",
     "pausedStatus": "已暂停",
     "scheduleManual": "手动",
+    "nextRunLabel": "下次 {{time}}",
     "runFailed": "自动化运行失败",
+    "saveFailed": "自动化保存失败",
     "status": {
       "active": "启用",
       "paused": "暂停"
+    },
+    "trigger": {
+      "manual": "手动",
+      "cron": "定时"
+    },
+    "runStatus": {
+      "running": "运行中",
+      "success": "成功",
+      "failed": "失败",
+      "skipped": "跳过"
     },
     "actions": {
       "run": "运行",
@@ -1461,6 +1473,10 @@
       "agent": "代理",
       "schedule": "计划",
       "schedulePlaceholder": "每天 10:00",
+      "trigger": "触发方式",
+      "cron": "Cron 表达式",
+      "cronPlaceholder": "0 9 * * *",
+      "cronHint": "标准 cron（分 时 日 月 周）。例：0 9 * * * 表示每天 09:00 运行。",
       "status": "状态",
       "prompt": "Prompt",
       "promptPlaceholder": "描述这个自动化运行时要让 agent 做什么。"

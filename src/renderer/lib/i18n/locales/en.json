@@ -1441,10 +1441,22 @@
     "emptyPaused": "No paused automations.",
     "pausedStatus": "Paused",
     "scheduleManual": "Manual",
+    "nextRunLabel": "Next {{time}}",
     "runFailed": "Automation failed",
+    "saveFailed": "Failed to save automation",
     "status": {
       "active": "Active",
       "paused": "Paused"
+    },
+    "trigger": {
+      "manual": "Manual",
+      "cron": "Schedule"
+    },
+    "runStatus": {
+      "running": "Running",
+      "success": "Succeeded",
+      "failed": "Failed",
+      "skipped": "Skipped"
     },
     "actions": {
       "run": "Run",
@@ -1461,6 +1473,10 @@
       "agent": "Agent",
       "schedule": "Schedule",
       "schedulePlaceholder": "Every day 10:00",
+      "trigger": "Trigger",
+      "cron": "Cron expression",
+      "cronPlaceholder": "0 9 * * *",
+      "cronHint": "Standard cron (min hour day month weekday). Example: 0 9 * * * runs every day at 09:00.",
       "status": "Status",
       "prompt": "Prompt",
       "promptPlaceholder": "Describe what the agent should do when this automation runs."

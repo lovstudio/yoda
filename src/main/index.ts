@@ -14,6 +14,7 @@ import { yodaAccountService } from './core/account/services/yoda-account-service
 import { agentHookService } from './core/agent-hooks/agent-hook-service';
 import { resolveQuitAgentSessionsDecision } from './core/app/quit-agent-sessions';
 import { appService } from './core/app/service';
+import { automationScheduler } from './core/automation/automation-scheduler';
 import { agentSessionRuntimeStore } from './core/conversations/agent-session-runtime';
 import { localDependencyManager } from './core/dependencies/dependency-manager';
 import { editorBufferService } from './core/editor/editor-buffer-service';
@@ -200,6 +201,10 @@ void app.whenReady().then(async () => {
 
   mobileGatewayService.initialize().catch((e) => {
     log.error('Failed to start mobile gateway service:', e);
+  });
+
+  automationScheduler.initialize().catch((e) => {
+    log.error('Failed to start automation scheduler:', e);
   });
 
   yodaAccountService.loadSessionToken().catch((e) => {

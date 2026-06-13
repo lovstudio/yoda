@@ -204,6 +204,13 @@
       "when": 1781351229475,
       "tag": "0028_flowery_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1781352806530,
+      "tag": "0029_rapid_thor_girl",
+      "breakpoints": true
     }
   ]
 }
