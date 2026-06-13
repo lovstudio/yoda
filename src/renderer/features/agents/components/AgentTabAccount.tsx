@@ -669,12 +669,12 @@ const EnvVarEditor: React.FC<{
 
         return (
           <div key={envVar} className="bg-background px-3 py-2">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <code className="min-w-0 shrink truncate font-mono text-xs" title={envVar}>
                 {envVar}
               </code>
               {editing ? (
-                <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+                <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1.5">
                   <Input
                     autoFocus
                     type={sensitive ? 'password' : 'text'}
@@ -701,7 +701,7 @@ const EnvVarEditor: React.FC<{
                   </Button>
                 </div>
               ) : (
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="ml-auto flex shrink-0 items-center gap-1.5">
                   {customValue ? (
                     <>
                       <span
@@ -806,7 +806,9 @@ const LocalUsagePanel: React.FC<{
           <RefreshCw className={cn(refreshing && 'animate-spin')} />
         </Button>
       </div>
-      <div className="flex divide-x divide-border overflow-hidden rounded-md border border-border">
+      {/* auto-fit so the 5 metrics reflow into rows instead of crushing into
+          one row; gap-px over bg-border draws clean dividers in both axes. */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-px overflow-hidden rounded-md border border-border bg-border">
         <UsageMetric
           label={t('agents.account.localUsageCost')}
           value={`≈ ${formatCost(usage.costUsd)}`}
@@ -855,8 +857,13 @@ const MaasConnectionList: React.FC<{ connections: MaasConnection[] }> = ({ conne
           key={connection.platformId}
           className="flex min-w-0 items-center justify-between gap-3 bg-background px-3 py-2"
         >
-          <span className="min-w-0 truncate text-xs font-medium">{connection.displayName}</span>
-          <code className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+          <span className="min-w-0 truncate text-xs font-medium" title={connection.displayName}>
+            {connection.displayName}
+          </span>
+          <code
+            className="min-w-0 truncate font-mono text-xs text-muted-foreground"
+            title={connection.endpoint}
+          >
             {connection.endpoint}
           </code>
         </div>
@@ -909,7 +916,7 @@ const UsageSummaryPanel: React.FC<{
 
   return (
     <div className="overflow-hidden rounded-md border border-border">
-      <div className="flex divide-x divide-border">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-px bg-border">
         <UsageMetric
           label={t('agents.account.usageTokens')}
           value={formatCompactNumber(totalTokens(summary))}
@@ -938,7 +945,7 @@ const UsageSummaryPanel: React.FC<{
 
 const UsageMetric: React.FC<{ label: string; value: string }> = ({ label, value }) => {
   return (
-    <div className="min-w-0 flex-1 px-3 py-2">
+    <div className="min-w-0 bg-background px-3 py-2">
       <div className="truncate text-[10px] uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
