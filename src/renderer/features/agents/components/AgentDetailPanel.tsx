@@ -56,14 +56,16 @@ export const AgentDetailPanel: React.FC<{ agentId: RuntimeId; hideHeader?: boole
     }
 
     return (
-      <div className="flex h-full flex-col">
+      // @container so the tab strip below keys off the panel's own width (the
+      // settings content area), not the whole settings view incl. the nav column.
+      <div className="@container flex h-full flex-col">
         {/* The accordion row already plays the role of the header, so the
             embedded panel drops its own to avoid a duplicated name+status. */}
         {!hideHeader && <AgentHeader provider={provider} />}
-        {/* overflow-x-auto is the safety net; under @max-md the labels collapse
-            so the 7 tabs degrade to icon-only and fit a narrow side-pane. */}
+        {/* overflow-x-auto is the safety net; below the panel breakpoint the
+            labels collapse so the 7 tabs degrade to icon-only and fit narrow. */}
         <div
-          className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-background-secondary px-4 @max-md:px-2"
+          className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-background-secondary px-4 @max-[820px]:px-2"
           style={{ scrollbarWidth: 'none' }}
         >
           {TABS.map((tab) => {
@@ -76,14 +78,14 @@ export const AgentDetailPanel: React.FC<{ agentId: RuntimeId; hideHeader?: boole
                 onClick={() => setActiveTab(tab.id)}
                 title={t(tab.labelKey)}
                 className={cn(
-                  'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm transition @max-md:px-2.5',
+                  'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm transition @max-[820px]:px-2.5',
                   isActive
                     ? 'border-foreground text-foreground'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 )}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" />
-                <span className="@max-md:hidden">{t(tab.labelKey)}</span>
+                <span className="@max-[820px]:hidden">{t(tab.labelKey)}</span>
               </button>
             );
           })}
