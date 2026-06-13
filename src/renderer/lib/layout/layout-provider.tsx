@@ -2,11 +2,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useState,
   type ReactNode,
   type RefObject,
 } from 'react';
 import { usePanelRef, type PanelImperativeHandle } from 'react-resizable-panels';
+import { rpc } from '@renderer/lib/ipc';
 
 export interface WorkspaceLayoutContextValue {
   isLeftOpen: boolean;
@@ -40,6 +42,10 @@ export function useWorkspaceLayoutService() {
   const toggleLeft = useCallback(() => {
     setCollapsed('left', isLeftOpen);
   }, [setCollapsed, isLeftOpen]);
+
+  useEffect(() => {
+    void rpc.app.setLeftSidebarMenuChecked(isLeftOpen);
+  }, [isLeftOpen]);
 
   return {
     leftPanelRef,

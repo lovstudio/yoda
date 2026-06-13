@@ -19,6 +19,7 @@ import {
   type PlatformKey,
 } from '@shared/openInApps';
 import { isTaskWindowTarget, type TaskWindowTarget } from '@shared/task-window';
+import { setLeftSidebarMenuChecked } from '@main/app/menu';
 import {
   registerTaskWindowDock,
   setTaskStripDropZone,
@@ -230,6 +231,10 @@ class AppService implements IInitializable, IDisposable {
 
   setTaskStripDropZone(zone: TaskStripDropZone | null): void {
     setTaskStripDropZone(zone);
+  }
+
+  setLeftSidebarMenuChecked(checked: boolean): void {
+    setLeftSidebarMenuChecked(checked);
   }
 
   async openIn(args: {

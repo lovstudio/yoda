@@ -5,12 +5,23 @@ import {
   menuCloseTabChannel,
   menuOpenSettingsChannel,
   menuRedoChannel,
+  menuToggleLeftSidebarChannel,
   menuUndoChannel,
 } from '@shared/events/appEvents';
 import { YODA_DOCS_URL, YODA_RELEASES_URL } from '@shared/urls';
 import { resolveAppVersion } from '@main/core/app/utils';
 import { events } from '@main/lib/events';
 import { duplicateAppWindow } from './window';
+
+const LEFT_SIDEBAR_MENU_ITEM_ID = 'view.toggleLeftSidebar';
+
+export function setLeftSidebarMenuChecked(checked: boolean): void {
+  const menu = Menu.getApplicationMenu();
+  if (!menu) return;
+  const item = menu.getMenuItemById(LEFT_SIDEBAR_MENU_ITEM_ID);
+  if (!item) return;
+  item.checked = checked;
+}
 
 function restartApp(): void {
   if (import.meta.env.DEV) {
@@ -141,6 +152,18 @@ export async function setupApplicationMenu(): Promise<void> {
     {
       label: 'View',
       submenu: [
+        {
+          id: LEFT_SIDEBAR_MENU_ITEM_ID,
+          label: 'Show Left Sidebar',
+          type: 'checkbox' as const,
+          checked: true,
+          accelerator: 'CmdOrCtrl+B',
+          // Renderer owns the hotkey (user-configurable). Display the accelerator
+          // as a visual hint without registering it, so we don't double-toggle.
+          registerAccelerator: false,
+          click: () => events.emit(menuToggleLeftSidebarChannel, undefined),
+        },
+        { type: 'separator' as const },
         { role: 'reload' as const },
         { role: 'forceReload' as const },
         { role: 'toggleDevTools' as const },

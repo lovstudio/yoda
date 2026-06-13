@@ -74,6 +74,10 @@ export const appController = createRPCController({
     appService.setTaskStripDropZone(zone);
     return { success: true };
   },
+  setLeftSidebarMenuChecked: async (checked: boolean) => {
+    appService.setLeftSidebarMenuChecked(checked);
+    return { success: true };
+  },
   openIn: async (args: {
     app: OpenInAppId;
     path: string;

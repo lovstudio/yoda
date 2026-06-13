@@ -3,6 +3,7 @@ import {
   deepLinkOpenChannel,
   menuOpenSettingsChannel,
   menuRedoChannel,
+  menuToggleLeftSidebarChannel,
   menuUndoChannel,
   notificationFocusTaskChannel,
   taskWindowAssignTargetChannel,
@@ -12,6 +13,7 @@ import {
   performActiveEditorUndo,
 } from '@renderer/lib/editor/activeCodeEditor';
 import { events, rpc } from '@renderer/lib/ipc';
+import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider';
 import { useNavigate, useWorkspaceSlots } from '@renderer/lib/layout/navigation-provider';
 import {
   getTaskWindowLaunchTarget,
@@ -23,6 +25,7 @@ import { openTaskTarget, openTaskWindowTarget } from './open-task-target';
 export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boolean | void }) {
   const { navigate } = useNavigate();
   const { currentView } = useWorkspaceSlots();
+  const { toggleLeft } = useWorkspaceLayoutContext();
 
   useEffect(() => {
     return events.on(menuOpenSettingsChannel, () => {
@@ -33,6 +36,10 @@ export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boole
       navigate('settings');
     });
   }, [navigate, onOpenSettings, currentView]);
+
+  useEffect(() => {
+    return events.on(menuToggleLeftSidebarChannel, () => toggleLeft());
+  }, [toggleLeft]);
 
   // Menu Undo/Redo (Cmd/Ctrl+Z) arrives as an event because the Edit menu
   // routes through the renderer to keep undo scoped to the focused Monaco
