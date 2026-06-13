@@ -3,11 +3,13 @@ import { buildTaskDeepLink } from '@shared/deep-links';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useArchiveTask } from '@renderer/features/tasks/archive-task';
+import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
 import { registeredTaskData } from '@renderer/features/tasks/stores/task';
 import {
   asProvisioned,
   getTaskManagerStore,
   getTaskStore,
+  taskChildren,
 } from '@renderer/features/tasks/stores/task-selectors';
 import { OVERVIEW_TAB_ID } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { rpc } from '@renderer/lib/ipc';
@@ -43,6 +45,13 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
 
   const taskName = task.data.name;
   const isArchived = Boolean(registeredTaskData(task)?.archivedAt);
+  // Direct children = compare-group candidates (or generic subtasks).
+  const childTaskIds =
+    projectId !== INTERNAL_PROJECT_ID
+      ? taskChildren(projectId, taskId)
+          .map((child) => registeredTaskData(child)?.id)
+          .filter((id): id is string => Boolean(id))
+      : [];
   const isArchiving = taskManager?.archivingTaskIds.has(taskId) ?? false;
   const canAssignWorkspace = projectId === INTERNAL_PROJECT_ID || task.data.isPinned;
 
@@ -147,6 +156,20 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
     onSetParent:
       projectId !== INTERNAL_PROJECT_ID && task.state !== 'unregistered'
         ? () => showSetParent({ projectId, taskId })
+        : undefined,
+    // Show this task in an extra pane beside whatever is currently routed.
+    onOpenBeside:
+      !isArchived && task.state !== 'unregistered'
+        ? () => splitViewStore.add({ projectId, taskId })
+        : undefined,
+    // Compare-group parent: route to it as primary and tile all its children
+    // (the alternative candidates) side by side.
+    onTileCandidates:
+      !isArchived && task.state !== 'unregistered' && childTaskIds.length > 0
+        ? () => {
+            navigate('task', { projectId, taskId });
+            splitViewStore.replace(childTaskIds.map((id) => ({ projectId, taskId: id })));
+          }
         : undefined,
   };
 }

@@ -5,8 +5,10 @@ import {
   CircleDot,
   CircleSlash,
   ClipboardList,
+  Columns2,
   Copy,
   Info,
+  LayoutGrid,
   Link2,
   ListPlus,
   ListTree,
@@ -105,6 +107,10 @@ export interface TaskMenuActions extends TaskMenuInfoFields {
   onCreateSubtask?: () => void;
   /** Open the parent-task picker for this task. */
   onSetParent?: () => void;
+  /** Show this task in an extra pane beside the routed task. */
+  onOpenBeside?: () => void;
+  /** Tile all of this task's children (compare candidates) side by side. */
+  onTileCandidates?: () => void;
 }
 
 interface MenuSubItemDescriptor {
@@ -140,6 +146,24 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       icon: Info,
       label: actions.openDetailsLabel ?? t('tasks.context.openDetails'),
       onSelect: actions.onOpenDetails,
+    });
+  }
+  if (actions.onOpenBeside) {
+    items.push({
+      key: 'open-beside',
+      group: 0,
+      icon: Columns2,
+      label: t('tasks.context.openBeside'),
+      onSelect: actions.onOpenBeside,
+    });
+  }
+  if (actions.onTileCandidates) {
+    items.push({
+      key: 'tile-candidates',
+      group: 0,
+      icon: LayoutGrid,
+      label: t('tasks.context.tileCandidates'),
+      onSelect: actions.onTileCandidates,
     });
   }
 

@@ -1259,6 +1259,8 @@
     "contextTab": "Context",
     "context": {
       "openDetails": "Open details",
+      "openBeside": "Open beside",
+      "tileCandidates": "Tile all candidates",
       "unpinTask": "Unpin",
       "pinTask": "Pin",
       "unmarkReview": "Mark as read",

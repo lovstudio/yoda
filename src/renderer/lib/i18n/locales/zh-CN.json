@@ -1259,6 +1259,8 @@
     "contextTab": "上下文",
     "context": {
       "openDetails": "打开详情",
+      "openBeside": "在旁边打开",
+      "tileCandidates": "并排所有候选",
       "unpinTask": "取消置顶",
       "pinTask": "置顶",
       "unmarkReview": "标记已读",
