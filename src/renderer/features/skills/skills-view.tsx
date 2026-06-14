@@ -29,8 +29,9 @@ const SURFACE_OPTIONS = [
 ] as const;
 
 /**
- * Prominent segmented [Skills | Plugins] control. Rendered in the page-title
- * slot of each surface so the tabs ARE the header, not a toolbar afterthought.
+ * [Skills | Plugins] switch rendered in the page-title slot of each surface.
+ * Styled to match the top-level app tab chips (see AppTab in app-tab-strip.tsx)
+ * so switching surfaces reads with the same tab affordance as the rest of the app.
  */
 const SurfaceToggle: React.FC<{ value: Surface; onChange: (value: Surface) => void }> = ({
   value,
@@ -41,7 +42,7 @@ const SurfaceToggle: React.FC<{ value: Surface; onChange: (value: Surface) => vo
     <div
       role="tablist"
       aria-label={t('plugins.surface.ariaLabel')}
-      className="inline-flex items-center gap-1 rounded-lg bg-muted p-1"
+      className="flex items-center gap-1"
     >
       {SURFACE_OPTIONS.map(({ value: option, icon: Icon, labelKey }) => {
         const active = value === option;
@@ -53,14 +54,14 @@ const SurfaceToggle: React.FC<{ value: Surface; onChange: (value: Surface) => vo
             aria-selected={active}
             onClick={() => onChange(option)}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              'group flex h-7 cursor-default select-none items-center gap-1.5 rounded-md border px-2 py-1 text-xs',
               active
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
+                ? 'border-border bg-background-1 text-foreground'
+                : 'border-transparent text-foreground-muted hover:bg-background-2 hover:text-foreground'
             )}
           >
-            <Icon className="h-4 w-4" />
-            {t(labelKey)}
+            <Icon className="size-3.5 shrink-0" />
+            <span className="truncate">{t(labelKey)}</span>
           </button>
         );
       })}
