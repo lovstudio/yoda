@@ -6,6 +6,7 @@ import {
   MessageSquareShare,
   PanelRightOpen,
   Puzzle,
+  RefreshCw,
   Search,
   Settings,
   Smartphone,
@@ -357,6 +358,20 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               >
                 <MessageSquareShare className="h-5 w-5 sm:h-4 sm:w-4" />
                 {t('sidebar.giveFeedback')}
+              </SidebarMenuButton>
+              <SidebarMenuButton
+                onClick={() => void appState.update.check({ notify: true })}
+                disabled={appState.update.state.status === 'checking'}
+                aria-label={t('settings.update.checkForUpdates')}
+                className="w-full justify-start"
+              >
+                <RefreshCw
+                  className={cn(
+                    'h-5 w-5 sm:h-4 sm:w-4',
+                    appState.update.state.status === 'checking' && 'animate-spin'
+                  )}
+                />
+                {t('settings.update.checkForUpdates')}
               </SidebarMenuButton>
             </SidebarMenu>
           )}
