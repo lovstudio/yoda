@@ -80,13 +80,25 @@ function normalizeTabParams(
 }
 
 /**
- * The fixed page set of a project scope — every page always shows as a
- * top-level tab (mirrors the former in-panel ToggleGroup); missing ones are
- * synthesized by `visibleTabs`, never persisted upfront. Keep in sync with
- * the ProjectView union in features/projects/stores/project-view.ts.
+ * The full page set of a project scope. Only `overview` is a fixed index tab
+ * (always present in the strip); the rest open on demand via the strip's "+"
+ * menu or links on the overview page, and close back out of the strip. Keep in
+ * sync with the ProjectView union in features/projects/stores/project-view.ts.
  */
-export const PROJECT_PAGE_VIEWS = ['overview', 'tasks', 'sessions', 'harness', 'settings'] as const;
+export const PROJECT_PAGE_VIEWS = [
+  'overview',
+  'tasks',
+  'sessions',
+  'harness',
+  'docs',
+  'settings',
+] as const;
 export type ProjectPageView = (typeof PROJECT_PAGE_VIEWS)[number];
+
+/** A project page is "view-able" via the strip's "+" menu when it isn't the fixed overview. */
+export function isProjectPageView(view: string): view is ProjectPageView {
+  return (PROJECT_PAGE_VIEWS as readonly string[]).includes(view);
+}
 
 /**
  * Scope of a tab — the isolation unit of the strip (IDE model). The strip only
@@ -120,6 +132,11 @@ export function isIndexTab(tab: AppTabEntry): boolean {
   if (tab.viewId === 'task') {
     const target = tab.params.tab as { kind?: string } | undefined;
     return !target || target.kind === 'overview';
+  }
+  // Within a project scope only the overview page is fixed; the other pages
+  // (tasks/sessions/harness/docs/settings) open on demand and are closeable.
+  if (tab.viewId === 'project') {
+    return ((tab.params.view as string | undefined) ?? 'overview') === 'overview';
   }
   return tab.viewId !== 'file' && tab.viewId !== 'skill';
 }
@@ -381,14 +398,14 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
     if (active.viewId === 'project' || active.viewId === 'file') {
       const { projectId } = active.params as { projectId?: string };
       if (!projectId) return stored;
-      return PROJECT_PAGE_VIEWS.map((view) => {
-        const entry = stored.find(
-          (candidate) => ((candidate.params.view as string | undefined) ?? 'overview') === view
-        );
-        if (entry) return entry;
-        const params = { projectId, view };
-        return { id: syntheticTabId('project', params), viewId: 'project' as ViewId, params };
-      });
+      // Only the overview is a fixed tab; other project pages live in `scoped`
+      // as closeable tabs once opened (see isIndexTab / visibleTabs).
+      const overview = stored.find(
+        (candidate) => ((candidate.params.view as string | undefined) ?? 'overview') === 'overview'
+      );
+      if (overview) return [overview];
+      const params = { projectId, view: 'overview' };
+      return [{ id: syntheticTabId('project', params), viewId: 'project' as ViewId, params }];
     }
 
     if (active.viewId === 'task') {

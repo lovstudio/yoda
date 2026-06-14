@@ -13,6 +13,8 @@ export type FormState = {
   scriptSetup: string;
   scriptRun: string;
   scriptTeardown: string;
+  docsLocalPath: string;
+  docsCloudUrl: string;
   worktreeDirectory: string;
   defaultBranch: Branch | null;
   remote: string;
@@ -56,6 +58,8 @@ export function settingsToForm(
     scriptSetup: normalizeScript(s.scripts?.setup),
     scriptRun: normalizeScript(s.scripts?.run),
     scriptTeardown: normalizeScript(s.scripts?.teardown),
+    docsLocalPath: s.docs?.localPath ?? '',
+    docsCloudUrl: s.docs?.cloudUrl ?? '',
     worktreeDirectory: s.worktreeDirectory ?? '',
     defaultBranch:
       projectDefaultBranchToBranch(s.defaultBranch, configuredRemoteMeta, remotes) ?? null,
@@ -91,10 +95,16 @@ export function formToSettings(f: FormState): ProjectSettings {
   const provisionCommand = blankToUndefined(f.provisionCommand);
   const terminateCommand = blankToUndefined(f.terminateCommand);
   const hasScripts = Object.values(scripts).some((value) => value !== undefined);
+  const docs = {
+    localPath: blankToUndefined(f.docsLocalPath),
+    cloudUrl: blankToUndefined(f.docsCloudUrl),
+  };
+  const hasDocs = Object.values(docs).some((value) => value !== undefined);
   return {
     preservePatterns: preservePatterns.length > 0 ? preservePatterns : undefined,
     shellSetup: blankToUndefined(f.shellSetup),
     scripts: hasScripts ? scripts : undefined,
+    docs: hasDocs ? docs : undefined,
     worktreeDirectory: blankToUndefined(f.worktreeDirectory),
     defaultBranch,
     remote: blankToUndefined(f.remote),

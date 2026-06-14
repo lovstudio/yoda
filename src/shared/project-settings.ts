@@ -36,11 +36,25 @@ export const quickActionSchema = z.object({
 
 export type QuickAction = z.infer<typeof quickActionSchema>;
 
+/**
+ * Per-project documentation sources surfaced by the project Docs page.
+ * `localPath` is a repo-relative directory of markdown files; `cloudUrl` is a
+ * deployed docs site. The page shows whichever are set and lets the user
+ * switch when both exist.
+ */
+export const projectDocsSettingsSchema = z.object({
+  localPath: z.string().optional(),
+  cloudUrl: z.string().optional(),
+});
+
+export type ProjectDocsSettings = z.infer<typeof projectDocsSettingsSchema>;
+
 export const shareableProjectSettingsSchema = z.object({
   preservePatterns: preservePatternsSchema.optional(),
   shellSetup: z.string().optional(),
   scripts: shareableProjectScriptsSettingsSchema.optional(),
   quickActions: z.array(quickActionSchema).optional(),
+  docs: projectDocsSettingsSchema.optional(),
 });
 
 export const shareableProjectSettingsWithDefaultsSchema = shareableProjectSettingsSchema.extend({
@@ -108,7 +122,9 @@ export type ShareableProjectSettingsWriteField =
   | 'scripts.setup'
   | 'scripts.run'
   | 'scripts.teardown'
-  | 'quickActions';
+  | 'quickActions'
+  | 'docs.localPath'
+  | 'docs.cloudUrl';
 
 export const SHAREABLE_PROJECT_SETTINGS_WRITE_FIELDS = [
   'preservePatterns',
@@ -117,6 +133,8 @@ export const SHAREABLE_PROJECT_SETTINGS_WRITE_FIELDS = [
   'scripts.run',
   'scripts.teardown',
   'quickActions',
+  'docs.localPath',
+  'docs.cloudUrl',
 ] as const satisfies ShareableProjectSettingsWriteField[];
 
 export type WriteProjectConfigRequest = {
@@ -143,5 +161,7 @@ export function emptyProjectSettingsOverrideState(): ProjectSettingsOverrideStat
     'scripts.run': [],
     'scripts.teardown': [],
     quickActions: [],
+    'docs.localPath': [],
+    'docs.cloudUrl': [],
   };
 }

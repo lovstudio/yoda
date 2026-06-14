@@ -7,7 +7,8 @@
     "home": "主页",
     "project": "项目",
     "task": "任务",
-    "file": "文件"
+    "file": "文件",
+    "addProjectPage": "添加页面"
   },
   "fileActions": {
     "label": "文件操作",
@@ -3030,9 +3031,23 @@
               "modalLabel": "Teardown 脚本",
               "leafLabel": "teardown"
             }
+          },
+          "docs": {
+            "localPath": {
+              "modalLabel": "本地文档路径",
+              "leafLabel": "本地文档路径",
+              "description": "相对仓库根目录的 markdown 文件目录（如 docs），在文档页渲染。"
+            },
+            "cloudUrl": {
+              "modalLabel": "云端文档 URL",
+              "leafLabel": "云端文档 URL",
+              "description": "已部署的文档站 URL，在文档页以应用内浏览器打开。"
+            }
           }
         }
-      }
+      },
+      "docsSection": "文档",
+      "docsSectionDescription": "项目文档页的来源。本地目录会渲染仓库中的 markdown；云端 URL 会打开已部署的文档站。"
     },
     "tasks": {
       "activeWithCount": "活动 ({{count}})",
@@ -3048,6 +3063,19 @@
       "deleteTitle": "删除任务？",
       "deleteDescription": "所选任务将被永久删除，此操作无法撤销。",
       "deleteConfirm": "删除任务"
+    },
+    "docs": {
+      "label": "文档",
+      "sourceLocal": "本地",
+      "sourceCloud": "云端",
+      "openExternal": "在浏览器中打开",
+      "emptyTitle": "未配置文档",
+      "emptyDescription": "在项目设置中配置本地文档目录或文档站 URL，即可在此显示文档。",
+      "configure": "打开设置",
+      "loadError": "无法加载文档",
+      "loadErrorHint": "读取 “{{path}}” 失败。请检查项目设置中的本地文档路径。",
+      "emptyDir": "没有 Markdown 文件",
+      "emptyDirHint": "在 “{{path}}” 中未找到 .md 或 .mdx 文件。"
     }
   },
   "terminalSearch": {

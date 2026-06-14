@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { DocsPanel } from '@renderer/features/projects/components/docs-view/docs-panel';
 import { HarnessPanel } from '@renderer/features/projects/components/harness-view/harness-panel';
 import { OverviewPanel } from '@renderer/features/projects/components/overview-view/overview-panel';
 import { ProjectSessionsPanel } from '@renderer/features/projects/components/sessions-view/project-sessions-panel';
@@ -29,6 +30,7 @@ export const ActiveProject = observer(function ActiveProject() {
         {activeView === 'tasks' && <TaskList />}
         {activeView === 'sessions' && <ProjectSessionsPanel />}
         {activeView === 'harness' && <HarnessPanel />}
+        {activeView === 'docs' && <DocsPanel projectId={projectId} />}
         {activeView === 'settings' && <SettingsPanel />}
       </div>
     </div>

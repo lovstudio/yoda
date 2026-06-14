@@ -1,5 +1,6 @@
 import {
   Archive,
+  BookText,
   Bot,
   ChartColumn,
   Cloud,
@@ -25,7 +26,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskWindowTabTarget } from '@shared/task-window';
 import { AppTabContextMenu } from '@renderer/app/app-tab-context-menu';
@@ -38,6 +39,7 @@ import {
 } from '@renderer/app/tab-drag';
 import type { ViewId } from '@renderer/app/view-registry';
 import {
+  getProjectSettingsStore,
   getProjectStore,
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
@@ -53,9 +55,17 @@ import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import {
   isIndexTab,
+  PROJECT_PAGE_VIEWS,
   type AppTabEntry,
   type ProjectPageView,
 } from '@renderer/lib/stores/app-tabs-store';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
@@ -163,19 +173,102 @@ export const AppTabStrip = observer(function AppTabStrip() {
           </AppTabContextMenu>
         );
       })}
-      <button
-        type="button"
-        aria-label={newSessionLabel}
-        title={newSessionLabel}
-        disabled={newSessionDisabled}
-        // Follows the tabs normally; once the strip overflows it pins to the
-        // scrollport's right edge and tabs scroll beneath it.
-        className="sticky right-0 z-10 flex size-7 shrink-0 items-center justify-center rounded-md bg-background-secondary text-foreground-passive hover:bg-background-2 hover:text-foreground disabled:pointer-events-none disabled:opacity-50 dark:bg-background [-webkit-app-region:no-drag]"
-        onClick={handleNewSession}
-      >
-        <Plus className="size-3.5" />
-      </button>
+      {projectId && !taskId ? (
+        <ProjectAddMenu projectId={projectId} newTaskLabel={newSessionLabel} />
+      ) : (
+        <button
+          type="button"
+          aria-label={newSessionLabel}
+          title={newSessionLabel}
+          disabled={newSessionDisabled}
+          // Follows the tabs normally; once the strip overflows it pins to the
+          // scrollport's right edge and tabs scroll beneath it.
+          className={PLUS_BUTTON_CLASS}
+          onClick={handleNewSession}
+        >
+          <Plus className="size-3.5" />
+        </button>
+      )}
     </div>
+  );
+});
+
+const PLUS_BUTTON_CLASS =
+  'sticky right-0 z-10 flex size-7 shrink-0 items-center justify-center rounded-md bg-background-secondary text-foreground-passive hover:bg-background-2 hover:text-foreground disabled:pointer-events-none disabled:opacity-50 dark:bg-background [-webkit-app-region:no-drag]';
+
+/**
+ * The strip's "+" in a project scope: a menu that opens the project's
+ * non-overview pages (tasks/sessions/harness/docs/settings) as tabs — docs
+ * only when configured — plus a shortcut to start a new task. Overview is the
+ * fixed tab and pages already open are omitted.
+ */
+const ProjectAddMenu = observer(function ProjectAddMenu({
+  projectId,
+  newTaskLabel,
+}: {
+  projectId: string;
+  newTaskLabel: string;
+}) {
+  const { t } = useTranslation();
+  const { navigate } = useNavigate();
+  const settingsStore = getProjectSettingsStore(projectId);
+
+  useEffect(() => {
+    void settingsStore?.pageData.load();
+  }, [settingsStore]);
+
+  const docs = settingsStore?.settings?.docs;
+  const docsConfigured = Boolean(docs?.localPath?.trim() || docs?.cloudUrl?.trim());
+
+  const openViews = new Set(
+    appState.appTabs.visibleTabs
+      .filter((tab) => tab.viewId === 'project')
+      .map((tab) => (tab.params.view as string | undefined) ?? 'overview')
+  );
+
+  const candidates = PROJECT_PAGE_VIEWS.filter(
+    (view) => view !== 'overview' && !openViews.has(view) && (view !== 'docs' || docsConfigured)
+  );
+
+  const addPageLabel = t('appTabs.addProjectPage');
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label={addPageLabel}
+            title={addPageLabel}
+            className={PLUS_BUTTON_CLASS}
+          >
+            <Plus className="size-3.5" />
+          </button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-52">
+        {candidates.map((view) => {
+          const { label, icon } = describeProjectTab(
+            { id: '', viewId: 'project', params: { projectId, view } },
+            t
+          );
+          return (
+            <DropdownMenuItem
+              key={view}
+              onClick={() => appState.appTabs.openTab('project', { projectId, view })}
+            >
+              {icon}
+              {label}
+            </DropdownMenuItem>
+          );
+        })}
+        {candidates.length > 0 ? <DropdownMenuSeparator /> : null}
+        <DropdownMenuItem onClick={() => navigate('home', { projectId })}>
+          <Plus className="size-4" />
+          {newTaskLabel}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 });
 
@@ -374,6 +467,8 @@ function describeProjectTab(
       return { label: t('tasks.conversations.sessions'), icon: lucideIcon(MessageSquare) };
     case 'harness':
       return { label: t('projects.harness.label'), icon: lucideIcon(Cpu) };
+    case 'docs':
+      return { label: t('projects.docs.label'), icon: lucideIcon(BookText) };
     case 'settings':
       return { label: t('common.settings'), icon: lucideIcon(Settings) };
     case 'overview':

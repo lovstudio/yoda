@@ -81,6 +81,9 @@ export function ShareableSettingsSection({
   const lifecycleFields = SHAREABLE_FIELD_DESCRIPTORS.filter(
     (descriptor) => descriptor.group === 'lifecycle'
   );
+  const docsFields = SHAREABLE_FIELD_DESCRIPTORS.filter(
+    (descriptor) => descriptor.group === 'docs'
+  );
 
   return (
     <>
@@ -123,6 +126,27 @@ export function ShareableSettingsSection({
         </div>
 
         {lifecycleFields.map((descriptor) => (
+          <ShareableField
+            key={descriptor.id}
+            descriptor={descriptor}
+            form={form}
+            update={update}
+            getOverrideSources={getOverrideSources}
+          />
+        ))}
+      </div>
+
+      <Separator />
+
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <FieldTitle>{t('projects.settings.docsSection')}</FieldTitle>
+          <FieldDescription className="text-foreground-muted">
+            {t('projects.settings.docsSectionDescription')}
+          </FieldDescription>
+        </div>
+
+        {docsFields.map((descriptor) => (
           <ShareableField
             key={descriptor.id}
             descriptor={descriptor}

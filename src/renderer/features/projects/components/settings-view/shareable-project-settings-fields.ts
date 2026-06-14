@@ -5,7 +5,9 @@ export type ShareableFieldFormKey =
   | 'shellSetup'
   | 'scriptSetup'
   | 'scriptRun'
-  | 'scriptTeardown';
+  | 'scriptTeardown'
+  | 'docsLocalPath'
+  | 'docsCloudUrl';
 
 export type ShareableFieldDescriptor = {
   id: ShareableProjectSettingsWriteField;
@@ -17,7 +19,7 @@ export type ShareableFieldDescriptor = {
   placeholder?: string;
   description?: string;
   multiline: boolean;
-  group?: 'lifecycle';
+  group?: 'lifecycle' | 'docs';
 };
 
 function trimText(value: string): string {
@@ -88,6 +90,30 @@ export const SHAREABLE_FIELD_DESCRIPTORS: ShareableFieldDescriptor[] = [
     placeholder: 'docker compose down',
     multiline: true,
     group: 'lifecycle',
+  },
+  {
+    id: 'docs.localPath',
+    formKey: 'docsLocalPath',
+    modalLabel: 'Local docs path',
+    leafLabel: 'local docs path',
+    defaultWrite: true,
+    normalizeText: trimText,
+    placeholder: 'docs',
+    description: 'Repo-relative directory of markdown files rendered on the Docs page.',
+    multiline: false,
+    group: 'docs',
+  },
+  {
+    id: 'docs.cloudUrl',
+    formKey: 'docsCloudUrl',
+    modalLabel: 'Cloud docs URL',
+    leafLabel: 'cloud docs URL',
+    defaultWrite: true,
+    normalizeText: trimText,
+    placeholder: 'https://docs.example.com',
+    description: 'URL of a deployed docs site, opened in-app on the Docs page.',
+    multiline: false,
+    group: 'docs',
   },
 ];
 

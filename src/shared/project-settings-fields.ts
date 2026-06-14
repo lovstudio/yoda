@@ -31,6 +31,19 @@ function compactScripts(settings: ShareableProjectSettings): void {
   }
 }
 
+function ensureDocs(
+  settings: ShareableProjectSettings
+): NonNullable<ShareableProjectSettings['docs']> {
+  settings.docs ??= {};
+  return settings.docs;
+}
+
+function compactDocs(settings: ShareableProjectSettings): void {
+  if (settings.docs && Object.values(settings.docs).every((value) => value === undefined)) {
+    delete settings.docs;
+  }
+}
+
 export const SHAREABLE_FIELD_ACCESSORS = {
   preservePatterns: {
     path: ['preservePatterns'],
@@ -107,6 +120,30 @@ export const SHAREABLE_FIELD_ACCESSORS = {
       return value?.length ? value.map((a) => `${a.label}: ${a.command}`).join('\n') : null;
     },
   },
+  'docs.localPath': {
+    path: ['docs', 'localPath'],
+    get: (settings) => settings.docs?.localPath,
+    set: (settings, value) => {
+      ensureDocs(settings).localPath = value as string | undefined;
+    },
+    clear: (settings) => {
+      if (settings.docs) delete settings.docs.localPath;
+      compactDocs(settings);
+    },
+    displayValue: (settings) => displayText(settings.docs?.localPath),
+  },
+  'docs.cloudUrl': {
+    path: ['docs', 'cloudUrl'],
+    get: (settings) => settings.docs?.cloudUrl,
+    set: (settings, value) => {
+      ensureDocs(settings).cloudUrl = value as string | undefined;
+    },
+    clear: (settings) => {
+      if (settings.docs) delete settings.docs.cloudUrl;
+      compactDocs(settings);
+    },
+    displayValue: (settings) => displayText(settings.docs?.cloudUrl),
+  },
 } satisfies Record<ShareableProjectSettingsWriteField, ShareableFieldAccessor>;
 
 export function clearShareableProjectSettingsFields<T extends ProjectSettings>(
@@ -118,6 +155,7 @@ export function clearShareableProjectSettingsFields<T extends ProjectSettings>(
     preservePatterns: settings.preservePatterns ? [...settings.preservePatterns] : undefined,
     scripts: settings.scripts ? { ...settings.scripts } : undefined,
     quickActions: settings.quickActions ? [...settings.quickActions] : undefined,
+    docs: settings.docs ? { ...settings.docs } : undefined,
   };
 
   for (const field of fields) {

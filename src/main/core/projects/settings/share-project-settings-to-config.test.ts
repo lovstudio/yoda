@@ -562,6 +562,8 @@ describe('shareProjectSettingsToConfig', () => {
         },
       ],
       quickActions: [],
+      'docs.localPath': [],
+      'docs.cloudUrl': [],
     });
   });
 });

@@ -7,7 +7,8 @@
     "home": "Home",
     "project": "Project",
     "task": "Task",
-    "file": "File"
+    "file": "File",
+    "addProjectPage": "Add page"
   },
   "fileActions": {
     "label": "File actions",
@@ -3030,9 +3031,23 @@
               "modalLabel": "Teardown script",
               "leafLabel": "teardown"
             }
+          },
+          "docs": {
+            "localPath": {
+              "modalLabel": "Local docs path",
+              "leafLabel": "local docs path",
+              "description": "Repo-relative directory of markdown files (e.g. docs). Rendered on the Docs page."
+            },
+            "cloudUrl": {
+              "modalLabel": "Cloud docs URL",
+              "leafLabel": "cloud docs URL",
+              "description": "URL of a deployed documentation site, opened in-app on the Docs page."
+            }
           }
         }
-      }
+      },
+      "docsSection": "Documentation",
+      "docsSectionDescription": "Sources for the project Docs page. A local directory renders markdown from the repo; a cloud URL opens a deployed docs site."
     },
     "tasks": {
       "activeWithCount": "Active ({{count}})",
@@ -3048,6 +3063,19 @@
       "deleteTitle": "Delete tasks?",
       "deleteDescription": "Selected tasks will be permanently deleted. This action cannot be undone.",
       "deleteConfirm": "Delete tasks"
+    },
+    "docs": {
+      "label": "Docs",
+      "sourceLocal": "Local",
+      "sourceCloud": "Cloud",
+      "openExternal": "Open in browser",
+      "emptyTitle": "No docs configured",
+      "emptyDescription": "Set a local docs directory or a docs site URL in project settings to show documentation here.",
+      "configure": "Open settings",
+      "loadError": "Could not load docs",
+      "loadErrorHint": "Failed to read \"{{path}}\". Check the local docs path in project settings.",
+      "emptyDir": "No markdown files",
+      "emptyDirHint": "No .md or .mdx files were found in \"{{path}}\"."
     }
   },
   "terminalSearch": {
