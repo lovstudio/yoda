@@ -1363,6 +1363,11 @@
       "crossProject": "父任务必须在同一项目中",
       "parentArchived": "父任务已归档"
     },
+    "createParent": {
+      "title": "增设父任务",
+      "label": "父任务名称",
+      "failed": "创建父任务失败"
+    },
     "transcript": {
       "noSession": "暂无活动会话",
       "loading": "正在加载实录…",

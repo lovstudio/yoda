@@ -1363,6 +1363,11 @@
       "crossProject": "Parent task must be in the same project",
       "parentArchived": "Parent task is archived"
     },
+    "createParent": {
+      "title": "Add parent task",
+      "label": "Parent task name",
+      "failed": "Failed to create parent task"
+    },
     "transcript": {
       "noSession": "No active session",
       "loading": "Loading transcript…",
