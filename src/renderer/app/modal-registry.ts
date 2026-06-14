@@ -79,7 +79,7 @@ export const modalRegistry = {
   renameProjectModal: createModal(RenameProjectModal, { size: 'xs' }),
   createWorkspaceModal: createModal(CreateWorkspaceModal, { size: 'xs' }),
   projectWorkspaceConflictModal: createModal(ProjectWorkspaceConflictModal, { size: 'sm' }),
-  archiveTaskWithNoteModal: createModal(ArchiveTaskWithNoteModal, { size: 'xs' }),
+  archiveTaskWithNoteModal: createModal(ArchiveTaskWithNoteModal, { size: 'sm' }),
   archivedSessionTranscriptModal: createModal(ArchivedSessionTranscriptModal, { size: 'lg' }),
   shareProjectConfigModal: createModal(ShareProjectConfigModal, { size: 'md' }),
   manageRunScriptsModal: createModal(ManageRunScriptsModal, { size: 'md' }),

@@ -9,6 +9,8 @@ import {
 type ArchiveTaskOptions = {
   note?: string;
   skipPreCommand?: boolean;
+  /** One-off pre-archive command override (user-edited in the archive dialog). */
+  preArchiveCommand?: string;
 };
 
 type ArchiveConversationOptions = {

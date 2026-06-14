@@ -323,7 +323,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                   onClick={(e) => {
                     e.stopPropagation();
                     setArchiveConfirming(false);
-                    menuActions.onArchiveWithSkill?.();
+                    // Quick archive defaults to NO pre-archive skill — the skill
+                    // flow lives in the right-click menu's archive submenu.
+                    menuActions.onArchiveQuick();
                   }}
                 />
               }

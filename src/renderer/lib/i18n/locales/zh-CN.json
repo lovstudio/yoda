@@ -1038,6 +1038,8 @@
       "title": "归档 \"{{name}}\"",
       "label": "备注（可选）",
       "placeholder": "为何归档此任务？",
+      "skillLabel": "归档前执行 skill",
+      "skillDescription": "归档前会把这段命令发送到每个活跃会话并等 agent 完成。可在预设基础上补充内容，留空则直接归档。",
       "archiving": "归档中…",
       "submit": "归档"
     },

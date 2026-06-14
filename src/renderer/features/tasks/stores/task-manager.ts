@@ -664,7 +664,7 @@ export class TaskManagerStore {
 
   async archiveTask(
     taskId: string,
-    options: { note?: string; skipPreCommand?: boolean } = {}
+    options: { note?: string; skipPreCommand?: boolean; preArchiveCommand?: string } = {}
   ): Promise<void> {
     const currentTask = this.tasks.get(taskId);
     if (!currentTask || !isRegistered(currentTask)) return;
@@ -681,6 +681,7 @@ export class TaskManagerStore {
     try {
       const { archivedTaskIds } = await rpc.tasks.archiveTask(this.projectId, taskId, nextNote, {
         skipPreCommand: options.skipPreCommand,
+        preArchiveCommand: options.preArchiveCommand,
       });
       // Reconcile: the server is authoritative on the cascaded set (it may know
       // descendants this renderer hasn't loaded or had stale parents for).

@@ -19,6 +19,11 @@ import { getDescendantTaskIds } from './task-hierarchy';
 export type ArchiveTaskOptions = {
   /** Skip injecting the configured pre-archive command into live sessions. */
   skipPreCommand?: boolean;
+  /**
+   * One-off pre-archive command to run instead of the configured setting
+   * (the user edited it in the archive dialog). Ignored when `skipPreCommand`.
+   */
+  preArchiveCommand?: string;
 };
 
 /**
@@ -67,7 +72,7 @@ export async function archiveTask(
 
   const preArchiveCommand = options.skipPreCommand
     ? ''
-    : (await appSettingsService.get('homeDraft')).preArchiveCommand;
+    : (options.preArchiveCommand ?? (await appSettingsService.get('homeDraft')).preArchiveCommand);
 
   const archivedTaskIds: string[] = [];
   for (const descendantId of activeDescendantIds) {

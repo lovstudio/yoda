@@ -18,7 +18,6 @@ import {
   PinOff,
   RefreshCw,
   RotateCcw,
-  Settings2,
   Sparkles,
 } from 'lucide-react';
 import React from 'react';
@@ -84,17 +83,18 @@ export interface TaskMenuActions extends TaskMenuInfoFields {
   onMarkNeedsReview: () => void;
   onUnmarkNeedsReview: () => void;
   onRename: () => void;
+  /** Archive immediately with no skill and no dialog (sidebar quick action). */
+  onArchiveQuick: () => void;
   /**
    * Archive the task directly (no pre-archive skill). Opens a dialog for an
    * optional note; confirming there performs the archive.
    */
   onArchive: () => void;
-  /** Run the configured pre-archive skill against every live session, then archive. */
+  /**
+   * Open the archive dialog in skill mode: an editable command prefilled from
+   * the configured preset runs against every live session before archiving.
+   */
   onArchiveWithSkill?: () => void;
-  /** Whether a pre-archive skill is configured; gates the "run skill" entry. */
-  hasArchiveSkill?: boolean;
-  /** Open the settings page where the pre-archive skill is configured. */
-  onConfigureArchiveSkill?: () => void;
   onCopyYodaLink?: () => void;
   onRestore?: () => void;
   onReconnect?: () => void;
@@ -202,20 +202,13 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       },
     ];
     if (actions.onArchiveWithSkill) {
+      // The skill dialog prefills/edits the command and links to settings, so
+      // it stays enabled even when no preset is configured yet.
       archiveSubmenu.push({
         key: 'archive-with-skill',
         icon: Sparkles,
         label: t('tasks.context.archiveWithSkill'),
         onSelect: actions.onArchiveWithSkill,
-        disabled: !actions.hasArchiveSkill,
-      });
-    }
-    if (actions.onConfigureArchiveSkill) {
-      archiveSubmenu.push({
-        key: 'configure-archive-skill',
-        icon: Settings2,
-        label: t('tasks.context.configureArchiveSkill'),
-        onSelect: actions.onConfigureArchiveSkill,
       });
     }
     items.push(

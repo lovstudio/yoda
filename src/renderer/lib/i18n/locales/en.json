@@ -1038,6 +1038,8 @@
       "title": "Archive \"{{name}}\"",
       "label": "Note (optional)",
       "placeholder": "Why are you archiving this task?",
+      "skillLabel": "Run skill before archiving",
+      "skillDescription": "Sent to every live session before archiving; waits for the agent to finish. Edit or extend the preset, or leave empty to archive directly.",
       "archiving": "Archiving…",
       "submit": "Archive"
     },
