@@ -81,7 +81,7 @@ export function ArchivedConversationRow({
             className="size-4"
           />
         </span>
-        <span className="min-w-0 flex-1 truncate" title={displayTitle}>
+        <span className="min-w-0 flex-1 truncate line-through" title={displayTitle}>
           {displayTitle}
         </span>
         {!compact && <SessionUsageChip usage={usage} />}
