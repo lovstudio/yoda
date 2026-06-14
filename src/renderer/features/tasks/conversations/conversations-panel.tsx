@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Power, RotateCcw } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -292,13 +292,34 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
                       webLinks={webLinks}
                     />
                     {activeConversation?.sessionExited ? (
-                      <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-3 border-t border-border bg-background/95 px-4 py-2.5">
-                        <span className="text-sm text-muted-foreground">
-                          {t('tasks.conversations.sessionExited')}
-                        </span>
-                        <Button size="sm" variant="outline" onClick={handleReloadExitedSession}>
-                          {t('tasks.tabs.reloadConversation')}
-                        </Button>
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-3 duration-300 animate-in fade-in-0 slide-in-from-bottom-2">
+                        <div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-border-primary/70 bg-background/85 py-1.5 pr-1.5 pl-3 shadow-sm ring-1 ring-foreground/5 backdrop-blur-md">
+                          <span className="flex items-center gap-2 text-sm text-foreground-passive">
+                            <span
+                              className="relative flex size-2 shrink-0 items-center justify-center"
+                              aria-hidden
+                            >
+                              <span className="absolute size-2 rounded-full bg-status-cancelled/30" />
+                              <span className="size-1.5 rounded-full bg-status-cancelled" />
+                            </span>
+                            <Power
+                              className="size-3.5 shrink-0 text-foreground-passive"
+                              aria-hidden
+                            />
+                            <span className="font-medium text-foreground-muted">
+                              {t('tasks.conversations.sessionExited')}
+                            </span>
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleReloadExitedSession}
+                            className="h-7 gap-1.5"
+                          >
+                            <RotateCcw className="size-3.5" aria-hidden />
+                            {t('tasks.tabs.reloadConversation')}
+                          </Button>
+                        </div>
                       </div>
                     ) : null}
                   </div>
