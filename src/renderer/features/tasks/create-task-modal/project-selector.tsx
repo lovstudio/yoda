@@ -1,4 +1,4 @@
-import { FolderPlus } from 'lucide-react';
+import { FolderPlus, Zap } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -44,7 +44,13 @@ interface BrowseOption {
   label: string;
 }
 
-type ProjectSelectorOption = ProjectOption | ProjectlessOption | BrowseOption;
+interface ExpressOption {
+  kind: 'express';
+  value: '__express__';
+  label: string;
+}
+
+type ProjectSelectorOption = ProjectOption | ProjectlessOption | BrowseOption | ExpressOption;
 
 interface ProjectSelectorProps {
   value: string | undefined;
@@ -64,6 +70,8 @@ export const ProjectSelector = observer(function ProjectSelector({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [browsing, setBrowsing] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState('');
   const { toast } = useToast();
 
   const options: ProjectOption[] = Array.from(getProjectManagerStore().projects.entries()).flatMap(
@@ -91,11 +99,21 @@ export const ProjectSelector = observer(function ProjectSelector({
     value: '__browse__',
     label: browsing ? t('projects.opening') : t('projects.browseForFolder'),
   };
+  const trimmedQuery = query.trim();
+  const expressOption: ExpressOption = {
+    kind: 'express',
+    value: '__express__',
+    label: creating
+      ? t('projects.settingUpProject')
+      : trimmedQuery
+        ? t('projects.expressCreateNamed', { name: trimmedQuery })
+        : t('projects.expressCreate'),
+  };
   const optionGroups: Array<{ value: string; items: ProjectSelectorOption[] }> = [
     { value: 'options', items: options },
     {
       value: 'actions',
-      items: [browseOption, ...(allowProjectless ? [projectlessOption] : [])],
+      items: [browseOption, expressOption, ...(allowProjectless ? [projectlessOption] : [])],
     },
   ];
 
@@ -115,6 +133,10 @@ export const ProjectSelector = observer(function ProjectSelector({
       void handleBrowse();
       return;
     }
+    if (item.kind === 'express') {
+      void handleExpressCreate();
+      return;
+    }
     if (item.kind === 'projectless') {
       onChange(undefined);
       setOpen(false);
@@ -122,6 +144,33 @@ export const ProjectSelector = observer(function ProjectSelector({
     }
     onChange(item.value);
     setOpen(false);
+  }
+
+  async function handleExpressCreate() {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const { path, name } = await rpc.projects.prepareQuickProject({
+        name: query.trim() || undefined,
+      });
+      const projectId = await getProjectManagerStore().createProject(
+        { type: 'local' },
+        { mode: 'pick', name, path, initGitRepository: true }
+      );
+      if (projectId) {
+        onChange(projectId);
+        setOpen(false);
+      }
+    } catch (err) {
+      log.error('Failed to express-create project:', err);
+      toast({
+        title: t('projects.failedExpressCreate'),
+        description: err instanceof Error ? err.message : String(err),
+        variant: 'destructive',
+      });
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function handleBrowse() {
@@ -207,14 +256,15 @@ export const ProjectSelector = observer(function ProjectSelector({
       onValueChange={handleValueChange}
       open={open}
       onOpenChange={setOpen}
+      onInputValueChange={setQuery}
       isItemEqualToValue={(a: ProjectSelectorOption, b: ProjectSelectorOption) =>
         a.kind === b.kind && a.value === b.value
       }
-      filter={(item: ProjectSelectorOption, query) => {
-        if (item.kind === 'browse') return true;
-        const q = query.toLowerCase();
-        if (item.label.toLowerCase().includes(q)) return true;
-        return item.kind === 'project' && item.path.toLowerCase().includes(q);
+      filter={(item: ProjectSelectorOption, q) => {
+        if (item.kind === 'browse' || item.kind === 'express') return true;
+        const needle = q.toLowerCase();
+        if (item.label.toLowerCase().includes(needle)) return true;
+        return item.kind === 'project' && item.path.toLowerCase().includes(needle);
       }}
       autoHighlight
     >
@@ -241,7 +291,9 @@ export const ProjectSelector = observer(function ProjectSelector({
                   <ComboboxItem
                     key={item.value}
                     value={item}
-                    disabled={item.kind === 'browse' && browsing}
+                    disabled={
+                      (item.kind === 'browse' && browsing) || (item.kind === 'express' && creating)
+                    }
                     aria-label={
                       item.kind === 'projectless'
                         ? `${item.label}: ${item.description}`
@@ -251,6 +303,11 @@ export const ProjectSelector = observer(function ProjectSelector({
                     {item.kind === 'browse' ? (
                       <>
                         <FolderPlus className="size-4 text-foreground-muted" />
+                        <span className="min-w-0 truncate">{item.label}</span>
+                      </>
+                    ) : item.kind === 'express' ? (
+                      <>
+                        <Zap className="size-4 text-foreground-muted" />
                         <span className="min-w-0 truncate">{item.label}</span>
                       </>
                     ) : item.kind === 'projectless' ? (

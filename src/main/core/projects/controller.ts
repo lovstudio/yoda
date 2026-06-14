@@ -9,6 +9,7 @@ import { createProject, inspectProjectPath } from './operations/createProject';
 import { deleteProject } from './operations/deleteProject';
 import { getArchivedProjects, getProjects } from './operations/getProjects';
 import { openProject } from './operations/openProject';
+import { prepareQuickProject } from './operations/prepareQuickProject';
 import { unarchiveProject } from './operations/unarchiveProject';
 import { updateProjectAlias } from './operations/updateProjectAlias';
 import { updateProjectConnection } from './operations/updateProjectConnection';
@@ -21,6 +22,7 @@ import {
 
 export const projectController = createRPCController({
   createProject,
+  prepareQuickProject,
   inspectProjectPath,
   getProjects,
   getArchivedProjects,
