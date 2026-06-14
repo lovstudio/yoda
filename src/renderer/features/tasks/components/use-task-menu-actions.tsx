@@ -37,7 +37,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
   const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
   const showCreateSubtask = useShowModal('newSubtaskModal');
   const showSetParent = useShowModal('setParentTaskModal');
-  const { archiveTask, hasPreArchiveCommand } = useArchiveTask(projectId);
+  const { archiveTask } = useArchiveTask(projectId);
 
   const task = getTaskStore(projectId, taskId);
   const taskManager = getTaskManagerStore(projectId);
@@ -116,17 +116,18 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
     onMarkNeedsReview: () => void task.setNeedsReview(true),
     onUnmarkNeedsReview: () => void task.setNeedsReview(false),
     onRename: () => showRename({ projectId, taskId, currentName: taskName }),
-    // Direct archive: dialog for an optional note, no pre-archive skill.
-    onArchive: () => showArchiveWithNote({ projectId, taskId, taskName, skipPreCommand: true }),
-    // Run the configured pre-archive skill against every live session, then archive.
-    onArchiveWithSkill: () => {
+    // Quick archive (sidebar icon): straight to archive, no skill, no dialog.
+    onArchiveQuick: () => {
       if (isArchiving) return;
-      void archiveTask(taskId).catch((error: unknown) => {
-        log.warn('useTaskMenuActions: archive task failed', { projectId, taskId, error });
+      void archiveTask(taskId, { skipPreCommand: true }).catch((error: unknown) => {
+        log.warn('useTaskMenuActions: quick archive failed', { projectId, taskId, error });
       });
     },
-    hasArchiveSkill: hasPreArchiveCommand,
-    onConfigureArchiveSkill: () => navigate('settings', { tab: 'sessions' }),
+    // Direct archive: dialog for an optional note, no pre-archive skill.
+    onArchive: () => showArchiveWithNote({ projectId, taskId, taskName }),
+    // Open the archive dialog in skill mode: an editable command prefilled from
+    // the configured preset runs against every live session before archiving.
+    onArchiveWithSkill: () => showArchiveWithNote({ projectId, taskId, taskName, withSkill: true }),
     onCopyYodaLink: () => void copyTaskLink(buildTaskDeepLink({ projectId, taskId }), t),
     onRestore: () => void taskManager?.restoreTask(taskId),
     onReconnect: workspace?.connectionState != null ? () => workspace.reconnect() : undefined,
