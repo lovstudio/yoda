@@ -185,7 +185,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
         {!embedded && (
           <div className="mb-6">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold">{t('skills.title')}</h1>
+              {surfaceControl ?? <h1 className="text-lg font-semibold">{t('skills.title')}</h1>}
               <SkillsCatalogHint />
             </div>
             <p className="mt-1 text-xs text-muted-foreground">{t('skills.subtitle')}</p>
@@ -199,7 +199,6 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
             !embedded && '-mx-8 px-8'
           )}
         >
-          {surfaceControl}
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input

@@ -3,7 +3,7 @@ import React, { type PropsWithChildren } from 'react';
 import { useTranslation } from 'react-i18next';
 import PluginsView from '@renderer/features/plugins/PluginsView';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
-import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
+import { cn } from '@renderer/utils/utils';
 import SkillsView from './components/SkillsView';
 
 type SkillsViewParams = {
@@ -23,30 +23,48 @@ function loadStoredSurface(): Surface {
   }
 }
 
-/** Segmented [Skills | Plugins] control rendered into each view's toolbar. */
+const SURFACE_OPTIONS = [
+  { value: 'skills', icon: Boxes, labelKey: 'plugins.surface.skills' },
+  { value: 'plugins', icon: Puzzle, labelKey: 'plugins.surface.plugins' },
+] as const;
+
+/**
+ * Prominent segmented [Skills | Plugins] control. Rendered in the page-title
+ * slot of each surface so the tabs ARE the header, not a toolbar afterthought.
+ */
 const SurfaceToggle: React.FC<{ value: Surface; onChange: (value: Surface) => void }> = ({
   value,
   onChange,
 }) => {
   const { t } = useTranslation();
   return (
-    <ToggleGroup
-      size="icon-sm"
-      multiple={false}
-      value={[value]}
-      onValueChange={([next]) => {
-        if (next) onChange(next as Surface);
-      }}
+    <div
+      role="tablist"
       aria-label={t('plugins.surface.ariaLabel')}
-      className="shrink-0"
+      className="inline-flex items-center gap-1 rounded-lg bg-muted p-1"
     >
-      <ToggleGroupItem value="skills" aria-label={t('plugins.surface.skills')}>
-        <Boxes className="h-3.5 w-3.5" />
-      </ToggleGroupItem>
-      <ToggleGroupItem value="plugins" aria-label={t('plugins.surface.plugins')}>
-        <Puzzle className="h-3.5 w-3.5" />
-      </ToggleGroupItem>
-    </ToggleGroup>
+      {SURFACE_OPTIONS.map(({ value: option, icon: Icon, labelKey }) => {
+        const active = value === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(option)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              active
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {t(labelKey)}
+          </button>
+        );
+      })}
+    </div>
   );
 };
 
