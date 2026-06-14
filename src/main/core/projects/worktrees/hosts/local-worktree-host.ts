@@ -136,7 +136,15 @@ export class LocalWorktreeHost implements WorktreeHost {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const target = await this.validateExisting(filePath);
-      await fs.rm(target, { recursive: options?.recursive ?? false, force: false });
+      // Retry on ENOTEMPTY/EBUSY/EPERM: a stale worktree's node_modules can still
+      // be written to by a racing install (e.g. electron postinstall), so a single
+      // rm pass loses to the writer and aborts. fs.rm retries these natively.
+      await fs.rm(target, {
+        recursive: options?.recursive ?? false,
+        force: false,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
