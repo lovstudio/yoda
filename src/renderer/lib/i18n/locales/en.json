@@ -1496,6 +1496,29 @@
       "confirmLabel": "Delete"
     }
   },
+  "plugins": {
+    "title": "Plugins",
+    "subtitle": "Manage installed plugins and the skills, commands, and agents they bundle",
+    "searchPlaceholder": "Search plugins…",
+    "refreshAria": "Refresh plugins",
+    "disabled": "Disabled",
+    "uninstall": "Uninstall",
+    "toggleAria": "Toggle {{name}}",
+    "noPlugins": "No plugins installed.",
+    "noMatches": "No plugins match your search.",
+    "components": {
+      "skills": "Skills",
+      "commands": "Commands",
+      "agents": "Agents",
+      "hooks": "Hooks",
+      "mcpServers": "MCP servers"
+    },
+    "surface": {
+      "ariaLabel": "Switch between skills and plugins",
+      "skills": "Skills",
+      "plugins": "Plugins"
+    }
+  },
   "skills": {
     "title": "Skills",
     "subtitle": "Extend your agents with reusable skill modules",
