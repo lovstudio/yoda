@@ -5,6 +5,37 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.11.2 — 2026-06-14
+
+### Added
+
+- **Quick project creation**: the project selector can create a project on the
+  fly — auto-deriving the path and initializing the repo — via a prompt-titled
+  dialog.
+- **Review workflow**: review orchestration moves into the main process with a
+  marker turn-end fallback; new review sessions auto-activate and display side
+  by side with the implementer by default.
+- Conversations: archived conversations fold into the unified list with
+  consistent sorting and a "finished" style; the session-exit banner becomes a
+  floating frosted "shutdown" command bar with one-click debug-info copy.
+- Tasks: "add parent task" (a session-less grouping container) via a
+  name-input dialog defaulting to the current task name.
+- A "Check for updates" entry in the sidebar nav.
+
+### Changed
+
+- Archiving via the icon no longer runs a skill by default; the skill flow
+  moves into the right-click menu with an editable command.
+- The task overview drops its archived collapse groups (sessions + subtasks).
+
+### Fixed
+
+- Worktree provisioning no longer hangs on a git fetch credential prompt;
+  stale-dir removal retries on ENOTEMPTY/EBUSY races.
+- Provision-error tasks gain a retry action from both the dead-end view and the
+  tab context menu.
+- Quick project creation no longer flickers from top to middle in the sidebar.
+
 ## 0.11.1 — 2026-06-13
 
 ### Changed
