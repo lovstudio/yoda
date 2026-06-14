@@ -23,6 +23,7 @@ import { maasController } from './core/maas/controller';
 import { mcpController } from './core/mcp/controller';
 import { mobileGatewayController } from './core/mobile-gateway/controller';
 import { plainController } from './core/plain/controller';
+import { pluginsController } from './core/plugins/controller';
 import { projectController } from './core/projects/controller';
 import { ptyController } from './core/pty/controller';
 import { pullRequestController } from './core/pull-requests/controller';
@@ -68,6 +69,7 @@ export const rpcRouter = createRPCRouter({
   maas: maasController,
   mobileGateway: mobileGatewayController,
   plain: plainController,
+  plugins: pluginsController,
   skills: skillsController,
   ssh: sshController,
   projects: projectController,

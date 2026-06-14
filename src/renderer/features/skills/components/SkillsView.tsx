@@ -42,7 +42,10 @@ function loadStoredLayout(): SkillsLayout {
   }
 }
 
-const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
+const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNode }> = ({
+  embedded = false,
+  surfaceControl,
+}) => {
   const { t } = useTranslation();
   const { params: skillsParams, setParams: setSkillsParams } = useParams('skills');
   const {
@@ -196,6 +199,7 @@ const SkillsView: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
             !embedded && '-mx-8 px-8'
           )}
         >
+          {surfaceControl}
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input

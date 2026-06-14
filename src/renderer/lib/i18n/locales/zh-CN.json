@@ -1496,6 +1496,29 @@
       "confirmLabel": "删除"
     }
   },
+  "plugins": {
+    "title": "插件",
+    "subtitle": "管理已安装的插件，及其捆绑的技能、命令与 Agent",
+    "searchPlaceholder": "搜索插件…",
+    "refreshAria": "刷新插件",
+    "disabled": "已禁用",
+    "uninstall": "卸载",
+    "toggleAria": "切换 {{name}}",
+    "noPlugins": "未安装任何插件。",
+    "noMatches": "没有匹配的插件。",
+    "components": {
+      "skills": "技能",
+      "commands": "命令",
+      "agents": "Agent",
+      "hooks": "Hooks",
+      "mcpServers": "MCP 服务"
+    },
+    "surface": {
+      "ariaLabel": "在技能与插件间切换",
+      "skills": "技能",
+      "plugins": "插件"
+    }
+  },
   "skills": {
     "title": "技能",
     "subtitle": "通过可复用的技能模块扩展代理能力",
