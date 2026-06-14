@@ -1296,7 +1296,8 @@
       },
       "copyFailed": "无法复制到剪贴板。",
       "createSubtask": "新建子任务",
-      "setParent": "设置父任务…"
+      "setParent": "设置父任务…",
+      "createParent": "增设父任务（分组）"
     },
     "sessionPanel": {
       "title": "会话",
