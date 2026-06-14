@@ -6,12 +6,8 @@ import {
   getProjectStore,
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
-import { ArchivedConversationRow } from '@renderer/features/tasks/conversations/archived-conversation-row';
 import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
-import {
-  conversationTime,
-  useArchivedConversations,
-} from '@renderer/features/tasks/conversations/use-archived-conversations';
+import { conversationTime } from '@renderer/features/tasks/conversations/use-archived-conversations';
 import {
   getTaskStore,
   taskAncestors,
@@ -27,7 +23,6 @@ import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
 import { AgentStatusIndicator } from '../components/agent-status-indicator';
-import { ArchivedDisclosure } from '../components/archived-disclosure';
 import { SessionUsageChip } from '../components/session-usage-chip';
 import { TaskStatsStrip } from '../components/task-stats-strip';
 import { useTaskStats } from '../hooks/useTaskStats';
@@ -50,7 +45,6 @@ export const OverviewPanel = observer(function OverviewPanel() {
     (a, b) => conversationTime(b.data.lastInteractedAt) - conversationTime(a.data.lastInteractedAt)
   );
 
-  const archived = useArchivedConversations(projectId, taskId);
   const { data: taskStats } = useTaskStats(projectId, taskId);
   const usageByConversation = new Map<string, ConversationUsageSummary>(
     (taskStats?.conversations ?? []).map((usage) => [usage.conversationId, usage])
@@ -149,23 +143,6 @@ export const OverviewPanel = observer(function OverviewPanel() {
                 />
               ))}
             </ul>
-          )}
-
-          {archived.length > 0 && (
-            <ArchivedDisclosure
-              label={t('tasks.overview.archivedSessions', { count: archived.length })}
-            >
-              <ul className="flex flex-col gap-1">
-                {archived.map((conversation) => (
-                  <li key={conversation.id}>
-                    <ArchivedConversationRow
-                      conversation={conversation}
-                      usage={usageByConversation.get(conversation.id)}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </ArchivedDisclosure>
           )}
         </section>
 

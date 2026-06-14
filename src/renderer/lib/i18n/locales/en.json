@@ -842,8 +842,7 @@
           "yoda-maas": "MaaS"
         }
       },
-      "subtasks": "Subtasks ({{count}})",
-      "archivedSubtasks": "Archived ({{count}})"
+      "subtasks": "Subtasks ({{count}})"
     },
     "archivedSession": {
       "readOnly": "Read-only",

@@ -842,8 +842,7 @@
           "yoda-maas": "MaaS"
         }
       },
-      "subtasks": "子任务（{{count}}）",
-      "archivedSubtasks": "已归档（{{count}}）"
+      "subtasks": "子任务（{{count}}）"
     },
     "archivedSession": {
       "readOnly": "只读",
