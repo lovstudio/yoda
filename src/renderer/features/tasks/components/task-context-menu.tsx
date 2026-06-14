@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Columns2,
   Copy,
+  FolderTree,
   Info,
   LayoutGrid,
   Link2,
@@ -107,6 +108,8 @@ export interface TaskMenuActions extends TaskMenuInfoFields {
   onCreateSubtask?: () => void;
   /** Open the parent-task picker for this task. */
   onSetParent?: () => void;
+  /** Create a new session-less grouping parent and nest this task under it. */
+  onCreateParent?: () => void;
   /** Show this task in an extra pane beside the routed task. */
   onOpenBeside?: () => void;
   /** Tile all of this task's children (compare candidates) side by side. */
@@ -286,6 +289,15 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       icon: ListTree,
       label: t('tasks.context.setParent'),
       onSelect: actions.onSetParent,
+    });
+  }
+  if (!actions.isArchived && actions.onCreateParent) {
+    items.push({
+      key: 'create-parent',
+      group: 2,
+      icon: FolderTree,
+      label: t('tasks.context.createParent'),
+      onSelect: actions.onCreateParent,
     });
   }
 

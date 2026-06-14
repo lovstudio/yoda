@@ -1296,7 +1296,8 @@
       },
       "copyFailed": "The value could not be copied to the clipboard.",
       "createSubtask": "New subtask",
-      "setParent": "Set parent task..."
+      "setParent": "Set parent task...",
+      "createParent": "Add parent task (group)"
     },
     "sessionPanel": {
       "title": "Session",
