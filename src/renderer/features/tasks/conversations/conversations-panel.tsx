@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { MessageSquare, Power, RotateCcw } from 'lucide-react';
+import { Check, Copy, MessageSquare, Power, RotateCcw } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
@@ -29,6 +29,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
 import type { ConversationStore } from './conversation-manager';
@@ -187,6 +188,40 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
     const initialSize = pty ? getResumeInitialSize(pty, terminalContainerRef.current) : undefined;
     void conversations.restartConversation(activeConversation.data.id, initialSize);
   };
+
+  // Snapshot of the dead session for a bug report / paste into the agent.
+  const [debugCopied, setDebugCopied] = useState(false);
+  const debugCopyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (debugCopyResetRef.current) clearTimeout(debugCopyResetRef.current);
+    },
+    []
+  );
+  const handleCopyExitDebugInfo = () => {
+    if (!activeConversation) return;
+    const { data, session, status, sessionExited } = activeConversation;
+    const lines = [
+      'Yoda — agent session exited',
+      `time: ${new Date().toISOString()}`,
+      `runtime: ${agentConfig[data.runtimeId]?.name ?? data.runtimeId} (${data.runtimeId})`,
+      `conversation: ${data.id}`,
+      `task: ${data.taskId}`,
+      `project: ${data.projectId}`,
+      `ptySession: ${session.sessionId}`,
+      `ptyStatus: ${session.status}`,
+      `agentStatus: ${status}`,
+      `sessionExited: ${sessionExited}`,
+      `target: ${remoteConnectionId ? `ssh:${remoteConnectionId}` : 'local'}`,
+      `workspace: ${provisioned.path}`,
+      `createdAt: ${data.createdAt ?? 'n/a'}`,
+      `lastInteractedAt: ${data.lastInteractedAt ?? 'n/a'}`,
+    ];
+    void navigator.clipboard.writeText(lines.join('\n'));
+    setDebugCopied(true);
+    if (debugCopyResetRef.current) clearTimeout(debugCopyResetRef.current);
+    debugCopyResetRef.current = setTimeout(() => setDebugCopied(false), 1500);
+  };
   const { data: homeDir } = useQuery({
     queryKey: ['homeDir'],
     queryFn: () => rpc.app.getHomeDir(),
@@ -293,8 +328,8 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
                     />
                     {activeConversation?.sessionExited ? (
                       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-3 duration-300 animate-in fade-in-0 slide-in-from-bottom-2">
-                        <div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-border-primary/70 bg-background/85 py-1.5 pr-1.5 pl-3 shadow-sm ring-1 ring-foreground/5 backdrop-blur-md">
-                          <span className="flex items-center gap-2 text-sm text-foreground-passive">
+                        <div className="pointer-events-auto flex items-center gap-2.5 rounded-lg border border-border-primary/70 bg-background/85 py-1.5 pr-1.5 pl-3 shadow-sm ring-1 ring-foreground/5 backdrop-blur-md">
+                          <span className="flex items-center gap-2 pr-0.5 text-sm text-foreground-passive">
                             <span
                               className="relative flex size-2 shrink-0 items-center justify-center"
                               aria-hidden
@@ -310,6 +345,30 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
                               {t('tasks.conversations.sessionExited')}
                             </span>
                           </span>
+                          <span className="h-4 w-px shrink-0 bg-border-primary/60" aria-hidden />
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost"
+                                  onClick={handleCopyExitDebugInfo}
+                                  aria-label={t('common.copyDebugInfo')}
+                                >
+                                  {debugCopied ? (
+                                    <Check className="size-3.5 text-status-done" aria-hidden />
+                                  ) : (
+                                    <Copy className="size-3.5" aria-hidden />
+                                  )}
+                                </Button>
+                              }
+                            />
+                            <TooltipContent>
+                              {debugCopied
+                                ? t('common.debugInfoCopied')
+                                : t('common.copyDebugInfo')}
+                            </TooltipContent>
+                          </Tooltip>
                           <Button
                             size="sm"
                             variant="outline"
