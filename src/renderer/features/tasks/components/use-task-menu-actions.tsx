@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { buildTaskDeepLink } from '@shared/deep-links';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
-import { ensureUniqueTaskDisplayName } from '@shared/task-name';
 import {
   getProjectStore,
   getRepositoryStore,
@@ -41,6 +40,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
   const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
   const showCreateSubtask = useShowModal('newSubtaskModal');
   const showSetParent = useShowModal('setParentTaskModal');
+  const showCreateParent = useShowModal('createParentTaskModal');
   const { archiveTask, hasPreArchiveCommand } = useArchiveTask(projectId);
 
   const task = getTaskStore(projectId, taskId);
@@ -97,31 +97,6 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
     }
     navigate('task', { projectId, taskId });
     asProvisioned(task)?.taskView.tabManager.setActiveTab(OVERVIEW_TAB_ID);
-  };
-
-  // Wrap this task in a fresh session-less grouping parent: create a no-worktree
-  // task as a pure container, then reparent this task under it. The new parent
-  // slots in where this task sat (inherits its current parent) so the tree keeps
-  // its place. Mirrors the compare-mode group anchor in home-view.tsx.
-  const handleCreateParent = async () => {
-    if (!taskManager || !repoDefaultBranch) return;
-    const existingNames = Array.from(taskManager.tasks.values(), (s) => s.data.name);
-    const parentId = crypto.randomUUID();
-    const grandparentId = registeredTaskData(task)?.parentTaskId;
-    try {
-      await taskManager.createTask({
-        id: parentId,
-        projectId,
-        name: ensureUniqueTaskDisplayName(`${taskName}-group`, existingNames),
-        sourceBranch: repoDefaultBranch,
-        strategy: { kind: 'no-worktree' },
-        parentTaskId: grandparentId,
-      });
-      await task.setParentTask(parentId);
-      navigate('task', { projectId, taskId: parentId });
-    } catch (error: unknown) {
-      log.warn('useTaskMenuActions: create parent task failed', { projectId, taskId, error });
-    }
   };
 
   return {
@@ -191,7 +166,7 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
       projectId !== INTERNAL_PROJECT_ID &&
       task.state !== 'unregistered' &&
       Boolean(repoDefaultBranch)
-        ? () => void handleCreateParent()
+        ? () => showCreateParent({ projectId, taskId, defaultName: taskName })
         : undefined,
     // Show this task in an extra pane beside whatever is currently routed.
     onOpenBeside:

@@ -16,6 +16,7 @@ import { ReviseSkillModal } from '@renderer/features/skills/components/ReviseSki
 import { AddRemoteModal } from '@renderer/features/tasks/add-remote-modal';
 import { ArchiveTaskWithNoteModal } from '@renderer/features/tasks/archive-task-with-note-modal';
 import { ArchivedSessionTranscriptModal } from '@renderer/features/tasks/archived-session-transcript-modal';
+import { CreateParentTaskModal } from '@renderer/features/tasks/create-parent-task-modal';
 import { CreateTaskModal } from '@renderer/features/tasks/create-task-modal/create-task-modal';
 import { CreatePrModal } from '@renderer/features/tasks/diff-view/changes-panel/components/pr-entry/create-pr-modal';
 import { ConflictDialog } from '@renderer/features/tasks/editor/conflict-dialog';
@@ -73,6 +74,7 @@ export const modalRegistry = {
   renameTaskModal: createModal(RenameTaskModal, { size: 'xs' }),
   renameConversationModal: createModal(RenameConversationModal, { size: 'xs' }),
   setParentTaskModal: createModal(SetParentTaskModal, { size: 'sm' }),
+  createParentTaskModal: createModal(CreateParentTaskModal, { size: 'xs' }),
   sessionPromptsModal: createModal(SessionPromptsModal, { size: 'lg' }),
   renameProjectModal: createModal(RenameProjectModal, { size: 'xs' }),
   createWorkspaceModal: createModal(CreateWorkspaceModal, { size: 'xs' }),
