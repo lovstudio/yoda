@@ -6,6 +6,7 @@ import { CommandPaletteModal } from '@renderer/features/command-palette/command-
 import { IntegrationSetupModal } from '@renderer/features/integrations/integration-setup-modal';
 import { McpModal } from '@renderer/features/mcp/components/McpModal';
 import { AddProjectModal } from '@renderer/features/projects/components/add-project-modal/add-project-modal';
+import { ExpressCreateProjectModal } from '@renderer/features/projects/components/express-create-project-modal';
 import { ManageRunScriptsModal } from '@renderer/features/projects/components/manage-run-scripts-modal';
 import { ManageQuickActionsModal } from '@renderer/features/projects/components/overview-view/manage-quick-actions-modal';
 import { RenameProjectModal } from '@renderer/features/projects/components/rename-project-modal';
@@ -58,6 +59,7 @@ export const modalRegistry = {
   newConversationModal: createModal(NewConversationModal, { size: 'lg' }),
   newSubtaskModal: createModal(NewSubtaskModal, { size: 'lg' }),
   addProjectModal: createModal(AddProjectModal),
+  expressCreateProjectModal: createModal(ExpressCreateProjectModal, { size: 'xs' }),
   addSshConnModal: createModal(AddSshConnModal),
   changeProjectConnectionModal: createModal(ChangeProjectConnectionModal, { size: 'sm' }),
   githubDeviceFlowModal: createModal(GithubDeviceFlowModalOverlay, { size: 'sm' }),

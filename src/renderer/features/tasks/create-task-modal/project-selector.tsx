@@ -10,6 +10,7 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import {
   Combobox,
   ComboboxCollection,
@@ -70,9 +71,9 @@ export const ProjectSelector = observer(function ProjectSelector({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [browsing, setBrowsing] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState('');
   const { toast } = useToast();
+  const showExpressCreateModal = useShowModal('expressCreateProjectModal');
 
   const options: ProjectOption[] = Array.from(getProjectManagerStore().projects.entries()).flatMap(
     ([id, store]) => {
@@ -103,11 +104,9 @@ export const ProjectSelector = observer(function ProjectSelector({
   const expressOption: ExpressOption = {
     kind: 'express',
     value: '__express__',
-    label: creating
-      ? t('projects.settingUpProject')
-      : trimmedQuery
-        ? t('projects.expressCreateNamed', { name: trimmedQuery })
-        : t('projects.expressCreate'),
+    label: trimmedQuery
+      ? t('projects.expressCreateNamed', { name: trimmedQuery })
+      : t('projects.expressCreate'),
   };
   const optionGroups: Array<{ value: string; items: ProjectSelectorOption[] }> = [
     { value: 'options', items: options },
@@ -134,7 +133,11 @@ export const ProjectSelector = observer(function ProjectSelector({
       return;
     }
     if (item.kind === 'express') {
-      void handleExpressCreate();
+      setOpen(false);
+      showExpressCreateModal({
+        defaultName: trimmedQuery,
+        onSuccess: (projectId) => onChange(projectId),
+      });
       return;
     }
     if (item.kind === 'projectless') {
@@ -144,33 +147,6 @@ export const ProjectSelector = observer(function ProjectSelector({
     }
     onChange(item.value);
     setOpen(false);
-  }
-
-  async function handleExpressCreate() {
-    if (creating) return;
-    setCreating(true);
-    try {
-      const { path, name } = await rpc.projects.prepareQuickProject({
-        name: query.trim() || undefined,
-      });
-      const projectId = await getProjectManagerStore().createProject(
-        { type: 'local' },
-        { mode: 'pick', name, path, initGitRepository: true }
-      );
-      if (projectId) {
-        onChange(projectId);
-        setOpen(false);
-      }
-    } catch (err) {
-      log.error('Failed to express-create project:', err);
-      toast({
-        title: t('projects.failedExpressCreate'),
-        description: err instanceof Error ? err.message : String(err),
-        variant: 'destructive',
-      });
-    } finally {
-      setCreating(false);
-    }
   }
 
   async function handleBrowse() {
@@ -291,9 +267,7 @@ export const ProjectSelector = observer(function ProjectSelector({
                   <ComboboxItem
                     key={item.value}
                     value={item}
-                    disabled={
-                      (item.kind === 'browse' && browsing) || (item.kind === 'express' && creating)
-                    }
+                    disabled={item.kind === 'browse' && browsing}
                     aria-label={
                       item.kind === 'projectless'
                         ? `${item.label}: ${item.description}`
