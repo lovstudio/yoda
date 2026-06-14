@@ -2,8 +2,11 @@ import { Settings2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useArchiveTask } from '@renderer/features/tasks/archive-task';
+import { getTaskMenuConversation } from '@renderer/features/tasks/components/task-menu-session-info';
+import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
@@ -49,11 +52,18 @@ export const ArchiveTaskWithNoteModal = observer(function ArchiveTaskWithNoteMod
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
 
   const [note, setNote] = useState('');
-  // Prefill from the configured preset; the user can edit / append before
-  // running it (or clear it to archive without a skill).
-  const [command, setCommand] = useState(() =>
-    withSkill ? (homeDraft?.preArchiveCommand ?? '') : ''
-  );
+  // Prefill the *complete* command the user will actually run: resolve the
+  // configured preset (a bare skill id) into the target runtime's command
+  // form (e.g. `/skill` for claude, `$skill` for codex) up front, instead of
+  // showing the raw id and letting the main process prefix it in the
+  // background. The user can still edit / append / clear before running.
+  const [command, setCommand] = useState(() => {
+    if (!withSkill) return '';
+    const preset = homeDraft?.preArchiveCommand ?? '';
+    if (!preset) return '';
+    const conversation = getTaskMenuConversation(asProvisioned(getTaskStore(projectId, taskId)));
+    return conversation ? applyAgentCommandPrefix(conversation.runtimeId, preset) : preset;
+  });
 
   const { archiveTask } = useArchiveTask(projectId);
 
