@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { cn } from '@renderer/utils/utils';
 import { GitStatusSection } from './git-status-section';
@@ -9,6 +9,7 @@ import { StagedSection } from './staged-section';
 import { UnstagedSection } from './unstaged-section';
 
 export const ChangesPanel = observer(function ChangesPanel() {
+  const { taskId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
   const changesView = provisioned.taskView.diffView.changesView;
 
@@ -30,7 +31,7 @@ export const ChangesPanel = observer(function ChangesPanel() {
       <ResizablePanelGroup
         orientation="vertical"
         className="min-h-0 flex-1"
-        id="changes-panel-group"
+        id={`changes-panel-group:${taskId}`}
         disableCursor
       >
         <ResizablePanel

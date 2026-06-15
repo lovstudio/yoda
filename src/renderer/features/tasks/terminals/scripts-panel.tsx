@@ -80,7 +80,7 @@ export const ScriptsPanel = observer(function ScriptsPanel() {
   return (
     <ResizablePanelGroup
       orientation="horizontal"
-      id="scripts-drawer-inner"
+      id={`scripts-drawer-inner:${taskId}`}
       className="h-full"
       onFocus={() => provisionedTask.taskView.setFocusedRegion('bottom')}
     >

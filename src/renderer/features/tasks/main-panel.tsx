@@ -233,7 +233,7 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
     <ResizablePanelGroup
       orientation="vertical"
       className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
-      id="task-main-vertical"
+      id={`task-main-vertical:${taskId}`}
       defaultLayout={runtimeDrawerLayouts.get(taskId)}
       onLayoutChanged={(next) => {
         runtimeDrawerLayouts.set(taskId, next);
