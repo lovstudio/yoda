@@ -191,5 +191,3 @@ function arraysEqual(a: string[], b: string[]): boolean {
 function openMarker(id: string, open: boolean): string {
   return `${open ? '+' : '-'}${id}`;
 }
-
-export const taskSidebarPreferenceStore = new TaskSidebarPreferenceStore();

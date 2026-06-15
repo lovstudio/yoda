@@ -21,7 +21,6 @@ import {
   SessionPromptsViewAllButton,
   useSessionPrompts,
 } from '../session-info-panel';
-import { taskSidebarPreferenceStore } from '../stores/task-sidebar-preferences';
 import { TaskPanel, TaskTodosCount, useTaskTodos } from '../task-panel';
 import {
   TranscriptContent,
@@ -69,8 +68,8 @@ export const SessionPanel = observer(function SessionPanel() {
 
   // User-managed runtime composition (session chip context menu → 管理章节):
   // units render in the current order, hidden ones are skipped entirely.
-  const visibleUnits = taskSidebarPreferenceStore.sessionPanelUnitOrder.filter(
-    (unit) => !taskSidebarPreferenceStore.sessionPanelHiddenUnits.includes(unit)
+  const visibleUnits = taskView.sidebarPrefs.sessionPanelUnitOrder.filter(
+    (unit) => !taskView.sidebarPrefs.sessionPanelHiddenUnits.includes(unit)
   );
 
   const renderUnit = (unit: SessionPanelUnit): React.ReactNode => {

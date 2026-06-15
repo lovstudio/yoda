@@ -18,7 +18,7 @@ import {
 import { appState } from '@renderer/lib/stores/app-state';
 import type { HistoryEntry } from '@renderer/lib/stores/navigation-history-store';
 import { focusTracker } from '@renderer/utils/focus-tracker';
-import { taskSidebarPreferenceStore } from './task-sidebar-preferences';
+import { TaskSidebarPreferenceStore } from './task-sidebar-preferences';
 
 /**
  * Identifies which content renderer is active in the main panel.
@@ -68,6 +68,8 @@ export class TaskViewStore {
   readonly diffView: DiffViewStore;
   /** The task's single resident in-app browser card. */
   readonly browser: TaskBrowserStore;
+  /** Per-task sidebar/bottom-panel chrome state (collapse, active tabs, etc). */
+  readonly sidebarPrefs = new TaskSidebarPreferenceStore();
   private readonly diffTabLifecycle: DiffTabLifecycleStore;
   private readonly terminalsMgr: TerminalManagerStore;
   private readonly disposers: (() => void)[] = [];
@@ -163,32 +165,33 @@ export class TaskViewStore {
       editorView: false,
       diffView: false,
       browser: false,
+      sidebarPrefs: false,
       activeRenderer: computed,
     });
   }
 
   get sidebarTab(): SidebarTab {
-    return taskSidebarPreferenceStore.sidebarTab;
+    return this.sidebarPrefs.sidebarTab;
   }
 
   get isSidebarCollapsed(): boolean {
-    return taskSidebarPreferenceStore.isSidebarCollapsed;
+    return this.sidebarPrefs.isSidebarCollapsed;
   }
 
   get openSidebarGroups(): SidebarTabGroup[] {
-    return taskSidebarPreferenceStore.openSidebarGroups;
+    return this.sidebarPrefs.openSidebarGroups;
   }
 
   get sessionPanelOpenSectionIds(): string[] {
-    return [...taskSidebarPreferenceStore.sessionPanelOpenSectionIds];
+    return [...this.sidebarPrefs.sessionPanelOpenSectionIds];
   }
 
   isDisclosureOpen(id: string, defaultOpen: boolean): boolean {
-    return taskSidebarPreferenceStore.isDisclosureOpen(id, defaultOpen);
+    return this.sidebarPrefs.isDisclosureOpen(id, defaultOpen);
   }
 
   setDisclosureOpen(id: string, open: boolean): void {
-    taskSidebarPreferenceStore.setDisclosureOpen(id, open);
+    this.sidebarPrefs.setDisclosureOpen(id, open);
   }
 
   get activeRenderer(): RendererKind {
@@ -231,14 +234,14 @@ export class TaskViewStore {
   }
 
   setSidebarTab(v: SidebarTab): void {
-    taskSidebarPreferenceStore.setSidebarTab(v);
+    this.sidebarPrefs.setSidebarTab(v);
     // Activating a tab from anywhere (titlebar toggle, commands, deep links)
     // surfaces its feature card in the sidebar strip.
-    taskSidebarPreferenceStore.openSidebarGroup(sidebarGroupForTab(v));
+    this.sidebarPrefs.openSidebarGroup(sidebarGroupForTab(v));
   }
 
   openSidebarGroup(group: SidebarTabGroup): void {
-    taskSidebarPreferenceStore.openSidebarGroup(group);
+    this.sidebarPrefs.openSidebarGroup(group);
   }
 
   /**
@@ -254,11 +257,11 @@ export class TaskViewStore {
   }
 
   closeSidebarGroup(group: SidebarTabGroup): void {
-    taskSidebarPreferenceStore.closeSidebarGroup(group);
+    this.sidebarPrefs.closeSidebarGroup(group);
   }
 
   setSidebarCollapsed(collapsed: boolean): void {
-    taskSidebarPreferenceStore.setSidebarCollapsed(collapsed);
+    this.sidebarPrefs.setSidebarCollapsed(collapsed);
     if (collapsed) this.isSidebarMaximized = false;
   }
 
@@ -267,7 +270,7 @@ export class TaskViewStore {
   }
 
   setSessionPanelOpenSectionIds(sectionIds: string[]): void {
-    taskSidebarPreferenceStore.setSessionPanelOpenSectionIds(sectionIds);
+    this.sidebarPrefs.setSessionPanelOpenSectionIds(sectionIds);
   }
 
   setFocusedRegion(region: 'main' | 'bottom'): void {
@@ -281,44 +284,44 @@ export class TaskViewStore {
 
   /** Bottom drawer chrome is a global preference shared across tasks. */
   get isTerminalDrawerOpen(): boolean {
-    return taskSidebarPreferenceStore.isBottomPanelOpen;
+    return this.sidebarPrefs.isBottomPanelOpen;
   }
 
   get bottomPanelTab(): BottomPanelTab {
-    return taskSidebarPreferenceStore.bottomPanelTab;
+    return this.sidebarPrefs.bottomPanelTab;
   }
 
   /** Mode tabs added to the drawer strip, in user order. */
   get openBottomPanelTabs(): BottomPanelTab[] {
-    return taskSidebarPreferenceStore.openBottomPanelTabs;
+    return this.sidebarPrefs.openBottomPanelTabs;
   }
 
   /** The selected mode tab, or null when it isn't in the strip (empty state). */
   get activeBottomPanelTab(): BottomPanelTab | null {
-    const tab = taskSidebarPreferenceStore.bottomPanelTab;
-    return taskSidebarPreferenceStore.openBottomPanelTabs.includes(tab) ? tab : null;
+    const tab = this.sidebarPrefs.bottomPanelTab;
+    return this.sidebarPrefs.openBottomPanelTabs.includes(tab) ? tab : null;
   }
 
   /** Drawer spans the full window width vs. only the main column. */
   get isBottomPanelFullWidth(): boolean {
-    return taskSidebarPreferenceStore.isBottomPanelFullWidth;
+    return this.sidebarPrefs.isBottomPanelFullWidth;
   }
 
   setBottomPanelFullWidth(fullWidth: boolean): void {
-    taskSidebarPreferenceStore.setBottomPanelFullWidth(fullWidth);
+    this.sidebarPrefs.setBottomPanelFullWidth(fullWidth);
   }
 
   setTerminalDrawerOpen(open: boolean): void {
-    taskSidebarPreferenceStore.setBottomPanelOpen(open);
+    this.sidebarPrefs.setBottomPanelOpen(open);
     if (open && this.activeBottomPanelTab === 'terminals' && this.terminalTabs.tabs.length === 0) {
       void this.terminalsMgr.createDefaultTerminal();
     }
   }
 
   setBottomPanelTab(tab: BottomPanelTab): void {
-    taskSidebarPreferenceStore.setBottomPanelTab(tab);
+    this.sidebarPrefs.setBottomPanelTab(tab);
     // Activating a mode from anywhere surfaces its tab in the drawer strip.
-    taskSidebarPreferenceStore.openBottomPanelTab(tab);
+    this.sidebarPrefs.openBottomPanelTab(tab);
     // Switching to terminals in an open drawer must not land on an empty pane.
     if (tab === 'terminals' && this.isTerminalDrawerOpen && this.terminalTabs.tabs.length === 0) {
       void this.terminalsMgr.createDefaultTerminal();
@@ -328,17 +331,17 @@ export class TaskViewStore {
   /** Removes a mode tab from the strip; the active one falls back to the next. */
   closeBottomPanelTab(tab: BottomPanelTab): void {
     const wasActive = this.activeBottomPanelTab === tab;
-    taskSidebarPreferenceStore.closeBottomPanelTab(tab);
+    this.sidebarPrefs.closeBottomPanelTab(tab);
     if (!wasActive) return;
-    const next = taskSidebarPreferenceStore.openBottomPanelTabs[0];
+    const next = this.sidebarPrefs.openBottomPanelTabs[0];
     if (next) this.setBottomPanelTab(next);
   }
 
   /** Opens the terminal drawer in terminals mode and creates a new session. */
   openNewTerminal(): void {
-    taskSidebarPreferenceStore.setBottomPanelOpen(true);
-    taskSidebarPreferenceStore.setBottomPanelTab('terminals');
-    taskSidebarPreferenceStore.openBottomPanelTab('terminals');
+    this.sidebarPrefs.setBottomPanelOpen(true);
+    this.sidebarPrefs.setBottomPanelTab('terminals');
+    this.sidebarPrefs.openBottomPanelTab('terminals');
     void this.terminalsMgr.createDefaultTerminal();
   }
 

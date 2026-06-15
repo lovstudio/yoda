@@ -24,7 +24,6 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { cn } from '@renderer/utils/utils';
-import { taskSidebarPreferenceStore } from './stores/task-sidebar-preferences';
 import { ScriptsPanel } from './terminals/scripts-panel';
 import { TerminalsPanel } from './terminals/terminal-panel';
 
@@ -81,10 +80,7 @@ export const BottomPanel = observer(function BottomPanel() {
     canDrop: (payload) => payload.kind === 'bottom-mode',
     onDrop: (payload, event) => {
       if (payload.kind !== 'bottom-mode') return;
-      taskSidebarPreferenceStore.reorderBottomPanelTab(
-        payload.mode,
-        tabDropIndex(event, 'bottom-mode')
-      );
+      taskView.sidebarPrefs.reorderBottomPanelTab(payload.mode, tabDropIndex(event, 'bottom-mode'));
     },
   });
 

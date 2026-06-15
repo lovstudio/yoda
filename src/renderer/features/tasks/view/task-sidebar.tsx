@@ -57,7 +57,6 @@ import {
 import { cn } from '@renderer/utils/utils';
 import { ChangesPanel } from '../diff-view/changes-panel/changes-panel';
 import { EditorFileTree } from '../editor/editor-file-tree';
-import { taskSidebarPreferenceStore } from '../stores/task-sidebar-preferences';
 import {
   sessionPanelUnitLabelKey,
   SIDEBAR_TAB_GROUPS,
@@ -249,7 +248,7 @@ export const TaskSidebar = observer(function TaskSidebar() {
         payload.taskId === taskId),
     onDrop: (payload, event) => {
       if (payload.kind === 'sidebar-group') {
-        taskSidebarPreferenceStore.reorderSidebarGroup(
+        taskView.sidebarPrefs.reorderSidebarGroup(
           payload.group,
           tabDropIndex(event, 'sidebar-group')
         );
@@ -487,8 +486,9 @@ export const TaskSidebar = observer(function TaskSidebar() {
  */
 const SessionPanelSectionManager = observer(function SessionPanelSectionManager() {
   const { t } = useTranslation();
-  const order = taskSidebarPreferenceStore.sessionPanelUnitOrder;
-  const hidden = taskSidebarPreferenceStore.sessionPanelHiddenUnits;
+  const { taskView } = useProvisionedTask();
+  const order = taskView.sidebarPrefs.sessionPanelUnitOrder;
+  const hidden = taskView.sidebarPrefs.sessionPanelHiddenUnits;
 
   return (
     <div className="flex flex-col">
@@ -503,7 +503,7 @@ const SessionPanelSectionManager = observer(function SessionPanelSectionManager(
               checked={visible}
               aria-label={t(sessionPanelUnitLabelKey(unit))}
               onCheckedChange={(checked) =>
-                taskSidebarPreferenceStore.setSessionPanelUnitHidden(unit, checked !== true)
+                taskView.sidebarPrefs.setSessionPanelUnitHidden(unit, checked !== true)
               }
             />
             <button
@@ -512,7 +512,7 @@ const SessionPanelSectionManager = observer(function SessionPanelSectionManager(
                 'min-w-0 flex-1 truncate text-left',
                 !visible && 'text-foreground-passive'
               )}
-              onClick={() => taskSidebarPreferenceStore.setSessionPanelUnitHidden(unit, visible)}
+              onClick={() => taskView.sidebarPrefs.setSessionPanelUnitHidden(unit, visible)}
             >
               {t(sessionPanelUnitLabelKey(unit))}
             </button>
@@ -523,7 +523,7 @@ const SessionPanelSectionManager = observer(function SessionPanelSectionManager(
                 title={t('tasks.sessionPanel.moveSectionUp')}
                 disabled={index === 0}
                 className="flex size-5 items-center justify-center rounded-sm text-foreground-passive hover:bg-background-1 hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
-                onClick={() => taskSidebarPreferenceStore.moveSessionPanelUnit(unit, -1)}
+                onClick={() => taskView.sidebarPrefs.moveSessionPanelUnit(unit, -1)}
               >
                 <ChevronUp className="size-3.5" />
               </button>
@@ -533,7 +533,7 @@ const SessionPanelSectionManager = observer(function SessionPanelSectionManager(
                 title={t('tasks.sessionPanel.moveSectionDown')}
                 disabled={index === order.length - 1}
                 className="flex size-5 items-center justify-center rounded-sm text-foreground-passive hover:bg-background-1 hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
-                onClick={() => taskSidebarPreferenceStore.moveSessionPanelUnit(unit, 1)}
+                onClick={() => taskView.sidebarPrefs.moveSessionPanelUnit(unit, 1)}
               >
                 <ChevronDown className="size-3.5" />
               </button>
@@ -545,7 +545,7 @@ const SessionPanelSectionManager = observer(function SessionPanelSectionManager(
         <button
           type="button"
           className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-sm text-foreground-muted hover:bg-background-2 hover:text-foreground"
-          onClick={() => taskSidebarPreferenceStore.resetSessionPanelUnits()}
+          onClick={() => taskView.sidebarPrefs.resetSessionPanelUnits()}
         >
           <RotateCcw className="size-3.5" />
           {t('tasks.sessionPanel.resetSections')}
