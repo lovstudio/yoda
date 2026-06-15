@@ -1,6 +1,6 @@
-import { Download } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
@@ -18,6 +18,7 @@ import {
 } from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
 import { isImeComposing } from '@renderer/utils/ime';
+import { cn } from '@renderer/utils/utils';
 import { ResetToDefaultButton } from './ResetToDefaultButton';
 import { SettingRow } from './SettingRow';
 
@@ -209,11 +210,20 @@ export const EnableTmuxRow: React.FC = observer(() => {
 
   const tmuxByDefault = projects?.tmuxByDefault ?? true;
   const tmuxState = appState.dependencies.allStatuses['tmux'];
-  const tmuxMissing = tmuxState?.status === 'missing';
+  const tmuxStatus = tmuxState?.status;
+  const tmuxMissing = tmuxStatus === 'missing';
+  const tmuxAvailable = tmuxStatus === 'available';
+  const tmuxErrored = tmuxStatus === 'error';
   const installingTmux = appState.dependencies.isInstalling('tmux');
   const handleInstallTmux = useCallback(() => {
     void installTmux();
   }, [installTmux]);
+
+  const [rechecking, setRechecking] = useState(false);
+  const handleRecheck = useCallback(() => {
+    setRechecking(true);
+    void appState.dependencies.probeAll().finally(() => setRechecking(false));
+  }, []);
 
   return (
     <SettingRow
@@ -221,11 +231,38 @@ export const EnableTmuxRow: React.FC = observer(() => {
       description={
         <span className="flex flex-col gap-1">
           <span>{t('settings.tasks.enableTmuxDescription')}</span>
+          {tmuxAvailable && (
+            <span className="text-emerald-500">
+              {tmuxState?.version
+                ? t('settings.tasks.tmuxAvailableWithVersion', { version: tmuxState.version })
+                : t('settings.tasks.tmuxAvailable')}
+            </span>
+          )}
+          {tmuxAvailable && tmuxState?.path && (
+            <span className="font-mono text-xs break-all text-foreground-passive">
+              {t('settings.tasks.tmuxPathLabel', { path: tmuxState.path })}
+            </span>
+          )}
           {tmuxMissing && <span className="text-amber-500">{t('settings.tasks.tmuxMissing')}</span>}
+          {tmuxErrored && (
+            <span className="text-destructive">
+              {t('settings.tasks.tmuxError', { error: tmuxState?.error ?? '' })}
+            </span>
+          )}
         </span>
       }
       control={
         <>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={rechecking}
+            onClick={handleRecheck}
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', rechecking && 'animate-spin')} />
+            {rechecking ? t('settings.tasks.recheckingTmux') : t('settings.tasks.recheckTmux')}
+          </Button>
           {tmuxMissing && (
             <Button
               type="button"

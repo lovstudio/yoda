@@ -577,6 +577,12 @@
       "tmuxNotDetectedAfterInstall": "安装后仍未检测到 tmux。",
       "tmuxNoInstallCommand": "当前系统没有可用的自动 tmux 安装命令。",
       "tmuxInstallFailed": "安装 tmux 失败",
+      "tmuxAvailable": "tmux 可用。",
+      "tmuxAvailableWithVersion": "tmux {{version}} 可用。",
+      "tmuxPathLabel": "路径：{{path}}",
+      "tmuxError": "tmux 检测失败：{{error}}",
+      "recheckTmux": "重新检测",
+      "recheckingTmux": "检测中…",
       "preArchiveCommand": "归档前调用 skill",
       "preArchiveCommandDescription": "设置后，归档任务或会话前会先把这个 skill 或命令发送到目标会话，并等 agent 完成再执行归档。留空则直接归档。",
       "preArchiveCommandPlaceholder": "例如 lovstudio-git-commit-with-context"

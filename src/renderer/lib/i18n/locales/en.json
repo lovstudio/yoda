@@ -577,6 +577,12 @@
       "tmuxNotDetectedAfterInstall": "tmux was not detected after installation.",
       "tmuxNoInstallCommand": "No automatic tmux install command is available for this system.",
       "tmuxInstallFailed": "Failed to install tmux",
+      "tmuxAvailable": "tmux is available.",
+      "tmuxAvailableWithVersion": "tmux {{version}} is available.",
+      "tmuxPathLabel": "Path: {{path}}",
+      "tmuxError": "tmux check failed: {{error}}",
+      "recheckTmux": "Re-check",
+      "recheckingTmux": "Checking…",
       "preArchiveCommand": "Pre-archive skill",
       "preArchiveCommandDescription": "When set, archiving a task or session first sends this skill or command to the target session and waits for the agent to finish. Leave empty to archive immediately.",
       "preArchiveCommandPlaceholder": "e.g. lovstudio-git-commit-with-context"
