@@ -89,7 +89,7 @@ interface WorkspaceContentLayoutProps {
 export function WorkspaceContentLayout({ titlebarSlot, mainPanel }: WorkspaceContentLayoutProps) {
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
-      {titlebarSlot}
+      <div className="select-none">{titlebarSlot}</div>
       <div className="flex-1 overflow-hidden bg-background text-foreground">
         <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
           {mainPanel}
