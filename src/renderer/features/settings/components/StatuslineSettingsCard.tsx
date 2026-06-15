@@ -8,8 +8,8 @@ import { Input } from '@renderer/lib/ui/input';
 
 /**
  * Manages the candidate statusline templates. The active statusline is
- * switched per working directory from a session's Harness → Statusline blind,
- * which writes the chosen command into Claude Code's settings file.
+ * switched from a session's Harness → Statusline blind against the project
+ * root, which writes the chosen command into Claude Code's settings file.
  */
 const StatuslineSettingsCard: React.FC = () => {
   const { t } = useTranslation();

@@ -32,6 +32,7 @@ import type {
   CodexSessionContext,
   ContextSkill,
 } from '@shared/conversations';
+import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
   ContextItem,
@@ -113,6 +114,8 @@ export const HarnessSection = observer(function HarnessSection({
 }) {
   const { t } = useTranslation();
   const provisioned = useProvisionedTask();
+  const statuslineCwd =
+    asMounted(getProjectStore(provisioned.projectId))?.data.path ?? provisioned.path;
   // Falls back to the task's most recent conversation when the active main-area
   // tab is a file/diff — the harness context must not vanish on tab switches.
   const conversation = getTaskMenuConversation(provisioned);
@@ -127,9 +130,11 @@ export const HarnessSection = observer(function HarnessSection({
   }
   if (id === 'statusline') {
     // Statusline is settings-file-based (no transcript needed) and currently
-    // Claude-only — Codex has no statusline support.
+    // Claude-only — Codex has no statusline support. Resolve against the
+    // project root rather than the task worktree so the status bar is not owned
+    // by a single task.
     return runtimeId === 'claude' ? (
-      <StatuslineSection cwd={provisioned.path} />
+      <StatuslineSection cwd={statuslineCwd} />
     ) : (
       <HarnessPlaceholder id={id}>{t('tasks.panel.contextUnsupported')}</HarnessPlaceholder>
     );

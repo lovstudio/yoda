@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { useProvisionedTaskOrNull } from '@renderer/features/tasks/task-view-context';
 
 /**
- * Reads/writes a persisted open state for an ad-hoc disclosure (a `<details>`,
+ * Reads/writes runtime open state for an ad-hoc disclosure (a `<details>`,
  * a group toggle, …). The id must be stable across renders so the remembered
- * state reattaches after a remount. `defaultOpen` is used until the user has
- * explicitly toggled this id. Outside a task view (no ProvisionedTaskProvider,
- * e.g. the composer popover) the state falls back to plain component state.
+ * state reattaches during the current app session. `defaultOpen` is used until
+ * the user has explicitly toggled this id. Outside a task view (no
+ * ProvisionedTaskProvider, e.g. the composer popover) the state falls back to
+ * plain component state.
  */
 export function usePersistedDisclosure(
   id: string,
@@ -24,9 +25,9 @@ export function usePersistedDisclosure(
 }
 
 /**
- * A `<details>` whose open state persists across remounts via the task sidebar
- * view-state. Drop-in for native `<details>` — same className/children, but
- * controlled by a stable `id`.
+ * A `<details>` whose open state survives remounts for the current app session.
+ * Drop-in for native `<details>` — same className/children, but controlled by a
+ * stable `id`.
  */
 export const PersistedDetails = observer(function PersistedDetails({
   id,

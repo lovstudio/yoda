@@ -56,7 +56,7 @@ export const SessionPanel = observer(function SessionPanel() {
   // matching blind so those entry points land on the right section — but only
   // on a genuine tab *transition*. Firing on mount (e.g. switching tasks, which
   // remounts this panel with a new `taskView`) would clobber the user's
-  // persisted blind choice with the active tab's default section.
+  // runtime blind choice with the active tab's default section.
   const activeTab = taskView.sidebarTab;
   const prevTabRef = useRef(activeTab);
   useEffect(() => {
@@ -67,8 +67,8 @@ export const SessionPanel = observer(function SessionPanel() {
     if (section) taskView.setSessionPanelOpenSectionIds([section]);
   }, [activeTab, taskView]);
 
-  // User-managed composition (session chip context menu → 管理章节): units
-  // render in the persisted order, hidden ones are skipped entirely.
+  // User-managed runtime composition (session chip context menu → 管理章节):
+  // units render in the current order, hidden ones are skipped entirely.
   const visibleUnits = taskSidebarPreferenceStore.sessionPanelUnitOrder.filter(
     (unit) => !taskSidebarPreferenceStore.sessionPanelHiddenUnits.includes(unit)
   );
