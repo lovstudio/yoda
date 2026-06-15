@@ -1,4 +1,17 @@
 {
+  "initialCommit": {
+    "title": "创建初始提交",
+    "reasonWorktreeMode": "该模式会让每个 agent 在各自独立的 worktree 中运行，需要一个基础提交作为分叉起点。",
+    "explanation": "当前仓库还没有任何提交。Yoda 将执行 `git add -A` 并创建一个初始提交（遵循 .gitignore）。",
+    "counting": "正在统计文件…",
+    "fileCount": "将提交的文件数",
+    "totalSize": "大致体积",
+    "sizeUnknown": "未知（远程）",
+    "previewFailed": "无法读取仓库信息。",
+    "manyFilesWarning": "文件数量较多——提交前请确认大目录（node_modules、构建产物、数据等）已写入 .gitignore。",
+    "confirm": "创建提交并继续",
+    "failed": "创建初始提交失败。"
+  },
   "appTabs": {
     "closeTab": "关闭标签页",
     "openInGlobalSidePane": "在全局侧边栏打开",

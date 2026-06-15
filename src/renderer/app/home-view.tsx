@@ -1470,6 +1470,11 @@ export const HomeComposer = observer(function HomeComposer({
           : runMode === 'brainstorm'
             ? hasSlotAgent(SPEC_PROMPT_KEY)
             : hasSlotAgent(NORMAL_PROMPT_KEY);
+  // A worktree-requiring mode on an unborn repo can't fork until the repo has a
+  // base commit. Rather than dead-disabling the button, we route submit through
+  // a modal that seeds the first commit, then proceeds.
+  const needsInitialCommit =
+    !!mounted && !!defaultBranch && modeRequiresWorktree && isUnborn && !!selectedProjectId;
   const canSubmit =
     !submitting &&
     modeHasAgents &&
@@ -1477,7 +1482,9 @@ export const HomeComposer = observer(function HomeComposer({
       ? !!targetProvisionedTask
       : modeCanRunWithoutProject
         ? !mounted || !!defaultBranch
-        : !!mounted && !!defaultBranch && (!modeRequiresWorktree || !isUnborn));
+        : !!mounted &&
+          !!defaultBranch &&
+          (!modeRequiresWorktree || !isUnborn || needsInitialCommit));
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || submitting) return;
@@ -2087,6 +2094,23 @@ export const HomeComposer = observer(function HomeComposer({
     updateDraft,
   ]);
 
+  const showInitialCommitModal = useShowModal('initialCommitModal');
+  // Single entry point for both the send button and Enter-to-submit. When a
+  // worktree mode needs a base commit first, divert to the modal and resume on
+  // confirm; otherwise submit straight through.
+  const submit = useCallback(() => {
+    if (!canSubmit) return;
+    if (needsInitialCommit && selectedProjectId) {
+      showInitialCommitModal({
+        projectId: selectedProjectId,
+        reason: t('initialCommit.reasonWorktreeMode'),
+        onSuccess: () => void handleSubmit(),
+      });
+      return;
+    }
+    void handleSubmit();
+  }, [canSubmit, needsInitialCommit, selectedProjectId, showInitialCommitModal, handleSubmit, t]);
+
   const applyPromptEdit = useCallback(
     (value: string, selection: TextSelection) => {
       const textarea = promptTextareaRef.current;
@@ -2399,7 +2423,7 @@ export const HomeComposer = observer(function HomeComposer({
 
         if (!e.shiftKey) {
           e.preventDefault();
-          if (canSubmit) void handleSubmit();
+          submit();
         }
       }
     },
@@ -2411,15 +2435,14 @@ export const HomeComposer = observer(function HomeComposer({
       applyPromptEdit,
       applyPromptEnterEdit,
       applyPromptTabEdit,
-      canSubmit,
       commitPathCompletion,
       commitSkillShortcut,
       effectiveSkillShortcutIndex,
       filteredSkillShortcutOptions,
-      handleSubmit,
       pathCompletionItems,
       pathCompletionOpen,
       skillShortcutMenuOpen,
+      submit,
     ]
   );
 
@@ -2716,7 +2739,7 @@ export const HomeComposer = observer(function HomeComposer({
                 type="button"
                 aria-label={t('home.submitAria')}
                 disabled={!canSubmit}
-                onClick={() => void handleSubmit()}
+                onClick={submit}
                 className={cn(
                   'flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-150',
                   canSubmit

@@ -224,6 +224,20 @@ export type RemoteBranchesPayload = {
   gitDefaultBranch: string;
 };
 
+/**
+ * What `git add -A` would stage for an unborn repo's first commit, so the UI can
+ * warn before turning a directory with (possibly huge, e.g. un-ignored
+ * node_modules) contents into a tracked initial commit.
+ */
+export type InitialCommitPreview = {
+  /** Untracked, non-ignored files that would be committed (respects .gitignore). */
+  fileCount: number;
+  /** Total bytes of those files. null when not computed (remote/SSH project). */
+  totalBytes: number | null;
+  /** True when totalBytes is extrapolated from a sample because fileCount was large. */
+  approximate: boolean;
+};
+
 /** @deprecated Use LocalBranchesPayload and RemoteBranchesPayload */
 export type BranchesPayload = {
   branches: (LocalBranch | RemoteBranch)[];

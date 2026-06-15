@@ -95,6 +95,28 @@ export const repositoryController = createRPCController({
     return ok();
   },
 
+  getInitialCommitPreview: async (projectId: string) => {
+    const project = projectManager.getProject(projectId);
+    if (!project) return err({ type: 'not_found' as const });
+    try {
+      return ok(await project.getInitialCommitPreview());
+    } catch (e) {
+      return err({ type: 'git_error' as const, message: String(e) });
+    }
+  },
+
+  createInitialCommit: async (projectId: string) => {
+    const project = projectManager.getProject(projectId);
+    if (!project) return err({ type: 'not_found' as const });
+    try {
+      await project.createInitialCommit();
+      events.emit(gitRefChangedChannel, { projectId, kind: 'local-refs' });
+      return ok();
+    } catch (e) {
+      return err({ type: 'git_error' as const, message: String(e) });
+    }
+  },
+
   fetchPrForReview: async (
     projectId: string,
     prNumber: number,

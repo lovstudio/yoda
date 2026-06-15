@@ -1,4 +1,4 @@
-import type { Branch, FetchError } from '@shared/git';
+import type { Branch, FetchError, InitialCommitPreview } from '@shared/git';
 import type { ProjectRemoteState } from '@shared/projects';
 import type { Result } from '@shared/result';
 import type { IExecutionContext } from '@main/core/execution-context/types';
@@ -118,6 +118,68 @@ export class ProjectProvider implements IDisposable {
 
   fetch(): Promise<Result<void, FetchError>> {
     return this.gitFetchService.fetch();
+  }
+
+  /**
+   * Preview what `git add -A` would commit for an unborn repo's first commit.
+   * Lets the UI warn before committing a directory that may contain a huge,
+   * un-ignored payload (e.g. node_modules). Size is sampled to stay bounded and
+   * is only computed for local projects (avoids thousands of SSH round-trips).
+   */
+  async getInitialCommitPreview(): Promise<InitialCommitPreview> {
+    const { stdout } = await this._ctx.exec('git', [
+      'ls-files',
+      '--others',
+      '--exclude-standard',
+      '-z',
+    ]);
+    const files = stdout.split('\0').filter(Boolean);
+    const fileCount = files.length;
+
+    if (!this._ctx.supportsLocalSpawn || fileCount === 0) {
+      return { fileCount, totalBytes: fileCount === 0 ? 0 : null, approximate: false };
+    }
+
+    const SAMPLE_CAP = 2000;
+    const sample = files.slice(0, SAMPLE_CAP);
+    const sizes = await Promise.all(
+      sample.map((path) =>
+        this.fs
+          .stat(path)
+          .then((entry) => entry?.size ?? 0)
+          .catch(() => 0)
+      )
+    );
+    const sampledBytes = sizes.reduce((sum, size) => sum + size, 0);
+    const approximate = fileCount > SAMPLE_CAP;
+    const totalBytes = approximate
+      ? Math.round((sampledBytes / sample.length) * fileCount)
+      : sampledBytes;
+    return { fileCount, totalBytes, approximate };
+  }
+
+  /**
+   * Seed an unborn repo with its first commit so worktree-based flows (compare,
+   * team, new-branch) can fork from it. Stages everything (respecting
+   * .gitignore) and commits; --allow-empty covers the case where every file is
+   * ignored. Falls back to a Yoda identity only when git has none configured.
+   */
+  async createInitialCommit(): Promise<void> {
+    await this._ctx.exec('git', ['add', '-A']);
+    const email = await this._ctx
+      .exec('git', ['config', 'user.email'])
+      .then((r) => r.stdout.trim())
+      .catch(() => '');
+    const identityArgs = email
+      ? []
+      : ['-c', 'user.name=Yoda', '-c', 'user.email=yoda@lovstudio.ai'];
+    await this._ctx.exec('git', [
+      ...identityArgs,
+      'commit',
+      '--allow-empty',
+      '-m',
+      'Initial commit',
+    ]);
   }
 
   async dispose(options: ProjectDisposeOptions = {}): Promise<void> {

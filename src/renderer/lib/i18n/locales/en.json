@@ -23,6 +23,19 @@
     "openFailed": "Open failed",
     "currentLabel": "{{label}} (current)"
   },
+  "initialCommit": {
+    "title": "Create initial commit",
+    "reasonWorktreeMode": "This mode runs each agent in its own isolated worktree, which needs a base commit to branch from.",
+    "explanation": "This repository has no commits yet. Yoda will run `git add -A` and create an initial commit (respecting .gitignore).",
+    "counting": "Counting files…",
+    "fileCount": "Files to commit",
+    "totalSize": "Approximate size",
+    "sizeUnknown": "Unknown (remote)",
+    "previewFailed": "Could not inspect the repository.",
+    "manyFilesWarning": "That's a lot of files — make sure large directories (node_modules, build output, data) are listed in .gitignore before committing.",
+    "confirm": "Create commit & continue",
+    "failed": "Failed to create the initial commit."
+  },
   "common": {
     "ok": "OK",
     "cancel": "Cancel",

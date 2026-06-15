@@ -7,6 +7,7 @@ import { IntegrationSetupModal } from '@renderer/features/integrations/integrati
 import { McpModal } from '@renderer/features/mcp/components/McpModal';
 import { AddProjectModal } from '@renderer/features/projects/components/add-project-modal/add-project-modal';
 import { ExpressCreateProjectModal } from '@renderer/features/projects/components/express-create-project-modal';
+import { InitialCommitModal } from '@renderer/features/projects/components/initial-commit-modal';
 import { ManageRunScriptsModal } from '@renderer/features/projects/components/manage-run-scripts-modal';
 import { ManageQuickActionsModal } from '@renderer/features/projects/components/overview-view/manage-quick-actions-modal';
 import { RenameProjectModal } from '@renderer/features/projects/components/rename-project-modal';
@@ -60,6 +61,7 @@ export const modalRegistry = {
   newSubtaskModal: createModal(NewSubtaskModal, { size: 'lg' }),
   addProjectModal: createModal(AddProjectModal),
   expressCreateProjectModal: createModal(ExpressCreateProjectModal, { size: 'xs' }),
+  initialCommitModal: createModal(InitialCommitModal, { size: 'sm' }),
   addSshConnModal: createModal(AddSshConnModal),
   changeProjectConnectionModal: createModal(ChangeProjectConnectionModal, { size: 'sm' }),
   githubDeviceFlowModal: createModal(GithubDeviceFlowModalOverlay, { size: 'sm' }),
