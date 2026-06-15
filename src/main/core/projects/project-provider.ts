@@ -121,12 +121,27 @@ export class ProjectProvider implements IDisposable {
   }
 
   /**
+   * `git init` the project directory when it is not yet a repository. Idempotent
+   * and non-destructive — a folder added without "Initialize git repository"
+   * (or one whose `.git` went missing) still needs a repo before it can be
+   * seeded with a first commit.
+   */
+  private async ensureGitRepository(): Promise<void> {
+    const inside = await this._ctx
+      .exec('git', ['rev-parse', '--is-inside-work-tree'])
+      .then((r) => r.stdout.trim() === 'true')
+      .catch(() => false);
+    if (!inside) await this._ctx.exec('git', ['init']);
+  }
+
+  /**
    * Preview what `git add -A` would commit for an unborn repo's first commit.
    * Lets the UI warn before committing a directory that may contain a huge,
    * un-ignored payload (e.g. node_modules). Size is sampled to stay bounded and
    * is only computed for local projects (avoids thousands of SSH round-trips).
    */
   async getInitialCommitPreview(): Promise<InitialCommitPreview> {
+    await this.ensureGitRepository();
     const { stdout } = await this._ctx.exec('git', [
       'ls-files',
       '--others',
@@ -165,6 +180,7 @@ export class ProjectProvider implements IDisposable {
    * ignored. Falls back to a Yoda identity only when git has none configured.
    */
   async createInitialCommit(): Promise<void> {
+    await this.ensureGitRepository();
     await this._ctx.exec('git', ['add', '-A']);
     const email = await this._ctx
       .exec('git', ['config', 'user.email'])

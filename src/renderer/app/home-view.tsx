@@ -1451,11 +1451,13 @@ export const HomeComposer = observer(function HomeComposer({
           : runMode === 'brainstorm'
             ? hasSlotAgent(SPEC_PROMPT_KEY)
             : hasSlotAgent(NORMAL_PROMPT_KEY);
-  // A worktree-requiring mode on an unborn repo can't fork until the repo has a
-  // base commit. Rather than dead-disabling the button, we route submit through
-  // a modal that seeds the first commit, then proceeds.
-  const needsInitialCommit =
-    !!mounted && !!defaultBranch && modeRequiresWorktree && isUnborn && !!selectedProjectId;
+  // A worktree-requiring mode on a repo without a base commit can't fork until
+  // one exists. This covers both an unborn repo (git init, no commit) and a
+  // plain folder that was never `git init`-ed — both surface as `isUnborn` with
+  // no resolvable `defaultBranch`. Rather than dead-disabling the button, route
+  // submit through a modal that seeds the first commit (creating the repo if
+  // needed), then proceeds.
+  const needsInitialCommit = !!mounted && modeRequiresWorktree && isUnborn && !!selectedProjectId;
   const canSubmit =
     !submitting &&
     modeHasAgents &&
@@ -1463,9 +1465,7 @@ export const HomeComposer = observer(function HomeComposer({
       ? !!targetProvisionedTask
       : modeCanRunWithoutProject
         ? !mounted || !!defaultBranch
-        : !!mounted &&
-          !!defaultBranch &&
-          (!modeRequiresWorktree || !isUnborn || needsInitialCommit));
+        : !!mounted && (needsInitialCommit || !!defaultBranch));
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || submitting) return;
@@ -1803,7 +1803,19 @@ export const HomeComposer = observer(function HomeComposer({
         return;
       }
 
-      if (!defaultBranch) return;
+      // `defaultBranch` is derived from the repository store, which is stale
+      // right after the initial-commit modal seeds a brand-new repo (git init +
+      // first commit emit a ref change the store hasn't applied yet). Resolve
+      // the fork base from a fresh read so worktree modes get a valid source
+      // branch instead of silently bailing here.
+      let baseDefaultBranch = defaultBranch;
+      if (!baseDefaultBranch) {
+        const local = await rpc.repository.getLocalBranches(mounted.data.id);
+        if (local.currentBranch) {
+          baseDefaultBranch = { type: 'local', branch: local.currentBranch };
+        }
+      }
+      if (!baseDefaultBranch) return;
 
       const existingNames = Array.from(mounted.taskManager.tasks.values(), (t) => t.data.name);
       const reservedNames = [...existingNames];
@@ -1835,12 +1847,12 @@ export const HomeComposer = observer(function HomeComposer({
           name: taskName,
           sourceBranch:
             args.strategyKind === 'new-branch'
-              ? (forkBaseBranch ?? defaultBranch)
+              ? (forkBaseBranch ?? baseDefaultBranch)
               : args.strategyKind === 'checkout-existing'
-                ? (inPlacePick ?? defaultBranch)
+                ? (inPlacePick ?? baseDefaultBranch)
                 : parentBranchName
                   ? { type: 'local', branch: parentBranchName }
-                  : defaultBranch,
+                  : baseDefaultBranch,
           strategy,
           parentTaskId: args.parentTaskId ?? parentTarget?.taskId,
           initialConversation: {
@@ -1891,7 +1903,7 @@ export const HomeComposer = observer(function HomeComposer({
           id: parentTaskId,
           projectId: mounted.data.id,
           name: reserveTaskName(`${baseName}-compare`),
-          sourceBranch: forkBaseBranch ?? defaultBranch,
+          sourceBranch: forkBaseBranch ?? baseDefaultBranch,
           strategy: { kind: 'no-worktree' },
           parentTaskId: parentTarget?.taskId,
         });
