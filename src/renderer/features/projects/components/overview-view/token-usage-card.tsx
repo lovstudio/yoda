@@ -1,5 +1,5 @@
 import { Archive, ArrowUpRight, ChartColumn, Info, Loader2, RefreshCw } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProjectUsage, TokenBuckets, UsageOverview } from '@shared/stats';
 import { useUsageOverview } from '@renderer/features/usage/useUsageOverview';
@@ -47,6 +47,19 @@ export function TokenUsageCard({ projectId }: { projectId: string }) {
   const { t } = useTranslation();
   const { data: overview, isLoading, isError, isFetching, refetch } = useUsageOverview(projectId);
 
+  // The mtime cache makes refetches near-instant, so the natural `isFetching`
+  // flash is too brief to perceive. Hold a spinning state for a minimum window
+  // so the click reads as acknowledged.
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    void Promise.allSettled([
+      refetch(),
+      new Promise((resolve) => window.setTimeout(resolve, 600)),
+    ]).finally(() => setRefreshing(false));
+  }, [refetch]);
+  const spinning = isFetching || refreshing;
+
   return (
     <section className="rounded-lg border border-border bg-background-elevated p-4">
       <header className="flex items-center justify-between mb-3">
@@ -69,13 +82,13 @@ export function TokenUsageCard({ projectId }: { projectId: string }) {
           )}
           <button
             type="button"
-            onClick={() => void refetch()}
-            disabled={isFetching}
+            onClick={handleRefresh}
+            disabled={spinning}
             title={t('usage.refresh')}
             aria-label={t('usage.refresh')}
             className="inline-flex shrink-0 text-foreground-passive transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <RefreshCw className={cn('size-3.5', isFetching && 'animate-spin')} />
+            <RefreshCw className={cn('size-3.5', spinning && 'animate-spin')} />
           </button>
         </div>
       </header>
