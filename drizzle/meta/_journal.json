@@ -225,6 +225,13 @@
       "when": 1781519843282,
       "tag": "0031_modern_stature",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1781553414973,
+      "tag": "0032_numerous_invaders",
+      "breakpoints": true
     }
   ]
 }

@@ -569,6 +569,106 @@ export const messages = sqliteTable(
   })
 );
 
+// ── Team Room (multi-agent group chat) ──────────────────────────────────────
+// A room is project+task-scoped: members are role-tagged conversations running
+// in the task's worktree, and the chat timeline is the messages between them
+// (human posts + agent hand-offs). The generic @-routing engine (RoomConductor)
+// is the generalization of the review orchestrator; `review-loop` is one preset.
+
+export const teamRooms = sqliteTable(
+  'team_rooms',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    /** Preset that seeded the room: 'review-loop' | 'freeform' | … */
+    preset: text('preset').notNull().default('freeform'),
+    /** 'active' | 'archived' */
+    status: text('status').notNull().default('active'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`)
+      .$onUpdate(() => new Date().toISOString()),
+  },
+  (table) => ({
+    projectIdIdx: index('idx_team_rooms_project_id').on(table.projectId),
+    taskIdIdx: index('idx_team_rooms_task_id').on(table.taskId),
+  })
+);
+
+export const roomMembers = sqliteTable(
+  'room_members',
+  {
+    id: text('id').primaryKey(),
+    roomId: text('room_id')
+      .notNull()
+      .references(() => teamRooms.id, { onDelete: 'cascade' }),
+    /** The member's live session; null until it first gets assigned work. */
+    conversationId: text('conversation_id').references(() => conversations.id, {
+      onDelete: 'set null',
+    }),
+    /** Stable @handle used for mention routing (unique within a room). */
+    handle: text('handle').notNull(),
+    displayName: text('display_name').notNull(),
+    /** 'lead' (the human) | a role label like 'implementer' | 'reviewer' | 'member'. */
+    role: text('role').notNull(),
+    /** Runtime the member's conversation spawns on (null for the human lead). */
+    runtime: text('runtime'),
+    /** Role system prompt, captured at member creation (mirrors reviewer_system_prompt). */
+    systemPrompt: text('system_prompt').notNull().default(''),
+    autoApprove: integer('auto_approve', { mode: 'boolean' }).notNull().default(false),
+    /** Identity accent key, resolved to a theme color in the renderer. */
+    accent: text('accent').notNull().default('slate'),
+    /** Last known runtime status mirror: 'idle' | 'thinking' | 'working' | 'awaiting' | 'done'. */
+    status: text('status').notNull().default('idle'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    roomIdIdx: index('idx_room_members_room_id').on(table.roomId),
+    roomHandleIdx: uniqueIndex('idx_room_members_room_handle').on(table.roomId, table.handle),
+  })
+);
+
+export const roomMessages = sqliteTable(
+  'room_messages',
+  {
+    id: text('id').primaryKey(),
+    roomId: text('room_id')
+      .notNull()
+      .references(() => teamRooms.id, { onDelete: 'cascade' }),
+    /** Authoring member; null = the human lead or a system message. */
+    authorMemberId: text('author_member_id').references(() => roomMembers.id, {
+      onDelete: 'set null',
+    }),
+    /** 'text' (human/plain) | 'handoff' (agent conclusion) | 'system' | 'verdict'. */
+    kind: text('kind').notNull().default('text'),
+    body: text('body').notNull(),
+    /** JSON array of @handles this message addresses (drives routing). */
+    mentions: text('mentions'),
+    /** Conversation id of the session that produced this message (for "open session"). */
+    sessionRef: text('session_ref'),
+    /** Optional preset verdict carried by the message: 'pass' | 'fail'. */
+    verdict: text('verdict'),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    roomIdIdx: index('idx_room_messages_room_id').on(table.roomId),
+    createdAtIdx: index('idx_room_messages_created_at').on(table.createdAt),
+  })
+);
+
 export const editorBuffers = sqliteTable(
   'editor_buffers',
   {
@@ -763,6 +863,30 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   }),
 }));
 
+export const teamRoomsRelations = relations(teamRooms, ({ one, many }) => ({
+  project: one(projects, { fields: [teamRooms.projectId], references: [projects.id] }),
+  task: one(tasks, { fields: [teamRooms.taskId], references: [tasks.id] }),
+  members: many(roomMembers),
+  messages: many(roomMessages),
+}));
+
+export const roomMembersRelations = relations(roomMembers, ({ one, many }) => ({
+  room: one(teamRooms, { fields: [roomMembers.roomId], references: [teamRooms.id] }),
+  conversation: one(conversations, {
+    fields: [roomMembers.conversationId],
+    references: [conversations.id],
+  }),
+  messages: many(roomMessages),
+}));
+
+export const roomMessagesRelations = relations(roomMessages, ({ one }) => ({
+  room: one(teamRooms, { fields: [roomMessages.roomId], references: [teamRooms.id] }),
+  author: one(roomMembers, {
+    fields: [roomMessages.authorMemberId],
+    references: [roomMembers.id],
+  }),
+}));
+
 export type SshConnectionRow = typeof sshConnections.$inferSelect;
 export type SshConnectionInsert = typeof sshConnections.$inferInsert;
 export type WorkspaceRow = typeof workspaces.$inferSelect;
@@ -787,3 +911,9 @@ export type AgentRow = typeof agents.$inferSelect;
 export type AgentInsert = typeof agents.$inferInsert;
 export type AppSecretRow = typeof appSecrets.$inferSelect;
 export type AppSecretInsert = typeof appSecrets.$inferInsert;
+export type TeamRoomRow = typeof teamRooms.$inferSelect;
+export type TeamRoomInsert = typeof teamRooms.$inferInsert;
+export type RoomMemberRow = typeof roomMembers.$inferSelect;
+export type RoomMemberInsert = typeof roomMembers.$inferInsert;
+export type RoomMessageRow = typeof roomMessages.$inferSelect;
+export type RoomMessageInsert = typeof roomMessages.$inferInsert;
