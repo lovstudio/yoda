@@ -26,6 +26,7 @@ export const RUNTIME_IDS = [
   'pi',
   'letta',
   'autohand',
+  'antigravity',
 ] as const;
 
 export type RuntimeId = (typeof RUNTIME_IDS)[number];
@@ -667,6 +668,23 @@ export const RUNTIMES: RuntimeDefinition[] = [
     alt: 'Autohand Code CLI',
     terminalOnly: true,
   },
+  {
+    id: 'antigravity',
+    name: 'Antigravity',
+    description:
+      "Google's Gemini-powered terminal coding agent with multi-file edits, subagents, and tool calling.",
+    docUrl: 'https://antigravity.google/docs/cli-getting-started',
+    installCommand: 'curl -fsSL https://antigravity.google/cli/install.sh | bash',
+    commands: ['agy'],
+    versionArgs: ['--version'],
+    cli: 'agy',
+    autoApproveFlag: '--dangerously-skip-permissions',
+    initialPromptFlag: '-i',
+    resumeFlag: '--continue',
+    icon: 'antigravity.png',
+    alt: 'Antigravity CLI',
+    terminalOnly: true,
+  },
 ];
 
 const OPENAI_API_ENV = [
@@ -889,6 +907,11 @@ export const RUNTIME_ACCOUNT_PROFILES = {
     officialSubscription: { supported: true },
     officialApi: { envVars: ['AUTOHAND_API_KEY'] },
     maas: { supported: true, providerHints: [] },
+  },
+  antigravity: {
+    officialSubscription: { supported: true },
+    officialApi: { envVars: GOOGLE_API_ENV },
+    maas: { supported: true, providerHints: ['google', 'gemini'] },
   },
 } satisfies Record<RuntimeId, RuntimeAccountProfile>;
 

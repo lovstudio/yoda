@@ -1,5 +1,6 @@
 import { type RuntimeId } from '@shared/runtime-registry';
 import ampLogo from '../../assets/images/ampcode.png';
+import antigravityLogo from '../../assets/images/antigravity.png';
 import atlassianLogo from '../../assets/images/atlassian.png';
 import augmentLogoSvg from '../../assets/images/Auggie.svg?raw';
 import autohandLogoSvg from '../../assets/images/autohand.svg?raw';
@@ -47,6 +48,7 @@ export const agentConfig: Record<RuntimeId, AgentInfo> = {
   droid: { name: 'Droid', logo: factoryLogoSvg, alt: 'Factory Droid', isSvg: true },
   pi: { name: 'Pi', logo: piLogo, alt: 'Pi CLI' },
   autohand: { name: 'Autohand Code', logo: autohandLogoSvg, alt: 'Autohand Code CLI', isSvg: true },
+  antigravity: { name: 'Antigravity', logo: antigravityLogo, alt: 'Antigravity CLI' },
   opencode: { name: 'OpenCode', logo: opencodeLogo, alt: 'OpenCode', invertInDark: true },
   hermes: { name: 'Hermes Agent', logo: hermesLogo, alt: 'Hermes Agent CLI' },
   auggie: { name: 'Auggie', logo: augmentLogoSvg, alt: 'Auggie CLI', isSvg: true },
