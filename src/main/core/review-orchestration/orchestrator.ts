@@ -181,7 +181,6 @@ class ReviewOrchestrator {
       }
       await this.update(row.id, { status: 'awaiting_impl', round });
       await this.sendImplementerFeedback(implSessionId, implSession, implRuntime, {
-        requirement: row.requirement,
         reviewFeedback: review.result.feedback,
       });
     }
@@ -263,7 +262,7 @@ class ReviewOrchestrator {
     sessionId: string,
     session: SessionKey,
     runtime: RuntimeId,
-    args: { requirement: string; reviewFeedback: string }
+    args: { reviewFeedback: string }
   ): Promise<void> {
     await this.sendPrompt(sessionId, session, runtime, buildImplementerFeedbackPrompt(args));
   }
