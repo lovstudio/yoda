@@ -51,6 +51,9 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const autoExpandedActiveIdRef = useRef<string | null>(null);
+  // Last dndId we scrolled into view; gates the reveal effect so it fires on
+  // navigation / first mount but not on every background row refresh.
+  const lastScrolledTargetRef = useRef<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [taskProjection, setTaskProjection] = useState<TreeProjection | null>(null);
   const [expandedTaskGroupIds, setExpandedTaskGroupIds] = useState<Set<string>>(() => new Set());
@@ -138,7 +141,10 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     });
   }, [activeSidebarDndId, displayRows, expandedTaskGroupIds]);
 
-  // Scroll the active project/task into view when navigation or row layout changes.
+  // Scroll the active project/task into view when navigation changes, or when the
+  // active row first mounts (e.g. after expanding a truncated group). Guard on the
+  // target dndId so background row refreshes (which produce a fresh `renderRows`
+  // reference on every store update) don't yank the scroll position back.
   useEffect(() => {
     let targetProjectId: string | null = null;
     let targetTaskId: string | null = null;
@@ -150,7 +156,10 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
       targetProjectId = projectParams.projectId;
     }
 
-    if (!targetProjectId) return;
+    if (!targetProjectId) {
+      lastScrolledTargetRef.current = null;
+      return;
+    }
 
     if (targetTaskId) {
       const activeTask = getTaskStore(targetProjectId, targetTaskId);
@@ -163,7 +172,12 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
       ? toTaskDndId(targetProjectId, targetTaskId)
       : toProjectDndId(targetProjectId);
     const node = containerRef.current?.querySelector<HTMLElement>(`[data-sidebar-row="${dndId}"]`);
-    node?.scrollIntoView({ block: 'nearest' });
+    if (!node) return;
+    // Already aligned this target — a re-run here is just a row refresh, not a
+    // navigation or a newly-mounted node, so leave the user's scroll alone.
+    if (lastScrolledTargetRef.current === dndId) return;
+    lastScrolledTargetRef.current = dndId;
+    node.scrollIntoView({ block: 'nearest' });
   }, [currentView, taskParams.projectId, taskParams.taskId, projectParams.projectId, renderRows]);
 
   function toggleTaskGroupExpanded(groupId: string) {
