@@ -2,7 +2,7 @@ import { Eye, Loader2, Pencil } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { Activity, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { usePanelRef } from 'react-resizable-panels';
+import { usePanelRef, type Layout } from 'react-resizable-panels';
 import {
   getTaskManagerStore,
   getTaskStore,
@@ -10,7 +10,6 @@ import {
   taskViewKind,
 } from '@renderer/features/tasks/stores/task-selectors';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
-import { usePersistentPanelLayout } from '@renderer/lib/hooks/use-persistent-panel-layout';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
@@ -173,7 +172,7 @@ const TaskSetupRecovery = observer(function TaskSetupRecovery({
 });
 
 /**
- * Two bottom-drawer layouts, switched by the global `isBottomPanelFullWidth`
+ * Two bottom-drawer layouts, switched by the per-task `isBottomPanelFullWidth`
  * preference (toggle in the drawer's own strip):
  * - Full width: the outer split is vertical so the drawer spans the whole
  *   window (under the sidebar too); main|sidebar only occupies the upper region.
@@ -201,16 +200,23 @@ const ReadyTaskMainPanel = observer(function ReadyTaskMainPanel() {
   );
 });
 
+/**
+ * Per-task drawer height, kept in memory for the app session only. Like the
+ * sidebar width (`runtimeSidebarPx`) this is runtime UI state, but keyed by
+ * task so resizing one task's drawer never leaks into another's.
+ */
+const runtimeDrawerLayouts = new Map<string, Layout>();
+
 /** Vertical split: `children` on top, the (collapsible) bottom drawer below. */
 const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { taskId } = useTaskViewContext();
   const { taskView } = useProvisionedTask();
   const bottomPanelRef = usePanelRef();
   const [isHandleDragging, setIsHandleDragging] = useState(false);
-  const layout = usePersistentPanelLayout('task-main-vertical');
 
   useEffect(() => {
     const panel = bottomPanelRef.current;
@@ -227,7 +233,11 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
     <ResizablePanelGroup
       orientation="vertical"
       className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
-      {...layout}
+      id="task-main-vertical"
+      defaultLayout={runtimeDrawerLayouts.get(taskId)}
+      onLayoutChanged={(next) => {
+        runtimeDrawerLayouts.set(taskId, next);
+      }}
     >
       <ResizablePanel
         id="task-main-content"
@@ -258,6 +268,11 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
         className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
         data-yoda-animate={isHandleDragging ? 'false' : 'true'}
         onResize={() => {
+          // Only a user dragging the divider toggles the drawer. Programmatic
+          // resizes (mount, restore, store-driven expand/collapse) must not
+          // write back, or one task's restored geometry would clobber another's
+          // per-task open state.
+          if (!isHandleDragging) return;
           const wantOpen = !(bottomPanelRef.current?.isCollapsed() ?? false);
           if (taskView.isTerminalDrawerOpen !== wantOpen) {
             taskView.setTerminalDrawerOpen(wantOpen);

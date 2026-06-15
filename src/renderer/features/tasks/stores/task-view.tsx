@@ -282,7 +282,7 @@ export class TaskViewStore {
     });
   }
 
-  /** Bottom drawer chrome is a global preference shared across tasks. */
+  /** Bottom drawer chrome is per-task runtime state (see sidebarPrefs). */
   get isTerminalDrawerOpen(): boolean {
     return this.sidebarPrefs.isBottomPanelOpen;
   }
