@@ -77,6 +77,7 @@ import { initialConversationTitle } from '@renderer/features/tasks/conversations
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
 import { useRuntimeAutoApproveDefaults } from '@renderer/features/tasks/hooks/useRuntimeAutoApproveDefaults';
+import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { AgentSlotSelector } from '@renderer/lib/components/agent-slot/agent-slot-selector';
@@ -1657,6 +1658,10 @@ export const HomeComposer = observer(function HomeComposer({
           const first = launches[0];
           resetComposer();
           if (first) goToTask(compareProjectId, first.taskId);
+          // Tile every candidate side by side; the grid de-dupes the routed primary.
+          splitViewStore.replace(
+            launches.map((launch) => ({ projectId: compareProjectId, taskId: launch.taskId }))
+          );
           void Promise.allSettled(launches.map((launch) => launch.promise)).then(reportFailures);
           return;
         }
@@ -1929,6 +1934,10 @@ export const HomeComposer = observer(function HomeComposer({
         if (launches.length === 0) return;
         const first = launches[0];
         if (first) goToTask(mounted.data.id, first.taskId);
+        // Tile every candidate side by side; the grid de-dupes the routed primary.
+        splitViewStore.replace(
+          launches.map((launch) => ({ projectId: mounted.data.id, taskId: launch.taskId }))
+        );
         void Promise.allSettled([parentPromise, ...launches.map((l) => l.promise)]).then(
           reportFailures
         );
