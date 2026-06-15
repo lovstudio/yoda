@@ -9,7 +9,7 @@ export const REVIEW_MAX_ROUNDS = 3;
  * be missed (e.g. codex never writing `task_complete`), but the marker appears
  * in the PTY output regardless, so the orchestrator can advance on it alone.
  */
-export const REVIEW_RESULT_MARKER = /YODA_REVIEW_RESULT:\s*(PASS|FAIL)/i;
+export const REVIEW_RESULT_MARKER = /YODA_REVIEW_RESULT:[ \t]*(PASS|FAIL)\b/gi;
 
 export interface ReviewResult {
   /** True only when an explicit PASS marker is present. */
@@ -22,10 +22,14 @@ export interface ReviewResult {
 
 export function parseReviewResult(output: string): ReviewResult {
   const clean = stripTerminalControlSequences(output).trim();
-  const match = REVIEW_RESULT_MARKER.exec(clean);
+  // Take the LAST verdict: the reviewer is told to end its turn with the marker,
+  // so a match earlier in the buffer is at best a restated format and at worst a
+  // stale verdict. (The injected prompt uses a non-matching `<PASS|FAIL>`
+  // placeholder so it can't be mistaken for a real verdict in the first place.)
+  const last = [...clean.matchAll(REVIEW_RESULT_MARKER)].at(-1);
   return {
-    passed: match?.[1]?.toUpperCase() === 'PASS',
-    hasMarker: match !== null,
+    passed: last?.[1]?.toUpperCase() === 'PASS',
+    hasMarker: last !== undefined,
     feedback: clean.slice(-12_000),
   };
 }
@@ -45,12 +49,12 @@ export function buildReviewPrompt(args: {
       '',
       `Protocol:`,
       `- Do not modify files.`,
-      `- End your response with exactly one marker line:`,
-      `YODA_REVIEW_RESULT: PASS`,
-      `or`,
-      `YODA_REVIEW_RESULT: FAIL`,
-      '',
-      `If the result is FAIL, list concrete fixes for implementer agent A before the marker.`,
+      `- If there are issues, list concrete fixes for implementer agent A first.`,
+      `- Then end your response with a single status line, written exactly in this`,
+      `  format (replace <PASS|FAIL> with the literal word PASS or FAIL):`,
+      `  YODA_REVIEW_RESULT: <PASS|FAIL>`,
+      `  Use PASS only when the implementation fully meets the requirement;`,
+      `  otherwise use FAIL.`,
     ].join('\n')
   );
 }
