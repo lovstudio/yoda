@@ -4,7 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { TaskFinishControl } from '@renderer/features/tasks/finish-flow/finish-control';
 import { getTaskStore, taskViewKind } from '@renderer/features/tasks/stores/task-selectors';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useIsHostedTaskView,
+  useProvisionedTask,
+  useTaskViewContext,
+} from '@renderer/features/tasks/task-view-context';
 import { OpenInMenu } from '@renderer/lib/components/titlebar/open-in-menu';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
@@ -20,11 +24,12 @@ import { DevServerPills } from './components/dev-server-pills';
  */
 export const TaskTitlebar = observer(function TaskTitlebar() {
   const { projectId, taskId } = useTaskViewContext();
+  const hosted = useIsHostedTaskView();
   const taskStore = getTaskStore(projectId, taskId);
   const kind = taskViewKind(taskStore, projectId);
 
   if (kind !== 'ready') {
-    return <Titlebar />;
+    return <Titlebar hosted={hosted} />;
   }
 
   return null;
@@ -40,11 +45,13 @@ export const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
   const { t } = useTranslation();
   const provisionedTask = useProvisionedTask();
   const { taskView } = provisionedTask;
+  const hosted = useIsHostedTaskView();
   const projectStore = asMounted(getProjectStore(projectId));
   const isRemoteProject = projectStore?.data.type === 'ssh';
 
   return (
     <Titlebar
+      hosted={hosted}
       rightSlot={
         <div className="flex items-center gap-2">
           <DevServerPills projectId={projectId} taskId={taskId} />

@@ -8,7 +8,20 @@ import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 
-export function Titlebar({ leftSlot, rightSlot }: { leftSlot?: ReactNode; rightSlot?: ReactNode }) {
+export function Titlebar({
+  leftSlot,
+  rightSlot,
+  hosted = false,
+}: {
+  leftSlot?: ReactNode;
+  rightSlot?: ReactNode;
+  /**
+   * Hosted (non-primary, split-view extra) panes must not show the global
+   * AppTabStrip / nav cluster — those always reflect the routed task. The pane
+   * keeps only its own task controls (rightSlot) and stays draggable.
+   */
+  hosted?: boolean;
+}) {
   const { t } = useTranslation();
   const { setCollapsed, isLeftOpen } = useWorkspaceLayoutContext();
   return (
@@ -22,7 +35,7 @@ export function Titlebar({ leftSlot, rightSlot }: { leftSlot?: ReactNode; rightS
         {!isLeftOpen && <div className="[-webkit-app-region:no-drag]"></div>}
         <div className="flex w-full min-w-0 items-center">
           <div className="flex shrink-0 items-center justify-start [-webkit-app-region:no-drag]">
-            {!isLeftOpen && (
+            {!isLeftOpen && !hosted && (
               <>
                 <TooltipProvider delay={300}>
                   <Tooltip>
@@ -47,10 +60,10 @@ export function Titlebar({ leftSlot, rightSlot }: { leftSlot?: ReactNode; rightS
             )}
             {leftSlot}
           </div>
-          {/* App tabs share the titlebar row (browser model); blank space stays draggable. */}
-          <div className="min-w-0 flex-1 px-2">
-            <AppTabStrip />
-          </div>
+          {/* App tabs share the titlebar row (browser model); blank space stays
+              draggable. Hosted panes drop the global strip — they switch tabs
+              via their own sidebar — keeping only a draggable spacer. */}
+          <div className="min-w-0 flex-1 px-2">{hosted ? null : <AppTabStrip />}</div>
           <div className="flex shrink-0 items-center justify-end [-webkit-app-region:no-drag]">
             {rightSlot}
           </div>

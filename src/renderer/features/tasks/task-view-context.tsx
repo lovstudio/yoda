@@ -48,6 +48,13 @@ export function useProvisionedTask(): ProvisionedTask {
 interface TaskViewContext {
   projectId: string;
   taskId: string;
+  /**
+   * True when this task view is HOSTED as a non-primary pane (a split-view
+   * extra) rather than owning the global route + app-tab strip. Hosted panes
+   * render their own self-contained chrome and must not show the global
+   * AppTabStrip / nav cluster (which always reflect the routed task).
+   */
+  hosted: boolean;
 }
 
 const TaskViewContext = createContext<TaskViewContext | null>(null);
@@ -56,14 +63,18 @@ export const TaskViewWrapper = observer(function TaskViewWrapper({
   children,
   projectId,
   taskId,
+  hosted = false,
 }: {
   children: ReactNode;
   projectId: string;
   taskId: string;
+  hosted?: boolean;
 }) {
   return (
     <ProjectViewWrapper projectId={projectId}>
-      <TaskViewContext.Provider value={{ projectId, taskId }}>{children}</TaskViewContext.Provider>
+      <TaskViewContext.Provider value={{ projectId, taskId, hosted }}>
+        {children}
+      </TaskViewContext.Provider>
     </ProjectViewWrapper>
   );
 });
@@ -74,6 +85,11 @@ export function useTaskViewContext(): TaskViewContext {
     throw new Error('useTaskViewContext must be used within a TaskViewContextProvider');
   }
   return context;
+}
+
+/** True when rendered inside a hosted (non-primary, split-view extra) task pane. */
+export function useIsHostedTaskView(): boolean {
+  return useContext(TaskViewContext)?.hosted ?? false;
 }
 
 export function useTaskViewKind(): TaskViewKind {
