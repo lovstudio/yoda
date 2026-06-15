@@ -26,7 +26,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskWindowTabTarget } from '@shared/task-window';
 import { AppTabContextMenu } from '@renderer/app/app-tab-context-menu';
@@ -39,7 +39,6 @@ import {
 } from '@renderer/app/tab-drag';
 import type { ViewId } from '@renderer/app/view-registry';
 import {
-  getProjectSettingsStore,
   getProjectStore,
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
@@ -198,9 +197,10 @@ const PLUS_BUTTON_CLASS =
 
 /**
  * The strip's "+" in a project scope: a menu that opens the project's
- * non-overview pages (tasks/sessions/harness/docs/settings) as tabs — docs
- * only when configured — plus a shortcut to start a new task. Overview is the
- * fixed tab and pages already open are omitted.
+ * non-overview pages (tasks/sessions/harness/docs/settings) as tabs, plus a
+ * shortcut to start a new task. Overview is the fixed tab and pages already
+ * open are omitted. Docs is always offered — opening it unconfigured lands on
+ * the Docs page's empty state, which guides the user to configure a source.
  */
 const ProjectAddMenu = observer(function ProjectAddMenu({
   projectId,
@@ -211,14 +211,6 @@ const ProjectAddMenu = observer(function ProjectAddMenu({
 }) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
-  const settingsStore = getProjectSettingsStore(projectId);
-
-  useEffect(() => {
-    void settingsStore?.pageData.load();
-  }, [settingsStore]);
-
-  const docs = settingsStore?.settings?.docs;
-  const docsConfigured = Boolean(docs?.localPath?.trim() || docs?.cloudUrl?.trim());
 
   const openViews = new Set(
     appState.appTabs.visibleTabs
@@ -227,7 +219,7 @@ const ProjectAddMenu = observer(function ProjectAddMenu({
   );
 
   const candidates = PROJECT_PAGE_VIEWS.filter(
-    (view) => view !== 'overview' && !openViews.has(view) && (view !== 'docs' || docsConfigured)
+    (view) => view !== 'overview' && !openViews.has(view)
   );
 
   const addPageLabel = t('appTabs.addProjectPage');
