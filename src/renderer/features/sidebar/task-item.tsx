@@ -118,10 +118,13 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const branchName =
     provisionedTask?.workspace.git.branchName ??
     ('taskBranch' in task.data ? task.data.taskBranch : undefined);
-  // Compact branch mode tints a thin left rail with a stable per-branch hue
-  // (same branch → same color), so it carries info regardless of whether the
-  // user forks every task or never forks. See branchColor().
-  const branchRailColor = branchColor(branchName);
+  // Every create strategy except `no-worktree` gives the task its own branch
+  // (and worktree) and sets taskBranch; in-place tasks leave it unset. So
+  // taskBranch presence is exactly "this session is worktree-based" — the
+  // compact rail shows only for those, tinted by a stable per-branch hue
+  // (same branch → same color). In-place tasks get no rail.
+  const taskBranch = 'taskBranch' in task.data ? task.data.taskBranch : undefined;
+  const branchRailColor = taskBranch ? branchColor(taskBranch) : undefined;
   const project = getProjectStore(projectId);
   const projectName =
     project?.state === 'unregistered' ? projectId : (project?.displayName ?? projectId);
@@ -231,8 +234,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
             </span>
           )}
           {branchDisplay === 'compact' && branchRailColor && (
-            // A stable per-branch hue on a thin rail hugging the row's left
-            // edge: identical branches share a color, distinct branches differ.
+            // Worktree-based sessions get a thin left rail; in-place tasks
+            // don't. Its hue is stable per branch — identical branches share a
+            // color, distinct branches differ.
             <span
               aria-hidden
               title={branchName}

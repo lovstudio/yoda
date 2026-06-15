@@ -1,13 +1,11 @@
 /**
- * Stable per-branch accent color.
- *
- * Whether a task is a fork or sits on the trunk is a per-user habit (some
- * people are always forking, some never), so it can't carry information. A
- * branch's *identity* can: the same branch always gets the same hue, different
- * branches differ — useful in every workflow. These are data-keyed decorative
- * tints (like Linear/GitHub label colors), not semantic UI tokens, so a fixed
- * curated palette is intentional. Tones are muted and mid-lightness so they
- * read on both the light (near-white) and dark (near-black) sidebar.
+ * Stable per-branch accent color, used to tint the sidebar rail of
+ * worktree-based task sessions (the call site decides which tasks get one).
+ * The same branch always maps to the same hue, distinct branches differ. These
+ * are data-keyed decorative tints (like Linear/GitHub label colors), not
+ * semantic UI tokens, so a fixed curated palette is intentional. Tones are
+ * muted and mid-lightness so they read on both the light (near-white) and dark
+ * (near-black) sidebar.
  */
 const BRANCH_COLORS = [
   '#C4775E', // terracotta
