@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 /**
  * Boot screen — a terminal-native "kernel boot" splash shown while the app
@@ -16,6 +16,30 @@ const MINT_DIM = 'rgba(127, 224, 167, 0.45)';
 
 /** Minimum time the boot sequence stays up, so it never flashes. */
 const MIN_BOOT_MS = 1900;
+
+/** Set once the operator has crossed the boot gate at least once. After that,
+ *  later launches auto-enter when the animation finishes — the manual confirm
+ *  is a first-run beat, not a tax on every open. */
+const BOOT_ENTERED_KEY = 'yoda:boot-entered';
+
+function hasEnteredBefore(): boolean {
+  try {
+    return localStorage.getItem(BOOT_ENTERED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function markEntered(): void {
+  try {
+    localStorage.setItem(BOOT_ENTERED_KEY, 'true');
+  } catch {
+    // Private mode / disabled storage: degrade to always showing the gate.
+  }
+}
+
+/** Beat after the bar fills before an auto-enter, so the completion still reads. */
+const AUTO_ENTER_MS = 650;
 
 const WORDMARK = ['Y', 'O', 'D', 'A'];
 
@@ -159,6 +183,13 @@ export function BootScreen({ ready, onFinished }: BootScreenProps) {
   const [minElapsed, setMinElapsed] = useState(false);
   const [visibleLogs, setVisibleLogs] = useState(() => (reducedMotion ? BOOT_LOG.length : 0));
   const [exiting, setExiting] = useState(false);
+  // First run keeps the manual confirm gate; later launches auto-enter.
+  const [firstRun] = useState(() => !hasEnteredBefore());
+
+  const enter = useCallback(() => {
+    markEntered();
+    setExiting(true);
+  }, []);
 
   // Hold the splash for a minimum beat so a fast load doesn't strobe.
   useEffect(() => {
@@ -221,11 +252,18 @@ export function BootScreen({ ready, onFinished }: BootScreenProps) {
   useEffect(() => {
     if (!done || exiting) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') setExiting(true);
+      if (e.key === 'Enter') enter();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [done, exiting]);
+  }, [done, exiting, enter]);
+
+  // Returning operators skip the gate: auto-enter once the bar fills.
+  useEffect(() => {
+    if (!done || exiting || firstRun) return;
+    const t = setTimeout(enter, AUTO_ENTER_MS);
+    return () => clearTimeout(t);
+  }, [done, exiting, firstRun, enter]);
 
   return (
     <motion.div
@@ -464,11 +502,11 @@ export function BootScreen({ ready, onFinished }: BootScreenProps) {
         {/* Enter gate — fixed-height slot so the column doesn't shift when the
             bar completes and the operator confirmation appears. */}
         <div className="mt-8 flex h-16 flex-col items-center gap-2.5">
-          {done && (
+          {done && firstRun && (
             <>
               <motion.button
                 type="button"
-                onClick={() => setExiting(true)}
+                onClick={enter}
                 className="cursor-pointer rounded-sm border px-5 py-2 font-mono text-[11px] uppercase outline-none"
                 style={{
                   borderColor: MINT_DIM,
