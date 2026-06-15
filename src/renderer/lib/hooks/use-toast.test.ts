@@ -43,7 +43,7 @@ describe('toast', () => {
     await i18n.changeLanguage('en');
   });
 
-  it('adds a copy action to regular toasts by default', async () => {
+  it('does not add a copy action to non-error toasts', () => {
     toast({
       title: 'Saved',
       description: 'Project settings updated.',
@@ -51,11 +51,34 @@ describe('toast', () => {
 
     expect(mocks.sonnerToast).toHaveBeenCalledTimes(1);
     const options = mocks.sonnerToast.mock.calls[0][1] as ToastOptions;
+    expect(options.action).toBeUndefined();
+    expect(options.cancel).toBeUndefined();
+  });
+
+  it('keeps a custom action on a non-error toast without adding copy', () => {
+    const undo = vi.fn();
+
+    toast({
+      title: 'Task archived',
+      action: { label: 'Undo', onClick: undo },
+    });
+
+    expect(mocks.sonnerToast).toHaveBeenCalledTimes(1);
+    const options = mocks.sonnerToast.mock.calls[0][1] as ToastOptions;
+    expect(options.action?.label).toBe('Undo');
+    expect(options.cancel).toBeUndefined();
+  });
+
+  it('adds a copy action to error toasts', async () => {
+    toast.error('Something broke');
+
+    expect(mocks.sonnerToast.error).toHaveBeenCalledTimes(1);
+    const options = mocks.sonnerToast.error.mock.calls[0][1] as ToastOptions;
     expect(options.action?.label).toBe('Copy');
 
     await options.action?.onClick();
 
-    expect(mocks.writeText).toHaveBeenCalledWith('Saved\n\nProject settings updated.');
+    expect(mocks.writeText).toHaveBeenCalledWith('Something broke');
     expect(mocks.sonnerToast.success).toHaveBeenCalledWith('Copied');
   });
 
@@ -88,12 +111,13 @@ describe('toast', () => {
 
     toast({
       title: 'Push failed',
+      variant: 'destructive',
       action: { label: 'Retry', onClick: retry },
       debugInfo: 'git push failed',
     });
 
-    expect(mocks.sonnerToast).toHaveBeenCalledTimes(1);
-    const options = mocks.sonnerToast.mock.calls[0][1] as ToastOptions;
+    expect(mocks.sonnerToast.error).toHaveBeenCalledTimes(1);
+    const options = mocks.sonnerToast.error.mock.calls[0][1] as ToastOptions;
     expect(options.action?.label).toBe('Retry');
     expect(options.cancel?.label).toBe('Copy debug info');
 
@@ -104,10 +128,11 @@ describe('toast', () => {
   it('copies debug log arrays as newline-delimited text', async () => {
     toast({
       title: 'SSH failed',
+      variant: 'destructive',
       debugInfo: ['connecting', 'auth failed'],
     });
 
-    const options = mocks.sonnerToast.mock.calls[0][1] as ToastOptions;
+    const options = mocks.sonnerToast.error.mock.calls[0][1] as ToastOptions;
     await options.action?.onClick();
 
     expect(mocks.writeText).toHaveBeenCalledWith('SSH failed\n\nconnecting\nauth failed');

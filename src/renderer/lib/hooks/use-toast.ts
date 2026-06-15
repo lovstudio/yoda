@@ -23,9 +23,13 @@ type ToastCopyPayload = {
   debugInfo?: unknown;
 };
 
+// The copy action is only attached to error/destructive toasts — that is the
+// only place copying the message or debug info is useful. Success, loading and
+// neutral info toasts (including ones with their own action like "Undo") stay
+// clean.
 function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToast) {
   if (!isToastObject(input)) {
-    return sonnerToast(input, withCopyAction(externalOptions, { title: input }));
+    return sonnerToast(input, externalOptions);
   }
 
   const { title, description, variant, action, debugInfo } = input;
@@ -37,16 +41,15 @@ function toast(input: Toast | ToastDisplayContent, externalOptions?: ExternalToa
     options.action = { label: action.label, onClick: action.onClick };
   }
 
-  addCopyAction(options, { title, description, debugInfo });
-
   if (variant === 'destructive') {
+    addCopyAction(options, { title, description, debugInfo });
     return sonnerToast.error(title, options);
   }
   return sonnerToast(title ?? '', options);
 }
 
 toast.success = (message: ToastDisplayContent, options?: ExternalToast) =>
-  sonnerToast.success(message, withCopyAction(options, { title: message }));
+  sonnerToast.success(message, options);
 
 toast.error = (message: ToastDisplayContent, options?: ExternalToast) =>
   sonnerToast.error(
@@ -55,10 +58,7 @@ toast.error = (message: ToastDisplayContent, options?: ExternalToast) =>
   );
 
 toast.loading = (message: ToastDisplayContent, options?: ExternalToast) =>
-  sonnerToast.loading(
-    message,
-    withCopyAction(options, { title: message, description: options?.description })
-  );
+  sonnerToast.loading(message, options);
 
 toast.dismiss = sonnerToast.dismiss;
 
