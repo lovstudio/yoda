@@ -1,6 +1,6 @@
 import { Settings2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
@@ -50,6 +50,18 @@ export const ArchiveTaskWithNoteModal = observer(function ArchiveTaskWithNoteMod
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
+
+  // Autofocus the prefilled command textarea with the caret at the end (not
+  // position 0). Guarded so it only fires on the initial mount, otherwise the
+  // inline ref re-runs on every keystroke and yanks the caret to the end.
+  const commandFocusedRef = useRef(false);
+  const focusCommandAtEnd = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el || commandFocusedRef.current) return;
+    commandFocusedRef.current = true;
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }, []);
 
   const [note, setNote] = useState('');
   // Prefill the *complete* command the user will actually run: resolve the
@@ -102,11 +114,11 @@ export const ArchiveTaskWithNoteModal = observer(function ArchiveTaskWithNoteMod
             <Field>
               <FieldLabel>{t('tasks.archiveWithNote.skillLabel')}</FieldLabel>
               <Textarea
+                ref={focusCommandAtEnd}
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 placeholder={t('settings.tasks.preArchiveCommandPlaceholder')}
                 rows={3}
-                autoFocus
               />
               <FieldDescription>{t('tasks.archiveWithNote.skillDescription')}</FieldDescription>
             </Field>
