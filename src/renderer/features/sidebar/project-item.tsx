@@ -208,7 +208,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
       const taskIds = Array.from(mountedProject.taskManager.tasks.values()).flatMap((task) =>
         isRegistered(task) && !task.data.archivedAt ? [task.data.id] : []
       );
-      await Promise.all(taskIds.map((taskId) => archiveTask(taskId)));
+      await Promise.all(taskIds.map((taskId) => archiveTask(taskId, { suppressUndoToast: true })));
       if (currentView === 'task' && taskParams.projectId === projectId) {
         navigate('project', { projectId });
       }

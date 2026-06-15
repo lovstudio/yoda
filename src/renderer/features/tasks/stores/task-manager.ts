@@ -22,6 +22,7 @@ import type { ProjectSettingsStore } from '@renderer/features/projects/stores/pr
 import type { RepositoryStore } from '@renderer/features/projects/stores/repository-store';
 import { TASK_SIDEBAR_VIEW_STATE_KEY } from '@renderer/features/tasks/stores/task-sidebar-preferences';
 import { toast } from '@renderer/lib/hooks/use-toast';
+import i18n from '@renderer/lib/i18n';
 import { events, rpc } from '@renderer/lib/ipc';
 import { appState } from '@renderer/lib/stores/app-state';
 import { viewStateCache } from '@renderer/lib/stores/view-state-cache';
@@ -664,7 +665,12 @@ export class TaskManagerStore {
 
   async archiveTask(
     taskId: string,
-    options: { note?: string; skipPreCommand?: boolean; preArchiveCommand?: string } = {}
+    options: {
+      note?: string;
+      skipPreCommand?: boolean;
+      preArchiveCommand?: string;
+      suppressUndoToast?: boolean;
+    } = {}
   ): Promise<void> {
     const currentTask = this.tasks.get(taskId);
     if (!currentTask || !isRegistered(currentTask)) return;
@@ -694,9 +700,28 @@ export class TaskManagerStore {
           }
         }
       });
+      if (!options.suppressUndoToast) this.showArchiveUndoToast(taskId);
     } finally {
       for (const id of cascadeIds) this.setTaskArchiving(id, false);
     }
+  }
+
+  /** Brief toast after archiving, offering a one-click restore of the same task. */
+  private showArchiveUndoToast(taskId: string): void {
+    const toastId = toast.success(i18n.t('sidebar.taskArchived'), {
+      duration: 6000,
+      action: {
+        label: i18n.t('common.undo'),
+        onClick: () => {
+          toast.dismiss(toastId);
+          void this.restoreTask(taskId).catch((e: unknown) => {
+            toast.error(e instanceof Error ? e.message : String(e), {
+              description: i18n.t('sidebar.archiveTask'),
+            });
+          });
+        },
+      },
+    });
   }
 
   async archiveActiveTasks(): Promise<void> {
@@ -704,7 +729,9 @@ export class TaskManagerStore {
     const taskIds = Array.from(this.tasks.values()).flatMap((task) =>
       isRegistered(task) && !task.data.archivedAt ? [task.data.id] : []
     );
-    await Promise.all(taskIds.map((taskId) => this.archiveTask(taskId)));
+    await Promise.all(
+      taskIds.map((taskId) => this.archiveTask(taskId, { suppressUndoToast: true }))
+    );
   }
 
   async restoreTask(taskId: string): Promise<void> {

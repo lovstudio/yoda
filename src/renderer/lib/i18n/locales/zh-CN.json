@@ -43,6 +43,7 @@
     "no": "否",
     "confirm": "确认",
     "search": "搜索",
+    "undo": "撤销",
     "copy": "复制",
     "copied": "已复制",
     "copyFailed": "复制失败",
@@ -185,6 +186,7 @@
       "failed": "重命名项目失败"
     },
     "archiveTask": "归档任务",
+    "taskArchived": "任务已归档",
     "confirmArchive": "确认归档",
     "interruptPreArchive": "打断归档前 skill",
     "archiveTaskWithNote": "归档任务（附备注）…",
