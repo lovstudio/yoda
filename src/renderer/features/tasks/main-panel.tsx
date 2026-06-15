@@ -11,8 +11,6 @@ import {
 } from '@renderer/features/tasks/stores/task-selectors';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { usePersistentPanelLayout } from '@renderer/lib/hooks/use-persistent-panel-layout';
-import { rpc } from '@renderer/lib/ipc';
-import { viewStateCache } from '@renderer/lib/stores/view-state-cache';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
@@ -276,13 +274,7 @@ const SIDEBAR_MIN_PX = 280;
 const SIDEBAR_DEFAULT_PX = 360;
 /** Dragging the divider below this width collapses the sidebar. */
 const SIDEBAR_COLLAPSE_THRESHOLD_PX = 200;
-const SIDEBAR_PX_VIEW_STATE_KEY = 'task-sidebar-px';
-
-function loadSidebarPx(): number {
-  const saved = viewStateCache.peek(SIDEBAR_PX_VIEW_STATE_KEY);
-  const n = typeof saved === 'string' ? Number(saved) : NaN;
-  return Number.isFinite(n) && n >= SIDEBAR_MIN_PX ? Math.round(n) : SIDEBAR_DEFAULT_PX;
-}
+let runtimeSidebarPx = SIDEBAR_DEFAULT_PX;
 
 /**
  * Upper region: (titlebar + main column) | task sidebar.
@@ -305,7 +297,7 @@ const TaskUpperSplit = observer(function TaskUpperSplit({
   const { taskView } = useProvisionedTask();
   const containerRef = useRef<HTMLDivElement>(null);
   const sidebarElRef = useRef<HTMLDivElement>(null);
-  const [sidebarPx, setSidebarPx] = useState(loadSidebarPx);
+  const [sidebarPx, setSidebarPx] = useState(runtimeSidebarPx);
   const sidebarPxRef = useRef(sidebarPx);
   sidebarPxRef.current = sidebarPx;
   const dragRef = useRef<{ startX: number; startPx: number } | null>(null);
@@ -319,10 +311,9 @@ const TaskUpperSplit = observer(function TaskUpperSplit({
     if (!dragRef.current) return;
     dragRef.current = null;
     e.currentTarget.releasePointerCapture(e.pointerId);
-    // Hand the width back to React + persistence only on release.
+    // Hand the width back to React only on release; this is runtime UI state.
+    runtimeSidebarPx = sidebarPxRef.current;
     setSidebarPx(sidebarPxRef.current);
-    viewStateCache.set(SIDEBAR_PX_VIEW_STATE_KEY, String(sidebarPxRef.current));
-    void rpc.viewState.save(SIDEBAR_PX_VIEW_STATE_KEY, String(sidebarPxRef.current));
   };
 
   return (

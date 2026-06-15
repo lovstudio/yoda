@@ -1,5 +1,5 @@
 import { computed, makeAutoObservable, reaction, runInAction } from 'mobx';
-import type { BottomPanelTab, TaskSidebarViewSnapshot, TaskViewSnapshot } from '@shared/view-state';
+import type { BottomPanelTab, TaskViewSnapshot } from '@shared/view-state';
 import { TaskBrowserStore } from '@renderer/features/tasks/browser/browser-store';
 import type { ConversationManagerStore } from '@renderer/features/tasks/conversations/conversation-manager';
 import { DiffTabLifecycleStore } from '@renderer/features/tasks/diff-view/stores/diff-tab-lifecycle-store';
@@ -73,13 +73,8 @@ export class TaskViewStore {
   private readonly disposers: (() => void)[] = [];
   private readonly taskId: string;
 
-  constructor(
-    resources: TaskViewResources,
-    savedSnapshot?: TaskViewSnapshot,
-    sharedSidebarSnapshot?: TaskSidebarViewSnapshot
-  ) {
+  constructor(resources: TaskViewResources, savedSnapshot?: TaskViewSnapshot) {
     this.taskId = resources.taskId;
-    taskSidebarPreferenceStore.hydrate(sharedSidebarSnapshot ?? null, savedSnapshot ?? null);
     this.focusedRegion = savedSnapshot?.focusedRegion === 'bottom' ? 'bottom' : 'main';
     this.terminalsMgr = resources.terminals;
 

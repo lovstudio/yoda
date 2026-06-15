@@ -80,14 +80,14 @@ export type TaskBrowserSnapshot = {
 };
 
 export type TaskViewSnapshot = {
-  /** @deprecated Sidebar chrome is now stored globally in TaskSidebarViewSnapshot. */
+  /** @deprecated Sidebar chrome is runtime-only; legacy snapshots are ignored. */
   sidebarTab?: string;
-  /** @deprecated Sidebar chrome is now stored globally in TaskSidebarViewSnapshot. */
+  /** @deprecated Sidebar chrome is runtime-only; legacy snapshots are ignored. */
   isSidebarCollapsed?: boolean;
   focusedRegion: 'main' | 'bottom';
-  /** @deprecated Bottom drawer chrome is now stored globally in TaskSidebarViewSnapshot. */
+  /** @deprecated Bottom drawer chrome is runtime-only; legacy snapshots are ignored. */
   isTerminalDrawerOpen?: boolean;
-  /** @deprecated Bottom drawer chrome is now stored globally in TaskSidebarViewSnapshot. */
+  /** @deprecated Bottom drawer chrome is runtime-only; legacy snapshots are ignored. */
   bottomPanelTab?: BottomPanelTab;
   tabManager?: TabManagerSnapshot;
   /** The task's resident in-app browser card (current page + visit history). */
@@ -99,6 +99,7 @@ export type TaskViewSnapshot = {
   diffView?: DiffViewSnapshot;
 };
 
+/** Runtime-only task sidebar chrome. Do not persist without explicit UI affordances. */
 export type TaskSidebarViewSnapshot = {
   sidebarTab?: string;
   isSidebarCollapsed?: boolean;
