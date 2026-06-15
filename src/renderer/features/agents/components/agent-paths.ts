@@ -105,6 +105,8 @@ export function resolveAgentPaths(id: RuntimeId): AgentPaths {
       return { config: '~/.autohand' };
     case 'hermes':
       return { config: '~/.hermes' };
+    case 'antigravity':
+      return { config: '~/.antigravity' };
   }
 }
 

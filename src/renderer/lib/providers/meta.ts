@@ -1,4 +1,5 @@
 import ampcodeIcon from '@/assets/images/ampcode.png';
+import antigravityIcon from '@/assets/images/antigravity.png';
 import atlassianIcon from '@/assets/images/atlassian.png';
 import augmentcodeIcon from '@/assets/images/Auggie.svg?raw';
 import autohandIcon from '@/assets/images/autohand.svg?raw';
@@ -57,6 +58,7 @@ const ICONS: Record<string, string> = {
   'mistral.png': mistralIcon,
   'pi.png': piIcon,
   'autohand.svg': autohandIcon,
+  'antigravity.png': antigravityIcon,
 };
 
 export type AgentMeta = {
