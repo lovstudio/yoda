@@ -103,17 +103,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // column instead of pushing the name right.
   const hasRootToggle = hasChildren && treeDepth === 0;
   const branchDisplay = sidebarStore.taskBranchDisplay;
-  // Compact branch mode reserves the pl-8 icon column on EVERY variant (the
-  // suffix renders inside it), so labels line up at the same 32px offset
-  // across the projects list, the pinned strip, and the Drafts list.
   const taskIndentClass =
-    rowVariant === 'underProject'
-      ? hasRootToggle
-        ? undefined
-        : 'pl-8'
-      : branchDisplay === 'compact'
-        ? 'pl-8'
-        : 'pl-2';
+    rowVariant === 'underProject' ? (hasRootToggle ? undefined : 'pl-8') : 'pl-2';
 
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
@@ -126,14 +117,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const branchName =
     provisionedTask?.workspace.git.branchName ??
     ('taskBranch' in task.data ? task.data.taskBranch : undefined);
-  // Generated branches end in a 5-char random suffix (createTask:
-  // Math.random().toString(36).slice(2, 7)). The slug before it mirrors the
-  // task name shown right next to it, so compact mode renders only that
-  // suffix — the one part that distinguishes the branch. Non-generated
-  // branches (Linear, custom) fall back to their basename.
-  const compactBranchName = branchName
-    ? (/-([0-9a-z]{5})$/.exec(branchName)?.[1] ?? branchName.slice(branchName.lastIndexOf('/') + 1))
-    : undefined;
+  // Compact branch mode signals branch type with a colored left edge-bar:
+  // the project's default/main branch gets the accent color, task forks get a
+  // muted line. Until provisioned (or before the default branch resolves) the
+  // task is treated as a fork.
+  const isOnDefaultBranch = provisionedTask?.workspace.git.isOnDefaultBranch ?? false;
   const project = getProjectStore(projectId);
   const projectName =
     project?.state === 'unregistered' ? projectId : (project?.displayName ?? projectId);
@@ -242,28 +230,18 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               })}
             </span>
           )}
-          {branchDisplay === 'compact' && compactBranchName && (
-            // The suffix lives INSIDE the pl-8 icon column (same column as
-            // the project rows' chevron/icon), absolutely positioned so the
-            // label keeps its exact indent and stays aligned across rows and
-            // lists (projects list, pinned strip, Drafts). Parent rows reuse
-            // that column for the hover collapse chevron — the suffix fades
-            // out as the chevron fades in.
+          {branchDisplay === 'compact' && branchName && (
+            // A thin colored bar pinned to the row's left edge: accent for the
+            // project's default/main branch, a muted gray for task forks. It
+            // reads the branch type at a glance without spending row width.
             <span
               title={branchName}
               className={cn(
-                'pointer-events-none absolute inset-y-0 left-0 flex w-8 items-center justify-center overflow-hidden',
-                hasRootToggle && 'transition-opacity duration-150 group-hover/row:opacity-0',
+                'absolute inset-y-1 left-0.5 w-0.5 rounded-full',
+                isOnDefaultBranch ? 'bg-primary-button-background' : 'bg-border-2',
                 (isBootstrapping || isArchiving) && 'opacity-40'
               )}
-            >
-              {/* 8px keeps 5 mono chars (~24px) comfortably inside the
-                  32px column — at 9px the text nearly touched the row's
-                  rounded background edge. */}
-              <span className="truncate font-mono text-[8px] tracking-tight text-foreground-tertiary-passive">
-                {compactBranchName}
-              </span>
-            </span>
+            />
           )}
           <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
             <div className="flex min-w-0 items-center gap-1">

@@ -77,6 +77,7 @@ export class GitStore {
       isLoading: computed,
       error: computed,
       isBranchPublished: computed,
+      isOnDefaultBranch: computed,
       aheadCount: computed,
       behindCount: computed,
       branchName: computed,
@@ -155,6 +156,17 @@ export class GitStore {
   get isBranchPublished(): boolean {
     const name = this.branchName;
     return name ? this.repositoryStore.isBranchOnRemote(name) : false;
+  }
+
+  /**
+   * True when this workspace sits on the project's default/main branch rather
+   * than a task fork. Drives the sidebar's branch edge-bar accent color.
+   */
+  get isOnDefaultBranch(): boolean {
+    const name = this.branchName;
+    if (!name) return false;
+    const def = this.repositoryStore.defaultBranch;
+    return def ? name === def.branch : false;
   }
 
   /** Commits this workspace's branch is ahead of its upstream. */
