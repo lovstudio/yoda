@@ -60,7 +60,10 @@ export function InitialCommitModal({ projectId, reason, onSuccess, onClose }: Pr
     const result = await rpc.repository.createInitialCommit(projectId);
     setCommitting(false);
     if (!result.success) {
-      toast.error(t('initialCommit.failed'));
+      // Surface the underlying git error so failures are diagnosable instead of
+      // a generic "failed" toast (e.g. a missing git binary or a hook rejection).
+      const detail = 'message' in result.error ? result.error.message : undefined;
+      toast.error(detail ? `${t('initialCommit.failed')} ${detail}` : t('initialCommit.failed'));
       return;
     }
     onSuccess();
