@@ -37,6 +37,7 @@ import { skillsController } from './core/skills/controller';
 import { sshController } from './core/ssh/controller';
 import { statsController } from './core/stats/controller';
 import { taskController } from './core/tasks/controller';
+import { teamRoomController } from './core/team-rooms/controller';
 import { telemetryController } from './core/telemetry/controller';
 import { terminalsController } from './core/terminals/controller';
 import { updateController } from './core/updates/controller';
@@ -89,6 +90,7 @@ export const rpcRouter = createRPCRouter({
   viewState: viewStateController,
   search: searchController,
   reviewOrchestration: reviewOrchestrationController,
+  teamRooms: teamRoomController,
 });
 
 export type RpcRouter = typeof rpcRouter;
