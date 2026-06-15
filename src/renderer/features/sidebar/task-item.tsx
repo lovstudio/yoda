@@ -20,6 +20,7 @@ import {
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { Badge } from '@renderer/lib/ui/badge';
+import { branchColor } from '@renderer/utils/branch-color';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
 import { SidebarItemMiniButton, SidebarMenuRow } from './sidebar-primitives';
@@ -117,11 +118,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const branchName =
     provisionedTask?.workspace.git.branchName ??
     ('taskBranch' in task.data ? task.data.taskBranch : undefined);
-  // Compact branch mode flags only the exception: a task sitting on the
-  // project's default/main branch gets an accent left rail. Forks — the common
-  // case, where an always-on mark would be identical noise on every row — stay
-  // unmarked. Not provisioned / default unresolved counts as a fork.
-  const isOnDefaultBranch = provisionedTask?.workspace.git.isOnDefaultBranch ?? false;
+  // Compact branch mode tints a thin left rail with a stable per-branch hue
+  // (same branch → same color), so it carries info regardless of whether the
+  // user forks every task or never forks. See branchColor().
+  const branchRailColor = branchColor(branchName);
   const project = getProjectStore(projectId);
   const projectName =
     project?.state === 'unregistered' ? projectId : (project?.displayName ?? projectId);
@@ -230,15 +230,15 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               })}
             </span>
           )}
-          {branchDisplay === 'compact' && isOnDefaultBranch && (
-            // Accent rail hugging the row's left edge — the lone signal that
-            // this task lives on the project's default/main branch. Forks
-            // render nothing, so the rail stays meaningful instead of noisy.
+          {branchDisplay === 'compact' && branchRailColor && (
+            // A stable per-branch hue on a thin rail hugging the row's left
+            // edge: identical branches share a color, distinct branches differ.
             <span
               aria-hidden
               title={branchName}
+              style={{ backgroundColor: branchRailColor }}
               className={cn(
-                'absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-primary-button-background',
+                'absolute inset-y-1.5 left-0.5 w-[3px] rounded-full',
                 (isBootstrapping || isArchiving) && 'opacity-40'
               )}
             />
