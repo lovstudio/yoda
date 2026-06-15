@@ -114,7 +114,9 @@ export function InitialCommitModal({ projectId, reason, onSuccess, onClose }: Pr
         <Button variant="outline" onClick={onClose} disabled={committing}>
           {t('common.cancel')}
         </Button>
-        <Button onClick={() => void handleConfirm()} disabled={isPending || committing}>
+        {/* Stats load independently and never gate the action — the user can
+            create the commit without waiting for the count/size to finish. */}
+        <Button onClick={() => void handleConfirm()} disabled={committing}>
           {committing ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
