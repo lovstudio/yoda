@@ -47,7 +47,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/toolti
 import { cn } from '@renderer/utils/utils';
 import { SidebarPinnedTaskList } from './pinned-task-list';
 import { SidebarProjectlessTaskList } from './projectless-task-list';
-import { ProjectsGroupLabel, ProjectsSettingsMenu } from './projects-group-label';
+import { ProjectsGroupLabel } from './projects-group-label';
 import {
   SidebarContainer,
   SidebarContent,
@@ -232,10 +232,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
           <SidebarMenu>
             <div className="group/ws flex h-8 items-center gap-1 rounded-lg pr-1 text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary has-data-popup-open:bg-background-tertiary-1 has-data-popup-open:text-foreground-tertiary">
               <WorkspaceSwitcher />
-              <div className="relative shrink-0">
-                <ProjectsSettingsMenu />
-                <WorkspaceReviewBadge className="pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity group-hover/ws:opacity-0 group-has-data-popup-open/ws:opacity-0" />
-              </div>
+              <WorkspaceReviewBadge className="shrink-0" />
             </div>
             <div className="my-1 border-t border-border" />
             <SidebarMenuButton
