@@ -29,6 +29,15 @@ const POLL_MS = 1_500;
 const TURN_TIMEOUT_MS = 30 * 60_000;
 /** If the implementer is never seen running this soon, assume it already ran. */
 const IMPLEMENTER_GRACE_MS = 20_000;
+/**
+ * Floor for the gap between writing a (potentially large, bracketed-paste)
+ * prompt and writing the submit key. A runtime's registry delay can be 0 (e.g.
+ * Claude Code), which races the Enter ahead of the TUI finishing the paste — the
+ * prompt then sits unsent in the input box. Mirrors the image-attachment
+ * injector's PROMPT_SUBMIT_DELAY_MS, with extra margin since review feedback can
+ * be up to 12k chars.
+ */
+const SUBMIT_DELAY_FLOOR_MS = 300;
 
 type Row = typeof reviewOrchestrations.$inferSelect;
 
@@ -273,8 +282,8 @@ class ReviewOrchestrator {
     pty.write(payload);
     // Seed working so the next turn-wait observes a running session.
     agentSessionRuntimeStore.setStatus(session, 'working');
-    const submitDelay = getAgentCommandSubmitDelayMs(runtime);
-    if (submitDelay > 0) await new Promise((resolve) => setTimeout(resolve, submitDelay));
+    const submitDelay = Math.max(getAgentCommandSubmitDelayMs(runtime), SUBMIT_DELAY_FLOOR_MS);
+    await new Promise((resolve) => setTimeout(resolve, submitDelay));
     pty.write(getAgentCommandSubmitInput(runtime));
   }
 
