@@ -1,7 +1,9 @@
+import { stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
 import { iterateLines } from '@main/utils/text-lines';
 import { listClaudeSessionTranscriptPaths } from './claude-session-files';
+import { findClaudeTranscriptDir } from './claude-session-index';
 import {
   aggregateUsageEntries,
   makeUsageEntry,
@@ -23,12 +25,26 @@ import {
  * file, so per-file message-id dedupe stays sufficient (ccusage parity).
  */
 export const claudeUsageReader: TranscriptUsageReader = {
-  resolveTranscriptPaths: ({ cwd, conversationId }) => {
+  resolveTranscriptPaths: async ({ cwd, conversationId }) => {
+    // The cwd-derived slug is the fast path, but it misses when the session
+    // ran under a since-removed worktree (auto-merge prunes the worktree while
+    // the task stays active). Fall back to locating the transcript by id.
     const main = resolveClaudeTranscriptPath(cwd, conversationId);
-    return listClaudeSessionTranscriptPaths(dirname(main), conversationId);
+    if (await exists(main)) return listClaudeSessionTranscriptPaths(dirname(main), conversationId);
+    const dir = await findClaudeTranscriptDir(conversationId);
+    return dir ? listClaudeSessionTranscriptPaths(dir, conversationId) : [];
   },
   parseUsage: parseClaudeUsage,
 };
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function parseClaudeUsage(raw: string): SessionTokenUsage | null {
   const byMessage = new Map<string, UsageEntry>();
