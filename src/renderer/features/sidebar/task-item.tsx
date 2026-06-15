@@ -117,10 +117,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const branchName =
     provisionedTask?.workspace.git.branchName ??
     ('taskBranch' in task.data ? task.data.taskBranch : undefined);
-  // Compact branch mode signals branch type with a colored left edge-bar:
-  // the project's default/main branch gets the accent color, task forks get a
-  // muted line. Until provisioned (or before the default branch resolves) the
-  // task is treated as a fork.
+  // Compact branch mode flags only the exception: a task sitting on the
+  // project's default/main branch gets an accent left rail. Forks — the common
+  // case, where an always-on mark would be identical noise on every row — stay
+  // unmarked. Not provisioned / default unresolved counts as a fork.
   const isOnDefaultBranch = provisionedTask?.workspace.git.isOnDefaultBranch ?? false;
   const project = getProjectStore(projectId);
   const projectName =
@@ -230,15 +230,15 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               })}
             </span>
           )}
-          {branchDisplay === 'compact' && branchName && (
-            // A thin colored bar pinned to the row's left edge: accent for the
-            // project's default/main branch, a muted gray for task forks. It
-            // reads the branch type at a glance without spending row width.
+          {branchDisplay === 'compact' && isOnDefaultBranch && (
+            // Accent rail hugging the row's left edge — the lone signal that
+            // this task lives on the project's default/main branch. Forks
+            // render nothing, so the rail stays meaningful instead of noisy.
             <span
+              aria-hidden
               title={branchName}
               className={cn(
-                'absolute inset-y-1 left-0.5 w-0.5 rounded-full',
-                isOnDefaultBranch ? 'bg-primary-button-background' : 'bg-border-2',
+                'absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-primary-button-background',
                 (isBootstrapping || isArchiving) && 'opacity-40'
               )}
             />
