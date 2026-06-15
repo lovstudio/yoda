@@ -197,7 +197,7 @@ export const TaskList = observer(function TaskList() {
 
   const bulkArchive = () => {
     const ids = [...taskView.selectedIds];
-    ids.forEach((id) => void archiveTask(id));
+    ids.forEach((id) => void archiveTask(id, { suppressUndoToast: true }));
     clearSelection();
   };
 

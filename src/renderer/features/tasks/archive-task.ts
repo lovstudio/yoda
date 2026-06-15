@@ -11,6 +11,8 @@ type ArchiveTaskOptions = {
   skipPreCommand?: boolean;
   /** One-off pre-archive command override (user-edited in the archive dialog). */
   preArchiveCommand?: string;
+  /** Bulk callers set this to avoid spawning one undo toast per task. */
+  suppressUndoToast?: boolean;
 };
 
 type ArchiveConversationOptions = {
