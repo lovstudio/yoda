@@ -1485,6 +1485,11 @@
     "openSession": "open session",
     "hideSession": "hide session",
     "composerPlaceholder": "Message the room — @mention a teammate to assign a task…",
+    "intro": {
+      "title": "Team & roles",
+      "review": "An implement → review loop: the implementer builds, the reviewer checks, and they hand work back and forth until it's approved. @mention anyone to chime in.",
+      "freeform": "Open collaboration: @mention any teammate to delegate; they work in their own session and hand back when done."
+    },
     "preset": { "review": "Review loop", "freeform": "Freeform" },
     "mode": { "review": "Review loop", "freeform": "Freeform" },
     "taskExisting": "Existing task",

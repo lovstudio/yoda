@@ -1485,6 +1485,11 @@
     "openSession": "查看 session",
     "hideSession": "收起 session",
     "composerPlaceholder": "在房间里发言——@ 某个成员给它派活…",
+    "intro": {
+      "title": "团队与分工",
+      "review": "实现 → 评审循环：implementer 实现、reviewer 检查，二者来回交接直到通过。@ 任何人都可以插话。",
+      "freeform": "自由协作：@ 任意队友派活，TA 在自己的会话里推进、完成后交接回来。"
+    },
     "preset": { "review": "评审循环", "freeform": "自由" },
     "mode": { "review": "评审循环", "freeform": "自由" },
     "taskExisting": "已有任务",

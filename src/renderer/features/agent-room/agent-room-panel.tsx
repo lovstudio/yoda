@@ -1,4 +1,4 @@
-import { MessagesSquare, Plus, Send, Sparkles, TerminalSquare } from 'lucide-react';
+import { MessagesSquare, Plus, Send, Sparkles, TerminalSquare, Users } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -155,6 +155,7 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <TeamIntroCard agents={agents} preset={snapshot.room.preset} />
             {snapshot.messages.map((msg) => (
               <MessageRow
                 key={msg.id}
@@ -181,6 +182,44 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
     </section>
   );
 });
+
+function TeamIntroCard({
+  agents,
+  preset,
+}: {
+  agents: RoomMember[];
+  preset: RoomSnapshot['room']['preset'];
+}) {
+  const { t } = useTranslation();
+  const desc =
+    preset === 'review-loop' ? t('agentRoom.intro.review') : t('agentRoom.intro.freeform');
+  return (
+    <div className="mb-4 rounded-xl border border-border bg-background-1 p-4">
+      <div className="mb-1.5 flex items-center gap-2">
+        <Users className="size-4 text-primary" />
+        <span className="text-sm font-semibold">{t('agentRoom.intro.title')}</span>
+      </div>
+      <p className="mb-3 text-xs leading-relaxed text-foreground-muted">{desc}</p>
+      <div className="flex flex-col gap-1.5">
+        {agents.map((m) => (
+          <div key={m.id} className="flex items-center gap-2.5">
+            <div
+              className={cn(
+                'flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold',
+                ACCENT_AVATAR[m.accent]
+              )}
+            >
+              {monogram(m.displayName)}
+            </div>
+            <span className="text-sm font-medium">{m.displayName}</span>
+            <span className="text-xs text-foreground-muted">{m.role}</span>
+            <span className="ml-auto font-mono text-[10px] text-foreground-muted">@{m.handle}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function MessageRow({
   message,
@@ -279,10 +318,14 @@ const Composer = observer(function Composer({ members }: { members: RoomMember[]
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const query = value.match(/@([a-z0-9_-]*)$/i)?.[1]?.toLowerCase() ?? null;
+  const mentionable = [
+    { handle: 'all', displayName: 'Everyone', accent: 'slate' as const },
+    ...members
+      .filter((m) => m.role !== 'lead')
+      .map((m) => ({ handle: m.handle, displayName: m.displayName, accent: m.accent })),
+  ];
   const suggestions =
-    query !== null
-      ? members.filter((m) => m.role !== 'lead' && m.handle.toLowerCase().startsWith(query))
-      : [];
+    query !== null ? mentionable.filter((s) => s.handle.toLowerCase().startsWith(query)) : [];
 
   const pick = (handle: string) => {
     setValue((v) => v.replace(/@[a-z0-9_-]*$/i, `@${handle} `));
@@ -304,7 +347,7 @@ const Composer = observer(function Composer({ members }: { members: RoomMember[]
         <div className="absolute bottom-full left-5 mb-2 w-64 overflow-hidden rounded-lg border border-border bg-background-2 shadow-lg">
           {suggestions.map((m, i) => (
             <button
-              key={m.id}
+              key={m.handle}
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
