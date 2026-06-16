@@ -1491,7 +1491,8 @@
     "handoff": "交接",
     "openSession": "查看 session",
     "hideSession": "收起 session",
-    "composerPlaceholder": "在房间里发言——@ 某个成员给它派活…",
+    "composerPlaceholder": "在房间里发言——@ 某个成员派活，或 /命令…",
+    "cmd": { "stop": "打断所有正在运行的成员" },
     "intro": {
       "title": "团队与分工",
       "review": "实现 → 评审循环：implementer 实现、reviewer 检查，二者来回交接直到通过。@ 任何人都可以插话。",

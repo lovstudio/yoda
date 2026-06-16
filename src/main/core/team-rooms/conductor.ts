@@ -63,6 +63,13 @@ type ReviewWatch = {
   onFinish: (verdict?: { passed: boolean; feedback: string }) => void;
 };
 
+/** Keep room chat readable — full agent output stays one click away in its session. */
+const CHAT_FEEDBACK_MAX = 800;
+function clip(text: string, max = CHAT_FEEDBACK_MAX): string {
+  const t = text.trim();
+  return t.length > max ? `${t.slice(0, max).trimEnd()}…` : t;
+}
+
 function mapStatus(s: AgentSessionRuntimeStatus): MemberStatus {
   switch (s) {
     case 'working':
@@ -440,18 +447,21 @@ class RoomConductor {
         kind: 'handoff',
         body: `@${reviewer.handle} ${REVIEW_REQUEST}`,
         mentions: [reviewer.handle.toLowerCase()],
+        sessionRef: leader.conversationId,
       });
       return;
     }
 
     if (finished.id === reviewer.id) {
+      const note = clip(verdict?.feedback ?? '');
       if (verdict?.passed) {
         await postMessage({
           roomId,
           authorMemberId: reviewer.id,
           kind: 'handoff',
-          body: `@you Review passed.${verdict.feedback ? `\n\n${verdict.feedback}` : ''}`,
+          body: `@you Review passed.${note ? `\n\n${note}` : ''}`,
           mentions: ['you'],
+          sessionRef: reviewer.conversationId,
         });
         await postMessage({
           roomId,
@@ -461,14 +471,13 @@ class RoomConductor {
         });
         return;
       }
-      const fixes =
-        verdict?.feedback?.trim() || 'Re-check the implementation against the requirement.';
       await postMessage({
         roomId,
         authorMemberId: reviewer.id,
         kind: 'handoff',
-        body: `@${leader.handle} ${fixes}`,
+        body: `@${leader.handle} ${note || 'Re-check the implementation against the requirement.'}`,
         mentions: [leader.handle.toLowerCase()],
+        sessionRef: reviewer.conversationId,
       });
     }
   }
@@ -498,6 +507,7 @@ export async function handleTeamAt(
     kind: 'handoff',
     body: message.trim() || '(no message)',
     mentions,
+    sessionRef: found.member.conversationId,
   });
 }
 
@@ -515,5 +525,6 @@ export async function handleTeamStatus(conversationId: string, message: string):
     kind: 'text',
     body: message.trim(),
     mentions: [],
+    sessionRef: found.member.conversationId,
   });
 }

@@ -1491,7 +1491,8 @@
     "handoff": "hand-off",
     "openSession": "open session",
     "hideSession": "hide session",
-    "composerPlaceholder": "Message the room — @mention a teammate to assign a task…",
+    "composerPlaceholder": "Message the room — @mention a teammate, or /command…",
+    "cmd": { "stop": "Interrupt all running agents" },
     "intro": {
       "title": "Team & roles",
       "review": "An implement → review loop: the implementer builds, the reviewer checks, and they hand work back and forth until it's approved. @mention anyone to chime in.",

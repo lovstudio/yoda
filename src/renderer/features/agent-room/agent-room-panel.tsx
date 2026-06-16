@@ -213,7 +213,11 @@ function TeamIntroCard({
             </div>
             <span className="text-sm font-medium">{m.displayName}</span>
             <span className="text-xs text-foreground-muted">{m.role}</span>
-            <span className="ml-auto font-mono text-[10px] text-foreground-muted">@{m.handle}</span>
+            <span className="ml-auto flex items-center gap-1 text-[10px] text-foreground-muted">
+              <span className={cn('size-1.5 rounded-full', STATUS_DOT[m.status])} />
+              {STATUS_LABEL[m.status]}
+            </span>
+            <span className="font-mono text-[10px] text-foreground-muted">@{m.handle}</span>
           </div>
         ))}
       </div>
@@ -310,6 +314,16 @@ function renderBody(body: string, byHandle: Map<string, RoomMember>) {
   });
 }
 
+type MentionItem = {
+  kind: 'mention';
+  handle: string;
+  displayName: string;
+  accent: RoomMember['accent'];
+  status: RoomMember['status'] | null;
+};
+type CommandItem = { kind: 'command'; name: string; label: string; desc: string };
+type SuggestItem = MentionItem | CommandItem;
+
 const Composer = observer(function Composer({ members }: { members: RoomMember[] }) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
@@ -317,18 +331,52 @@ const Composer = observer(function Composer({ members }: { members: RoomMember[]
   const [sel, setSel] = useState(0);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  const query = value.match(/@([a-z0-9_-]*)$/i)?.[1]?.toLowerCase() ?? null;
-  const mentionable = [
-    { handle: 'all', displayName: 'Everyone', accent: 'slate' as const },
-    ...members
-      .filter((m) => m.role !== 'lead')
-      .map((m) => ({ handle: m.handle, displayName: m.displayName, accent: m.accent })),
-  ];
-  const suggestions =
-    query !== null ? mentionable.filter((s) => s.handle.toLowerCase().startsWith(query)) : [];
+  const commands: CommandItem[] = useMemo(
+    () => [{ kind: 'command', name: 'stop', label: '/stop', desc: t('agentRoom.cmd.stop') }],
+    [t]
+  );
+  const mentionable: MentionItem[] = useMemo(
+    () => [
+      { kind: 'mention', handle: 'all', displayName: 'Everyone', accent: 'slate', status: null },
+      ...members
+        .filter((m) => m.role !== 'lead')
+        .map(
+          (m): MentionItem => ({
+            kind: 'mention',
+            handle: m.handle,
+            displayName: m.displayName,
+            accent: m.accent,
+            status: m.status,
+          })
+        ),
+    ],
+    [members]
+  );
 
-  const pick = (handle: string) => {
-    setValue((v) => v.replace(/@[a-z0-9_-]*$/i, `@${handle} `));
+  // A leading "/" (no space yet) → command palette; a trailing "@token" → mentions.
+  const commandQuery = /^\/[a-z0-9]*$/i.test(value) ? value.slice(1).toLowerCase() : null;
+  const mentionQuery =
+    commandQuery === null ? (value.match(/@([a-z0-9_-]*)$/i)?.[1]?.toLowerCase() ?? null) : null;
+  const suggestions: SuggestItem[] =
+    commandQuery !== null
+      ? commands.filter((c) => c.name.startsWith(commandQuery))
+      : mentionQuery !== null
+        ? mentionable.filter((m) => m.handle.toLowerCase().startsWith(mentionQuery))
+        : [];
+
+  const isCommand = (name: string) => commands.some((c) => c.name === name);
+  const runCommand = (name: string) => {
+    if (name === 'stop') void agentRoomStore.stopRoom();
+    setValue('');
+    setSuggestOpen(false);
+  };
+
+  const accept = (item: SuggestItem) => {
+    if (item.kind === 'command') {
+      runCommand(item.name);
+      return;
+    }
+    setValue((v) => v.replace(/@[a-z0-9_-]*$/i, `@${item.handle} `));
     setSuggestOpen(false);
     taRef.current?.focus();
   };
@@ -336,38 +384,65 @@ const Composer = observer(function Composer({ members }: { members: RoomMember[]
   const send = () => {
     const body = value.trim();
     if (!body) return;
+    if (body.startsWith('/')) {
+      const name = body.slice(1).split(/\s+/)[0].toLowerCase();
+      if (isCommand(name)) {
+        runCommand(name);
+        return;
+      }
+      // Unknown slash text (e.g. a file path) — fall through and post it.
+    }
     setValue('');
     setSuggestOpen(false);
     void agentRoomStore.postLeadMessage(body);
   };
 
+  const open = suggestOpen && suggestions.length > 0;
+
   return (
     <div className="relative border-t border-border px-5 py-3">
-      {suggestOpen && suggestions.length > 0 && (
-        <div className="absolute bottom-full left-5 mb-2 w-64 overflow-hidden rounded-lg border border-border bg-background-2 shadow-lg">
-          {suggestions.map((m, i) => (
+      {open && (
+        <div className="absolute bottom-full left-5 mb-2 w-72 overflow-hidden rounded-lg border border-border bg-background-2 shadow-lg">
+          {suggestions.map((s, i) => (
             <button
-              key={m.handle}
+              key={s.kind === 'command' ? s.name : s.handle}
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
-                pick(m.handle);
+                accept(s);
               }}
               className={cn(
                 'flex w-full items-center gap-2 px-3 py-2 text-left text-sm',
                 i === sel ? 'bg-background-3' : 'hover:bg-background-3'
               )}
             >
-              <div
-                className={cn(
-                  'flex size-6 items-center justify-center rounded-md text-xs font-semibold',
-                  ACCENT_AVATAR[m.accent]
-                )}
-              >
-                {monogram(m.displayName)}
-              </div>
-              <span className="flex-1">{m.displayName}</span>
-              <span className="text-[11px] text-foreground-muted">@{m.handle}</span>
+              {s.kind === 'command' ? (
+                <>
+                  <span className="font-mono text-xs font-semibold text-primary">{s.label}</span>
+                  <span className="flex-1 truncate text-[11px] text-foreground-muted">
+                    {s.desc}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <div
+                    className={cn(
+                      'flex size-6 items-center justify-center rounded-md text-xs font-semibold',
+                      ACCENT_AVATAR[s.accent]
+                    )}
+                  >
+                    {monogram(s.displayName)}
+                  </div>
+                  <span className="flex-1 truncate">{s.displayName}</span>
+                  {s.status && (
+                    <span className="flex items-center gap-1 text-[10px] text-foreground-muted">
+                      <span className={cn('size-1.5 rounded-full', STATUS_DOT[s.status])} />
+                      {STATUS_LABEL[s.status]}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-foreground-muted">@{s.handle}</span>
+                </>
+              )}
             </button>
           ))}
         </div>
@@ -379,25 +454,26 @@ const Composer = observer(function Composer({ members }: { members: RoomMember[]
           rows={1}
           placeholder={t('agentRoom.composerPlaceholder')}
           onChange={(e) => {
-            setValue(e.target.value);
-            setSuggestOpen(/@([a-z0-9_-]*)$/i.test(e.target.value));
+            const next = e.target.value;
+            setValue(next);
+            setSuggestOpen(/^\/[a-z0-9]*$/i.test(next) || /@([a-z0-9_-]*)$/i.test(next));
             setSel(0);
           }}
           onKeyDown={(e) => {
-            if (suggestOpen && suggestions.length > 0) {
+            if (open) {
               if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setSel((s) => (s + 1) % suggestions.length);
+                setSel((x) => (x + 1) % suggestions.length);
                 return;
               }
               if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setSel((s) => (s - 1 + suggestions.length) % suggestions.length);
+                setSel((x) => (x - 1 + suggestions.length) % suggestions.length);
                 return;
               }
               if (e.key === 'Enter' || e.key === 'Tab') {
                 e.preventDefault();
-                pick(suggestions[sel].handle);
+                accept(suggestions[sel]);
                 return;
               }
               if (e.key === 'Escape') {

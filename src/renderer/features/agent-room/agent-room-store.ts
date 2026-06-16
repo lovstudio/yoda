@@ -122,6 +122,21 @@ class AgentRoomStore {
     await this.selectRoom(roomId);
   }
 
+  /** `/stop` — interrupt every running agent in the active room (Esc to each). */
+  async stopRoom(): Promise<void> {
+    const snap = this.snapshot;
+    if (!snap) return;
+    const { projectId, taskId } = snap.room;
+    const running = snap.members.filter(
+      (m) => m.conversationId && (m.status === 'running' || m.status === 'awaiting-input')
+    );
+    await Promise.all(
+      running.map((m) =>
+        rpc.conversations.interruptConversation(projectId, taskId, m.conversationId as string)
+      )
+    );
+  }
+
   setInspectedConversation(conversationId: string | null): void {
     this.inspectedConversationId =
       this.inspectedConversationId === conversationId ? null : conversationId;

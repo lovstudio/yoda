@@ -5,6 +5,7 @@ import {
   type AgentTeamMember,
   type TeamRouting,
 } from '@shared/agent-team';
+import { REVIEW_PROTOCOL_LINES } from '@shared/review-protocol';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { TEAM_AT_SCRIPT } from '@shared/team-protocol';
 import type { MemberAccent } from '@shared/team-room';
@@ -128,14 +129,7 @@ function routingAddendum(
           `turn — the reviewer is brought in automatically. When you receive review feedback, address it`,
           `in the same worktree and finish again. Keep the existing direction unless a fix requires otherwise.`,
         ].join('\n')
-      : [
-          `# Your routing`,
-          `Review the implementer's work against the lead's original requirement — do NOT modify files.`,
-          `End your turn with exactly one line, on its own:`,
-          `  YODA_REVIEW_RESULT: PASS   (only if it fully meets the requirement)`,
-          `  YODA_REVIEW_RESULT: FAIL   (if any changes are needed)`,
-          `When FAIL, list the concrete fixes the implementer should make BEFORE that final line.`,
-        ].join('\n');
+      : [`# Your routing`, ...REVIEW_PROTOCOL_LINES].join('\n');
   }
   if (routing === 'fan-out') {
     return kind === 'leader'
