@@ -61,7 +61,14 @@ export class ProjectSettingsStore {
   async save(
     settings: ProjectSettings
   ): Promise<Result<ProjectSettings, UpdateProjectSettingsError>> {
-    const result = await rpc.projects.updateProjectSettings(this.projectId, settings);
+    // Callers may hand us settings whose nested values are MobX-observable
+    // proxies (e.g. the composer spreads this store's own `settings` to
+    // preserve sibling fields — a plain root with observable children, which
+    // `toJS` does not deep-convert). Electron's IPC structured-clone cannot
+    // serialize proxies and throws "An object could not be cloned", so deep
+    // plain-ify at the serialization boundary. ProjectSettings is pure JSON.
+    const plain = JSON.parse(JSON.stringify(settings)) as ProjectSettings;
+    const result = await rpc.projects.updateProjectSettings(this.projectId, plain);
     if (result.success) {
       const current = this.pageData.data;
       if (current) this.pageData.setValue({ ...current, settings: result.data });
