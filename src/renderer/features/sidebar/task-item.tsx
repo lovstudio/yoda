@@ -17,13 +17,16 @@ import {
   getTaskStore,
   taskDisplayStatus,
 } from '@renderer/features/tasks/stores/task-selectors';
+import { OVERVIEW_TAB_ID } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
-import { sidebarStore } from '@renderer/lib/stores/app-state';
+import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
 import { Badge } from '@renderer/lib/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { branchColor } from '@renderer/utils/branch-color';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
 import { SidebarItemMiniButton, SidebarMenuRow } from './sidebar-primitives';
+import { useAltKeyHeld } from './use-alt-key-held';
 
 interface SidebarTaskItemProps {
   taskId: string;
@@ -69,6 +72,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // (turns it into a confirm badge), the second click archives. Anything that
   // moves focus away — leaving the row, opening the menu — disarms it.
   const [isArchiveConfirming, setArchiveConfirming] = useState(false);
+  // Alt/Option-held hover hints (and click) that the row pins into the global
+  // side pane instead of navigating — same affordance as the nav controls.
+  const altHeld = useAltKeyHeld();
+  const [isHovered, setHovered] = useState(false);
 
   const task = getTaskStore(projectId, taskId)!;
   const taskManager = getTaskManagerStore(projectId);
@@ -156,215 +163,232 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           : sidebarStore.releaseTaskReflow('task-menu')
       }
     >
-      <SidebarMenuRow
-        className={cn(
-          // Two-line row: task name on top, branch below. Height is intrinsic
-          // (min-h-8 keeps branch-less rows at the original 32px). `relative`
-          // anchors the compact branch gutter inside the pl-8 icon column.
-          'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1',
-          taskIndentClass
-        )}
-        isActive={isActive}
-        onMouseDown={(e) => e.preventDefault()}
-        onMouseLeave={() => setArchiveConfirming(false)}
-        onClick={() => {
-          setArchiveConfirming(false);
-          handleOpenDetails();
-        }}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          menuActions.onRename();
-        }}
-      >
-        <div className="flex min-w-0 flex-1 items-center gap-1 self-stretch overflow-hidden">
-          {hasRootToggle && (
-            <SidebarItemMiniButton
-              type="button"
-              aria-label={t('sidebar.toggleSubtasks')}
-              aria-expanded={!isCollapsed}
-              className="shrink-0 transition-opacity duration-150 opacity-0 group-hover/row:opacity-100"
+      <Tooltip open={altHeld && isHovered}>
+        <TooltipTrigger
+          render={
+            <SidebarMenuRow
+              className={cn(
+                // Two-line row: task name on top, branch below. Height is intrinsic
+                // (min-h-8 keeps branch-less rows at the original 32px). `relative`
+                // anchors the compact branch gutter inside the pl-8 icon column.
+                'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1',
+                taskIndentClass
+              )}
+              isActive={isActive}
+              onMouseDown={(e) => e.preventDefault()}
+              onMouseEnter={() => setHovered(true)}
+              onMouseLeave={() => {
+                setHovered(false);
+                setArchiveConfirming(false);
+              }}
               onClick={(e) => {
+                setArchiveConfirming(false);
+                // Alt/Option pins the task into the global side pane; a plain
+                // click navigates as usual.
+                if (e.altKey) {
+                  appState.sidePane.pinTask(projectId, taskId, OVERVIEW_TAB_ID);
+                  return;
+                }
+                handleOpenDetails();
+              }}
+              onDoubleClick={(e) => {
                 e.stopPropagation();
-                sidebarStore.toggleTaskCollapsed(taskId);
+                menuActions.onRename();
               }}
             >
-              <ChevronRight
-                className={cn('h-4 w-4 transition-transform', !isCollapsed && 'rotate-90')}
-              />
-            </SidebarItemMiniButton>
-          )}
-          {guideTrail.length > 0 && (
-            <span className="flex shrink-0 self-stretch">
-              {guideTrail.map((continues, index) => {
-                const isElbow = index === guideTrail.length - 1;
-                // Nested parents toggle via the elbow slot itself: guide lines
-                // fade out on row hover and a chevron fades in, so the name
-                // stays aligned with leaf siblings.
-                const isToggleSlot = isElbow && hasChildren;
-                return (
-                  <TreeGuideSlot
-                    key={index}
-                    continues={continues}
-                    isElbow={isElbow}
-                    fadeOnRowHover={isToggleSlot}
-                  >
-                    {isToggleSlot && (
-                      <button
-                        type="button"
-                        aria-label={t('sidebar.toggleSubtasks')}
-                        aria-expanded={!isCollapsed}
-                        className="absolute inset-0 flex items-center justify-center rounded-sm text-foreground-tertiary opacity-0 transition-opacity duration-150 hover:bg-background-tertiary-2 hover:text-foreground group-hover/row:opacity-100"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          sidebarStore.toggleTaskCollapsed(taskId);
-                        }}
-                      >
-                        <ChevronRight
-                          className={cn(
-                            'h-3.5 w-3.5 transition-transform',
-                            !isCollapsed && 'rotate-90'
-                          )}
-                        />
-                      </button>
-                    )}
-                  </TreeGuideSlot>
-                );
-              })}
-            </span>
-          )}
-          {branchDisplay === 'compact' && branchRailColor && (
-            // Worktree-based sessions get a thin left rail; in-place tasks
-            // don't. Its hue is stable per branch — identical branches share a
-            // color, distinct branches differ.
-            <span
-              aria-hidden
-              title={branchName}
-              style={{ backgroundColor: branchRailColor }}
-              className={cn(
-                'absolute inset-y-1.5 left-0.5 w-[3px] rounded-full',
-                (isBootstrapping || isArchiving) && 'opacity-40'
-              )}
-            />
-          )}
-          <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
-            <div className="flex min-w-0 items-center gap-1">
-              <span
-                className={cn(
-                  'min-w-0 truncate text-left transition-colors',
-                  (isBootstrapping || isArchiving) && 'text-foreground/40'
-                )}
-              >
-                {taskName}
-              </span>
-              {isCollapsed && (
-                <span className="shrink-0 rounded-sm bg-background-tertiary-2 px-1 text-[10px] tabular-nums text-foreground-tertiary">
-                  {childCount}
-                </span>
-              )}
-              {rowVariant === 'flat' && (
-                <span className="shrink-0 truncate max-w-[8rem] rounded-sm bg-background-tertiary-2 px-1 text-[10px] uppercase tracking-wide text-foreground-tertiary">
-                  {projectName}
-                </span>
-              )}
-              <RenderPrBadge task={task} />
-            </div>
-            {branchDisplay === 'full' && branchName && (
-              <div
-                className={cn(
-                  'flex min-w-0 items-center gap-1 text-foreground-tertiary-passive',
-                  (isBootstrapping || isArchiving) && 'opacity-40'
-                )}
-              >
-                <GitBranch className="size-3 shrink-0" />
-                <span className="min-w-0 truncate font-mono text-[10px] leading-4">
-                  {branchName}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-        <div
-          className={cn(
-            'items-center gap-0.5',
-            isMenuOpen || isArchiving || isArchiveConfirming
-              ? 'flex'
-              : hasAgentNotification
-                ? 'hidden'
-                : 'hidden group-hover/row:flex'
-          )}
-        >
-          {isArchiveConfirming ? (
-            <Badge
-              render={
-                <button
-                  type="button"
-                  aria-label={t('sidebar.confirmArchive')}
-                  disabled={isArchiving}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setArchiveConfirming(false);
-                    // Quick archive defaults to NO pre-archive skill — the skill
-                    // flow lives in the right-click menu's archive submenu.
-                    menuActions.onArchiveQuick();
-                  }}
-                />
-              }
-              className="h-6 cursor-pointer bg-destructive px-2.5 text-[11px] font-semibold uppercase tracking-wide text-destructive-foreground shadow-sm hover:bg-destructive/90"
-            >
-              {t('sidebar.confirmArchive')}
-            </Badge>
-          ) : (
-            <>
-              <TaskActionsMenu
-                {...menuActions}
-                open={isMenuOpen}
-                onOpenChange={(open) => {
-                  if (open) setArchiveConfirming(false);
-                  setMenuOpen(open);
-                }}
-                trigger={
+              <div className="flex min-w-0 flex-1 items-center gap-1 self-stretch overflow-hidden">
+                {hasRootToggle && (
                   <SidebarItemMiniButton
                     type="button"
-                    aria-label={t('sidebar.runScripts.menuLabel')}
-                    onClick={(e) => e.stopPropagation()}
+                    aria-label={t('sidebar.toggleSubtasks')}
+                    aria-expanded={!isCollapsed}
+                    className="shrink-0 transition-opacity duration-150 opacity-0 group-hover/row:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      sidebarStore.toggleTaskCollapsed(taskId);
+                    }}
                   >
-                    <MoreHorizontal className="h-4 w-4" />
+                    <ChevronRight
+                      className={cn('h-4 w-4 transition-transform', !isCollapsed && 'rotate-90')}
+                    />
                   </SidebarItemMiniButton>
-                }
-              />
-              <SidebarItemMiniButton
-                type="button"
-                aria-label={t('sidebar.archiveTask')}
-                disabled={isArchiving}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setArchiveConfirming(true);
-                }}
-              >
-                {isArchiving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Archive className="h-4 w-4" />
                 )}
-              </SidebarItemMiniButton>
-            </>
-          )}
-        </div>
-        <div
-          className={cn(
-            'items-center',
-            isMenuOpen || isArchiving || isArchiveConfirming
-              ? 'hidden'
-              : hasAgentNotification
-                ? 'flex'
-                : 'flex group-hover/row:hidden'
-          )}
-        >
-          <TaskSidebarAgentStatus task={task} needsReview={needsReview} />
-        </div>
-      </SidebarMenuRow>
+                {guideTrail.length > 0 && (
+                  <span className="flex shrink-0 self-stretch">
+                    {guideTrail.map((continues, index) => {
+                      const isElbow = index === guideTrail.length - 1;
+                      // Nested parents toggle via the elbow slot itself: guide lines
+                      // fade out on row hover and a chevron fades in, so the name
+                      // stays aligned with leaf siblings.
+                      const isToggleSlot = isElbow && hasChildren;
+                      return (
+                        <TreeGuideSlot
+                          key={index}
+                          continues={continues}
+                          isElbow={isElbow}
+                          fadeOnRowHover={isToggleSlot}
+                        >
+                          {isToggleSlot && (
+                            <button
+                              type="button"
+                              aria-label={t('sidebar.toggleSubtasks')}
+                              aria-expanded={!isCollapsed}
+                              className="absolute inset-0 flex items-center justify-center rounded-sm text-foreground-tertiary opacity-0 transition-opacity duration-150 hover:bg-background-tertiary-2 hover:text-foreground group-hover/row:opacity-100"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                sidebarStore.toggleTaskCollapsed(taskId);
+                              }}
+                            >
+                              <ChevronRight
+                                className={cn(
+                                  'h-3.5 w-3.5 transition-transform',
+                                  !isCollapsed && 'rotate-90'
+                                )}
+                              />
+                            </button>
+                          )}
+                        </TreeGuideSlot>
+                      );
+                    })}
+                  </span>
+                )}
+                {branchDisplay === 'compact' && branchRailColor && (
+                  // Worktree-based sessions get a thin left rail; in-place tasks
+                  // don't. Its hue is stable per branch — identical branches share a
+                  // color, distinct branches differ.
+                  <span
+                    aria-hidden
+                    title={branchName}
+                    style={{ backgroundColor: branchRailColor }}
+                    className={cn(
+                      'absolute inset-y-1.5 left-0.5 w-[3px] rounded-full',
+                      (isBootstrapping || isArchiving) && 'opacity-40'
+                    )}
+                  />
+                )}
+                <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
+                  <div className="flex min-w-0 items-center gap-1">
+                    <span
+                      className={cn(
+                        'min-w-0 truncate text-left transition-colors',
+                        (isBootstrapping || isArchiving) && 'text-foreground/40'
+                      )}
+                    >
+                      {taskName}
+                    </span>
+                    {isCollapsed && (
+                      <span className="shrink-0 rounded-sm bg-background-tertiary-2 px-1 text-[10px] tabular-nums text-foreground-tertiary">
+                        {childCount}
+                      </span>
+                    )}
+                    {rowVariant === 'flat' && (
+                      <span className="shrink-0 truncate max-w-[8rem] rounded-sm bg-background-tertiary-2 px-1 text-[10px] uppercase tracking-wide text-foreground-tertiary">
+                        {projectName}
+                      </span>
+                    )}
+                    <RenderPrBadge task={task} />
+                  </div>
+                  {branchDisplay === 'full' && branchName && (
+                    <div
+                      className={cn(
+                        'flex min-w-0 items-center gap-1 text-foreground-tertiary-passive',
+                        (isBootstrapping || isArchiving) && 'opacity-40'
+                      )}
+                    >
+                      <GitBranch className="size-3 shrink-0" />
+                      <span className="min-w-0 truncate font-mono text-[10px] leading-4">
+                        {branchName}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div
+                className={cn(
+                  'items-center gap-0.5',
+                  isMenuOpen || isArchiving || isArchiveConfirming
+                    ? 'flex'
+                    : hasAgentNotification
+                      ? 'hidden'
+                      : 'hidden group-hover/row:flex'
+                )}
+              >
+                {isArchiveConfirming ? (
+                  <Badge
+                    render={
+                      <button
+                        type="button"
+                        aria-label={t('sidebar.confirmArchive')}
+                        disabled={isArchiving}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setArchiveConfirming(false);
+                          // Quick archive defaults to NO pre-archive skill — the skill
+                          // flow lives in the right-click menu's archive submenu.
+                          menuActions.onArchiveQuick();
+                        }}
+                      />
+                    }
+                    className="h-6 cursor-pointer bg-destructive px-2.5 text-[11px] font-semibold uppercase tracking-wide text-destructive-foreground shadow-sm hover:bg-destructive/90"
+                  >
+                    {t('sidebar.confirmArchive')}
+                  </Badge>
+                ) : (
+                  <>
+                    <TaskActionsMenu
+                      {...menuActions}
+                      open={isMenuOpen}
+                      onOpenChange={(open) => {
+                        if (open) setArchiveConfirming(false);
+                        setMenuOpen(open);
+                      }}
+                      trigger={
+                        <SidebarItemMiniButton
+                          type="button"
+                          aria-label={t('sidebar.runScripts.menuLabel')}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </SidebarItemMiniButton>
+                      }
+                    />
+                    <SidebarItemMiniButton
+                      type="button"
+                      aria-label={t('sidebar.archiveTask')}
+                      disabled={isArchiving}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setArchiveConfirming(true);
+                      }}
+                    >
+                      {isArchiving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Archive className="h-4 w-4" />
+                      )}
+                    </SidebarItemMiniButton>
+                  </>
+                )}
+              </div>
+              <div
+                className={cn(
+                  'items-center',
+                  isMenuOpen || isArchiving || isArchiveConfirming
+                    ? 'hidden'
+                    : hasAgentNotification
+                      ? 'flex'
+                      : 'flex group-hover/row:hidden'
+                )}
+              >
+                <TaskSidebarAgentStatus task={task} needsReview={needsReview} />
+              </div>
+            </SidebarMenuRow>
+          }
+        />
+        <TooltipContent side="right">{t('appTabs.openInGlobalSidePane')}</TooltipContent>
+      </Tooltip>
     </TaskContextMenu>
   );
 });

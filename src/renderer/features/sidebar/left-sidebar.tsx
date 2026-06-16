@@ -59,30 +59,8 @@ import {
 import { SidebarSpace } from './sidebar-space';
 import { SidebarVersionAnchor } from './sidebar-version-anchor';
 import { SidebarVirtualList } from './sidebar-virtual-list';
+import { useAltKeyHeld } from './use-alt-key-held';
 import { useSidebarDrop } from './use-sidebar-drop';
-
-/** Tracks whether the Alt/Option key is held, resetting on window blur. */
-function useAltKeyHeld(): boolean {
-  const [held, setHeld] = React.useState(false);
-  React.useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Alt') setHeld(true);
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Alt') setHeld(false);
-    };
-    const onBlur = () => setHeld(false);
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', onBlur);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, []);
-  return held;
-}
 
 /**
  * Wraps a sidebar control that routes to a registered view: right-click offers

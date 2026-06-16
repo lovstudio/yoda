@@ -43,6 +43,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/toolti
 import { cn } from '@renderer/utils/utils';
 import { ProjectActionsMenu, ProjectContextMenu } from './project-menu';
 import { SidebarItemMiniButton, SidebarMenuButton, SidebarMenuRow } from './sidebar-primitives';
+import { useAltKeyHeld } from './use-alt-key-held';
 
 const UNREGISTERED_PHASE_KEY: Record<UnregisteredProject['phase'], string> = {
   'creating-repo': 'sidebar.phase.creatingRepo',
@@ -66,6 +67,10 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const showRenameProject = useShowModal('renameProjectModal');
   const showConfirmRemoveProject = useShowModal('confirmActionModal');
   const [isMenuOpen, setMenuOpen] = useState(false);
+  // Alt/Option-held hover hints (and click) that the row pins into the global
+  // side pane instead of expanding — same affordance as the nav controls.
+  const altHeld = useAltKeyHeld();
+  const [isHovered, setHovered] = useState(false);
 
   const project = getProjectStore(projectId);
   const mountedProject = asMounted(project);
@@ -276,101 +281,118 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
 
   return (
     <ProjectContextMenu {...menuActions}>
-      <SidebarMenuRow
-        className={cn('group/row h-8 justify-between flex px-1')}
-        data-active={isProjectActive || undefined}
-        isActive={isProjectActive}
-        role="button"
-        tabIndex={0}
-        aria-expanded={isExpanded}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={handleToggleExpanded}
-        onKeyDown={handleRowKeyDown}
-      >
-        <div className="flex items-center gap-1 flex-1 min-w-0">
-          {project.state === 'unregistered' ? (
-            renderSpinnerWithTooltip()
-          ) : (
-            <SidebarItemMiniButton
-              type="button"
-              className="relative"
+      <Tooltip open={altHeld && isHovered}>
+        <TooltipTrigger
+          render={
+            <SidebarMenuRow
+              className={cn('group/row h-8 justify-between flex px-1')}
+              data-active={isProjectActive || undefined}
+              isActive={isProjectActive}
+              role="button"
+              tabIndex={0}
+              aria-expanded={isExpanded}
+              onMouseDown={(e) => e.preventDefault()}
+              onMouseEnter={() => setHovered(true)}
+              onMouseLeave={() => setHovered(false)}
               onClick={(e) => {
-                e.stopPropagation();
+                // Alt/Option pins the project into the global side pane; a plain
+                // click toggles its task list as usual.
+                if (e.altKey) {
+                  appState.sidePane.pinView('project', { projectId });
+                  return;
+                }
                 handleToggleExpanded();
               }}
+              onKeyDown={handleRowKeyDown}
             >
-              <ProjectIcon className="absolute h-4 w-4 transition-opacity duration-150 opacity-100 group-hover/row:opacity-0" />
-              <ChevronRight
-                className={cn(
-                  'absolute h-4 w-4 transition-all duration-150 opacity-0 group-hover/row:opacity-100',
-                  isExpanded && 'rotate-90'
+              <div className="flex items-center gap-1 flex-1 min-w-0">
+                {project.state === 'unregistered' ? (
+                  renderSpinnerWithTooltip()
+                ) : (
+                  <SidebarItemMiniButton
+                    type="button"
+                    className="relative"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleExpanded();
+                    }}
+                  >
+                    <ProjectIcon className="absolute h-4 w-4 transition-opacity duration-150 opacity-100 group-hover/row:opacity-0" />
+                    <ChevronRight
+                      className={cn(
+                        'absolute h-4 w-4 transition-all duration-150 opacity-0 group-hover/row:opacity-100',
+                        isExpanded && 'rotate-90'
+                      )}
+                    />
+                  </SidebarItemMiniButton>
                 )}
-              />
-            </SidebarItemMiniButton>
-          )}
-          <span
-            className={cn(
-              'flex-1 min-w-0 self-stretch flex items-center overflow-hidden text-left transition-colors select-none',
-              projectViewKind(getProjectStore(projectId)) === 'bootstrapping' &&
-                'text-foreground-tertiary-passive'
-            )}
-          >
-            {isSshProject ? (
-              <span className="min-w-0 flex items-center gap-2 overflow-hidden">
-                <span className="truncate">{project.displayName}</span>
-                <ConnectionStatusDot state={sshConnectionState} />
-              </span>
-            ) : (
-              <span className="min-w-0 flex items-center gap-1.5 overflow-hidden">
-                <span className="truncate">{project.displayName}</span>
-                {projectViewKind(project) === 'path_not_found' && (
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-foreground-destructive" />
-                    </TooltipTrigger>
-                    <TooltipContent>{t('sidebar.projectNotFound')}</TooltipContent>
-                  </Tooltip>
-                )}
-              </span>
-            )}
-          </span>
-        </div>
-        <div className="flex items-center gap-0.5">
-          <ProjectActionsMenu
-            {...menuActions}
-            open={isMenuOpen}
-            onOpenChange={setMenuOpen}
-            trigger={
-              <SidebarItemMiniButton
-                type="button"
-                className={cn(
-                  'transition-opacity duration-150',
-                  isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'
-                )}
-                aria-label={t('sidebar.more')}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </SidebarItemMiniButton>
-            }
-          />
-          <SidebarItemMiniButton
-            type="button"
-            className={cn(
-              'transition-opacity duration-150',
-              isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'
-            )}
-            onPointerEnter={() => prefetchRepository()}
-            onClick={(e) => {
-              e.stopPropagation();
-              void handleAddTask();
-            }}
-            disabled={project.state === 'unregistered'}
-          >
-            <Plus className="h-4 w-4" />
-          </SidebarItemMiniButton>
-        </div>
-      </SidebarMenuRow>
+                <span
+                  className={cn(
+                    'flex-1 min-w-0 self-stretch flex items-center overflow-hidden text-left transition-colors select-none',
+                    projectViewKind(getProjectStore(projectId)) === 'bootstrapping' &&
+                      'text-foreground-tertiary-passive'
+                  )}
+                >
+                  {isSshProject ? (
+                    <span className="min-w-0 flex items-center gap-2 overflow-hidden">
+                      <span className="truncate">{project.displayName}</span>
+                      <ConnectionStatusDot state={sshConnectionState} />
+                    </span>
+                  ) : (
+                    <span className="min-w-0 flex items-center gap-1.5 overflow-hidden">
+                      <span className="truncate">{project.displayName}</span>
+                      {projectViewKind(project) === 'path_not_found' && (
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-foreground-destructive" />
+                          </TooltipTrigger>
+                          <TooltipContent>{t('sidebar.projectNotFound')}</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center gap-0.5">
+                <ProjectActionsMenu
+                  {...menuActions}
+                  open={isMenuOpen}
+                  onOpenChange={setMenuOpen}
+                  trigger={
+                    <SidebarItemMiniButton
+                      type="button"
+                      className={cn(
+                        'transition-opacity duration-150',
+                        isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'
+                      )}
+                      aria-label={t('sidebar.more')}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </SidebarItemMiniButton>
+                  }
+                />
+                <SidebarItemMiniButton
+                  type="button"
+                  className={cn(
+                    'transition-opacity duration-150',
+                    isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'
+                  )}
+                  onPointerEnter={() => prefetchRepository()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleAddTask();
+                  }}
+                  disabled={project.state === 'unregistered'}
+                >
+                  <Plus className="h-4 w-4" />
+                </SidebarItemMiniButton>
+              </div>
+            </SidebarMenuRow>
+          }
+        />
+        <TooltipContent side="right">{t('appTabs.openInGlobalSidePane')}</TooltipContent>
+      </Tooltip>
     </ProjectContextMenu>
   );
 });
