@@ -193,16 +193,18 @@ const TerminalSettingsCard: React.FC = () => {
         control={
           <div className="w-[183px] flex-shrink-0">
             <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-              <PopoverTrigger>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 w-full justify-between text-sm font-normal"
-                  disabled={loading || saving}
-                >
-                  <span className="truncate text-left">{pickerLabel}</span>
-                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-70" />
-                </Button>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 w-full justify-between text-sm font-normal"
+                    disabled={loading || saving}
+                  />
+                }
+              >
+                <span className="truncate text-left">{pickerLabel}</span>
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-70" />
               </PopoverTrigger>
               <PopoverContent align="start" className="w-[260px] p-2">
                 <div className="grid gap-2">
