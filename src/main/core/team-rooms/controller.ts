@@ -4,6 +4,7 @@ import { seedReviewRoom, type SeedReviewRoomParams } from './presets';
 import {
   addMember,
   createRoom,
+  getAllRooms,
   getMessages,
   getRoom,
   getRoomsForProject,
@@ -16,6 +17,7 @@ import {
 export const teamRoomController = createRPCController({
   createRoom: (params: CreateRoomParams): Promise<TeamRoom> => createRoom(params),
   createReviewRoom: (params: SeedReviewRoomParams): Promise<string> => seedReviewRoom(params),
+  getAllRooms: (): Promise<TeamRoom[]> => getAllRooms(),
   getRoomsForProject: (projectId: string): Promise<TeamRoom[]> => getRoomsForProject(projectId),
   getRoom: (roomId: string): Promise<RoomSnapshot | null> => getRoom(roomId),
   addMember: (params: AddMemberParams): Promise<RoomMember> => addMember(params),

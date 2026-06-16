@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import {
   roomMemberStatusChangedChannel,
   roomMessagePostedChannel,
@@ -108,6 +108,15 @@ export async function getRoomsForProject(projectId: string): Promise<TeamRoom[]>
     .from(teamRooms)
     .where(and(eq(teamRooms.projectId, projectId), eq(teamRooms.status, 'active')))
     .orderBy(asc(teamRooms.createdAt));
+  return rows.map(mapRoom);
+}
+
+export async function getAllRooms(): Promise<TeamRoom[]> {
+  const rows = await db
+    .select()
+    .from(teamRooms)
+    .where(eq(teamRooms.status, 'active'))
+    .orderBy(desc(teamRooms.updatedAt));
   return rows.map(mapRoom);
 }
 
