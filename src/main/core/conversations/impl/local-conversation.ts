@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import type { Conversation } from '@shared/conversations';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
+import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { makePtyId } from '@shared/ptyId';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { getRuntime } from '@shared/runtime-registry';
@@ -64,6 +65,9 @@ export class LocalConversationProvider implements ConversationProvider {
   private readonly shellSetup?: string;
   private readonly ctx: IExecutionContext;
   private readonly taskEnvVars: Record<string, string>;
+  private readonly resolveProjectPromptPrinciples?: () => Promise<
+    ProjectPromptPrinciples | undefined
+  >;
   private readonly hookConfigWriter: HookConfigWriter;
   private readonly preparedHookProviders = new Map<string, boolean>();
   private readonly tmuxSessionNames = new Map<string, string>();
@@ -78,6 +82,7 @@ export class LocalConversationProvider implements ConversationProvider {
     shellSetup,
     ctx,
     taskEnvVars = {},
+    resolveProjectPromptPrinciples,
   }: {
     projectId: string;
     taskPath: string;
@@ -86,6 +91,7 @@ export class LocalConversationProvider implements ConversationProvider {
     shellSetup?: string;
     ctx: IExecutionContext;
     taskEnvVars?: Record<string, string>;
+    resolveProjectPromptPrinciples?: () => Promise<ProjectPromptPrinciples | undefined>;
   }) {
     this.projectId = projectId;
     this.taskPath = taskPath;
@@ -94,6 +100,7 @@ export class LocalConversationProvider implements ConversationProvider {
     this.shellSetup = shellSetup;
     this.ctx = ctx;
     this.taskEnvVars = taskEnvVars;
+    this.resolveProjectPromptPrinciples = resolveProjectPromptPrinciples;
     this.hookConfigWriter = new HookConfigWriter(new LocalFileSystem(taskPath), ctx);
   }
 
@@ -159,7 +166,9 @@ export class LocalConversationProvider implements ConversationProvider {
       isResuming,
       initialPrompt: useClipboardImagePaste ? undefined : effectiveInitialPrompt,
       workingDirectory: this.taskPath,
-      appendSystemPrompt: await getEnabledPromptPrinciplesText(),
+      appendSystemPrompt: await getEnabledPromptPrinciplesText(
+        await this.resolveProjectPromptPrinciples?.()
+      ),
     });
     const args = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 

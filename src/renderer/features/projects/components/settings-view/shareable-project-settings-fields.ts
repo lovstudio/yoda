@@ -121,9 +121,12 @@ export const SHAREABLE_FIELD_DESCRIPTOR_BY_ID = Object.fromEntries(
   SHAREABLE_FIELD_DESCRIPTORS.map((descriptor) => [descriptor.id, descriptor])
 ) as Record<ShareableProjectSettingsWriteField, ShareableFieldDescriptor>;
 
-export const DEFAULT_WRITE_FIELDS = SHAREABLE_FIELD_DESCRIPTORS.filter(
-  (descriptor) => descriptor.defaultWrite
-).map((descriptor) => descriptor.id);
+export const DEFAULT_WRITE_FIELDS: ShareableProjectSettingsWriteField[] = [
+  ...SHAREABLE_FIELD_DESCRIPTORS.filter((descriptor) => descriptor.defaultWrite).map(
+    (descriptor) => descriptor.id
+  ),
+  'promptPrinciples',
+];
 
 export const SHAREABLE_FIELD_FORM_KEY = Object.fromEntries(
   SHAREABLE_FIELD_DESCRIPTORS.map((descriptor) => [descriptor.id, descriptor.formKey])

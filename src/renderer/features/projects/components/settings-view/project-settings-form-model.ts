@@ -24,6 +24,8 @@ export type FormState = {
   terminateCommand: string;
   /** Carried through opaque — managed by the dedicated quick-actions modal. */
   quickActions?: ProjectSettings['quickActions'];
+  /** Carried through opaque — managed by the prompt-principles section. */
+  promptPrinciples?: ProjectSettings['promptPrinciples'];
 };
 
 export type FormUpdate = <K extends keyof FormState>(key: K, value: FormState[K]) => void;
@@ -68,6 +70,7 @@ export function settingsToForm(
     provisionCommand: s.workspaceProvider?.provisionCommand ?? '',
     terminateCommand: s.workspaceProvider?.terminateCommand ?? '',
     quickActions: s.quickActions,
+    promptPrinciples: s.promptPrinciples,
   };
 }
 
@@ -118,6 +121,7 @@ export function formToSettings(f: FormState): ProjectSettings {
           }
         : undefined,
     quickActions: f.quickActions,
+    promptPrinciples: f.promptPrinciples,
   };
 }
 
@@ -146,10 +150,22 @@ export function normalizeShareableFieldValue(
   return SHAREABLE_FIELD_DESCRIPTOR_BY_ID[field].normalizeText(value);
 }
 
+function hasProjectPromptPrinciples(form: FormState): boolean {
+  const value = form.promptPrinciples;
+  if (!value) return false;
+  const hasOverrides = !!value.globalOverrides && Object.keys(value.globalOverrides).length > 0;
+  const hasItems = !!value.items && value.items.length > 0;
+  return hasOverrides || hasItems;
+}
+
 export function getAvailableWriteFields(form: FormState): ShareableProjectSettingsWriteField[] {
-  return SHAREABLE_FIELD_DESCRIPTORS.map((descriptor) => descriptor.id).filter((field) =>
-    String(form[SHAREABLE_FIELD_FORM_KEY[field]]).trim()
+  // Text fields participate via the descriptor table; structured fields
+  // (prompt principles) aren't descriptor-backed, so surface them explicitly
+  // when they carry content so they can be shared into `.yoda.json`.
+  const textFields = SHAREABLE_FIELD_DESCRIPTORS.map((descriptor) => descriptor.id).filter(
+    (field) => String(form[SHAREABLE_FIELD_FORM_KEY[field]]).trim()
   );
+  return hasProjectPromptPrinciples(form) ? [...textFields, 'promptPrinciples'] : textFields;
 }
 
 export function areFormStatesEqual(a: FormState, b: FormState): boolean {

@@ -63,7 +63,7 @@ export function projectConfigWriteFieldLabel(
   field: ShareableProjectSettingsWriteField,
   t?: TFunction
 ): string {
-  if (!t) return SHAREABLE_FIELD_DESCRIPTOR_BY_ID[field].modalLabel;
+  if (!t) return SHAREABLE_FIELD_DESCRIPTOR_BY_ID[field]?.modalLabel ?? field;
   return t(`projects.settings.shareable.fields.${field}.modalLabel`);
 }
 

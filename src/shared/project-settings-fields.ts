@@ -1,5 +1,6 @@
 import {
   SHAREABLE_PROJECT_SETTINGS_WRITE_FIELDS,
+  type ProjectPromptPrinciples,
   type ProjectSettings,
   type QuickAction,
   type ShareableProjectSettings,
@@ -120,6 +121,25 @@ export const SHAREABLE_FIELD_ACCESSORS = {
       return value?.length ? value.map((a) => `${a.label}: ${a.command}`).join('\n') : null;
     },
   },
+  promptPrinciples: {
+    path: ['promptPrinciples'],
+    get: (settings) => settings.promptPrinciples,
+    set: (settings, value) => {
+      settings.promptPrinciples = value as ProjectPromptPrinciples | undefined;
+    },
+    clear: (settings) => {
+      delete settings.promptPrinciples;
+    },
+    displayValue: (settings) => {
+      const overrides = Object.entries(settings.promptPrinciples?.globalOverrides ?? {});
+      const items = settings.promptPrinciples?.items?.filter((p) => p.text.trim()) ?? [];
+      const lines = [
+        ...overrides.map(([, enabled]) => `global: ${enabled ? 'on' : 'off'}`),
+        ...items.map((p) => `${p.name || 'untitled'}: ${p.enabled ? 'on' : 'off'}`),
+      ];
+      return lines.length ? lines.join('\n') : null;
+    },
+  },
   'docs.localPath': {
     path: ['docs', 'localPath'],
     get: (settings) => settings.docs?.localPath,
@@ -155,6 +175,7 @@ export function clearShareableProjectSettingsFields<T extends ProjectSettings>(
     preservePatterns: settings.preservePatterns ? [...settings.preservePatterns] : undefined,
     scripts: settings.scripts ? { ...settings.scripts } : undefined,
     quickActions: settings.quickActions ? [...settings.quickActions] : undefined,
+    promptPrinciples: settings.promptPrinciples ? { ...settings.promptPrinciples } : undefined,
     docs: settings.docs ? { ...settings.docs } : undefined,
   };
 

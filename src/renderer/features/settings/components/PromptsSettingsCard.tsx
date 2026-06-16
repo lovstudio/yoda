@@ -1,7 +1,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PromptPrinciple } from '@shared/app-settings';
+import type { PromptPrinciple } from '@shared/project-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';

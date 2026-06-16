@@ -727,6 +727,7 @@
     "attachImagesAsPathsLabel": "图片以文件路径发送",
     "attachImagesAsPathsDesc": "以 @路径 形式引用图片，而不是把图片原生粘贴进 agent 终端。",
     "promptPrinciplesLabel": "Prompt 原则",
+    "promptPrinciplesProjectHeading": "本项目",
     "promptPrincipleUnnamed": "未命名原则",
     "instructionFilesLabel": "指令文件",
     "instructionFilesHint": "Runtime 内置 system prompt 不可编辑。全局 CLAUDE.md 充当用户级 system prompt，项目 CLAUDE.md / AGENTS.md 是项目级 prompt。点击展开查看，悬停行尾可打开编辑。",
@@ -3086,8 +3087,26 @@
       "lifecycleScriptsDescription": "任务工作区创建或清理时运行的命令。",
       "provisionCommand": "Provision 命令",
       "terminateCommand": "Terminate 命令",
+      "promptPrinciples": {
+        "title": "提示词原则",
+        "description": "在全局原则之上叠加本项目的规则。两者都会在会话启动时拼接到智能体系统提示词之后。",
+        "globalHeading": "全局原则",
+        "globalEmpty": "还没有全局原则。可在 设置 → 提示词 中添加。",
+        "localHeading": "项目原则",
+        "toggleGlobal": "在本项目启用",
+        "toggleLocal": "启用原则",
+        "unnamed": "未命名原则",
+        "namePlaceholder": "名称",
+        "textPlaceholder": "拼接到系统提示词后的原则文本…",
+        "add": "添加原则",
+        "remove": "移除原则"
+      },
       "shareable": {
         "fields": {
+          "promptPrinciples": {
+            "modalLabel": "提示词原则",
+            "leafLabel": "提示词原则"
+          },
           "preservePatterns": {
             "modalLabel": "保留模式",
             "leafLabel": "保留模式",
