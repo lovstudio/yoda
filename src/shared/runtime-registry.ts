@@ -27,6 +27,7 @@ export const RUNTIME_IDS = [
   'letta',
   'autohand',
   'antigravity',
+  'grok',
 ] as const;
 
 export type RuntimeId = (typeof RUNTIME_IDS)[number];
@@ -685,6 +686,25 @@ export const RUNTIMES: RuntimeDefinition[] = [
     alt: 'Antigravity CLI',
     terminalOnly: true,
   },
+  {
+    id: 'grok',
+    name: 'Grok',
+    description:
+      "xAI's terminal coding agent (Grok Build) with plan mode, parallel subagents, and headless automation.",
+    docUrl: 'https://x.ai/cli',
+    installCommand: 'curl -fsSL https://x.ai/cli/install.sh | bash',
+    commands: ['grok'],
+    versionArgs: ['--version'],
+    cli: 'grok',
+    autoApproveFlag: '--always-approve',
+    initialPromptFlag: '',
+    useKeystrokeInjection: true,
+    commandPrefix: '/',
+    icon: 'grok.svg',
+    alt: 'Grok CLI',
+    invertInDark: true,
+    terminalOnly: true,
+  },
 ];
 
 const OPENAI_API_ENV = [
@@ -912,6 +932,19 @@ export const RUNTIME_ACCOUNT_PROFILES = {
     officialSubscription: { supported: true },
     officialApi: { envVars: GOOGLE_API_ENV },
     maas: { supported: true, providerHints: ['google', 'gemini'] },
+  },
+  grok: {
+    officialSubscription: { supported: true },
+    officialApi: {
+      envVars: ['XAI_API_KEY'],
+      probe: {
+        defaultBaseUrl: 'https://api.x.ai/v1',
+        path: '/models',
+        authEnvVars: ['XAI_API_KEY'],
+        auth: 'bearer',
+      },
+    },
+    maas: { supported: true, providerHints: ['xai', 'grok'] },
   },
 } satisfies Record<RuntimeId, RuntimeAccountProfile>;
 
