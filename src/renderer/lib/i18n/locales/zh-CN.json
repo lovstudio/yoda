@@ -577,6 +577,8 @@
       "tmuxInstallFailed": "安装 tmux 失败",
       "tmuxError": "tmux 检测失败：{{error}}",
       "tmuxStatusError": "检测失败",
+      "tmuxStatusRow": "状态",
+      "tmuxPathRow": "可执行文件路径",
       "recheckTmux": "重新检测",
       "recheckingTmux": "检测中…",
       "preArchiveCommand": "归档前调用 skill",

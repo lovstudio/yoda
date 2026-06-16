@@ -577,6 +577,8 @@
       "tmuxInstallFailed": "Failed to install tmux",
       "tmuxError": "tmux check failed: {{error}}",
       "tmuxStatusError": "Check failed",
+      "tmuxStatusRow": "Status",
+      "tmuxPathRow": "Binary path",
       "recheckTmux": "Re-check",
       "recheckingTmux": "Checking…",
       "preArchiveCommand": "Pre-archive skill",

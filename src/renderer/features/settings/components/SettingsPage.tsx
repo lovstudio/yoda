@@ -46,7 +46,8 @@ import {
   EnableTmuxRow,
   InitTaskNameFromSessionRow,
   PreArchiveCommandRow,
-  TmuxSettingsSection,
+  TmuxRecheckButton,
+  TmuxSettingsRows,
 } from './TaskSettingsRows';
 import TelemetryCard from './TelemetryCard';
 import TerminalSettingsCard from './TerminalSettingsCard';
@@ -399,7 +400,12 @@ export function SettingsPage({
       description: t('settings.terminalTab.description'),
       sections: [
         { id: 'terminal', component: <TerminalSettingsCard /> },
-        { id: 'tmux', component: <TmuxSettingsSection /> },
+        {
+          id: 'tmux',
+          title: t('settings.terminal.tmux'),
+          action: <TmuxRecheckButton />,
+          component: <TmuxSettingsRows />,
+        },
       ],
     },
     'keyboard-shortcuts': {
