@@ -1496,10 +1496,28 @@
     "composerPlaceholder": "Message the room — @mention a teammate, or /command…",
     "cmd": { "stop": "Interrupt all running agents" },
     "intro": {
-      "title": "Team & roles",
-      "review": "An implement → review loop: the implementer builds, the reviewer checks, and they hand work back and forth until it's approved. @mention anyone to chime in.",
-      "freeform": "Open collaboration: @mention any teammate to delegate; they work in their own session and hand back when done."
+      "title": "How this works",
+      "review": {
+        "lead": "You describe what you need; the System acts as referee — it directs who works and drives the loop:",
+        "steps": [
+          "{{impl}} implements it.",
+          "{{rev}} reviews the changes and gives feedback.",
+          "{{impl}} revises — back and forth until {{rev}} approves.",
+          "the System marks the task complete."
+        ],
+        "note": "You don't @ anyone — the System does. You can still @mention someone to chime in."
+      },
+      "freeform": {
+        "lead": "Open collaboration — you direct the team:",
+        "steps": [
+          "@mention a teammate to delegate a task.",
+          "they work in their own session and report back.",
+          "@all to broadcast to everyone."
+        ],
+        "note": "Each teammate works independently; click a message to watch its session."
+      }
     },
+    "member": { "instructions": "Instructions", "noInstructions": "No custom instructions" },
     "preset": { "review": "Review loop", "freeform": "Freeform" },
     "mode": { "review": "Review loop", "freeform": "Freeform" },
     "taskExisting": "Existing task",

@@ -216,11 +216,14 @@ export async function seedRoomFromTeam(args: {
     });
   }
 
+  // Review-loop: the user just states the requirement — the System (referee)
+  // decides who works and @s them. Other presets still address the leader directly.
   await postMessage({
     roomId: room.id,
     authorMemberId: lead.id,
     kind: 'text',
-    body: `@${leaderHandle} ${args.requirement}`,
+    body:
+      team.routing === 'review-loop' ? args.requirement : `@${leaderHandle} ${args.requirement}`,
   });
 
   return room.id;

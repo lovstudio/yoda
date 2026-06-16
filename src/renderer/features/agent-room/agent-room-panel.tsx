@@ -183,7 +183,7 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
   );
 });
 
-function TeamIntroCard({
+const TeamIntroCard = observer(function TeamIntroCard({
   agents,
   preset,
 }: {
@@ -191,38 +191,84 @@ function TeamIntroCard({
   preset: RoomSnapshot['room']['preset'];
 }) {
   const { t } = useTranslation();
-  const desc =
-    preset === 'review-loop' ? t('agentRoom.intro.review') : t('agentRoom.intro.freeform');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const key = preset === 'review-loop' ? 'review' : 'freeform';
+  const impl = agents.find((m) => m.role === 'leader')?.displayName ?? 'Implementer';
+  const rev = agents.find((m) => m.role === 'worker')?.displayName ?? 'Reviewer';
+  const steps = t(`agentRoom.intro.${key}.steps`, { returnObjects: true, impl, rev }) as string[];
+
   return (
     <div className="mb-4 rounded-xl border border-border bg-background-1 p-4">
       <div className="mb-1.5 flex items-center gap-2">
         <Users className="size-4 text-primary" />
         <span className="text-sm font-semibold">{t('agentRoom.intro.title')}</span>
       </div>
-      <p className="mb-3 text-xs leading-relaxed text-foreground-muted">{desc}</p>
-      <div className="flex flex-col gap-1.5">
-        {agents.map((m) => (
-          <div key={m.id} className="flex items-center gap-2.5">
-            <div
-              className={cn(
-                'flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold',
-                ACCENT_AVATAR[m.accent]
-              )}
-            >
-              {monogram(m.displayName)}
-            </div>
-            <span className="text-sm font-medium">{m.displayName}</span>
-            <span className="ml-auto flex items-center gap-1 text-[10px] text-foreground-muted">
-              <span className={cn('size-1.5 rounded-full', STATUS_DOT[m.status])} />
-              {STATUS_LABEL[m.status]}
-            </span>
-            <span className="font-mono text-[10px] text-foreground-muted">@{m.handle}</span>
-          </div>
+      <p className="text-xs leading-relaxed text-foreground-muted">
+        {t(`agentRoom.intro.${key}.lead`)}
+      </p>
+      <ol className="my-2 flex flex-col gap-1">
+        {steps.map((s, i) => (
+          <li key={i} className="flex gap-2 text-xs leading-relaxed text-foreground-muted">
+            <span className="font-mono text-primary/70">{i + 1}.</span>
+            <span>{s}</span>
+          </li>
         ))}
+      </ol>
+      <p className="mb-3 text-[11px] italic text-foreground-muted/80">
+        {t(`agentRoom.intro.${key}.note`)}
+      </p>
+      <div className="flex flex-col gap-0.5">
+        {agents.map((m) => {
+          const expanded = expandedId === m.id;
+          return (
+            <div key={m.id} className="rounded-lg">
+              <button
+                type="button"
+                onClick={() => setExpandedId(expanded ? null : m.id)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-background-2"
+              >
+                <div
+                  className={cn(
+                    'flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold',
+                    ACCENT_AVATAR[m.accent]
+                  )}
+                >
+                  {monogram(m.displayName)}
+                </div>
+                <span className="text-sm font-medium">{m.displayName}</span>
+                <span className="ml-auto flex items-center gap-1 text-[10px] text-foreground-muted">
+                  <span className={cn('size-1.5 rounded-full', STATUS_DOT[m.status])} />
+                  {STATUS_LABEL[m.status]}
+                </span>
+                <span className="font-mono text-[10px] text-foreground-muted">@{m.handle}</span>
+              </button>
+              {expanded && (
+                <div className="mb-1 ml-9 mt-1 flex flex-col gap-1.5 text-xs text-foreground-muted">
+                  <div className="flex items-center gap-2">
+                    <span>{m.role}</span>
+                    {m.runtime && <span className="font-mono opacity-80">{m.runtime}</span>}
+                  </div>
+                  <div className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-background p-2 text-[11px] leading-relaxed">
+                    {m.systemPrompt?.trim() ? m.systemPrompt : t('agentRoom.member.noInstructions')}
+                  </div>
+                  {m.conversationId && (
+                    <button
+                      type="button"
+                      onClick={() => agentRoomStore.setInspectedConversation(m.conversationId)}
+                      className="inline-flex w-fit items-center gap-1 text-[11px] text-foreground-muted transition-colors hover:text-foreground"
+                    >
+                      <TerminalSquare className="size-3" /> {t('agentRoom.openSession')}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
-}
+});
 
 function MessageRow({
   message,
@@ -236,15 +282,23 @@ function MessageRow({
   inspectedId: string | null;
 }) {
   const { t } = useTranslation();
+  // System = the referee's voice: a small centered line, with @handles as pills.
   if (message.kind === 'system') {
     return (
-      <div className="my-2 text-center text-xs italic text-foreground-muted">{message.body}</div>
+      <div className="my-2 flex justify-center">
+        <div className="text-center text-xs italic text-foreground-muted">
+          {renderBody(message.body, byHandle)}
+        </div>
+      </div>
     );
   }
   const author = message.authorMemberId ? byId.get(message.authorMemberId) : undefined;
   const accent = author?.accent ?? 'terra';
   const name = author?.displayName ?? 'You';
   const isInspected = message.sessionRef === inspectedId && inspectedId !== null;
+  const openSession = message.sessionRef
+    ? () => agentRoomStore.setInspectedConversation(message.sessionRef)
+    : undefined;
 
   return (
     <div className="flex gap-3 py-2.5">
@@ -256,7 +310,7 @@ function MessageRow({
       >
         {monogram(name)}
       </div>
-      <div className="group min-w-0 flex-1">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className={cn('text-sm font-semibold', ACCENT_TEXT[accent])}>{name}</span>
           {message.kind === 'handoff' && (
@@ -264,19 +318,19 @@ function MessageRow({
               {t('agentRoom.handoff')}
             </span>
           )}
-          {message.sessionRef && (
+          {openSession && (
             <button
               type="button"
-              title={isInspected ? t('agentRoom.hideSession') : t('agentRoom.openSession')}
-              onClick={() => agentRoomStore.setInspectedConversation(message.sessionRef)}
+              onClick={openSession}
               className={cn(
-                'flex size-5 items-center justify-center rounded transition-colors',
+                'ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors',
                 isInspected
                   ? 'text-primary'
-                  : 'text-foreground-muted/50 opacity-0 hover:text-foreground group-hover:opacity-100'
+                  : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
               )}
             >
-              <TerminalSquare className="size-3.5" />
+              <TerminalSquare className="size-3" />
+              {isInspected ? t('agentRoom.hideSession') : t('agentRoom.openSession')}
             </button>
           )}
         </div>

@@ -45,8 +45,8 @@ const ALL_HANDLE = 'all';
 
 /**
  * What the conductor injects to start a reviewer's turn each round. The reviewer
- * ends with the `YODA_REVIEW_RESULT` marker; the verdict is the turn-end signal,
- * so this drives the loop without depending on the agent running `team-at`.
+ * ends by recording a structured verdict via `.yoda/team-verdict` — the reliable,
+ * explicit turn-end + hand-off signal (the PTY marker remains a silent fallback).
  */
 const REVIEW_REQUEST =
   'The implementer just finished a round. Review the current worktree against the original requirement (do NOT modify files). ' +
@@ -134,7 +134,6 @@ class RoomConductor {
   }
 
   private async onMessage(roomId: string, message: RoomMessage): Promise<void> {
-    if (message.mentions.length === 0) return;
     const snapshot = await getRoom(roomId);
     if (!snapshot || snapshot.room.status !== 'active') return;
     const { room, members } = snapshot;
@@ -149,15 +148,28 @@ class RoomConductor {
     if (fromHuman) {
       this.hops.set(roomId, MAX_HOPS);
       this.reviewRounds.set(roomId, 0);
+      this.activeMember.delete(roomId);
     }
 
+    const reviewLoop = room.preset === 'review-loop';
     const wantsAll = message.mentions.includes(ALL_HANDLE);
-    const targets = members.filter(
+    let targets = members.filter(
       (m) =>
         m.runtime &&
         m.id !== message.authorMemberId &&
         (wantsAll || message.mentions.includes(m.handle.toLowerCase()))
     );
+
+    // The System is the referee: a human request with no explicit @target in a
+    // review-loop room kicks off the implementer automatically (the user does NOT
+    // @ anyone — the System directs who works, starting the loop).
+    if (targets.length === 0 && fromHuman && reviewLoop) {
+      const leader = members.find((m) => m.role === 'leader' && m.runtime);
+      if (leader) {
+        await this.transition(roomId, `@${leader.handle} is on it.`);
+        targets = [leader];
+      }
+    }
     if (targets.length === 0) return;
 
     const roster: RosterEntry[] = members.map((m) => ({
@@ -167,7 +179,6 @@ class RoomConductor {
     }));
     const fromName = author?.displayName ?? 'the lead';
 
-    const reviewLoop = room.preset === 'review-loop';
     for (const member of targets) {
       if (!this.spend(roomId)) return this.pauseRouting(roomId);
       await this.deliverTo(room.projectId, room.taskId, roomId, member, roster, {
@@ -473,7 +484,10 @@ class RoomConductor {
     if (finished.id === leader.id) {
       if (!this.spend(roomId)) return this.pauseRouting(roomId);
       const round = (this.reviewRounds.get(roomId) ?? 0) + 1;
-      await this.transition(roomId, `${reviewer.displayName} is reviewing (round ${round}).`);
+      await this.transition(
+        roomId,
+        `@${leader.handle} finished — @${reviewer.handle} is reviewing (round ${round}).`
+      );
       await this.deliverTo(room.projectId, room.taskId, roomId, reviewer, roster, {
         fromName: leader.displayName,
         body: REVIEW_REQUEST,
@@ -485,23 +499,20 @@ class RoomConductor {
     if (finished.id === reviewer.id) {
       if (verdict?.passed) {
         this.reviewRounds.delete(roomId);
-        await this.transition(roomId, `${reviewer.displayName} approved the work — task complete.`);
+        await this.transition(roomId, `@${reviewer.handle} approved — task complete.`);
         return;
       }
       // FAIL — count the round and stop ping-ponging once it clearly won't converge.
       const rounds = (this.reviewRounds.get(roomId) ?? 0) + 1;
       this.reviewRounds.set(roomId, rounds);
       if (rounds >= REVIEW_ROUND_CAP) {
-        await this.transition(
-          roomId,
-          `Still not passing after ${rounds} review rounds — pausing for @you to take a look.`
-        );
+        await this.transition(roomId, `Still not passing after ${rounds} rounds — over to @you.`);
         return;
       }
       if (!this.spend(roomId)) return this.pauseRouting(roomId);
       await this.transition(
         roomId,
-        `${reviewer.displayName} requested changes — back to ${leader.displayName}.`
+        `Changes requested — @${leader.handle} is addressing the review.`
       );
       const fixes =
         verdict?.feedback?.trim() || 'Re-check the implementation against the requirement.';
