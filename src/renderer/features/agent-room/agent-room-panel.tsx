@@ -139,7 +139,7 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
                 onClick={() => agentRoomStore.setInspectedMember(m.id)}
                 title={`${m.displayName} · ${STATUS_LABEL[m.status]}`}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-lg border px-1.5 py-1 transition-colors',
+                  'flex cursor-pointer items-center gap-1.5 rounded-lg border px-1.5 py-1 transition-colors',
                   isInspected
                     ? 'border-primary bg-primary/10'
                     : 'border-transparent hover:border-border hover:bg-background-2'
@@ -271,7 +271,7 @@ const TeamIntroCard = observer(function TeamIntroCard({
               onClick={() => agentRoomStore.setInspectedMember(m.id)}
               title={t('agentRoom.viewAgent')}
               className={cn(
-                'flex w-full items-center gap-2.5 rounded-lg border px-1.5 py-1 text-left transition-colors',
+                'flex w-full cursor-pointer items-center gap-2.5 rounded-lg border px-1.5 py-1 text-left transition-colors',
                 isInspected
                   ? 'border-primary bg-primary/10'
                   : 'border-transparent hover:bg-background-2'
@@ -368,7 +368,7 @@ const AgentDetailPane = observer(function AgentDetailPane({
           <button
             type="button"
             onClick={() => agentRoomStore.setInspectedConversation(member.conversationId)}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-border bg-background-1 px-3 py-1.5 text-xs text-foreground-muted transition-colors hover:border-primary hover:text-foreground"
+            className="mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background-1 px-3 py-1.5 text-xs text-foreground-muted transition-colors hover:border-primary hover:text-foreground"
           >
             <TerminalSquare className="size-3.5" /> {t('agentRoom.openSession')}
           </button>
@@ -421,7 +421,7 @@ function MessageRow({
           onClick={openDetail}
           title={t('agentRoom.viewAgent')}
           className={cn(
-            'flex size-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold transition-opacity hover:opacity-80',
+            'flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-sm font-semibold transition-opacity hover:opacity-80',
             ACCENT_AVATAR[accent]
           )}
         >
@@ -444,7 +444,10 @@ function MessageRow({
               type="button"
               onClick={openDetail}
               title={t('agentRoom.viewAgent')}
-              className={cn('text-sm font-semibold hover:underline', ACCENT_TEXT[accent])}
+              className={cn(
+                'cursor-pointer text-sm font-semibold hover:underline',
+                ACCENT_TEXT[accent]
+              )}
             >
               {name}
             </button>
@@ -461,7 +464,7 @@ function MessageRow({
               type="button"
               onClick={openSession}
               className={cn(
-                'ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors',
+                'ml-auto flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors',
                 isInspected
                   ? 'text-primary'
                   : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
@@ -494,7 +497,7 @@ function renderBody(body: string, byHandle: Map<string, RoomMember>) {
             key={i}
             type="button"
             onClick={() => agentRoomStore.setInspectedMember(member.id)}
-            className={cn(cls, 'hover:underline')}
+            className={cn(cls, 'cursor-pointer hover:underline')}
           >
             @{member.displayName}
           </button>
