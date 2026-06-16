@@ -1,6 +1,7 @@
 import { createRPCRouter } from '../shared/ipc/rpc';
 import { accountController } from './core/account/controller';
 import { agentHooksController } from './core/agent-hooks/controller';
+import { agentTeamsController } from './core/agent-teams/controller';
 import { agentsConfigController } from './core/agents-config/controller';
 import { aiLabController } from './core/ai-lab/controller';
 import { aiLogsController } from './core/ai-logs/controller';
@@ -49,6 +50,7 @@ export const rpcRouter = createRPCRouter({
   account: accountController,
   agentHooks: agentHooksController,
   agentsConfig: agentsConfigController,
+  agentTeams: agentTeamsController,
   aiLab: aiLabController,
   aiLogs: aiLogsController,
   automation: automationController,

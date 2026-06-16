@@ -232,6 +232,13 @@
       "when": 1781553414973,
       "tag": "0032_numerous_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1781572267334,
+      "tag": "0033_optimal_vertigo",
+      "breakpoints": true
     }
   ]
 }
