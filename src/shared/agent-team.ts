@@ -44,6 +44,7 @@ export interface AgentTeamDraft {
 }
 
 export const BUILTIN_STARTUP_TEAM_ID = 'builtin:startup';
+export const BUILTIN_REVIEW_TEAM_ID = 'builtin:review';
 
 /**
  * The built-in "startup company" team — the former hard-coded 5-role `team`
@@ -92,6 +93,30 @@ export const BUILTIN_TEAMS: AgentTeam[] = [
         role: 'worker',
         runtime: 'codex',
         agentRef: BUILTIN_AGENT_KEYS.teamOperations,
+      },
+    ],
+    createdAt: '',
+    updatedAt: '',
+  },
+  {
+    id: BUILTIN_REVIEW_TEAM_ID,
+    name: 'Review (implement → review)',
+    icon: '🔍',
+    builtin: true,
+    members: [
+      {
+        handle: 'implementer',
+        displayName: 'Implementer',
+        role: 'leader',
+        runtime: 'claude',
+        agentRef: BUILTIN_AGENT_KEYS.reviewImplementer,
+      },
+      {
+        handle: 'reviewer',
+        displayName: 'Reviewer',
+        role: 'worker',
+        runtime: 'codex',
+        agentRef: BUILTIN_AGENT_KEYS.reviewReviewer,
       },
     ],
     createdAt: '',

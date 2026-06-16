@@ -482,18 +482,23 @@ function buildSpecPrompt(args: { requirement: string; systemPrompt: string }): s
   );
 }
 
-function buildTeamCeoPrompt(args: { requirement: string; systemPrompt: string }): string {
+// The team leader runs first. Its own system prompt drives specifics; here we
+// just give the requirement and name the teammates who act on its output, so
+// the framing stays generic across team templates (startup, review, …).
+function buildTeamCeoPrompt(args: {
+  requirement: string;
+  systemPrompt: string;
+  teammates?: string[];
+}): string {
+  const teammates = args.teammates?.filter(Boolean) ?? [];
   return withSystemPrompt(
     args.systemPrompt,
     [
       `Original requirement:`,
       args.requirement || '(No explicit requirement was provided.)',
-      '',
-      `Target specialist agents:`,
-      `- Product manager agent, role-playing Steve Jobs`,
-      `- Engineering agent, role-playing Linus Torvalds`,
-      `- UI/UX agent, role-playing Jony Ive`,
-      `- User operations agent, role-playing Tim Cook`,
+      ...(teammates.length
+        ? ['', `Teammates who will continue from your output: ${teammates.join(', ')}.`]
+        : []),
     ].join('\n')
   );
 }
@@ -509,7 +514,7 @@ function buildTeamRolePrompt(args: {
       `Original requirement:`,
       args.requirement || '(No explicit requirement was provided.)',
       '',
-      `CEO decomposition and assignments:`,
+      `What the lead produced:`,
       args.ceoPlan,
     ].join('\n')
   );
@@ -1653,15 +1658,16 @@ export const HomeComposer = observer(function HomeComposer({
           const leaderSlot = leader ? resolveTeamMember(leader) : null;
           if (!leader || !leaderSlot?.provider) return;
           const leaderProvider = leaderSlot.provider;
+          const workers = teamWorkers(activeTeam);
           const leaderConv = createTaskConversation({
             provider: leaderProvider,
             initialPrompt: buildTeamCeoPrompt({
               requirement,
               systemPrompt: leaderSlot.systemPrompt,
+              teammates: workers.map((m) => m.displayName),
             }),
             titlePrompt: trimmed || undefined,
           });
-          const workers = teamWorkers(activeTeam);
           finishTaskConversationSubmit();
           void (async () => {
             await leaderConv.promise;
@@ -1948,17 +1954,18 @@ export const HomeComposer = observer(function HomeComposer({
         const leaderSlot = leader ? resolveTeamMember(leader) : null;
         if (!leader || !leaderSlot?.provider) return;
         const leaderProvider = leaderSlot.provider;
+        const workers = teamWorkers(activeTeam);
         const leaderConv = createProjectTask({
           provider: leaderProvider,
           nameSeed: `${baseName}-${leader.handle}`,
           initialPrompt: buildTeamCeoPrompt({
             requirement,
             systemPrompt: leaderSlot.systemPrompt,
+            teammates: workers.map((m) => m.displayName),
           }),
           titlePrompt: trimmed || undefined,
           strategyKind: 'new-branch',
         });
-        const workers = teamWorkers(activeTeam);
         goToTask(mounted.data.id, leaderConv.taskId);
         void (async () => {
           await leaderConv.promise;
