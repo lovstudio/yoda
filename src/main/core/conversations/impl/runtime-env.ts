@@ -4,12 +4,21 @@ import { getRuntimeAccountProfile, type RuntimeId } from '@shared/runtime-regist
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const CLAUDE_DISABLE_ALTERNATE_SCREEN_ENV = 'CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN';
 
-/** GLM rides on the Claude Code CLI pointed at z.ai's Anthropic-compatible endpoint. */
-const GLM_ANTHROPIC_BASE_URL = 'https://api.z.ai/api/anthropic';
+/**
+ * Runtimes that ride on the Claude Code CLI but point it at a third-party
+ * Anthropic-compatible endpoint. The base URL is forced here; the API key is
+ * supplied by the user via ANTHROPIC_AUTH_TOKEN.
+ */
+const CLAUDE_COMPATIBLE_BASE_URLS: Partial<Record<RuntimeId, string>> = {
+  glm: 'https://api.z.ai/api/anthropic',
+  step: 'https://api.stepfun.com/step_plan',
+};
 
 /** Runtimes whose underlying binary is Claude Code (and thus share its tmux quirks). */
 function isClaudeBased(runtimeId: RuntimeId | undefined): boolean {
-  return runtimeId === 'claude' || runtimeId === 'glm';
+  return (
+    runtimeId === 'claude' || (runtimeId !== undefined && runtimeId in CLAUDE_COMPATIBLE_BASE_URLS)
+  );
 }
 
 function shouldForwardOfficialApiEnv(providerConfig: RuntimeCustomConfig | undefined): boolean {
@@ -58,10 +67,13 @@ export function resolveRuntimeEnv(
     }
   }
 
-  // Pin GLM to z.ai's Anthropic-compatible endpoint unless the user overrode it
-  // (the GLM API key itself is supplied by the user via ANTHROPIC_AUTH_TOKEN).
-  if (options.runtimeId === 'glm' && env.ANTHROPIC_BASE_URL === undefined) {
-    env.ANTHROPIC_BASE_URL = GLM_ANTHROPIC_BASE_URL;
+  // Pin Claude-compatible runtimes (GLM, Step) to their endpoint unless the user
+  // overrode it (the API key itself is supplied via ANTHROPIC_AUTH_TOKEN).
+  const compatibleBaseUrl = options.runtimeId
+    ? CLAUDE_COMPATIBLE_BASE_URLS[options.runtimeId]
+    : undefined;
+  if (compatibleBaseUrl && env.ANTHROPIC_BASE_URL === undefined) {
+    env.ANTHROPIC_BASE_URL = compatibleBaseUrl;
   }
 
   if (

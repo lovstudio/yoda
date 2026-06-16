@@ -29,6 +29,7 @@ import openaiLogoSvg from '../../assets/images/openai.svg?raw';
 import opencodeLogo from '../../assets/images/opencode.png';
 import piLogo from '../../assets/images/pi.png';
 import qwenLogo from '../../assets/images/qwen.png';
+import stepLogoSvg from '../../assets/images/step.svg?raw';
 
 export type AgentInfo = {
   name: string;
@@ -46,6 +47,7 @@ export const agentConfig: Record<RuntimeId, AgentInfo> = {
   cursor: { name: 'Cursor', logo: cursorLogoSvg, alt: 'Cursor CLI', isSvg: true },
   gemini: { name: 'Gemini', logo: geminiLogo, alt: 'Gemini CLI' },
   glm: { name: 'GLM', logo: glmLogoSvg, alt: 'GLM (Zhipu AI)', isSvg: true },
+  step: { name: 'Step', logo: stepLogoSvg, alt: 'Step (StepFun)', isSvg: true },
   mistral: { name: 'Mistral Vibe', logo: mistralLogo, alt: 'Mistral Vibe CLI' },
   qwen: { name: 'Qwen Code', logo: qwenLogo, alt: 'Qwen Code' },
   droid: { name: 'Droid', logo: factoryLogoSvg, alt: 'Factory Droid', isSvg: true },

@@ -29,6 +29,7 @@ export const RUNTIME_IDS = [
   'antigravity',
   'grok',
   'glm',
+  'step',
 ] as const;
 
 export type RuntimeId = (typeof RUNTIME_IDS)[number];
@@ -731,6 +732,31 @@ export const RUNTIMES: RuntimeDefinition[] = [
     terminalOnly: true,
     supportsHooks: true,
   },
+  {
+    id: 'step',
+    name: 'Step',
+    description:
+      "StepFun's Step Plan, driven through the Claude Code CLI against StepFun's Anthropic-compatible endpoint. Set ANTHROPIC_AUTH_TOKEN to your StepFun key.",
+    docUrl: 'https://platform.stepfun.com/docs/zh/step-plan/integrations/claude-code',
+    // Step has no standalone agent binary — it rides on the Claude Code CLI.
+    installCommand: 'curl -fsSL https://claude.ai/install.sh | bash',
+    commands: ['claude'],
+    versionArgs: ['--version'],
+    cli: 'claude',
+    autoApproveFlag: '--dangerously-skip-permissions',
+    initialPromptFlag: '',
+    clipboardImagePaste: true,
+    resumeFlag: '--resume',
+    sessionIdFlag: '--session-id',
+    appendSystemPromptFlag: '--append-system-prompt',
+    commandPrefix: '/',
+    planActivateCommand: '/plan',
+    namingCommand: 'claude --print --model {model} --output-format text --no-session-persistence',
+    icon: 'step.svg',
+    alt: 'Step (StepFun)',
+    terminalOnly: true,
+    supportsHooks: true,
+  },
 ];
 
 const OPENAI_API_ENV = [
@@ -988,6 +1014,23 @@ export const RUNTIME_ACCOUNT_PROFILES = {
       },
     },
     maas: { supported: false, providerHints: ['zhipu', 'glm', 'z.ai'] },
+  },
+  step: {
+    // Step Plan auth is the StepFun API key carried in ANTHROPIC_AUTH_TOKEN;
+    // the base URL is forced to StepFun by resolveRuntimeEnv.
+    officialSubscription: { supported: false },
+    officialApi: {
+      envVars: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL'],
+      probe: {
+        defaultBaseUrl: 'https://api.stepfun.com/step_plan',
+        path: '/v1/models',
+        baseUrlEnvVar: 'ANTHROPIC_BASE_URL',
+        authEnvVars: ['ANTHROPIC_AUTH_TOKEN'],
+        auth: 'bearer',
+        headers: { 'anthropic-version': '2023-06-01' },
+      },
+    },
+    maas: { supported: false, providerHints: ['stepfun', 'step', '阶跃'] },
   },
 } satisfies Record<RuntimeId, RuntimeAccountProfile>;
 

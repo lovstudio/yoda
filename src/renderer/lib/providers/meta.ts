@@ -27,6 +27,7 @@ import openaiIcon from '@/assets/images/openai.svg?raw';
 import opencodeIcon from '@/assets/images/opencode.png';
 import piIcon from '@/assets/images/pi.png';
 import qwenIcon from '@/assets/images/qwen.png';
+import stepIcon from '@/assets/images/step.svg?raw';
 import { RUNTIMES, type RuntimeId } from '@shared/runtime-registry';
 
 export type UiAgent = RuntimeId;
@@ -42,6 +43,7 @@ const ICONS: Record<string, string> = {
   'droid.svg': factorydroidIcon,
   'gemini.png': geminiIcon,
   'glm.svg': glmIcon,
+  'step.svg': stepIcon,
   'cursor.svg': cursorlogoIcon,
   'devin.png': devinIcon,
   'gh-copilot.svg': ghcopilotIcon,
