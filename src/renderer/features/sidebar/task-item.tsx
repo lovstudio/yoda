@@ -184,8 +184,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               onClick={(e) => {
                 setArchiveConfirming(false);
                 // Alt/Option pins the task into the global side pane; a plain
-                // click navigates as usual.
+                // click navigates as usual. Provision first — the pinned body
+                // renders nothing until the task store is provisioned (its
+                // observer fills in once provisioning completes).
                 if (e.altKey) {
+                  handleProvision();
                   appState.sidePane.pinTask(projectId, taskId, OVERVIEW_TAB_ID);
                   return;
                 }
