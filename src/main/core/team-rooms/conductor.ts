@@ -1,41 +1,67 @@
 import { randomUUID } from 'node:crypto';
+import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import { teamRoomUpdatedChannel } from '@shared/events/teamRoomEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
 import type { RuntimeId } from '@shared/runtime-registry';
 import {
   buildMemberTurnPrompt,
   buildTeammateSystemPrompt,
-  countTeamMessages,
-  teamMessageOrFallback,
   type RosterEntry,
 } from '@shared/team-protocol';
-import type { RoomMember, RoomMessage } from '@shared/team-room';
+import type { MemberStatus, RoomMember, RoomMessage } from '@shared/team-room';
+import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { createConversation } from '@main/core/conversations/createConversation';
 import { injectPrompt } from '@main/core/conversations/inject-prompt';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
-import { getAllRooms, getRoom, postMessage, setMemberConversation, setMemberStatus } from './store';
+import {
+  getAllRooms,
+  getMemberByConversation,
+  getRoom,
+  postMessage,
+  setMemberConversation,
+  setMemberStatus,
+} from './store';
+import { installTeamAtScript } from './team-at-script';
 import { teamRoomEvents } from './team-room-events';
-import { waitForMemberTurn } from './turn-wait';
 
-const POLL_MS = 1_500;
-const TURN_TIMEOUT_MS = 30 * 60_000;
-/** Max agent turns per human prompt, so an @-cascade can't loop forever. */
-const MAX_HOPS = 16;
+const STATUS_POLL_MS = 1_500;
+/** A member can be observed idle this long after delivery before we trust it. */
+const TURN_START_GRACE_MS = 20_000;
+/** Max agent deliveries per human prompt, so an @-cascade can't loop forever. */
+const MAX_HOPS = 24;
+/** The reserved broadcast handle. */
+const ALL_HANDLE = 'all';
+
+type Session = { projectId: string; taskId: string; conversationId: string };
+
+function mapStatus(s: AgentSessionRuntimeStatus): MemberStatus {
+  switch (s) {
+    case 'working':
+      return 'running';
+    case 'awaiting-input':
+      return 'awaiting-input';
+    case 'error':
+      return 'error';
+    case 'idle':
+    case 'completed':
+      return 'finished';
+  }
+}
 
 /**
- * Generic @-mention routing engine for Team Rooms — the generalization of the
- * review orchestrator. Watches every posted message; for each agent teammate
- * it addresses, dispatches a turn (spawning/reusing that member's session),
- * captures the member's hand-off block, and posts it back as a room message —
- * which re-enters routing if it @mentions someone else. Bounded by MAX_HOPS.
+ * Game-loop conductor for Team Rooms. Routing is NOT scraped from agent output:
+ * every room message with @mentions causes the conductor to DELIVER that message
+ * straight into the mentioned member's live session (continuing it with new
+ * input). Agents reach teammates out-of-band via the `team-at` script, which
+ * posts a room message through {@link handleTeamAt}. Member dots mirror real
+ * run-state via a per-member status watcher.
  */
 class RoomConductor {
   private started = false;
-  private readonly inFlight = new Set<string>(); // member ids currently working
   private readonly hops = new Map<string, number>(); // roomId -> remaining budget
-  private readonly aborters = new Map<string, AbortController>(); // roomId -> abort
+  private readonly statusWatchers = new Map<string, () => void>(); // memberId -> cancel
 
   /** Subscribe to message posts. Idempotent. */
   initialize(): void {
@@ -48,51 +74,18 @@ class RoomConductor {
     });
   }
 
-  abortRoom(roomId: string): void {
-    this.aborters.get(roomId)?.abort();
-    this.aborters.delete(roomId);
-  }
-
-  /**
-   * Recover rooms left mid-turn by a previous app lifetime (reload, crash). The
-   * in-flight PTY turn is gone, so: clear stale 'working'/'thinking' member dots,
-   * then re-drive the last message if it still addresses an agent that never got
-   * to reply (it's the last message, so by definition nothing followed it).
-   */
+  /** Clear stale running dots from a previous app lifetime. */
   async resumePending(): Promise<void> {
     const rooms = await getAllRooms();
     for (const room of rooms) {
       const snapshot = await getRoom(room.id);
       if (!snapshot) continue;
       for (const member of snapshot.members) {
-        if (member.runtime && member.status !== 'idle') {
+        if (member.runtime && member.status !== 'idle' && member.status !== 'finished') {
           await setMemberStatus(room.id, member.id, 'idle', member.conversationId);
         }
       }
-      const last = snapshot.messages.at(-1);
-      if (!last || last.mentions.length === 0) continue;
-      const pending = snapshot.members.some(
-        (m) =>
-          m.runtime &&
-          m.id !== last.authorMemberId &&
-          last.mentions.includes(m.handle.toLowerCase())
-      );
-      if (pending) {
-        this.hops.set(room.id, MAX_HOPS);
-        void this.onMessage(room.id, last).catch((e: unknown) => {
-          log.warn('RoomConductor: resume failed', { roomId: room.id, error: String(e) });
-        });
-      }
     }
-  }
-
-  private signal(roomId: string): AbortSignal {
-    let ac = this.aborters.get(roomId);
-    if (!ac) {
-      ac = new AbortController();
-      this.aborters.set(roomId, ac);
-    }
-    return ac.signal;
   }
 
   private async onMessage(roomId: string, message: RoomMessage): Promise<void> {
@@ -109,11 +102,12 @@ class RoomConductor {
     // spend it so a back-and-forth can't run away.
     if (fromHuman) this.hops.set(roomId, MAX_HOPS);
 
+    const wantsAll = message.mentions.includes(ALL_HANDLE);
     const targets = members.filter(
       (m) =>
         m.runtime &&
         m.id !== message.authorMemberId &&
-        message.mentions.includes(m.handle.toLowerCase())
+        (wantsAll || message.mentions.includes(m.handle.toLowerCase()))
     );
     if (targets.length === 0) return;
 
@@ -122,7 +116,7 @@ class RoomConductor {
       displayName: m.displayName,
       role: m.role,
     }));
-    const fromName = author?.displayName ?? 'Lead';
+    const fromName = author?.displayName ?? 'the lead';
 
     for (const member of targets) {
       const remaining = this.hops.get(roomId) ?? 0;
@@ -130,21 +124,26 @@ class RoomConductor {
         await postMessage({
           roomId,
           kind: 'system',
-          body: `Routing paused — hit the ${MAX_HOPS}-turn limit for this prompt. @mention a teammate to continue.`,
+          body: `Routing paused — hit the ${MAX_HOPS}-message limit for this prompt. @mention a teammate to continue.`,
           mentions: [],
         });
         return;
       }
-      if (this.inFlight.has(member.id)) continue; // already working; skip duplicate ping
       this.hops.set(roomId, remaining - 1);
-      await this.dispatchTurn(room.projectId, room.taskId, roomId, member, roster, {
+      await this.deliverTo(room.projectId, room.taskId, roomId, member, roster, {
         fromName,
         body: message.body,
       });
     }
   }
 
-  private async dispatchTurn(
+  /**
+   * Deliver a message into a member's session: spawn the session on first
+   * contact (with its teammate + role system prompt), otherwise inject the
+   * message as new input. Returns immediately — the member works on its own; its
+   * reply comes back later as its own `team-at` call.
+   */
+  private async deliverTo(
     projectId: string,
     taskId: string,
     roomId: string,
@@ -153,31 +152,29 @@ class RoomConductor {
     incoming: { fromName: string; body: string }
   ): Promise<void> {
     const runtime = member.runtime as RuntimeId;
-    this.inFlight.add(member.id);
+    const turnPrompt = buildMemberTurnPrompt({
+      fromDisplayName: incoming.fromName,
+      body: incoming.body,
+    });
+
+    let conversationId = member.conversationId;
+    const existingSessionId = conversationId
+      ? makePtySessionId(projectId, taskId, conversationId)
+      : null;
+    const alive =
+      existingSessionId !== null && ptySessionRegistry.get(existingSessionId) !== undefined;
+
     try {
-      await setMemberStatus(roomId, member.id, 'thinking', member.conversationId);
-
-      const turnPrompt = buildMemberTurnPrompt({
-        fromDisplayName: incoming.fromName,
-        body: incoming.body,
-      });
-
-      let conversationId = member.conversationId;
-      let sessionId = conversationId ? makePtySessionId(projectId, taskId, conversationId) : null;
-      const alive = sessionId !== null && ptySessionRegistry.get(sessionId) !== undefined;
-      let baselineCount = 0;
-
+      // Make sure the team-at script is present in the worktree before the
+      // agent could try to run it.
+      await installTeamAtScript(projectId, taskId);
       if (!alive) {
-        // First turn (or session died across a restart): spawn the member's
-        // session with the teammate system prompt + this turn baked in.
         conversationId = randomUUID();
-        sessionId = makePtySessionId(projectId, taskId, conversationId);
         const teammatePrompt = buildTeammateSystemPrompt({
           displayName: member.displayName,
           handle: member.handle,
           roster,
         });
-        // Role prompt (e.g. "you are the reviewer…") + chat etiquette + this turn.
         const systemPrompt = member.systemPrompt
           ? `${teammatePrompt}\n\n${member.systemPrompt}`
           : teammatePrompt;
@@ -192,11 +189,10 @@ class RoomConductor {
         });
         await setMemberConversation(member.id, conversationId);
         events.emit(teamRoomUpdatedChannel, { roomId }, roomId);
-      } else if (sessionId) {
-        baselineCount = countTeamMessages(ptySessionRegistry.snapshot(sessionId));
+      } else if (conversationId && existingSessionId) {
         const ok = await injectPrompt(
-          sessionId,
-          { projectId, taskId, conversationId: conversationId as string },
+          existingSessionId,
+          { projectId, taskId, conversationId },
           runtime,
           turnPrompt
         );
@@ -206,44 +202,74 @@ class RoomConductor {
         }
       }
 
-      await setMemberStatus(roomId, member.id, 'working', conversationId);
-      const outcome = await waitForMemberTurn(
-        { projectId, taskId, conversationId: conversationId as string },
-        sessionId as string,
-        baselineCount,
-        { signal: this.signal(roomId), timeoutMs: TURN_TIMEOUT_MS, pollMs: POLL_MS }
-      );
-      if (outcome.kind === 'aborted') {
-        await setMemberStatus(roomId, member.id, 'idle', conversationId);
-        return;
-      }
-
-      const body = teamMessageOrFallback(outcome.output);
-      await postMessage({
-        roomId,
-        authorMemberId: member.id,
-        kind: 'handoff',
-        body,
-        sessionRef: conversationId,
-      });
-      await setMemberStatus(roomId, member.id, 'idle', conversationId);
+      await setMemberStatus(roomId, member.id, 'running', conversationId);
+      this.watchStatus(roomId, member.id, { projectId, taskId, conversationId: conversationId! });
     } catch (error) {
-      // A turn can fail to even start (e.g. the backing worktree isn't ready, or
-      // the agent CLI failed to spawn). Don't leave the member stuck 'working';
-      // surface it in the room and free the dot.
-      await setMemberStatus(roomId, member.id, 'idle', member.conversationId).catch(() => {});
+      await setMemberStatus(roomId, member.id, 'error', member.conversationId).catch(() => {});
       await postMessage({
         roomId,
         kind: 'system',
-        body: `${member.displayName} couldn't start its turn: ${
+        body: `${member.displayName} couldn't start: ${
           error instanceof Error ? error.message : String(error)
         }`,
         mentions: [],
       }).catch(() => {});
-    } finally {
-      this.inFlight.delete(member.id);
     }
+  }
+
+  /** Mirror a member's roster dot to its session run-state until the turn ends. */
+  private watchStatus(roomId: string, memberId: string, session: Session): void {
+    this.statusWatchers.get(memberId)?.();
+    const start = Date.now();
+    let sawRunning = false;
+    let last: MemberStatus | null = null;
+
+    const timer = setInterval(() => {
+      const raw = agentSessionRuntimeStore.getStatus(session);
+      if (raw === 'working' || raw === 'awaiting-input') sawRunning = true;
+      const terminal = raw === 'idle' || raw === 'completed' || raw === 'error';
+      // Don't trust an early idle before the agent has actually started.
+      if (terminal && !sawRunning && Date.now() - start < TURN_START_GRACE_MS) return;
+
+      const mapped = mapStatus(raw);
+      if (mapped !== last) {
+        last = mapped;
+        void setMemberStatus(roomId, memberId, mapped, session.conversationId).catch(() => {});
+      }
+      if (terminal) stop();
+    }, STATUS_POLL_MS);
+
+    const stop = () => {
+      clearInterval(timer);
+      this.statusWatchers.delete(memberId);
+    };
+    this.statusWatchers.set(memberId, stop);
   }
 }
 
 export const roomConductor = new RoomConductor();
+
+/**
+ * Called when a member's session runs the `team-at` script: post the message as
+ * that member, addressed to the given handles (or 'all'). The room-message hook
+ * then delivers it into the targets' sessions via the conductor.
+ */
+export async function handleTeamAt(
+  conversationId: string,
+  to: string[] | 'all',
+  message: string
+): Promise<void> {
+  const found = await getMemberByConversation(conversationId);
+  if (!found) {
+    log.warn('handleTeamAt: no room member for conversation', { conversationId });
+    return;
+  }
+  const mentions = to === 'all' ? [ALL_HANDLE] : to.map((h) => h.toLowerCase()).filter(Boolean);
+  await postMessage({
+    roomId: found.roomId,
+    authorMemberId: found.member.id,
+    kind: 'handoff',
+    body: message.trim() || '(no message)',
+    mentions,
+  });
+}

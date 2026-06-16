@@ -28,16 +28,18 @@ export const ACCENT_MENTION: Record<MemberAccent, string> = {
 /** Status dot color + animation. */
 export const STATUS_DOT: Record<MemberStatus, string> = {
   idle: 'bg-foreground-muted/50',
-  thinking: 'bg-amber-500 animate-pulse',
-  working: 'bg-teal-500 animate-pulse',
-  awaiting: 'bg-amber-500 animate-pulse',
-  done: 'bg-emerald-500',
+  waiting: 'bg-amber-500/70 animate-pulse',
+  running: 'bg-teal-500 animate-pulse',
+  finished: 'bg-emerald-500',
+  error: 'bg-red-500',
+  'awaiting-input': 'bg-amber-500 animate-pulse',
 };
 
 export const STATUS_LABEL: Record<MemberStatus, string> = {
   idle: 'idle',
-  thinking: 'analyzing',
-  working: 'working',
-  awaiting: 'awaiting',
-  done: 'done',
+  waiting: 'waiting',
+  running: 'running',
+  finished: 'finished',
+  error: 'error',
+  'awaiting-input': 'awaiting input',
 };

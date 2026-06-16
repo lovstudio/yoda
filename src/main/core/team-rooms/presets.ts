@@ -6,6 +6,7 @@ import {
   type TeamRouting,
 } from '@shared/agent-team';
 import type { RuntimeId } from '@shared/runtime-registry';
+import { TEAM_AT_SCRIPT } from '@shared/team-protocol';
 import type { MemberAccent } from '@shared/team-room';
 import { agentTeamsService } from '@main/core/agent-teams/agent-teams-service';
 import { agentsConfigService } from '@main/core/agents-config/agents-config-service';
@@ -110,33 +111,40 @@ async function resolveMemberSystemPrompt(member: AgentTeamMember): Promise<strin
   return member.systemPrompt ?? '';
 }
 
-/** The @-routing addendum that turns a generic team into a scripted collaboration. */
+/** Role-specific routing addendum, expressed via the team-at script (no @ in output). */
 function routingAddendum(
   routing: TeamRouting,
   kind: 'leader' | 'worker',
   ctx: { leaderHandle: string; workerHandles: string[] }
 ): string {
-  const workers = ctx.workerHandles.map((h) => `@${h}`).join(' ');
+  const reviewer = ctx.workerHandles[0] ?? 'you';
   if (routing === 'review-loop') {
     return kind === 'leader'
       ? [
-          `When your implementation round is complete, hand off in your team message to ${workers || '@you'} for review.`,
-          `When they send back fixes, address them and hand back for another review round.`,
+          `# Your routing`,
+          `When your implementation round is complete, request review:`,
+          `  ${TEAM_AT_SCRIPT} ${reviewer} "<short summary of what you changed>"`,
+          `When the reviewer sends back fixes, address them and hand back the same way for another round.`,
         ].join('\n')
       : [
-          `Review the implementer's work against the lead's original requirement — do not implement.`,
-          `In your team message: if there are issues, give @${ctx.leaderHandle} concrete fixes and hand back;`,
-          `if it fully meets the requirement, hand off to @you (the lead) with a one-line PASS.`,
+          `# Your routing`,
+          `Review the implementer's work against the lead's original requirement — do NOT modify files.`,
+          `- If there are issues: ${TEAM_AT_SCRIPT} ${ctx.leaderHandle} "<concrete fixes to make>"`,
+          `- If it fully meets the requirement: ${TEAM_AT_SCRIPT} you "PASS — <one-line summary>"`,
         ].join('\n');
   }
   if (routing === 'fan-out') {
     return kind === 'leader'
-      ? workers
-        ? `Plan the work, then in your team message @mention each teammate (${workers}) with their part.`
-        : `Complete the work for this requirement.`
-      : `Do your part based on the lead's plan, then hand off to @you (the lead) when done.`;
+      ? ctx.workerHandles.length
+        ? [
+            `# Your routing`,
+            `Plan the work, then assign each teammate their part — one call each:`,
+            ...ctx.workerHandles.map((h) => `  ${TEAM_AT_SCRIPT} ${h} "<their part>"`),
+          ].join('\n')
+        : `When done, run: ${TEAM_AT_SCRIPT} you "<summary>"`
+      : `Do your part based on the lead's plan, then run: ${TEAM_AT_SCRIPT} you "<summary>"`;
   }
-  return ''; // freeform — rely on the generic teammate etiquette
+  return ''; // freeform — the generic teammate etiquette already explains team-at
 }
 
 /**

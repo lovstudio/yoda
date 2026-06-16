@@ -192,6 +192,19 @@ export async function getMembers(roomId: string): Promise<RoomMember[]> {
   return rows.map(mapMember);
 }
 
+/** Find the room member that owns a conversation (used by the team-at callback). */
+export async function getMemberByConversation(
+  conversationId: string
+): Promise<{ roomId: string; member: RoomMember } | null> {
+  const [row] = await db
+    .select()
+    .from(roomMembers)
+    .where(eq(roomMembers.conversationId, conversationId))
+    .limit(1);
+  if (!row) return null;
+  return { roomId: row.roomId, member: mapMember(row) };
+}
+
 /** Bind (or clear) a member's live session conversation. */
 export async function setMemberConversation(
   memberId: string,

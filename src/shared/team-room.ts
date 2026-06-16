@@ -3,8 +3,16 @@ import type { RuntimeId } from './runtime-registry';
 /** Preset that seeded a room. `review-loop` wires implementer↔reviewer routing. */
 export type RoomPreset = 'freeform' | 'review-loop';
 
-/** Member status mirror shown as the roster dot (decoupled from raw run-state). */
-export type MemberStatus = 'idle' | 'thinking' | 'working' | 'awaiting' | 'done';
+/**
+ * Member lifecycle state shown as the roster dot, game-loop style:
+ * - idle: no live session / nothing assigned
+ * - waiting: queued to act but its turn hasn't started
+ * - running: its agent session is actively working
+ * - finished: completed its last turn
+ * - error: its last turn failed
+ * - awaiting-input: its session is blocked on a prompt (permission, question)
+ */
+export type MemberStatus = 'idle' | 'waiting' | 'running' | 'finished' | 'error' | 'awaiting-input';
 
 /** Message provenance. `handoff` = an agent's conclusion; `verdict` = preset PASS/FAIL. */
 export type MessageKind = 'text' | 'handoff' | 'system' | 'verdict';

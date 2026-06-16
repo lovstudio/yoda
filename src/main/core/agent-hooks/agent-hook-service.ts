@@ -1,4 +1,5 @@
 import { agentEventChannel } from '@shared/events/agentEvents';
+import { parsePtyId } from '@shared/ptyId';
 import { interactiveTurnLogger } from '@main/core/ai-logs/interactive-turn-logger';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { events } from '@main/lib/events';
@@ -15,6 +16,24 @@ class AgentHookService implements IInitializable, IDisposable {
     await this.server.start(async (raw) => {
       if (raw.type === 'hook-exec') {
         await enrichHookExecEvent(raw);
+        return;
+      }
+      if (raw.type === 'team-at') {
+        const conversationId = parsePtyId(raw.ptyId)?.conversationId;
+        let payload: { to?: unknown; message?: unknown } = {};
+        try {
+          payload = JSON.parse(raw.body || '{}');
+        } catch {
+          return;
+        }
+        const to =
+          payload.to === 'all' ? 'all' : Array.isArray(payload.to) ? payload.to.map(String) : [];
+        const message = typeof payload.message === 'string' ? payload.message : '';
+        if (conversationId && (to === 'all' || to.length > 0)) {
+          // Lazy import to avoid an agent-hooks ↔ team-rooms load-time cycle.
+          const { handleTeamAt } = await import('@main/core/team-rooms/conductor');
+          await handleTeamAt(conversationId, to, message);
+        }
         return;
       }
       const event = await enrichEvent(raw);
