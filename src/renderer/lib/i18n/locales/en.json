@@ -419,6 +419,13 @@
       "description": "Customize the appearance and behavior of the app.",
       "keyboardShortcuts": "Keyboard shortcuts"
     },
+    "interface": {
+      "dockSessionHistory": "Dock session history",
+      "dockSessionHistoryDescription": "Pin the active session's prompt history below the conversation pane.",
+      "dockSessionHistoryRows": "Docked history rows",
+      "dockSessionHistoryRowsDescription": "Number of prompt rows shown before the docked list scrolls.",
+      "rowsUnit": "rows"
+    },
     "terminalTab": {
       "description": "Configure terminal font, history, clipboard behavior, and tmux session reuse."
     },

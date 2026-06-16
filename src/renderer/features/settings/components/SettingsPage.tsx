@@ -33,6 +33,7 @@ import { CliAgentsRescanButton } from './CliAgentsList';
 import DefaultRuntimeSettingsCard from './DefaultRuntimeSettingsCard';
 import GithubSettingsCard from './GithubSettingsCard';
 import IntegrationsCard from './IntegrationsCard';
+import InterfaceSettingsCard from './InterfaceSettingsCard';
 import KeyboardSettingsCard from './KeyboardSettingsCard';
 import LanguageCard from './LanguageCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
@@ -388,7 +389,10 @@ export function SettingsPage({
     interface: {
       title: t('settings.tabs.interface'),
       description: t('settings.interfaceTab.description'),
-      sections: [{ id: 'theme', component: <ThemeCard /> }],
+      sections: [
+        { id: 'theme', component: <ThemeCard /> },
+        { id: 'interface-behavior', component: <InterfaceSettingsCard /> },
+      ],
     },
     terminal: {
       title: t('settings.tabs.terminal'),
