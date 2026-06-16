@@ -90,12 +90,8 @@ export const composerStrategyKindValues = ['new-branch', 'no-worktree'] as const
 export const composerDefaultsSchema = z.object({
   runtimeId: z.enum(RUNTIME_IDS).optional(),
   runMode: z.enum(composerRunModeValues).optional(),
-  baseBranch: z.string().optional(),
   standardStrategyKind: z.enum(composerStrategyKindValues).optional(),
   reviewStrategyKind: z.enum(composerStrategyKindValues).optional(),
-  compareRuntimes: z.array(z.enum(RUNTIME_IDS)).optional(),
-  reviewerRuntime: z.enum(RUNTIME_IDS).optional(),
-  teamRuntimes: z.record(z.string(), z.enum(RUNTIME_IDS)).optional(),
   attachImagesAsPaths: z.boolean().optional(),
 });
 

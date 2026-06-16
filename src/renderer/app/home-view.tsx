@@ -619,6 +619,27 @@ export const HomeComposer = observer(function HomeComposer({
     ? (projectDisplayName(projectStore) ?? selectedProjectId)
     : undefined;
 
+  // Project-level layer for composer settings. `composerDefaults` overrides the
+  // user's global homeDraft per project (run config + attach mode); a present
+  // field overrides, an absent field inherits. Same model + storage as
+  // promptPrinciples — edited into project settings, shared via `.yoda.json`.
+  const projectSettingsStore = selectedProjectId
+    ? getProjectSettingsStore(selectedProjectId)
+    : undefined;
+  const projectSettings = projectSettingsStore?.settings ?? null;
+  const hasProjectOverrideTarget = Boolean(selectedProjectId);
+  const composerDefaults = projectSettings?.composerDefaults;
+  const setComposerDefault = useCallback(
+    <K extends keyof ComposerDefaults>(field: K, value: ComposerDefaults[K] | undefined) => {
+      if (!projectSettingsStore || !projectSettings) return;
+      void projectSettingsStore.save({
+        ...projectSettings,
+        composerDefaults: withComposerDefault(projectSettings.composerDefaults, field, value),
+      });
+    },
+    [projectSettingsStore, projectSettings]
+  );
+
   // Subtasks branch off the parent task's branch instead of the project default.
   const parentTaskStore = parentTarget
     ? getTaskStore(parentTarget.projectId, parentTarget.taskId)
@@ -718,18 +739,24 @@ export const HomeComposer = observer(function HomeComposer({
     [forkBaseLabel, inPlaceBranchLabel, inPlaceKind, t]
   );
 
-  const providerOverrideValue = draft?.runtimeOverride ?? null;
+  // Run config below resolves project override ?? global homeDraft. A present
+  // `composerDefaults` field means the chip edits the project layer; otherwise
+  // it edits the user's global default. The scope pills live in the gear popover.
+  const runtimeOverridden = composerDefaults?.runtimeId !== undefined;
+  const providerOverrideValue = composerDefaults?.runtimeId ?? draft?.runtimeOverride ?? null;
   const setRuntimeOverridePersisted = useCallback(
     (id: RuntimeId | null) => {
-      updateDraft({ runtimeOverride: id });
+      if (runtimeOverridden) setComposerDefault('runtimeId', id ?? undefined);
+      else updateDraft({ runtimeOverride: id });
     },
-    [updateDraft]
+    [runtimeOverridden, setComposerDefault, updateDraft]
   );
   const { runtimeId, setRuntimeOverride } = useEffectiveRuntime(connectionId, {
     value: providerOverrideValue,
     set: setRuntimeOverridePersisted,
   });
-  const persistedRunMode: HomeRunMode = draft?.runMode ?? 'normal';
+  const runModeOverridden = composerDefaults?.runMode !== undefined;
+  const persistedRunMode: HomeRunMode = composerDefaults?.runMode ?? draft?.runMode ?? 'normal';
   const [runMode, setRunModeState] = useState<HomeRunMode>('normal');
   const hasManualRunModeRef = useRef(false);
   useEffect(() => {
@@ -740,9 +767,10 @@ export const HomeComposer = observer(function HomeComposer({
     (next: HomeRunMode) => {
       hasManualRunModeRef.current = true;
       setRunModeState(next);
-      updateDraft({ runMode: next });
+      if (runModeOverridden) setComposerDefault('runMode', next);
+      else updateDraft({ runMode: next });
     },
-    [updateDraft]
+    [runModeOverridden, setComposerDefault, updateDraft]
   );
   const compareRuntimes = useMemo(
     () => normalizeCompareProviders(draft?.compareRuntimes, runtimeId),
@@ -1242,19 +1270,25 @@ export const HomeComposer = observer(function HomeComposer({
   }, [activePathMention, projectData?.id]);
 
   const [submitting, setSubmitting] = useState(false);
-  const strategyKind: TaskStrategyKind = draft?.strategyKind ?? 'new-branch';
+  const standardStrategyOverridden = composerDefaults?.standardStrategyKind !== undefined;
+  const strategyKind: TaskStrategyKind =
+    composerDefaults?.standardStrategyKind ?? draft?.strategyKind ?? 'new-branch';
   const setStrategyKind = useCallback(
     (next: TaskStrategyKind) => {
-      updateDraft({ strategyKind: next });
+      if (standardStrategyOverridden) setComposerDefault('standardStrategyKind', next);
+      else updateDraft({ strategyKind: next });
     },
-    [updateDraft]
+    [standardStrategyOverridden, setComposerDefault, updateDraft]
   );
-  const reviewStrategyKind: TaskStrategyKind = draft?.reviewStrategyKind ?? 'no-worktree';
+  const reviewStrategyOverridden = composerDefaults?.reviewStrategyKind !== undefined;
+  const reviewStrategyKind: TaskStrategyKind =
+    composerDefaults?.reviewStrategyKind ?? draft?.reviewStrategyKind ?? 'no-worktree';
   const setReviewStrategyKind = useCallback(
     (next: TaskStrategyKind) => {
-      updateDraft({ reviewStrategyKind: next });
+      if (reviewStrategyOverridden) setComposerDefault('reviewStrategyKind', next);
+      else updateDraft({ reviewStrategyKind: next });
     },
-    [updateDraft]
+    [reviewStrategyOverridden, setComposerDefault, updateDraft]
   );
   const effectiveStandardStrategyKind: TaskStrategyKind = isUnborn ? 'no-worktree' : strategyKind;
   const effectiveReviewStrategyKind: TaskStrategyKind = isUnborn
@@ -1289,32 +1323,12 @@ export const HomeComposer = observer(function HomeComposer({
   // When a project is selected, prompt-principle toggles operate on the
   // project's layer (override globals + its own items) stored in project
   // settings; with no project they edit the global defaults above.
-  const projectSettingsStore = selectedProjectId
-    ? getProjectSettingsStore(selectedProjectId)
-    : undefined;
-  const projectSettings = projectSettingsStore?.settings ?? null;
   const projectPromptPrinciples = projectSettings?.promptPrinciples;
   const projectPrincipleItems = projectPromptPrinciples?.items ?? [];
   const saveProjectPromptPrinciples = useCallback(
     (next: ProjectPromptPrinciples | undefined) => {
       if (!projectSettingsStore || !projectSettings) return;
       void projectSettingsStore.save({ ...projectSettings, promptPrinciples: next });
-    },
-    [projectSettingsStore, projectSettings]
-  );
-  // Project-level composer defaults (run config + attach mode). Same layering
-  // as promptPrinciples: a present field overrides the user's global homeDraft
-  // for this project; an absent field inherits it. Edited into project settings
-  // and shared via `.yoda.json`.
-  const hasProjectOverrideTarget = Boolean(selectedProjectId);
-  const composerDefaults = projectSettings?.composerDefaults;
-  const setComposerDefault = useCallback(
-    <K extends keyof ComposerDefaults>(field: K, value: ComposerDefaults[K] | undefined) => {
-      if (!projectSettingsStore || !projectSettings) return;
-      void projectSettingsStore.save({
-        ...projectSettings,
-        composerDefaults: withComposerDefault(projectSettings.composerDefaults, field, value),
-      });
     },
     [projectSettingsStore, projectSettings]
   );
@@ -2757,6 +2771,46 @@ export const HomeComposer = observer(function HomeComposer({
               </div>
               <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
                 <ComposerSettingsHeader
+                  label={t('home.composerRunDefaultsLabel')}
+                  hint={t('home.composerRunDefaultsHint')}
+                />
+                <ComposerScopeRow
+                  label={t('home.composerDefaultRuntimeLabel')}
+                  value={runtimeId ? (getRuntime(runtimeId)?.name ?? runtimeId) : undefined}
+                  source={runtimeOverridden ? 'project' : 'global'}
+                  canOverride={hasProjectOverrideTarget}
+                  onChange={(scope) =>
+                    setComposerDefault(
+                      'runtimeId',
+                      scope === 'project' ? (runtimeId ?? undefined) : undefined
+                    )
+                  }
+                />
+                <ComposerScopeRow
+                  label={t('home.composerDefaultRunModeLabel')}
+                  source={runModeOverridden ? 'project' : 'global'}
+                  canOverride={hasProjectOverrideTarget}
+                  onChange={(scope) =>
+                    setComposerDefault(
+                      'runMode',
+                      scope === 'project' ? persistedRunMode : undefined
+                    )
+                  }
+                />
+                <ComposerScopeRow
+                  label={t('home.composerDefaultStrategyLabel')}
+                  source={standardStrategyOverridden ? 'project' : 'global'}
+                  canOverride={hasProjectOverrideTarget}
+                  onChange={(scope) =>
+                    setComposerDefault(
+                      'standardStrategyKind',
+                      scope === 'project' ? strategyKind : undefined
+                    )
+                  }
+                />
+              </div>
+              <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
+                <ComposerSettingsHeader
                   label={t('home.promptPrinciplesLabel')}
                   action={
                     <button
@@ -2883,6 +2937,34 @@ function ComposerScopeToggle({
     >
       {isProject ? t('home.composerScopeProject') : t('home.composerScopeGlobal')}
     </button>
+  );
+}
+
+/** One run-default row in the composer popover: label + inherit/override pill.
+ *  The value itself is edited via the matching toolbar chip. */
+function ComposerScopeRow({
+  label,
+  value,
+  source,
+  canOverride,
+  onChange,
+}: {
+  label: string;
+  value?: string;
+  source: ComposerOverrideScope;
+  canOverride: boolean;
+  onChange: (source: ComposerOverrideScope) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="min-w-0 truncate text-xs text-foreground">{label}</span>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {value ? (
+          <span className="max-w-32 truncate text-[11px] text-foreground-passive">{value}</span>
+        ) : null}
+        <ComposerScopeToggle source={source} canOverride={canOverride} onChange={onChange} />
+      </div>
+    </div>
   );
 }
 
