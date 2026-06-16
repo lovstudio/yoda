@@ -16,6 +16,8 @@
 export const TEAM_AT_SCRIPT = '.yoda/team-at';
 /** Path (relative to the worktree) of the bundled team-status (progress broadcast) script. */
 export const TEAM_STATUS_SCRIPT = '.yoda/team-status';
+/** Path (relative to the worktree) of the bundled team-verdict (structured PASS/FAIL) script. */
+export const TEAM_VERDICT_SCRIPT = '.yoda/team-verdict';
 
 export interface RosterEntry {
   handle: string;

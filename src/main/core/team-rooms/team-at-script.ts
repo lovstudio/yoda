@@ -57,7 +57,38 @@ curl -sf -X POST "http://127.0.0.1:$port/hook" \\
 echo "team-status: shared"
 `;
 
-/** Idempotently write `.yoda/team-at` + `.yoda/team-status` into a task's worktree. */
+/**
+ * The bundled `team-verdict` script: record a structured PASS/FAIL verdict at the
+ * end of a review turn. This is the reliable, explicit hand-off signal — the
+ * conductor advances the review loop from this (no scraping the PTY for a marker).
+ * The message is forwarded to the implementer (on fail) or shown to the lead (on
+ * pass).
+ */
+const VERDICT_SCRIPT = `#!/usr/bin/env bash
+# Yoda team-verdict: record your review verdict and hand off.
+# Usage: .yoda/team-verdict <pass|fail> <message...>
+set -euo pipefail
+if [ "$#" -lt 1 ]; then echo "usage: team-verdict <pass|fail> <message>" >&2; exit 2; fi
+verdict="$1"; shift
+if [ "$verdict" != "pass" ] && [ "$verdict" != "fail" ]; then
+  echo "team-verdict: first arg must be 'pass' or 'fail'" >&2; exit 2
+fi
+ep="$HOME/.yoda/hook-endpoint.json"
+if [ ! -f "$ep" ]; then echo "team-verdict: Yoda hook endpoint not found" >&2; exit 1; fi
+port=$(sed -n 's/.*"port":\\([0-9]*\\).*/\\1/p' "$ep")
+token=$(sed -n 's/.*"token":"\\([^"]*\\)".*/\\1/p' "$ep")
+msg="$*"
+esc=$(printf '%s' "$msg" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null || printf '"%s"' "$msg")
+curl -sf -X POST "http://127.0.0.1:$port/hook" \\
+  -H "X-Yoda-Token: $token" \\
+  -H "X-Yoda-Pty-Id: \${YODA_PTY_ID:-}" \\
+  -H "X-Yoda-Event-Type: team-verdict" \\
+  -H "Content-Type: application/json" \\
+  -d "{\\"verdict\\": \\"$verdict\\", \\"message\\": $esc}" >/dev/null
+echo "team-verdict: $verdict recorded"
+`;
+
+/** Idempotently write the `.yoda/team-*` scripts into a task's worktree. */
 export async function installTeamAtScript(projectId: string, taskId: string): Promise<void> {
   const worktree = resolveTask(projectId, taskId)?.conversations.taskPath;
   if (!worktree) return;
@@ -66,6 +97,7 @@ export async function installTeamAtScript(projectId: string, taskId: string): Pr
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, 'team-at'), SCRIPT, { mode: 0o755 });
     await writeFile(join(dir, 'team-status'), STATUS_SCRIPT, { mode: 0o755 });
+    await writeFile(join(dir, 'team-verdict'), VERDICT_SCRIPT, { mode: 0o755 });
   } catch (error) {
     log.warn('installTeamAtScript: failed', { projectId, taskId, error: String(error) });
   }

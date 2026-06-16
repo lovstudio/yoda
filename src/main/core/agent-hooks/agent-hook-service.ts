@@ -36,6 +36,24 @@ class AgentHookService implements IInitializable, IDisposable {
         }
         return;
       }
+      if (raw.type === 'team-verdict') {
+        const conversationId = parsePtyId(raw.ptyId)?.conversationId;
+        let verdict: 'pass' | 'fail' | null = null;
+        let message = '';
+        try {
+          const payload = JSON.parse(raw.body || '{}') as { verdict?: unknown; message?: unknown };
+          verdict =
+            payload.verdict === 'pass' ? 'pass' : payload.verdict === 'fail' ? 'fail' : null;
+          message = typeof payload.message === 'string' ? payload.message : '';
+        } catch {
+          return;
+        }
+        if (conversationId && verdict) {
+          const { handleTeamVerdict } = await import('@main/core/team-rooms/conductor');
+          await handleTeamVerdict(conversationId, verdict, message);
+        }
+        return;
+      }
       if (raw.type === 'team-status') {
         const conversationId = parsePtyId(raw.ptyId)?.conversationId;
         let message = '';

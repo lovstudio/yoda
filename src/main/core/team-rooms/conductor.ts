@@ -50,7 +50,8 @@ const ALL_HANDLE = 'all';
  */
 const REVIEW_REQUEST =
   'The implementer just finished a round. Review the current worktree against the original requirement (do NOT modify files). ' +
-  'List any concrete fixes needed, then end your turn with exactly one line: `YODA_REVIEW_RESULT: PASS` if it fully meets the requirement, or `YODA_REVIEW_RESULT: FAIL` if changes are needed.';
+  'When done, record your verdict by running: `.yoda/team-verdict pass "<why it meets the requirement>"` ' +
+  'or `.yoda/team-verdict fail "<the concrete fixes the implementer should make>"`.';
 
 /**
  * How many FAIL rounds the review loop runs before escalating to the human,
@@ -69,6 +70,12 @@ type ReviewWatch = {
   baselineMarkers: number;
   onFinish: (verdict?: { passed: boolean; feedback: string }) => void;
 };
+
+/** Keep the chat line readable — the full hand-off goes to the next agent's session. */
+function clip(text: string, max = 280): string {
+  const t = text.trim();
+  return t.length > max ? `${t.slice(0, max).trimEnd()}…` : t;
+}
 
 function mapStatus(s: AgentSessionRuntimeStatus): MemberStatus {
   switch (s) {
@@ -99,6 +106,7 @@ class RoomConductor {
   private readonly standups = new Map<string, () => void>(); // roomId -> stop
   private readonly activity = new Map<string, number>(); // memberId -> last PTY-growth ts
   private readonly reviewRounds = new Map<string, number>(); // roomId -> FAIL rounds so far
+  private readonly activeMember = new Map<string, string>(); // roomId -> member whose turn it is
 
   /** Subscribe to message posts. Idempotent. */
   initialize(): void {
@@ -262,6 +270,9 @@ class RoomConductor {
       }
 
       await setMemberStatus(roomId, member.id, 'running', conversationId);
+      // Track whose turn it is so a duplicate turn-end signal (e.g. a stray
+      // run-state terminal after an explicit verdict already advanced) is ignored.
+      if (incoming.reviewLoop) this.activeMember.set(roomId, member.id);
       const review: ReviewWatch | undefined = incoming.reviewLoop
         ? {
             role: member.role === 'leader' ? 'leader' : 'worker',
@@ -351,29 +362,30 @@ class RoomConductor {
         last = mapped;
         void setMemberStatus(roomId, memberId, mapped, session.conversationId).catch(() => {});
       }
-      if (terminal || stalled) {
+
+      // The implementer's turn ends on a terminal run-state (claude is reliable here).
+      if (review?.role === 'leader' && terminal) {
         stop();
-        if (stalled && review) {
-          void setMemberStatus(roomId, memberId, 'finished', session.conversationId).catch(
-            () => {}
-          );
-          void postMessage({
-            roomId,
-            kind: 'system',
-            body: `Heartbeat — no progress from this member for a while; moving the loop forward.`,
-            mentions: [],
-          }).catch(() => {});
-        }
-        if (review && raw !== 'error') {
-          // Ended (or stalled). Reviewer without a fresh marker → treat its tail
-          // as fix notes (FAIL); implementer end → bring in the reviewer.
-          const verdict =
-            review.role === 'worker'
-              ? { passed: false, feedback: parseReviewResult(snapshot).feedback }
-              : undefined;
-          review.onFinish(verdict);
-        }
+        if (raw !== 'error') review.onFinish(undefined);
+        return;
       }
+      // The reviewer's turn ends on its explicit `team-verdict` (handled out of
+      // band) or its marker (above). A bare terminal run-state is NOT enough — we
+      // wait for the verdict. A long stall is the only fallback (wedged session).
+      if (review?.role === 'worker' && stalled) {
+        stop();
+        void setMemberStatus(roomId, memberId, 'finished', session.conversationId).catch(() => {});
+        void postMessage({
+          roomId,
+          kind: 'system',
+          body: `Heartbeat — no verdict from the reviewer for a while; moving the loop forward.`,
+          mentions: [],
+        }).catch(() => {});
+        review.onFinish({ passed: false, feedback: parseReviewResult(snapshot).feedback });
+        return;
+      }
+      // Freeform members (no review wiring): just stop mirroring when they finish.
+      if (!review && terminal) stop();
     }, STATUS_POLL_MS);
 
     const stop = () => {
@@ -444,6 +456,11 @@ class RoomConductor {
     if (!snapshot || snapshot.room.status !== 'active') return;
     const { room, members } = snapshot;
     if (room.preset !== 'review-loop') return;
+    // Dedupe: only the member whose turn it currently is can advance the loop, so
+    // a late run-state terminal arriving after an explicit verdict already moved
+    // on is ignored.
+    if (this.activeMember.get(roomId) !== finished.id) return;
+    this.activeMember.delete(roomId);
     const leader = members.find((m) => m.role === 'leader' && m.runtime);
     const reviewer = members.find((m) => m.role === 'worker' && m.runtime);
     if (!leader || !reviewer) return;
@@ -500,6 +517,32 @@ class RoomConductor {
   private async transition(roomId: string, body: string): Promise<void> {
     await postMessage({ roomId, kind: 'system', body, mentions: [] });
   }
+
+  /**
+   * A reviewer recorded an explicit verdict via the `team-verdict` script — the
+   * reliable, structured turn-end signal (no PTY scraping). Post the reviewer's
+   * own words as its chat line, then advance the loop from the verdict.
+   */
+  async onReviewerVerdict(conversationId: string, passed: boolean, message: string): Promise<void> {
+    const found = await getMemberByConversation(conversationId);
+    if (!found) return;
+    const { roomId, member } = found;
+    if (message.trim()) {
+      await postMessage({
+        roomId,
+        authorMemberId: member.id,
+        kind: 'text',
+        body: clip(message),
+        mentions: [],
+        sessionRef: member.conversationId,
+      });
+    }
+    // Cancel its turn watcher so the marker/stall fallback can't double-advance,
+    // then settle its dot (the watcher won't update it anymore).
+    this.statusWatchers.get(member.id)?.();
+    await setMemberStatus(roomId, member.id, 'finished', member.conversationId).catch(() => {});
+    await this.advanceReviewLoop(roomId, member, { passed, feedback: message });
+  }
 }
 
 export const roomConductor = new RoomConductor();
@@ -528,6 +571,20 @@ export async function handleTeamAt(
     mentions,
     sessionRef: found.member.conversationId,
   });
+}
+
+/**
+ * Called when a reviewer runs the `team-verdict` script: the explicit, structured
+ * PASS/FAIL hand-off that drives the review loop (replacing fragile PTY-marker
+ * scraping). The message is the reviewer's hand-off note — shown in chat and, on
+ * FAIL, delivered to the implementer.
+ */
+export async function handleTeamVerdict(
+  conversationId: string,
+  verdict: 'pass' | 'fail',
+  message: string
+): Promise<void> {
+  await roomConductor.onReviewerVerdict(conversationId, verdict === 'pass', message);
 }
 
 /**

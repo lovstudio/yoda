@@ -74,14 +74,7 @@ function extractReviewNotes(clean: string): string | null {
   return inner;
 }
 
-/**
- * The reviewer's protocol: don't touch files, decide PASS/FAIL, and put a short
- * teammate-style hand-off between the NOTES delimiters + a final verdict marker.
- * Exported so Team Room review-loop reviewers reuse the exact same instructions,
- * which keeps {@link parseReviewResult} able to extract a clean hand-off (instead
- * of dumping the raw PTY tail into the room chat).
- */
-export const REVIEW_PROTOCOL_LINES = [
+const REVIEW_PROTOCOL_LINES = [
   `Protocol:`,
   `- Do not modify files.`,
   `- Decide whether the implementation meets the requirement.`,

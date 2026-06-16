@@ -1,4 +1,4 @@
-import { TEAM_AT_SCRIPT } from '@shared/agent-communication-protocol';
+import { TEAM_AT_SCRIPT, TEAM_VERDICT_SCRIPT } from '@shared/agent-communication-protocol';
 import {
   teamLeader,
   teamWorkers,
@@ -6,7 +6,6 @@ import {
   type AgentTeamMember,
   type TeamRouting,
 } from '@shared/agent-team';
-import { REVIEW_PROTOCOL_LINES } from '@shared/review-protocol';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { MemberAccent } from '@shared/team-room';
 import { agentTeamsService } from '@main/core/agent-teams/agent-teams-service';
@@ -120,8 +119,9 @@ function routingAddendum(
 ): string {
   if (routing === 'review-loop') {
     // The conductor drives this loop deterministically (it brings in the reviewer
-    // when you finish, and forwards review feedback back to you), so neither side
-    // calls team-at — the reviewer just ends with the verdict marker.
+    // when the implementer finishes, and forwards review feedback back), so the
+    // implementer never hands off manually; the reviewer hands off by recording a
+    // structured verdict via the team-verdict script (no @-handles, no markers).
     return kind === 'leader'
       ? [
           `# Your routing`,
@@ -129,7 +129,15 @@ function routingAddendum(
           `turn — the reviewer is brought in automatically. When you receive review feedback, address it`,
           `in the same worktree and finish again. Keep the existing direction unless a fix requires otherwise.`,
         ].join('\n')
-      : [`# Your routing`, ...REVIEW_PROTOCOL_LINES].join('\n');
+      : [
+          `# Your routing`,
+          `Review the implementer's work against the lead's original requirement — do NOT modify files.`,
+          `End your turn by recording your verdict (this is how you hand off — do not write @handles):`,
+          `  ${TEAM_VERDICT_SCRIPT} pass "<one line: why it fully meets the requirement>"`,
+          `  ${TEAM_VERDICT_SCRIPT} fail "<the concrete fixes the implementer should make>"`,
+          `Use pass ONLY if it fully meets the requirement. On fail, your message is sent straight to the`,
+          `implementer, so make it specific and actionable.`,
+        ].join('\n');
   }
   if (routing === 'fan-out') {
     return kind === 'leader'
