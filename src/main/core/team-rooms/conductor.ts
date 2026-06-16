@@ -544,7 +544,10 @@ class RoomConductor {
    */
   async onReviewerVerdict(conversationId: string, passed: boolean, message: string): Promise<void> {
     const found = await getMemberByConversation(conversationId);
-    if (!found) return;
+    if (!found) {
+      log.warn('onReviewerVerdict: no room member for conversation', { conversationId });
+      return;
+    }
     const { roomId, member } = found;
     if (message.trim()) {
       await postMessage({
@@ -613,7 +616,10 @@ export async function handleTeamVerdict(
  */
 export async function handleTeamStatus(conversationId: string, message: string): Promise<void> {
   const found = await getMemberByConversation(conversationId);
-  if (!found) return;
+  if (!found) {
+    log.warn('handleTeamStatus: no room member for conversation', { conversationId });
+    return;
+  }
   await postMessage({
     roomId: found.roomId,
     authorMemberId: found.member.id,
