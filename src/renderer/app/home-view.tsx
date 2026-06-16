@@ -27,7 +27,6 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import {
   useCallback,
@@ -47,19 +46,13 @@ import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
-import {
-  BUILTIN_STARTUP_TEAM_ID,
-  teamLeader,
-  teamWorkers,
-  type AgentTeam,
-  type AgentTeamMember,
-} from '@shared/agent-team';
+import { BUILTIN_STARTUP_TEAM_ID, type AgentTeam } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import type { ClaudeMemoryFile } from '@shared/conversations';
 import type { Branch } from '@shared/git';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
-import { stripTerminalControlSequences, withSystemPrompt } from '@shared/prompt-format';
+import { withSystemPrompt } from '@shared/prompt-format';
 import { REVIEW_MAX_ROUNDS } from '@shared/review-protocol';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import type { CatalogIndex } from '@shared/skills/types';
@@ -74,7 +67,6 @@ import {
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { recordSkillInvocation } from '@renderer/features/skills/skill-usage-stats';
 import { ContextItem, memoryFileLabel } from '@renderer/features/tasks/components/context-item';
-import type { ConversationStore } from '@renderer/features/tasks/conversations/conversation-manager';
 import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
@@ -198,7 +190,6 @@ interface RunModeInputChrome {
 
 const MIN_COMPARE_AGENTS = 2;
 const MAX_COMPARE_AGENTS = 6;
-const CONVERSATION_TURN_TIMEOUT_MS = 30 * 60_000;
 const DEFAULT_COMPARE_RUNTIMES: RuntimeId[] = ['claude', 'codex'];
 const DEFAULT_REVIEWER_RUNTIME: RuntimeId = 'claude';
 
@@ -480,105 +471,6 @@ function buildSpecPrompt(args: { requirement: string; systemPrompt: string }): s
       `Start the spec session now. Ask only material clarifying questions before drafting final artifacts unless the user explicitly asks you to draft from the current information.`,
     ].join('\n')
   );
-}
-
-// The team leader runs first. Its own system prompt drives specifics; here we
-// just give the requirement and name the teammates who act on its output, so
-// the framing stays generic across team templates (startup, review, …).
-function buildTeamCeoPrompt(args: {
-  requirement: string;
-  systemPrompt: string;
-  teammates?: string[];
-}): string {
-  const teammates = args.teammates?.filter(Boolean) ?? [];
-  return withSystemPrompt(
-    args.systemPrompt,
-    [
-      `Original requirement:`,
-      args.requirement || '(No explicit requirement was provided.)',
-      ...(teammates.length
-        ? ['', `Teammates who will continue from your output: ${teammates.join(', ')}.`]
-        : []),
-    ].join('\n')
-  );
-}
-
-function buildTeamRolePrompt(args: {
-  requirement: string;
-  ceoPlan: string;
-  systemPrompt: string;
-}): string {
-  return withSystemPrompt(
-    args.systemPrompt,
-    [
-      `Original requirement:`,
-      args.requirement || '(No explicit requirement was provided.)',
-      '',
-      `What the lead produced:`,
-      args.ceoPlan,
-    ].join('\n')
-  );
-}
-
-function waitForConversationTurn(conversation: ConversationStore): Promise<void> {
-  if (conversation.status !== 'working') return Promise.resolve();
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let dispose: (() => void) | null = null;
-    let timeout: ReturnType<typeof setTimeout> | null = null;
-
-    const cleanup = () => {
-      if (settled) return;
-      settled = true;
-      dispose?.();
-      if (timeout) clearTimeout(timeout);
-    };
-
-    timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('Timed out waiting for the agent turn to finish.'));
-    }, CONVERSATION_TURN_TIMEOUT_MS);
-
-    dispose = reaction(
-      () => conversation.status !== 'working',
-      (done) => {
-        if (!done) return;
-        cleanup();
-        resolve();
-      },
-      { fireImmediately: true }
-    );
-  });
-}
-
-async function readConversationOutput(conversation: ConversationStore): Promise<string> {
-  const result = await rpc.pty.subscribe(conversation.session.sessionId);
-  await rpc.pty.unsubscribe(conversation.session.sessionId).catch(() => {});
-  return result.success ? result.data.buffer : '';
-}
-
-async function getConversationStore(
-  projectId: string,
-  taskId: string,
-  conversationId: string
-): Promise<ConversationStore> {
-  const provisioned = asProvisioned(getTaskStore(projectId, taskId));
-  if (!provisioned) throw new Error('Task is not ready for orchestration.');
-  await provisioned.conversations.load();
-  const conversation = provisioned.conversations.conversations.get(conversationId);
-  if (!conversation) throw new Error('Agent conversation was not found.');
-  return conversation;
-}
-
-async function waitForInitialConversationOutput(
-  projectId: string,
-  taskId: string,
-  conversationId: string
-): Promise<string> {
-  const conversation = await getConversationStore(projectId, taskId, conversationId);
-  await waitForConversationTurn(conversation);
-  return stripTerminalControlSequences(await readConversationOutput(conversation)).trim();
 }
 
 /**
@@ -893,21 +785,6 @@ export const HomeComposer = observer(function HomeComposer({
     [teams, selectedTeamId]
   );
   const { agents: userAgents } = useAgents();
-  // Resolve a team member to what it runs with: system prompt from its agentRef
-  // (a built-in agent slug or a user Agent id) or its inline prompt, runtime from
-  // the template (falling back to the agent's preferred runtime).
-  const resolveTeamMember = useCallback(
-    (member: AgentTeamMember): { provider: RuntimeId | null; systemPrompt: string } => {
-      const agent = member.agentRef
-        ? (userAgents.find((a) => a.id === member.agentRef || a.slug === member.agentRef) ?? null)
-        : null;
-      return {
-        provider: member.runtime ?? agent?.preferredRuntime ?? null,
-        systemPrompt: agent?.systemPrompt ?? member.systemPrompt ?? '',
-      };
-    },
-    [userAgents]
-  );
   const selectedAgentIdsByMode = useMemo<Record<string, string[]>>(
     () => draft?.selectedAgentIds ?? {},
     [draft?.selectedAgentIds]
@@ -1414,11 +1291,7 @@ export const HomeComposer = observer(function HomeComposer({
       : runMode === 'review'
         ? hasSlotAgent(REVIEW_IMPLEMENTER_PROMPT_KEY) && hasSlotAgent(REVIEW_REVIEWER_PROMPT_KEY)
         : runMode === 'team'
-          ? Boolean(
-              activeTeam &&
-                activeTeam.members.length > 0 &&
-                activeTeam.members.every((m) => resolveTeamMember(m).provider)
-            )
+          ? Boolean(activeTeam && activeTeam.members.length > 0)
           : runMode === 'brainstorm'
             ? hasSlotAgent(SPEC_PROMPT_KEY)
             : hasSlotAgent(NORMAL_PROMPT_KEY);
@@ -1654,51 +1527,22 @@ export const HomeComposer = observer(function HomeComposer({
 
         if (runMode === 'team') {
           if (!activeTeam) return;
-          const leader = teamLeader(activeTeam);
-          const leaderSlot = leader ? resolveTeamMember(leader) : null;
-          if (!leader || !leaderSlot?.provider) return;
-          const leaderProvider = leaderSlot.provider;
-          const workers = teamWorkers(activeTeam);
-          const leaderConv = createTaskConversation({
-            provider: leaderProvider,
-            initialPrompt: buildTeamCeoPrompt({
+          // Instantiate a chat room from the team template on this task; the
+          // conductor drives the iterative @-routing (members appear as the
+          // task's conversations).
+          void rpc.teamRooms
+            .createRoomFromTeam({
+              projectId: taskScopedTarget.projectId,
+              taskId: taskScopedTarget.taskId,
+              teamId: activeTeam.id,
               requirement,
-              systemPrompt: leaderSlot.systemPrompt,
-              teammates: workers.map((m) => m.displayName),
-            }),
-            titlePrompt: trimmed || undefined,
-          });
-          finishTaskConversationSubmit();
-          void (async () => {
-            await leaderConv.promise;
-            const leaderOutput = await waitForInitialConversationOutput(
-              taskScopedTarget.projectId,
-              taskScopedTarget.taskId,
-              leaderConv.conversationId
-            );
-            const workerLaunches = workers.flatMap((member) => {
-              const slot = resolveTeamMember(member);
-              if (!slot.provider) return [];
-              return [
-                createTaskConversation({
-                  provider: slot.provider,
-                  initialPrompt: buildTeamRolePrompt({
-                    requirement,
-                    ceoPlan: leaderOutput || '(The lead agent did not produce captured output.)',
-                    systemPrompt: slot.systemPrompt,
-                  }),
-                  titlePrompt: trimmed || undefined,
-                }),
-              ];
+            })
+            .catch((error: unknown) => {
+              toast.error(
+                error instanceof Error ? error.message : 'Agent team orchestration failed.'
+              );
             });
-            reportFailures(
-              await Promise.allSettled(workerLaunches.map((launch) => launch.promise))
-            );
-          })().catch((error: unknown) => {
-            toast.error(
-              error instanceof Error ? error.message : 'Agent team orchestration failed.'
-            );
-          });
+          finishTaskConversationSubmit();
           return;
         }
 
@@ -1950,71 +1794,35 @@ export const HomeComposer = observer(function HomeComposer({
 
       if (runMode === 'team') {
         if (!activeTeam) return;
-        const leader = teamLeader(activeTeam);
-        const leaderSlot = leader ? resolveTeamMember(leader) : null;
-        if (!leader || !leaderSlot?.provider) return;
-        const leaderProvider = leaderSlot.provider;
-        const workers = teamWorkers(activeTeam);
-        const leaderConv = createProjectTask({
-          provider: leaderProvider,
-          nameSeed: `${baseName}-${leader.handle}`,
-          initialPrompt: buildTeamCeoPrompt({
-            requirement,
-            systemPrompt: leaderSlot.systemPrompt,
-            teammates: workers.map((m) => m.displayName),
-          }),
-          titlePrompt: trimmed || undefined,
-          strategyKind: 'new-branch',
+        const teamId = activeTeam.id;
+        const teamRequirement = requirement;
+        // Bare task (no initial conversation) — the room conductor instantiates
+        // the team and populates the task's conversations via iterative @-routing.
+        const taskId = crypto.randomUUID();
+        const taskName = reserveTaskName(baseName);
+        const createPromise = mounted.taskManager.createTask({
+          id: taskId,
+          projectId: mounted.data.id,
+          name: taskName,
+          sourceBranch: forkBaseBranch ?? baseDefaultBranch,
+          strategy: { kind: 'new-branch', taskBranch: taskName, pushBranch: false },
+          parentTaskId: parentTarget?.taskId,
         });
-        goToTask(mounted.data.id, leaderConv.taskId);
-        void (async () => {
-          await leaderConv.promise;
-          const leaderOutput = await waitForInitialConversationOutput(
-            mounted.data.id,
-            leaderConv.taskId,
-            leaderConv.conversationId
-          );
-          // Workers run as additional sessions inside the leader's task (shared
-          // worktree), not as separate tasks — same as the task-scoped path.
-          const provisioned = asProvisioned(getTaskStore(mounted.data.id, leaderConv.taskId));
-          if (!provisioned) throw new Error('Team task is not ready for workers.');
-          const conversationTitleInputs = Array.from(
-            provisioned.conversations.conversations.values(),
-            (conversation) => ({
-              runtimeId: conversation.data.runtimeId,
-              title: conversation.data.title,
+        goToTask(mounted.data.id, taskId);
+        void createPromise
+          .then(() =>
+            rpc.teamRooms.createRoomFromTeam({
+              projectId: mounted.data.id,
+              taskId,
+              teamId,
+              requirement: teamRequirement,
             })
-          );
-          const workerLaunches = workers.flatMap((member) => {
-            const slot = resolveTeamMember(member);
-            if (!slot.provider) return [];
-            const title = initialConversationTitle(
-              slot.provider,
-              trimmed || undefined,
-              conversationTitleInputs
+          )
+          .catch((error: unknown) => {
+            toast.error(
+              error instanceof Error ? error.message : 'Agent team orchestration failed.'
             );
-            conversationTitleInputs.push({ runtimeId: slot.provider, title });
-            return [
-              provisioned.conversations.createConversation({
-                id: crypto.randomUUID(),
-                projectId: mounted.data.id,
-                taskId: leaderConv.taskId,
-                runtime: slot.provider,
-                title,
-                initialPrompt: buildTeamRolePrompt({
-                  requirement,
-                  ceoPlan: leaderOutput || '(The lead agent did not produce captured output.)',
-                  systemPrompt: slot.systemPrompt,
-                }),
-                imagePaths,
-                autoApprove: autoApproveDefaults.getDefault(slot.provider),
-              }),
-            ];
           });
-          reportFailures(await Promise.allSettled(workerLaunches));
-        })().catch((error: unknown) => {
-          toast.error(error instanceof Error ? error.message : 'Agent team orchestration failed.');
-        });
         resetComposer();
         return;
       }
@@ -2062,7 +1870,6 @@ export const HomeComposer = observer(function HomeComposer({
     compareRuntimes,
     reviewerRuntime,
     activeTeam,
-    resolveTeamMember,
     userAgents,
     slotAgentId,
     autoApproveDefaults,
