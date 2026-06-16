@@ -33,11 +33,7 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
   );
 }
 
-function DialogContent({
-  className,
-  children,
-  ...props
-}: DialogPrimitive.Popup.Props & { showCloseButton?: boolean }) {
+function DialogContent({ className, children, ...props }: DialogPrimitive.Popup.Props) {
   return (
     <DialogPortal>
       <DialogOverlay />

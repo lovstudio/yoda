@@ -160,10 +160,7 @@ const CustomCommandModal: React.FC<CustomCommandModalProps> = ({ isOpen, onClose
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        className="max-h-[85vh] max-w-lg gap-0 overflow-hidden p-0"
-        showCloseButton={false}
-      >
+      <DialogContent className="max-h-[85vh] max-w-lg gap-0 overflow-hidden p-0">
         <div className="border-b border-border/60">
           <DialogHeader className="flex-row items-start gap-4">
             <div>
