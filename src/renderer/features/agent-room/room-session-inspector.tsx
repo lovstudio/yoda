@@ -1,6 +1,7 @@
 import { Loader2, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect } from 'react';
+import { ConversationSession } from '@renderer/features/tasks/conversations/conversation-session';
 import {
   getTaskManagerStore,
   getTaskStore,
@@ -11,8 +12,7 @@ import {
   TaskViewWrapper,
   useProvisionedTask,
 } from '@renderer/features/tasks/task-view-context';
-import { PtyPane } from '@renderer/lib/pty/pty-pane';
-import { cn } from '@renderer/utils/utils';
+import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 
 /**
  * Live terminal of a single room member's session, embedded in the chat so the
@@ -84,14 +84,13 @@ const SessionPty = observer(function SessionPty({ conversationId }: { conversati
   const store = provisioned.conversations.conversations.get(conversationId);
   const session = store?.session;
 
-  if (!session || session.status !== 'ready' || !session.pty) return <Connecting />;
+  if (!store || !session || session.status !== 'ready' || !session.pty) return <Connecting />;
+  // Reuse the standard session tab UI so a room session looks/behaves identically
+  // (terminal + input + search + exited-state handling).
   return (
-    <PtyPane
-      sessionId={session.sessionId}
-      pty={session.pty}
-      className={cn('h-full w-full min-w-0')}
-      mapShiftEnterToCtrlJ
-    />
+    <PaneSizingProvider paneId={`room-session-${conversationId}`} sessionIds={[session.sessionId]}>
+      <ConversationSession conversation={store} isVisible autoFocus={false} />
+    </PaneSizingProvider>
   );
 });
 
