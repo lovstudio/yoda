@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
+import type { AgentTeamMember } from '@shared/agent-team';
 import type { AgentAccountProviderId } from '@shared/runtime-registry';
 import type { TaskNamingContextSnapshot, TaskNamingStatus } from '@shared/task-naming';
 import type { StoredBranch } from '@main/core/tasks/stored-branch';
@@ -717,6 +718,25 @@ export const agents = sqliteTable(
   })
 );
 
+// User-defined Agent Team templates (decoupled from project/task, like agents).
+// Built-in teams live in code (BUILTIN_TEAMS), not here.
+export const agentTeams = sqliteTable('agent_teams', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  icon: text('icon').notNull().default(''),
+  members: text('members', { mode: 'json' })
+    .notNull()
+    .$type<AgentTeamMember[]>()
+    .default(sql`'[]'`),
+  createdAt: text('created_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`)
+    .$onUpdate(() => new Date().toISOString()),
+});
+
 export const kv = sqliteTable(
   'kv',
   {
@@ -909,6 +929,8 @@ export type KvRow = typeof kv.$inferSelect;
 export type KvInsert = typeof kv.$inferInsert;
 export type AgentRow = typeof agents.$inferSelect;
 export type AgentInsert = typeof agents.$inferInsert;
+export type AgentTeamRow = typeof agentTeams.$inferSelect;
+export type AgentTeamInsert = typeof agentTeams.$inferInsert;
 export type AppSecretRow = typeof appSecrets.$inferSelect;
 export type AppSecretInsert = typeof appSecrets.$inferInsert;
 export type TeamRoomRow = typeof teamRooms.$inferSelect;
