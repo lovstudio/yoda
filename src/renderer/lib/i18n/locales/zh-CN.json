@@ -295,6 +295,7 @@
       "github": "GitHub",
       "interface": "界面",
       "terminal": "终端",
+      "tmux": "tmux",
       "keyboardShortcuts": "快捷键",
       "kanban": "看板",
       "aiLab": "AI Lab",
@@ -427,7 +428,10 @@
       "rowsUnit": "行"
     },
     "terminalTab": {
-      "description": "配置终端字体、历史行数、剪贴板行为与 tmux 会话复用。"
+      "description": "配置终端字体、历史行数与剪贴板行为。"
+    },
+    "tmuxTab": {
+      "description": "在 tmux session 中运行代理与终端，使它们在重启 Yoda 后仍可继续连接。"
     },
     "keyboardShortcutsTab": {
       "description": "自定义应用操作的键盘快捷键。"

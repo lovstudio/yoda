@@ -47,7 +47,6 @@ import {
   EnableTmuxRow,
   InitTaskNameFromSessionRow,
   PreArchiveCommandRow,
-  TmuxRecheckButton,
   TmuxSettingsRows,
 } from './TaskSettingsRows';
 import TelemetryCard from './TelemetryCard';
@@ -75,6 +74,7 @@ export type SettingsPageTab =
   | 'repository'
   | 'interface'
   | 'terminal'
+  | 'tmux'
   | 'keyboard-shortcuts'
   | 'kanban'
   | 'ai-lab'
@@ -104,6 +104,7 @@ function useSettingsTabGroups(): SettingsTabEntry[][] {
       { id: 'general', label: t('settings.tabs.general') },
       { id: 'interface', label: t('settings.tabs.interface') },
       { id: 'terminal', label: t('settings.tabs.terminal') },
+      { id: 'tmux', label: t('settings.tabs.tmux') },
       { id: 'keyboard-shortcuts', label: t('settings.tabs.keyboardShortcuts') },
     ],
     // Projects, the tasks that run inside them, and the agent sessions inside tasks.
@@ -398,15 +399,12 @@ export function SettingsPage({
     terminal: {
       title: t('settings.tabs.terminal'),
       description: t('settings.terminalTab.description'),
-      sections: [
-        { id: 'terminal', component: <TerminalSettingsCard /> },
-        {
-          id: 'tmux',
-          title: t('settings.terminal.tmux'),
-          action: <TmuxRecheckButton />,
-          component: <TmuxSettingsRows />,
-        },
-      ],
+      sections: [{ id: 'terminal', component: <TerminalSettingsCard /> }],
+    },
+    tmux: {
+      title: t('settings.terminal.tmux'),
+      description: t('settings.tmuxTab.description'),
+      sections: [{ id: 'tmux', component: <TmuxSettingsRows /> }],
     },
     'keyboard-shortcuts': {
       title: t('settings.tabs.keyboardShortcuts'),

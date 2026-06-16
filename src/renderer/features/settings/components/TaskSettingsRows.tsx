@@ -237,10 +237,9 @@ export const EnableTmuxRow: React.FC = observer(() => {
 });
 
 /**
- * Terminal tab → tmux sub-section header action. Mirrors the clis-models
- * "CLI agents" section: a section title with a rescan action ({@link
- * CliAgentsRescanButton}) and a rows body ({@link TmuxSettingsRows}). Re-probes
- * all dependencies (cheap) so a freshly-installed or PATH-late tmux is picked up.
+ * Re-probes all dependencies (cheap) so a freshly-installed or PATH-late tmux is
+ * picked up. Lives in the tmux tab's Status row; mirrors {@link
+ * CliAgentsRescanButton}.
  */
 export const TmuxRecheckButton: React.FC = observer(() => {
   const { t } = useTranslation();
@@ -266,12 +265,11 @@ export const TmuxRecheckButton: React.FC = observer(() => {
 });
 
 /**
- * Terminal tab → tmux sub-section body. A vertical stack of {@link SettingRow}s
- * (description, detection status, binary path) so future tmux options — socket
+ * Body of the dedicated tmux settings tab. A vertical stack of {@link
+ * SettingRow}s (detection status, binary path) so future tmux options — socket
  * name, mouse mode, kill-on-archive, … — slot in as additional rows without
- * reworking the layout. The enable toggle lives in {@link EnableTmuxRow} under
- * the Sessions tab; re-check lives in {@link TmuxRecheckButton} (the section
- * header action).
+ * reworking the layout. The tab itself supplies the heading + description; the
+ * enable toggle lives in {@link EnableTmuxRow} under the Sessions tab.
  */
 export const TmuxSettingsRows: React.FC = observer(() => {
   const { t } = useTranslation();
@@ -299,7 +297,6 @@ export const TmuxSettingsRows: React.FC = observer(() => {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs text-foreground-passive">{t('settings.tasks.enableTmuxDescription')}</p>
       <SettingRow
         title={t('settings.tasks.tmuxStatusRow')}
         description={
@@ -311,7 +308,7 @@ export const TmuxSettingsRows: React.FC = observer(() => {
         }
         control={
           <>
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2 pr-1">
               <span
                 className={cn(
                   'h-1.5 w-1.5 shrink-0 rounded-full',
@@ -339,6 +336,7 @@ export const TmuxSettingsRows: React.FC = observer(() => {
                   : t('settings.tasks.installTmux')}
               </Button>
             )}
+            <TmuxRecheckButton />
           </>
         }
       />
@@ -347,7 +345,7 @@ export const TmuxSettingsRows: React.FC = observer(() => {
           title={t('settings.tasks.tmuxPathRow')}
           control={
             <span
-              className="max-w-[320px] truncate font-mono text-xs text-foreground-passive"
+              className="max-w-[360px] truncate font-mono text-xs text-foreground-passive"
               title={tmuxState.path}
             >
               {tmuxState.path}
