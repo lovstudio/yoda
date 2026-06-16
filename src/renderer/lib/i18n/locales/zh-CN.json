@@ -1506,7 +1506,8 @@
     },
     "errors": {
       "localOnly": "新建 worktree 仅支持本地项目。",
-      "taskCreate": "创建任务失败。"
+      "taskCreate": "创建任务失败。",
+      "taskSetup": "任务的 worktree 没设置完成——请到任务视图修复后再建房间。"
     }
   },
   "promptLibrary": {

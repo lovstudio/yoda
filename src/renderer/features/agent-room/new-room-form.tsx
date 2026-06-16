@@ -84,10 +84,14 @@ export const NewRoomForm = observer(function NewRoomForm({ onClose }: { onClose:
       sourceBranch: { type: 'local', branch: project.baseRef },
       strategy: { kind: 'new-branch', taskBranch: branch, pushBranch: false },
     });
-    if (res && typeof res === 'object' && 'ok' in res && (res as { ok: boolean }).ok === false) {
-      throw new Error(t('agentRoom.errors.taskCreate'));
+    // createTask resolves only after the worktree is set up AND provisioned, so
+    // no polling is needed — but a branch-setup failure comes back as success
+    // with a non-'ready' setupStatus, which must NOT seed a room on a dead task.
+    if (!res.success) throw new Error(t('agentRoom.errors.taskCreate'));
+    if (res.data.task.setupStatus !== 'ready') {
+      throw new Error(res.data.task.setupError || t('agentRoom.errors.taskSetup'));
     }
-    return id;
+    return res.data.task.id;
   };
 
   const create = async () => {
