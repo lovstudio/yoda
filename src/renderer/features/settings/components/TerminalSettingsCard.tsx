@@ -198,7 +198,7 @@ const TerminalSettingsCard: React.FC = () => {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-9 w-full justify-between text-sm font-normal"
+                    className="h-8 w-full justify-between text-sm font-normal"
                     disabled={loading || saving}
                   />
                 }
@@ -309,7 +309,7 @@ const TerminalSettingsCard: React.FC = () => {
               value={scrollbackDraft}
               disabled={loading || saving}
               aria-label={t('settings.terminal.scrollbackLinesAria')}
-              className="h-9 text-right"
+              className="h-8 text-right"
               onChange={(e) => setScrollbackDraft(e.target.value)}
               onBlur={() => {
                 if (skipScrollbackCommitRef.current) {
