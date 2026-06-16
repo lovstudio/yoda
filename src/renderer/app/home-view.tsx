@@ -51,6 +51,7 @@ import type { Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import type { ClaudeMemoryFile } from '@shared/conversations';
 import type { Branch } from '@shared/git';
+import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { withSystemPrompt } from '@shared/prompt-format';
 import { REVIEW_MAX_ROUNDS } from '@shared/review-protocol';
@@ -59,8 +60,14 @@ import type { CatalogIndex } from '@shared/skills/types';
 import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import {
+  effectiveGlobalEnabled,
+  setGlobalOverride,
+  setProjectItems,
+} from '@renderer/features/projects/project-prompt-principles';
+import {
   asMounted,
   getProjectManagerStore,
+  getProjectSettingsStore,
   getRepositoryStore,
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
@@ -1274,6 +1281,40 @@ export const HomeComposer = observer(function HomeComposer({
       });
     },
     [promptPrinciplesValue, updatePromptPrinciples]
+  );
+  // When a project is selected, prompt-principle toggles operate on the
+  // project's layer (override globals + its own items) stored in project
+  // settings; with no project they edit the global defaults above.
+  const projectSettingsStore = selectedProjectId
+    ? getProjectSettingsStore(selectedProjectId)
+    : undefined;
+  const projectSettings = projectSettingsStore?.settings ?? null;
+  const projectPromptPrinciples = projectSettings?.promptPrinciples;
+  const projectPrincipleItems = projectPromptPrinciples?.items ?? [];
+  const saveProjectPromptPrinciples = useCallback(
+    (next: ProjectPromptPrinciples | undefined) => {
+      if (!projectSettingsStore || !projectSettings) return;
+      void projectSettingsStore.save({ ...projectSettings, promptPrinciples: next });
+    },
+    [projectSettingsStore, projectSettings]
+  );
+  const setGlobalPrincipleProjectOverride = useCallback(
+    (principle: { id: string; enabled: boolean }, enabled: boolean) => {
+      saveProjectPromptPrinciples(setGlobalOverride(projectPromptPrinciples, principle, enabled));
+    },
+    [projectPromptPrinciples, saveProjectPromptPrinciples]
+  );
+  const setProjectPrincipleEnabled = useCallback(
+    (id: string, enabled: boolean) => {
+      const items = projectPromptPrinciples?.items ?? [];
+      saveProjectPromptPrinciples(
+        setProjectItems(
+          projectPromptPrinciples,
+          items.map((item) => (item.id === id ? { ...item, enabled } : item))
+        )
+      );
+    },
+    [projectPromptPrinciples, saveProjectPromptPrinciples]
   );
   const modeCanRunWithoutProject = runMode === 'normal' || runMode === 'brainstorm';
   const modeRequiresWorktree =
@@ -2710,15 +2751,53 @@ export const HomeComposer = observer(function HomeComposer({
                       </div>
                       <Switch
                         size="sm"
-                        checked={principle.enabled}
+                        checked={
+                          selectedProjectId
+                            ? effectiveGlobalEnabled(projectPromptPrinciples, principle)
+                            : principle.enabled
+                        }
                         onCheckedChange={(checked) =>
-                          setPromptPrincipleEnabled(principle.id, checked)
+                          selectedProjectId
+                            ? setGlobalPrincipleProjectOverride(principle, checked)
+                            : setPromptPrincipleEnabled(principle.id, checked)
                         }
                         aria-label={t('settings.prompts.toggle')}
                       />
                     </div>
                   ))
                 )}
+                {selectedProjectId && projectPrincipleItems.length > 0 ? (
+                  <>
+                    <div className="mt-1 text-[10px] font-medium uppercase tracking-wide text-foreground-passive">
+                      {t('home.promptPrinciplesProjectHeading')}
+                    </div>
+                    {projectPrincipleItems.map((principle) => (
+                      <div key={principle.id} className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className="min-w-0 truncate text-xs text-foreground">
+                            {principle.name || t('home.promptPrincipleUnnamed')}
+                          </span>
+                          {principle.text ? (
+                            <InfoTooltip
+                              label={principle.name || t('home.promptPrincipleUnnamed')}
+                              content={
+                                <span className="whitespace-pre-wrap">{principle.text}</span>
+                              }
+                            />
+                          ) : null}
+                        </div>
+                        <Switch
+                          size="sm"
+                          checked={principle.enabled}
+                          onCheckedChange={(checked) =>
+                            setProjectPrincipleEnabled(principle.id, checked)
+                          }
+                          aria-label={t('settings.prompts.toggle')}
+                        />
+                      </div>
+                    ))}
+                  </>
+                ) : null}
               </div>
               <InstructionFilesSection projectPath={skillProjectPath} />
             </PopoverContent>

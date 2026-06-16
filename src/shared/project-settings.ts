@@ -37,6 +37,33 @@ export const quickActionSchema = z.object({
 export type QuickAction = z.infer<typeof quickActionSchema>;
 
 /**
+ * An atomic, user-defined operating principle appended after the runtime's
+ * system prompt at spawn. The canonical source of truth for this shape — the
+ * app-global `promptPrinciples` setting reuses it, and projects layer on top.
+ */
+export const promptPrincipleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  text: z.string(),
+  enabled: z.boolean(),
+});
+
+export type PromptPrinciple = z.infer<typeof promptPrincipleSchema>;
+
+/**
+ * A project's prompt-principle layer over the app-global list:
+ * - `globalOverrides` maps a global principle id to an explicit enabled state
+ *   for this project. Absent ids inherit the global default.
+ * - `items` are project-local principles, appended after the global ones.
+ */
+export const projectPromptPrinciplesSchema = z.object({
+  globalOverrides: z.record(z.string(), z.boolean()).optional(),
+  items: z.array(promptPrincipleSchema).optional(),
+});
+
+export type ProjectPromptPrinciples = z.infer<typeof projectPromptPrinciplesSchema>;
+
+/**
  * Per-project documentation sources surfaced by the project Docs page.
  * `localPath` is a repo-relative directory of markdown files; `cloudUrl` is a
  * deployed docs site. The page shows whichever are set and lets the user
@@ -54,6 +81,7 @@ export const shareableProjectSettingsSchema = z.object({
   shellSetup: z.string().optional(),
   scripts: shareableProjectScriptsSettingsSchema.optional(),
   quickActions: z.array(quickActionSchema).optional(),
+  promptPrinciples: projectPromptPrinciplesSchema.optional(),
   docs: projectDocsSettingsSchema.optional(),
 });
 
@@ -123,6 +151,7 @@ export type ShareableProjectSettingsWriteField =
   | 'scripts.run'
   | 'scripts.teardown'
   | 'quickActions'
+  | 'promptPrinciples'
   | 'docs.localPath'
   | 'docs.cloudUrl';
 
@@ -133,6 +162,7 @@ export const SHAREABLE_PROJECT_SETTINGS_WRITE_FIELDS = [
   'scripts.run',
   'scripts.teardown',
   'quickActions',
+  'promptPrinciples',
   'docs.localPath',
   'docs.cloudUrl',
 ] as const satisfies ShareableProjectSettingsWriteField[];
@@ -161,6 +191,7 @@ export function emptyProjectSettingsOverrideState(): ProjectSettingsOverrideStat
     'scripts.run': [],
     'scripts.teardown': [],
     quickActions: [],
+    promptPrinciples: [],
     'docs.localPath': [],
     'docs.cloudUrl': [],
   };

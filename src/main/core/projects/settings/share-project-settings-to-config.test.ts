@@ -562,6 +562,7 @@ describe('shareProjectSettingsToConfig', () => {
         },
       ],
       quickActions: [],
+      promptPrinciples: [],
       'docs.localPath': [],
       'docs.cloudUrl': [],
     });

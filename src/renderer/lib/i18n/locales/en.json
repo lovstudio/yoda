@@ -737,6 +737,7 @@
     "attachImagesAsPathsLabel": "Send images as file paths",
     "attachImagesAsPathsDesc": "Reference images as @path mentions instead of pasting them natively into the agent terminal.",
     "promptPrinciplesLabel": "Prompt principles",
+    "promptPrinciplesProjectHeading": "This project",
     "promptPrincipleUnnamed": "Untitled principle",
     "instructionFilesLabel": "Instruction files",
     "instructionFilesHint": "The runtime's built-in system prompt is not editable. The global CLAUDE.md acts as your user-level system prompt; the project's CLAUDE.md / AGENTS.md are the project-level prompts. Click to expand, hover a row to open and edit.",
@@ -3137,8 +3138,26 @@
       "lifecycleScriptsDescription": "Commands that run when setting up or tearing down task workspaces.",
       "provisionCommand": "Provision command",
       "terminateCommand": "Terminate command",
+      "promptPrinciples": {
+        "title": "Prompt principles",
+        "description": "Layer this project's rules over the global ones. Both are appended after the agent's system prompt at spawn.",
+        "globalHeading": "Global principles",
+        "globalEmpty": "No global principles yet. Add them in Settings → Prompts.",
+        "localHeading": "Project principles",
+        "toggleGlobal": "Enable for this project",
+        "toggleLocal": "Enable principle",
+        "unnamed": "Untitled principle",
+        "namePlaceholder": "Name",
+        "textPlaceholder": "Principle text appended to the system prompt…",
+        "add": "Add principle",
+        "remove": "Remove principle"
+      },
       "shareable": {
         "fields": {
+          "promptPrinciples": {
+            "modalLabel": "Prompt principles",
+            "leafLabel": "prompt principles"
+          },
           "preservePatterns": {
             "modalLabel": "Preserve patterns",
             "leafLabel": "preserve patterns",

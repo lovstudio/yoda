@@ -15,6 +15,7 @@ import { useFeatureFlag } from '@renderer/lib/hooks/useFeatureFlag';
 import { FieldGroup } from '@renderer/lib/ui/field';
 import { ProjectSettingsFooter } from './project-settings-footer';
 import { BaseProjectSettingsSection } from './sections/base-project-settings-section';
+import { PromptPrinciplesSection } from './sections/prompt-principles-section';
 import { ShareableSettingsSection } from './sections/shareable-project-settings-section';
 import { WorkspaceProviderSettingsSection } from './sections/workspace-provider-settings-section';
 import { useProjectSettingsForm } from './use-project-settings-form';
@@ -86,6 +87,7 @@ export const ProjectSettingsForm = observer(function ProjectSettingsForm({
             update={formModel.update}
             getOverrideSources={formModel.getOverrideSources}
           />
+          <PromptPrinciplesSection form={formModel.form} update={formModel.update} />
         </FieldGroup>
       </div>
       <ProjectSettingsFooter

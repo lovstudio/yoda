@@ -3,7 +3,7 @@ import { customThemeSelectionSchema, customThemesSettingsSchema } from '@shared/
 import { KANBAN_STATUSES } from '@shared/kanban';
 import { MAAS_PLATFORM_IDS } from '@shared/maas';
 import { openInAppIdSchema } from '@shared/openInApps';
-import { quickActionSchema } from '@shared/project-settings';
+import { promptPrincipleSchema, quickActionSchema } from '@shared/project-settings';
 import { RUNTIME_MODEL_CANDIDATE_SOURCES } from '@shared/runtime-model-candidates';
 import { AGENT_ACCOUNT_PROVIDER_IDS, RUNTIME_IDS, RUNTIMES } from '@shared/runtime-registry';
 import {
@@ -421,15 +421,6 @@ export const statuslineTemplateSchema = z.object({
 
 export const statuslineSettingsSchema = z.object({
   templates: z.array(statuslineTemplateSchema),
-});
-
-/** An atomic, user-defined operating principle for agent runtimes. */
-export const promptPrincipleSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  text: z.string(),
-  /** Enabled principles are appended after the runtime's system prompt at spawn. */
-  enabled: z.boolean(),
 });
 
 export const promptPrinciplesSettingsSchema = z.object({

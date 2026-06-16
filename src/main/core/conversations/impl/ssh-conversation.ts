@@ -1,6 +1,7 @@
 import type { AgentSessionConfig } from '@shared/agent-session';
 import type { Conversation } from '@shared/conversations';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
+import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { wireAgentClassifier } from '@main/core/agent-hooks/classifier-wiring';
 import { claudeTrustService } from '@main/core/agent-hooks/claude-trust-service';
@@ -48,6 +49,9 @@ export class SshConversationProvider implements ConversationProvider {
   private readonly ctx: IExecutionContext;
   private readonly proxy: SshClientProxy;
   private readonly connectionId: string;
+  private readonly resolveProjectPromptPrinciples?: () => Promise<
+    ProjectPromptPrinciples | undefined
+  >;
   private readonly tmuxSessionNames = new Map<string, string>();
   private readonly sessionInfos = new Map<string, Omit<ActiveConversationSession, 'detachable'>>();
 
@@ -61,6 +65,7 @@ export class SshConversationProvider implements ConversationProvider {
     ctx,
     proxy,
     connectionId,
+    resolveProjectPromptPrinciples,
   }: {
     projectId: string;
     taskPath: string;
@@ -71,6 +76,7 @@ export class SshConversationProvider implements ConversationProvider {
     ctx: IExecutionContext;
     proxy: SshClientProxy;
     connectionId: string;
+    resolveProjectPromptPrinciples?: () => Promise<ProjectPromptPrinciples | undefined>;
   }) {
     this.projectId = projectId;
     this.taskPath = taskPath;
@@ -81,6 +87,7 @@ export class SshConversationProvider implements ConversationProvider {
     this.ctx = ctx;
     this.proxy = proxy;
     this.connectionId = connectionId;
+    this.resolveProjectPromptPrinciples = resolveProjectPromptPrinciples;
   }
 
   async startSession(
@@ -119,7 +126,9 @@ export class SshConversationProvider implements ConversationProvider {
       initialPrompt: isResuming
         ? initialPrompt
         : substituteImageMentions(initialPrompt, imagePaths ?? []),
-      appendSystemPrompt: await getEnabledPromptPrinciplesText(),
+      appendSystemPrompt: await getEnabledPromptPrinciplesText(
+        await this.resolveProjectPromptPrinciples?.()
+      ),
     });
 
     const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
