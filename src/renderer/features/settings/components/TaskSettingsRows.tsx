@@ -199,7 +199,7 @@ export const PreArchiveCommandRow: React.FC = () => {
 
 /**
  * Sessions tab: the per-session opt-in toggle only. Detection/version/path and
- * install live in {@link TmuxSettingsRows} under the Terminal tab.
+ * install live in {@link TmuxSettingsChapter} under the Terminal tab.
  */
 export const EnableTmuxRow: React.FC = observer(() => {
   const { t } = useTranslation();
@@ -300,14 +300,9 @@ export const TmuxSettingsChapter: React.FC = observer(() => {
   return (
     <div className="flex flex-col gap-4">
       <Separator />
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h3 className="text-lg text-foreground">{t('settings.terminal.tmux')}</h3>
-          <p className="text-sm text-foreground-muted">
-            {t('settings.tasks.enableTmuxDescription')}
-          </p>
-        </div>
-        <TmuxRecheckButton />
+      <div className="flex min-w-0 flex-col gap-1">
+        <h3 className="text-lg text-foreground">{t('settings.terminal.tmux')}</h3>
+        <p className="text-sm text-foreground-muted">{t('settings.tasks.enableTmuxDescription')}</p>
       </div>
       <div className="flex flex-col gap-3">
         <SettingRow
@@ -365,6 +360,11 @@ export const TmuxSettingsChapter: React.FC = observer(() => {
             }
           />
         )}
+        <SettingRow
+          title={t('settings.tasks.recheckTmuxRow')}
+          description={t('settings.tasks.recheckTmuxRowDescription')}
+          control={<TmuxRecheckButton />}
+        />
       </div>
     </div>
   );

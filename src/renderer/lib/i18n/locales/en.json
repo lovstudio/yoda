@@ -583,6 +583,8 @@
       "tmuxPathRow": "Binary path",
       "recheckTmux": "Re-check",
       "recheckingTmux": "Checking…",
+      "recheckTmuxRow": "Re-check detection",
+      "recheckTmuxRowDescription": "Re-probe tmux's install status and version — useful right after installing it or changing your PATH.",
       "preArchiveCommand": "Pre-archive skill",
       "preArchiveCommandDescription": "When set, archiving a task or session first sends this skill or command to the target session and waits for the agent to finish. Leave empty to archive immediately.",
       "preArchiveCommandPlaceholder": "e.g. lovstudio-git-commit-with-context"
