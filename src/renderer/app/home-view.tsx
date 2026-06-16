@@ -3395,10 +3395,7 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
           </button>
         }
       />
-      <DialogContent
-        showCloseButton={false}
-        className="flex h-[min(70dvh,40rem)] w-[min(44rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0 sm:max-w-[44rem]"
-      >
+      <DialogContent className="flex h-[min(70dvh,40rem)] w-[min(44rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0 sm:max-w-[44rem]">
         <DialogHeader showCloseButton className="min-w-0 px-4 py-3">
           <DialogTitle className="truncate text-sm font-semibold text-foreground">
             {t('home.developmentParadigm')}
