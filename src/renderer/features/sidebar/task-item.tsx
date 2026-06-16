@@ -151,6 +151,22 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     navigate('task', { projectId, taskId });
   };
 
+  // Alt/Option-click pins the task into the global side pane and behaves like a
+  // normal open — it lands on the preferred session rather than the overview.
+  // Provisioning is async, so resolve the pinned tab only once the task is
+  // ready; a session-less task falls back to its overview.
+  const pinTaskToSidePane = () => {
+    void (async () => {
+      if (task.state === 'unprovisioned' && task.phase === 'idle') {
+        await taskManager?.provisionTask(taskId);
+      }
+      const provisioned = asProvisioned(getTaskStore(projectId, taskId));
+      const tabId =
+        provisioned?.taskView.tabManager.openPreferredConversationInShellPin() ?? OVERVIEW_TAB_ID;
+      appState.sidePane.pinTask(projectId, taskId, tabId);
+    })();
+  };
+
   return (
     <TaskContextMenu
       {...menuActions}
@@ -183,13 +199,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               }}
               onClick={(e) => {
                 setArchiveConfirming(false);
-                // Alt/Option pins the task into the global side pane; a plain
-                // click navigates as usual. Provision first — the pinned body
-                // renders nothing until the task store is provisioned (its
-                // observer fills in once provisioning completes).
+                // Alt/Option pins the task into the global side pane (landing
+                // on its session, like a normal open); a plain click navigates.
                 if (e.altKey) {
-                  handleProvision();
-                  appState.sidePane.pinTask(projectId, taskId, OVERVIEW_TAB_ID);
+                  pinTaskToSidePane();
                   return;
                 }
                 handleOpenDetails();
