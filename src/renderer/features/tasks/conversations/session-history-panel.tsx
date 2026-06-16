@@ -1,4 +1,4 @@
-import { ChevronDown, MessageSquare } from 'lucide-react';
+import { ChevronDown, MessageSquare, Minus, Plus } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -108,36 +108,69 @@ export const SessionHistoryPanel = observer(function SessionHistoryPanel({
   return <SessionPromptList prompts={prompts.prompts} className="h-full" />;
 });
 
+const MIN_DOCK_ROWS = 1;
+const MAX_DOCK_ROWS = 20;
+
 /**
  * The same prompt history docked at the bottom of the conversation pane, gated
- * behind the `interface.dockSessionHistory` setting. Caps to N visible rows
- * (`interface.dockSessionHistoryRows`) and can be collapsed inline; collapsing
- * also stops the background fetch.
+ * behind the `interface.dockSessionHistory` setting (toggled from the task
+ * menu). Caps to N visible rows — adjustable inline via the header — and can be
+ * collapsed; collapsing also stops the background fetch.
  */
 export const DockedSessionHistory = observer(function DockedSessionHistory() {
   const { t } = useTranslation();
-  const { value: ui } = useAppSettingsKey('interface');
-  const enabled = ui?.dockSessionHistory ?? false;
-  const rows = Math.min(20, Math.max(1, ui?.dockSessionHistoryRows ?? 3));
+  const { value: ui, update } = useAppSettingsKey('interface');
+  const enabled = ui?.dockSessionHistory ?? true;
+  const rows = Math.min(MAX_DOCK_ROWS, Math.max(MIN_DOCK_ROWS, ui?.dockSessionHistoryRows ?? 3));
   const [collapsed, setCollapsed] = useState(false);
   const prompts = useSessionPrompts(enabled && !collapsed);
 
   if (!enabled || !prompts.hasConversation) return null;
 
+  const setRows = (next: number) =>
+    update({ dockSessionHistoryRows: Math.min(MAX_DOCK_ROWS, Math.max(MIN_DOCK_ROWS, next)) });
+
   return (
     <div className="flex shrink-0 flex-col border-t border-border-primary/60 bg-background">
-      <button
-        type="button"
-        className="flex h-7 shrink-0 items-center gap-1.5 px-3 text-left text-foreground-passive transition-colors hover:text-foreground"
-        onClick={() => setCollapsed((v) => !v)}
-        aria-expanded={!collapsed}
-      >
-        <ChevronDown className={cn('size-3 transition-transform', collapsed && '-rotate-90')} />
-        <span className="text-[11px] font-medium">{t('tasks.bottomPanel.session')}</span>
-        <span className="font-mono text-[10px] tabular-nums text-foreground-passive">
-          {prompts.prompts.length}
-        </span>
-      </button>
+      <div className="flex h-7 shrink-0 items-center gap-1.5 px-3 text-foreground-passive">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left transition-colors hover:text-foreground"
+          onClick={() => setCollapsed((v) => !v)}
+          aria-expanded={!collapsed}
+        >
+          <ChevronDown className={cn('size-3 transition-transform', collapsed && '-rotate-90')} />
+          <span className="text-[11px] font-medium">{t('tasks.bottomPanel.session')}</span>
+          <span className="font-mono text-[10px] tabular-nums text-foreground-passive">
+            {prompts.prompts.length}
+          </span>
+        </button>
+        {!collapsed ? (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              className="flex size-4 items-center justify-center rounded-sm transition-colors hover:bg-background-2 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+              onClick={() => setRows(rows - 1)}
+              disabled={rows <= MIN_DOCK_ROWS}
+              aria-label={t('tasks.bottomPanel.sessionFewerRows')}
+              title={t('tasks.bottomPanel.sessionFewerRows')}
+            >
+              <Minus className="size-2.5" />
+            </button>
+            <span className="w-3 text-center font-mono text-[10px] tabular-nums">{rows}</span>
+            <button
+              type="button"
+              className="flex size-4 items-center justify-center rounded-sm transition-colors hover:bg-background-2 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+              onClick={() => setRows(rows + 1)}
+              disabled={rows >= MAX_DOCK_ROWS}
+              aria-label={t('tasks.bottomPanel.sessionMoreRows')}
+              title={t('tasks.bottomPanel.sessionMoreRows')}
+            >
+              <Plus className="size-2.5" />
+            </button>
+          </div>
+        ) : null}
+      </div>
       {!collapsed ? (
         prompts.hasPrompts ? (
           <SessionPromptList

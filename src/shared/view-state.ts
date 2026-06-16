@@ -146,7 +146,8 @@ export type AppTabsSnapshot = {
 /** A pin in the shell-level (cross-route) side pane. */
 export type SidePanePinSnapshot =
   | { id: string; kind: 'view'; viewId: string; params: Record<string, unknown> }
-  | { id: string; kind: 'task'; projectId: string; taskId: string; tabId: string };
+  | { id: string; kind: 'task'; projectId: string; taskId: string; tabId: string }
+  | { id: string; kind: 'task-view'; projectId: string; taskId: string };
 
 /** Persisted shell-level side pane: pinned tabs that survive route changes. */
 export type AppSidePaneSnapshot = {

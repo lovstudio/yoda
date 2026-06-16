@@ -24,7 +24,7 @@ import { splitViewStore } from './split-view-store';
  * strip, which only the primary pane may own. Extra panes are driven by their
  * own internal tab state (switch tabs via the pane's own sidebar).
  */
-const SelfContainedTaskPane = observer(function SelfContainedTaskPane({
+export const SelfContainedTaskPane = observer(function SelfContainedTaskPane({
   projectId,
   taskId,
 }: {

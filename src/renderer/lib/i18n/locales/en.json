@@ -295,6 +295,7 @@
       "github": "GitHub",
       "interface": "Interface",
       "terminal": "Terminal",
+      "tmux": "tmux",
       "keyboardShortcuts": "Keyboard shortcuts",
       "kanban": "Kanban",
       "aiLab": "AI Lab",
@@ -419,15 +420,11 @@
       "description": "Customize the appearance and behavior of the app.",
       "keyboardShortcuts": "Keyboard shortcuts"
     },
-    "interface": {
-      "dockSessionHistory": "Dock session history",
-      "dockSessionHistoryDescription": "Pin the active session's prompt history below the conversation pane.",
-      "dockSessionHistoryRows": "Docked history rows",
-      "dockSessionHistoryRowsDescription": "Number of prompt rows shown before the docked list scrolls.",
-      "rowsUnit": "rows"
-    },
     "terminalTab": {
-      "description": "Configure terminal font, history, clipboard behavior, and tmux session reuse."
+      "description": "Configure terminal font, history, and clipboard behavior."
+    },
+    "tmuxTab": {
+      "description": "Run agent sessions and terminals in tmux sessions so they survive Yoda restarts."
     },
     "keyboardShortcutsTab": {
       "description": "Customize keyboard shortcuts for app actions."
@@ -1333,7 +1330,9 @@
       "copyFailed": "The value could not be copied to the clipboard.",
       "createSubtask": "New subtask",
       "setParent": "Set parent task...",
-      "createParent": "Add parent task (group)"
+      "createParent": "Add parent task (group)",
+      "showSessionHistoryDock": "Show session history dock",
+      "hideSessionHistoryDock": "Hide session history dock"
     },
     "sessionPanel": {
       "title": "Session",
@@ -1417,7 +1416,9 @@
       "cardDescScripts": "Run the project's lifecycle scripts",
       "cardDescSession": "Browse this task's prompt history",
       "layoutFullWidth": "Span full width",
-      "layoutBesideSidebar": "Yield to sidebar"
+      "layoutBesideSidebar": "Yield to sidebar",
+      "sessionFewerRows": "Fewer rows",
+      "sessionMoreRows": "More rows"
     }
   },
   "commandPalette": {

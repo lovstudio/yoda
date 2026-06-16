@@ -17,7 +17,6 @@ import {
   getTaskStore,
   taskDisplayStatus,
 } from '@renderer/features/tasks/stores/task-selectors';
-import { OVERVIEW_TAB_ID } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
 import { Badge } from '@renderer/lib/ui/badge';
@@ -151,20 +150,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     navigate('task', { projectId, taskId });
   };
 
-  // Alt/Option-click pins the task into the global side pane and behaves like a
-  // normal open — it lands on the preferred session rather than the overview.
-  // Provisioning is async, so resolve the pinned tab only once the task is
-  // ready; a session-less task falls back to its overview.
+  // Alt/Option-click pins the WHOLE task UI into the global side pane — opening
+  // it there behaves exactly like routing to the task, just wrapped in the pane
+  // (the self-contained pane auto-provisions and owns its own tab strip).
   const pinTaskToSidePane = () => {
-    void (async () => {
-      if (task.state === 'unprovisioned' && task.phase === 'idle') {
-        await taskManager?.provisionTask(taskId);
-      }
-      const provisioned = asProvisioned(getTaskStore(projectId, taskId));
-      const tabId =
-        provisioned?.taskView.tabManager.openPreferredConversationInShellPin() ?? OVERVIEW_TAB_ID;
-      appState.sidePane.pinTask(projectId, taskId, tabId);
-    })();
+    appState.sidePane.pinTaskView(projectId, taskId);
   };
 
   return (

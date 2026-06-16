@@ -10,14 +10,18 @@ import type { Snapshottable } from './snapshottable';
  * - `view` pins host an arbitrary registered view (settings, project pages,
  *   project files, …) by route. Copy semantics: the top-level tab stays put;
  *   the pane renders an independent instance with its own params.
- * - `task` pins host a task entity (conversation / file / diff / overview).
- *   The entity itself lives in that task's TabManagerStore (`shellPinTabIds`
- *   for moved entries, the fixed overview entry for overview pins) — this
- *   store only references it, mirroring the task-sidebar pin model.
+ * - `task` pins host a single task entity (conversation / file / diff /
+ *   overview). The entity itself lives in that task's TabManagerStore
+ *   (`shellPinTabIds` for moved entries, the fixed overview entry for overview
+ *   pins) — this store only references it, mirroring the task-sidebar pin model.
+ * - `task-view` pins host the WHOLE task UI (tab strip + main + task sidebar),
+ *   self-contained like a split-view extra pane — opening a task into the pane
+ *   behaves exactly like routing to it, just wrapped in the side pane.
  */
 export type SidePanePin =
   | { id: string; kind: 'view'; viewId: ViewId; params: Record<string, unknown> }
-  | { id: string; kind: 'task'; projectId: string; taskId: string; tabId: string };
+  | { id: string; kind: 'task'; projectId: string; taskId: string; tabId: string }
+  | { id: string; kind: 'task-view'; projectId: string; taskId: string };
 
 /**
  * Shell-level (cross-route) side pane: a first-class workspace column to the
@@ -41,6 +45,7 @@ export class AppSidePaneStore implements Snapshottable<AppSidePaneSnapshot> {
       isMaximized: observable,
       pinView: action,
       pinTask: action,
+      pinTaskView: action,
       unpin: action,
       reorderPin: action,
       setActivePin: action,
@@ -92,6 +97,20 @@ export class AppSidePaneStore implements Snapshottable<AppSidePaneSnapshot> {
       return;
     }
     const pin: SidePanePin = { id: crypto.randomUUID(), kind: 'task', projectId, taskId, tabId };
+    this.pins.push(pin);
+    this.activePinId = pin.id;
+  }
+
+  /** Pin a task's whole self-contained view (deduplicated by task) and select it. */
+  pinTaskView(projectId: string, taskId: string): void {
+    const existing = this.pins.find(
+      (pin) => pin.kind === 'task-view' && pin.projectId === projectId && pin.taskId === taskId
+    );
+    if (existing) {
+      this.activePinId = existing.id;
+      return;
+    }
+    const pin: SidePanePin = { id: crypto.randomUUID(), kind: 'task-view', projectId, taskId };
     this.pins.push(pin);
     this.activePinId = pin.id;
   }
@@ -164,6 +183,9 @@ function isValidPinSnapshot(pin: SidePanePinSnapshot | undefined): pin is SidePa
       typeof pin.taskId === 'string' &&
       typeof pin.tabId === 'string'
     );
+  }
+  if (pin.kind === 'task-view') {
+    return typeof pin.projectId === 'string' && typeof pin.taskId === 'string';
   }
   return false;
 }

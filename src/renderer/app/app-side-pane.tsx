@@ -22,6 +22,7 @@ import {
   type WrapParams,
 } from '@renderer/app/view-registry';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { SelfContainedTaskPane } from '@renderer/features/tasks/split-view/tiled-task-grid';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { OVERVIEW_TAB_ID } from '@renderer/features/tasks/tabs/tab-manager-store';
 import {
@@ -110,14 +111,15 @@ export const AppSidePane = observer(function AppSidePane() {
       }
       return { label: t('appTabs.task'), icon: null };
     }
+    // Task-overview and whole-task-view pins both chip as the task itself.
     const entry: AppTabEntry =
-      pin.kind === 'task'
-        ? {
+      pin.kind === 'view'
+        ? { id: pin.id, viewId: pin.viewId, params: pin.params }
+        : {
             id: pin.id,
             viewId: 'task',
             params: { projectId: pin.projectId, taskId: pin.taskId, tab: { kind: 'overview' } },
-          }
-        : { id: pin.id, viewId: pin.viewId, params: pin.params };
+          };
     return describeTab(entry, t, branchPrefix);
   };
 
@@ -371,6 +373,10 @@ export const AppSidePane = observer(function AppSidePane() {
                   <ShellPinnedTaskBody tabId={pin.tabId} />
                 </ProvisionedTaskProvider>
               </TaskViewWrapper>
+            ) : pin.kind === 'task-view' ? (
+              <div className="h-full min-h-0 overflow-hidden">
+                <SelfContainedTaskPane projectId={pin.projectId} taskId={pin.taskId} />
+              </div>
             ) : (
               <ViewPinHost pin={pin} />
             )}

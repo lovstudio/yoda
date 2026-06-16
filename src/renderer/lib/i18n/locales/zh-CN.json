@@ -295,6 +295,7 @@
       "github": "GitHub",
       "interface": "界面",
       "terminal": "终端",
+      "tmux": "tmux",
       "keyboardShortcuts": "快捷键",
       "kanban": "看板",
       "aiLab": "AI Lab",
@@ -419,15 +420,11 @@
       "description": "自定义应用的外观与行为。",
       "keyboardShortcuts": "键盘快捷键"
     },
-    "interface": {
-      "dockSessionHistory": "在对话底部停靠会话记录",
-      "dockSessionHistoryDescription": "将当前会话的 prompt 历史固定显示在对话面板下方。",
-      "dockSessionHistoryRows": "停靠记录行数",
-      "dockSessionHistoryRowsDescription": "停靠列表滚动前显示的 prompt 行数。",
-      "rowsUnit": "行"
-    },
     "terminalTab": {
-      "description": "配置终端字体、历史行数、剪贴板行为与 tmux 会话复用。"
+      "description": "配置终端字体、历史行数与剪贴板行为。"
+    },
+    "tmuxTab": {
+      "description": "在 tmux session 中运行代理与终端，使它们在重启 Yoda 后仍可继续连接。"
     },
     "keyboardShortcutsTab": {
       "description": "自定义应用操作的键盘快捷键。"
@@ -1333,7 +1330,9 @@
       "copyFailed": "无法复制到剪贴板。",
       "createSubtask": "新建子任务",
       "setParent": "设置父任务…",
-      "createParent": "增设父任务（分组）"
+      "createParent": "增设父任务（分组）",
+      "showSessionHistoryDock": "显示底部会话记录",
+      "hideSessionHistoryDock": "隐藏底部会话记录"
     },
     "sessionPanel": {
       "title": "会话",
@@ -1417,7 +1416,9 @@
       "cardDescScripts": "运行项目配置的生命周期脚本",
       "cardDescSession": "回看本任务的 prompt 历史",
       "layoutFullWidth": "底栏铺满全宽",
-      "layoutBesideSidebar": "底栏避开侧边栏"
+      "layoutBesideSidebar": "底栏避开侧边栏",
+      "sessionFewerRows": "减少行数",
+      "sessionMoreRows": "增加行数"
     }
   },
   "commandPalette": {

@@ -13,6 +13,8 @@ import {
   Link2,
   ListPlus,
   ListTree,
+  PanelBottomClose,
+  PanelBottomOpen,
   Pencil,
   Pin,
   PinOff,
@@ -23,6 +25,7 @@ import {
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuntimeId } from '@shared/runtime-registry';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
   WorkspaceAssignContextSubmenu,
   WorkspaceAssignDropdownSubmenu,
@@ -122,6 +125,8 @@ interface MenuItemDescriptor {
 
 function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   const { t } = useTranslation();
+  const { value: ui, update: updateInterface } = useAppSettingsKey('interface');
+  const dockSessionHistory = ui?.dockSessionHistory ?? true;
   const items: MenuItemDescriptor[] = [];
 
   // group 0 — open details (standalone)
@@ -293,7 +298,26 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     });
   }
 
-  // group 4 — session: reconnect
+  // group 4 — session: docked prompt-history toggle, reconnect
+  if (!actions.isArchived) {
+    items.push(
+      dockSessionHistory
+        ? {
+            key: 'hide-session-history-dock',
+            group: 4,
+            icon: PanelBottomClose,
+            label: t('tasks.context.hideSessionHistoryDock'),
+            onSelect: () => updateInterface({ dockSessionHistory: false }),
+          }
+        : {
+            key: 'show-session-history-dock',
+            group: 4,
+            icon: PanelBottomOpen,
+            label: t('tasks.context.showSessionHistoryDock'),
+            onSelect: () => updateInterface({ dockSessionHistory: true }),
+          }
+    );
+  }
   if (actions.onReconnect) {
     items.push({
       key: 'reconnect',
