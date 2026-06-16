@@ -227,6 +227,19 @@ class RoomConductor {
         sessionRef: conversationId,
       });
       await setMemberStatus(roomId, member.id, 'idle', conversationId);
+    } catch (error) {
+      // A turn can fail to even start (e.g. the backing worktree isn't ready, or
+      // the agent CLI failed to spawn). Don't leave the member stuck 'working';
+      // surface it in the room and free the dot.
+      await setMemberStatus(roomId, member.id, 'idle', member.conversationId).catch(() => {});
+      await postMessage({
+        roomId,
+        kind: 'system',
+        body: `${member.displayName} couldn't start its turn: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        mentions: [],
+      }).catch(() => {});
     } finally {
       this.inFlight.delete(member.id);
     }

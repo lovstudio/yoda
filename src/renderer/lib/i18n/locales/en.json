@@ -1504,7 +1504,8 @@
     },
     "errors": {
       "localOnly": "New worktrees are only supported for local projects.",
-      "taskCreate": "Failed to create the task."
+      "taskCreate": "Failed to create the task.",
+      "taskSetup": "The task's worktree setup didn't finish — fix it in the task view, then create the room."
     }
   },
   "promptLibrary": {
