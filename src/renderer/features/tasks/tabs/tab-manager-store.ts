@@ -243,6 +243,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       snapshot: computed,
       openConversation: action,
       openConversationInSidebar: action,
+      openPreferredConversationInShellPin: action,
       openConversationPreview: action,
       openFile: action,
       openFileInSidebar: action,
@@ -579,6 +580,27 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     this.entries.set(entry.tabId, entry);
     this.sidebarTabIds.push(entry.tabId);
     this.activeSidebarTabId = entry.tabId;
+  }
+
+  /**
+   * Open the task's preferred conversation as a shell-pane pinned tab and
+   * return its tab id (for AppSidePaneStore) — mirrors a normal task open,
+   * which lands on the preferred session. Returns undefined when the task has
+   * no conversation yet so the caller can fall back to the overview.
+   */
+  openPreferredConversationInShellPin(): string | undefined {
+    const conversationId = this._preferredConversationId();
+    if (!conversationId) return undefined;
+    const existing = this._findConversationEntry(conversationId);
+    if (existing) {
+      existing.isPreview = false;
+      this.moveTabToShellPin(existing.tabId);
+      return existing.tabId;
+    }
+    const entry = new ConversationTabEntry(conversationId, false);
+    this.entries.set(entry.tabId, entry);
+    this.shellPinTabIds.push(entry.tabId);
+    return entry.tabId;
   }
 
   openConversationPreview(conversationId: string): void {

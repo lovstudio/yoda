@@ -312,6 +312,10 @@ export const runtimeConfigDefaults = Object.fromEntries(
 export const interfaceSettingsSchema = z.object({
   taskHoverAction: z.enum(['delete', 'archive']),
   autoRightSidebarBehavior: z.boolean(),
+  /** Dock the active session's prompt history at the bottom of the conversation pane. */
+  dockSessionHistory: z.boolean(),
+  /** Visible row count for the docked prompt history before it scrolls. */
+  dockSessionHistoryRows: z.number().int().min(1).max(20),
 });
 
 export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });

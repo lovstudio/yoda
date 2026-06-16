@@ -2,6 +2,7 @@ import {
   Bot,
   Check,
   FileText,
+  Menu,
   Plug,
   Puzzle,
   Users,
@@ -103,20 +104,19 @@ export function LibrarySectionDropdown({
   className?: string;
 }) {
   const { t } = useTranslation();
-  const active = SECTIONS.find((s) => s.id === activeSection);
-  const ActiveIcon = active?.icon;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
+        aria-label={t('sidebar.library')}
+        title={t('sidebar.library')}
         className={cn(
-          'flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm text-foreground-muted hover:bg-background-2 hover:text-foreground',
+          'flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground',
           className
         )}
       >
-        {ActiveIcon && <ActiveIcon className="size-4 shrink-0" />}
-        {active && <span className="truncate">{t(active.labelKey)}</span>}
+        <Menu className="size-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48">
+      <DropdownMenuContent align="end" className="w-48">
         {SECTIONS.map(({ id, icon: Icon, labelKey }) => (
           <DropdownMenuItem key={id} onClick={() => onSectionChange(id)}>
             <Icon className="size-4 shrink-0" />
@@ -171,7 +171,7 @@ export function LibraryMainPanel() {
       </nav>
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {!isPinHosted && (
-          <div className="hidden shrink-0 items-center border-b border-border px-3 py-1.5 @max-lg:flex">
+          <div className="hidden shrink-0 items-center justify-end border-b border-border px-3 py-1.5 @max-lg:flex">
             <LibrarySectionDropdown section={section} onSectionChange={onSectionChange} />
           </div>
         )}

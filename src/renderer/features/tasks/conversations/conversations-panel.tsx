@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
+import { DockedSessionHistory } from '@renderer/features/tasks/conversations/session-history-panel';
 import { useIsActiveTask } from '@renderer/features/tasks/hooks/use-is-active-task';
 import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -256,8 +257,8 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
   const webLinks = useWorkspaceWebLinks();
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-[var(--xterm-bg)] px-2 pt-2">
-      <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-[var(--xterm-bg)]">
+      <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden px-2 pt-2">
         <div
           ref={containerRef}
           tabIndex={-1}
@@ -394,6 +395,7 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
           </PaneSizingProvider>
         </div>
       </div>
+      <DockedSessionHistory />
     </div>
   );
 });

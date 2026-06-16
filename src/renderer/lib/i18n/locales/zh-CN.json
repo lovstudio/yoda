@@ -419,6 +419,13 @@
       "description": "自定义应用的外观与行为。",
       "keyboardShortcuts": "键盘快捷键"
     },
+    "interface": {
+      "dockSessionHistory": "在对话底部停靠会话记录",
+      "dockSessionHistoryDescription": "将当前会话的 prompt 历史固定显示在对话面板下方。",
+      "dockSessionHistoryRows": "停靠记录行数",
+      "dockSessionHistoryRowsDescription": "停靠列表滚动前显示的 prompt 行数。",
+      "rowsUnit": "行"
+    },
     "terminalTab": {
       "description": "配置终端字体、历史行数、剪贴板行为与 tmux 会话复用。"
     },
