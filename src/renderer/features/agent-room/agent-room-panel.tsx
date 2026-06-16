@@ -126,29 +126,54 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
             · {t('agentRoom.agentCount', { count: agents.length })}
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-3">
-          {agents.map((m) => (
-            <div
-              key={m.id}
-              className="relative"
-              title={`${m.displayName} · ${STATUS_LABEL[m.status]}`}
-            >
-              <div
+        <div className="ml-auto flex items-center gap-1.5">
+          {agents.map((m) => {
+            const conv = m.conversationId;
+            const isInspected = conv !== null && conv === inspectedId;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                disabled={!conv}
+                onClick={() => conv && agentRoomStore.setInspectedConversation(conv)}
+                title={
+                  conv
+                    ? `${m.displayName} · ${STATUS_LABEL[m.status]} — ${t('agentRoom.openSession')}`
+                    : `${m.displayName} · ${STATUS_LABEL[m.status]}`
+                }
                 className={cn(
-                  'flex size-7 items-center justify-center rounded-lg text-xs font-semibold',
-                  ACCENT_AVATAR[m.accent]
+                  'flex items-center gap-1.5 rounded-lg border px-1.5 py-1 transition-colors',
+                  isInspected
+                    ? 'border-primary bg-primary/10'
+                    : 'border-transparent hover:border-border hover:bg-background-2',
+                  !conv && 'cursor-default'
                 )}
               >
-                {monogram(m.displayName)}
-              </div>
-              <span
-                className={cn(
-                  'absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-background',
-                  STATUS_DOT[m.status]
+                <div className="relative">
+                  <div
+                    className={cn(
+                      'flex size-6 items-center justify-center rounded-md text-[11px] font-semibold',
+                      ACCENT_AVATAR[m.accent]
+                    )}
+                  >
+                    {monogram(m.displayName)}
+                  </div>
+                  <span
+                    className={cn(
+                      'absolute -bottom-0.5 -right-0.5 size-2 rounded-full ring-2 ring-background',
+                      STATUS_DOT[m.status]
+                    )}
+                  />
+                </div>
+                <span className="text-xs font-medium">{m.displayName}</span>
+                {conv && (
+                  <TerminalSquare
+                    className={cn('size-3', isInspected ? 'text-primary' : 'text-foreground-muted')}
+                  />
                 )}
-              />
-            </div>
-          ))}
+              </button>
+            );
+          })}
         </div>
       </header>
 
