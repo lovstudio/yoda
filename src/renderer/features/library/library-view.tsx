@@ -1,7 +1,7 @@
-import { Bot, FileText, MessagesSquare, Plug, Puzzle, Workflow } from 'lucide-react';
+import { Bot, FileText, Plug, Puzzle, Users, Workflow } from 'lucide-react';
 import { createContext, useCallback, useContext, type ComponentType, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AgentRoomMainPanel } from '@renderer/features/agent-room/agent-room-panel';
+import { AgentTeamsMainPanel } from '@renderer/features/agent-teams/agent-teams-panel';
 import { AgentManagerMainPanel } from '@renderer/features/agents-config/agent-manager-view';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
 import { McpMainPanel } from '@renderer/features/mcp/mcp-view';
@@ -12,7 +12,7 @@ import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { cn } from '@renderer/utils/utils';
 
 /** The Library groups the user's reusable resources behind one nav entry. */
-export type LibrarySection = 'prompts' | 'agents' | 'agentRoom' | 'skills' | 'mcp' | 'automation';
+export type LibrarySection = 'prompts' | 'agents' | 'agentTeams' | 'skills' | 'mcp' | 'automation';
 
 const SECTIONS: {
   id: LibrarySection;
@@ -21,7 +21,7 @@ const SECTIONS: {
 }[] = [
   { id: 'prompts', icon: FileText, labelKey: 'library.sections.prompts' },
   { id: 'agents', icon: Bot, labelKey: 'library.sections.agents' },
-  { id: 'agentRoom', icon: MessagesSquare, labelKey: 'library.sections.agentRoom' },
+  { id: 'agentTeams', icon: Users, labelKey: 'library.sections.agentTeams' },
   { id: 'skills', icon: Puzzle, labelKey: 'library.sections.skills' },
   { id: 'mcp', icon: Plug, labelKey: 'library.sections.mcp' },
   { id: 'automation', icon: Workflow, labelKey: 'library.sections.automation' },
@@ -65,8 +65,8 @@ function LibrarySectionContent({ section }: { section: LibrarySection }) {
       return <PromptLibraryPanel />;
     case 'agents':
       return <AgentManagerMainPanel />;
-    case 'agentRoom':
-      return <AgentRoomMainPanel />;
+    case 'agentTeams':
+      return <AgentTeamsMainPanel />;
     case 'skills':
       return <SkillsMainPanel />;
     case 'mcp':

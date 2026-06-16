@@ -1468,7 +1468,7 @@
     "sections": {
       "prompts": "Prompts",
       "agents": "Agents",
-      "agentRoom": "Agent Room",
+      "agentTeams": "Agent Teams",
       "skills": "Skills",
       "mcp": "MCP",
       "automation": "Automation"

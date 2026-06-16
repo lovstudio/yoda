@@ -1468,7 +1468,7 @@
     "sections": {
       "prompts": "提示词",
       "agents": "智能体",
-      "agentRoom": "智能体房间",
+      "agentTeams": "智能体团队",
       "skills": "技能",
       "mcp": "MCP",
       "automation": "自动化"
