@@ -118,9 +118,16 @@ export const BUILTIN_TEAMS: AgentTeam[] = [
     builtin: true,
     members: [
       {
+        handle: 'referee',
+        displayName: 'Referee',
+        role: 'leader',
+        runtime: 'claude',
+        agentRef: BUILTIN_AGENT_KEYS.reviewReferee,
+      },
+      {
         handle: 'implementer',
         displayName: 'Implementer',
-        role: 'leader',
+        role: 'worker',
         runtime: 'claude',
         agentRef: BUILTIN_AGENT_KEYS.reviewImplementer,
       },

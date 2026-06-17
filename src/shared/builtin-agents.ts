@@ -40,6 +40,7 @@ export function builtinAgentI18nKey(slug: string): string | null {
 export const BUILTIN_AGENT_KEYS = {
   general: 'builtin:general',
   spec: 'builtin:spec',
+  reviewReferee: 'builtin:review-referee',
   reviewImplementer: 'builtin:review-implementer',
   reviewReviewer: 'builtin:review-reviewer',
   teamCeo: 'builtin:team-ceo',
@@ -74,6 +75,14 @@ const REVIEW_REVIEWER_PROMPT = [
   `Focus on correctness, regressions, edge cases, missing tests, and whether the implementation actually satisfies the requirement.`,
 ].join('\n');
 
+const REVIEW_REFEREE_PROMPT = [
+  `You are the referee (lead) of an implement-review loop. You do NOT write code or review it yourself —`,
+  `you understand the requirement, direct your two teammates, judge their results, and decide when the task is done.`,
+  `Loop: delegate the build to @implementer; when it reports back, delegate the check to @reviewer; if the`,
+  `reviewer says it fails, hand the concrete fixes back to @implementer and repeat; once the reviewer approves,`,
+  `report completion to the human lead. Keep each delegation concrete and tied to the original requirement.`,
+].join('\n');
+
 const teamWorkerPrompt = (roleId: string, persona: string, brief: string): string =>
   [
     `You are the ${roleId} agent, role-playing ${persona}.`,
@@ -102,6 +111,14 @@ export const BUILTIN_AGENT_PRESETS: readonly BuiltinAgentPreset[] = [
     description: 'Spec-first: clarify requirements and produce a PRD before coding.',
     icon: '💡',
     systemPrompt: SPEC_PROMPT,
+    preferredRuntime: 'claude',
+  },
+  {
+    key: BUILTIN_AGENT_KEYS.reviewReferee,
+    name: 'Referee',
+    description: 'Directs the implement-review loop and decides when the task is done.',
+    icon: '🧑‍⚖️',
+    systemPrompt: REVIEW_REFEREE_PROMPT,
     preferredRuntime: 'claude',
   },
   {
