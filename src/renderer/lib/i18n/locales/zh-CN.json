@@ -1834,8 +1834,10 @@
     "modelDefault": "默认模型",
     "systemPrompt": "System prompt",
     "systemPromptPlaceholder": "描述这个 Agent 的角色、约束和工作方式。",
+    "noSystemPrompt": "暂无 system prompt",
     "skills": "Skills",
     "skillsEnabledCount": "已启用 {{count}} 个",
+    "noEnabledSkills": "未启用 skill",
     "noSkills": "暂无已安装的 skill，请先在 Skills 中安装后再启用。",
     "deleteTitle": "删除 Agent",
     "deleteDescription": "删除「{{name}}」？此操作不可撤销。",
@@ -2054,11 +2056,13 @@
       "configDescription": "在 Finder 中打开代理的本地配置目录或文件。",
       "noConfig": "暂未为 {{name}} 配置默认路径。"
     },
-    "compareAgents": "对比代理",
+    "compareAgents": "对比客户端",
     "copyInstallCommandFor": "复制 {{name}} 的安装命令",
     "copyCommand": "复制命令",
-    "searchAgents": "搜索代理…",
-    "noAgentInstalled": "未安装代理"
+    "searchAgents": "搜索智能体…",
+    "searchRuntimes": "搜索客户端…",
+    "noAgentInstalled": "未安装客户端",
+    "noRuntimeInstalled": "未安装客户端"
   },
   "roadmap": {
     "title": "Roadmap",

@@ -1,9 +1,19 @@
 import { Check, ChevronDown, Plus, Settings2 } from 'lucide-react';
-import { useState, type ComponentType, type ReactNode } from 'react';
+import {
+  forwardRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Agent } from '@shared/agents';
+import { getRuntime } from '@shared/runtime-registry';
+import AgentLogo from '@renderer/lib/components/agent-logo';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
+import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
+import { AgentInfoHover } from './agent-info-card';
 
 interface AgentSlotSelectorProps {
   /** Currently selected Agent, or null when none is chosen yet. */
@@ -105,21 +115,51 @@ export function AgentSlotSelector({
           ) : (
             filtered.map((agent) => {
               const active = selectedAgent?.id === agent.id;
+              const runtimeConfig = agent.preferredRuntime
+                ? agentConfig[agent.preferredRuntime]
+                : null;
+              const runtimeName = agent.preferredRuntime
+                ? (getRuntime(agent.preferredRuntime)?.name ?? agent.preferredRuntime)
+                : t('agentManager.anyRuntime');
               return (
-                <Row key={agent.id} active={active} onClick={() => pick(agent.id)}>
-                  <span className="flex size-4 shrink-0 items-center justify-center text-[13px] leading-none">
-                    {agent.icon || '🤖'}
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate">{agent.name}</span>
-                    {agent.description && (
-                      <span className="truncate text-xs text-foreground-muted">
-                        {agent.description}
+                <AgentInfoHover key={agent.id} agent={agent}>
+                  <Row active={active} onClick={() => pick(agent.id)}>
+                    <span className="flex size-4 shrink-0 items-center justify-center text-[13px] leading-none">
+                      {agent.icon || '🤖'}
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate">{agent.name}</span>
+                      {agent.description && (
+                        <span className="truncate text-xs text-foreground-muted">
+                          {agent.description}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
+                        {runtimeConfig ? (
+                          <AgentLogo
+                            logo={runtimeConfig.logo}
+                            alt={runtimeConfig.alt}
+                            isSvg={runtimeConfig.isSvg}
+                            invertInDark={runtimeConfig.invertInDark}
+                            className="h-3 w-3 shrink-0 rounded-sm"
+                          />
+                        ) : null}
+                        <span className="truncate">{runtimeName}</span>
+                        {agent.enabledSkillIds.length > 0 && (
+                          <>
+                            <span className="text-foreground-passive">·</span>
+                            <span className="shrink-0">
+                              {t('agentManager.skillsCount', {
+                                count: agent.enabledSkillIds.length,
+                              })}
+                            </span>
+                          </>
+                        )}
                       </span>
-                    )}
-                  </span>
-                  {active && <Check className="size-3.5 shrink-0 text-primary" />}
-                </Row>
+                    </span>
+                    {active && <Check className="size-3.5 shrink-0 self-start text-primary" />}
+                  </Row>
+                </AgentInfoHover>
               );
             })
           )}
@@ -147,28 +187,33 @@ export function AgentSlotSelector({
   );
 }
 
-function Row({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
+// forwardRef + prop spreading so AgentInfoHover can use a Row as its hover
+// trigger (base-ui clones the element and merges hover handlers + ref onto it).
+const Row = forwardRef<
+  HTMLButtonElement,
+  {
+    active: boolean;
+    onClick: () => void;
+    children: ReactNode;
+  } & ButtonHTMLAttributes<HTMLButtonElement>
+>(({ active, onClick, children, className, ...rest }, ref) => {
   return (
     <button
+      {...rest}
+      ref={ref}
       type="button"
       onClick={onClick}
       className={cn(
         'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors',
-        active ? 'text-primary' : 'text-foreground hover:bg-background-2'
+        active ? 'text-primary' : 'text-foreground hover:bg-background-2',
+        className
       )}
     >
       {children}
     </button>
   );
-}
+});
+Row.displayName = 'Row';
 
 function ActionButton({
   icon: Icon,

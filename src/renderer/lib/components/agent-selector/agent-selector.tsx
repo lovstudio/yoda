@@ -99,13 +99,13 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
             </>
           ) : (
             <span className="flex-1 truncate text-foreground-muted">
-              {t('agents.noAgentInstalled')}
+              {t('agents.noRuntimeInstalled')}
             </span>
           )}
           <ChevronDown className="size-3.5 shrink-0 text-foreground-muted" />
         </ComboboxTrigger>
         <ComboboxContent className="w-auto min-w-(--anchor-width)">
-          <ComboboxInput showTrigger={false} placeholder={t('agents.searchAgents')} />
+          <ComboboxInput showTrigger={false} placeholder={t('agents.searchRuntimes')} />
           <ComboboxList className="pb-0">
             {(group: AgentGroup) => (
               <ComboboxGroup key={group.value} items={group.items} className="py-1">

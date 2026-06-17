@@ -1834,8 +1834,10 @@
     "modelDefault": "Default model",
     "systemPrompt": "System prompt",
     "systemPromptPlaceholder": "Describe this agent's role, constraints and how it works.",
+    "noSystemPrompt": "No system prompt",
     "skills": "Skills",
     "skillsEnabledCount": "{{count}} enabled",
+    "noEnabledSkills": "No skills enabled",
     "noSkills": "No installed skills. Install skills first to enable them here.",
     "deleteTitle": "Delete agent",
     "deleteDescription": "Delete \"{{name}}\"? This cannot be undone.",
@@ -2054,11 +2056,13 @@
       "configDescription": "Open the agent's local config directory or file in Finder.",
       "noConfig": "No default config path for {{name}}."
     },
-    "compareAgents": "Compare agents",
+    "compareAgents": "Compare clients",
     "copyInstallCommandFor": "Copy install command for {{name}}",
     "copyCommand": "Copy command",
     "searchAgents": "Search agents...",
-    "noAgentInstalled": "No agent installed"
+    "searchRuntimes": "Search clients...",
+    "noAgentInstalled": "No client installed",
+    "noRuntimeInstalled": "No client installed"
   },
   "roadmap": {
     "title": "Roadmap",
