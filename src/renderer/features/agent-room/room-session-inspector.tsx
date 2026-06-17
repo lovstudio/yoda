@@ -1,8 +1,11 @@
 import { Loader2, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { buildConversationSections } from '@renderer/app/app-tab-context-menu';
 import { ConversationSession } from '@renderer/features/tasks/conversations/conversation-session';
 import {
+  asProvisioned,
   getTaskManagerStore,
   getTaskStore,
   taskViewKind,
@@ -12,6 +15,7 @@ import {
   TaskViewWrapper,
   useProvisionedTask,
 } from '@renderer/features/tasks/task-view-context';
+import { ChipContextMenu } from '@renderer/lib/components/chip-context-menu';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 
 /**
@@ -33,6 +37,7 @@ export const RoomSessionInspector = observer(function RoomSessionInspector({
   title: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const taskStore = getTaskStore(projectId, taskId);
   const kind = taskViewKind(taskStore, projectId);
 
@@ -44,21 +49,33 @@ export const RoomSessionInspector = observer(function RoomSessionInspector({
       .catch(() => {});
   }, [kind, projectId, taskId, taskStore]);
 
+  // Same conversation menu (rename / archive / reload / copy link) as the top
+  // strip and task sidebar, so a room session behaves identically on right-click.
+  const sections = buildConversationSections(
+    asProvisioned(taskStore),
+    projectId,
+    taskId,
+    conversationId,
+    t
+  );
+
   return (
     <aside className="flex h-full w-full min-w-0 flex-col border-l border-border bg-background">
-      <header className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground-muted">
-          {title}
-        </span>
-        <button
-          type="button"
-          onClick={onClose}
-          title="Close"
-          className="flex size-6 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
-        >
-          <X className="size-4" />
-        </button>
-      </header>
+      <ChipContextMenu sections={sections}>
+        <header className="flex items-center gap-2 border-b border-border px-3 py-2">
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground-muted">
+            {title}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close"
+            className="flex size-6 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </header>
+      </ChipContextMenu>
       <div className="min-h-0 flex-1">
         {kind === 'ready' ? (
           <TaskViewWrapper projectId={projectId} taskId={taskId} hosted>
