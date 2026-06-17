@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileActionsDropdown } from '@renderer/features/tasks/components/file-actions';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import { useSessionNoteSync } from '@renderer/features/tasks/use-session-note-sync';
 import { rpc } from '@renderer/lib/ipc';
 import { modelRegistry } from '@renderer/lib/monaco/monaco-model-registry';
 import { buildMonacoModelPath } from '@renderer/lib/monaco/monacoModelPath';
@@ -26,6 +27,7 @@ export const MarkdownEditorRenderer = observer(function MarkdownEditorRenderer({
   const provisioned = useProvisionedTask();
   const { workspaceId } = provisioned;
   const { editorView, tabManager } = provisioned.taskView;
+  const syncNote = useSessionNoteSync();
   const sourcePath = `${provisioned.path.replace(/\/+$/, '')}/${filePath}`;
   const bufferUri = buildMonacoModelPath(editorView.modelRootPath, filePath);
   // Reading bufferVersions creates a MobX tracking dependency so this observer()
@@ -72,6 +74,7 @@ export const MarkdownEditorRenderer = observer(function MarkdownEditorRenderer({
         variant="full"
         className="mx-auto w-full max-w-3xl px-8 py-8"
         resolveImage={resolveImage}
+        onAddNote={syncNote}
       />
     </div>
   );
