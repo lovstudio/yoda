@@ -16,9 +16,12 @@ const collapseWhitespace = (text: string): string => text.replace(/\s+/g, ' ').t
  *   apart from the user's own prompt instead of blurring them together.
  */
 export function formatNoteForInput(note: MarkdownNoteDraft): string {
-  return `\n[文档批注] 针对原文「${collapseWhitespace(note.quote)}」的备注：${collapseWhitespace(
-    note.comment
-  )}`;
+  const parts = [
+    note.anchor ? `位置 ${note.anchor}` : null,
+    `原文「${collapseWhitespace(note.quote)}」`,
+    `备注：${collapseWhitespace(note.comment)}`,
+  ].filter(Boolean);
+  return `\n[文档批注] ${parts.join(' ｜ ')}`;
 }
 
 /** Stages a markdown note into the given PTY session's input line. */

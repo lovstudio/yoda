@@ -10,7 +10,12 @@ import type { PluggableList } from 'unified';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { rpc } from '@renderer/lib/ipc';
-import { MarkdownAnnotations, type MarkdownNoteDraft } from '@renderer/lib/ui/markdown-annotations';
+import {
+  MarkdownAnnotations,
+  sourceLineAttr,
+  type MarkdownNoteDraft,
+  type SourceNode,
+} from '@renderer/lib/ui/markdown-annotations';
 import { cn } from '@renderer/utils/utils';
 
 type Variant = 'full' | 'compact';
@@ -37,6 +42,12 @@ interface MarkdownRendererProps {
    * render locally). Has no effect unless annotations are enabled.
    */
   onAddNote?: (note: MarkdownNoteDraft) => void;
+  /**
+   * Backing document path for annotation anchors. When set, a saved note's
+   * `anchor` becomes `path:line` (or just `path`), so consumers can point the
+   * agent at the exact spot.
+   */
+  documentPath?: string;
 }
 
 const FRONT_MATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
@@ -190,7 +201,7 @@ const ResolvedImage: React.FC<{
   return <img src={dataUrl} alt={alt} className="my-3 max-w-full rounded" />;
 };
 
-type WithChildren = { children?: React.ReactNode };
+type WithChildren = { children?: React.ReactNode; node?: SourceNode };
 type WithChildrenAndClass = { children?: React.ReactNode; className?: string };
 type AnchorProps = { href?: string; children?: React.ReactNode };
 type ImgProps = { src?: string; alt?: string };
@@ -205,30 +216,49 @@ function useFullComponents(
 ) {
   return useMemo(
     () => ({
-      h1: ({ children }: WithChildren) => (
-        <h1 className="mb-4 mt-6 border-b border-border pb-2 text-2xl font-semibold text-foreground first:mt-0">
+      h1: ({ children, node }: WithChildren) => (
+        <h1
+          {...sourceLineAttr(node)}
+          className="mb-4 mt-6 border-b border-border pb-2 text-2xl font-semibold text-foreground first:mt-0"
+        >
           {children}
         </h1>
       ),
-      h2: ({ children }: WithChildren) => (
-        <h2 className="mb-3 mt-6 border-b border-border pb-2 text-xl font-semibold text-foreground first:mt-0">
+      h2: ({ children, node }: WithChildren) => (
+        <h2
+          {...sourceLineAttr(node)}
+          className="mb-3 mt-6 border-b border-border pb-2 text-xl font-semibold text-foreground first:mt-0"
+        >
           {children}
         </h2>
       ),
-      h3: ({ children }: WithChildren) => (
-        <h3 className="mb-2 mt-4 text-lg font-semibold text-foreground">{children}</h3>
+      h3: ({ children, node }: WithChildren) => (
+        <h3 {...sourceLineAttr(node)} className="mb-2 mt-4 text-lg font-semibold text-foreground">
+          {children}
+        </h3>
       ),
-      h4: ({ children }: WithChildren) => (
-        <h4 className="mb-2 mt-4 text-base font-semibold text-foreground">{children}</h4>
+      h4: ({ children, node }: WithChildren) => (
+        <h4 {...sourceLineAttr(node)} className="mb-2 mt-4 text-base font-semibold text-foreground">
+          {children}
+        </h4>
       ),
-      h5: ({ children }: WithChildren) => (
-        <h5 className="mb-1 mt-3 text-sm font-semibold text-foreground">{children}</h5>
+      h5: ({ children, node }: WithChildren) => (
+        <h5 {...sourceLineAttr(node)} className="mb-1 mt-3 text-sm font-semibold text-foreground">
+          {children}
+        </h5>
       ),
-      h6: ({ children }: WithChildren) => (
-        <h6 className="mb-1 mt-3 text-sm font-semibold text-muted-foreground">{children}</h6>
+      h6: ({ children, node }: WithChildren) => (
+        <h6
+          {...sourceLineAttr(node)}
+          className="mb-1 mt-3 text-sm font-semibold text-muted-foreground"
+        >
+          {children}
+        </h6>
       ),
-      p: ({ children }: WithChildren) => (
-        <p className="mb-3 text-sm leading-relaxed text-foreground">{children}</p>
+      p: ({ children, node }: WithChildren) => (
+        <p {...sourceLineAttr(node)} className="mb-3 text-sm leading-relaxed text-foreground">
+          {children}
+        </p>
       ),
       ul: ({ children }: WithChildren) => (
         <ul className="mb-3 ml-6 list-disc space-y-1 text-sm text-foreground">{children}</ul>
@@ -236,7 +266,11 @@ function useFullComponents(
       ol: ({ children }: WithChildren) => (
         <ol className="mb-3 ml-6 list-decimal space-y-1 text-sm text-foreground">{children}</ol>
       ),
-      li: ({ children }: WithChildren) => <li className="leading-relaxed">{children}</li>,
+      li: ({ children, node }: WithChildren) => (
+        <li {...sourceLineAttr(node)} className="leading-relaxed">
+          {children}
+        </li>
+      ),
       code: ({ children, className }: WithChildrenAndClass) => {
         const match = /language-(\w+)/.exec(className || '');
         const language = match ? match[1] : '';
@@ -280,8 +314,11 @@ function useFullComponents(
           </a>
         );
       },
-      blockquote: ({ children }: WithChildren) => (
-        <blockquote className="mb-3 border-l-4 border-border bg-muted/30 py-1 pl-4 text-sm italic text-muted-foreground">
+      blockquote: ({ children, node }: WithChildren) => (
+        <blockquote
+          {...sourceLineAttr(node)}
+          className="mb-3 border-l-4 border-border bg-muted/30 py-1 pl-4 text-sm italic text-muted-foreground"
+        >
           {children}
         </blockquote>
       ),
@@ -331,23 +368,43 @@ function useFullComponents(
 function useCompactComponents() {
   return useMemo(
     () => ({
-      h1: ({ children }: WithChildren) => (
-        <h2 className="mb-1 mt-3 text-sm font-semibold text-foreground first:mt-0">{children}</h2>
+      h1: ({ children, node }: WithChildren) => (
+        <h2
+          {...sourceLineAttr(node)}
+          className="mb-1 mt-3 text-sm font-semibold text-foreground first:mt-0"
+        >
+          {children}
+        </h2>
       ),
-      h2: ({ children }: WithChildren) => (
-        <h3 className="mb-1 mt-3 text-sm font-semibold text-foreground first:mt-0">{children}</h3>
+      h2: ({ children, node }: WithChildren) => (
+        <h3
+          {...sourceLineAttr(node)}
+          className="mb-1 mt-3 text-sm font-semibold text-foreground first:mt-0"
+        >
+          {children}
+        </h3>
       ),
-      h3: ({ children }: WithChildren) => (
-        <h4 className="mb-1 mt-2 text-xs font-semibold text-foreground">{children}</h4>
+      h3: ({ children, node }: WithChildren) => (
+        <h4 {...sourceLineAttr(node)} className="mb-1 mt-2 text-xs font-semibold text-foreground">
+          {children}
+        </h4>
       ),
-      p: ({ children }: WithChildren) => <p className="mb-2 leading-relaxed">{children}</p>,
+      p: ({ children, node }: WithChildren) => (
+        <p {...sourceLineAttr(node)} className="mb-2 leading-relaxed">
+          {children}
+        </p>
+      ),
       ul: ({ children }: WithChildren) => (
         <ul className="mb-2 ml-4 list-disc space-y-0.5">{children}</ul>
       ),
       ol: ({ children }: WithChildren) => (
         <ol className="mb-2 ml-4 list-decimal space-y-0.5">{children}</ol>
       ),
-      li: ({ children }: WithChildren) => <li className="leading-relaxed">{children}</li>,
+      li: ({ children, node }: WithChildren) => (
+        <li {...sourceLineAttr(node)} className="leading-relaxed">
+          {children}
+        </li>
+      ),
       code: ({ children, className }: WithChildrenAndClass) => {
         const isBlock = className?.includes('language-');
         return isBlock ? (
@@ -412,6 +469,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   resolveImage,
   annotations,
   onAddNote,
+  documentPath,
 }) => {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'ydark';
@@ -436,7 +494,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         {body}
       </Markdown>
       {annotationsEnabled && (
-        <MarkdownAnnotations containerRef={containerRef} onAddNote={onAddNote} />
+        <MarkdownAnnotations
+          containerRef={containerRef}
+          onAddNote={onAddNote}
+          documentPath={documentPath}
+        />
       )}
     </div>
   );

@@ -4,8 +4,15 @@
  * Runs in real Chromium via Playwright so the Selection/Range APIs behave like
  * production — the bit that decides whether a floating "add note" action shows.
  */
+import { createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import Markdown from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
+import remarkGfm from 'remark-gfm';
+import type { PluggableList } from 'unified';
 import { afterEach, describe, expect, it } from 'vitest';
-import { detectSelectionInside } from '@renderer/lib/ui/markdown-annotations';
+import { detectSelectionInside, sourceLineAttr } from '@renderer/lib/ui/markdown-annotations';
 
 function appendText(parent: HTMLElement, text: string): HTMLElement {
   const el = document.createElement('p');
@@ -84,5 +91,72 @@ describe('detectSelectionInside', () => {
     selectNodeContents(p);
 
     expect(detectSelectionInside(container)?.quote).toBe('summary text in a button-role wrapper');
+  });
+
+  it('reads the source line from the nearest [data-source-line] ancestor', () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    const p = document.createElement('p');
+    p.setAttribute('data-source-line', '42');
+    p.textContent = 'a quoted line';
+    container.appendChild(p);
+
+    selectNodeContents(p.firstChild as Node);
+
+    expect(detectSelectionInside(container)?.line).toBe(42);
+  });
+});
+
+describe('sourceLineAttr through the real markdown pipeline', () => {
+  const hosts: HTMLDivElement[] = [];
+
+  afterEach(() => {
+    while (hosts.length) hosts.pop()?.remove();
+  });
+
+  async function renderMarkdown(rehypePlugins: PluggableList): Promise<HTMLDivElement> {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    hosts.push(host);
+    const markdown = 'first paragraph\n\nsecond paragraph\n\nthird paragraph';
+    const root = createRoot(host);
+    root.render(
+      createElement(
+        Markdown,
+        {
+          remarkPlugins: [remarkGfm],
+          rehypePlugins,
+          components: {
+            p: ({ children, node }: { children?: React.ReactNode; node?: unknown }) =>
+              createElement(
+                'p',
+                sourceLineAttr(node as Parameters<typeof sourceLineAttr>[0]),
+                children
+              ),
+          },
+        },
+        markdown
+      )
+    );
+    // Poll until React commits the paragraphs before inspecting the DOM.
+    for (let i = 0; i < 50 && host.querySelectorAll('p').length < 3; i++) {
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    }
+    return host;
+  }
+
+  // Guards the anchor feature: if positions stopped surviving the rehype
+  // pipeline, every annotation would silently lose its line number.
+  it('emits data-source-line for the full variant pipeline (rehypeRaw + sanitize)', async () => {
+    const host = await renderMarkdown([rehypeRaw, rehypeSanitize]);
+    const lines = [...host.querySelectorAll('p')].map((p) => p.getAttribute('data-source-line'));
+    expect(host.querySelectorAll('p').length).toBe(3);
+    expect(lines).toEqual(['1', '3', '5']);
+  });
+
+  it('emits data-source-line for the compact variant pipeline (sanitize only)', async () => {
+    const host = await renderMarkdown([rehypeSanitize]);
+    const lines = [...host.querySelectorAll('p')].map((p) => p.getAttribute('data-source-line'));
+    expect(lines).toEqual(['1', '3', '5']);
   });
 });
