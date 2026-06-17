@@ -158,7 +158,7 @@ const SortablePrincipleRow: React.FC<SortablePrincipleRowProps> = ({
         </Button>
       </div>
       <Textarea
-        className="min-h-16 text-xs"
+        className="max-h-64 min-h-16 overflow-auto text-xs"
         defaultValue={item.text}
         placeholder={t('settings.prompts.textPlaceholder')}
         onBlur={(event) => {
