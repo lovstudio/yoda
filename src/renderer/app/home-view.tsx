@@ -92,6 +92,7 @@ import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider'
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
+import { Badge } from '@renderer/lib/ui/badge';
 import {
   Combobox,
   ComboboxCollection,
@@ -3316,11 +3317,12 @@ interface RunModeOption {
   icon: ComponentType<{ className?: string }>;
   labelKey: string;
   descKey: string;
+  alpha?: boolean;
 }
 
-// Modes split into two clusters. The first cluster runs a single converged
-// workflow; "compare" stands alone because it fans the same task out across
-// isolated branches — a different mental model, so it gets its own group.
+// Modes split into three clusters. "Workflow" runs a single converged session;
+// "Multi-agent" gathers the modes where several agents collaborate; "compare"
+// stands alone because it fans the same task out across isolated branches.
 const RUN_MODE_GROUPS: Array<{ labelKey: string; options: RunModeOption[] }> = [
   {
     labelKey: 'home.modeGroupWorkflow',
@@ -3332,13 +3334,24 @@ const RUN_MODE_GROUPS: Array<{ labelKey: string; options: RunModeOption[] }> = [
         labelKey: 'home.modeBrainstorm',
         descKey: 'home.modeBrainstormDesc',
       },
+    ],
+  },
+  {
+    labelKey: 'home.modeGroupMultiAgent',
+    options: [
       {
         mode: 'review',
         icon: Repeat2,
         labelKey: 'home.modeReview',
         descKey: 'home.modeReviewDesc',
       },
-      { mode: 'team', icon: Users, labelKey: 'home.modeTeam', descKey: 'home.modeTeamDesc' },
+      {
+        mode: 'team',
+        icon: Users,
+        labelKey: 'home.modeTeam',
+        descKey: 'home.modeTeamDesc',
+        alpha: true,
+      },
     ],
   },
   {
@@ -3480,6 +3493,11 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
                         )}
                       />
                       <span className="min-w-0 flex-1 truncate">{t(option.labelKey)}</span>
+                      {option.alpha && (
+                        <Badge variant="secondary" className="shrink-0 px-1 py-0 text-[9px]">
+                          {t('home.modeAlphaBadge')}
+                        </Badge>
+                      )}
                       {active && <Check className="size-3.5 shrink-0 text-primary" />}
                     </button>
                   );
@@ -3491,6 +3509,11 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
             <div className="flex items-center gap-2">
               <PendingIcon className="size-4 shrink-0 text-primary" />
               <span className="text-sm font-semibold text-foreground">{t(pending.labelKey)}</span>
+              {pending.alpha && (
+                <Badge variant="secondary" className="px-1 py-0 text-[9px]">
+                  {t('home.modeAlphaBadge')}
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-foreground-muted">{t(pending.descKey)}</p>
             {renderConfiguration(pendingMode)}
