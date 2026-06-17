@@ -1596,8 +1596,8 @@ const SessionOverviewContent = observer(function SessionOverviewContent({
   };
 
   // Stage a note into this session's input box (the running agent's prompt
-  // line) so the user can review and send it. We don't append a newline —
-  // staging, not submitting.
+  // line) so the user can review and send it — staged on its own line, never
+  // submitted (see formatNoteForInput).
   const syncNoteToInput = useCallback(
     (note: { quote: string; comment: string }) => {
       const sessionId = provisionedTask.conversations.conversations.get(conversation.id)?.session

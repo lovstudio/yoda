@@ -4,12 +4,21 @@ import { useProvisionedTaskOrNull } from '@renderer/features/tasks/task-view-con
 import { rpc } from '@renderer/lib/ipc';
 import type { MarkdownNoteDraft } from '@renderer/lib/ui/markdown-annotations';
 
+const collapseWhitespace = (text: string): string => text.replace(/\s+/g, ' ').trim();
+
 /**
- * Formats a markdown note as a single line to stage in a session's input box.
- * No trailing newline — we stage in the prompt line, we don't submit it.
+ * Formats a markdown note for staging in a session's input box.
+ *
+ * - A leading newline (LF, the terminal's "insert line" — never CR, which would
+ *   submit) puts each note on its own line, so consecutive notes stack cleanly
+ *   and stay separate from whatever the user typed themselves.
+ * - The `[文档批注]` tag plus a delimited quote let the agent tell an annotation
+ *   apart from the user's own prompt instead of blurring them together.
  */
 export function formatNoteForInput(note: MarkdownNoteDraft): string {
-  return `关于「${note.quote}」：${note.comment} `.replace(/\r?\n/g, ' ');
+  return `\n[文档批注] 针对原文「${collapseWhitespace(note.quote)}」的备注：${collapseWhitespace(
+    note.comment
+  )}`;
 }
 
 /** Stages a markdown note into the given PTY session's input line. */
