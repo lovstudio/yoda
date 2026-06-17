@@ -3381,6 +3381,10 @@ function SkillShortcutSelector({
 }
 
 interface RunModeOption {
+  // Stable per-entry id. A mode can surface in more than one section (e.g. Review
+  // lives under both Workflow and Multi-agent), so the entry — not the mode — is
+  // what we key and select on; `mode` still drives the actual run behavior.
+  id: string;
   mode: HomeRunMode;
   icon: ComponentType<{ className?: string }>;
   labelKey: string;
@@ -3390,17 +3394,32 @@ interface RunModeOption {
 
 // Modes split into three clusters. "Workflow" runs a single converged session;
 // "Multi-agent" gathers the modes where several agents collaborate; "compare"
-// stands alone because it fans the same task out across isolated branches.
+// stands alone because it fans the same task out across isolated branches. Review
+// lives in both Workflow and Multi-agent — same behavior, two entry points.
 const RUN_MODE_GROUPS: Array<{ labelKey: string; options: RunModeOption[] }> = [
   {
     labelKey: 'home.modeGroupWorkflow',
     options: [
-      { mode: 'normal', icon: Bot, labelKey: 'home.modeNormal', descKey: 'home.modeNormalDesc' },
       {
+        id: 'normal',
+        mode: 'normal',
+        icon: Bot,
+        labelKey: 'home.modeNormal',
+        descKey: 'home.modeNormalDesc',
+      },
+      {
+        id: 'brainstorm',
         mode: 'brainstorm',
         icon: Lightbulb,
         labelKey: 'home.modeBrainstorm',
         descKey: 'home.modeBrainstormDesc',
+      },
+      {
+        id: 'review-workflow',
+        mode: 'review',
+        icon: Repeat2,
+        labelKey: 'home.modeReview',
+        descKey: 'home.modeReviewDesc',
       },
     ],
   },
@@ -3408,12 +3427,14 @@ const RUN_MODE_GROUPS: Array<{ labelKey: string; options: RunModeOption[] }> = [
     labelKey: 'home.modeGroupMultiAgent',
     options: [
       {
+        id: 'review-team',
         mode: 'review',
         icon: Repeat2,
         labelKey: 'home.modeReview',
         descKey: 'home.modeReviewDesc',
       },
       {
+        id: 'team',
         mode: 'team',
         icon: Users,
         labelKey: 'home.modeTeam',
@@ -3426,6 +3447,7 @@ const RUN_MODE_GROUPS: Array<{ labelKey: string; options: RunModeOption[] }> = [
     labelKey: 'home.modeGroupExplore',
     options: [
       {
+        id: 'compare',
         mode: 'compare',
         icon: GitCompare,
         labelKey: 'home.modeCompare',
@@ -3436,6 +3458,12 @@ const RUN_MODE_GROUPS: Array<{ labelKey: string; options: RunModeOption[] }> = [
 ];
 
 const RUN_MODE_OPTIONS: RunModeOption[] = RUN_MODE_GROUPS.flatMap((group) => group.options);
+
+// A mode's default entry id (first entry that runs it) — used to seed the staged
+// selection from the committed `mode`, which carries no entry identity.
+function defaultEntryIdForMode(mode: HomeRunMode): string {
+  return (RUN_MODE_OPTIONS.find((option) => option.mode === mode) ?? RUN_MODE_OPTIONS[0]).id;
+}
 
 interface RunModeSelectorProps {
   mode: HomeRunMode;
@@ -3449,22 +3477,22 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
   const [open, setOpen] = useState(false);
   // The mode change reshapes the whole development paradigm, so we stage it locally
   // and only commit on explicit confirmation rather than applying on each click.
-  const [pendingMode, setPendingMode] = useState<HomeRunMode>(mode);
+  // We stage by entry id because a single mode can appear under several sections.
+  const [pendingId, setPendingId] = useState<string>(() => defaultEntryIdForMode(mode));
   const current = RUN_MODE_OPTIONS.find((option) => option.mode === mode) ?? RUN_MODE_OPTIONS[0];
   const CurrentIcon = current.icon;
-  const pending =
-    RUN_MODE_OPTIONS.find((option) => option.mode === pendingMode) ?? RUN_MODE_OPTIONS[0];
+  const pending = RUN_MODE_OPTIONS.find((option) => option.id === pendingId) ?? RUN_MODE_OPTIONS[0];
   const PendingIcon = pending.icon;
-  const dirty = pendingMode !== mode;
+  const dirty = pending.mode !== mode;
   const isNonStandardMode = mode !== 'normal';
 
   const handleOpenChange = (next: boolean) => {
-    if (next) setPendingMode(mode);
+    if (next) setPendingId(defaultEntryIdForMode(mode));
     setOpen(next);
   };
 
   const handleConfirm = () => {
-    if (dirty) onChange(pendingMode);
+    if (dirty) onChange(pending.mode);
     setOpen(false);
   };
 
@@ -3538,15 +3566,15 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
                 </span>
                 {group.options.map((option) => {
                   const Icon = option.icon;
-                  const active = option.mode === pendingMode;
+                  const active = option.id === pendingId;
                   return (
                     <button
-                      key={option.mode}
+                      key={option.id}
                       type="button"
                       role="tab"
                       aria-selected={active}
                       title={t(option.descKey)}
-                      onClick={() => setPendingMode(option.mode)}
+                      onClick={() => setPendingId(option.id)}
                       className={cn(
                         'flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors',
                         active
@@ -3584,7 +3612,7 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
               )}
             </div>
             <p className="text-xs text-foreground-muted">{t(pending.descKey)}</p>
-            {renderConfiguration(pendingMode)}
+            {renderConfiguration(pending.mode)}
           </div>
         </div>
         <DialogFooter className="px-3 py-2.5">
