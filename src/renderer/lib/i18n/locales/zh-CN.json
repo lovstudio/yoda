@@ -362,6 +362,7 @@
       "toggle": "启用原则",
       "remove": "移除原则",
       "reorder": "拖动排序",
+      "toggleExpand": "展开原则",
       "empty": "暂无原则。"
     },
     "statusline": {

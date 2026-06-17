@@ -362,6 +362,7 @@
       "toggle": "Enable principle",
       "remove": "Remove principle",
       "reorder": "Drag to reorder",
+      "toggleExpand": "Expand principle",
       "empty": "No principles yet."
     },
     "statusline": {
