@@ -24,7 +24,6 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
-  Users,
   X,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
@@ -46,7 +45,11 @@ import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
-import { BUILTIN_STARTUP_TEAM_ID, type AgentTeam } from '@shared/agent-team';
+import {
+  BUILTIN_REVIEW_TEAM_ID,
+  BUILTIN_STARTUP_TEAM_ID,
+  type AgentTeam,
+} from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import type { ClaudeMemoryFile } from '@shared/conversations';
@@ -2728,8 +2731,11 @@ export const HomeComposer = observer(function HomeComposer({
           <RunModeSelector
             mode={runMode}
             summary={runModeSummary}
+            teams={teams}
+            selectedTeamId={selectedTeamId}
             onChange={setRunMode}
-            renderConfiguration={(configurationMode) => (
+            onSelectTeam={setSelectedTeamId}
+            renderConfiguration={(configurationMode, configurationTeamId) => (
               <ModeConfigurationPanel
                 mode={configurationMode}
                 runtimeId={runtimeId}
@@ -2741,8 +2747,7 @@ export const HomeComposer = observer(function HomeComposer({
                 reviewerRuntime={reviewerRuntime}
                 onReviewerProviderChange={setReviewerProvider}
                 teams={teams}
-                selectedTeamId={selectedTeamId}
-                onSelectTeam={setSelectedTeamId}
+                selectedTeamId={configurationTeamId ?? selectedTeamId}
                 agents={userAgents}
                 slotAgentId={slotAgentId}
                 onSlotAgentChange={setSlotAgent}
@@ -3381,118 +3386,163 @@ function SkillShortcutSelector({
 }
 
 interface RunModeOption {
-  // Stable per-entry id. A mode can surface in more than one section (e.g. Review
-  // lives under both Workflow and Multi-agent), so the entry — not the mode — is
-  // what we key and select on; `mode` still drives the actual run behavior.
+  // Stable per-entry id — what we key and select on. A single mode can surface as
+  // several entries (every Agent Team is its own `team` entry), so identity lives
+  // on the entry, not the mode; `mode` (+ `teamId`) still drive the run behavior.
   id: string;
   mode: HomeRunMode;
-  icon: ComponentType<{ className?: string }>;
-  labelKey: string;
+  /** Set on `team` entries — the Agent Team this entry launches. */
+  teamId?: string;
+  /** Lucide icon for static entries. Mutually exclusive with `emoji`. */
+  icon?: ComponentType<{ className?: string }>;
+  /** Emoji glyph for team entries (matches AgentTeam.icon). */
+  emoji?: string;
+  /** i18n key for static entries. Mutually exclusive with `label`. */
+  labelKey?: string;
+  /** Literal label for team entries (the team name). */
+  label?: string;
   descKey: string;
   alpha?: boolean;
 }
 
-// Modes split into three clusters. "Workflow" runs a single converged session;
-// "Multi-agent" gathers the modes where several agents collaborate; "compare"
-// stands alone because it fans the same task out across isolated branches. Review
-// lives in both Workflow and Multi-agent — same behavior, two entry points.
-const RUN_MODE_GROUPS: Array<{ labelKey: string; options: RunModeOption[] }> = [
+// Static entries. "Workflow" runs a single converged session; "compare" stands
+// alone because it fans the same task out across isolated branches. The
+// "Multi-agent" group sits between them and is built dynamically from the Agent
+// Teams (see buildRunModeGroups) — every team is its own independent entry.
+const WORKFLOW_RUN_MODE_OPTIONS: RunModeOption[] = [
   {
-    labelKey: 'home.modeGroupWorkflow',
-    options: [
-      {
-        id: 'normal',
-        mode: 'normal',
-        icon: Bot,
-        labelKey: 'home.modeNormal',
-        descKey: 'home.modeNormalDesc',
-      },
-      {
-        id: 'brainstorm',
-        mode: 'brainstorm',
-        icon: Lightbulb,
-        labelKey: 'home.modeBrainstorm',
-        descKey: 'home.modeBrainstormDesc',
-      },
-      {
-        id: 'review-workflow',
-        mode: 'review',
-        icon: Repeat2,
-        labelKey: 'home.modeReview',
-        descKey: 'home.modeReviewDesc',
-      },
-    ],
+    id: 'normal',
+    mode: 'normal',
+    icon: Bot,
+    labelKey: 'home.modeNormal',
+    descKey: 'home.modeNormalDesc',
   },
   {
-    labelKey: 'home.modeGroupMultiAgent',
-    options: [
-      {
-        id: 'review-team',
-        mode: 'review',
-        icon: Repeat2,
-        labelKey: 'home.modeReview',
-        descKey: 'home.modeReviewDesc',
-      },
-      {
-        id: 'team',
-        mode: 'team',
-        icon: Users,
-        labelKey: 'home.modeTeam',
-        descKey: 'home.modeTeamDesc',
-        alpha: true,
-      },
-    ],
+    id: 'brainstorm',
+    mode: 'brainstorm',
+    icon: Lightbulb,
+    labelKey: 'home.modeBrainstorm',
+    descKey: 'home.modeBrainstormDesc',
   },
   {
-    labelKey: 'home.modeGroupExplore',
-    options: [
-      {
-        id: 'compare',
-        mode: 'compare',
-        icon: GitCompare,
-        labelKey: 'home.modeCompare',
-        descKey: 'home.modeCompareDesc',
-      },
-    ],
+    id: 'review-workflow',
+    mode: 'review',
+    icon: Repeat2,
+    labelKey: 'home.modeReview',
+    descKey: 'home.modeReviewDesc',
   },
 ];
 
-const RUN_MODE_OPTIONS: RunModeOption[] = RUN_MODE_GROUPS.flatMap((group) => group.options);
+const EXPLORE_RUN_MODE_OPTIONS: RunModeOption[] = [
+  {
+    id: 'compare',
+    mode: 'compare',
+    icon: GitCompare,
+    labelKey: 'home.modeCompare',
+    descKey: 'home.modeCompareDesc',
+  },
+];
 
-// A mode's default entry id (first entry that runs it) — used to seed the staged
-// selection from the committed `mode`, which carries no entry identity.
-function defaultEntryIdForMode(mode: HomeRunMode): string {
-  return (RUN_MODE_OPTIONS.find((option) => option.mode === mode) ?? RUN_MODE_OPTIONS[0]).id;
+function teamToRunModeOption(team: AgentTeam): RunModeOption {
+  return {
+    id: `team:${team.id}`,
+    mode: 'team',
+    teamId: team.id,
+    emoji: team.icon,
+    label: team.name,
+    descKey: 'home.modeTeamDesc',
+    // Honors the original "startup is alpha" call; the review-loop team is GA.
+    alpha: team.id === BUILTIN_STARTUP_TEAM_ID,
+  };
+}
+
+// Multi-agent teams in a stable order: the review-loop team leads, the startup
+// company team follows, then any user-defined teams in list order.
+function orderMultiAgentTeams(teams: AgentTeam[]): AgentTeam[] {
+  const pinned = [BUILTIN_REVIEW_TEAM_ID, BUILTIN_STARTUP_TEAM_ID];
+  const lead = pinned
+    .map((id) => teams.find((tm) => tm.id === id))
+    .filter((tm): tm is AgentTeam => Boolean(tm));
+  const rest = teams.filter((tm) => !pinned.includes(tm.id));
+  return [...lead, ...rest];
+}
+
+function buildRunModeGroups(
+  teams: AgentTeam[]
+): Array<{ labelKey: string; options: RunModeOption[] }> {
+  return [
+    { labelKey: 'home.modeGroupWorkflow', options: WORKFLOW_RUN_MODE_OPTIONS },
+    {
+      labelKey: 'home.modeGroupMultiAgent',
+      options: orderMultiAgentTeams(teams).map(teamToRunModeOption),
+    },
+    { labelKey: 'home.modeGroupExplore', options: EXPLORE_RUN_MODE_OPTIONS },
+  ];
+}
+
+// The entry that represents the committed (mode, selectedTeamId) pair. For `team`
+// the team id disambiguates which of the many team entries is active.
+function entryIdForState(
+  options: RunModeOption[],
+  mode: HomeRunMode,
+  selectedTeamId: string
+): string {
+  const match =
+    mode === 'team'
+      ? (options.find((o) => o.teamId === selectedTeamId) ?? options.find((o) => o.mode === 'team'))
+      : options.find((o) => o.mode === mode);
+  return (match ?? options[0]).id;
 }
 
 interface RunModeSelectorProps {
   mode: HomeRunMode;
   summary?: string | null;
+  teams: AgentTeam[];
+  selectedTeamId: string;
   onChange: (mode: HomeRunMode) => void;
-  renderConfiguration: (mode: HomeRunMode) => ReactNode;
+  onSelectTeam: (teamId: string) => void;
+  renderConfiguration: (mode: HomeRunMode, teamId: string | undefined) => ReactNode;
 }
 
-function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunModeSelectorProps) {
+function RunModeSelector({
+  mode,
+  summary,
+  teams,
+  selectedTeamId,
+  onChange,
+  onSelectTeam,
+  renderConfiguration,
+}: RunModeSelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const groups = useMemo(() => buildRunModeGroups(teams), [teams]);
+  const options = useMemo(() => groups.flatMap((group) => group.options), [groups]);
   // The mode change reshapes the whole development paradigm, so we stage it locally
   // and only commit on explicit confirmation rather than applying on each click.
-  // We stage by entry id because a single mode can appear under several sections.
-  const [pendingId, setPendingId] = useState<string>(() => defaultEntryIdForMode(mode));
-  const current = RUN_MODE_OPTIONS.find((option) => option.mode === mode) ?? RUN_MODE_OPTIONS[0];
+  // We stage by entry id since a mode (notably `team`) spans many entries.
+  const [pendingId, setPendingId] = useState<string>(() =>
+    entryIdForState(options, mode, selectedTeamId)
+  );
+  const labelOf = (option: RunModeOption) =>
+    option.label ?? (option.labelKey ? t(option.labelKey) : '');
+  const current =
+    options.find((option) => option.id === entryIdForState(options, mode, selectedTeamId)) ??
+    options[0];
+  const pending = options.find((option) => option.id === pendingId) ?? options[0];
   const CurrentIcon = current.icon;
-  const pending = RUN_MODE_OPTIONS.find((option) => option.id === pendingId) ?? RUN_MODE_OPTIONS[0];
   const PendingIcon = pending.icon;
-  const dirty = pending.mode !== mode;
+  const dirty =
+    pending.mode !== mode || (pending.mode === 'team' && pending.teamId !== selectedTeamId);
   const isNonStandardMode = mode !== 'normal';
 
   const handleOpenChange = (next: boolean) => {
-    if (next) setPendingId(defaultEntryIdForMode(mode));
+    if (next) setPendingId(entryIdForState(options, mode, selectedTeamId));
     setOpen(next);
   };
 
   const handleConfirm = () => {
-    if (dirty) onChange(pending.mode);
+    if (pending.teamId) onSelectTeam(pending.teamId);
+    if (pending.mode !== mode) onChange(pending.mode);
     setOpen(false);
   };
 
@@ -3510,8 +3560,12 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
                 : 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
             )}
           >
-            <CurrentIcon className="size-3.5 shrink-0" />
-            <span className="shrink-0">{t(current.labelKey)}</span>
+            {current.emoji ? (
+              <span className="shrink-0 text-sm leading-none">{current.emoji}</span>
+            ) : (
+              CurrentIcon && <CurrentIcon className="size-3.5 shrink-0" />
+            )}
+            <span className="shrink-0">{labelOf(current)}</span>
             {summary ? (
               <>
                 <span
@@ -3553,7 +3607,7 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
             aria-orientation="vertical"
             className="flex w-44 shrink-0 flex-col gap-1 overflow-y-auto bg-background-1/50 p-2"
           >
-            {RUN_MODE_GROUPS.map((group, groupIndex) => (
+            {groups.map((group, groupIndex) => (
               <div
                 key={group.labelKey}
                 className={cn(
@@ -3582,13 +3636,21 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
                           : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
                       )}
                     >
-                      <Icon
-                        className={cn(
-                          'size-4 shrink-0',
-                          active ? 'text-primary' : 'text-foreground-muted'
-                        )}
-                      />
-                      <span className="min-w-0 flex-1 truncate">{t(option.labelKey)}</span>
+                      {option.emoji ? (
+                        <span className="size-4 shrink-0 text-center text-sm leading-4">
+                          {option.emoji}
+                        </span>
+                      ) : (
+                        Icon && (
+                          <Icon
+                            className={cn(
+                              'size-4 shrink-0',
+                              active ? 'text-primary' : 'text-foreground-muted'
+                            )}
+                          />
+                        )
+                      )}
+                      <span className="min-w-0 flex-1 truncate">{labelOf(option)}</span>
                       {option.alpha && (
                         <Badge variant="secondary" className="shrink-0 px-1 py-0 text-[9px]">
                           {t('home.modeAlphaBadge')}
@@ -3603,8 +3665,14 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
             <div className="flex items-center gap-2">
-              <PendingIcon className="size-4 shrink-0 text-primary" />
-              <span className="text-sm font-semibold text-foreground">{t(pending.labelKey)}</span>
+              {pending.emoji ? (
+                <span className="size-4 shrink-0 text-center text-sm leading-4">
+                  {pending.emoji}
+                </span>
+              ) : (
+                PendingIcon && <PendingIcon className="size-4 shrink-0 text-primary" />
+              )}
+              <span className="text-sm font-semibold text-foreground">{labelOf(pending)}</span>
               {pending.alpha && (
                 <Badge variant="secondary" className="px-1 py-0 text-[9px]">
                   {t('home.modeAlphaBadge')}
@@ -3612,7 +3680,7 @@ function RunModeSelector({ mode, summary, onChange, renderConfiguration }: RunMo
               )}
             </div>
             <p className="text-xs text-foreground-muted">{t(pending.descKey)}</p>
-            {renderConfiguration(pending.mode)}
+            {renderConfiguration(pending.mode, pending.teamId)}
           </div>
         </div>
         <DialogFooter className="px-3 py-2.5">
@@ -3656,7 +3724,6 @@ interface ModeConfigurationPanelProps {
   onReviewerProviderChange: (provider: RuntimeId) => void;
   teams: AgentTeam[];
   selectedTeamId: string;
-  onSelectTeam: (teamId: string) => void;
   agents: Agent[];
   slotAgentId: (slotKey: string) => string | null;
   onSlotAgentChange: (slotKey: string, agentId: string) => void;
@@ -3676,7 +3743,6 @@ function ModeConfigurationPanel({
   onReviewerProviderChange,
   teams,
   selectedTeamId,
-  onSelectTeam,
   agents,
   slotAgentId,
   onSlotAgentChange,
@@ -3786,34 +3852,10 @@ function ModeConfigurationPanel({
 
       {mode === 'team' &&
         (() => {
+          // The team is chosen in the sidebar now; the panel just shows its roster.
           const team = teams.find((tm) => tm.id === selectedTeamId) ?? teams[0];
           return (
             <div className="flex flex-col gap-2">
-              <div className="flex flex-col gap-1">
-                {teams.map((tm) => {
-                  const active = tm.id === (team?.id ?? selectedTeamId);
-                  return (
-                    <button
-                      key={tm.id}
-                      type="button"
-                      onClick={() => onSelectTeam(tm.id)}
-                      className={cn(
-                        'flex items-center gap-2 rounded-md border px-2.5 py-2 text-left text-sm transition-colors',
-                        active
-                          ? 'border-primary/50 bg-primary/10 text-primary'
-                          : 'border-border text-foreground-muted hover:bg-background-2 hover:text-foreground'
-                      )}
-                    >
-                      <span className="text-base leading-none">{tm.icon}</span>
-                      <span className="min-w-0 flex-1 truncate font-medium">{tm.name}</span>
-                      <span className="shrink-0 text-[11px] text-foreground-muted">
-                        {t('home.teamMemberCount', { count: tm.members.length })}
-                      </span>
-                      {active && <Check className="size-3.5 shrink-0 text-primary" />}
-                    </button>
-                  );
-                })}
-              </div>
               {team && (
                 <div className="flex flex-col gap-0.5 rounded-md border border-border/60 bg-background-1/40 p-2">
                   {team.members.map((m) => (
