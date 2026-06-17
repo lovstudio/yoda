@@ -3,7 +3,8 @@ import { useMemo, useState, type PropsWithChildren } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Agent } from '@shared/agents';
 import { builtinAgentI18nKey } from '@shared/builtin-agents';
-import { getRuntime } from '@shared/runtime-registry';
+import { AgentCard as AgentIdentityCard } from '@renderer/lib/components/agent-card/agent-card';
+import { AgentMetaRow } from '@renderer/lib/components/agent-card/agent-meta-row';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
@@ -23,7 +24,6 @@ function AgentCard({
   onDelete: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const runtime = agent.preferredRuntime ? getRuntime(agent.preferredRuntime) : null;
 
   // Built-in Agents are seeded with English name/description; show their
   // localized copy when a translation exists. User-authored Agents (and any
@@ -37,61 +37,46 @@ function AgentCard({
       : agent.description;
 
   return (
-    <div className="group flex items-start gap-3 rounded-lg border border-border bg-background-1 p-3 transition-colors hover:border-primary/40">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-background-2 text-lg">
-        {agent.icon || '🤖'}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-sm font-semibold text-foreground">{name}</span>
-          <span
-            className={cn(
-              'shrink-0 truncate rounded-sm px-1.5 py-0.5 text-[10px] font-medium',
-              agent.model ? 'bg-primary/10 text-primary' : 'bg-background-2 text-foreground-muted'
-            )}
+    <AgentIdentityCard
+      name={name}
+      description={description || t('agentManager.noDescription')}
+      footer={
+        <AgentMetaRow
+          className="mt-0.5"
+          runtime={agent.preferredRuntime}
+          model={agent.model || t('agentManager.modelDefault')}
+          skillCount={agent.enabledSkillIds.length}
+        />
+      }
+      trailing={
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            type="button"
+            aria-label={t('common.edit')}
+            onClick={onEdit}
+            className="flex size-7 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground"
           >
-            {agent.model || t('agentManager.modelDefault')}
-          </span>
-          <span className="shrink-0 rounded-sm bg-background-2 px-1.5 py-0.5 text-[10px] text-foreground-muted">
-            {runtime ? runtime.name : t('agentManager.anyRuntime')}
-          </span>
-          {agent.enabledSkillIds.length > 0 && (
-            <span className="shrink-0 rounded-sm bg-background-2 px-1.5 py-0.5 text-[10px] text-foreground-muted">
-              {t('agentManager.skillsCount', { count: agent.enabledSkillIds.length })}
-            </span>
-          )}
+            <Pencil className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label={t('agentManager.duplicate')}
+            onClick={onDuplicate}
+            className="flex size-7 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground"
+          >
+            <Copy className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label={t('common.delete')}
+            onClick={onDelete}
+            className="flex size-7 items-center justify-center rounded-md text-foreground-muted hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
         </div>
-        <p className="line-clamp-1 text-xs text-foreground-muted">
-          {description || t('agentManager.noDescription')}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-        <button
-          type="button"
-          aria-label={t('common.edit')}
-          onClick={onEdit}
-          className="flex size-7 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground"
-        >
-          <Pencil className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          aria-label={t('agentManager.duplicate')}
-          onClick={onDuplicate}
-          className="flex size-7 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground"
-        >
-          <Copy className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          aria-label={t('common.delete')}
-          onClick={onDelete}
-          className="flex size-7 items-center justify-center rounded-md text-foreground-muted hover:bg-destructive/10 hover:text-destructive"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
-      </div>
-    </div>
+      }
+    />
   );
 }
 

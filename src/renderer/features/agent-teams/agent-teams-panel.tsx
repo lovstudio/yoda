@@ -8,11 +8,11 @@ import {
 } from '@shared/agent-team';
 import type { Agent } from '@shared/agents';
 import { BUILTIN_AGENT_PRESETS } from '@shared/builtin-agents';
-import { getRuntime, RUNTIMES } from '@shared/runtime-registry';
+import { RUNTIMES } from '@shared/runtime-registry';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
-import AgentLogo from '@renderer/lib/components/agent-logo';
+import { AgentCard } from '@renderer/lib/components/agent-card/agent-card';
+import { AgentMetaRow } from '@renderer/lib/components/agent-card/agent-meta-row';
 import { AgentInfoHover } from '@renderer/lib/components/agent-slot/agent-info-card';
-import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
 import { useAgentTeams } from './use-agent-teams';
 
@@ -89,51 +89,29 @@ function MemberCard({
   trailing?: ReactNode;
 }) {
   const resolved = resolveMemberAgent(member, agents);
-  const runtimeConfig = agentConfig[member.runtime];
-  const runtimeName = getRuntime(member.runtime)?.name ?? member.runtime;
   const skillCount = resolved?.enabledSkillIds.length ?? 0;
 
-  const row = (
-    <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background-2/30 px-2 py-1.5">
-      <span className="flex size-5 shrink-0 items-center justify-center text-[15px] leading-none">
-        {resolved?.icon ?? '🤖'}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="min-w-0 truncate text-sm text-foreground">{member.displayName}</span>
-          {leaderBadge && member.role === 'leader' && (
-            <span className="flex shrink-0 items-center gap-1 rounded bg-primary/15 px-1.5 py-px text-[10px] text-primary">
-              <Crown className="size-3" /> leader
-            </span>
-          )}
-        </div>
-        {resolved?.description && (
-          <span className="truncate text-xs text-foreground-muted">{resolved.description}</span>
-        )}
-        {showRuntime && (
-          <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
-            <AgentLogo
-              logo={runtimeConfig.logo}
-              alt={runtimeConfig.alt}
-              isSvg={runtimeConfig.isSvg}
-              invertInDark={runtimeConfig.invertInDark}
-              className="h-3 w-3 shrink-0 rounded-sm"
-            />
-            <span className="truncate">{runtimeName}</span>
-            {skillCount > 0 && (
-              <>
-                <span className="text-foreground-passive">·</span>
-                <span className="shrink-0">{skillCount} skills</span>
-              </>
-            )}
+  const card = (
+    <AgentCard
+      name={member.displayName}
+      description={resolved?.description || undefined}
+      badges={
+        leaderBadge && member.role === 'leader' ? (
+          <span className="flex shrink-0 items-center gap-1 rounded bg-primary/15 px-1.5 py-px text-[10px] text-primary">
+            <Crown className="size-3" /> leader
           </span>
-        )}
-      </div>
-      {trailing}
-    </div>
+        ) : undefined
+      }
+      footer={
+        showRuntime ? (
+          <AgentMetaRow className="mt-0.5" runtime={member.runtime} skillCount={skillCount} />
+        ) : undefined
+      }
+      trailing={trailing}
+    />
   );
 
-  return resolved ? <AgentInfoHover agent={resolved}>{row}</AgentInfoHover> : row;
+  return resolved ? <AgentInfoHover agent={resolved}>{card}</AgentInfoHover> : card;
 }
 
 type Editing = {

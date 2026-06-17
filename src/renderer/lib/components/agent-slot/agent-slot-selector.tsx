@@ -9,6 +9,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { Agent } from '@shared/agents';
 import { getRuntime } from '@shared/runtime-registry';
+import { AgentAvatar } from '@renderer/lib/components/agent-card/agent-avatar';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { agentConfig } from '@renderer/utils/agentConfig';
@@ -26,26 +27,6 @@ interface AgentSlotSelectorProps {
    *  slot's role), letting the caller fold a label into the picker row. */
   eyebrow?: ReactNode;
   className?: string;
-}
-
-/**
- * Monogram avatar for an Agent. We deliberately do not render the Agent's emoji
- * here — a brand-tinted initial reads as a real identity anchor and stays
- * consistent across light/dark themes, where stray emoji look out of place.
- */
-function AgentAvatar({ name, className }: { name: string; className?: string }) {
-  const initial = Array.from(name.trim())[0]?.toUpperCase() ?? '·';
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'flex shrink-0 select-none items-center justify-center rounded-lg bg-primary-button-background font-semibold uppercase leading-none text-primary-button-foreground',
-        className
-      )}
-    >
-      {initial}
-    </span>
-  );
 }
 
 /**
