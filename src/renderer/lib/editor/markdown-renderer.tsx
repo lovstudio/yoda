@@ -75,6 +75,7 @@ export const MarkdownEditorRenderer = observer(function MarkdownEditorRenderer({
         className="mx-auto w-full max-w-3xl px-8 py-8"
         resolveImage={resolveImage}
         onAddNote={syncNote}
+        documentPath={sourcePath}
       />
     </div>
   );

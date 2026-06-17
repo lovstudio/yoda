@@ -12,12 +12,28 @@ export interface MarkdownNote {
   quote: string;
   /** The user's note. */
   comment: string;
+  /** Where the quote lives — e.g. `path/to/file.md:42`. Undefined for sources
+   *  without a backing document (e.g. a generated session summary). */
+  anchor?: string;
 }
 
 /** Payload handed to the consumer when a note is saved. */
-export type MarkdownNoteDraft = Pick<MarkdownNote, 'quote' | 'comment'>;
+export type MarkdownNoteDraft = Pick<MarkdownNote, 'quote' | 'comment' | 'anchor'>;
 
-type Captured = { quote: string; rect: DOMRect };
+type Captured = { quote: string; rect: DOMRect; line?: number };
+
+/** Minimal shape of a react-markdown hast node carrying a source position. */
+export type SourceNode = { position?: { start?: { line?: number } } };
+
+/**
+ * Emits a `data-source-line` attribute from a hast node's source position so a
+ * selected quote can be anchored back to its line in the source. Empty object
+ * when the position is unavailable (then the anchor falls back to the path).
+ */
+export function sourceLineAttr(node: SourceNode | undefined): { 'data-source-line'?: number } {
+  const line = node?.position?.start?.line;
+  return typeof line === 'number' ? { 'data-source-line': line } : {};
+}
 
 /** Collapses selection whitespace so quotes stay readable in compact UI. */
 function normalizeQuote(text: string): string {
@@ -25,9 +41,23 @@ function normalizeQuote(text: string): string {
 }
 
 /**
+ * Walks up from a selection node to the nearest element carrying a
+ * `data-source-line` attribute (emitted by the markdown block components) and
+ * returns that 1-based source line. Undefined when positions aren't available.
+ */
+function sourceLineOf(node: Node | null): number | undefined {
+  const start = node?.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element | null);
+  const el = start?.closest('[data-source-line]');
+  const line = el?.getAttribute('data-source-line');
+  const parsed = line ? Number.parseInt(line, 10) : NaN;
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
  * Reads the current window selection and, when it is a non-empty range that
- * starts inside `container`, returns the normalized quote plus the range's
- * viewport rect. Returns `null` otherwise. Exported for testing.
+ * starts inside `container`, returns the normalized quote, the range's viewport
+ * rect, and the source line of the selection start. Returns `null` otherwise.
+ * Exported for testing.
  */
 export function detectSelectionInside(container: HTMLElement): Captured | null {
   const selection = window.getSelection();
@@ -36,8 +66,8 @@ export function detectSelectionInside(container: HTMLElement): Captured | null {
   if (!quote) return null;
   // The anchor can be a text node; `contains` covers nodes and their parents.
   if (!container.contains(selection.anchorNode)) return null;
-  const rect = selection.getRangeAt(0).getBoundingClientRect();
-  return { quote, rect };
+  const range = selection.getRangeAt(0);
+  return { quote, rect: range.getBoundingClientRect(), line: sourceLineOf(range.startContainer) };
 }
 
 /** Anchored floating action shown right after a non-empty text selection. */
@@ -150,6 +180,11 @@ function NotesList({ notes, onRemove }: { notes: MarkdownNote[]; onRemove: (id: 
             <p className="whitespace-pre-wrap break-words text-xs text-foreground-muted">
               {note.comment}
             </p>
+            {note.anchor ? (
+              <p className="truncate font-mono text-[10px] text-foreground-passive">
+                {note.anchor}
+              </p>
+            ) : null}
           </div>
           <Button
             size="icon-xs"
@@ -175,12 +210,16 @@ function NotesList({ notes, onRemove }: { notes: MarkdownNote[]; onRemove: (id: 
 export function MarkdownAnnotations({
   containerRef,
   onAddNote,
+  documentPath,
   className,
 }: {
   containerRef: React.RefObject<HTMLElement | null>;
   /** Called when a note is saved. Omit when there is no sync target (e.g. a
    *  read-only doc not opened from a session) — notes still render locally. */
   onAddNote?: (note: MarkdownNoteDraft) => void;
+  /** Backing document path; combined with the source line into a note anchor
+   *  (`path:line`) so the consumer can point precisely at the quote. */
+  documentPath?: string;
   className?: string;
 }) {
   const [toolbar, setToolbar] = useState<Captured | null>(null);
@@ -210,12 +249,22 @@ export function MarkdownAnnotations({
   const saveNote = useCallback(
     (comment: string) => {
       if (!composing) return;
-      const note: MarkdownNote = { id: crypto.randomUUID(), quote: composing.quote, comment };
+      const anchor = documentPath
+        ? composing.line
+          ? `${documentPath}:${composing.line}`
+          : documentPath
+        : undefined;
+      const note: MarkdownNote = {
+        id: crypto.randomUUID(),
+        quote: composing.quote,
+        comment,
+        anchor,
+      };
       setNotes((prev) => [...prev, note]);
-      onAddNote?.({ quote: note.quote, comment: note.comment });
+      onAddNote?.({ quote: note.quote, comment: note.comment, anchor: note.anchor });
       setComposing(null);
     },
-    [composing, onAddNote]
+    [composing, onAddNote, documentPath]
   );
 
   const removeNote = useCallback((id: string) => {

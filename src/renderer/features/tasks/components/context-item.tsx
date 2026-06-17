@@ -51,7 +51,11 @@ export function ContextItem({
       }
     >
       {renderMode === 'markdown' ? (
-        <MarkdownContextContent content={text} className="mt-1.5 max-h-56" />
+        <MarkdownContextContent
+          content={text}
+          documentPath={sourcePath}
+          className="mt-1.5 max-h-56"
+        />
       ) : (
         <pre className="mt-1.5 max-h-56 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-foreground-passive">
           {text}
@@ -66,9 +70,11 @@ export function ContextItem({
 
 export function MarkdownContextContent({
   content,
+  documentPath,
   className,
 }: {
   content: string;
+  documentPath?: string;
   className?: string;
 }) {
   // Opened from a session's context → enable annotations and sync notes into
@@ -80,6 +86,7 @@ export function MarkdownContextContent({
       variant="compact"
       annotations={syncNote !== undefined}
       onAddNote={syncNote}
+      documentPath={documentPath}
       className={cn(
         'overflow-auto break-words text-[11px] leading-relaxed text-foreground-passive [&>*:last-child]:mb-0 [&_pre]:max-w-full',
         className
