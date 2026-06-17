@@ -79,3 +79,7 @@ src/main/appConfig.json
 # Local content artifacts (dev blog drafts, generated covers)
 /.output/
 /cover-image/
+
+# vitest browser failure artifacts
+.vitest-attachments/
+**/__screenshots__/
