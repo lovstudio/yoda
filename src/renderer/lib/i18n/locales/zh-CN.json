@@ -1854,6 +1854,10 @@
       "name": "规格 Agent",
       "description": "规格优先：先澄清需求并产出 PRD，再开始编码。"
     },
+    "review-referee": {
+      "name": "裁判",
+      "description": "指挥实现-评审循环，并判定任务何时完成。"
+    },
     "review-implementer": {
       "name": "实现者",
       "description": "实现需求并处理评审反馈。"

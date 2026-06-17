@@ -111,46 +111,41 @@ async function resolveMemberSystemPrompt(member: AgentTeamMember): Promise<strin
   return member.systemPrompt ?? '';
 }
 
-/** Role-specific routing addendum, expressed via the team-at script (no @ in output). */
+/**
+ * Generic leader/worker routing mechanics, the same for every team. The leader
+ * (referee) orchestrates via team-at; workers do their part and report back. The
+ * team's actual workflow (review loop, fan-out, …) lives in the leader Agent's
+ * own system prompt — the engine just relays @-messages and, when a teammate's
+ * turn ends, hands control back to the leader. So the only mechanics a member
+ * needs are: how to delegate (leader) / how to report (worker).
+ */
 function routingAddendum(
-  routing: TeamRouting,
+  _routing: TeamRouting,
   kind: 'leader' | 'worker',
   ctx: { leaderHandle: string; workerHandles: string[] }
 ): string {
-  if (routing === 'review-loop') {
-    // Fully prompt-driven, like every other team: the implementer hands to the
-    // reviewer and the reviewer either ends the loop (addresses @you) or sends
-    // fixes back — the conductor just relays these team-at messages.
-    const reviewerHandle = ctx.workerHandles[0] ?? 'reviewer';
-    return kind === 'leader'
-      ? [
-          `# Your routing`,
-          `Build what the lead asks for in this worktree. When your round is complete, hand off for review:`,
-          `  ${TEAM_AT_SCRIPT} ${reviewerHandle} "<one line: what to review / ready for review>"`,
-          `When the reviewer sends fixes back, address them in the same worktree and hand off again the same`,
-          `way. Keep the existing direction unless a fix requires otherwise.`,
-        ].join('\n')
-      : [
-          `# Your routing`,
-          `Review the implementer's work against the lead's original requirement — do NOT modify files.`,
-          `Hand off exactly one of these when your review is done:`,
-          `  ${TEAM_AT_SCRIPT} you "Approved — <one line: why it fully meets the requirement>"   (ends the task)`,
-          `  ${TEAM_AT_SCRIPT} ${ctx.leaderHandle} "<the concrete, actionable fixes to make>"   (sends it back)`,
-          `Approve ONLY if it fully meets the requirement; otherwise send specific, actionable fixes.`,
-        ].join('\n');
+  if (kind === 'leader') {
+    const roster = ctx.workerHandles.length
+      ? ctx.workerHandles.map((h) => `@${h}`).join(', ')
+      : '(no teammates yet)';
+    return [
+      `# How you run the team`,
+      `You are the lead — you direct the work, you do NOT do it yourself. Your teammates: ${roster}.`,
+      `Delegate one step at a time by addressing a teammate:`,
+      `  ${TEAM_AT_SCRIPT} <handle> "<the concrete task for them>"`,
+      `Each teammate works in this shared worktree and reports back to you when their turn ends — so after`,
+      `every report, decide the next step (re-assign, bring in another teammate, or finish).`,
+      `When the whole task is complete, end it by telling the human lead:`,
+      `  ${TEAM_AT_SCRIPT} you "<one-line summary of what the team delivered>"`,
+    ].join('\n');
   }
-  if (routing === 'fan-out') {
-    return kind === 'leader'
-      ? ctx.workerHandles.length
-        ? [
-            `# Your routing`,
-            `Plan the work, then assign each teammate their part — one call each:`,
-            ...ctx.workerHandles.map((h) => `  ${TEAM_AT_SCRIPT} ${h} "<their part>"`),
-          ].join('\n')
-        : `When done, run: ${TEAM_AT_SCRIPT} you "<summary>"`
-      : `Do your part based on the lead's plan, then run: ${TEAM_AT_SCRIPT} you "<summary>"`;
-  }
-  return ''; // freeform — the generic teammate etiquette already explains team-at
+  return [
+    `# How you work`,
+    `The lead (@${ctx.leaderHandle}) assigns you a task. Do exactly your part in this shared worktree, then`,
+    `report the result back to the lead so they can decide what's next:`,
+    `  ${TEAM_AT_SCRIPT} ${ctx.leaderHandle} "<your result, verdict, or what you changed>"`,
+    `Address only the lead — they coordinate the team.`,
+  ].join('\n');
 }
 
 /**

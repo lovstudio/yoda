@@ -1854,6 +1854,10 @@
       "name": "Spec Agent",
       "description": "Spec-first: clarify requirements and produce a PRD before coding."
     },
+    "review-referee": {
+      "name": "Referee",
+      "description": "Directs the implement-review loop and decides when the task is done."
+    },
     "review-implementer": {
       "name": "Implementer",
       "description": "Implements the requirement and addresses reviewer feedback."

@@ -65,6 +65,7 @@ class RoomConductor {
   private readonly statusWatchers = new Map<string, () => void>(); // memberId -> cancel
   private readonly standups = new Map<string, () => void>(); // roomId -> stop
   private readonly activity = new Map<string, number>(); // memberId -> last PTY-growth ts
+  private readonly handedOff = new Set<string>(); // memberIds that addressed someone this turn
 
   /** Subscribe to message posts. Idempotent. */
   initialize(): void {
@@ -108,6 +109,10 @@ class RoomConductor {
     // agent-authored messages spend it so a back-and-forth can't run away.
     const fromHuman = !!author && !author.runtime;
     if (fromHuman) this.hops.set(roomId, MAX_HOPS);
+
+    // An agent that addressed someone this turn has explicitly handed off, so its
+    // turn-end must NOT also trigger the automatic hand-back to the lead.
+    if (author?.runtime && message.mentions.length > 0) this.handedOff.add(author.id);
 
     const wantsAll = message.mentions.includes(ALL_HANDLE);
     const targets = members.filter(
@@ -220,8 +225,10 @@ class RoomConductor {
         }
       }
 
+      // New turn: clear any prior hand-off mark so this turn's end is judged fresh.
+      this.handedOff.delete(member.id);
       await setMemberStatus(roomId, member.id, 'running', conversationId);
-      this.watchStatus(roomId, member.id, { projectId, taskId, conversationId });
+      this.watchStatus(roomId, member, { projectId, taskId, conversationId });
       this.ensureStandup(roomId);
     } catch (error) {
       await setMemberStatus(roomId, member.id, 'error', member.conversationId).catch(() => {});
@@ -237,13 +244,15 @@ class RoomConductor {
   }
 
   /**
-   * Mirror a member's roster dot to its session run-state until the turn ends.
-   * Routing is agent-driven (members hand off via the team-at script), so this
-   * watcher is purely cosmetic: it reflects status and stops when the turn ends.
+   * Mirror a member's roster dot to its run-state, and on a clean turn-end fire
+   * {@link onTurnEnd} so the lead can drive the next step. The stop hook is the
+   * turn-end signal (it surfaces as a terminal run-state); routing itself stays
+   * agent-driven.
    */
-  private watchStatus(roomId: string, memberId: string, session: Session): void {
-    this.statusWatchers.get(memberId)?.();
+  private watchStatus(roomId: string, member: RoomMember, session: Session): void {
+    this.statusWatchers.get(member.id)?.();
     const sessionId = makePtySessionId(session.projectId, session.taskId, session.conversationId);
+    let sawRunning = false;
     let last: MemberStatus | null = null;
     let lastLen = ptySessionRegistry.snapshot(sessionId).length;
 
@@ -252,26 +261,68 @@ class RoomConductor {
       // Heartbeat: output growth means the member is alive and making progress.
       if (snapshot.length > lastLen) {
         lastLen = snapshot.length;
-        this.activity.set(memberId, Date.now());
+        this.activity.set(member.id, Date.now());
       }
 
       const raw = agentSessionRuntimeStore.getStatus(session);
-      const terminal = raw === 'idle' || raw === 'completed' || raw === 'error';
+      if (raw === 'working' || raw === 'awaiting-input') sawRunning = true;
+      const clean = raw === 'idle' || raw === 'completed';
+      const errored = raw === 'error';
 
       const mapped = mapStatus(raw);
       if (mapped !== last) {
         last = mapped;
-        void setMemberStatus(roomId, memberId, mapped, session.conversationId).catch(() => {});
+        void setMemberStatus(roomId, member.id, mapped, session.conversationId).catch(() => {});
       }
 
-      if (terminal) stop();
+      // Only trust a turn-end once the member has actually started (avoid an early
+      // idle before the agent boots).
+      if (sawRunning && (clean || errored)) {
+        stop();
+        if (clean) void this.onTurnEnd(roomId, member).catch(() => {});
+      }
     }, STATUS_POLL_MS);
 
     const stop = () => {
       clearInterval(timer);
-      this.statusWatchers.delete(memberId);
+      this.statusWatchers.delete(member.id);
     };
-    this.statusWatchers.set(memberId, stop);
+    this.statusWatchers.set(member.id, stop);
+  }
+
+  /**
+   * A member's turn ended. If it already addressed someone (delegated or reported),
+   * routing has happened — do nothing. Otherwise hand control back to the lead so
+   * it can decide the next step; if the lead itself ended without delegating, the
+   * task is done and control returns to the human.
+   */
+  private async onTurnEnd(roomId: string, finished: RoomMember): Promise<void> {
+    if (this.handedOff.has(finished.id)) return;
+    const snapshot = await getRoom(roomId);
+    if (!snapshot || snapshot.room.status !== 'active') return;
+    const { room, members } = snapshot;
+    const leader = members.find((m) => m.role === 'leader' && m.runtime);
+
+    if (!leader || finished.id === leader.id) {
+      await postMessage({
+        roomId,
+        kind: 'system',
+        body: `${finished.displayName} ended its turn — over to you. @mention a teammate to continue.`,
+        mentions: [],
+      });
+      return;
+    }
+
+    if (!this.spend(roomId)) return this.pauseRouting(roomId);
+    const roster: RosterEntry[] = members.map((m) => ({
+      handle: m.handle,
+      displayName: m.displayName,
+      role: m.role,
+    }));
+    await this.deliverTo(room.projectId, room.taskId, roomId, leader, roster, {
+      fromName: finished.displayName,
+      body: `${finished.displayName} (@${finished.handle}) finished its turn without reporting back. Decide the next step.`,
+    });
   }
 
   /**
