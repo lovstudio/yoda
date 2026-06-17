@@ -5,6 +5,12 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.13.1 — 2026-06-16
+
+### Fixed
+
+- Agent rooms: ensure a session's conversation is loaded before opening its tab.
+
 ## 0.13.0 — 2026-06-16
 
 ### Added
