@@ -3914,7 +3914,7 @@ function ModeConfigurationPanel({
             <button
               type="button"
               onClick={onAddCompareRuntime}
-              className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/60 bg-background-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border hover:bg-background-2 hover:text-foreground"
+              className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/60 bg-background-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border hover:bg-background-2 hover:text-foreground"
             >
               <Plus className="size-3.5" />
               <span>{t('home.addCompareAgent')}</span>
@@ -4034,25 +4034,23 @@ function Agent({
     selectedAgent && showAgentModal({ agent: selectedAgent, onSuccess: () => undefined });
 
   return (
-    <div className="group flex min-w-0 flex-col gap-2.5 rounded-lg border border-border/60 bg-background-1 p-2.5 transition-colors hover:border-border focus-within:border-border-1">
-      <div className="flex min-w-0 items-center gap-2">
-        {/* Role identity anchor: an icon badge fronts the small-caps role name so
-            the slot's function reads at a glance, distinct from the agent emoji
-            shown inside the picker below. */}
-        <span title={label} className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background-2/60 text-foreground-muted transition-colors group-hover:border-border group-hover:text-foreground">
-            <Icon className="size-4" />
-          </span>
-          <span className="min-w-0 truncate text-[10.5px] font-semibold uppercase leading-tight tracking-[0.07em] text-foreground-muted transition-colors group-hover:text-foreground">
-            {label}
-          </span>
+    <div className="group flex min-w-0 flex-col gap-2.5 rounded-xl border border-border/60 bg-background-1 p-3 transition-colors hover:border-border focus-within:border-border-1">
+      {/* Eyebrow: the slot's role recedes to a quiet, wide-tracked label so the
+          agent that fills it can read as the card's subject. */}
+      <div className="flex min-w-0 items-center gap-1.5">
+        <Icon className="size-3.5 shrink-0 text-foreground-muted" />
+        <span
+          title={label}
+          className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground-passive"
+        >
+          {label}
         </span>
         {selectedAgent && (
           <button
             type="button"
             onClick={editAgent}
             aria-label={t('agentManager.editAgent')}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground"
           >
             <Settings2 className="size-3.5" />
           </button>
@@ -4060,13 +4058,14 @@ function Agent({
         {action}
       </div>
 
+      {/* Subject: the agent filling this slot — the one solid, focal control. */}
       <AgentSlotSelector
         selectedAgent={selectedAgent}
         agents={agents}
         onSelectAgent={onSelectAgent}
         onCreateAgent={() => showAgentModal({ onSuccess: (created) => onSelectAgent(created.id) })}
         onManageAgents={() => navigate('agentManager')}
-        className="h-9 min-w-0 border-border/60 bg-background-2/40 hover:bg-background-2"
+        className="h-10 min-w-0 rounded-lg border-transparent bg-background-2/70 px-3 hover:bg-background-2"
       />
 
       {selectedAgent && (
@@ -4077,12 +4076,16 @@ function Agent({
             </p>
           )}
 
-          <div className="flex min-w-0 items-center gap-2">
+          {/* Hairline drops the runtime/model overrides to a quieter tier than
+              the agent itself — they are loosely-coupled tweaks, not the choice. */}
+          <div aria-hidden className="h-px bg-border/50" />
+
+          <div className="flex min-w-0 items-center gap-1">
             <AgentSelector
               value={runtime}
               onChange={onChange}
               connectionId={connectionId}
-              className="h-8 min-w-0 flex-1 border-border/60 bg-background-2/40 text-sm transition-colors hover:bg-background-2"
+              className="h-8 min-w-0 flex-1 rounded-md border-transparent bg-transparent text-sm transition-colors hover:bg-background-2"
             />
             <SlotModelInput key={selectedAgent.id} agent={selectedAgent} />
           </div>
@@ -4092,7 +4095,7 @@ function Agent({
               {skillNames.map((name, index) => (
                 <span
                   key={`${name}-${index}`}
-                  className="max-w-40 truncate rounded-full border border-border/60 bg-background-2/50 px-2 py-0.5 text-[10.5px] font-medium text-foreground-muted"
+                  className="max-w-40 truncate rounded-full bg-background-2/70 px-2 py-0.5 text-[10px] font-medium text-foreground-muted"
                 >
                   {name}
                 </span>
@@ -4133,7 +4136,7 @@ function SlotModelInput({ agent }: { agent: Agent }) {
       }}
       placeholder={t('agentManager.modelPlaceholder')}
       title={t('agentManager.model')}
-      className="h-8 w-32 shrink-0 rounded-md border border-border/60 bg-background-2/40 px-2 text-xs text-foreground outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-ring"
+      className="h-8 w-28 shrink-0 rounded-md border border-transparent bg-transparent px-2 text-xs text-foreground outline-none transition-colors placeholder:text-foreground-passive hover:bg-background-2 focus-visible:bg-background-2 focus-visible:ring-1 focus-visible:ring-ring"
     />
   );
 }
