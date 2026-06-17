@@ -1,4 +1,5 @@
 import {
+  ClipboardCopy,
   Copy,
   ExternalLink,
   FileText,
@@ -53,6 +54,11 @@ export function useFilePathActions(target: FilePathTarget) {
     copyRelativePath: target.relativePath
       ? () => void copyPath(target.relativePath as string, t)
       : null,
+    // Directories have no content to copy.
+    copyFileContent:
+      target.kind === 'directory'
+        ? null
+        : () => void copyFileContent(target.absolutePath, target.sshConnectionId ?? null, t),
     openFile: isRemote
       ? () =>
           void openIn(
@@ -189,6 +195,18 @@ export function FilePathMenuItems({
         <Copy className="size-4" />
         {t('fileActions.copyAbsolutePath')}
       </Item>
+      {actions.copyFileContent ? (
+        <Item
+          className="whitespace-nowrap"
+          onClick={(event) => {
+            event.stopPropagation();
+            actions.copyFileContent?.();
+          }}
+        >
+          <ClipboardCopy className="size-4" />
+          {t('fileActions.copyFileContent')}
+        </Item>
+      ) : null}
     </>
   );
 }
@@ -376,6 +394,30 @@ async function copyPath(path: string, t: (key: string) => string): Promise<void>
     if (res?.success) {
       toast({ title: t('fileActions.pathCopied') });
       return;
+    }
+  } catch {
+    // handled below
+  }
+  toast({ title: t('common.copyFailed'), variant: 'destructive' });
+}
+
+async function copyFileContent(
+  absolutePath: string,
+  sshConnectionId: string | null,
+  t: (key: string) => string
+): Promise<void> {
+  try {
+    const read = await rpc.fs.readAbsoluteFile(absolutePath, { sshConnectionId });
+    if (read.success) {
+      const written = await rpc.app.clipboardWriteText(read.data.content);
+      if (written?.success) {
+        toast({
+          title: read.data.truncated
+            ? t('fileActions.contentCopiedTruncated')
+            : t('fileActions.contentCopied'),
+        });
+        return;
+      }
     }
   } catch {
     // handled below

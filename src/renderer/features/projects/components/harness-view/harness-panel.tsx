@@ -18,6 +18,7 @@ import {
   FilePathActionsDropdown,
   type FilePathTarget,
 } from '@renderer/lib/components/file-path-actions';
+import { useScopedSelectAll } from '@renderer/lib/hooks/use-scoped-select-all';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useParams } from '@renderer/lib/layout/navigation-provider';
@@ -310,6 +311,7 @@ function SectionEmpty({ hint }: { hint: string }) {
 
 function MemoryCard({ file, makeTarget }: { file: HarnessMemoryFile; makeTarget: MakeTarget }) {
   const { t } = useTranslation();
+  const selectAll = useScopedSelectAll<HTMLPreElement>();
   return (
     <Collapsible className="border-t border-border bg-background first:border-t-0">
       <div className="flex items-center gap-1 pr-2 hover:bg-background-1">
@@ -326,7 +328,10 @@ function MemoryCard({ file, makeTarget }: { file: HarnessMemoryFile; makeTarget:
       </div>
       <CollapsibleContent>
         <div className="border-t border-border bg-background-1 px-3 py-2">
-          <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground-muted">
+          <pre
+            {...selectAll}
+            className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground-muted outline-none"
+          >
             {file.content}
           </pre>
           {file.truncated ? (

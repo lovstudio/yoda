@@ -277,6 +277,24 @@ export const filesController = createRPCController({
     }
   },
 
+  // Reads a file by absolute path, no project/workspace context. Backs the
+  // shared file-path actions menu's "copy file content" — the same surface
+  // already exposes the absolute path and opens it in external editors.
+  readAbsoluteFile: async (
+    filePath: string,
+    options?: { sshConnectionId?: string | null; maxBytes?: number }
+  ) => {
+    try {
+      const maxBytes = options?.maxBytes ?? 5 * 1024 * 1024;
+      const fsProvider = options?.sshConnectionId
+        ? new SshFileSystem(await sshConnectionManager.connect(options.sshConnectionId), '/')
+        : new LocalFileSystem('/');
+      return ok(await fsProvider.read(filePath, maxBytes));
+    } catch (e) {
+      return err({ type: 'fs_error' as const, message: String(e) });
+    }
+  },
+
   listFiles: async (
     projectId: string,
     workspaceId: string,
