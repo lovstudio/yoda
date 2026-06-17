@@ -7,6 +7,14 @@ import {
 import type { RoomSnapshot, TeamRoom } from '@shared/team-room';
 import { events, rpc } from '@renderer/lib/ipc';
 
+/** A side-pane tab: either a member's identity detail or a member's live session. */
+export type RoomPaneTab =
+  | { id: string; kind: 'agent'; memberId: string }
+  | { id: string; kind: 'session'; conversationId: string };
+
+const agentTabId = (memberId: string) => `agent:${memberId}`;
+const sessionTabId = (conversationId: string) => `session:${conversationId}`;
+
 /**
  * Renderer state for the Agent Room (Team Room) chat. Module singleton — the
  * Library section is global, and rooms span projects. Subscribes to the active
@@ -18,10 +26,13 @@ class AgentRoomStore {
   snapshot: RoomSnapshot | null = null;
   loadingRooms = false;
   loadingRoom = false;
-  /** Conversation id whose live session is shown in the side pane, if any. */
-  inspectedConversationId: string | null = null;
-  /** Member id whose detail is shown in the side pane, if any. */
-  inspectedMemberId: string | null = null;
+  /**
+   * Open side-pane tabs (member details + live sessions), rendered with the
+   * standard TabBar so they behave like normal app tabs — multiple at once,
+   * switchable, closeable. `activePaneTabId` is the focused one.
+   */
+  paneTabs: RoomPaneTab[] = [];
+  activePaneTabId: string | null = null;
 
   private disposers: (() => void)[] = [];
 
@@ -48,8 +59,8 @@ class AgentRoomStore {
     if (this.activeRoomId === roomId && this.snapshot) return;
     this.activeRoomId = roomId;
     this.snapshot = null;
-    this.inspectedConversationId = null;
-    this.inspectedMemberId = null;
+    this.paneTabs = [];
+    this.activePaneTabId = null;
     this.resubscribe(roomId);
     await this.refreshSnapshot();
   }
@@ -140,17 +151,47 @@ class AgentRoomStore {
     );
   }
 
-  /** Show a member's live session in the side pane (mutually exclusive with member detail). */
-  setInspectedConversation(conversationId: string | null): void {
-    this.inspectedConversationId =
-      this.inspectedConversationId === conversationId ? null : conversationId;
-    if (this.inspectedConversationId) this.inspectedMemberId = null;
+  isAgentTabActive(memberId: string): boolean {
+    return this.activePaneTabId === agentTabId(memberId);
   }
 
-  /** Show a member's detail in the side pane (mutually exclusive with the session view). */
-  setInspectedMember(memberId: string | null): void {
-    this.inspectedMemberId = this.inspectedMemberId === memberId ? null : memberId;
-    if (this.inspectedMemberId) this.inspectedConversationId = null;
+  isSessionTabActive(conversationId: string): boolean {
+    return this.activePaneTabId === sessionTabId(conversationId);
+  }
+
+  /** Open (or focus) a member's identity-detail tab in the side pane. */
+  openAgentTab(memberId: string): void {
+    this.openTab({ id: agentTabId(memberId), kind: 'agent', memberId });
+  }
+
+  /** Open (or focus) a member's live-session tab in the side pane. */
+  openSessionTab(conversationId: string): void {
+    this.openTab({ id: sessionTabId(conversationId), kind: 'session', conversationId });
+  }
+
+  /** Toggle a session tab from a message row — focus it, or close it if already focused. */
+  toggleSessionTab(conversationId: string): void {
+    if (this.isSessionTabActive(conversationId)) this.closePaneTab(sessionTabId(conversationId));
+    else this.openSessionTab(conversationId);
+  }
+
+  setActivePaneTab(id: string): void {
+    this.activePaneTabId = id;
+  }
+
+  closePaneTab(id: string): void {
+    const index = this.paneTabs.findIndex((tab) => tab.id === id);
+    if (index === -1) return;
+    this.paneTabs.splice(index, 1);
+    if (this.activePaneTabId === id) {
+      const next = this.paneTabs[index] ?? this.paneTabs[index - 1];
+      this.activePaneTabId = next?.id ?? null;
+    }
+  }
+
+  private openTab(tab: RoomPaneTab): void {
+    if (!this.paneTabs.some((existing) => existing.id === tab.id)) this.paneTabs.push(tab);
+    this.activePaneTabId = tab.id;
   }
 
   private resubscribe(roomId: string): void {

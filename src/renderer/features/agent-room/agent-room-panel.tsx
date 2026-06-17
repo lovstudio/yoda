@@ -1,14 +1,21 @@
-import { MessagesSquare, Plus, Send, Sparkles, TerminalSquare, Users, X } from 'lucide-react';
+import { MessagesSquare, Plus, Send, Sparkles, TerminalSquare, Users } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RoomMember, RoomMessage, RoomSnapshot } from '@shared/team-room';
+import { buildConversationSections } from '@renderer/app/app-tab-context-menu';
+import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  ProvisionedTaskProvider,
+  TaskViewWrapper,
+} from '@renderer/features/tasks/task-view-context';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
+import { TabBar } from '@renderer/lib/ui/tab-bar';
 import { cn } from '@renderer/utils/utils';
 import { ACCENT_AVATAR, ACCENT_MENTION, ACCENT_TEXT, STATUS_DOT, STATUS_LABEL } from './accent';
-import { agentRoomStore } from './agent-room-store';
+import { agentRoomStore, type RoomPaneTab } from './agent-room-store';
 import { NewRoomForm } from './new-room-form';
-import { RoomSessionInspector } from './room-session-inspector';
+import { Connecting, SessionPty, useProvisionRoomTask } from './room-session-inspector';
 
 const monogram = (name: string) => name.trim().charAt(0).toUpperCase() || '?';
 
@@ -113,9 +120,7 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
   }, [snapshot.messages.length]);
 
   const agents = snapshot.members.filter((m) => m.role !== 'lead');
-  const inspectedId = agentRoomStore.inspectedConversationId;
-  const inspectedMemberId = agentRoomStore.inspectedMemberId;
-  const detailMember = inspectedMemberId ? byId.get(inspectedMemberId) : undefined;
+  const hasPane = agentRoomStore.paneTabs.length > 0;
 
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col">
@@ -131,12 +136,12 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           {agents.map((m) => {
-            const isInspected = inspectedMemberId === m.id;
+            const isInspected = agentRoomStore.isAgentTabActive(m.id);
             return (
               <button
                 key={m.id}
                 type="button"
-                onClick={() => agentRoomStore.setInspectedMember(m.id)}
+                onClick={() => agentRoomStore.openAgentTab(m.id)}
                 title={`${m.displayName} · ${STATUS_LABEL[m.status]}`}
                 className={cn(
                   'flex cursor-pointer items-center gap-1.5 rounded-lg border px-1.5 py-1 transition-colors',
@@ -175,35 +180,14 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
               <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                 <TeamIntroCard agents={agents} preset={snapshot.room.preset} />
                 {snapshot.messages.map((msg) => (
-                  <MessageRow
-                    key={msg.id}
-                    message={msg}
-                    byId={byId}
-                    byHandle={byHandle}
-                    inspectedId={inspectedId}
-                  />
+                  <MessageRow key={msg.id} message={msg} byId={byId} byHandle={byHandle} />
                 ))}
               </div>
               <Composer members={snapshot.members} />
             </div>
           );
 
-          const sidePane = inspectedId ? (
-            <RoomSessionInspector
-              projectId={snapshot.room.projectId}
-              taskId={snapshot.room.taskId}
-              conversationId={inspectedId}
-              title={`session · ${inspectedId.slice(0, 8)}`}
-              onClose={() => agentRoomStore.setInspectedConversation(null)}
-            />
-          ) : detailMember ? (
-            <AgentDetailPane
-              member={detailMember}
-              onClose={() => agentRoomStore.setInspectedMember(null)}
-            />
-          ) : null;
-
-          if (!sidePane) return chatColumn;
+          if (!hasPane) return chatColumn;
 
           return (
             <ResizablePanelGroup orientation="horizontal" className="min-h-0 min-w-0">
@@ -217,13 +201,126 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
                 minSize="24%"
                 className="flex min-h-0 min-w-0"
               >
-                {sidePane}
+                <RoomSidePane snapshot={snapshot} />
               </ResizablePanel>
             </ResizablePanelGroup>
           );
         })()}
       </div>
     </section>
+  );
+});
+
+/**
+ * Side pane hosting the open member-detail / session tabs as normal tabs — the
+ * shared TabBar gives identical look + close + right-click menu as the app's
+ * task tabs. All sessions share the room's single backing task, so we provision
+ * + wrap once and keep every tab mounted (terminals stay alive across switches).
+ */
+const RoomSidePane = observer(function RoomSidePane({ snapshot }: { snapshot: RoomSnapshot }) {
+  const { t } = useTranslation();
+  const { projectId, taskId } = snapshot.room;
+  const { paneTabs, activePaneTabId } = agentRoomStore;
+  const byId = useMemo(() => new Map(snapshot.members.map((m) => [m.id, m])), [snapshot.members]);
+  const byConversation = useMemo(
+    () =>
+      new Map(
+        snapshot.members.filter((m) => m.conversationId).map((m) => [m.conversationId as string, m])
+      ),
+    [snapshot.members]
+  );
+
+  const hasSession = paneTabs.some((tab) => tab.kind === 'session');
+  const sessionActive = paneTabs.some(
+    (tab) => tab.kind === 'session' && tab.id === activePaneTabId
+  );
+  const kind = useProvisionRoomTask(projectId, taskId, hasSession);
+
+  const tabLabel = (tab: RoomPaneTab) =>
+    tab.kind === 'agent'
+      ? (byId.get(tab.memberId)?.displayName ?? t('agentRoom.viewAgent'))
+      : (byConversation.get(tab.conversationId)?.displayName ?? 'session');
+
+  const tabPrefix = (tab: RoomPaneTab) => {
+    if (tab.kind === 'session') return <TerminalSquare className="size-3.5 opacity-70" />;
+    const member = byId.get(tab.memberId);
+    return (
+      <span
+        className={cn(
+          'flex size-4 items-center justify-center rounded text-[9px] font-semibold',
+          ACCENT_AVATAR[member?.accent ?? 'slate']
+        )}
+      >
+        {monogram(member?.displayName ?? '?')}
+      </span>
+    );
+  };
+
+  return (
+    <aside className="flex h-full w-full min-w-0 flex-col border-l border-border bg-background">
+      <TabBar
+        tabs={paneTabs}
+        activeTabId={activePaneTabId ?? undefined}
+        getId={(tab) => tab.id}
+        getLabel={tabLabel}
+        renderTabPrefix={tabPrefix}
+        onSelect={(id) => agentRoomStore.setActivePaneTab(id)}
+        onRemove={(id) => agentRoomStore.closePaneTab(id)}
+        getTabMenu={(tab) =>
+          tab.kind === 'session'
+            ? buildConversationSections(
+                asProvisioned(getTaskStore(projectId, taskId)),
+                projectId,
+                taskId,
+                tab.conversationId,
+                t
+              )
+            : []
+        }
+      />
+      <div className="relative min-h-0 flex-1">
+        {paneTabs.map((tab) => {
+          if (tab.kind !== 'agent') return null;
+          const member = byId.get(tab.memberId);
+          return (
+            <div
+              key={tab.id}
+              className={cn(
+                'absolute inset-0 overflow-y-auto',
+                tab.id !== activePaneTabId && 'hidden'
+              )}
+            >
+              {member ? <AgentDetailBody member={member} /> : null}
+            </div>
+          );
+        })}
+        {hasSession && (
+          <div className={cn('absolute inset-0', !sessionActive && 'hidden')}>
+            {kind === 'ready' ? (
+              <TaskViewWrapper projectId={projectId} taskId={taskId} hosted>
+                <ProvisionedTaskProvider projectId={projectId} taskId={taskId}>
+                  {paneTabs.map((tab) =>
+                    tab.kind === 'session' ? (
+                      <div
+                        key={tab.id}
+                        className={cn('absolute inset-0', tab.id !== activePaneTabId && 'hidden')}
+                      >
+                        <SessionPty
+                          conversationId={tab.conversationId}
+                          isVisible={tab.id === activePaneTabId}
+                        />
+                      </div>
+                    ) : null
+                  )}
+                </ProvisionedTaskProvider>
+              </TaskViewWrapper>
+            ) : (
+              <Connecting />
+            )}
+          </div>
+        )}
+      </div>
+    </aside>
   );
 });
 
@@ -235,7 +332,6 @@ const TeamIntroCard = observer(function TeamIntroCard({
   preset: RoomSnapshot['room']['preset'];
 }) {
   const { t } = useTranslation();
-  const inspectedMemberId = agentRoomStore.inspectedMemberId;
   const key = preset === 'review-loop' ? 'review' : 'freeform';
   const impl = agents.find((m) => m.role === 'leader')?.displayName ?? 'Implementer';
   const rev = agents.find((m) => m.role === 'worker')?.displayName ?? 'Reviewer';
@@ -263,12 +359,12 @@ const TeamIntroCard = observer(function TeamIntroCard({
       </p>
       <div className="flex flex-col gap-0.5">
         {agents.map((m) => {
-          const isInspected = inspectedMemberId === m.id;
+          const isInspected = agentRoomStore.isAgentTabActive(m.id);
           return (
             <button
               key={m.id}
               type="button"
-              onClick={() => agentRoomStore.setInspectedMember(m.id)}
+              onClick={() => agentRoomStore.openAgentTab(m.id)}
               title={t('agentRoom.viewAgent')}
               className={cn(
                 'flex w-full cursor-pointer items-center gap-2.5 rounded-lg border px-1.5 py-1 text-left transition-colors',
@@ -299,82 +395,61 @@ const TeamIntroCard = observer(function TeamIntroCard({
   );
 });
 
-/** Side pane: a room member's identity / entity detail (role, runtime, instructions). */
-const AgentDetailPane = observer(function AgentDetailPane({
-  member,
-  onClose,
-}: {
-  member: RoomMember;
-  onClose: () => void;
-}) {
+/** Side-pane tab body: a room member's identity / entity detail (role, runtime, instructions). */
+const AgentDetailBody = observer(function AgentDetailBody({ member }: { member: RoomMember }) {
   const { t } = useTranslation();
   return (
-    <aside className="flex h-full w-full min-w-0 flex-col border-l border-border bg-background">
-      <header className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <span className="min-w-0 flex-1 truncate text-xs font-medium">
-          {t('agentRoom.viewAgent')}
-        </span>
+    <div className="h-full overflow-y-auto p-4">
+      <div className="flex items-center gap-3">
+        <div
+          className={cn(
+            'flex size-11 shrink-0 items-center justify-center rounded-xl text-base font-semibold',
+            ACCENT_AVATAR[member.accent]
+          )}
+        >
+          {monogram(member.displayName)}
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-base font-semibold">{member.displayName}</div>
+          <div className="flex items-center gap-2 text-xs text-foreground-muted">
+            <span className="flex items-center gap-1">
+              <span className={cn('size-2 rounded-full', STATUS_DOT[member.status])} />
+              {STATUS_LABEL[member.status]}
+            </span>
+            <span className="font-mono">@{member.handle}</span>
+          </div>
+        </div>
+      </div>
+      <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
+        <dt className="text-foreground-muted">role</dt>
+        <dd>{member.role}</dd>
+        {member.runtime && (
+          <>
+            <dt className="text-foreground-muted">runtime</dt>
+            <dd className="font-mono">{member.runtime}</dd>
+          </>
+        )}
+      </dl>
+      <div className="mt-4">
+        <div className="mb-1 text-xs font-semibold text-foreground-muted">
+          {t('agentRoom.member.instructions')}
+        </div>
+        <div className="whitespace-pre-wrap rounded-lg border border-border bg-background-1 p-3 text-xs leading-relaxed">
+          {member.systemPrompt?.trim() ? member.systemPrompt : t('agentRoom.member.noInstructions')}
+        </div>
+      </div>
+      {member.conversationId && (
         <button
           type="button"
-          onClick={onClose}
-          title="Close"
-          className="flex size-6 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+          onClick={() =>
+            member.conversationId && agentRoomStore.openSessionTab(member.conversationId)
+          }
+          className="mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background-1 px-3 py-1.5 text-xs text-foreground-muted transition-colors hover:border-primary hover:text-foreground"
         >
-          <X className="size-4" />
+          <TerminalSquare className="size-3.5" /> {t('agentRoom.openSession')}
         </button>
-      </header>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              'flex size-11 shrink-0 items-center justify-center rounded-xl text-base font-semibold',
-              ACCENT_AVATAR[member.accent]
-            )}
-          >
-            {monogram(member.displayName)}
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-base font-semibold">{member.displayName}</div>
-            <div className="flex items-center gap-2 text-xs text-foreground-muted">
-              <span className="flex items-center gap-1">
-                <span className={cn('size-2 rounded-full', STATUS_DOT[member.status])} />
-                {STATUS_LABEL[member.status]}
-              </span>
-              <span className="font-mono">@{member.handle}</span>
-            </div>
-          </div>
-        </div>
-        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
-          <dt className="text-foreground-muted">role</dt>
-          <dd>{member.role}</dd>
-          {member.runtime && (
-            <>
-              <dt className="text-foreground-muted">runtime</dt>
-              <dd className="font-mono">{member.runtime}</dd>
-            </>
-          )}
-        </dl>
-        <div className="mt-4">
-          <div className="mb-1 text-xs font-semibold text-foreground-muted">
-            {t('agentRoom.member.instructions')}
-          </div>
-          <div className="whitespace-pre-wrap rounded-lg border border-border bg-background-1 p-3 text-xs leading-relaxed">
-            {member.systemPrompt?.trim()
-              ? member.systemPrompt
-              : t('agentRoom.member.noInstructions')}
-          </div>
-        </div>
-        {member.conversationId && (
-          <button
-            type="button"
-            onClick={() => agentRoomStore.setInspectedConversation(member.conversationId)}
-            className="mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background-1 px-3 py-1.5 text-xs text-foreground-muted transition-colors hover:border-primary hover:text-foreground"
-          >
-            <TerminalSquare className="size-3.5" /> {t('agentRoom.openSession')}
-          </button>
-        )}
-      </div>
-    </aside>
+      )}
+    </div>
   );
 });
 
@@ -382,12 +457,10 @@ function MessageRow({
   message,
   byId,
   byHandle,
-  inspectedId,
 }: {
   message: RoomMessage;
   byId: Map<string, RoomMember>;
   byHandle: Map<string, RoomMember>;
-  inspectedId: string | null;
 }) {
   const { t } = useTranslation();
   // System = the referee's voice: a small centered line, with @handles as pills.
@@ -403,15 +476,12 @@ function MessageRow({
   const author = message.authorMemberId ? byId.get(message.authorMemberId) : undefined;
   const accent = author?.accent ?? 'terra';
   const name = author?.displayName ?? 'You';
-  const isInspected = message.sessionRef === inspectedId && inspectedId !== null;
-  const openSession = message.sessionRef
-    ? () => agentRoomStore.setInspectedConversation(message.sessionRef)
-    : undefined;
+  const sessionRef = message.sessionRef;
+  const isInspected = sessionRef ? agentRoomStore.isSessionTabActive(sessionRef) : false;
+  const openSession = sessionRef ? () => agentRoomStore.toggleSessionTab(sessionRef) : undefined;
   // Avatar/name open the agent's detail pane — only for real agents (the human
   // lead has no entity to show).
-  const openDetail = author?.runtime
-    ? () => agentRoomStore.setInspectedMember(author.id)
-    : undefined;
+  const openDetail = author?.runtime ? () => agentRoomStore.openAgentTab(author.id) : undefined;
 
   return (
     <div className="flex gap-3 py-2.5">
@@ -496,7 +566,7 @@ function renderBody(body: string, byHandle: Map<string, RoomMember>) {
           <button
             key={i}
             type="button"
-            onClick={() => agentRoomStore.setInspectedMember(member.id)}
+            onClick={() => agentRoomStore.openAgentTab(member.id)}
             className={cn(cls, 'cursor-pointer hover:underline')}
           >
             @{member.displayName}

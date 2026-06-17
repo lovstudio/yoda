@@ -1,9 +1,15 @@
 import { X } from 'lucide-react';
 import { observer, Observer } from 'mobx-react-lite';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { ReorderList } from '@renderer/lib/components/reorder-list';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from './context-menu';
 import { Separator } from './separator';
 
 function InlineEditInput({
@@ -51,6 +57,8 @@ export interface TabBarProps<TEntity> {
   renderTabSuffix?: (entity: TEntity) => React.ReactNode;
   onRename?: (id: string, newName: string) => void;
   onReorder?: (fromIndex: number, toIndex: number) => void;
+  /** Right-click menu sections for a tab; non-empty result wraps it in a ContextMenu. */
+  getTabMenu?: (entity: TEntity) => React.ReactNode[][];
   /** Rendered in the right-side area. Caller is responsible for all buttons and their click handlers. */
   actions?: React.ReactNode;
 }
@@ -66,6 +74,7 @@ export const TabBar = observer(function TabBar<TEntity>({
   renderTabSuffix,
   onRename,
   onReorder,
+  getTabMenu,
   actions,
 }: TabBarProps<TEntity>) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -76,60 +85,80 @@ export const TabBar = observer(function TabBar<TEntity>({
     const isActive = activeTabId === id;
     const isEditing = editingId === id;
 
-    return (
-      <>
-        <button
-          key={id}
-          onClick={() => onSelect(id)}
-          onDoubleClick={() => onRename && setEditingId(id)}
-          className={cn(
-            'group relative bg-background-secondary flex flex-col h-full text-sm text-foreground-muted hover:bg-background-secondary-1/40',
-            isActive &&
-              'bg-background-secondary-1 opacity-100 text-foreground hover:bg-background-secondary-1 '
-          )}
-        >
-          <div className={cn('flex items-center pl-3 pr-1 h-full', !onRemove && 'pr-3')}>
-            <span className="flex items-center gap-1">
-              {renderTabPrefix?.(entity)}
-              {isEditing ? (
-                <InlineEditInput
-                  initialValue={label}
-                  onConfirm={(newLabel) => {
-                    setEditingId(null);
-                    const trimmed = newLabel.trim();
-                    if (trimmed && trimmed !== label) {
-                      onRename?.(id, trimmed);
-                    }
-                  }}
-                  onCancel={() => setEditingId(null)}
-                />
-              ) : (
-                <span className="max-w-24 truncate p-1">{label}</span>
-              )}
-            </span>
-            {onRemove && (
-              <div className="relative size-5 flex items-center justify-center">
-                {renderTabSuffix && (
-                  <span className="transition-opacity group-hover:opacity-0">
-                    {renderTabSuffix(entity)}
-                  </span>
-                )}
-                <button
-                  disabled={isEditing}
-                  className="absolute inset-0 hover:bg-background-2 text-foreground-muted flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemove(id);
-                  }}
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
+    const button = (
+      <button
+        onClick={() => onSelect(id)}
+        onDoubleClick={() => onRename && setEditingId(id)}
+        className={cn(
+          'group relative bg-background-secondary flex flex-col h-full text-sm text-foreground-muted hover:bg-background-secondary-1/40',
+          isActive &&
+            'bg-background-secondary-1 opacity-100 text-foreground hover:bg-background-secondary-1 '
+        )}
+      >
+        <div className={cn('flex items-center pl-3 pr-1 h-full', !onRemove && 'pr-3')}>
+          <span className="flex items-center gap-1">
+            {renderTabPrefix?.(entity)}
+            {isEditing ? (
+              <InlineEditInput
+                initialValue={label}
+                onConfirm={(newLabel) => {
+                  setEditingId(null);
+                  const trimmed = newLabel.trim();
+                  if (trimmed && trimmed !== label) {
+                    onRename?.(id, trimmed);
+                  }
+                }}
+                onCancel={() => setEditingId(null)}
+              />
+            ) : (
+              <span className="max-w-24 truncate p-1">{label}</span>
             )}
-          </div>
-        </button>
+          </span>
+          {onRemove && (
+            <div className="relative size-5 flex items-center justify-center">
+              {renderTabSuffix && (
+                <span className="transition-opacity group-hover:opacity-0">
+                  {renderTabSuffix(entity)}
+                </span>
+              )}
+              <button
+                disabled={isEditing}
+                className="absolute inset-0 hover:bg-background-2 text-foreground-muted flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(id);
+                }}
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      </button>
+    );
+
+    const menu = getTabMenu?.(entity)?.filter((section) => section.length > 0) ?? [];
+
+    return (
+      <Fragment key={id}>
+        {menu.length > 0 ? (
+          <ContextMenu>
+            <ContextMenuTrigger className="flex h-full">{button}</ContextMenuTrigger>
+            <ContextMenuContent className="w-56">
+              {menu.map((section, index) => (
+                // Sections are stable per tab kind — index keys are fine here.
+                <Fragment key={index}>
+                  {index > 0 ? <ContextMenuSeparator /> : null}
+                  {section}
+                </Fragment>
+              ))}
+            </ContextMenuContent>
+          </ContextMenu>
+        ) : (
+          button
+        )}
         <Separator orientation="vertical" />
-      </>
+      </Fragment>
     );
   };
 
