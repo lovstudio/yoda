@@ -1,4 +1,4 @@
-import { TEAM_AT_SCRIPT, TEAM_VERDICT_SCRIPT } from '@shared/agent-communication-protocol';
+import { TEAM_AT_SCRIPT } from '@shared/agent-communication-protocol';
 import {
   teamLeader,
   teamWorkers,
@@ -49,7 +49,7 @@ export async function seedReviewRoom(params: SeedReviewRoomParams): Promise<stri
     projectId: params.projectId,
     taskId: params.taskId,
     name: params.name,
-    preset: 'review-loop',
+    preset: 'freeform',
   });
 
   const lead = await addMember({
@@ -118,25 +118,25 @@ function routingAddendum(
   ctx: { leaderHandle: string; workerHandles: string[] }
 ): string {
   if (routing === 'review-loop') {
-    // The conductor drives this loop deterministically (it brings in the reviewer
-    // when the implementer finishes, and forwards review feedback back), so the
-    // implementer never hands off manually; the reviewer hands off by recording a
-    // structured verdict via the team-verdict script (no @-handles, no markers).
+    // Fully prompt-driven, like every other team: the implementer hands to the
+    // reviewer and the reviewer either ends the loop (addresses @you) or sends
+    // fixes back — the conductor just relays these team-at messages.
+    const reviewerHandle = ctx.workerHandles[0] ?? 'reviewer';
     return kind === 'leader'
       ? [
           `# Your routing`,
-          `Build what the lead asks for in this worktree. When your round is complete, just finish your`,
-          `turn — the reviewer is brought in automatically. When you receive review feedback, address it`,
-          `in the same worktree and finish again. Keep the existing direction unless a fix requires otherwise.`,
+          `Build what the lead asks for in this worktree. When your round is complete, hand off for review:`,
+          `  ${TEAM_AT_SCRIPT} ${reviewerHandle} "<one line: what to review / ready for review>"`,
+          `When the reviewer sends fixes back, address them in the same worktree and hand off again the same`,
+          `way. Keep the existing direction unless a fix requires otherwise.`,
         ].join('\n')
       : [
           `# Your routing`,
           `Review the implementer's work against the lead's original requirement — do NOT modify files.`,
-          `End your turn by recording your verdict (this is how you hand off — do not write @handles):`,
-          `  ${TEAM_VERDICT_SCRIPT} pass "<one line: why it fully meets the requirement>"`,
-          `  ${TEAM_VERDICT_SCRIPT} fail "<the concrete fixes the implementer should make>"`,
-          `Use pass ONLY if it fully meets the requirement. On fail, your message is sent straight to the`,
-          `implementer, so make it specific and actionable.`,
+          `Hand off exactly one of these when your review is done:`,
+          `  ${TEAM_AT_SCRIPT} you "Approved — <one line: why it fully meets the requirement>"   (ends the task)`,
+          `  ${TEAM_AT_SCRIPT} ${ctx.leaderHandle} "<the concrete, actionable fixes to make>"   (sends it back)`,
+          `Approve ONLY if it fully meets the requirement; otherwise send specific, actionable fixes.`,
         ].join('\n');
   }
   if (routing === 'fan-out') {
@@ -173,7 +173,9 @@ export async function seedRoomFromTeam(args: {
     projectId: args.projectId,
     taskId: args.taskId,
     name: team.name,
-    preset: team.routing === 'review-loop' ? 'review-loop' : 'freeform',
+    // One generic engine: the routing addendum in each member's prompt encodes
+    // the collaboration; the conductor adds no per-preset control logic.
+    preset: 'freeform',
   });
 
   const lead = await addMember({
@@ -216,14 +218,14 @@ export async function seedRoomFromTeam(args: {
     });
   }
 
-  // Review-loop: the user just states the requirement — the System (referee)
-  // decides who works and @s them. Other presets still address the leader directly.
+  // Every team kicks off the same way: address the requirement to the leader (the
+  // member who receives the problem). The leader's prompt drives every hand-off
+  // from there.
   await postMessage({
     roomId: room.id,
     authorMemberId: lead.id,
     kind: 'text',
-    body:
-      team.routing === 'review-loop' ? args.requirement : `@${leaderHandle} ${args.requirement}`,
+    body: `@${leaderHandle} ${args.requirement}`,
   });
 
   return room.id;

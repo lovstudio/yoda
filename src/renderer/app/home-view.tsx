@@ -3773,6 +3773,7 @@ function ModeConfigurationPanel({
   className,
 }: ModeConfigurationPanelProps) {
   const { t } = useTranslation();
+  const { navigate } = useNavigate();
 
   // A slot card needs its Agent selection. `key` is the slot's stable key (the
   // mode's prompt key, reused purely to key the per-slot selection).
@@ -3898,7 +3899,14 @@ function ModeConfigurationPanel({
                   ))}
                 </div>
               )}
-              <p className="px-1 text-xs text-foreground-muted">{t('home.teamManageHint')}</p>
+              <button
+                type="button"
+                onClick={() => navigate('library', { section: 'agentTeams' })}
+                className="flex items-center gap-1.5 self-start rounded-md px-1 py-0.5 text-xs text-foreground-muted transition-colors hover:text-foreground"
+              >
+                <Settings2 className="size-3.5 shrink-0" />
+                <span>{t('home.teamManageHint')}</span>
+              </button>
             </div>
           );
         })()}

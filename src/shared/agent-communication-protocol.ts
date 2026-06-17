@@ -7,9 +7,10 @@
  * so "@ing" a teammate is literally continuing its agent session with new input,
  * which every CLI supports.
  *
- * Specific collaboration MODES build on this: e.g. the review loop (implement ↔
- * review) lives in `review-protocol.ts`, fan-out and freeform are other modes.
- * Review is just one typical mode — this protocol is the substrate they share.
+ * Collaboration MODES are expressed purely as prompt instructions (see the
+ * per-routing addendum in team-rooms/presets.ts): review, fan-out and freeform
+ * all run on this one substrate — agents drive every hand-off and decide when to
+ * stop (by addressing @you). The conductor adds no per-mode control logic.
  */
 
 /**
@@ -22,8 +23,6 @@ export const TEAM_SCRIPT_DIR_TOKEN = '__YODA_SCRIPTS_DIR__';
 export const TEAM_AT_SCRIPT = `${TEAM_SCRIPT_DIR_TOKEN}/team-at`;
 /** Prompt-facing path of the team-status (progress broadcast) script. */
 export const TEAM_STATUS_SCRIPT = `${TEAM_SCRIPT_DIR_TOKEN}/team-status`;
-/** Prompt-facing path of the team-verdict (structured PASS/FAIL) script. */
-export const TEAM_VERDICT_SCRIPT = `${TEAM_SCRIPT_DIR_TOKEN}/team-verdict`;
 
 export interface RosterEntry {
   handle: string;
@@ -39,8 +38,6 @@ export function buildTeammateSystemPrompt(args: {
   displayName: string;
   handle: string;
   roster: RosterEntry[];
-  /** Preset-driven loops (e.g. review-loop) where the conductor routes hand-offs, so the member must NOT call team-at. */
-  autoRouted?: boolean;
 }): string {
   const others = args.roster.filter((r) => r.handle !== args.handle);
   const roster = others.length
@@ -52,30 +49,6 @@ export function buildTeammateSystemPrompt(args: {
     roster,
     ``,
   ];
-  if (args.autoRouted) {
-    return [
-      ...header,
-      `# How this team works`,
-      `This team runs an automatic loop. You do NOT message teammates yourself — when you finish your`,
-      `turn, the system automatically hands off to the right teammate and brings their reply back to you.`,
-      `Just do your part and finish. Do NOT write "@handle" in your replies and do NOT run any hand-off`,
-      `command — follow the routing instructions below for exactly how to end your turn.`,
-      ``,
-      `# Talk to the room in your own voice (REQUIRED)`,
-      `The room is a group chat the human is watching, so you MUST keep them in the loop. Speak for`,
-      `yourself — naturally, in your own words — by running:`,
-      ``,
-      `  ${TEAM_STATUS_SCRIPT} "<one short, human line>"`,
-      ``,
-      `- ALWAYS run it as your FIRST action, before doing any work — say what you're about to do`,
-      `  (e.g. "Sure, let me dig into the parser and see what's breaking."). Sound like you, not a template.`,
-      `- ALWAYS run it again as your LAST action, before finishing — a one-line summary of what you did`,
-      `  or found. Even for a trivial task, post both lines.`,
-      `- You may drop an extra line at a meaningful milestone. Keep each to ONE sentence; your detailed`,
-      `  work stays in your session — this is just the chat.`,
-      `This is broadcast-only — it never hands off your turn or changes the routing.`,
-    ].join('\n');
-  }
   return [
     ...header,
     `# Talking to the team`,

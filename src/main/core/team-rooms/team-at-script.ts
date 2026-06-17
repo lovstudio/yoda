@@ -14,7 +14,7 @@ import { log } from '@main/lib/logger';
  * are still read live from `~/.yoda/hook-endpoint.json` (they change across app
  * restarts; the conversation id does not).
  */
-function buildScripts(ptyId: string): Record<'team-at' | 'team-status' | 'team-verdict', string> {
+function buildScripts(ptyId: string): Record<'team-at' | 'team-status', string> {
   // Common prologue: resolve the live endpoint and bake this member's ptyId.
   const head = (name: string) => `#!/usr/bin/env bash
 set -euo pipefail
@@ -60,17 +60,6 @@ body="{\\"message\\": $esc}"
 ${post('team-status', 'team-status')}
 echo "team-status: shared"
 `,
-    'team-verdict': `${head('team-verdict')}
-# Usage: team-verdict <pass|fail> <message...>
-if [ "$#" -lt 1 ]; then echo "usage: team-verdict <pass|fail> <message>" >&2; exit 2; fi
-verdict="$1"; shift
-if [ "$verdict" != "pass" ] && [ "$verdict" != "fail" ]; then echo "team-verdict: first arg must be 'pass' or 'fail'" >&2; exit 2; fi
-msg="$*"
-${escMsg}
-body="{\\"verdict\\": \\"$verdict\\", \\"message\\": $esc}"
-${post('team-verdict', 'team-verdict')}
-echo "team-verdict: $verdict recorded"
-`,
   };
 }
 
@@ -95,7 +84,6 @@ export async function installTeamScripts(
     await Promise.all([
       writeFile(join(dir, 'team-at'), scripts['team-at'], { mode: 0o755 }),
       writeFile(join(dir, 'team-status'), scripts['team-status'], { mode: 0o755 }),
-      writeFile(join(dir, 'team-verdict'), scripts['team-verdict'], { mode: 0o755 }),
     ]);
   } catch (error) {
     log.warn('installTeamScripts: failed', { projectId, taskId, error: String(error) });
