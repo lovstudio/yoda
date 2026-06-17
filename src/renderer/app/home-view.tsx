@@ -284,6 +284,13 @@ function insertPromptText(
   };
 }
 
+// execCommand('insertText') with a large payload locks the renderer: Chromium
+// builds the undo transaction roughly per-character, so inserting a multi-KB
+// prompt template freezes the main thread. Above this size we skip the native
+// pipeline and assign directly — losing fine-grained undo for that one edit is
+// an acceptable trade for not hanging.
+const NATIVE_EDIT_MAX_INSERT = 2000;
+
 // Applies a programmatic edit through the native editing pipeline
 // (execCommand) so the browser undo stack (Ctrl/Cmd+Z) keeps working.
 // Direct value assignment on a controlled textarea would wipe it.
@@ -308,12 +315,13 @@ function applyNativeTextareaEdit(
     textarea.focus();
     textarea.setSelectionRange(prefix, current.length - suffix);
     const applied =
-      inserted.length > 0
+      inserted.length <= NATIVE_EDIT_MAX_INSERT &&
+      (inserted.length > 0
         ? document.execCommand('insertText', false, inserted)
-        : document.execCommand('delete');
+        : document.execCommand('delete'));
     if (!applied || textarea.value !== nextValue) {
-      // Fallback: assign via the native setter so React's value tracker
-      // still sees the change and onChange fires.
+      // Fallback (also the large-insert path): assign via the native setter so
+      // React's value tracker still sees the change and onChange fires.
       const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
       setValue?.call(textarea, nextValue);
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
