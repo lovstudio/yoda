@@ -9,9 +9,9 @@ const collapseWhitespace = (text: string): string => text.replace(/\s+/g, ' ').t
 /**
  * Formats a markdown note for staging in a session's input box.
  *
- * - A leading newline (LF, the terminal's "insert line" — never CR, which would
- *   submit) puts each note on its own line, so consecutive notes stack cleanly
- *   and stay separate from whatever the user typed themselves.
+ * - A trailing newline (LF, the terminal's "insert line" — never CR, which would
+ *   submit) ends each note on its own fresh line, so consecutive notes stack
+ *   without a leading blank line and the cursor is ready for the next one.
  * - The `[文档批注]` tag plus a delimited quote let the agent tell an annotation
  *   apart from the user's own prompt instead of blurring them together.
  */
@@ -21,7 +21,7 @@ export function formatNoteForInput(note: MarkdownNoteDraft): string {
     `原文「${collapseWhitespace(note.quote)}」`,
     `备注：${collapseWhitespace(note.comment)}`,
   ].filter(Boolean);
-  return `\n[文档批注] ${parts.join(' ｜ ')}`;
+  return `[文档批注] ${parts.join(' ｜ ')}\n`;
 }
 
 /** Stages a markdown note into the given PTY session's input line. */
