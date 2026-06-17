@@ -22,6 +22,9 @@ interface AgentSlotSelectorProps {
   onSelectAgent: (agentId: string) => void;
   onCreateAgent: () => void;
   onManageAgents: () => void;
+  /** Optional quiet line above the agent name inside the trigger (e.g. the
+   *  slot's role), letting the caller fold a label into the picker row. */
+  eyebrow?: ReactNode;
   className?: string;
 }
 
@@ -57,6 +60,7 @@ export function AgentSlotSelector({
   onSelectAgent,
   onCreateAgent,
   onManageAgents,
+  eyebrow,
   className,
 }: AgentSlotSelectorProps) {
   const { t } = useTranslation();
@@ -95,8 +99,9 @@ export function AgentSlotSelector({
             {selectedAgent ? (
               <>
                 <AgentAvatar name={selectedAgent.name} className="size-9 text-sm" />
-                <span className="flex-1 truncate text-left text-[13px] font-medium">
-                  {selectedAgent.name}
+                <span className="flex min-w-0 flex-1 flex-col text-left leading-tight">
+                  {eyebrow}
+                  <span className="truncate text-[13px] font-medium">{selectedAgent.name}</span>
                 </span>
               </>
             ) : (
@@ -104,8 +109,9 @@ export function AgentSlotSelector({
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-border-1 text-foreground-passive">
                   <Plus className="size-4" />
                 </span>
-                <span className="flex-1 truncate text-left text-foreground-muted">
-                  {t('home.slotPickAgent')}
+                <span className="flex min-w-0 flex-1 flex-col text-left leading-tight">
+                  {eyebrow}
+                  <span className="truncate text-foreground-muted">{t('home.slotPickAgent')}</span>
                 </span>
               </>
             )}
