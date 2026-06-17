@@ -19,7 +19,10 @@
     "openInTerminal": "Open in terminal",
     "copyRelativePath": "Copy relative path",
     "copyAbsolutePath": "Copy absolute path",
+    "copyFileContent": "Copy file content",
     "pathCopied": "Path copied",
+    "contentCopied": "File content copied",
+    "contentCopiedTruncated": "File content copied (truncated — file too large)",
     "openFailed": "Open failed",
     "currentLabel": "{{label}} (current)"
   },

@@ -32,7 +32,10 @@
     "openInTerminal": "在终端中打开",
     "copyRelativePath": "复制相对路径",
     "copyAbsolutePath": "复制绝对路径",
+    "copyFileContent": "复制全文",
     "pathCopied": "路径已复制",
+    "contentCopied": "全文已复制",
+    "contentCopiedTruncated": "全文已复制（文件过大，已截断）",
     "openFailed": "打开失败",
     "currentLabel": "{{label}}（当前）"
   },
