@@ -332,10 +332,10 @@
       "signOutConfirmLabel": "Sign Out"
     },
     "agentsTab": {
-      "description": "Manage runtimes and model configurations.",
-      "cliAgents": "Runtimes",
-      "runtimeDetail": "Runtime details",
-      "agentInstalled": "Runtime installed",
+      "description": "Manage clients and model configurations.",
+      "cliAgents": "Clients",
+      "runtimeDetail": "Client details",
+      "agentInstalled": "Client installed",
       "agentInstalledDescription": "{{name}} is ready.",
       "installFailed": "Install failed",
       "detected": "Detected",
@@ -345,14 +345,14 @@
       "rescan": "Rescan"
     },
     "defaultRuntime": {
-      "title": "Default runtime",
-      "description": "The runtime used by default when starting a new session."
+      "title": "Default client",
+      "description": "The client used by default when starting a new session."
     },
     "promptsTab": {
-      "description": "Atomic operating principles. Enabled principles are appended after the runtime's system prompt when a session starts."
+      "description": "Atomic operating principles. Enabled principles are appended after the client's system prompt when a session starts."
     },
     "prompts": {
-      "description": "Each principle is one atomic rule. Toggle a principle on to embed it after the runtime's system prompt; enabled principles also show in the session panel's Persona section.",
+      "description": "Each principle is one atomic rule. Toggle a principle on to embed it after the client's system prompt; enabled principles also show in the session panel's Persona section.",
       "addPrinciple": "Add principle",
       "namePlaceholder": "Name",
       "textPlaceholder": "Principle text appended after the system prompt",
@@ -533,11 +533,11 @@
       "namingConfigTitle": "Naming",
       "namingConfigDescription": "Agent, target language, and the context sources used to name sessions and tasks.",
       "summaryConfigTitle": "Session summary",
-      "summaryConfigDescription": "The agent used to generate session summaries. Runs on its own runtime and model, independent of each session's runtime.",
+      "summaryConfigDescription": "The agent used to generate session summaries. Runs on its own client and model, independent of each session's runtime.",
       "namingAgentLabel": "Naming agent",
-      "namingAgentHint": "The agent that names tasks. It binds both the runtime and model, since naming must run inside an agent environment.",
+      "namingAgentHint": "The agent that names tasks. It binds both the client and model, since naming must run inside an agent environment.",
       "summaryAgentLabel": "Summary agent",
-      "summaryAgentHint": "The agent that generates session summaries. It runs entirely on its own runtime and model, so summaries keep working even if the session's own runtime is unavailable.",
+      "summaryAgentHint": "The agent that generates session summaries. It runs entirely on its own client and model, so summaries keep working even if the session's own runtime is unavailable.",
       "summaryLanguageLabel": "Summary language",
       "summaryContext": {
         "recentLabel": "Recent summary inputs",
@@ -602,8 +602,8 @@
       "noFontsFound": "No fonts found."
     },
     "defaultAgent": {
-      "title": "Default runtime",
-      "description": "The runtime that will be selected by default when creating a new task."
+      "title": "Default client",
+      "description": "The client that will be selected by default when creating a new task."
     },
     "resetToDefaultWithLabel": "Reset to default: {{label}}",
     "serverUnavailable": "{{product}} server is currently unavailable. Please try again later.",
@@ -729,7 +729,7 @@
     "promptPrinciplesLabel": "Prompt principles",
     "promptPrincipleUnnamed": "Untitled principle",
     "instructionFilesLabel": "Instruction files",
-    "instructionFilesHint": "The runtime's built-in system prompt is not editable. The global CLAUDE.md acts as your user-level system prompt; the project's CLAUDE.md / AGENTS.md are the project-level prompts. Click to expand, hover a row to open and edit.",
+    "instructionFilesHint": "The client's built-in system prompt is not editable. The global CLAUDE.md acts as your user-level system prompt; the project's CLAUDE.md / AGENTS.md are the project-level prompts. Click to expand, hover a row to open and edit.",
     "noInstructionFiles": "No instruction files found",
     "manage": "Manage",
     "imageTokenLabel": "Image {{index}}",
@@ -915,7 +915,7 @@
       "renameFailed": "Failed to rename session",
       "status": "Status",
       "agentStatusLabel": "Agent state",
-      "runtimeRunning": "Runtime",
+      "runtimeRunning": "Client",
       "ptyStatusLabel": "PTY",
       "ptySessionId": "PTY session ID",
       "workingDirectory": "Working directory",
@@ -975,7 +975,7 @@
         "autoApprove": "Whether agent tool calls are approved automatically, without per-call confirmation.",
         "resumeCommand": "CLI command you can run in an external terminal to resume this session manually.",
         "agentStatus": "Agent working state inferred from session output: idle, working, awaiting input, etc.",
-        "runtimeRunning": "Whether the runtime CLI process is currently running.",
+        "runtimeRunning": "Whether the client CLI process is currently running.",
         "tmux": "Whether the session is hosted in tmux. If enabled, the process survives window close and can be reattached.",
         "ptyStatus": "Connection state between the UI and the main-process pseudo terminal (PTY); affects live terminal output.",
         "ptySessionId": "Internal identifier of this PTY connection, for debugging only; changes after app restart.",
@@ -990,7 +990,7 @@
     "hooks": {
       "title": "Hooks",
       "unsupported": "Hooks not supported",
-      "unsupportedDescription": "This runtime does not expose configurable hooks.",
+      "unsupportedDescription": "This client does not expose configurable hooks.",
       "none": "No hooks configured",
       "noneDescription": "No hooks were found in the active settings for this session.",
       "sourceEmpty": "No hooks at this layer",
@@ -1195,7 +1195,7 @@
       "emptyHint": "Select or create a conversation.",
       "noActiveConversation": "No active conversation",
       "claudeOnly": "Available for Claude conversations only.",
-      "contextUnsupported": "Context inspection is not available for this runtime yet.",
+      "contextUnsupported": "Context inspection is not available for this client yet.",
       "context": "Context",
       "renameContext": "Rename context",
       "renameContextHint": "Context sent to the naming model",
@@ -1204,7 +1204,7 @@
       "regenerateName": "Regenerate",
       "renameContextRegenerateFailed": "Failed to regenerate task name",
       "truncated": "truncated",
-      "provider": "Runtime",
+      "provider": "Client",
       "model": "Model",
       "approvalMode": "Approval",
       "sandboxPolicy": "Sandbox",
@@ -1305,7 +1305,7 @@
       "copyYodaLink": "Copy Yoda link",
       "yodaLinkCopied": "Yoda link copied",
       "taskInfo": {
-        "provider": "Runtime",
+        "provider": "Client",
         "project": "Project",
         "projectPath": "Project path",
         "task": "Task",
@@ -1433,7 +1433,7 @@
     "title": "MCP",
     "subtitle": "Connect your agents with external data sources and tools",
     "searchPlaceholder": "Search servers…",
-    "refreshAria": "Refresh runtimes",
+    "refreshAria": "Refresh clients",
     "customMcp": "Custom MCP",
     "added": "Added",
     "recommended": "Recommended",
@@ -1717,7 +1717,7 @@
   },
   "agentManager": {
     "title": "Agents",
-    "subtitle": "Build reusable agents from a system prompt, skills and a preferred runtime.",
+    "subtitle": "Build reusable agents from a system prompt, skills and a preferred client.",
     "newAgent": "New agent",
     "editAgent": "Edit agent",
     "searchPlaceholder": "Search agents",
@@ -1727,15 +1727,15 @@
     "noDescription": "No description",
     "noDescriptionShort": "No description",
     "duplicate": "Duplicate",
-    "anyRuntime": "Any runtime",
+    "anyRuntime": "Any client",
     "skillsCount": "{{count}} skills",
     "icon": "Icon",
     "namePlaceholder": "e.g. Spec Writer",
     "descPlaceholder": "What is this agent for?",
-    "preferredRuntime": "Preferred runtime",
+    "preferredRuntime": "Preferred client",
     "preferredRuntimeHint": "Used when available; otherwise falls back to the mode default.",
     "model": "Model",
-    "modelPlaceholder": "Runtime default",
+    "modelPlaceholder": "Client default",
     "modelDefault": "Default model",
     "systemPrompt": "System prompt",
     "systemPromptPlaceholder": "Describe this agent's role, constraints and how it works.",
@@ -1795,8 +1795,8 @@
     }
   },
   "agents": {
-    "title": "Runtime",
-    "subtitle": "Manage installed CLI runtimes — detection status and versions",
+    "title": "Client",
+    "subtitle": "Manage installed CLI clients — detection status and versions",
     "detected": "Detected",
     "notDetected": "Not detected",
     "notFound": "Agent not found",
@@ -1805,7 +1805,7 @@
     "unset": "unset",
     "tabs": {
       "account": "Auth",
-      "maas": "Runtime",
+      "maas": "Client",
       "models": "Models",
       "memory": "Memory",
       "hooks": "Hooks",
@@ -1813,9 +1813,9 @@
       "settings": "Settings"
     },
     "maas": {
-      "title": "Runtime metadata",
+      "title": "Client metadata",
       "description": "Static CLI metadata Yoda uses when launching this agent.",
-      "placeholder": "Runtime capabilities and launch details for {{name}}.",
+      "placeholder": "Client capabilities and launch details for {{name}}.",
       "cliFlags": "CLI flags",
       "cliFlagsDescription": "Flags Yoda uses to launch this agent",
       "cli": "CLI command",
@@ -1835,7 +1835,7 @@
       "officialSubscription": "Official subscription",
       "officialSubscriptionDescription": "{{name}} keeps official login and subscription credentials in its own CLI or local config.",
       "officialApi": "Official API",
-      "officialApiDescription": "API keys and base URLs forwarded to {{name}} when Yoda launches runtime sessions.",
+      "officialApiDescription": "API keys and base URLs forwarded to {{name}} when Yoda launches client sessions.",
       "maasSource": "Yoda MaaS",
       "maasDescription": "Use configured model platforms for shared routing, observability, and billing when available.",
       "manageMaas": "Manage MaaS",
@@ -1863,7 +1863,7 @@
       "testOk": "Connection OK",
       "testFailed": "Connection failed",
       "loadingAccountStatus": "Loading account status...",
-      "noKnownApiEnvVars": "No known API environment variables are registered for this runtime.",
+      "noKnownApiEnvVars": "No known API environment variables are registered for this client.",
       "envSourceCustom": "Custom",
       "envSourceInherited": "System env",
       "envSourceUnset": "Not set",
@@ -1975,8 +1975,8 @@
       "chapterCount": "{{count}} chapters"
     },
     "matrix": {
-      "title": "Runtime capability matrix",
-      "desc": "Per-runtime support status for each capability. Click a row for the research notes behind it.",
+      "title": "Client capability matrix",
+      "desc": "Per-client support status for each capability. Click a row for the research notes behind it.",
       "featureColumn": "Capability",
       "upcoming": "Up next"
     },
@@ -1989,7 +1989,7 @@
       "na": "Not applicable"
     },
     "categories": {
-      "lifecycle": "Runtime lifecycle",
+      "lifecycle": "Client lifecycle",
       "session": "Session",
       "context": "Context",
       "extensibility": "Extensibility",
@@ -2007,15 +2007,15 @@
       },
       "install": {
         "name": "Installation",
-        "desc": "One-click install of the runtime CLI with the official install channel."
+        "desc": "One-click install of the client CLI with the official install channel."
       },
       "launch": {
         "name": "Launch",
-        "desc": "Spawn and orchestrate runtime sessions from Yoda with the right flags and environment."
+        "desc": "Spawn and orchestrate client sessions from Yoda with the right flags and environment."
       },
       "doctor": {
         "name": "Config self-diagnosis",
-        "desc": "Health-check runtime configuration: detect misconfiguration and suggest fixes."
+        "desc": "Health-check client configuration: detect misconfiguration and suggest fixes."
       },
       "sessionResume": {
         "name": "Resume / fork / history",
@@ -2139,7 +2139,7 @@
       },
       "sessionAutoRename": {
         "name": "Session auto-rename",
-        "desc": "Generate meaningful session titles automatically when the runtime can't — or won't — do it well."
+        "desc": "Generate meaningful session titles automatically when the client can't — or won't — do it well."
       },
       "sessionStateSync": {
         "name": "Session state sync",
@@ -2147,15 +2147,15 @@
       },
       "authSync": {
         "name": "Auth sync & management",
-        "desc": "Detect subscription / API-key auth per runtime and manage credentials in one place."
+        "desc": "Detect subscription / API-key auth per client and manage credentials in one place."
       },
       "usageSync": {
         "name": "Usage sync & management",
-        "desc": "Aggregate per-account usage and cost across runtimes."
+        "desc": "Aggregate per-account usage and cost across clients."
       },
       "systemPrompt": {
         "name": "System prompt",
-        "desc": "Detect, validate, debug and manage the runtime's system prompt configuration."
+        "desc": "Detect, validate, debug and manage the client's system prompt configuration."
       },
       "projectPrompt": {
         "name": "Project prompt",
@@ -2163,7 +2163,7 @@
       },
       "skills": {
         "name": "Skills",
-        "desc": "Detect, validate, debug and manage skills across runtimes."
+        "desc": "Detect, validate, debug and manage skills across clients."
       },
       "mcp": {
         "name": "MCP",
@@ -2214,7 +2214,7 @@
     },
     "cta": {
       "title": "Shape the roadmap",
-      "desc": "Want a runtime or capability prioritized? Tell us — feedback directly drives the order of this list.",
+      "desc": "Want a client or capability prioritized? Tell us — feedback directly drives the order of this list.",
       "button": "Give feedback"
     }
   },
@@ -2322,21 +2322,21 @@
     "byProject": "By project",
     "byModel": "By model",
     "modelUnknown": "Unknown model",
-    "byRuntime": "By runtime",
+    "byRuntime": "By client",
     "bySource": "By source",
     "sessionCount": "{{count}} sessions",
     "sourceUnknown": "Untracked",
     "topTasks": "Top tasks by tokens",
     "caliber": {
       "tasks": "How it's counted: tasks with a non-null archive date (archiving is the completion act). The sub-line is all tasks ever created.",
-      "tokens": "How it's counted: parsed from local Claude / Codex session transcripts, including subagent transcripts and any auxiliary directories configured in project settings. Total = input + output + cache read + cache write. Other runtimes have no transcript reader and count as zero.",
+      "tokens": "How it's counted: parsed from local Claude / Codex session transcripts, including subagent transcripts and any auxiliary directories configured in project settings. Total = input + output + cache read + cache write. Other clients have no transcript reader and count as zero.",
       "lines": "How it's counted: per task = committed diff vs source branch (merge-base) + uncommitted working-tree changes. Live for active tasks; archived tasks use their last snapshot (tasks archived before this feature shipped have none and count as zero).",
       "activeDays": "How it's counted: local calendar days with any token usage in session transcripts.",
       "heatmap": "How it's counted: each session's tokens are bucketed into the local date they were consumed. Color levels are quantiles (25/50/75) of non-zero days.",
       "byProject": "How it's counted: each session is attributed to its task's project; untracked auxiliary-directory sessions go to the project that configured the path (sessions tracked by another project stay there — the global total never double-counts).",
       "byModel": "How it's counted: each transcript row is attributed to its provider-reported model id (Claude: message.model; Codex: the active turn_context model). Rows without one count as unknown.",
-      "byRuntime": "How it's counted: grouped by the runtime that ran each session; only sessions with parseable transcripts are included.",
-      "bySource": "How it's counted: the account mode recorded when each session was spawned. Sessions from before tracking landed are attributed to the runtime's current setting (estimate).",
+      "byRuntime": "How it's counted: grouped by the client that ran each session; only sessions with parseable transcripts are included.",
+      "bySource": "How it's counted: the account mode recorded when each session was spawned. Sessions from before tracking landed are attributed to the client's current setting (estimate).",
       "topTasks": "How it's counted: sum of all session tokens per task, top 10."
     }
   },
@@ -2354,7 +2354,7 @@
       "status": "Status",
       "purpose": "Task",
       "mode": "Mode",
-      "runtime": "Runtime",
+      "runtime": "Client",
       "started": "Started",
       "duration": "Duration"
     },
@@ -2988,7 +2988,7 @@
       "openProject": "Open project",
       "openFailed": "Open failed",
       "memoryTitle": "Memory & prompts",
-      "memoryEmpty": "No memory file yet. Create {{path}} to give this runtime project instructions.",
+      "memoryEmpty": "No memory file yet. Create {{path}} to give this client project instructions.",
       "skillsTitle": "Skills",
       "skillsEmpty": "No skills installed. Add SKILL.md folders under {{path}}.",
       "commandsTitle": "Slash commands",
