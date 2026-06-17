@@ -50,7 +50,7 @@ import {
   BUILTIN_STARTUP_TEAM_ID,
   type AgentTeam,
 } from '@shared/agent-team';
-import type { Agent } from '@shared/agents';
+import { agentToDraft, type Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import type { ClaudeMemoryFile } from '@shared/conversations';
 import type { Branch } from '@shared/git';
@@ -75,6 +75,7 @@ import {
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { useSkills } from '@renderer/features/skills/components/useSkills';
 import { recordSkillInvocation } from '@renderer/features/skills/skill-usage-stats';
 import { ContextItem, memoryFileLabel } from '@renderer/features/tasks/components/context-item';
 import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
@@ -3782,8 +3783,8 @@ function ModeConfigurationPanel({
   });
 
   return (
-    // Slots stack as single-line rows so the panel stays compact regardless of
-    // host width (composer popover, settings modal).
+    // Slots stack as Agent cards (identity + client + model + skills) so every
+    // run mode — including the multi-agent team — shows the same rich card.
     <div className={cn('mt-3 border-t border-border/60 pt-3', className)}>
       {mode === 'normal' && (
         <div className="mt-2 flex flex-col gap-1.5">
@@ -3931,8 +3932,10 @@ function Agent({
   selectedAgentId,
   onSelectAgent,
 }: AgentProps) {
+  const { t } = useTranslation();
   const { navigate } = useNavigate();
   const showAgentModal = useShowModal('agentEditModal');
+  const { installedSkills } = useSkills();
 
   const selectedAgent = selectedAgentId
     ? (agents.find((a) => a.id === selectedAgentId) ?? null)
@@ -3941,33 +3944,114 @@ function Agent({
   // preferred runtime. Editing it here sets the per-slot override (loose
   // coupling — it does not mutate the Agent).
   const runtime = value ?? selectedAgent?.preferredRuntime ?? null;
+  const skillNames = selectedAgent
+    ? selectedAgent.enabledSkillIds.map(
+        (id) => installedSkills.find((s) => s.id === id)?.displayName ?? id
+      )
+    : [];
+  const editAgent = () =>
+    selectedAgent && showAgentModal({ agent: selectedAgent, onSuccess: () => undefined });
 
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-md border border-border/70 bg-background-1 py-1 pl-2 pr-1">
-      <span title={label} className="flex w-28 shrink-0 items-center gap-1.5 text-foreground-muted">
-        <Icon className="size-3.5 shrink-0" />
-        <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wide">
-          {label}
+    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 bg-background-1 p-2">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span
+          title={label}
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-foreground-muted"
+        >
+          <Icon className="size-3.5 shrink-0" />
+          <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wide">
+            {label}
+          </span>
         </span>
-      </span>
+        {selectedAgent && (
+          <button
+            type="button"
+            onClick={editAgent}
+            aria-label={t('agentManager.editAgent')}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+          >
+            <Settings2 className="size-3.5" />
+          </button>
+        )}
+        {action}
+      </div>
+
       <AgentSlotSelector
         selectedAgent={selectedAgent}
         agents={agents}
         onSelectAgent={onSelectAgent}
         onCreateAgent={() => showAgentModal({ onSuccess: (created) => onSelectAgent(created.id) })}
         onManageAgents={() => navigate('agentManager')}
-        className="h-8 min-w-0 flex-1 border-transparent bg-background-2/40 hover:bg-background-2"
+        className="h-9 min-w-0 border-border bg-background-2/40 hover:bg-background-2"
       />
+
       {selectedAgent && (
-        <AgentSelector
-          value={runtime}
-          onChange={onChange}
-          connectionId={connectionId}
-          className="h-8 w-40 shrink-0 border-transparent bg-background-2/40 text-sm transition-colors hover:bg-background-2"
-        />
+        <>
+          {selectedAgent.description && (
+            <p className="line-clamp-2 px-0.5 text-xs leading-relaxed text-foreground-muted">
+              {selectedAgent.description}
+            </p>
+          )}
+
+          <div className="flex min-w-0 items-center gap-2">
+            <AgentSelector
+              value={runtime}
+              onChange={onChange}
+              connectionId={connectionId}
+              className="h-8 min-w-0 flex-1 border-border bg-background-2/40 text-sm transition-colors hover:bg-background-2"
+            />
+            <SlotModelInput key={selectedAgent.id} agent={selectedAgent} />
+          </div>
+
+          {skillNames.length > 0 && (
+            <div className="flex flex-wrap gap-1 px-0.5">
+              {skillNames.map((name, index) => (
+                <span
+                  key={`${name}-${index}`}
+                  className="max-w-40 truncate rounded-sm border border-border bg-background-2/40 px-1.5 py-0.5 text-[11px] text-foreground-muted"
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
+          )}
+        </>
       )}
-      {action}
     </div>
+  );
+}
+
+/**
+ * Inline model field for a slot's Agent. Edits the Agent's `model` (the same
+ * field the Agent editor writes), persisted on blur/Enter. Empty = runtime
+ * default.
+ */
+function SlotModelInput({ agent }: { agent: Agent }) {
+  const { t } = useTranslation();
+  const { update } = useAgents();
+  // Seeded once; the parent remounts this via key={agent.id} when the slot's
+  // Agent changes, so local edits never get clobbered mid-typing.
+  const [value, setValue] = useState(agent.model ?? '');
+
+  const commit = () => {
+    const next = value.trim() || null;
+    if (next === (agent.model ?? null)) return;
+    void update({ id: agent.id, draft: { ...agentToDraft(agent), model: next } });
+  };
+
+  return (
+    <input
+      value={value}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur();
+      }}
+      placeholder={t('agentManager.modelPlaceholder')}
+      title={t('agentManager.model')}
+      className="h-8 w-32 shrink-0 rounded-md border border-border bg-background-2/40 px-2 text-xs text-foreground outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-ring"
+    />
   );
 }
 
