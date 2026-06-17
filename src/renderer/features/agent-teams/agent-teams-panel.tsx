@@ -1,15 +1,140 @@
 import { Copy, Crown, Plus, Trash2, Users, X } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   isBuiltinTeamId,
   type AgentTeam,
   type AgentTeamMember,
   type TeamRouting,
 } from '@shared/agent-team';
+import type { Agent } from '@shared/agents';
+import { BUILTIN_AGENT_PRESETS } from '@shared/builtin-agents';
 import { getRuntime, RUNTIMES } from '@shared/runtime-registry';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
+import AgentLogo from '@renderer/lib/components/agent-logo';
+import { AgentInfoHover } from '@renderer/lib/components/agent-slot/agent-info-card';
+import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
 import { useAgentTeams } from './use-agent-teams';
+
+/**
+ * Resolve a team member to a full Agent for the card UI — a user Agent by id,
+ * a built-in preset by `builtin:*` key, or an inline-prompt fallback. The
+ * member's runtime (the slot override) wins over the source Agent's preferred
+ * runtime, so the card reflects what actually runs.
+ */
+function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | null {
+  let base: Pick<
+    Agent,
+    'name' | 'description' | 'icon' | 'systemPrompt' | 'enabledSkillIds' | 'model'
+  > | null = null;
+  if (member.agentRef) {
+    const user = agents.find((a) => a.id === member.agentRef);
+    if (user) base = user;
+    else {
+      const preset = BUILTIN_AGENT_PRESETS.find((p) => p.key === member.agentRef);
+      if (preset)
+        base = {
+          name: preset.name,
+          description: preset.description,
+          icon: preset.icon,
+          systemPrompt: preset.systemPrompt,
+          enabledSkillIds: [],
+          model: null,
+        };
+    }
+  }
+  if (!base && member.systemPrompt) {
+    base = {
+      name: member.displayName,
+      description: '',
+      icon: '🤖',
+      systemPrompt: member.systemPrompt,
+      enabledSkillIds: [],
+      model: null,
+    };
+  }
+  if (!base) return null;
+  return {
+    id: member.agentRef ?? member.handle,
+    slug: member.handle,
+    name: base.name,
+    description: base.description,
+    icon: base.icon,
+    systemPrompt: base.systemPrompt,
+    enabledSkillIds: base.enabledSkillIds,
+    preferredRuntime: member.runtime,
+    model: base.model,
+    source: 'local',
+    createdAt: '',
+    updatedAt: '',
+  };
+}
+
+/**
+ * Card row for one team member, shared by the read-only roster and the editor.
+ * Shows the resolved Agent's identity + (optional) runtime + skills, with the
+ * full Agent detail on hover. `trailing` carries editor controls.
+ */
+function MemberCard({
+  member,
+  agents,
+  showRuntime = true,
+  leaderBadge = true,
+  trailing,
+}: {
+  member: AgentTeamMember;
+  agents: Agent[];
+  showRuntime?: boolean;
+  leaderBadge?: boolean;
+  trailing?: ReactNode;
+}) {
+  const resolved = resolveMemberAgent(member, agents);
+  const runtimeConfig = agentConfig[member.runtime];
+  const runtimeName = getRuntime(member.runtime)?.name ?? member.runtime;
+  const skillCount = resolved?.enabledSkillIds.length ?? 0;
+
+  const row = (
+    <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background-2/30 px-2 py-1.5">
+      <span className="flex size-5 shrink-0 items-center justify-center text-[15px] leading-none">
+        {resolved?.icon ?? '🤖'}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="min-w-0 truncate text-sm text-foreground">{member.displayName}</span>
+          {leaderBadge && member.role === 'leader' && (
+            <span className="flex shrink-0 items-center gap-1 rounded bg-primary/15 px-1.5 py-px text-[10px] text-primary">
+              <Crown className="size-3" /> leader
+            </span>
+          )}
+        </div>
+        {resolved?.description && (
+          <span className="truncate text-xs text-foreground-muted">{resolved.description}</span>
+        )}
+        {showRuntime && (
+          <span className="flex items-center gap-1.5 text-[11px] text-foreground-muted">
+            <AgentLogo
+              logo={runtimeConfig.logo}
+              alt={runtimeConfig.alt}
+              isSvg={runtimeConfig.isSvg}
+              invertInDark={runtimeConfig.invertInDark}
+              className="h-3 w-3 shrink-0 rounded-sm"
+            />
+            <span className="truncate">{runtimeName}</span>
+            {skillCount > 0 && (
+              <>
+                <span className="text-foreground-passive">·</span>
+                <span className="shrink-0">{skillCount} skills</span>
+              </>
+            )}
+          </span>
+        )}
+      </div>
+      {trailing}
+    </div>
+  );
+
+  return resolved ? <AgentInfoHover agent={resolved}>{row}</AgentInfoHover> : row;
+}
 
 type Editing = {
   name: string;
@@ -153,7 +278,7 @@ export function AgentTeamsMainPanel() {
               )}
             </div>
             <p className="mb-2 text-xs text-foreground-muted">{ROUTING_LABELS[selected.routing]}</p>
-            <MemberList members={selected.members} />
+            <MemberList members={selected.members} agents={agents} />
             {isBuiltin && (
               <p className="mt-3 text-xs text-foreground-muted">
                 Built-in teams are read-only. Duplicate to customize members & runtimes.
@@ -170,24 +295,16 @@ export function AgentTeamsMainPanel() {
   );
 }
 
-function MemberList({ members }: { members: AgentTeamMember[] }) {
+function MemberList({ members, agents }: { members: AgentTeamMember[]; agents: Agent[] }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-background-1 p-2">
+    <div className="flex flex-col gap-1.5">
       {members.map((m) => (
-        <div key={m.handle} className="flex items-center gap-2 px-1.5 py-1.5 text-sm">
-          <span className="min-w-0 flex-1 truncate">{m.displayName}</span>
-          {m.role === 'leader' && (
-            <span className="flex items-center gap-1 rounded bg-primary/15 px-1.5 py-px text-[10px] text-primary">
-              <Crown className="size-3" /> leader
-            </span>
-          )}
-          <span className="font-mono text-[11px] text-foreground-muted">
-            {getRuntime(m.runtime)?.name ?? m.runtime}
-          </span>
-        </div>
+        <MemberCard key={m.handle} member={m} agents={agents} />
       ))}
       {members.length === 0 && (
-        <p className="px-2 py-3 text-center text-xs text-foreground-muted">No members yet.</p>
+        <p className="rounded-lg border border-border bg-background-1 px-2 py-3 text-center text-xs text-foreground-muted">
+          No members yet.
+        </p>
       )}
     </div>
   );
@@ -268,53 +385,61 @@ function TeamEditor({
           <span className="text-xs font-medium text-foreground-muted">
             Members — pick the leader (runs first, then hands off)
           </span>
-          <div className="flex flex-col gap-1 rounded-lg border border-border bg-background-1 p-2">
+          <div className="flex flex-col gap-1.5">
             {draft.members.map((m) => (
-              <div key={m.handle} className="flex items-center gap-2 px-1 py-1 text-sm">
-                <button
-                  type="button"
-                  onClick={() => setLeader(m.handle)}
-                  title="Make leader"
-                  className={cn(
-                    'flex size-6 items-center justify-center rounded-md border transition-colors',
-                    m.role === 'leader'
-                      ? 'border-primary bg-primary/15 text-primary'
-                      : 'border-border text-foreground-muted hover:text-foreground'
-                  )}
-                >
-                  <Crown className="size-3.5" />
-                </button>
-                <span className="min-w-0 flex-1 truncate">{m.displayName}</span>
-                <select
-                  value={m.runtime}
-                  onChange={(e) =>
-                    setMembers(
-                      draft.members.map((x) =>
-                        x.handle === m.handle
-                          ? { ...x, runtime: e.target.value as typeof x.runtime }
-                          : x
-                      )
-                    )
-                  }
-                  className="rounded-md border border-border bg-background-2 px-2 py-1 text-xs outline-none"
-                >
-                  {runtimeOptions.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setMembers(draft.members.filter((x) => x.handle !== m.handle))}
-                  className="flex size-6 items-center justify-center rounded-md text-foreground-muted hover:text-red-500"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </div>
+              <MemberCard
+                key={m.handle}
+                member={m}
+                agents={agents}
+                showRuntime={false}
+                leaderBadge={false}
+                trailing={
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setLeader(m.handle)}
+                      title="Make leader"
+                      className={cn(
+                        'flex size-6 items-center justify-center rounded-md border transition-colors',
+                        m.role === 'leader'
+                          ? 'border-primary bg-primary/15 text-primary'
+                          : 'border-border text-foreground-muted hover:text-foreground'
+                      )}
+                    >
+                      <Crown className="size-3.5" />
+                    </button>
+                    <select
+                      value={m.runtime}
+                      onChange={(e) =>
+                        setMembers(
+                          draft.members.map((x) =>
+                            x.handle === m.handle
+                              ? { ...x, runtime: e.target.value as typeof x.runtime }
+                              : x
+                          )
+                        )
+                      }
+                      className="rounded-md border border-border bg-background-2 px-2 py-1 text-xs outline-none"
+                    >
+                      {runtimeOptions.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setMembers(draft.members.filter((x) => x.handle !== m.handle))}
+                      className="flex size-6 items-center justify-center rounded-md text-foreground-muted hover:text-red-500"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                }
+              />
             ))}
             {draft.members.length === 0 && (
-              <p className="px-2 py-2 text-center text-xs text-foreground-muted">
+              <p className="rounded-lg border border-border bg-background-1 px-2 py-2 text-center text-xs text-foreground-muted">
                 Add agents from your library below.
               </p>
             )}
