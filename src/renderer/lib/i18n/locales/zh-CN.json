@@ -267,7 +267,7 @@
     },
     "needsReview": "需要审查",
     "expressMode": "一键建任务",
-    "expressModeDescription": "点击项目行的「+」时不再打开主页配置，而是立即创建任务并进入：自动生成任务名，从默认分支建任务分支，用上次使用的 Runtime 直接开启会话。Runtime 或默认分支尚未就绪时，仍会打开主页让你补全。",
+    "expressModeDescription": "点击项目行的「+」时不再打开主页配置，而是立即创建任务并进入：自动生成任务名，从默认分支建任务分支，用上次使用的客户端直接开启会话。客户端或默认分支尚未就绪时，仍会打开主页让你补全。",
     "toggleSubtasks": "展开/折叠子任务",
     "setParentFailed": "移动任务失败",
     "kanban": "看板"
@@ -277,7 +277,7 @@
     "tabs": {
       "general": "通用",
       "account": "账户",
-      "agents": "Runtime",
+      "agents": "客户端",
       "tasks": "任务",
       "sessions": "会话",
       "integrations": "集成",
@@ -332,10 +332,10 @@
       "signOutConfirmLabel": "退出登录"
     },
     "agentsTab": {
-      "description": "管理 CLI 运行环境（Runtime）与模型配置。",
-      "cliAgents": "Runtime",
-      "runtimeDetail": "Runtime 详情",
-      "agentInstalled": "Runtime 已安装",
+      "description": "管理 CLI 客户端与模型配置。",
+      "cliAgents": "客户端",
+      "runtimeDetail": "客户端详情",
+      "agentInstalled": "客户端已安装",
       "agentInstalledDescription": "{{name}} 已就绪。",
       "installFailed": "安装失败",
       "detected": "已检测到",
@@ -345,14 +345,14 @@
       "rescan": "重新探测"
     },
     "defaultRuntime": {
-      "title": "默认 Runtime",
-      "description": "新建会话时默认使用的 Runtime（CLI 运行环境）。"
+      "title": "默认客户端",
+      "description": "新建会话时默认使用的 CLI 客户端。"
     },
     "promptsTab": {
-      "description": "原子化的运行原则。勾选的原则会在会话启动时追加到 Runtime 的 system prompt 之后。"
+      "description": "原子化的运行原则。勾选的原则会在会话启动时追加到客户端的 system prompt 之后。"
     },
     "prompts": {
-      "description": "每条原则是一条原子化规则。开启后会嵌入到 Runtime 的 system prompt 之后，并显示在会话面板的人设章节中。",
+      "description": "每条原则是一条原子化规则。开启后会嵌入到客户端的 system prompt 之后，并显示在会话面板的人设章节中。",
       "addPrinciple": "添加原则",
       "namePlaceholder": "名称",
       "textPlaceholder": "追加到 system prompt 之后的原则内容",
@@ -533,11 +533,11 @@
       "namingConfigTitle": "命名",
       "namingConfigDescription": "用于命名会话与任务的 Agent、目标语言和上下文来源。",
       "summaryConfigTitle": "会话摘要",
-      "summaryConfigDescription": "用于生成会话摘要的 Agent。使用其自身的 Runtime 与模型运行，独立于各会话的运行时。",
+      "summaryConfigDescription": "用于生成会话摘要的 Agent。使用其自身的客户端与模型运行，独立于各会话的运行时。",
       "namingAgentLabel": "命名 Agent",
       "namingAgentHint": "负责命名任务的 Agent，同时绑定其运行时与模型——命名必须在 Agent 环境中执行。",
       "summaryAgentLabel": "摘要 Agent",
-      "summaryAgentHint": "负责生成会话摘要的 Agent，完全使用其自身的 Runtime 与模型运行；即使当前会话的运行时已不可用，摘要仍可正常生成。",
+      "summaryAgentHint": "负责生成会话摘要的 Agent，完全使用其自身的客户端与模型运行；即使当前会话的运行时已不可用，摘要仍可正常生成。",
       "summaryLanguageLabel": "摘要语言",
       "summaryContext": {
         "recentLabel": "近期摘要输入",
@@ -602,8 +602,8 @@
       "noFontsFound": "未找到字体。"
     },
     "defaultAgent": {
-      "title": "默认 Runtime",
-      "description": "创建新任务时默认选中的 Runtime。"
+      "title": "默认客户端",
+      "description": "创建新任务时默认选中的客户端。"
     },
     "resetToDefaultWithLabel": "重置为默认值：{{label}}",
     "serverUnavailable": "{{product}} 服务器当前不可用，请稍后重试。",
@@ -729,7 +729,7 @@
     "promptPrinciplesLabel": "Prompt 原则",
     "promptPrincipleUnnamed": "未命名原则",
     "instructionFilesLabel": "指令文件",
-    "instructionFilesHint": "Runtime 内置 system prompt 不可编辑。全局 CLAUDE.md 充当用户级 system prompt，项目 CLAUDE.md / AGENTS.md 是项目级 prompt。点击展开查看，悬停行尾可打开编辑。",
+    "instructionFilesHint": "客户端内置 system prompt 不可编辑。全局 CLAUDE.md 充当用户级 system prompt，项目 CLAUDE.md / AGENTS.md 是项目级 prompt。点击展开查看，悬停行尾可打开编辑。",
     "noInstructionFiles": "未找到指令文件",
     "manage": "管理",
     "imageTokenLabel": "图 {{index}}",
@@ -915,7 +915,7 @@
       "renameFailed": "重命名会话失败",
       "status": "状态",
       "agentStatusLabel": "Agent 状态",
-      "runtimeRunning": "Runtime",
+      "runtimeRunning": "客户端",
       "ptyStatusLabel": "PTY",
       "ptySessionId": "PTY 会话 ID",
       "workingDirectory": "工作目录",
@@ -975,7 +975,7 @@
         "autoApprove": "是否自动批准 agent 的工具调用与操作，无需逐次人工确认。",
         "resumeCommand": "在外部终端手动恢复此会话时可直接执行的 CLI 命令。",
         "agentStatus": "从会话输出推断的 agent 工作状态：空闲、工作中、等待输入等。",
-        "runtimeRunning": "Runtime CLI 进程当前是否在运行。",
+        "runtimeRunning": "客户端 CLI 进程当前是否在运行。",
         "tmux": "会话是否托管在 tmux 中。启用后即使窗口关闭，进程仍存活并可重连。",
         "ptyStatus": "界面与主进程伪终端（PTY）之间的连接状态，影响终端输出是否实时可见。",
         "ptySessionId": "本次 PTY 连接的内部标识，仅用于调试，应用重启后会变化。",
@@ -990,7 +990,7 @@
     "hooks": {
       "title": "Hooks",
       "unsupported": "不支持 Hooks",
-      "unsupportedDescription": "该 Runtime 未提供可配置的 hooks。",
+      "unsupportedDescription": "该客户端未提供可配置的 hooks。",
       "none": "未配置 Hooks",
       "noneDescription": "当前会话的生效配置中未找到任何 hooks。",
       "sourceEmpty": "该层级暂无 hook",
@@ -1195,7 +1195,7 @@
       "emptyHint": "选择或创建一个会话。",
       "noActiveConversation": "没有活动会话",
       "claudeOnly": "仅 Claude 会话可用。",
-      "contextUnsupported": "此 Runtime 暂不支持上下文检查。",
+      "contextUnsupported": "此客户端暂不支持上下文检查。",
       "context": "上下文",
       "renameContext": "重命名上下文",
       "renameContextHint": "发送给命名模型的上下文",
@@ -1204,7 +1204,7 @@
       "regenerateName": "重新生成",
       "renameContextRegenerateFailed": "重新生成任务名失败",
       "truncated": "已截断",
-      "provider": "Runtime",
+      "provider": "客户端",
       "model": "模型",
       "approvalMode": "审批",
       "sandboxPolicy": "沙箱",
@@ -1305,7 +1305,7 @@
       "copyYodaLink": "复制 Yoda 链接",
       "yodaLinkCopied": "Yoda 链接已复制",
       "taskInfo": {
-        "provider": "Runtime",
+        "provider": "客户端",
         "project": "项目",
         "projectPath": "项目路径",
         "task": "任务",
@@ -1433,7 +1433,7 @@
     "title": "MCP",
     "subtitle": "将代理连接到外部数据源与工具",
     "searchPlaceholder": "搜索 server…",
-    "refreshAria": "刷新 Runtime",
+    "refreshAria": "刷新客户端",
     "customMcp": "自定义 MCP",
     "added": "已添加",
     "recommended": "推荐",
@@ -1717,7 +1717,7 @@
   },
   "agentManager": {
     "title": "Agent",
-    "subtitle": "用 system prompt、skills 和首选 runtime 组合出可复用的 Agent。",
+    "subtitle": "用 system prompt、skills 和首选客户端组合出可复用的 Agent。",
     "newAgent": "新建 Agent",
     "editAgent": "编辑 Agent",
     "searchPlaceholder": "搜索 Agent",
