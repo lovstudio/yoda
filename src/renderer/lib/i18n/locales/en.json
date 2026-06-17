@@ -2474,7 +2474,13 @@
   },
   "markdown": {
     "imageNotFound": "[Image not found: {{src}}]",
-    "loadingImage": "Loading image..."
+    "loadingImage": "Loading image...",
+    "addNote": "Add note",
+    "notesTitle": "Notes",
+    "notePlaceholder": "Write your note…",
+    "saveNote": "Save",
+    "cancelNote": "Cancel",
+    "removeNote": "Remove note"
   },
   "auth": {
     "codeExpired": "Code expired",

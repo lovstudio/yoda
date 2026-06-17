@@ -1594,6 +1594,20 @@ const SessionOverviewContent = observer(function SessionOverviewContent({
     }
   };
 
+  // Stage a note into this session's input box (the running agent's prompt
+  // line) so the user can review and send it. We don't append a newline —
+  // staging, not submitting.
+  const syncNoteToInput = useCallback(
+    (note: { quote: string; comment: string }) => {
+      const sessionId = provisionedTask.conversations.conversations.get(conversation.id)?.session
+        .sessionId;
+      if (!sessionId) return;
+      const payload = `关于「${note.quote}」：${note.comment} `.replace(/\r?\n/g, ' ');
+      void rpc.pty.sendInput(sessionId, payload);
+    },
+    [conversation.id, provisionedTask]
+  );
+
   const text = result?.summary?.text ?? '';
   // Live stream takes precedence so the summary visibly types in.
   const displayText = streamingText.trim() || text;
@@ -1607,7 +1621,12 @@ const SessionOverviewContent = observer(function SessionOverviewContent({
   return (
     <div className="flex min-w-0 flex-col gap-1 px-2.5 py-2">
       <OverviewTitleInline conversation={conversation} />
-      <OverviewSummaryEditor text={text} displayText={displayText} onSave={saveManual} />
+      <OverviewSummaryEditor
+        text={text}
+        displayText={displayText}
+        onSave={saveManual}
+        onAddNote={syncNoteToInput}
+      />
       {generating || sourceKey || timestamp ? (
         <div className="flex min-w-0 items-center gap-1.5 px-1 text-[10px] text-foreground-passive">
           {generating ? (
@@ -1638,12 +1657,15 @@ function OverviewSummaryEditor({
   text,
   displayText,
   onSave,
+  onAddNote,
 }: {
   /** The saved summary text (what editing starts from). */
   text: string;
   /** What to render — live stream first, then the saved text. */
   displayText: string;
   onSave: (text: string) => Promise<void>;
+  /** Saves a note on a selected span into the session input. */
+  onAddNote?: (note: { quote: string; comment: string }) => void;
 }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
@@ -1698,6 +1720,7 @@ function OverviewSummaryEditor({
           content={displayText}
           variant="compact"
           className="text-xs text-foreground-muted"
+          onAddNote={onAddNote}
         />
       ) : (
         <span className="text-[11px] text-foreground-passive">

@@ -2474,7 +2474,13 @@
   },
   "markdown": {
     "imageNotFound": "[图片未找到：{{src}}]",
-    "loadingImage": "图片加载中…"
+    "loadingImage": "图片加载中…",
+    "addNote": "添加备注",
+    "notesTitle": "备注",
+    "notePlaceholder": "写下你的备注…",
+    "saveNote": "保存",
+    "cancelNote": "取消",
+    "removeNote": "删除备注"
   },
   "auth": {
     "codeExpired": "验证码已过期",

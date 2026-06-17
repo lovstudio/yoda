@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Markdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -10,6 +10,7 @@ import type { PluggableList } from 'unified';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { rpc } from '@renderer/lib/ipc';
+import { MarkdownAnnotations, type MarkdownNoteDraft } from '@renderer/lib/ui/markdown-annotations';
 import { cn } from '@renderer/utils/utils';
 
 type Variant = 'full' | 'compact';
@@ -24,6 +25,12 @@ interface MarkdownRendererProps {
    * render a "not found" placeholder. When omitted, local images are not resolved.
    */
   resolveImage?: (src: string) => Promise<string | null>;
+  /**
+   * When provided, enables select-text → add-note annotations over the rendered
+   * document. Called whenever the user saves a note. Consumers wire this to, e.g.,
+   * sync the note into the originating session's input box.
+   */
+  onAddNote?: (note: MarkdownNoteDraft) => void;
 }
 
 const FRONT_MATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
@@ -397,9 +404,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   variant = 'full',
   className,
   resolveImage,
+  onAddNote,
 }) => {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'ydark';
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const fullComponents = useFullComponents(isDark, resolveImage);
   const compactComponents = useCompactComponents();
@@ -413,11 +422,12 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   const { data: frontMatter, body } = useMemo(() => parseFrontMatter(content), [content]);
 
   return (
-    <div className={cn(className)}>
+    <div ref={containerRef} className={cn(className)}>
       {frontMatter && <FrontMatterBlock data={frontMatter} variant={variant} />}
       <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
         {body}
       </Markdown>
+      {onAddNote && <MarkdownAnnotations containerRef={containerRef} onAddNote={onAddNote} />}
     </div>
   );
 };
