@@ -189,21 +189,14 @@ export class UpdateStore {
     try {
       const res = await rpc.update.download();
       if (!res) {
-        runInAction(() => {
-          this.state = { status: 'error', message: 'Update API unavailable' };
-        });
+        this._failDownload('Update API unavailable');
         return;
       }
       if (!res.success) {
-        const message = res.error ?? 'Failed to download update';
-        runInAction(() => {
-          this.state = { status: 'error', message };
-        });
+        this._failDownload(res.error ?? i18n.t('settings.update.downloadFailed'));
       }
     } catch {
-      runInAction(() => {
-        this.state = { status: 'error', message: 'Failed to download update' };
-      });
+      this._failDownload(i18n.t('settings.update.downloadFailed'));
     }
   }
 
@@ -214,20 +207,24 @@ export class UpdateStore {
     try {
       const res = await rpc.update.quitAndInstall();
       if (!res) {
-        runInAction(() => {
-          this.state = { status: 'error', message: 'Update API unavailable' };
-        });
+        this._failInstall('Update API unavailable');
         return;
       }
       if (!res.success) {
-        runInAction(() => {
-          this.state = { status: 'error', message: res.error ?? 'Failed to install update' };
-        });
+        this._failInstall(res.error ?? i18n.t('settings.update.installFailed'));
       }
     } catch {
-      runInAction(() => {
-        this.state = { status: 'error', message: 'Failed to install update' };
-      });
+      this._failInstall(i18n.t('settings.update.installFailed'));
+    }
+  }
+
+  /** Opens the GitHub releases page in the system browser (which uses the OS
+   *  proxy), without quitting the app — the manual-download fallback. */
+  async openReleasePage(): Promise<void> {
+    try {
+      await rpc.update.openReleasePage();
+    } catch {
+      // best-effort — opening an external URL should not surface as an error
     }
   }
 
@@ -239,10 +236,49 @@ export class UpdateStore {
     }
   }
 
+  private _failDownload(message: string): void {
+    runInAction(() => {
+      this.state = { status: 'error', message };
+    });
+    toast.error(i18n.t('settings.update.downloadFailed'), {
+      description: message,
+      action: this._manualDownloadAction(),
+    });
+  }
+
+  private _failInstall(message: string): void {
+    runInAction(() => {
+      this.state = { status: 'error', message };
+    });
+    toast.error(i18n.t('settings.update.installFailed'), {
+      description: message,
+      action: this._manualDownloadAction(),
+    });
+  }
+
+  private _manualDownloadAction(): { label: string; onClick: () => void } {
+    return {
+      label: i18n.t('settings.update.manualDownload'),
+      onClick: () => {
+        void this.openReleasePage();
+      },
+    };
+  }
+
+  private _downloadAction(): { label: string; onClick: () => void } {
+    return {
+      label: i18n.t('settings.update.download'),
+      onClick: () => {
+        void this.download();
+      },
+    };
+  }
+
   private _maybeToastAvailable(version: string): void {
     if (!this._shouldNotify(version)) return;
     toast.success(i18n.t('settings.update.availableToast'), {
       description: i18n.t('settings.update.availableToastDescription', { version }),
+      action: this._downloadAction(),
     });
     this._rememberNotified(version);
   }
@@ -314,6 +350,7 @@ export class UpdateStore {
                 version: this.state.info.version,
               })
             : undefined,
+          action: this._downloadAction(),
         });
         return;
       case 'not-available':
@@ -323,6 +360,7 @@ export class UpdateStore {
         toast.error(i18n.t('settings.update.checkFailed'), {
           id: toastId,
           description: this.state.message,
+          action: this._manualDownloadAction(),
         });
         return;
       default:

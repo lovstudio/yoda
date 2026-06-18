@@ -503,7 +503,17 @@
       "download": "Download",
       "downloadingShort": "Downloading",
       "restart": "Restart",
-      "installingShort": "Installing"
+      "installingShort": "Installing",
+      "downloadFailed": "Couldn't download the update",
+      "installFailed": "Couldn't install the update",
+      "retry": "Retry",
+      "manualDownload": "Download manually",
+      "proxy": {
+        "title": "Update proxy",
+        "description": "The updater can't reach GitHub on some networks. Use a proxy if downloads keep failing. \"Auto\" follows your system proxy.",
+        "auto": "Auto (system)",
+        "custom": "Custom"
+      }
     },
     "telemetry": {
       "title": "Privacy & Telemetry",

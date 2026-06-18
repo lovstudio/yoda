@@ -149,6 +149,10 @@ export const SETTINGS_DEFAULTS = {
   promptPrinciples: {
     items: [],
   },
+  updates: {
+    proxyMode: 'auto' as const,
+    proxyUrl: '',
+  },
 } satisfies SettingsDefaultsMap;
 
 export function getDefaultForKey<K extends AppSettingsKey>(key: K): AppSettings[K] {

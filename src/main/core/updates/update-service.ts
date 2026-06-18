@@ -15,6 +15,7 @@ import {
   updateProgressEvent,
 } from '@shared/events/updateEvents';
 import { resolveAppVersion } from '@main/core/app/utils';
+import { appSettingsService } from '@main/core/settings/settings-service';
 import { events } from '@main/lib/events';
 import type { IDisposable, IInitializable } from '@main/lib/lifecycle';
 import { log } from '@main/lib/logger';
@@ -194,6 +195,8 @@ class UpdateService implements IInitializable, IDisposable {
       this.updateState.error = undefined;
     }
 
+    await this.applyProxyConfig();
+
     log.info('Checking for updates...', {
       channel: UPDATE_CHANNEL,
       currentVersion: this.updateState.currentVersion,
@@ -201,6 +204,35 @@ class UpdateService implements IInitializable, IDisposable {
 
     const result = await autoUpdater.checkForUpdatesAndNotify();
     return result?.updateInfo ?? null;
+  }
+
+  /**
+   * The updater runs in its own Electron session (partition "electron-updater")
+   * and does NOT inherit a shell/CLI proxy. Behind ClashX-style proxies the feed
+   * read may succeed via a CDN while the GitHub binary download fails — so we
+   * explicitly route the updater session: `custom` uses the user's proxy URL,
+   * `auto` follows the OS proxy (and logs what it resolved for diagnostics).
+   */
+  private async applyProxyConfig(): Promise<void> {
+    try {
+      const sess = autoUpdater.netSession;
+      if (!sess) return;
+
+      const cfg = await appSettingsService.get('updates');
+      const customUrl = cfg.proxyMode === 'custom' ? cfg.proxyUrl.trim() : '';
+
+      if (customUrl) {
+        await sess.setProxy({ proxyRules: customUrl });
+        log.info('Updater proxy: custom', { proxyUrl: customUrl });
+        return;
+      }
+
+      await sess.setProxy({ mode: 'system' });
+      const resolved = await sess.resolveProxy('https://github.com');
+      log.info('Updater proxy: auto (system)', { resolved });
+    } catch (error) {
+      log.warn('Failed to apply updater proxy config:', formatUpdaterError(error));
+    }
   }
 
   async downloadUpdate(): Promise<void> {
@@ -221,6 +253,7 @@ class UpdateService implements IInitializable, IDisposable {
     events.emit(updateDownloadingEvent, { version: this.updateState.availableVersion });
 
     try {
+      await this.applyProxyConfig();
       await autoUpdater.downloadUpdate();
     } catch (error: unknown) {
       const errorMessage = formatUpdaterError(error);

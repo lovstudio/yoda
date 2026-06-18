@@ -1,4 +1,11 @@
-import { AlertCircle, CheckCircle2, Download, Loader2, RefreshCw } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +15,7 @@ import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { formatBytes } from '@renderer/utils/formatBytes';
 import { SettingRow } from './SettingRow';
+import { UpdateProxyRow } from './UpdateProxyRow';
 
 export const UpdateCard = observer(function UpdateCard(): React.JSX.Element {
   const { t } = useTranslation();
@@ -72,6 +80,8 @@ export const UpdateCard = observer(function UpdateCard(): React.JSX.Element {
           )}
         </div>
       )}
+
+      <UpdateProxyRow />
     </div>
   );
 
@@ -124,7 +134,7 @@ export const UpdateCard = observer(function UpdateCard(): React.JSX.Element {
 
       case 'error':
         return (
-          <div className="grid gap-1">
+          <div className="grid gap-2">
             <Badge
               variant="outline"
               className="w-fit border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-400"
@@ -133,6 +143,26 @@ export const UpdateCard = observer(function UpdateCard(): React.JSX.Element {
               {t('settings.update.errorBadge')}
             </Badge>
             <p className="text-xs text-muted-foreground">{update.state.message}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => (update.availableVersion ? update.download() : update.check())}
+                className="h-7 text-xs"
+              >
+                <RefreshCw className="mr-1.5 h-3 w-3" />
+                {t('settings.update.retry')}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => update.openReleasePage()}
+                className="h-7 text-xs"
+              >
+                <ExternalLink className="mr-1.5 h-3 w-3" />
+                {t('settings.update.manualDownload')}
+              </Button>
+            </div>
           </div>
         );
 

@@ -29,6 +29,10 @@ vi.mock('@renderer/lib/i18n', () => {
     'settings.update.availableToastDescription': 'Version {{version}} is ready to download.',
     'settings.update.checkFailed': "Couldn't check for updates",
     'settings.update.checking': 'Checking for updates...',
+    'settings.update.download': 'Download',
+    'settings.update.downloadFailed': "Couldn't download the update",
+    'settings.update.installFailed': "Couldn't install the update",
+    'settings.update.manualDownload': 'Download manually',
     'settings.update.unavailableInBuild': 'Update checks are only available in packaged builds.',
     'settings.update.upToDate': "You're up to date.",
   };
@@ -97,7 +101,8 @@ describe('UpdateStore', () => {
       expect.objectContaining({
         id: 'toast-id',
         description: 'Update checks are only available in packaged builds.',
-        action: expect.objectContaining({ label: 'common.copy' }),
+        action: expect.objectContaining({ label: 'Download manually' }),
+        cancel: expect.objectContaining({ label: 'common.copy' }),
       })
     );
     expect(store.state).toEqual({
@@ -144,6 +149,7 @@ describe('UpdateStore', () => {
     expect(mocks.toast.success).toHaveBeenCalledWith('Update available', {
       id: 'toast-id',
       description: 'Version 0.3.3 is ready to download.',
+      action: expect.objectContaining({ label: 'Download' }),
     });
   });
 });

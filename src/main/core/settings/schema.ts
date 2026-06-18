@@ -427,6 +427,15 @@ export const promptPrinciplesSettingsSchema = z.object({
   items: z.array(promptPrincipleSchema),
 });
 
+/** Network/proxy behavior for the auto-updater. `auto` follows the OS proxy;
+ *  `custom` routes updater traffic through `proxyUrl` (e.g. http://127.0.0.1:7890).
+ *  The updater runs in its own Electron session and does not pick up a CLI/shell
+ *  proxy, so users behind ClashX-style proxies need this to reach GitHub. */
+export const updatesSettingsSchema = z.object({
+  proxyMode: z.enum(['auto', 'custom']).default('auto'),
+  proxyUrl: z.string().default(''),
+});
+
 export const APP_SETTINGS_SCHEMA_MAP = {
   localProject: localProjectSettingsSchema,
   project: projectSettingsSchema,
@@ -449,6 +458,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   homeDraft: homeDraftSchema,
   statusline: statuslineSettingsSchema,
   promptPrinciples: promptPrinciplesSettingsSchema,
+  updates: updatesSettingsSchema,
 } as const;
 
 export const appSettingsSchema = z.object({
@@ -473,4 +483,5 @@ export const appSettingsSchema = z.object({
   homeDraft: homeDraftSchema,
   statusline: statuslineSettingsSchema,
   promptPrinciples: promptPrinciplesSettingsSchema,
+  updates: updatesSettingsSchema,
 });

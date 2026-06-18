@@ -503,7 +503,17 @@
       "download": "下载",
       "downloadingShort": "下载中",
       "restart": "重启",
-      "installingShort": "安装中"
+      "installingShort": "安装中",
+      "downloadFailed": "更新下载失败",
+      "installFailed": "更新安装失败",
+      "retry": "重试",
+      "manualDownload": "手动下载",
+      "proxy": {
+        "title": "更新代理",
+        "description": "部分网络下更新器无法访问 GitHub。若下载持续失败，可设置代理。「自动」会跟随系统代理。",
+        "auto": "自动（系统）",
+        "custom": "自定义"
+      }
     },
     "telemetry": {
       "title": "隐私与遥测",

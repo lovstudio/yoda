@@ -46,6 +46,18 @@ export const updateController = createRPCController({
     }
   },
 
+  // Opens the releases page in the system browser WITHOUT quitting. The browser
+  // uses the OS proxy, so this is the reliable manual-download fallback when the
+  // in-app updater can't reach GitHub.
+  openReleasePage: async () => {
+    try {
+      await shell.openExternal(YODA_RELEASES_URL);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
   getState: async () => {
     try {
       const state = updateService.getState();
