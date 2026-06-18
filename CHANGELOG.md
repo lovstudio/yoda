@@ -5,6 +5,23 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.13.3 — 2026-06-18
+
+### Added
+
+- An agent's configured model is now applied at launch, via a per-runtime model
+  flag.
+- Smart paths recognize trailing-slash inputs as directories.
+
+### Fixed
+
+- Deep links: opening a task target mounts its project (no more white screen),
+  and the main window is focused instead of an arbitrary one.
+- Claude / Codex no longer get stuck "awaiting input" (the PTY classifier is no
+  longer wired for them).
+- Terminal: no duplicate/ghost lines while scrolling; the file-link hover hint
+  is delayed to 2s.
+
 ## 0.13.2 — 2026-06-18
 
 ### Fixed
