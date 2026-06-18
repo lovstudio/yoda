@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import { app, BrowserWindow } from 'electron';
+import { app } from 'electron';
 import { APP_NAME_LOWER } from '@shared/app-identity';
 import {
   isYodaDeepLinkUrl,
@@ -9,6 +9,7 @@ import {
   type ParsedDeepLink,
 } from '@shared/deep-links';
 import { deepLinkOpenChannel } from '@shared/events/appEvents';
+import { getMainWindow } from '@main/app/window';
 import { conversations, projects, tasks } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
@@ -116,7 +117,7 @@ class DeepLinkService {
   private dispatch(target: DeepLinkTarget): void {
     focusMainWindow();
 
-    const win = BrowserWindow.getAllWindows()[0];
+    const win = getMainWindow();
     if (!this.rendererReady || !win || win.isDestroyed()) {
       this.pendingTargets.push(target);
       return;
@@ -162,7 +163,11 @@ async function resolveTaskTarget(
 }
 
 function focusMainWindow(): void {
-  const win = BrowserWindow.getAllWindows()[0];
+  // Must target the main full-app window, not getAllWindows()[0] — a pre-warmed
+  // (hidden, blank) task window can sit at index 0, and showing it surfaces a
+  // white screen over the main window. getMainWindow() matches the window the
+  // deep-link event is routed to in events.ts.
+  const win = getMainWindow();
   if (!win || win.isDestroyed()) return;
   if (win.isMinimized()) win.restore();
   if (!win.isVisible()) win.show();
