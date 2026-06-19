@@ -2744,19 +2744,6 @@ export const HomeComposer = observer(function HomeComposer({
               />
             )}
           />
-          {!taskScopedTarget && mounted && runMode === 'normal' && (
-            <button
-              type="button"
-              aria-label={t('home.addCompareVariant')}
-              title={t('home.addCompareVariantTooltip')}
-              onClick={addVariant}
-              disabled={compareVariants.length >= MAX_COMPARE_VARIANTS}
-              className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <GitCompare className="size-3.5 text-foreground-muted" />
-              <span>{t('home.addCompareVariant')}</span>
-            </button>
-          )}
           <Popover>
             <PopoverTrigger
               aria-label={t('home.composerSettingsAria')}
@@ -2970,6 +2957,19 @@ export const HomeComposer = observer(function HomeComposer({
               <InstructionFilesSection projectPath={skillProjectPath} />
             </PopoverContent>
           </Popover>
+          {!taskScopedTarget && mounted && runMode === 'normal' && (
+            <button
+              type="button"
+              aria-label={t('home.addCompareVariant')}
+              title={t('home.addCompareVariantTooltip')}
+              onClick={addVariant}
+              disabled={compareVariants.length >= MAX_COMPARE_VARIANTS}
+              className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <GitCompare className="size-3.5 text-foreground-muted" />
+              <span>{t('home.addCompareVariant')}</span>
+            </button>
+          )}
         </div>
         {!taskScopedTarget && mounted && runMode === 'normal' && compareVariants.length > 0 && (
           <div className="flex flex-col gap-2 border-l-2 border-primary/30 pl-3">
