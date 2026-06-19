@@ -2365,6 +2365,215 @@ export const HomeComposer = observer(function HomeComposer({
 
   const promptInputChrome = getRunModeInputChrome(runMode);
 
+  // The composer-settings gear belongs to a config row (the base row in normal
+  // mode, every config row in compare mode), so it is a render helper reused
+  // across rows rather than a single global control.
+  const renderComposerSettingsButton = (): ReactNode => (
+    <Popover>
+      <PopoverTrigger
+        aria-label={t('home.composerSettingsAria')}
+        title={t('home.composerSettingsAria')}
+        className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 hover:text-foreground"
+      >
+        <Settings2 className="size-3.5 text-foreground-muted" />
+        <span className="hidden @lg/composer:inline">{t('home.composerSettingsLabel')}</span>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-96 gap-0 p-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="text-xs text-foreground">{t('home.attachImagesAsPathsLabel')}</span>
+            <InfoTooltip
+              label={t('home.attachImagesAsPathsLabel')}
+              content={t('home.attachImagesAsPathsDesc')}
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <ComposerScopeToggle
+              source={attachImagesField.source}
+              canOverride={attachImagesField.canOverride}
+              onChange={attachImagesField.setSource}
+            />
+            <Switch
+              size="sm"
+              checked={attachImagesAsPaths}
+              onCheckedChange={attachImagesField.setValue}
+            />
+          </div>
+        </div>
+        <Collapsible
+          open={runDefaultsOpen}
+          onOpenChange={setRunDefaultsOpen}
+          className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2"
+        >
+          <CollapsibleTrigger
+            title={t('home.composerRunDefaultsHint')}
+            className="group flex items-center justify-between gap-2 text-left"
+          >
+            <MicroLabel className="text-[10px]">{t('home.composerRunDefaultsLabel')}</MicroLabel>
+            <ChevronDown
+              className={cn(
+                'size-3.5 shrink-0 text-foreground-passive transition-transform',
+                runDefaultsOpen && 'rotate-180'
+              )}
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="flex flex-col gap-1">
+            <ComposerScopeRow
+              label={t('home.composerDefaultRuntimeLabel')}
+              value={runtimeId ? (getRuntime(runtimeId)?.name ?? runtimeId) : undefined}
+              source={runtimeOverridden ? 'project' : 'global'}
+              canOverride={hasProjectOverrideTarget}
+              onChange={(scope) =>
+                setComposerDefault(
+                  'runtimeId',
+                  scope === 'project' ? (runtimeId ?? undefined) : undefined
+                )
+              }
+            />
+            <ComposerScopeRow
+              label={t('home.composerDefaultRunModeLabel')}
+              source={runModeOverridden ? 'project' : 'global'}
+              canOverride={hasProjectOverrideTarget}
+              onChange={(scope) =>
+                setComposerDefault('runMode', scope === 'project' ? persistedRunMode : undefined)
+              }
+            />
+            <ComposerScopeRow
+              label={t('home.composerDefaultBaseBranchLabel')}
+              value={forkBaseLabel}
+              source={baseBranchOverridden ? 'project' : 'global'}
+              canOverride={hasProjectOverrideTarget}
+              onChange={(scope) =>
+                setComposerDefault(
+                  'baseBranch',
+                  scope === 'project' && forkBaseBranch
+                    ? {
+                        type: forkBaseBranch.type,
+                        branch: forkBaseBranch.branch,
+                        ...(forkBaseBranch.type === 'remote'
+                          ? { remoteName: forkBaseBranch.remote.name }
+                          : {}),
+                      }
+                    : undefined
+                )
+              }
+            />
+            <ComposerScopeRow
+              label={t('home.composerDefaultStrategyLabel')}
+              source={standardStrategyOverridden ? 'project' : 'global'}
+              canOverride={hasProjectOverrideTarget}
+              onChange={(scope) =>
+                setComposerDefault(
+                  'standardStrategyKind',
+                  scope === 'project' ? strategyKind : undefined
+                )
+              }
+            />
+            <ComposerScopeRow
+              label={t('home.composerDefaultReviewStrategyLabel')}
+              source={reviewStrategyOverridden ? 'project' : 'global'}
+              canOverride={hasProjectOverrideTarget}
+              onChange={(scope) =>
+                setComposerDefault(
+                  'reviewStrategyKind',
+                  scope === 'project' ? reviewStrategyKind : undefined
+                )
+              }
+            />
+            <ComposerScopeRow
+              label={t('home.composerDefaultReviewerLabel')}
+              value={getRuntime(reviewerRuntime)?.name ?? reviewerRuntime}
+              source={reviewerOverridden ? 'project' : 'global'}
+              canOverride={hasProjectOverrideTarget}
+              onChange={(scope) =>
+                setComposerDefault(
+                  'reviewerRuntime',
+                  scope === 'project' ? reviewerRuntime : undefined
+                )
+              }
+            />
+          </CollapsibleContent>
+        </Collapsible>
+        <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
+          <ComposerSettingsHeader
+            label={t('home.promptPrinciplesLabel')}
+            action={
+              <button
+                type="button"
+                className="font-mono text-[10px] uppercase tracking-widest text-foreground-passive transition-colors hover:text-foreground"
+                onClick={() => navigate('library', { section: 'prompts' })}
+              >
+                {t('home.manage')}
+              </button>
+            }
+          />
+          {promptPrinciples.length === 0 ? (
+            <p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>
+          ) : (
+            promptPrinciples.map((principle) => (
+              <div key={principle.id} className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="min-w-0 truncate text-xs text-foreground">
+                    {principle.name || t('home.promptPrincipleUnnamed')}
+                  </span>
+                  {principle.text ? (
+                    <InfoTooltip
+                      label={principle.name || t('home.promptPrincipleUnnamed')}
+                      content={<span className="whitespace-pre-wrap">{principle.text}</span>}
+                    />
+                  ) : null}
+                </div>
+                <Switch
+                  size="sm"
+                  checked={
+                    selectedProjectId
+                      ? effectiveGlobalEnabled(projectPromptPrinciples, principle)
+                      : principle.enabled
+                  }
+                  onCheckedChange={(checked) =>
+                    selectedProjectId
+                      ? setGlobalPrincipleProjectOverride(principle, checked)
+                      : setPromptPrincipleEnabled(principle.id, checked)
+                  }
+                  aria-label={t('settings.prompts.toggle')}
+                />
+              </div>
+            ))
+          )}
+          {selectedProjectId && projectPrincipleItems.length > 0 ? (
+            <>
+              <div className="mt-1 text-[10px] font-medium uppercase tracking-wide text-foreground-passive">
+                {t('home.promptPrinciplesProjectHeading')}
+              </div>
+              {projectPrincipleItems.map((principle) => (
+                <div key={principle.id} className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="min-w-0 truncate text-xs text-foreground">
+                      {principle.name || t('home.promptPrincipleUnnamed')}
+                    </span>
+                    {principle.text ? (
+                      <InfoTooltip
+                        label={principle.name || t('home.promptPrincipleUnnamed')}
+                        content={<span className="whitespace-pre-wrap">{principle.text}</span>}
+                      />
+                    ) : null}
+                  </div>
+                  <Switch
+                    size="sm"
+                    checked={principle.enabled}
+                    onCheckedChange={(checked) => setProjectPrincipleEnabled(principle.id, checked)}
+                    aria-label={t('settings.prompts.toggle')}
+                  />
+                </div>
+              ))}
+            </>
+          ) : null}
+        </div>
+        <InstructionFilesSection projectPath={skillProjectPath} />
+      </PopoverContent>
+    </Popover>
+  );
+
   return (
     <div className={className}>
       <div
@@ -2679,6 +2888,7 @@ export const HomeComposer = observer(function HomeComposer({
                     : 'local'
                 }
                 modelLabel={compareModelLabel}
+                renderSettings={renderComposerSettingsButton}
                 onChange={(patch) => updateVariant(variant.id, patch)}
                 onRemove={() => removeVariant(variant.id)}
                 onReorder={reorderVariant}
@@ -2800,226 +3010,13 @@ export const HomeComposer = observer(function HomeComposer({
                 />
               )}
             />
+            {renderComposerSettingsButton()}
           </div>
         )}
-        {/* Action row (always shown): add another config + composer settings. In
-            compare mode it sits under the config list, so "+ 对比" is the last row. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Popover>
-            <PopoverTrigger
-              aria-label={t('home.composerSettingsAria')}
-              title={t('home.composerSettingsAria')}
-              className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 hover:text-foreground"
-            >
-              <Settings2 className="size-3.5 text-foreground-muted" />
-              <span className="hidden @lg/composer:inline">{t('home.composerSettingsLabel')}</span>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-96 gap-0 p-2.5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="text-xs text-foreground">
-                    {t('home.attachImagesAsPathsLabel')}
-                  </span>
-                  <InfoTooltip
-                    label={t('home.attachImagesAsPathsLabel')}
-                    content={t('home.attachImagesAsPathsDesc')}
-                  />
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <ComposerScopeToggle
-                    source={attachImagesField.source}
-                    canOverride={attachImagesField.canOverride}
-                    onChange={attachImagesField.setSource}
-                  />
-                  <Switch
-                    size="sm"
-                    checked={attachImagesAsPaths}
-                    onCheckedChange={attachImagesField.setValue}
-                  />
-                </div>
-              </div>
-              <Collapsible
-                open={runDefaultsOpen}
-                onOpenChange={setRunDefaultsOpen}
-                className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2"
-              >
-                <CollapsibleTrigger
-                  title={t('home.composerRunDefaultsHint')}
-                  className="group flex items-center justify-between gap-2 text-left"
-                >
-                  <MicroLabel className="text-[10px]">
-                    {t('home.composerRunDefaultsLabel')}
-                  </MicroLabel>
-                  <ChevronDown
-                    className={cn(
-                      'size-3.5 shrink-0 text-foreground-passive transition-transform',
-                      runDefaultsOpen && 'rotate-180'
-                    )}
-                  />
-                </CollapsibleTrigger>
-                <CollapsibleContent className="flex flex-col gap-1">
-                  <ComposerScopeRow
-                    label={t('home.composerDefaultRuntimeLabel')}
-                    value={runtimeId ? (getRuntime(runtimeId)?.name ?? runtimeId) : undefined}
-                    source={runtimeOverridden ? 'project' : 'global'}
-                    canOverride={hasProjectOverrideTarget}
-                    onChange={(scope) =>
-                      setComposerDefault(
-                        'runtimeId',
-                        scope === 'project' ? (runtimeId ?? undefined) : undefined
-                      )
-                    }
-                  />
-                  <ComposerScopeRow
-                    label={t('home.composerDefaultRunModeLabel')}
-                    source={runModeOverridden ? 'project' : 'global'}
-                    canOverride={hasProjectOverrideTarget}
-                    onChange={(scope) =>
-                      setComposerDefault(
-                        'runMode',
-                        scope === 'project' ? persistedRunMode : undefined
-                      )
-                    }
-                  />
-                  <ComposerScopeRow
-                    label={t('home.composerDefaultBaseBranchLabel')}
-                    value={forkBaseLabel}
-                    source={baseBranchOverridden ? 'project' : 'global'}
-                    canOverride={hasProjectOverrideTarget}
-                    onChange={(scope) =>
-                      setComposerDefault(
-                        'baseBranch',
-                        scope === 'project' && forkBaseBranch
-                          ? {
-                              type: forkBaseBranch.type,
-                              branch: forkBaseBranch.branch,
-                              ...(forkBaseBranch.type === 'remote'
-                                ? { remoteName: forkBaseBranch.remote.name }
-                                : {}),
-                            }
-                          : undefined
-                      )
-                    }
-                  />
-                  <ComposerScopeRow
-                    label={t('home.composerDefaultStrategyLabel')}
-                    source={standardStrategyOverridden ? 'project' : 'global'}
-                    canOverride={hasProjectOverrideTarget}
-                    onChange={(scope) =>
-                      setComposerDefault(
-                        'standardStrategyKind',
-                        scope === 'project' ? strategyKind : undefined
-                      )
-                    }
-                  />
-                  <ComposerScopeRow
-                    label={t('home.composerDefaultReviewStrategyLabel')}
-                    source={reviewStrategyOverridden ? 'project' : 'global'}
-                    canOverride={hasProjectOverrideTarget}
-                    onChange={(scope) =>
-                      setComposerDefault(
-                        'reviewStrategyKind',
-                        scope === 'project' ? reviewStrategyKind : undefined
-                      )
-                    }
-                  />
-                  <ComposerScopeRow
-                    label={t('home.composerDefaultReviewerLabel')}
-                    value={getRuntime(reviewerRuntime)?.name ?? reviewerRuntime}
-                    source={reviewerOverridden ? 'project' : 'global'}
-                    canOverride={hasProjectOverrideTarget}
-                    onChange={(scope) =>
-                      setComposerDefault(
-                        'reviewerRuntime',
-                        scope === 'project' ? reviewerRuntime : undefined
-                      )
-                    }
-                  />
-                </CollapsibleContent>
-              </Collapsible>
-              <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
-                <ComposerSettingsHeader
-                  label={t('home.promptPrinciplesLabel')}
-                  action={
-                    <button
-                      type="button"
-                      className="font-mono text-[10px] uppercase tracking-widest text-foreground-passive transition-colors hover:text-foreground"
-                      onClick={() => navigate('library', { section: 'prompts' })}
-                    >
-                      {t('home.manage')}
-                    </button>
-                  }
-                />
-                {promptPrinciples.length === 0 ? (
-                  <p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>
-                ) : (
-                  promptPrinciples.map((principle) => (
-                    <div key={principle.id} className="flex items-center justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <span className="min-w-0 truncate text-xs text-foreground">
-                          {principle.name || t('home.promptPrincipleUnnamed')}
-                        </span>
-                        {principle.text ? (
-                          <InfoTooltip
-                            label={principle.name || t('home.promptPrincipleUnnamed')}
-                            content={<span className="whitespace-pre-wrap">{principle.text}</span>}
-                          />
-                        ) : null}
-                      </div>
-                      <Switch
-                        size="sm"
-                        checked={
-                          selectedProjectId
-                            ? effectiveGlobalEnabled(projectPromptPrinciples, principle)
-                            : principle.enabled
-                        }
-                        onCheckedChange={(checked) =>
-                          selectedProjectId
-                            ? setGlobalPrincipleProjectOverride(principle, checked)
-                            : setPromptPrincipleEnabled(principle.id, checked)
-                        }
-                        aria-label={t('settings.prompts.toggle')}
-                      />
-                    </div>
-                  ))
-                )}
-                {selectedProjectId && projectPrincipleItems.length > 0 ? (
-                  <>
-                    <div className="mt-1 text-[10px] font-medium uppercase tracking-wide text-foreground-passive">
-                      {t('home.promptPrinciplesProjectHeading')}
-                    </div>
-                    {projectPrincipleItems.map((principle) => (
-                      <div key={principle.id} className="flex items-center justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <span className="min-w-0 truncate text-xs text-foreground">
-                            {principle.name || t('home.promptPrincipleUnnamed')}
-                          </span>
-                          {principle.text ? (
-                            <InfoTooltip
-                              label={principle.name || t('home.promptPrincipleUnnamed')}
-                              content={
-                                <span className="whitespace-pre-wrap">{principle.text}</span>
-                              }
-                            />
-                          ) : null}
-                        </div>
-                        <Switch
-                          size="sm"
-                          checked={principle.enabled}
-                          onCheckedChange={(checked) =>
-                            setProjectPrincipleEnabled(principle.id, checked)
-                          }
-                          aria-label={t('settings.prompts.toggle')}
-                        />
-                      </div>
-                    ))}
-                  </>
-                ) : null}
-              </div>
-              <InstructionFilesSection projectPath={skillProjectPath} />
-            </PopoverContent>
-          </Popover>
-          {!taskScopedTarget && mounted && runMode === 'normal' && (
+        {/* Trailing action row: "+ 对比" is always the last row. The per-row config
+            gear lives on each config row, not here. */}
+        {!taskScopedTarget && mounted && runMode === 'normal' && (
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               aria-label={t('home.addCompareVariant')}
@@ -3031,8 +3028,8 @@ export const HomeComposer = observer(function HomeComposer({
               <GitCompare className="size-3.5 text-foreground-muted" />
               <span className="hidden @lg/composer:inline">{t('home.addCompareVariant')}</span>
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3052,6 +3049,7 @@ function CompareVariantRow({
   strategyLabels,
   runHostKind,
   modelLabel,
+  renderSettings,
   onChange,
   onRemove,
   onReorder,
@@ -3060,6 +3058,7 @@ function CompareVariantRow({
   strategyLabels: StrategyChipLabels;
   runHostKind: RunHostKind;
   modelLabel: string;
+  renderSettings: () => ReactNode;
   onChange: (patch: Partial<CompareVariant>) => void;
   onRemove: () => void;
   onReorder: (fromId: string, toId: string) => void;
@@ -3134,6 +3133,7 @@ function CompareVariantRow({
         modelLabel={modelLabel}
         onChange={(id) => onChange({ runtimeId: id })}
       />
+      {renderSettings()}
       <button
         type="button"
         aria-label={t('home.removeCompareVariant')}
