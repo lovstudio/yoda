@@ -3137,7 +3137,6 @@ function CompareVariantRow({
         onChange={(id) => onChange({ runtimeId: id })}
       />
       {renderSettings()}
-      {trailing}
       <button
         type="button"
         aria-label={t('home.removeCompareVariant')}
@@ -3147,6 +3146,7 @@ function CompareVariantRow({
       >
         <X className="size-3.5" />
       </button>
+      {trailing}
     </div>
   );
 }
