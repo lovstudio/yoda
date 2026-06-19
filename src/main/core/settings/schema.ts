@@ -320,7 +320,7 @@ export const interfaceSettingsSchema = z.object({
 
 export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });
 
-const homeRunModeSchema = z.enum(['normal', 'brainstorm', 'compare', 'review', 'team']);
+const homeRunModeSchema = z.enum(['normal', 'brainstorm', 'review', 'team']);
 const teamRuntimeSelectionSchema = z.object({
   ceo: z.enum(RUNTIME_IDS),
   product: z.enum(RUNTIME_IDS),
@@ -332,7 +332,6 @@ const teamRuntimeSelectionSchema = z.object({
 /** provider→runtime terminology migration for persisted home drafts. */
 const HOME_DRAFT_LEGACY_FIELDS: Record<string, string> = {
   providerOverride: 'runtimeOverride',
-  compareProviders: 'compareRuntimes',
   reviewReviewerProvider: 'reviewReviewerRuntime',
   teamProviders: 'teamRuntimes',
 };
@@ -348,6 +347,16 @@ export const homeDraftSchema = z.preprocess(
         migrated[newKey] = record[oldKey];
         delete migrated[oldKey];
       }
+    }
+    // The retired `compare` run mode coerces to `normal`; drop the dead
+    // compareRuntimes field so an old draft still satisfies the schema.
+    if (record.runMode === 'compare') {
+      migrated ??= { ...record };
+      migrated.runMode = 'normal';
+    }
+    if ('compareRuntimes' in record) {
+      migrated ??= { ...record };
+      delete migrated.compareRuntimes;
     }
     return migrated ?? value;
   },
@@ -367,7 +376,6 @@ export const homeDraftSchema = z.preprocess(
       .nullable(),
     runtimeOverride: z.enum(RUNTIME_IDS).nullable(),
     runMode: homeRunModeSchema,
-    compareRuntimes: z.array(z.enum(RUNTIME_IDS)),
     reviewReviewerRuntime: z.enum(RUNTIME_IDS),
     teamRuntimes: teamRuntimeSelectionSchema,
     /** Selected Agent Team template id for the `team` paradigm (built-in or user). */

@@ -18,7 +18,6 @@ import {
   Mic,
   Monitor,
   Paperclip,
-  Plus,
   Repeat2,
   Server,
   Settings2,
@@ -82,7 +81,6 @@ import { initialConversationTitle } from '@renderer/features/tasks/conversations
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
 import { useRuntimeAutoApproveDefaults } from '@renderer/features/tasks/hooks/useRuntimeAutoApproveDefaults';
-import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { AgentSlotSelector } from '@renderer/lib/components/agent-slot/agent-slot-selector';
@@ -171,8 +169,22 @@ type TaskStrategyKind = 'new-branch' | 'no-worktree';
 /** Strategy actually submitted to createTask — adds checkout-existing, which is
  *  derived (not forking + a non-current local branch picked), never persisted. */
 type TaskSubmitStrategyKind = TaskStrategyKind | 'checkout-existing';
-type HomeRunMode = 'normal' | 'brainstorm' | 'compare' | 'review' | 'team';
+type HomeRunMode = 'normal' | 'brainstorm' | 'review' | 'team';
 type RunHostKind = 'local' | 'ssh';
+
+/**
+ * One extra run environment in a multi-config comparison. Each variant is a copy
+ * of the base composer config the user can tweak: a different project, runtime,
+ * branch strategy, or prompt. On submit, the base config plus every variant each
+ * spawn their own task, and a detached window tiles them side by side.
+ */
+type CompareVariant = {
+  id: string;
+  projectId: string | null;
+  runtimeId: RuntimeId | null;
+  strategyKind: TaskStrategyKind;
+  promptOverride: string | null;
+};
 type SkillShortcutPrefix = '/' | '$';
 
 type HomeComposerSubmitTarget =
@@ -206,9 +218,7 @@ interface RunModeInputChrome {
   containerClassName: string;
 }
 
-const MIN_COMPARE_AGENTS = 2;
-const MAX_COMPARE_AGENTS = 6;
-const DEFAULT_COMPARE_RUNTIMES: RuntimeId[] = ['claude', 'codex'];
+const MAX_COMPARE_VARIANTS = 5;
 const DEFAULT_REVIEWER_RUNTIME: RuntimeId = 'claude';
 
 const NORMAL_PROMPT_KEY = 'normal:agent';
@@ -225,7 +235,6 @@ const SLOT_DEFAULT_BUILTIN_KEY: Record<string, string> = {
 };
 
 function defaultBuiltinKeyForSlot(slotKey: string): string | undefined {
-  if (slotKey.startsWith('compare:')) return BUILTIN_AGENT_KEYS.general;
   return SLOT_DEFAULT_BUILTIN_KEY[slotKey];
 }
 const ADVANCED_INPUT_CONTAINER_CLASS =
@@ -401,38 +410,9 @@ function skillShortcutOptionScore(item: SkillShortcutOption, query: string): num
   return scores.length > 0 ? Math.max(...scores) : null;
 }
 
-function uniqueRuntimes(providers: RuntimeId[]): RuntimeId[] {
-  return Array.from(new Set(providers));
-}
-
-function normalizeCompareProviders(
-  saved: RuntimeId[] | undefined,
-  primary: RuntimeId | null
-): RuntimeId[] {
-  const providers = uniqueRuntimes([
-    ...(primary ? [primary] : []),
-    ...(saved && saved.length > 0 ? saved : DEFAULT_COMPARE_RUNTIMES),
-  ]);
-  if (providers.length >= MIN_COMPARE_AGENTS) return providers.slice(0, MAX_COMPARE_AGENTS);
-
-  for (const id of RUNTIME_IDS) {
-    if (!providers.includes(id)) providers.push(id);
-    if (providers.length >= MIN_COMPARE_AGENTS) break;
-  }
-  return providers.slice(0, MAX_COMPARE_AGENTS);
-}
-
-function nextAvailableProvider(existing: RuntimeId[]): RuntimeId {
-  return RUNTIME_IDS.find((id) => !existing.includes(id)) ?? existing[0] ?? 'claude';
-}
-
 function getRunModeInputChrome(mode: HomeRunMode): RunModeInputChrome {
   switch (mode) {
     case 'brainstorm':
-      return {
-        containerClassName: ADVANCED_INPUT_CONTAINER_CLASS,
-      };
-    case 'compare':
       return {
         containerClassName: ADVANCED_INPUT_CONTAINER_CLASS,
       };
@@ -452,10 +432,6 @@ function getRunModeInputChrome(mode: HomeRunMode): RunModeInputChrome {
 
   const exhaustive: never = mode;
   return exhaustive;
-}
-
-function comparePromptKey(index: number): string {
-  return `compare:${index}`;
 }
 
 /**
@@ -787,42 +763,15 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [runModeOverridden, setComposerDefault, updateDraft]
   );
-  const compareRuntimesOverridden = composerDefaults?.compareRuntimes !== undefined;
-  const compareRuntimes = useMemo(
-    () =>
-      normalizeCompareProviders(
-        composerDefaults?.compareRuntimes ?? draft?.compareRuntimes,
-        runtimeId
-      ),
-    [composerDefaults?.compareRuntimes, draft?.compareRuntimes, runtimeId]
-  );
-  const writeCompareRuntimes = useCallback(
-    (next: RuntimeId[]) => {
-      if (compareRuntimesOverridden) setComposerDefault('compareRuntimes', next);
-      else updateDraft({ compareRuntimes: next });
-    },
-    [compareRuntimesOverridden, setComposerDefault, updateDraft]
-  );
-  const setCompareProvider = useCallback(
-    (index: number, next: RuntimeId) => {
-      const providers = [...compareRuntimes];
-      providers[index] = next;
-      writeCompareRuntimes(uniqueRuntimes(providers).slice(0, MAX_COMPARE_AGENTS));
-    },
-    [compareRuntimes, writeCompareRuntimes]
-  );
-  const addCompareProvider = useCallback(() => {
-    writeCompareRuntimes(
-      [...compareRuntimes, nextAvailableProvider(compareRuntimes)].slice(0, MAX_COMPARE_AGENTS)
-    );
-  }, [compareRuntimes, writeCompareRuntimes]);
-  const removeCompareProvider = useCallback(
-    (index: number) => {
-      if (compareRuntimes.length <= MIN_COMPARE_AGENTS) return;
-      writeCompareRuntimes(compareRuntimes.filter((_, i) => i !== index));
-    },
-    [compareRuntimes, writeCompareRuntimes]
-  );
+  // Extra comparison environments (ephemeral, not persisted). Empty = a plain
+  // single-task submit; non-empty = multi-config compare (base + variants).
+  const [compareVariants, setCompareVariants] = useState<CompareVariant[]>([]);
+  const updateVariant = useCallback((id: string, patch: Partial<CompareVariant>) => {
+    setCompareVariants((prev) => prev.map((v) => (v.id === id ? { ...v, ...patch } : v)));
+  }, []);
+  const removeVariant = useCallback((id: string) => {
+    setCompareVariants((prev) => prev.filter((v) => v.id !== id));
+  }, []);
   const reviewerOverridden = composerDefaults?.reviewerRuntime !== undefined;
   const reviewerRuntime =
     composerDefaults?.reviewerRuntime ?? draft?.reviewReviewerRuntime ?? DEFAULT_REVIEWER_RUNTIME;
@@ -883,9 +832,6 @@ export const HomeComposer = observer(function HomeComposer({
     const modelLabel = (model: string | null) =>
       model ? formatModelLabel(model) : t('home.modelDefault');
 
-    if (runMode === 'compare') {
-      return t('home.modeSummaryAgentCount', { count: compareRuntimes.length });
-    }
     if (runMode === 'team') {
       return activeTeam ? teamDisplayName(activeTeam, t) : null;
     }
@@ -907,7 +853,7 @@ export const HomeComposer = observer(function HomeComposer({
     const name = runtimeName(resolved.provider);
     if (!name) return null;
     return `${name} · ${modelLabel(resolved.agent?.model ?? null)}`;
-  }, [runMode, runtimeId, compareRuntimes.length, activeTeam, slotAgentId, userAgents, t]);
+  }, [runMode, runtimeId, activeTeam, slotAgentId, userAgents, t]);
   // Local project root, so the skill picker can surface project-local skills
   // alongside the global ones. SSH projects have no local path to scan.
   const skillProjectPath = projectData?.type === 'local' ? projectData.path : undefined;
@@ -1328,6 +1274,23 @@ export const HomeComposer = observer(function HomeComposer({
     effectiveStandardStrategyKind === 'new-branch' ? 'new-branch' : inPlaceKind;
   const reviewSubmitKind: TaskSubmitStrategyKind =
     effectiveReviewStrategyKind === 'new-branch' ? 'new-branch' : inPlaceKind;
+  // A new comparison variant defaults to a duplicate of the current base config.
+  const addVariant = useCallback(() => {
+    setCompareVariants((prev) =>
+      prev.length >= MAX_COMPARE_VARIANTS
+        ? prev
+        : [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              projectId: selectedProjectId ?? null,
+              runtimeId,
+              strategyKind: effectiveStandardStrategyKind,
+              promptOverride: null,
+            },
+          ]
+    );
+  }, [selectedProjectId, runtimeId, effectiveStandardStrategyKind]);
   const targetProvisionedTask = asProvisioned(taskScopedTaskStore);
   const setAttachImagesAsPathsGlobal = useCallback(
     (next: boolean) => {
@@ -1391,24 +1354,25 @@ export const HomeComposer = observer(function HomeComposer({
   const modeCanRunWithoutProject = runMode === 'normal' || runMode === 'brainstorm';
   const modeRequiresWorktree =
     !taskScopedTarget &&
-    (runMode === 'compare' ||
-      runMode === 'team' ||
-      (runMode === 'review' && effectiveReviewStrategyKind === 'new-branch'));
+    (runMode === 'team' || (runMode === 'review' && effectiveReviewStrategyKind === 'new-branch'));
   const trimmed = prompt.trim();
   // A slot can run only when it has an Agent assigned (the Agent supplies the
   // runtime + prompt). Each mode requires all its slots filled.
   const hasSlotAgent = (slotKey: string) => !!slotAgentId(slotKey);
   const modeHasAgents =
-    runMode === 'compare'
-      ? compareRuntimes.length >= MIN_COMPARE_AGENTS &&
-        compareRuntimes.every((_, index) => hasSlotAgent(comparePromptKey(index)))
-      : runMode === 'review'
-        ? hasSlotAgent(REVIEW_IMPLEMENTER_PROMPT_KEY) && hasSlotAgent(REVIEW_REVIEWER_PROMPT_KEY)
-        : runMode === 'team'
-          ? Boolean(activeTeam && activeTeam.members.length > 0)
-          : runMode === 'brainstorm'
-            ? hasSlotAgent(SPEC_PROMPT_KEY)
-            : hasSlotAgent(NORMAL_PROMPT_KEY);
+    runMode === 'review'
+      ? hasSlotAgent(REVIEW_IMPLEMENTER_PROMPT_KEY) && hasSlotAgent(REVIEW_REVIEWER_PROMPT_KEY)
+      : runMode === 'team'
+        ? Boolean(activeTeam && activeTeam.members.length > 0)
+        : runMode === 'brainstorm'
+          ? hasSlotAgent(SPEC_PROMPT_KEY)
+          : hasSlotAgent(NORMAL_PROMPT_KEY);
+  // Multi-config compare only fires in plain (normal, non-task-scoped) submits;
+  // every variant must target a real project before it can spawn a task.
+  const compareActive = runMode === 'normal' && !taskScopedTarget && compareVariants.length > 0;
+  const compareVariantsReady =
+    !compareActive ||
+    (Boolean(selectedProjectId) && compareVariants.every((variant) => Boolean(variant.projectId)));
   // A worktree-requiring mode on a repo without a base commit can't fork until
   // one exists. This covers both an unborn repo (git init, no commit) and a
   // plain folder that was never `git init`-ed — both surface as `isUnborn` with
@@ -1419,6 +1383,7 @@ export const HomeComposer = observer(function HomeComposer({
   const canSubmit =
     !submitting &&
     modeHasAgents &&
+    compareVariantsReady &&
     (taskScopedTarget
       ? !!targetProvisionedTask
       : modeCanRunWithoutProject
@@ -1449,6 +1414,7 @@ export const HomeComposer = observer(function HomeComposer({
         setPrompt('');
         updateDraft({ prompt: '', promptTokens: [] });
         clearPromptTokens();
+        setCompareVariants([]);
       };
       const reportFailures = (results: PromiseSettledResult<unknown>[]) => {
         const failures = results.filter((result) => result.status === 'rejected');
@@ -1536,75 +1502,6 @@ export const HomeComposer = observer(function HomeComposer({
           void launch.promise.catch(() => {
             toast.error('Agent conversation failed to start.');
           });
-          return;
-        }
-
-        if (runMode === 'compare') {
-          // Compare modifies files, so candidates must NOT share a worktree.
-          // Spin off one isolated child task per candidate (forked from this
-          // task's branch) instead of conversations that would clobber each
-          // other in the shared worktree.
-          if (!mounted) return;
-          const baseBranch =
-            targetProvisionedTask.workspace.git.branchName ??
-            (taskScopedTaskStore && 'taskBranch' in taskScopedTaskStore.data
-              ? taskScopedTaskStore.data.taskBranch
-              : undefined);
-          const sourceBranch = baseBranch
-            ? ({ type: 'local' as const, branch: baseBranch } as const)
-            : defaultBranch;
-          if (!sourceBranch) return;
-          const compareProjectId = mounted.data.id;
-          const compareBaseName = trimmed
-            ? taskNameFromPrompt(trimmed)
-            : await rpc.tasks.generateTaskName({});
-          const reservedNames = Array.from(
-            mounted.taskManager.tasks.values(),
-            (task) => task.data.name
-          );
-          const launches = compareRuntimes.flatMap((provider, index) => {
-            const slot = resolveSlot(comparePromptKey(index), provider);
-            if (!slot.provider) return [];
-            const taskName = ensureUniqueTaskDisplayName(
-              `${compareBaseName}-agent-${index + 1}-${slot.provider}`,
-              reservedNames
-            );
-            reservedNames.push(taskName);
-            const taskId = crypto.randomUUID();
-            const conversationId = crypto.randomUUID();
-            const promise = mounted.taskManager.createTask({
-              id: taskId,
-              projectId: compareProjectId,
-              name: taskName,
-              sourceBranch,
-              strategy: { kind: 'new-branch', taskBranch: taskName, pushBranch: false },
-              parentTaskId: taskScopedTarget.taskId,
-              initialConversation: {
-                id: conversationId,
-                projectId: compareProjectId,
-                taskId,
-                runtime: slot.provider,
-                title: initialConversationTitle(slot.provider, trimmed || undefined, []),
-                initialPrompt: buildRequirementPrompt({
-                  requirement,
-                  systemPrompt: slot.systemPrompt,
-                }),
-                imagePaths,
-                autoApprove: autoApproveDefaults.getDefault(slot.provider),
-                model: slot.agent?.model,
-              },
-            });
-            return [{ taskId, promise }];
-          });
-          if (launches.length === 0) return;
-          const first = launches[0];
-          resetComposer();
-          if (first) goToTask(compareProjectId, first.taskId);
-          // Tile every candidate side by side; the grid de-dupes the routed primary.
-          splitViewStore.replace(
-            launches.map((launch) => ({ projectId: compareProjectId, taskId: launch.taskId }))
-          );
-          void Promise.allSettled(launches.map((launch) => launch.promise)).then(reportFailures);
           return;
         }
 
@@ -1840,47 +1737,122 @@ export const HomeComposer = observer(function HomeComposer({
         return;
       }
 
-      if (runMode === 'compare') {
-        // Each candidate forks off the same base into its own isolated worktree.
-        // A dedicated session-less parent task groups them so the alternatives
-        // render together in the subtask tree; no candidate doubles as the anchor.
-        const parentTaskId = crypto.randomUUID();
-        const parentPromise = mounted.taskManager.createTask({
-          id: parentTaskId,
-          projectId: mounted.data.id,
-          name: reserveTaskName(`${baseName}-compare`),
-          sourceBranch: forkBaseBranch ?? baseDefaultBranch,
-          strategy: { kind: 'no-worktree' },
-          parentTaskId: parentTarget?.taskId,
-        });
-        const launches = compareRuntimes.flatMap((provider, index) => {
-          const slot = resolveSlot(comparePromptKey(index), provider);
-          if (!slot.provider) return [];
-          const launch = createProjectTask({
-            provider: slot.provider,
-            nameSeed: `${baseName}-agent-${index + 1}-${slot.provider}`,
-            initialPrompt: buildRequirementPrompt({
-              requirement,
-              systemPrompt: slot.systemPrompt,
-            }),
-            titlePrompt: trimmed || undefined,
-            strategyKind: 'new-branch',
-            parentTaskId,
-            model: slot.agent?.model,
+      // Multi-config comparison: the base config plus every variant each spawn
+      // their own independent task (possibly in different projects), then a
+      // detached window tiles them side by side. Each task is a normal task that
+      // also lands in its project's sidebar, so closing the window keeps them.
+      if (runMode === 'normal' && compareVariants.length > 0 && mounted) {
+        const baseSlot = resolveSlot(NORMAL_PROMPT_KEY, runtimeId);
+        if (!baseSlot.provider) return;
+
+        type CompareSpec = {
+          projectId: string;
+          provider: RuntimeId;
+          model: string | null | undefined;
+          systemPrompt: string;
+          requirement: string;
+          strategyKind: TaskStrategyKind;
+          nameSeed: string;
+        };
+
+        const createForSpec = async (
+          spec: CompareSpec
+        ): Promise<{ projectId: string; taskId: string; promise: Promise<unknown> } | null> => {
+          await projectManager.mountProject(spec.projectId).catch(() => {});
+          const target = asMounted(projectManager.projects.get(spec.projectId));
+          if (!target) return null;
+          // Fork base: the routed project reuses the already-resolved value; other
+          // projects fork from their own current branch.
+          const source =
+            spec.projectId === mounted.data.id
+              ? (forkBaseBranch ?? baseDefaultBranch)
+              : await rpc.repository
+                  .getLocalBranches(spec.projectId)
+                  .then((local) =>
+                    local.currentBranch
+                      ? ({ type: 'local' as const, branch: local.currentBranch } as const)
+                      : undefined
+                  );
+          if (!source) return null;
+          const taskName = ensureUniqueTaskDisplayName(
+            spec.nameSeed,
+            Array.from(target.taskManager.tasks.values(), (task) => task.data.name)
+          );
+          const taskId = crypto.randomUUID();
+          const conversationId = crypto.randomUUID();
+          const strategy =
+            spec.strategyKind === 'new-branch'
+              ? ({ kind: 'new-branch', taskBranch: taskName, pushBranch: false } as const)
+              : ({ kind: 'no-worktree' } as const);
+          const systemPrompt = spec.systemPrompt.trim();
+          const promise = target.taskManager.createTask({
+            id: taskId,
+            projectId: spec.projectId,
+            name: taskName,
+            sourceBranch: source,
+            strategy,
+            initialConversation: {
+              id: conversationId,
+              projectId: spec.projectId,
+              taskId,
+              runtime: spec.provider,
+              title: initialConversationTitle(
+                spec.provider,
+                trimmed || spec.requirement || undefined,
+                []
+              ),
+              initialPrompt: systemPrompt
+                ? buildRequirementPrompt({ requirement: spec.requirement, systemPrompt })
+                : spec.requirement || undefined,
+              imagePaths,
+              autoApprove: autoApproveDefaults.getDefault(spec.provider),
+              model: spec.model,
+            },
           });
-          return [launch];
-        });
-        if (launches.length === 0) return;
-        const first = launches[0];
-        if (first) goToTask(mounted.data.id, first.taskId);
-        // Tile every candidate side by side; the grid de-dupes the routed primary.
-        splitViewStore.replace(
-          launches.map((launch) => ({ projectId: mounted.data.id, taskId: launch.taskId }))
+          return { projectId: spec.projectId, taskId, promise };
+        };
+
+        const specs: CompareSpec[] = [
+          {
+            projectId: mounted.data.id,
+            provider: baseSlot.provider,
+            model: baseSlot.agent?.model,
+            systemPrompt: baseSlot.systemPrompt,
+            requirement,
+            strategyKind: standardSubmitKind === 'new-branch' ? 'new-branch' : 'no-worktree',
+            nameSeed: `${baseName}-base`,
+          },
+          ...compareVariants.flatMap((variant, index): CompareSpec[] => {
+            if (!variant.projectId) return [];
+            const slot = resolveSlot(NORMAL_PROMPT_KEY, variant.runtimeId);
+            if (!slot.provider) return [];
+            return [
+              {
+                projectId: variant.projectId,
+                provider: slot.provider,
+                model: slot.agent?.model,
+                systemPrompt: slot.systemPrompt,
+                requirement: variant.promptOverride?.trim() || requirement,
+                strategyKind: variant.strategyKind,
+                nameSeed: `${baseName}-alt-${index + 1}`,
+              },
+            ];
+          }),
+        ];
+
+        const results = (await Promise.all(specs.map(createForSpec))).filter(
+          (r): r is { projectId: string; taskId: string; promise: Promise<unknown> } => r !== null
         );
-        void Promise.allSettled([parentPromise, ...launches.map((l) => l.promise)]).then(
-          reportFailures
-        );
+        if (results.length === 0) return;
+
         resetComposer();
+        const base = results[0];
+        if (base) goToTask(base.projectId, base.taskId);
+        void rpc.app.openComparisonWindow({
+          panes: results.map((r) => ({ projectId: r.projectId, taskId: r.taskId })),
+          layout: { kind: 'columns', count: results.length },
+        });
+        void Promise.allSettled(results.map((r) => r.promise)).then(reportFailures);
         return;
       }
 
@@ -1988,7 +1960,6 @@ export const HomeComposer = observer(function HomeComposer({
     canSubmit,
     mounted,
     taskScopedTarget,
-    taskScopedTaskStore,
     parentTarget,
     parentBranchName,
     targetProvisionedTask,
@@ -2004,7 +1975,7 @@ export const HomeComposer = observer(function HomeComposer({
     trimmed,
     submitting,
     runMode,
-    compareRuntimes,
+    compareVariants,
     reviewerRuntime,
     activeTeam,
     queryClient,
@@ -2692,11 +2663,6 @@ export const HomeComposer = observer(function HomeComposer({
           )}
           <RunHostSelector kind={runHostKind} />
           {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
-          {!taskScopedTarget && mounted && runMode === 'compare' && (
-            <Chip icon={GitFork}>
-              {t('home.compareBranchPolicy', { count: compareRuntimes.length })}
-            </Chip>
-          )}
           {!taskScopedTarget && mounted && runMode === 'team' && (
             <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
           )}
@@ -2766,10 +2732,6 @@ export const HomeComposer = observer(function HomeComposer({
                 mode={configurationMode}
                 runtimeId={runtimeId}
                 onRuntimeChange={setRuntimeOverride}
-                compareRuntimes={compareRuntimes}
-                onCompareProviderChange={setCompareProvider}
-                onAddCompareRuntime={addCompareProvider}
-                onRemoveCompareRuntime={removeCompareProvider}
                 reviewerRuntime={reviewerRuntime}
                 onReviewerProviderChange={setReviewerProvider}
                 teams={teams}
@@ -2782,6 +2744,19 @@ export const HomeComposer = observer(function HomeComposer({
               />
             )}
           />
+          {!taskScopedTarget && mounted && runMode === 'normal' && (
+            <button
+              type="button"
+              aria-label={t('home.addCompareVariant')}
+              title={t('home.addCompareVariantTooltip')}
+              onClick={addVariant}
+              disabled={compareVariants.length >= MAX_COMPARE_VARIANTS}
+              className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <GitCompare className="size-3.5 text-foreground-muted" />
+              <span>{t('home.addCompareVariant')}</span>
+            </button>
+          )}
           <Popover>
             <PopoverTrigger
               aria-label={t('home.composerSettingsAria')}
@@ -2911,18 +2886,6 @@ export const HomeComposer = observer(function HomeComposer({
                       )
                     }
                   />
-                  <ComposerScopeRow
-                    label={t('home.composerDefaultCompareLabel')}
-                    value={String(compareRuntimes.length)}
-                    source={compareRuntimesOverridden ? 'project' : 'global'}
-                    canOverride={hasProjectOverrideTarget}
-                    onChange={(scope) =>
-                      setComposerDefault(
-                        'compareRuntimes',
-                        scope === 'project' ? compareRuntimes : undefined
-                      )
-                    }
-                  />
                 </CollapsibleContent>
               </Collapsible>
               <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
@@ -3008,10 +2971,160 @@ export const HomeComposer = observer(function HomeComposer({
             </PopoverContent>
           </Popover>
         </div>
+        {!taskScopedTarget && mounted && runMode === 'normal' && compareVariants.length > 0 && (
+          <div className="flex flex-col gap-2 border-l-2 border-primary/30 pl-3">
+            {compareVariants.map((variant, index) => (
+              <CompareVariantRow
+                key={variant.id}
+                index={index + 2}
+                variant={variant}
+                strategyLabels={strategyLabels}
+                onChange={(patch) => updateVariant(variant.id, patch)}
+                onRemove={() => removeVariant(variant.id)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 });
+
+/**
+ * One extra comparison environment under the base composer row: pick its
+ * project, runtime, branch strategy, and an optional prompt override. Empty
+ * fields fall back to the base config at submit time.
+ */
+function CompareVariantRow({
+  index,
+  variant,
+  strategyLabels,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  variant: CompareVariant;
+  strategyLabels: StrategyChipLabels;
+  onChange: (patch: Partial<CompareVariant>) => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-background-2 text-[10px] font-medium text-foreground-muted">
+        {index}
+      </span>
+      <ProjectSelector
+        value={variant.projectId ?? undefined}
+        onChange={(id) => onChange({ projectId: id ?? null })}
+        initializeGitRepositoryOnPick
+        trigger={
+          <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+            <FolderOpen className="size-3.5 text-foreground-muted" />
+            <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
+          </ComboboxTrigger>
+        }
+      />
+      <RuntimePickerChip value={variant.runtimeId} onChange={(id) => onChange({ runtimeId: id })} />
+      <ForkSwitchChip
+        checked={variant.strategyKind === 'new-branch'}
+        disabled={false}
+        onChange={(forked) => onChange({ strategyKind: forked ? 'new-branch' : 'no-worktree' })}
+        ariaLabel={t('home.strategyAria')}
+        labels={strategyLabels}
+      />
+      <PromptOverrideChip
+        value={variant.promptOverride}
+        onChange={(text) => onChange({ promptOverride: text.trim() ? text : null })}
+      />
+      <button
+        type="button"
+        aria-label={t('home.removeCompareVariant')}
+        title={t('home.removeCompareVariant')}
+        onClick={onRemove}
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+/** Compact runtime picker for a comparison variant (runtime override only). */
+function RuntimePickerChip({
+  value,
+  onChange,
+}: {
+  value: RuntimeId | null;
+  onChange: (id: RuntimeId) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const label = value ? (getRuntime(value)?.name ?? value) : t('home.agentLabel');
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+        <Bot className="size-3.5 text-foreground-muted" />
+        <span>{label}</span>
+        <ChevronDown className="size-3 text-foreground-muted" />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-44 p-1">
+        {RUNTIME_IDS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => {
+              onChange(id);
+              setOpen(false);
+            }}
+            className={cn(
+              'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-background-2',
+              value === id && 'bg-background-2'
+            )}
+          >
+            <span>{getRuntime(id)?.name ?? id}</span>
+            {value === id && <Check className="size-3.5 text-foreground-muted" />}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Optional per-variant prompt override; empty inherits the base prompt. */
+function PromptOverrideChip({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (text: string) => void;
+}) {
+  const { t } = useTranslation();
+  const active = Boolean(value && value.trim());
+  return (
+    <Popover>
+      <PopoverTrigger
+        className={cn(
+          'flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors',
+          active
+            ? 'border-primary/40 bg-primary/5 text-foreground'
+            : 'border-border bg-background-1 text-foreground hover:bg-background-2'
+        )}
+      >
+        <FileText className="size-3.5 text-foreground-muted" />
+        <span>{active ? t('home.promptOverrideActive') : t('home.promptOverrideLabel')}</span>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-2">
+        <Textarea
+          value={value ?? ''}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={t('home.promptOverridePlaceholder')}
+          className="min-h-24 text-xs"
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /**
  * Inherit/override pill for a single composer setting. `global` means the row
@@ -3476,16 +3589,6 @@ const WORKFLOW_RUN_MODE_OPTIONS: RunModeOption[] = [
   },
 ];
 
-const EXPLORE_RUN_MODE_OPTIONS: RunModeOption[] = [
-  {
-    id: 'compare',
-    mode: 'compare',
-    icon: GitCompare,
-    labelKey: 'home.modeCompare',
-    descKey: 'home.modeCompareDesc',
-  },
-];
-
 // Localized copy for the built-in teams so the zh/en picker reads naturally
 // rather than echoing the raw template name. User teams fall back to their name.
 const BUILTIN_TEAM_COPY: Record<string, { labelKey: string; descKey: string }> = {
@@ -3540,7 +3643,6 @@ function buildRunModeGroups(
       labelKey: 'home.modeGroupMultiAgent',
       options: orderMultiAgentTeams(teams).map(teamToRunModeOption),
     },
-    { labelKey: 'home.modeGroupExplore', options: EXPLORE_RUN_MODE_OPTIONS },
   ];
 }
 
@@ -3780,10 +3882,6 @@ interface ModeConfigurationPanelProps {
   mode: HomeRunMode;
   runtimeId: RuntimeId | null;
   onRuntimeChange: (agent: RuntimeId) => void;
-  compareRuntimes: RuntimeId[];
-  onCompareProviderChange: (index: number, provider: RuntimeId) => void;
-  onAddCompareRuntime: () => void;
-  onRemoveCompareRuntime: (index: number) => void;
   reviewerRuntime: RuntimeId;
   onReviewerProviderChange: (provider: RuntimeId) => void;
   teams: AgentTeam[];
@@ -3799,10 +3897,6 @@ function ModeConfigurationPanel({
   mode,
   runtimeId,
   onRuntimeChange,
-  compareRuntimes,
-  onCompareProviderChange,
-  onAddCompareRuntime,
-  onRemoveCompareRuntime,
   reviewerRuntime,
   onReviewerProviderChange,
   teams,
@@ -3851,43 +3945,6 @@ function ModeConfigurationPanel({
             connectionId={connectionId}
             {...slotProps(SPEC_PROMPT_KEY)}
           />
-        </div>
-      )}
-
-      {mode === 'compare' && (
-        <div className="flex flex-col gap-1.5">
-          {compareRuntimes.map((agent, index) => (
-            <Agent
-              key={`${agent}-${index}`}
-              icon={GitCompare}
-              label={t('home.compareAgent', { index: index + 1 })}
-              value={agent}
-              onChange={(provider) => onCompareProviderChange(index, provider)}
-              connectionId={connectionId}
-              {...slotProps(comparePromptKey(index))}
-              action={
-                <button
-                  type="button"
-                  aria-label={t('home.removeCompareAgent')}
-                  disabled={compareRuntimes.length <= MIN_COMPARE_AGENTS}
-                  onClick={() => onRemoveCompareRuntime(index)}
-                  className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <X className="size-3.5" />
-                </button>
-              }
-            />
-          ))}
-          {compareRuntimes.length < MAX_COMPARE_AGENTS && (
-            <button
-              type="button"
-              onClick={onAddCompareRuntime}
-              className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/60 bg-background-1 text-xs font-medium text-foreground-muted transition-colors hover:border-border hover:bg-background-2 hover:text-foreground"
-            >
-              <Plus className="size-3.5" />
-              <span>{t('home.addCompareAgent')}</span>
-            </button>
-          )}
         </div>
       )}
 

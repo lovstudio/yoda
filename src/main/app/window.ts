@@ -3,6 +3,11 @@ import { BrowserWindow, screen } from 'electron';
 import appIcon from '@/assets/images/yoda/yoda_logo.png?asset';
 import { PRODUCT_NAME } from '@shared/app-identity';
 import {
+  COMPARISON_WINDOW_TARGET_PARAM,
+  encodeComparisonWindowTarget,
+  type ComparisonWindowTarget,
+} from '@shared/comparison-window';
+import {
   encodeTaskWindowTarget,
   TASK_WINDOW_TARGET_PARAM,
   TASK_WINDOW_WARM_PARAM,
@@ -66,6 +71,15 @@ export function createTaskWindow(target: TaskWindowTarget): BrowserWindow {
   return createAppWindow({ target });
 }
 
+/**
+ * Open a detached window that tiles several tasks side by side for comparison.
+ * Cold-started (no warm pool): a comparison window mounts multiple projects and
+ * provisions multiple tasks, so the warm single-task shell would not help.
+ */
+export function createComparisonWindow(comparison: ComparisonWindowTarget): BrowserWindow {
+  return createAppWindow({ comparison });
+}
+
 /** Spawn an empty, hidden task window that boots its renderer shell and parks. */
 export function createWarmTaskWindow(): BrowserWindow {
   return createAppWindow({ warm: true });
@@ -83,11 +97,16 @@ export function positionTaskWindow(win: BrowserWindow, bounds?: TaskWindowBounds
 }
 
 function createAppWindow(
-  options: { target?: TaskWindowTarget; warm?: boolean } = {}
+  options: { target?: TaskWindowTarget; comparison?: ComparisonWindowTarget; warm?: boolean } = {}
 ): BrowserWindow {
+  const isComparisonWindow = Boolean(options.comparison);
   const isTaskWindow = Boolean(options.target) || options.warm === true;
-  const bounds =
-    isTaskWindow && !options.warm
+  // Comparison windows are detached surfaces like task windows (no app-tab strip)
+  // but want a larger default footprint to fit several tiled panes.
+  const isDetachedWindow = isTaskWindow || isComparisonWindow;
+  const bounds = isComparisonWindow
+    ? resolveComparisonWindowBounds()
+    : isTaskWindow && !options.warm
       ? resolveTaskWindowBounds(options.target?.bounds)
       : isTaskWindow
         ? resolveTaskWindowBounds(undefined)
@@ -97,8 +116,8 @@ function createAppWindow(
     width: bounds.width,
     height: bounds.height,
     ...(bounds.x !== undefined && bounds.y !== undefined ? { x: bounds.x, y: bounds.y } : {}),
-    minWidth: isTaskWindow ? 480 : 700,
-    minHeight: isTaskWindow ? 320 : 500,
+    minWidth: isDetachedWindow ? 480 : 700,
+    minHeight: isDetachedWindow ? 320 : 500,
     title: PRODUCT_NAME,
     backgroundColor: '#111111',
     // In production, electron-builder injects the icon from the app bundle.
@@ -126,7 +145,7 @@ function createAppWindow(
     show: false,
   });
 
-  void win.loadURL(rendererUrl(options.target, options.warm));
+  void win.loadURL(rendererUrl(options));
 
   // Route external links to the user’s default browser
   registerExternalLinkHandlers(win, import.meta.env.DEV);
@@ -135,7 +154,8 @@ function createAppWindow(
     // Show the shell immediately instead of waiting for ready-to-show: the
     // renderer bundle takes seconds to load, and the native backgroundColor
     // plus the static splash in index.html paint the same #111111 the boot
-    // screen uses — no flash, just a window that exists right away.
+    // screen uses — no flash, just a window that exists right away. Comparison
+    // windows cold-start the same way (no warm pre-render to wait on).
     win.show();
   } else if (!options.warm) {
     // Task windows keep the ready-to-show gate (they normally claim a
@@ -207,18 +227,40 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function rendererUrl(target?: TaskWindowTarget, warm?: boolean): string {
+function rendererUrl(options: {
+  target?: TaskWindowTarget;
+  comparison?: ComparisonWindowTarget;
+  warm?: boolean;
+}): string {
   const base = import.meta.env.DEV
     ? process.env.ELECTRON_RENDERER_URL!
     : `${APP_ORIGIN}/index.html`;
   const url = new URL(base);
-  if (target) {
-    url.searchParams.set(TASK_WINDOW_TARGET_PARAM, encodeTaskWindowTarget(target));
+  if (options.target) {
+    url.searchParams.set(TASK_WINDOW_TARGET_PARAM, encodeTaskWindowTarget(options.target));
   }
-  if (warm) {
+  if (options.comparison) {
+    url.searchParams.set(
+      COMPARISON_WINDOW_TARGET_PARAM,
+      encodeComparisonWindowTarget(options.comparison)
+    );
+  }
+  if (options.warm) {
     url.searchParams.set(TASK_WINDOW_WARM_PARAM, '1');
   }
   return url.toString();
+}
+
+function resolveComparisonWindowBounds(): {
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+} {
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const width = clamp(1280, 700, Math.max(700, workArea.width - 64));
+  const height = clamp(820, 500, Math.max(500, workArea.height - 64));
+  return { width, height, x: undefined, y: undefined };
 }
 
 export function getMainWindow(): BrowserWindow | null {

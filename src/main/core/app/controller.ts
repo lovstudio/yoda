@@ -1,4 +1,5 @@
 import { homedir } from 'node:os';
+import type { ComparisonWindowTarget } from '@shared/comparison-window';
 import type { TaskWindowReturnPayload } from '@shared/events/appEvents';
 import { createRPCController } from '@shared/ipc/rpc';
 import type { OpenInAppId } from '@shared/openInApps';
@@ -41,6 +42,22 @@ export const appController = createRPCController({
   openTaskWindow: async (target: TaskWindowTarget) => {
     try {
       appService.openTaskWindow(target);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  openComparisonWindow: async (target: ComparisonWindowTarget) => {
+    try {
+      appService.openComparisonWindow(target);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  focusTaskInMainWindow: async (target: { projectId: string; taskId: string }) => {
+    try {
+      appService.focusTaskInMainWindow(target);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
