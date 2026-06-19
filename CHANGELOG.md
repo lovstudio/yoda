@@ -5,6 +5,15 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.13.5 — 2026-06-19
+
+### Changed
+
+- Multi-config comparison polish: all config rows are unified — the base config
+  is migrated into the list alongside variants, every row carries its own config
+  gear, rows can be dragged to reorder, and the "+对比" button sits
+  right-aligned at the end of the first row instead of on a separate line.
+
 ## 0.13.4 — 2026-06-19
 
 ### Added
