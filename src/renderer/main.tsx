@@ -13,6 +13,7 @@ import type {
 import { setupAppCommandProvider } from '@renderer/lib/commands/app-commands';
 import { setupViewCommandProvider } from '@renderer/lib/commands/registry';
 import { wireCommitHistoryInvalidation } from '@renderer/lib/commit-history-invalidation';
+import { isComparisonWindowLaunch } from '@renderer/lib/comparison-window-launch-target';
 import { rpc } from '@renderer/lib/ipc';
 import { wireModelRegistryInvalidation } from '@renderer/lib/monaco/invalidation-bridges';
 import { codeEditorPool } from '@renderer/lib/monaco/monaco-code-pool';
@@ -76,11 +77,12 @@ async function bootstrap() {
         },
       },
     });
-  } else if (navResult) {
+  } else if (navResult && !isComparisonWindowLaunch) {
     appState.navigation.restoreSnapshot(navResult);
   }
-  // Detached task windows are single-route surfaces — no tab restoration there.
-  if (!launchTarget) {
+  // Detached windows are not the app-tab surface — comparison windows tile their
+  // own panes and task windows are single-route, so skip tab/side-pane restore.
+  if (!launchTarget && !isComparisonWindowLaunch) {
     const appTabsResult = (allViewState as Record<string, unknown>)?.appTabs;
     if (appTabsResult) {
       appState.appTabs.restoreSnapshot(appTabsResult as Partial<AppTabsSnapshot>);

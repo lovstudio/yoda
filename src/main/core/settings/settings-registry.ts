@@ -107,7 +107,6 @@ export const SETTINGS_DEFAULTS = {
     baseBranch: null,
     runtimeOverride: null,
     runMode: 'normal' as const,
-    compareRuntimes: ['claude', 'codex'],
     reviewReviewerRuntime: 'claude' as const,
     teamRuntimes: {
       ceo: 'claude' as const,

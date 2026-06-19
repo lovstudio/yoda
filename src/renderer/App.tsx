@@ -8,7 +8,12 @@ import { WelcomeScreen } from './app/welcome';
 import { Workspace } from './app/workspace';
 import { IntegrationsProvider } from './features/integrations/integrations-provider';
 import { Onboarding } from './features/onboarding/onboarding';
+import { ComparisonWindow } from './features/tasks/comparison-window';
 import { TaskTabWindow } from './features/tasks/task-window';
+import {
+  getComparisonWindowLaunchTarget,
+  isComparisonWindowLaunch,
+} from './lib/comparison-window-launch-target';
 import { useAccountSession } from './lib/hooks/useAccount';
 import { WorkspaceLayoutContextProvider } from './lib/layout/layout-provider';
 import { WorkspaceViewProvider } from './lib/layout/provider';
@@ -35,8 +40,11 @@ const AppContent = observer(function AppContent() {
 
   const isLoading = sessionLoading;
 
-  // Boot splash: main/full-app windows only — task windows pop open instantly.
-  const [bootScreenDone, setBootScreenDone] = useState(isTaskWindowLaunch);
+  // Boot splash: main/full-app windows only — detached task/comparison windows
+  // pop open instantly without the kernel boot screen.
+  const [bootScreenDone, setBootScreenDone] = useState(
+    isTaskWindowLaunch || isComparisonWindowLaunch
+  );
 
   // Computed once when queries first resolve while in onboarding. Never updated
   // after that so query refetches mid-onboarding cannot shrink the step list
@@ -59,13 +67,17 @@ const AppContent = observer(function AppContent() {
   };
 
   const handleOpenSettingsFromMenu = useCallback(() => {
-    if (isTaskWindowLaunch) return false;
+    if (isTaskWindowLaunch || isComparisonWindowLaunch) return false;
     if (view === 'onboarding' && stepsNeeded.length > 0) return false;
     setView('workspace');
     return true;
   }, [view, stepsNeeded.length]);
 
   const renderContent = () => {
+    if (isComparisonWindowLaunch) {
+      const target = getComparisonWindowLaunchTarget();
+      return target ? <ComparisonWindow target={target} /> : null;
+    }
     if (isTaskWindowLaunch) {
       return <TaskTabWindow />;
     }

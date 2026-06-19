@@ -3,10 +3,12 @@ import { stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { clipboard, dialog, shell } from 'electron';
+import { isComparisonWindowTarget, type ComparisonWindowTarget } from '@shared/comparison-window';
 import {
   appPasteChannel,
   appRedoChannel,
   appUndoChannel,
+  notificationFocusTaskChannel,
   taskWindowReturnedToTabChannel,
   type TaskWindowReturnPayload,
 } from '@shared/events/appEvents';
@@ -27,7 +29,7 @@ import {
   type TaskStripDropZone,
 } from '@main/app/task-window-dock';
 import { openTaskWindowFromPool } from '@main/app/task-window-pool';
-import { getMainWindow } from '@main/app/window';
+import { createComparisonWindow, getMainWindow } from '@main/app/window';
 import { db } from '@main/db/client';
 import { sshConnections } from '@main/db/schema';
 import { events } from '@main/lib/events';
@@ -208,6 +210,20 @@ class AppService implements IInitializable, IDisposable {
   openTaskWindow(target: TaskWindowTarget): void {
     if (!isTaskWindowTarget(target)) throw new Error('Invalid task window target');
     openTaskWindowFromPool(target);
+  }
+
+  openComparisonWindow(target: ComparisonWindowTarget): void {
+    if (!isComparisonWindowTarget(target)) throw new Error('Invalid comparison window target');
+    createComparisonWindow(target);
+  }
+
+  /** From a comparison pane: route the main window to one of the compared tasks. */
+  focusTaskInMainWindow(target: { projectId: string; taskId: string }): void {
+    if (!target.projectId || !target.taskId) throw new Error('Invalid focus task target');
+    events.emit(notificationFocusTaskChannel, {
+      projectId: target.projectId,
+      taskId: target.taskId,
+    });
   }
 
   notifyTaskWindowReturned(payload: TaskWindowReturnPayload): void {

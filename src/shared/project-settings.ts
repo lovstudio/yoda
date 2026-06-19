@@ -77,7 +77,7 @@ export const projectDocsSettingsSchema = z.object({
 
 export type ProjectDocsSettings = z.infer<typeof projectDocsSettingsSchema>;
 
-export const composerRunModeValues = ['normal', 'brainstorm', 'compare', 'review', 'team'] as const;
+export const composerRunModeValues = ['normal', 'brainstorm', 'review', 'team'] as const;
 export const composerStrategyKindValues = ['new-branch', 'no-worktree'] as const;
 
 /**
@@ -97,11 +97,15 @@ export type ComposerBaseBranch = z.infer<typeof composerBaseBranchSchema>;
 
 export const composerDefaultsSchema = z.object({
   runtimeId: z.enum(RUNTIME_IDS).optional(),
-  runMode: z.enum(composerRunModeValues).optional(),
+  // The retired `compare` run mode coerces to `normal` so an old `.yoda.json`
+  // override still parses instead of failing the whole settings object.
+  runMode: z.preprocess(
+    (value) => (value === 'compare' ? 'normal' : value),
+    z.enum(composerRunModeValues).optional()
+  ),
   baseBranch: composerBaseBranchSchema.optional(),
   standardStrategyKind: z.enum(composerStrategyKindValues).optional(),
   reviewStrategyKind: z.enum(composerStrategyKindValues).optional(),
-  compareRuntimes: z.array(z.enum(RUNTIME_IDS)).optional(),
   reviewerRuntime: z.enum(RUNTIME_IDS).optional(),
   attachImagesAsPaths: z.boolean().optional(),
 });
