@@ -186,7 +186,6 @@ type CompareVariant = {
   strategyKind: TaskStrategyKind;
   /** Fork/in-place base branch; null = the project's default branch. */
   baseBranch: Branch | null;
-  promptOverride: string | null;
 };
 type SkillShortcutPrefix = '/' | '$';
 
@@ -1304,24 +1303,27 @@ export const HomeComposer = observer(function HomeComposer({
     effectiveStandardStrategyKind === 'new-branch' ? 'new-branch' : inPlaceKind;
   const reviewSubmitKind: TaskSubmitStrategyKind =
     effectiveReviewStrategyKind === 'new-branch' ? 'new-branch' : inPlaceKind;
-  // A new comparison variant defaults to a duplicate of the current base config.
+  // Every comparison config is a duplicate of the current base composer config.
+  // Entering compare mode (from zero) migrates the base into the list as the
+  // first config and adds a second, so all rows are equal and the special base
+  // row disappears; later clicks append one more.
+  const makeVariantFromBase = useCallback(
+    (): CompareVariant => ({
+      id: crypto.randomUUID(),
+      projectId: selectedProjectId ?? null,
+      runtimeId,
+      strategyKind: effectiveStandardStrategyKind,
+      baseBranch: forkBaseBranch ?? null,
+    }),
+    [selectedProjectId, runtimeId, effectiveStandardStrategyKind, forkBaseBranch]
+  );
   const addVariant = useCallback(() => {
-    setCompareVariants((prev) =>
-      prev.length >= MAX_COMPARE_VARIANTS
-        ? prev
-        : [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              projectId: selectedProjectId ?? null,
-              runtimeId,
-              strategyKind: effectiveStandardStrategyKind,
-              baseBranch: forkBaseBranch ?? null,
-              promptOverride: null,
-            },
-          ]
-    );
-  }, [selectedProjectId, runtimeId, effectiveStandardStrategyKind, forkBaseBranch]);
+    setCompareVariants((prev) => {
+      if (prev.length >= MAX_COMPARE_VARIANTS) return prev;
+      if (prev.length === 0) return [makeVariantFromBase(), makeVariantFromBase()];
+      return [...prev, makeVariantFromBase()];
+    });
+  }, [makeVariantFromBase]);
   const targetProvisionedTask = asProvisioned(taskScopedTaskStore);
   const setAttachImagesAsPathsGlobal = useCallback(
     (next: boolean) => {
@@ -1773,15 +1775,11 @@ export const HomeComposer = observer(function HomeComposer({
       // detached window tiles them side by side. Each task is a normal task that
       // also lands in its project's sidebar, so closing the window keeps them.
       if (runMode === 'normal' && compareVariants.length > 0 && mounted) {
-        const baseSlot = resolveSlot(NORMAL_PROMPT_KEY, runtimeId);
-        if (!baseSlot.provider) return;
-
         type CompareSpec = {
           projectId: string;
           provider: RuntimeId;
           model: string | null | undefined;
           systemPrompt: string;
-          requirement: string;
           strategyKind: TaskStrategyKind;
           baseBranch: Branch | null;
           nameSeed: string;
@@ -1832,12 +1830,12 @@ export const HomeComposer = observer(function HomeComposer({
               runtime: spec.provider,
               title: initialConversationTitle(
                 spec.provider,
-                trimmed || spec.requirement || undefined,
+                trimmed || requirement || undefined,
                 []
               ),
               initialPrompt: systemPrompt
-                ? buildRequirementPrompt({ requirement: spec.requirement, systemPrompt })
-                : spec.requirement || undefined,
+                ? buildRequirementPrompt({ requirement, systemPrompt })
+                : requirement || undefined,
               imagePaths,
               autoApprove: autoApproveDefaults.getDefault(spec.provider),
               model: spec.model,
@@ -1846,35 +1844,24 @@ export const HomeComposer = observer(function HomeComposer({
           return { projectId: spec.projectId, taskId, promise };
         };
 
-        const specs: CompareSpec[] = [
-          {
-            projectId: mounted.data.id,
-            provider: baseSlot.provider,
-            model: baseSlot.agent?.model,
-            systemPrompt: baseSlot.systemPrompt,
-            requirement,
-            strategyKind: standardSubmitKind === 'new-branch' ? 'new-branch' : 'no-worktree',
-            baseBranch: forkBaseBranch ?? null,
-            nameSeed: `${baseName}-base`,
-          },
-          ...compareVariants.flatMap((variant, index): CompareSpec[] => {
-            if (!variant.projectId) return [];
-            const slot = resolveSlot(NORMAL_PROMPT_KEY, variant.runtimeId);
-            if (!slot.provider) return [];
-            return [
-              {
-                projectId: variant.projectId,
-                provider: slot.provider,
-                model: slot.agent?.model,
-                systemPrompt: slot.systemPrompt,
-                requirement: variant.promptOverride?.trim() || requirement,
-                strategyKind: variant.strategyKind,
-                baseBranch: variant.baseBranch,
-                nameSeed: `${baseName}-alt-${index + 1}`,
-              },
-            ];
-          }),
-        ];
+        // Every config is an equal row in the list (the base was migrated in when
+        // compare mode was entered); they all share the composer prompt.
+        const specs: CompareSpec[] = compareVariants.flatMap((variant, index): CompareSpec[] => {
+          if (!variant.projectId) return [];
+          const slot = resolveSlot(NORMAL_PROMPT_KEY, variant.runtimeId);
+          if (!slot.provider) return [];
+          return [
+            {
+              projectId: variant.projectId,
+              provider: slot.provider,
+              model: slot.agent?.model,
+              systemPrompt: slot.systemPrompt,
+              strategyKind: variant.strategyKind,
+              baseBranch: variant.baseBranch,
+              nameSeed: `${baseName}-${index + 1}`,
+            },
+          ];
+        });
 
         const results = (await Promise.all(specs.map(createForSpec))).filter(
           (r): r is { projectId: string; taskId: string; promise: Promise<unknown> } => r !== null
@@ -2674,118 +2661,155 @@ export const HomeComposer = observer(function HomeComposer({
         {/* Toolbar chips wrap to extra rows in narrow hosts — never min-w-max +
             overflow-x-auto: macOS overlay scrollbars make clipped chips invisible.
             Chip text labels collapse to icon-only below the @lg container width. */}
-        <div className="flex flex-wrap items-center gap-2">
-          {isProjectLocked ? (
-            <TaskScopedProjectButton
-              label={lockedProjectName ?? selectedProjectId ?? ''}
-              tooltip={
-                taskScopedTarget
-                  ? t('home.taskConversationScopeTooltip')
-                  : t('home.subtaskScopeTooltip')
-              }
-            />
-          ) : (
-            <ProjectSelector
-              value={selectedProjectId}
-              onChange={setSelectedProjectId}
-              allowProjectless
-              initializeGitRepositoryOnPick
-              trigger={
-                <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
-                  <FolderOpen className="size-3.5 text-foreground-muted" />
-                  <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
-                </ComboboxTrigger>
-              }
-            />
-          )}
-          <RunHostSelector kind={runHostKind} />
-          {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
-          {!taskScopedTarget && mounted && runMode === 'team' && (
-            <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
-          )}
-          {!taskScopedTarget && mounted && runMode === 'normal' && (
-            <>
-              <BaseBranchChip
-                projectId={mounted.data.id}
-                forking={effectiveStandardStrategyKind === 'new-branch'}
-                locked={Boolean(parentBranchName)}
-                value={
-                  effectiveStandardStrategyKind === 'new-branch' ? forkBaseBranch : inPlaceValue
+        {/* Compare mode: the base config is migrated into this uniform, reorderable
+            list, so every row is an equal config. The plain base chip row below is
+            hidden while comparing. */}
+        {!taskScopedTarget && mounted && runMode === 'normal' && compareVariants.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {compareVariants.map((variant) => (
+              <CompareVariantRow
+                key={variant.id}
+                variant={variant}
+                strategyLabels={strategyLabels}
+                runHostKind={
+                  asMounted(
+                    variant.projectId ? projectManager.projects.get(variant.projectId) : undefined
+                  )?.data.type === 'ssh'
+                    ? 'ssh'
+                    : 'local'
                 }
-                label={
-                  effectiveStandardStrategyKind === 'new-branch'
-                    ? forkBaseLabel
-                    : inPlaceBranchLabel
-                }
-                inPlace={
-                  effectiveStandardStrategyKind !== 'new-branch' && inPlaceKind === 'no-worktree'
-                }
-                onChange={setBaseBranch}
-                ariaLabel={t('home.baseBranchAria')}
+                modelLabel={compareModelLabel}
+                onChange={(patch) => updateVariant(variant.id, patch)}
+                onRemove={() => removeVariant(variant.id)}
+                onReorder={reorderVariant}
               />
-              <ForkSwitchChip
-                checked={effectiveStandardStrategyKind === 'new-branch'}
-                disabled={isUnborn}
-                onChange={(forked) => setStrategyKind(forked ? 'new-branch' : 'no-worktree')}
-                ariaLabel={t('home.strategyAria')}
-                labels={strategyLabels}
-              />
-            </>
-          )}
-          {!taskScopedTarget && mounted && runMode === 'review' && (
-            <>
-              <BaseBranchChip
-                projectId={mounted.data.id}
-                forking={effectiveReviewStrategyKind === 'new-branch'}
-                locked={Boolean(parentBranchName)}
-                value={effectiveReviewStrategyKind === 'new-branch' ? forkBaseBranch : inPlaceValue}
-                label={
-                  effectiveReviewStrategyKind === 'new-branch' ? forkBaseLabel : inPlaceBranchLabel
+            ))}
+          </div>
+        )}
+        {compareVariants.length === 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {isProjectLocked ? (
+              <TaskScopedProjectButton
+                label={lockedProjectName ?? selectedProjectId ?? ''}
+                tooltip={
+                  taskScopedTarget
+                    ? t('home.taskConversationScopeTooltip')
+                    : t('home.subtaskScopeTooltip')
                 }
-                inPlace={
-                  effectiveReviewStrategyKind !== 'new-branch' && inPlaceKind === 'no-worktree'
+              />
+            ) : (
+              <ProjectSelector
+                value={selectedProjectId}
+                onChange={setSelectedProjectId}
+                allowProjectless
+                initializeGitRepositoryOnPick
+                trigger={
+                  <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+                    <FolderOpen className="size-3.5 text-foreground-muted" />
+                    <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
+                  </ComboboxTrigger>
                 }
-                onChange={setBaseBranch}
-                ariaLabel={t('home.baseBranchAria')}
-              />
-              <ForkSwitchChip
-                checked={effectiveReviewStrategyKind === 'new-branch'}
-                disabled={isUnborn}
-                onChange={(forked) => setReviewStrategyKind(forked ? 'new-branch' : 'no-worktree')}
-                ariaLabel={t('home.reviewStrategyAria')}
-                labels={reviewStrategyLabels}
-              />
-            </>
-          )}
-          <RunModeSelector
-            mode={runMode}
-            summary={runModeSummary}
-            teams={teams}
-            selectedTeamId={selectedTeamId}
-            onChange={setRunMode}
-            onSelectTeam={setSelectedTeamId}
-            renderConfiguration={(configurationMode, configurationTeamId) => (
-              <ModeConfigurationPanel
-                mode={configurationMode}
-                runtimeId={runtimeId}
-                onRuntimeChange={setRuntimeOverride}
-                reviewerRuntime={reviewerRuntime}
-                onReviewerProviderChange={setReviewerProvider}
-                teams={teams}
-                selectedTeamId={configurationTeamId ?? selectedTeamId}
-                agents={userAgents}
-                slotAgentId={slotAgentId}
-                onSlotAgentChange={setSlotAgent}
-                connectionId={connectionId}
-                className="mt-2 border-t-0 pt-0"
               />
             )}
-          />
+            <RunHostSelector kind={runHostKind} />
+            {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
+            {!taskScopedTarget && mounted && runMode === 'team' && (
+              <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
+            )}
+            {!taskScopedTarget && mounted && runMode === 'normal' && (
+              <>
+                <BaseBranchChip
+                  projectId={mounted.data.id}
+                  forking={effectiveStandardStrategyKind === 'new-branch'}
+                  locked={Boolean(parentBranchName)}
+                  value={
+                    effectiveStandardStrategyKind === 'new-branch' ? forkBaseBranch : inPlaceValue
+                  }
+                  label={
+                    effectiveStandardStrategyKind === 'new-branch'
+                      ? forkBaseLabel
+                      : inPlaceBranchLabel
+                  }
+                  inPlace={
+                    effectiveStandardStrategyKind !== 'new-branch' && inPlaceKind === 'no-worktree'
+                  }
+                  onChange={setBaseBranch}
+                  ariaLabel={t('home.baseBranchAria')}
+                />
+                <ForkSwitchChip
+                  checked={effectiveStandardStrategyKind === 'new-branch'}
+                  disabled={isUnborn}
+                  onChange={(forked) => setStrategyKind(forked ? 'new-branch' : 'no-worktree')}
+                  ariaLabel={t('home.strategyAria')}
+                  labels={strategyLabels}
+                />
+              </>
+            )}
+            {!taskScopedTarget && mounted && runMode === 'review' && (
+              <>
+                <BaseBranchChip
+                  projectId={mounted.data.id}
+                  forking={effectiveReviewStrategyKind === 'new-branch'}
+                  locked={Boolean(parentBranchName)}
+                  value={
+                    effectiveReviewStrategyKind === 'new-branch' ? forkBaseBranch : inPlaceValue
+                  }
+                  label={
+                    effectiveReviewStrategyKind === 'new-branch'
+                      ? forkBaseLabel
+                      : inPlaceBranchLabel
+                  }
+                  inPlace={
+                    effectiveReviewStrategyKind !== 'new-branch' && inPlaceKind === 'no-worktree'
+                  }
+                  onChange={setBaseBranch}
+                  ariaLabel={t('home.baseBranchAria')}
+                />
+                <ForkSwitchChip
+                  checked={effectiveReviewStrategyKind === 'new-branch'}
+                  disabled={isUnborn}
+                  onChange={(forked) =>
+                    setReviewStrategyKind(forked ? 'new-branch' : 'no-worktree')
+                  }
+                  ariaLabel={t('home.reviewStrategyAria')}
+                  labels={reviewStrategyLabels}
+                />
+              </>
+            )}
+            <RunModeSelector
+              mode={runMode}
+              summary={runModeSummary}
+              teams={teams}
+              selectedTeamId={selectedTeamId}
+              onChange={setRunMode}
+              onSelectTeam={setSelectedTeamId}
+              renderConfiguration={(configurationMode, configurationTeamId) => (
+                <ModeConfigurationPanel
+                  mode={configurationMode}
+                  runtimeId={runtimeId}
+                  onRuntimeChange={setRuntimeOverride}
+                  reviewerRuntime={reviewerRuntime}
+                  onReviewerProviderChange={setReviewerProvider}
+                  teams={teams}
+                  selectedTeamId={configurationTeamId ?? selectedTeamId}
+                  agents={userAgents}
+                  slotAgentId={slotAgentId}
+                  onSlotAgentChange={setSlotAgent}
+                  connectionId={connectionId}
+                  className="mt-2 border-t-0 pt-0"
+                />
+              )}
+            />
+          </div>
+        )}
+        {/* Action row (always shown): add another config + composer settings. In
+            compare mode it sits under the config list, so "+ 对比" is the last row. */}
+        <div className="flex flex-wrap items-center gap-2">
           <Popover>
             <PopoverTrigger
               aria-label={t('home.composerSettingsAria')}
               title={t('home.composerSettingsAria')}
-              className="ml-auto flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 hover:text-foreground"
+              className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 hover:text-foreground"
             >
               <Settings2 className="size-3.5 text-foreground-muted" />
               <span className="hidden @lg/composer:inline">{t('home.composerSettingsLabel')}</span>
@@ -3009,28 +3033,6 @@ export const HomeComposer = observer(function HomeComposer({
             </button>
           )}
         </div>
-        {!taskScopedTarget && mounted && runMode === 'normal' && compareVariants.length > 0 && (
-          <div className="flex flex-col gap-2 border-l-2 border-primary/30 pl-1">
-            {compareVariants.map((variant) => (
-              <CompareVariantRow
-                key={variant.id}
-                variant={variant}
-                strategyLabels={strategyLabels}
-                runHostKind={
-                  asMounted(
-                    variant.projectId ? projectManager.projects.get(variant.projectId) : undefined
-                  )?.data.type === 'ssh'
-                    ? 'ssh'
-                    : 'local'
-                }
-                modelLabel={compareModelLabel}
-                onChange={(patch) => updateVariant(variant.id, patch)}
-                onRemove={() => removeVariant(variant.id)}
-                onReorder={reorderVariant}
-              />
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -3132,10 +3134,6 @@ function CompareVariantRow({
         modelLabel={modelLabel}
         onChange={(id) => onChange({ runtimeId: id })}
       />
-      <PromptOverrideChip
-        value={variant.promptOverride}
-        onChange={(text) => onChange({ promptOverride: text.trim() ? text : null })}
-      />
       <button
         type="button"
         aria-label={t('home.removeCompareVariant')}
@@ -3193,40 +3191,6 @@ function RuntimePickerChip({
 }
 
 /** Optional per-variant prompt override; empty inherits the base prompt. */
-function PromptOverrideChip({
-  value,
-  onChange,
-}: {
-  value: string | null;
-  onChange: (text: string) => void;
-}) {
-  const { t } = useTranslation();
-  const active = Boolean(value && value.trim());
-  return (
-    <Popover>
-      <PopoverTrigger
-        className={cn(
-          'flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors',
-          active
-            ? 'border-primary/40 bg-primary/5 text-foreground'
-            : 'border-border bg-background-1 text-foreground hover:bg-background-2'
-        )}
-      >
-        <FileText className="size-3.5 text-foreground-muted" />
-        <span>{active ? t('home.promptOverrideActive') : t('home.promptOverrideLabel')}</span>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-2">
-        <Textarea
-          value={value ?? ''}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={t('home.promptOverridePlaceholder')}
-          className="min-h-24 text-xs"
-        />
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 /**
  * Inherit/override pill for a single composer setting. `global` means the row
  * follows the user's global default; `project` overrides it for the current
