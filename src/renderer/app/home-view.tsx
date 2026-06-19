@@ -2583,7 +2583,7 @@ export const HomeComposer = observer(function HomeComposer({
       title={t('home.addCompareVariantTooltip')}
       onClick={addVariant}
       disabled={compareVariants.length >= MAX_COMPARE_VARIANTS}
-      className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:cursor-not-allowed disabled:opacity-50"
+      className="ml-auto flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:cursor-not-allowed disabled:opacity-50"
     >
       <GitCompare className="size-3.5 text-foreground-muted" />
       <span className="hidden @lg/composer:inline">{t('home.addCompareVariant')}</span>
