@@ -743,6 +743,7 @@
     "attachSshUnsupported": "Local attachments are not supported for SSH projects",
     "attachPasteFailedToast": "Could not attach the pasted image",
     "composerSettingsAria": "Input settings",
+    "composerSettingsLabel": "Config",
     "attachImagesAsPathsLabel": "Send images as file paths",
     "attachImagesAsPathsDesc": "Reference images as @path mentions instead of pasting them natively into the agent terminal.",
     "composerScopeGlobal": "Global",

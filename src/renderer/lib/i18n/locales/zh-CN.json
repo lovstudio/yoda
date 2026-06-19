@@ -743,6 +743,7 @@
     "attachSshUnsupported": "SSH 项目暂不支持本地附件",
     "attachPasteFailedToast": "无法添加粘贴的图片",
     "composerSettingsAria": "输入设置",
+    "composerSettingsLabel": "配置",
     "attachImagesAsPathsLabel": "图片以文件路径发送",
     "attachImagesAsPathsDesc": "以 @路径 形式引用图片，而不是把图片原生粘贴进 agent 终端。",
     "composerScopeGlobal": "全局",

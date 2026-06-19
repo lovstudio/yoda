@@ -2634,9 +2634,10 @@ export const HomeComposer = observer(function HomeComposer({
         </div>
       </div>
 
-      <div className="mt-3 flex flex-col gap-2">
+      <div className="@container/composer mt-3 flex flex-col gap-2">
         {/* Toolbar chips wrap to extra rows in narrow hosts — never min-w-max +
-            overflow-x-auto: macOS overlay scrollbars make clipped chips invisible. */}
+            overflow-x-auto: macOS overlay scrollbars make clipped chips invisible.
+            Chip text labels collapse to icon-only below the @lg container width. */}
         <div className="flex flex-wrap items-center gap-2">
           {isProjectLocked ? (
             <TaskScopedProjectButton
@@ -2748,9 +2749,10 @@ export const HomeComposer = observer(function HomeComposer({
             <PopoverTrigger
               aria-label={t('home.composerSettingsAria')}
               title={t('home.composerSettingsAria')}
-              className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+              className="ml-auto flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 hover:text-foreground"
             >
-              <Settings2 className="size-3.5" />
+              <Settings2 className="size-3.5 text-foreground-muted" />
+              <span className="hidden @lg/composer:inline">{t('home.composerSettingsLabel')}</span>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-96 gap-0 p-2.5">
               <div className="flex items-center justify-between gap-3">
@@ -2967,7 +2969,7 @@ export const HomeComposer = observer(function HomeComposer({
               className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <GitCompare className="size-3.5 text-foreground-muted" />
-              <span>{t('home.addCompareVariant')}</span>
+              <span className="hidden @lg/composer:inline">{t('home.addCompareVariant')}</span>
             </button>
           )}
         </div>
