@@ -5,6 +5,19 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.13.6 — 2026-06-20
+
+### Added
+
+- Move (promote) a task to another project.
+- Conversation panel: markdown links are now clickable.
+
+### Changed
+
+- The internal Drafts project is renamed and rendered as a normal project row
+  in the sidebar.
+- Embedded browser tames audio: autoplay is controlled, with mute / auto-mute.
+
 ## 0.13.5 — 2026-06-19
 
 ### Changed

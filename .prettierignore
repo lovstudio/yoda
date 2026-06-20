@@ -9,6 +9,9 @@
 **/.turbo
 **/out
 
+# ignore git worktrees (gitignored; descending into them flakes format)
+.worktrees
+
 # ignore config files that shouldn't be formatted
 **/.env*
 **/pnpm-lock.yaml
