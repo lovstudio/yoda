@@ -143,7 +143,10 @@ class UpdateService implements IInitializable, IDisposable {
     });
 
     autoUpdater.on('download-progress', (progressObj: ProgressInfo) => {
-      this.updateState.status = 'downloading';
+      if (this.updateState.status !== 'downloading') {
+        this.updateState.status = 'downloading';
+        events.emit(updateDownloadingEvent, { version: this.updateState.availableVersion ?? '' });
+      }
       this.updateState.downloadProgress = {
         bytesPerSecond: progressObj.bytesPerSecond,
         percent: progressObj.percent,
@@ -159,6 +162,10 @@ class UpdateService implements IInitializable, IDisposable {
     });
 
     autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+      if (this.updateState.status !== 'downloading') {
+        this.updateState.status = 'downloading';
+        events.emit(updateDownloadingEvent, { version: info.version });
+      }
       this.updateState.status = 'downloaded';
       this.updateState.rollbackVersion = this.updateState.currentVersion;
       events.emit(updateDownloadedEvent, { version: info.version });
@@ -248,9 +255,6 @@ class UpdateService implements IInitializable, IDisposable {
     if (!this.updateState.availableVersion) {
       throw new Error('No version information available for download');
     }
-
-    this.updateState.status = 'downloading';
-    events.emit(updateDownloadingEvent, { version: this.updateState.availableVersion });
 
     try {
       await this.applyProxyConfig();
