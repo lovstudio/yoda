@@ -12,9 +12,18 @@ import { isTerminalLinkCellInRange, type TerminalLinkCellPosition } from './term
 const URL_REGEX =
   /(?:https?|HTTPS?|ftp|FTP|file|FILE):\/\/[^\s"'<>`、，。；：！？（）「」『』【】〈〉《》“”‘’]+[^\s"'<>`、，。；：！？（）「」『』【】〈〉《》“”‘’.,;:!?)\]}]/g;
 
+// Markdown inline links `[label](url)` — the agent's ink renderer often prints
+// these literally, where only the bare URL inside the parens was clickable.
+// Match the whole span so the label is clickable too; the captured group is the
+// URL to open. Titles (`[label](url "title")`) fall back to the bare-URL match.
+const MARKDOWN_LINK_REGEX = /(!?)\[[^\]\n]*\]\(((?:https?|ftp|file):\/\/[^\s)]+)\)/gi;
+
 interface TerminalWebLinkCandidate {
   url: string;
+  /** Index of the clickable span's first character within the scan line. */
   index: number;
+  /** Length of the clickable span (the full `[label](url)` for markdown links). */
+  length: number;
 }
 
 export interface TerminalWebLinkOptions {
@@ -28,15 +37,28 @@ export interface TerminalWebLinkMatch {
 
 export function extractTerminalWebLinkCandidates(line: string): TerminalWebLinkCandidate[] {
   const candidates: TerminalWebLinkCandidate[] = [];
+  // Spans already claimed by a markdown link, so the bare-URL pass below skips
+  // the URL nested inside it (no overlapping links for the same cells).
+  const consumed: Array<[number, number]> = [];
+
+  MARKDOWN_LINK_REGEX.lastIndex = 0;
+  for (const match of line.matchAll(MARKDOWN_LINK_REGEX)) {
+    const url = match[2];
+    if (!url) continue;
+    // The clickable span starts at the `[` (skipping a leading `!` for images).
+    const index = (match.index ?? 0) + (match[1]?.length ?? 0);
+    const length = match[0].length - (match[1]?.length ?? 0);
+    candidates.push({ url, index, length });
+    consumed.push([index, index + length]);
+  }
 
   URL_REGEX.lastIndex = 0;
   for (const match of line.matchAll(URL_REGEX)) {
     const url = match[0];
     if (!url) continue;
-    candidates.push({
-      url,
-      index: match.index ?? 0,
-    });
+    const index = match.index ?? 0;
+    if (consumed.some(([start, end]) => index >= start && index < end)) continue;
+    candidates.push({ url, index, length: url.length });
   }
 
   return candidates;
@@ -55,12 +77,7 @@ export function getTerminalWebLinkMatches(
 
   const matches: TerminalWebLinkMatch[] = [];
   for (const candidate of extractTerminalWebLinkCandidates(line)) {
-    const range = mapScanRangeToBufferRange(
-      terminal,
-      chunks,
-      candidate.index,
-      candidate.url.length
-    );
+    const range = mapScanRangeToBufferRange(terminal, chunks, candidate.index, candidate.length);
     if (!range) continue;
 
     matches.push({ range, url: candidate.url });
