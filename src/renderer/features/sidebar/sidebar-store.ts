@@ -277,10 +277,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       // during its brief registering phase only to drop it on mount. Clone/new
       // keep showing so their long-running progress stays visible.
       .filter((p) => !this.hideProjectsWithoutActiveTasks || p.mode !== 'pick');
-    const real = all
-      .filter(isRegisteredProject)
-      .filter((p) => !p.data.isInternal)
-      .filter((p) => this.matchesActiveWorkspace(p));
+    const real = all.filter(isRegisteredProject).filter((p) => this.matchesActiveWorkspace(p));
 
     const typeFiltered =
       this.projectTypeFilter === 'all'
@@ -501,7 +498,6 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     const pinnedProjects = this.sortProjectsForSidebar(
       Array.from(this.projectManager.projects.values())
         .filter(isRegisteredProject)
-        .filter((p) => !p.data.isInternal)
         .filter((p) => this.matchesActiveWorkspace(p))
     ).filter((project) => pinnedProjectIds.has(project.data.id));
 

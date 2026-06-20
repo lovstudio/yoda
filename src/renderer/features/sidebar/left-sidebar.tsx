@@ -45,7 +45,6 @@ import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import { SidebarPinnedTaskList } from './pinned-task-list';
-import { SidebarProjectlessTaskList } from './projectless-task-list';
 import { ProjectsGroupLabel } from './projects-group-label';
 import {
   SidebarContainer,
@@ -277,7 +276,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               </SidebarGroupContent>
             )}
           </SidebarGroup>
-          <SidebarProjectlessTaskList />
         </SidebarContent>
         <div ref={footerRef} className="flex flex-col">
           {/* Single separator for the footer block: sits above the nav section
