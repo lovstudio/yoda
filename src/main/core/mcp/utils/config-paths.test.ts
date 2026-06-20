@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { getAgentMcpMeta, getAllMcpAgentIds } from './config-paths';
 
@@ -10,7 +11,7 @@ describe('getAgentMcpMeta', () => {
   it('returns correct meta for claude', () => {
     const meta = getAgentMcpMeta('claude');
     expect(meta).toBeDefined();
-    expect(meta!.configPath).toBe('/home/testuser/.claude.json');
+    expect(meta!.configPath).toBe(path.join('/home/testuser', '.claude.json'));
     expect(meta!.serversPath).toEqual(['mcpServers']);
     expect(meta!.adapter).toBe('passthrough');
     expect(meta!.isToml).toBe(false);
@@ -19,7 +20,7 @@ describe('getAgentMcpMeta', () => {
   it('returns correct meta for cursor', () => {
     const meta = getAgentMcpMeta('cursor');
     expect(meta).toBeDefined();
-    expect(meta!.configPath).toBe('/home/testuser/.cursor/mcp.json');
+    expect(meta!.configPath).toBe(path.join('/home/testuser', '.cursor', 'mcp.json'));
     expect(meta!.adapter).toBe('cursor');
   });
 
@@ -34,14 +35,14 @@ describe('getAgentMcpMeta', () => {
   it('returns correct meta for amp', () => {
     const meta = getAgentMcpMeta('amp');
     expect(meta).toBeDefined();
-    expect(meta!.configPath).toBe('/home/testuser/.config/amp/settings.json');
+    expect(meta!.configPath).toBe(path.join('/home/testuser', '.config', 'amp', 'settings.json'));
     expect(meta!.adapter).toBe('passthrough');
   });
 
   it('returns correct meta for gemini', () => {
     const meta = getAgentMcpMeta('gemini');
     expect(meta).toBeDefined();
-    expect(meta!.configPath).toBe('/home/testuser/.gemini/settings.json');
+    expect(meta!.configPath).toBe(path.join('/home/testuser', '.gemini', 'settings.json'));
     expect(meta!.serversPath).toEqual(['mcpServers']);
     expect(meta!.adapter).toBe('gemini');
   });
@@ -49,7 +50,7 @@ describe('getAgentMcpMeta', () => {
   it('returns correct meta for qwen (uses gemini adapter)', () => {
     const meta = getAgentMcpMeta('qwen');
     expect(meta).toBeDefined();
-    expect(meta!.configPath).toBe('/home/testuser/.qwen/settings.json');
+    expect(meta!.configPath).toBe(path.join('/home/testuser', '.qwen', 'settings.json'));
     expect(meta!.adapter).toBe('gemini');
   });
 
@@ -63,7 +64,7 @@ describe('getAgentMcpMeta', () => {
   it('returns correct meta for copilot', () => {
     const meta = getAgentMcpMeta('copilot');
     expect(meta).toBeDefined();
-    expect(meta!.configPath).toBe('/home/testuser/.copilot/mcp-config.json');
+    expect(meta!.configPath).toBe(path.join('/home/testuser', '.copilot', 'mcp-config.json'));
     expect(meta!.adapter).toBe('copilot');
   });
 

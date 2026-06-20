@@ -67,7 +67,14 @@ describe('scanCodexSkills', () => {
       description: 'Linked skill',
     });
     mkdirSync(join(home, '.agents', 'skills'), { recursive: true });
-    symlinkSync(linkedTarget, join(home, '.agents', 'skills', 'linked-skill'), 'dir');
+    // Windows cannot create symlinks without Developer Mode / elevation.
+    let linkedCreated = false;
+    try {
+      symlinkSync(linkedTarget, join(home, '.agents', 'skills', 'linked-skill'), 'dir');
+      linkedCreated = true;
+    } catch {
+      linkedCreated = false;
+    }
 
     const skills = await scanCodexSkills(cwd, { home, codexHome });
     const byName = new Map(skills.map((skill) => [skill.name, skill]));
@@ -79,7 +86,9 @@ describe('scanCodexSkills', () => {
       'first folded line second folded line'
     );
     expect(byName.get('override-me')?.description).toBe('Project description');
-    expect(byName.get('linked-skill')?.path).toBe(join(realpathSync(linkedTarget), 'SKILL.md'));
+    if (linkedCreated) {
+      expect(byName.get('linked-skill')?.path).toBe(join(realpathSync(linkedTarget), 'SKILL.md'));
+    }
     expect(byName.get('github:gh-fix-ci')?.description).toBe('User override for plugin skill');
   });
 });

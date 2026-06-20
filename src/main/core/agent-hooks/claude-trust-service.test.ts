@@ -112,10 +112,11 @@ describe('ClaudeTrustService', () => {
 
     const [tmpPath, content] = mockWriteFile.mock.calls[0];
     const [renameFrom, renameTo] = mockRename.mock.calls[0];
-    expect(tmpPath).toContain('/home/local-user/.claude.json.');
+    const configPath = path.join('/home/local-user', '.claude.json');
+    expect(tmpPath).toContain(configPath + '.');
     expect(tmpPath).toContain('.tmp');
     expect(renameFrom).toBe(tmpPath);
-    expect(renameTo).toBe('/home/local-user/.claude.json');
+    expect(renameTo).toBe(configPath);
 
     const written = JSON.parse(String(content));
     expect(written.projects[path.resolve(relPath)]).toEqual({
@@ -130,7 +131,7 @@ describe('ClaudeTrustService', () => {
     mockReadFile.mockResolvedValue(
       JSON.stringify({
         projects: {
-          [trustedPath]: {
+          [path.resolve(trustedPath)]: {
             hasTrustDialogAccepted: true,
             hasCompletedProjectOnboarding: true,
           },

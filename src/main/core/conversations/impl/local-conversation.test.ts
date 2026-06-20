@@ -363,9 +363,17 @@ describe('LocalConversationProvider', () => {
     await provider.startSession(codexConversation, { cols: 80, rows: 24 }, false, 'Fix this');
 
     expect(spawned[0].options.args[0]).toBe('-c');
-    expect(spawned[0].options.args[1]).toContain('notify=["bash","-c"');
-    // Notify now reads the live hook endpoint file at fire-time (survives restarts).
-    expect(spawned[0].options.args[1]).toContain('hook-endpoint.json');
+    // The notify helper is bash -c on POSIX, powershell.exe -File on Windows.
+    const notifyPrefix =
+      process.platform === 'win32' ? 'notify=["powershell.exe"' : 'notify=["bash","-c"';
+    expect(spawned[0].options.args[1]).toContain(notifyPrefix);
+    // Notify reads the live hook endpoint at fire-time (survives restarts): the
+    // bash helper inlines the hook-endpoint.json read; the .ps1 helper wraps it.
+    if (process.platform === 'win32') {
+      expect(spawned[0].options.args[1]).toContain('.ps1');
+    } else {
+      expect(spawned[0].options.args[1]).toContain('hook-endpoint.json');
+    }
     expect(spawned[0].options.args[1]).not.toContain('YODA_HOOK_PORT');
     expect(spawned[0].options.args.slice(2)).toEqual(['Fix this']);
   });

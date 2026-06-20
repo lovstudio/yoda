@@ -56,7 +56,9 @@ describe('ensureWindowsNpmGlobalBinInPath', () => {
   });
 });
 
-describe('resolveUserEnv (AppImage env scrub)', () => {
+// AppImage is a Linux-only packaging format; resolveUserEnv early-returns on
+// win32, so these scrub/PATH-parse assertions are POSIX-only.
+describe.skipIf(process.platform === 'win32')('resolveUserEnv (AppImage env scrub)', () => {
   const SCRUBBED_KEYS = [
     'APPIMAGE',
     'APPDIR',
