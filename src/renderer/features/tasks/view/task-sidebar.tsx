@@ -325,7 +325,9 @@ export const TaskSidebar = observer(function TaskSidebar() {
                 <SidebarChip
                   label={t(groupLabelKey(group))}
                   icon={
-                    group === 'browser' && taskView.browser.audible && !taskView.browser.userMuted ? (
+                    group === 'browser' &&
+                    taskView.browser.audible &&
+                    !taskView.browser.userMuted ? (
                       <Volume2 className="size-3.5 text-primary" />
                     ) : (
                       groupIcon(group)
