@@ -17,6 +17,9 @@ declare global {
     goForward(): void;
     reload(): void;
     stop(): void;
+    setAudioMuted(muted: boolean): void;
+    isAudioMuted(): boolean;
+    isCurrentlyAudible(): boolean;
   }
 
   interface Window {
@@ -38,6 +41,7 @@ declare module 'react' {
         src?: string;
         partition?: string;
         allowpopups?: string;
+        webpreferences?: string;
       };
     }
   }

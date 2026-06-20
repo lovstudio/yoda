@@ -19,6 +19,10 @@ export class TaskBrowserStore {
   history: BrowserHistoryEntry[] = [];
   /** Bumped on every external navigate request; the pane reacts to it. */
   navigationId = 0;
+  /** Whether the page is currently emitting sound (mirrored from the webview). */
+  audible = false;
+  /** User-toggled mute for this browser card; sticky across navigations. */
+  userMuted = false;
 
   constructor(snapshot?: TaskBrowserSnapshot) {
     if (snapshot) {
@@ -31,11 +35,15 @@ export class TaskBrowserStore {
       title: observable,
       history: observable,
       navigationId: observable,
+      audible: observable,
+      userMuted: observable,
       navigate: action,
       openNewTab: action,
       setLocation: action,
       setTitle: action,
       removeFromHistory: action,
+      setAudible: action,
+      setUserMuted: action,
     });
   }
 
@@ -59,6 +67,17 @@ export class TaskBrowserStore {
   openNewTab(): void {
     this.url = null;
     this.title = '';
+    this.audible = false;
+  }
+
+  /** Mirrored from the webview's media-started-playing / media-paused. */
+  setAudible(value: boolean): void {
+    this.audible = value;
+  }
+
+  /** Toggle the user's mute for this browser card. */
+  setUserMuted(value: boolean): void {
+    this.userMuted = value;
   }
 
   /** Remove a single entry from the visit history. */

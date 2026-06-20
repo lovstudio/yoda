@@ -1,4 +1,14 @@
-import { ArrowLeft, ArrowRight, ExternalLink, Globe, Plus, RotateCw, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  ExternalLink,
+  Globe,
+  Plus,
+  RotateCw,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -57,7 +67,14 @@ function ToolbarButton({
  * the empty new-tab state shows the visit history. The webview owns
  * navigation and mirrors location/title back into the store.
  */
-export const BrowserPane = observer(function BrowserPane({ store }: { store: TaskBrowserStore }) {
+export const BrowserPane = observer(function BrowserPane({
+  store,
+  visible = true,
+}: {
+  store: TaskBrowserStore;
+  /** Whether this pane is the foreground sidebar view; hidden panes are muted. */
+  visible?: boolean;
+}) {
   const { t } = useTranslation();
   const webviewRef = useRef<ElectronWebviewElement | null>(null);
   const [draftAddress, setDraftAddress] = useState<string | null>(null);
@@ -116,6 +133,41 @@ export const BrowserPane = observer(function BrowserPane({ store }: { store: Tas
     // Re-attach when the webview (re)mounts after the empty state.
   }, [store, isEmpty]);
 
+  // Mirror the page's audibility into the store so the toolbar (and the owning
+  // sidebar tab) can show a speaker indicator.
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (!webview || isEmpty) {
+      store.setAudible(false);
+      return;
+    }
+    const sync = () => store.setAudible(webview.isCurrentlyAudible());
+    webview.addEventListener('media-started-playing', sync);
+    webview.addEventListener('media-paused', sync);
+    return () => {
+      webview.removeEventListener('media-started-playing', sync);
+      webview.removeEventListener('media-paused', sync);
+    };
+  }, [store, isEmpty]);
+
+  // Only the foreground browser pane is allowed to make sound: mute when the
+  // pane is hidden (another sidebar group active) or the user muted it.
+  const effectiveMuted = !visible || store.userMuted;
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (!webview || isEmpty) return;
+    const apply = () => {
+      try {
+        webview.setAudioMuted(effectiveMuted);
+      } catch {
+        // webview not yet attached; the dom-ready listener will retry.
+      }
+    };
+    apply();
+    webview.addEventListener('dom-ready', apply);
+    return () => webview.removeEventListener('dom-ready', apply);
+  }, [effectiveMuted, isEmpty]);
+
   const submitAddress = () => {
     const url = draftAddress === null ? null : normalizeAddress(draftAddress);
     setDraftAddress(null);
@@ -164,6 +216,18 @@ export const BrowserPane = observer(function BrowserPane({ store }: { store: Tas
           <RotateCw className="size-3.5" />
         </ToolbarButton>
         {addressBar}
+        {!isEmpty && (store.audible || store.userMuted) && (
+          <ToolbarButton
+            label={store.userMuted ? t('tasks.browser.unmute') : t('tasks.browser.mute')}
+            onClick={() => store.setUserMuted(!store.userMuted)}
+          >
+            {store.userMuted ? (
+              <VolumeX className="size-3.5 text-foreground-muted" />
+            ) : (
+              <Volume2 className="size-3.5 text-primary" />
+            )}
+          </ToolbarButton>
+        )}
         <ToolbarButton
           label={t('tasks.browser.newTab')}
           disabled={isEmpty}

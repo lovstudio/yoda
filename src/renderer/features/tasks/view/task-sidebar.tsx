@@ -15,6 +15,7 @@ import {
   Plus,
   RotateCcw,
   SlidersHorizontal,
+  Volume2,
   X,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
@@ -323,7 +324,13 @@ export const TaskSidebar = observer(function TaskSidebar() {
               >
                 <SidebarChip
                   label={t(groupLabelKey(group))}
-                  icon={groupIcon(group)}
+                  icon={
+                    group === 'browser' && taskView.browser.audible && !taskView.browser.userMuted ? (
+                      <Volume2 className="size-3.5 text-primary" />
+                    ) : (
+                      groupIcon(group)
+                    )
+                  }
                   isActive={activeGroup === group}
                   closeLabel={t('tasks.sidePane.removeCard')}
                   onSelect={() => selectGroup(group)}
@@ -434,7 +441,7 @@ export const TaskSidebar = observer(function TaskSidebar() {
             <EditorFileTree />
           </Activity>
           <Activity mode={activeGroup === 'browser' ? 'visible' : 'hidden'}>
-            <BrowserPane store={taskView.browser} />
+            <BrowserPane store={taskView.browser} visible={activeGroup === 'browser'} />
           </Activity>
           {/* Each pinned entity keeps its own Activity so background PTYs stay alive. */}
           {pinnedTabs.map((tab) => {

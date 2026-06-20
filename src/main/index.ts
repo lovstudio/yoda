@@ -49,6 +49,11 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
 }
 
+// Block audible autoplay everywhere (incl. embedded <webview>): media stays
+// silent until a real user gesture, so a background page can't blast sound out
+// of nowhere. Muted autoplay is still allowed, so visuals are unaffected.
+app.commandLine.appendSwitch('autoplay-policy', 'document-user-activation-required');
+
 registerAppScheme();
 deepLinkService.register();
 

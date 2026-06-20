@@ -1407,7 +1407,9 @@
       "recent": "Recently visited",
       "emptyHint": "Enter a URL, or click a link in the terminal",
       "removeFromHistory": "Remove from history",
-      "openExternal": "Open in system browser"
+      "openExternal": "Open in system browser",
+      "mute": "Mute this page",
+      "unmute": "Unmute this page"
     },
     "sidePane": {
       "moveBack": "Move back to tab strip",
