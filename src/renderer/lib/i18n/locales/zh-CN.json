@@ -3062,7 +3062,7 @@
   "projects": {
     "selectProject": "选择项目",
     "noProject": "不使用项目",
-    "noProjectTooltip": "会创建一个隐藏的草稿任务，不创建 worktree。Agent 在 ~/Documents/Yoda 中启动，不出现在项目列表里，并显示在侧栏的“对话”中。",
+    "noProjectTooltip": "会在 Default 项目下创建任务，不创建 worktree。Agent 在 ~/Documents/Yoda 中启动，任务显示在 Default 项目下。",
     "selectLocalProject": "选择本地项目",
     "selectProjectDirectory": "选择项目目录",
     "cannotAddProject": "无法添加项目",

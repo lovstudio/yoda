@@ -878,7 +878,7 @@ export class MobileGatewayService {
     return {
       id: project.id,
       name: project.name,
-      displayName: project.isInternal ? 'Drafts' : projectDisplayName(project),
+      displayName: project.isInternal ? 'Default' : projectDisplayName(project),
       type: project.type,
       path: project.path,
       isInternal: project.isInternal,

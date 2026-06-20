@@ -3062,7 +3062,7 @@
   "projects": {
     "selectProject": "Select project",
     "noProject": "Do not use a project",
-    "noProjectTooltip": "Creates a hidden Drafts task without a worktree. The agent runs in ~/Documents/Yoda, stays out of the project list, and appears under Conversations.",
+    "noProjectTooltip": "Creates a task in the Default project without a worktree. The agent runs in ~/Documents/Yoda and the task appears under the Default project.",
     "selectLocalProject": "Select local project",
     "selectProjectDirectory": "Select project directory",
     "cannotAddProject": "Cannot add project",

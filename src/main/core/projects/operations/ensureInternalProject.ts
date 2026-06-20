@@ -8,7 +8,7 @@ import { projects } from '@main/db/schema';
 import { log } from '@main/lib/logger';
 import { projectManager } from '../project-manager';
 
-const INTERNAL_PROJECT_NAME = 'Drafts';
+const INTERNAL_PROJECT_NAME = 'Default';
 const INTERNAL_PROJECT_DIRNAME = 'Yoda';
 
 function internalProjectPath(): string {
@@ -45,11 +45,13 @@ export async function ensureInternalProject(): Promise<LocalProject> {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .returning();
-  } else if (row.path !== path || row.isInternal !== 1) {
-    // Heal drift (e.g. user moved $HOME or migration ran on a row that pre-existed).
+  } else if (row.path !== path || row.isInternal !== 1 || row.name !== INTERNAL_PROJECT_NAME) {
+    // Heal drift (moved $HOME, a pre-existing row, or the old 'Drafts' name).
+    // Only `name` is reconciled — user-facing renames go through `alias`, so
+    // this never clobbers a custom project name.
     [row] = await db
       .update(projects)
-      .set({ path, isInternal: 1, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .set({ path, name: INTERNAL_PROJECT_NAME, isInternal: 1, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, INTERNAL_PROJECT_ID))
       .returning();
   }
