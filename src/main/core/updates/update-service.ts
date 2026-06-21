@@ -27,7 +27,7 @@ const ALLOW_PRERELEASE = false;
 const ALLOW_DOWNGRADE = false;
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const STARTUP_DELAY_MS = 30 * 1000; // 30 seconds
-const INSTALL_RESTART_GUARD_TIMEOUT_MS = 2 * 60 * 1000;
+const INSTALL_RESTART_GUARD_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes — must exceed async shutdown cleanup
 
 export interface UpdateState {
   status: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'error';
@@ -143,6 +143,7 @@ class UpdateService implements IInitializable, IDisposable {
     });
 
     autoUpdater.on('download-progress', (progressObj: ProgressInfo) => {
+      log.debug('[update] download-progress', { percent: progressObj.percent, transferred: progressObj.transferred, total: progressObj.total });
       if (this.updateState.status !== 'downloading') {
         this.updateState.status = 'downloading';
         events.emit(updateDownloadingEvent, { version: this.updateState.availableVersion ?? '' });
@@ -162,6 +163,7 @@ class UpdateService implements IInitializable, IDisposable {
     });
 
     autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+      log.info('[update] update-downloaded event received', { version: info.version, currentStatus: this.updateState.status });
       if (this.updateState.status !== 'downloading') {
         this.updateState.status = 'downloading';
         events.emit(updateDownloadingEvent, { version: info.version });
@@ -256,9 +258,12 @@ class UpdateService implements IInitializable, IDisposable {
       throw new Error('No version information available for download');
     }
 
+    log.info('Starting update download', { version: this.updateState.availableVersion });
+
     try {
       await this.applyProxyConfig();
       await autoUpdater.downloadUpdate();
+      log.info('Update download completed successfully');
     } catch (error: unknown) {
       const errorMessage = formatUpdaterError(error);
       log.error('Update download failed:', errorMessage, error);
@@ -320,10 +325,17 @@ class UpdateService implements IInitializable, IDisposable {
     }, INSTALL_RESTART_GUARD_TIMEOUT_MS);
 
     setTimeout(() => {
+      log.info('[update] calling process.exit(0)');
       try {
-        autoUpdater.quitAndInstall(false, true);
+        // On macOS, Squirrel.Mac (ShipIt) has already staged the new app.
+        // app.quit() and app.exit() both trigger before-quit which our handler
+        // intercepts with event.preventDefault(), blocking termination.
+        // Use process.exit(0) to force-terminate so ShipIt can complete the
+        // app swap in the background.
+        process.exit(0);
       } catch (error) {
-        rollback(`quitAndInstall threw: ${formatUpdaterError(error)}`);
+        log.error('[update] process.exit threw:', error);
+        rollback(`process.exit threw: ${formatUpdaterError(error)}`);
       }
     }, 250);
   }
