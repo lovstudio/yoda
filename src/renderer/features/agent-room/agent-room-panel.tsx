@@ -5,7 +5,14 @@ import { useTranslation } from 'react-i18next';
 import type { RoomMember, RoomMessage, RoomSnapshot } from '@shared/team-room';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { cn } from '@renderer/utils/utils';
-import { ACCENT_AVATAR, ACCENT_MENTION, ACCENT_TEXT, STATUS_DOT, STATUS_LABEL } from './accent';
+import {
+  ACCENT_AVATAR,
+  ACCENT_MENTION,
+  ACCENT_TEXT,
+  STATUS_DOT,
+  STATUS_LABEL,
+  STATUS_TEXT,
+} from './accent';
 import { agentRoomStore } from './agent-room-store';
 
 const monogram = (name: string) => name.trim().charAt(0).toUpperCase() || '?';
@@ -72,7 +79,7 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
               key={m.id}
               type="button"
               onClick={() => openMember(m.id)}
-              title={`${m.displayName} · ${STATUS_LABEL[m.status]}`}
+              title={t('agentRoom.viewAgent')}
               className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-transparent px-1.5 py-1 transition-colors hover:border-border hover:bg-background-2"
             >
               <div className="relative">
@@ -91,7 +98,12 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
                   )}
                 />
               </div>
-              <span className="text-xs font-medium">{m.displayName}</span>
+              <span className="flex flex-col items-start leading-tight">
+                <span className="text-xs font-medium">{m.displayName}</span>
+                <span className={cn('text-[10px]', STATUS_TEXT[m.status])}>
+                  {STATUS_LABEL[m.status]}
+                </span>
+              </span>
             </button>
           ))}
         </div>

@@ -35,6 +35,16 @@ export const STATUS_DOT: Record<MemberStatus, string> = {
   'awaiting-input': 'bg-amber-500 animate-pulse',
 };
 
+/** Status label text color — keeps active states legible without a colored dot nearby. */
+export const STATUS_TEXT: Record<MemberStatus, string> = {
+  idle: 'text-foreground-muted',
+  waiting: 'text-amber-600 ydark:text-amber-400',
+  running: 'text-teal-600 ydark:text-teal-400',
+  finished: 'text-emerald-600 ydark:text-emerald-400',
+  error: 'text-red-600 ydark:text-red-400',
+  'awaiting-input': 'text-amber-600 ydark:text-amber-400',
+};
+
 export const STATUS_LABEL: Record<MemberStatus, string> = {
   idle: 'idle',
   waiting: 'waiting',
