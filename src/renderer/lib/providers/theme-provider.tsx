@@ -2,6 +2,7 @@ import { createContext, useEffect, useLayoutEffect, useState, type ReactNode } f
 import type { Theme } from '@shared/app-settings';
 import {
   findCustomTheme,
+  resolveThemeMode,
   YODA_GREEN_THEME,
   YODA_LIGHT2_THEME,
   YODA_WARM_THEME,
@@ -94,13 +95,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const selectedCustomTheme =
     findBuiltInOverlay(activeSelection) ?? findCustomTheme(customThemes, activeSelection);
-  const effectiveTheme: EffectiveTheme = selectedCustomTheme
-    ? selectedCustomTheme.mode === 'dark'
+  const effectiveTheme: EffectiveTheme =
+    resolveThemeMode(theme, {
+      systemMode: systemMode === 'ydark' ? 'dark' : 'light',
+      systemThemes,
+      customThemes,
+    }) === 'dark'
       ? 'ydark'
-      : 'ylight'
-    : activeSelection === 'ylight' || activeSelection === 'ydark'
-      ? activeSelection
-      : systemMode;
+      : 'ylight';
   const themeFingerprint = getCustomThemeFingerprint(selectedCustomTheme);
   const isThemeLoading = isLoading || customThemesLoading || systemThemesLoading;
 

@@ -290,7 +290,13 @@ describe('LocalConversationProvider', () => {
 
     await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
     expect(spawned).toHaveLength(1);
-    expect(spawned[0].options.args).toEqual(['--session-id', 'conv-1', 'Fix this']);
+    expect(spawned[0].options.args).toEqual([
+      '--session-id',
+      'conv-1',
+      'Fix this',
+      '--settings',
+      '{"theme":"dark"}',
+    ]);
 
     spawned[0].pty.emitExit({ exitCode: 0 });
     await vi.advanceTimersByTimeAsync(1_000);
@@ -307,7 +313,12 @@ describe('LocalConversationProvider', () => {
     await provider.startSession(conversation, { cols: 80, rows: 24 }, true);
 
     expect(spawned).toHaveLength(2);
-    expect(spawned[1].options.args).toEqual(['--resume', 'conv-1']);
+    expect(spawned[1].options.args).toEqual([
+      '--resume',
+      'conv-1',
+      '--settings',
+      '{"theme":"dark"}',
+    ]);
   });
 
   it('uses the resolved Codex thread id when resuming', async () => {

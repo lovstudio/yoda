@@ -105,6 +105,7 @@ export function buildAgentCommand({
   workingDirectory,
   appendSystemPrompt,
   model,
+  terminalThemeMode,
 }: {
   runtimeId: RuntimeId;
   providerConfig: RuntimeCustomConfig | undefined;
@@ -117,6 +118,12 @@ export function buildAgentCommand({
   appendSystemPrompt?: string;
   /** Agent's configured model; passed via the runtime's modelFlag on a new session. */
   model?: string | null;
+  /**
+   * Light/dark mode of Yoda's embedded terminal. When set, the Claude CLI is
+   * told to match it so its menu/selection colors stay readable against the
+   * terminal background. Omit for non-interactive or shareable commands.
+   */
+  terminalThemeMode?: 'light' | 'dark';
 }): AgentCommand {
   const providerDef = getRuntime(runtimeId);
   const [command, ...args] = parseCliPrefix(providerConfig?.cli, runtimeId);
@@ -166,7 +173,24 @@ export function buildAgentCommand({
     args.push(...parseArgField(providerConfig?.initialPromptFlag), initialPrompt);
   }
 
-  args.push(...parseArgField(providerConfig?.extraArgs));
+  const extraArgs = parseArgField(providerConfig?.extraArgs);
+
+  // Claude ignores OSC 11 terminal-background detection once a theme is set in
+  // its own config, so its dark-theme palette (e.g. pale blue 256-color 153)
+  // washes out on Yoda's light terminal. Pass the terminal's mode explicitly so
+  // the TUI's colors track the background. `--settings` merges over the user's
+  // config (theme only); skip if the user already supplies their own --settings.
+  const isClaudeCli = command === 'claude' || command.endsWith('/claude');
+  if (
+    isClaudeCli &&
+    terminalThemeMode &&
+    !args.includes('--settings') &&
+    !extraArgs.includes('--settings')
+  ) {
+    args.push('--settings', JSON.stringify({ theme: terminalThemeMode }));
+  }
+
+  args.push(...extraArgs);
 
   return { command, args };
 }

@@ -260,6 +260,37 @@ export function findCustomTheme(
   return themes.find((theme) => theme.id === id);
 }
 
+/** Light/dark base for every built-in theme selection. */
+const BUILT_IN_THEME_MODES: Record<BuiltInTheme, CustomThemeMode> = {
+  ylight: 'light',
+  ydark: 'dark',
+  ywarm: 'light',
+  ygreen: 'dark',
+  ylight2: 'light',
+};
+
+/**
+ * Resolves a theme selection to its effective light/dark mode — the single
+ * source of truth shared by the renderer (CSS classes) and the main process
+ * (CLI theme alignment). `null` means follow-system, resolved through the
+ * configured light/dark pair.
+ */
+export function resolveThemeMode(
+  selection: ThemeSelection,
+  ctx: {
+    systemMode: CustomThemeMode;
+    systemThemes: { light: ThemeSelection; dark: ThemeSelection };
+    customThemes: readonly CustomTheme[];
+  }
+): CustomThemeMode {
+  const active =
+    selection ?? (ctx.systemMode === 'dark' ? ctx.systemThemes.dark : ctx.systemThemes.light);
+  if (active && active in BUILT_IN_THEME_MODES) {
+    return BUILT_IN_THEME_MODES[active as BuiltInTheme];
+  }
+  return findCustomTheme(ctx.customThemes, active)?.mode ?? ctx.systemMode;
+}
+
 export function parseCustomThemePackageText(text: string): CustomThemePackageParseResult {
   let raw: unknown;
   try {

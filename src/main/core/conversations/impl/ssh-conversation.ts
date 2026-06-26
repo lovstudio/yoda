@@ -20,6 +20,7 @@ import { resolveSshCommand } from '@main/core/pty/spawn-utils';
 import { openSsh2Pty } from '@main/core/pty/ssh2-pty';
 import { resolveAvailableTmuxSessionName } from '@main/core/pty/tmux-availability';
 import { killTmuxSession, sendLiteralToTmuxSession } from '@main/core/pty/tmux-session-name';
+import { resolveTerminalThemeMode } from '@main/core/settings/resolve-terminal-theme-mode';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { events } from '@main/lib/events';
@@ -131,6 +132,7 @@ export class SshConversationProvider implements ConversationProvider {
         await this.resolveProjectPromptPrinciples?.()
       ),
       model,
+      terminalThemeMode: await resolveTerminalThemeMode(),
     });
 
     const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
