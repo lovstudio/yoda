@@ -62,8 +62,8 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
   const agents = snapshot.members.filter((m) => m.role !== 'lead');
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-5 py-3">
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0">
           <h2 className="truncate text-base font-semibold">{snapshot.room.name}</h2>
           <p className="text-xs text-foreground-muted">
@@ -109,22 +109,20 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
         </div>
       </header>
 
-      <div className="flex h-full min-w-0 flex-1 flex-col">
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <TeamIntroCard agents={agents} preset={snapshot.room.preset} onOpenMember={openMember} />
-          {snapshot.messages.map((msg) => (
-            <MessageRow
-              key={msg.id}
-              message={msg}
-              byId={byId}
-              byHandle={byHandle}
-              onOpenMember={openMember}
-              onOpenSession={openSession}
-            />
-          ))}
-        </div>
-        <Composer members={snapshot.members} />
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <TeamIntroCard agents={agents} preset={snapshot.room.preset} onOpenMember={openMember} />
+        {snapshot.messages.map((msg) => (
+          <MessageRow
+            key={msg.id}
+            message={msg}
+            byId={byId}
+            byHandle={byHandle}
+            onOpenMember={openMember}
+            onOpenSession={openSession}
+          />
+        ))}
       </div>
+      <Composer members={snapshot.members} />
     </section>
   );
 });
@@ -407,7 +405,7 @@ const Composer = observer(function Composer({ members }: { members: RoomMember[]
   const open = suggestOpen && suggestions.length > 0;
 
   return (
-    <div className="relative border-t border-border px-5 py-3">
+    <div className="relative shrink-0 border-t border-border px-5 py-3">
       {open && (
         <div className="absolute bottom-full left-5 mb-2 w-72 overflow-hidden rounded-lg border border-border bg-background-2 shadow-lg">
           {suggestions.map((s, i) => (
