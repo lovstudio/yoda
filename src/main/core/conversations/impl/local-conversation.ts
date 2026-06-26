@@ -34,6 +34,7 @@ import { logLocalPtySpawnWarnings, resolveLocalPtySpawn } from '@main/core/pty/p
 import { resolveAvailableTmuxSessionName } from '@main/core/pty/tmux-availability';
 import { killTmuxSession, sendLiteralToTmuxSession } from '@main/core/pty/tmux-session-name';
 import { sessionTitleManager } from '@main/core/session-title/session-title-manager';
+import { resolveTerminalThemeMode } from '@main/core/settings/resolve-terminal-theme-mode';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { events } from '@main/lib/events';
@@ -190,6 +191,7 @@ export class LocalConversationProvider implements ConversationProvider {
         await this.resolveProjectPromptPrinciples?.()
       ),
       model,
+      terminalThemeMode: await resolveTerminalThemeMode(),
     });
     const args = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 
