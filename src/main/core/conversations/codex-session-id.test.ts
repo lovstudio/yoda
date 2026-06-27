@@ -85,6 +85,82 @@ describe('resolveCodexThreadIdForConversation', () => {
     ).toEqual({ id: 'codex-thread', title: 'Codex renamed this session' });
   });
 
+  it('resolves an untitled Codex thread by closest creation time', () => {
+    insertThread(statePath, {
+      id: 'untitled-codex-thread',
+      cwd: '/repo',
+      title: '',
+      createdAtMs: Date.parse('2026-06-04T06:45:37.040Z'),
+      updatedAtMs: Date.parse('2026-06-04T06:45:38.000Z'),
+    });
+
+    expect(
+      resolveAgentResumeSession(
+        {
+          id: 'conversation-1',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          runtimeId: 'codex',
+          title: 'Yoda conversation title',
+          createdAt: '2026-06-04 06:45:36',
+          lastInteractedAt: null,
+          isInitialConversation: true,
+        },
+        '/repo'
+      )
+    ).toEqual({
+      sessionId: 'untitled-codex-thread',
+      sessionTitle: 'Yoda conversation title',
+    });
+  });
+
+  it('resolves a delayed untitled Codex thread when it is the only later cwd match', () => {
+    insertThread(statePath, {
+      id: 'delayed-codex-thread',
+      cwd: '/repo',
+      title: '',
+      createdAtMs: Date.parse('2026-06-04T07:06:00.000Z'),
+      updatedAtMs: Date.parse('2026-06-04T07:06:01.000Z'),
+    });
+
+    expect(
+      resolveCodexThreadIdForConversation({
+        conversationId: 'conversation-1',
+        cwd: '/repo',
+        title: 'Yoda conversation title',
+        createdAt: '2026-06-04 06:45:36',
+        statePath,
+      })
+    ).toBe('delayed-codex-thread');
+  });
+
+  it('does not guess a delayed Codex thread when the later cwd match is ambiguous', () => {
+    insertThread(statePath, {
+      id: 'delayed-codex-thread-1',
+      cwd: '/repo',
+      title: '',
+      createdAtMs: Date.parse('2026-06-04T07:06:00.000Z'),
+      updatedAtMs: Date.parse('2026-06-04T07:06:01.000Z'),
+    });
+    insertThread(statePath, {
+      id: 'delayed-codex-thread-2',
+      cwd: '/repo',
+      title: '',
+      createdAtMs: Date.parse('2026-06-04T07:07:00.000Z'),
+      updatedAtMs: Date.parse('2026-06-04T07:07:01.000Z'),
+    });
+
+    expect(
+      resolveCodexThreadIdForConversation({
+        conversationId: 'conversation-1',
+        cwd: '/repo',
+        title: 'Yoda conversation title',
+        createdAt: '2026-06-04 06:45:36',
+        statePath,
+      })
+    ).toBeUndefined();
+  });
+
   it('returns the resolved Codex thread title with the resume session id', () => {
     insertThread(statePath, {
       id: 'codex-thread',

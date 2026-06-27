@@ -20,6 +20,15 @@ export type CodexThreadTitle = {
   updatedAtMs: number;
 };
 
+export type CodexThreadRef = {
+  id: string;
+  cwd: string;
+  title?: string;
+  firstUserMessage: string;
+  createdAtMs: number;
+  updatedAtMs: number;
+};
+
 export type CodexThreadRollout = {
   id: string;
   cwd: string;
@@ -200,6 +209,81 @@ export function findClosestCodexThreadTitleByCreatedAt(params: {
   });
 }
 
+export function findClosestCodexThreadRefByCreatedAt(params: {
+  statePath: string;
+  cwd: string;
+  targetCreatedAtMs: number;
+  maxDistanceMs: number;
+  includeArchived?: boolean;
+}): CodexThreadRef | undefined {
+  const minCreatedAtMs = params.targetCreatedAtMs - params.maxDistanceMs;
+  const maxCreatedAtMs = params.targetCreatedAtMs + params.maxDistanceMs;
+  return withCodexState(params.statePath, (db) => {
+    const row = db
+      .prepare(
+        `
+          SELECT
+            id,
+            cwd,
+            title,
+            first_user_message AS firstUserMessage,
+            COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
+            COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
+          FROM threads
+          WHERE cwd = ?
+            AND (? = 1 OR archived = 0)
+            AND COALESCE(created_at_ms, created_at * 1000) >= ?
+            AND COALESCE(created_at_ms, created_at * 1000) <= ?
+          ORDER BY ABS(COALESCE(created_at_ms, created_at * 1000) - ?) ASC,
+            COALESCE(created_at_ms, created_at * 1000) ASC,
+            id ASC
+          LIMIT 1
+        `
+      )
+      .get(
+        params.cwd,
+        params.includeArchived ? 1 : 0,
+        minCreatedAtMs,
+        maxCreatedAtMs,
+        params.targetCreatedAtMs
+      );
+    return parseCodexThreadRef(row);
+  });
+}
+
+export function findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt(params: {
+  statePath: string;
+  cwd: string;
+  minCreatedAtMs: number;
+  includeArchived?: boolean;
+}): CodexThreadRef | undefined {
+  return withCodexState(params.statePath, (db) => {
+    const rows = db
+      .prepare(
+        `
+          SELECT
+            id,
+            cwd,
+            title,
+            first_user_message AS firstUserMessage,
+            COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
+            COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
+          FROM threads
+          WHERE cwd = ?
+            AND (? = 1 OR archived = 0)
+            AND TRIM(COALESCE(title, '')) = ''
+            AND TRIM(COALESCE(first_user_message, '')) = ''
+            AND COALESCE(created_at_ms, created_at * 1000) >= ?
+          ORDER BY COALESCE(created_at_ms, created_at * 1000) ASC, id ASC
+          LIMIT 2
+        `
+      )
+      .all(params.cwd, params.includeArchived ? 1 : 0, params.minCreatedAtMs);
+    if (!Array.isArray(rows) || rows.length !== 1) return undefined;
+    return parseCodexThreadRef(rows[0]);
+  });
+}
+
 export function findClosestCodexThreadRolloutByCreatedAt(params: {
   statePath: string;
   cwd: string;
@@ -293,6 +377,31 @@ export function readCodexThreadTitle(
       )
       .get(threadId);
     return parseCodexThreadTitle(row);
+  });
+}
+
+export function readCodexThreadRef(
+  statePath: string,
+  threadId: string
+): CodexThreadRef | undefined {
+  return withCodexState(statePath, (db) => {
+    const row = db
+      .prepare(
+        `
+          SELECT
+            id,
+            cwd,
+            title,
+            first_user_message AS firstUserMessage,
+            COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
+            COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
+          FROM threads
+          WHERE id = ?
+          LIMIT 1
+        `
+      )
+      .get(threadId);
+    return parseCodexThreadRef(row);
   });
 }
 
@@ -535,6 +644,12 @@ function isExpectedUnavailableCodexStateError(error: unknown): boolean {
 }
 
 function parseCodexThreadTitle(row: unknown): CodexThreadTitle | undefined {
+  const ref = parseCodexThreadRef(row);
+  if (!ref?.title) return undefined;
+  return { ...ref, title: ref.title };
+}
+
+function parseCodexThreadRef(row: unknown): CodexThreadRef | undefined {
   if (typeof row !== 'object' || row === null) return undefined;
   const rec = row as Record<string, unknown>;
   if (typeof rec.id !== 'string') return undefined;
@@ -543,12 +658,11 @@ function parseCodexThreadTitle(row: unknown): CodexThreadTitle | undefined {
   if (typeof rec.createdAtMs !== 'number') return undefined;
   if (typeof rec.updatedAtMs !== 'number') return undefined;
   const title = rec.title.trim();
-  if (!title) return undefined;
   const firstUserMessage = typeof rec.firstUserMessage === 'string' ? rec.firstUserMessage : '';
   return {
     id: rec.id,
     cwd: rec.cwd,
-    title,
+    ...(title ? { title } : {}),
     firstUserMessage,
     createdAtMs: rec.createdAtMs,
     updatedAtMs: rec.updatedAtMs,
