@@ -1,11 +1,12 @@
 import type { Conversation } from '@shared/conversations';
 import {
-  findClosestCodexThreadTitleByCreatedAt,
+  findClosestCodexThreadRefByCreatedAt,
   findCodexThreadTitleByTitle,
+  findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt,
   getClaimedCodexThreadId,
-  readCodexThreadTitle,
+  readCodexThreadRef,
   resolveCodexStatePath,
-  type CodexThreadTitle,
+  type CodexThreadRef,
 } from '@main/core/session-title/codex-title-source';
 
 const SQLITE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
@@ -82,9 +83,9 @@ export function resolveCodexThreadForConversation({
 }): ResolvedCodexThread | undefined {
   const claimedThreadId = getClaimedCodexThreadId(conversationId);
   if (claimedThreadId)
-    return toResolvedThread(readCodexThreadTitle(statePath, claimedThreadId), claimedThreadId);
+    return toResolvedThread(readCodexThreadRef(statePath, claimedThreadId), claimedThreadId);
 
-  const direct = readCodexThreadTitle(statePath, conversationId);
+  const direct = readCodexThreadRef(statePath, conversationId);
   if (direct) return toResolvedThread(direct, conversationId);
 
   const trimmedCwd = cwd?.trim();
@@ -104,18 +105,26 @@ export function resolveCodexThreadForConversation({
   const createdAtMs = parseTimestampMs(createdAt);
   if (createdAtMs === undefined) return undefined;
 
-  const byCreatedAt = findClosestCodexThreadTitleByCreatedAt({
+  const byCreatedAt = findClosestCodexThreadRefByCreatedAt({
     statePath,
     cwd: trimmedCwd,
     targetCreatedAtMs: createdAtMs,
     maxDistanceMs: CODEX_CREATED_AT_MATCH_MAX_DISTANCE_MS,
     includeArchived: true,
   });
-  return toResolvedThread(byCreatedAt);
+  if (byCreatedAt) return toResolvedThread(byCreatedAt);
+
+  const uniqueLaterThread = findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt({
+    statePath,
+    cwd: trimmedCwd,
+    minCreatedAtMs: createdAtMs,
+    includeArchived: true,
+  });
+  return toResolvedThread(uniqueLaterThread);
 }
 
 function toResolvedThread(
-  thread: CodexThreadTitle | undefined,
+  thread: CodexThreadRef | undefined,
   fallbackId?: string
 ): ResolvedCodexThread | undefined {
   if (thread) return { id: thread.id, title: thread.title };

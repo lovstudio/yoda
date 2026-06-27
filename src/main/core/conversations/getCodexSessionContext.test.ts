@@ -145,6 +145,27 @@ describe('getCodexSessionContext', () => {
     expect(context?.rolloutPath).toBe(rolloutPath);
   });
 
+  it('can resolve a delayed untitled Codex thread when it is the only later cwd match', async () => {
+    writeRollout(rolloutPath, { id: 'delayed-thread', cwd });
+    insertThread(statePath, rolloutPath, {
+      id: 'delayed-thread',
+      cwd,
+      title: '',
+      firstUserMessage: '',
+      createdAtMs: Date.parse('2026-06-02T11:21:00.000Z'),
+    });
+
+    const context = await getCodexSessionContext(
+      cwd,
+      'yoda-conversation-id',
+      'Yoda conversation title',
+      '2026-06-02 11:00:00'
+    );
+
+    expect(context?.threadId).toBe('delayed-thread');
+    expect(context?.rolloutPath).toBe(rolloutPath);
+  });
+
   it('falls back to rollout files when the state DB has no matching thread', async () => {
     const sessionDir = join(codexHome, 'sessions', '2026', '06', '02');
     const sessionRolloutPath = join(sessionDir, 'rollout-2026-06-02T11-00-00-conversation-1.jsonl');

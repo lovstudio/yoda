@@ -13,7 +13,8 @@ import type {
   SessionTranscriptMessage,
 } from '@shared/conversations';
 import {
-  findClosestCodexThreadTitleByCreatedAt,
+  findClosestCodexThreadRefByCreatedAt,
+  findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt,
   getClaimedCodexThreadId,
   resolveCodexStatePath,
 } from '@main/core/session-title/codex-title-source';
@@ -174,6 +175,8 @@ async function resolveCodexThreadFromRollouts({
   const title = conversationTitle?.trim();
   const targetCreatedAtMs = parseTimestampMs(conversationCreatedAt);
   let closestCreatedAtRow: { row: CodexThreadContextRow; distanceMs: number } | null = null;
+  let uniqueLaterCreatedAtRow: CodexThreadContextRow | null = null;
+  let hasMultipleLaterCreatedAtRows = false;
 
   for (const rolloutPath of rolloutPaths) {
     let raw: string;
@@ -215,10 +218,21 @@ async function resolveCodexThreadFromRollouts({
       ) {
         closestCreatedAtRow = { row, distanceMs };
       }
+      if (rowCreatedAtMs >= targetCreatedAtMs && !firstUserMessage) {
+        if (uniqueLaterCreatedAtRow && uniqueLaterCreatedAtRow.id !== row.id) {
+          hasMultipleLaterCreatedAtRows = true;
+        } else {
+          uniqueLaterCreatedAtRow = row;
+        }
+      }
     }
   }
 
-  return closestCreatedAtRow?.row ?? null;
+  return (
+    closestCreatedAtRow?.row ??
+    (hasMultipleLaterCreatedAtRows ? null : uniqueLaterCreatedAtRow) ??
+    null
+  );
 }
 
 async function listCodexRolloutPaths(codexHome: string): Promise<string[]> {
@@ -311,7 +325,7 @@ function resolveCodexThread({
 
   const createdAtMs = parseTimestampMs(conversationCreatedAt);
   if (createdAtMs !== undefined) {
-    const byCreatedAt = findClosestCodexThreadTitleByCreatedAt({
+    const byCreatedAt = findClosestCodexThreadRefByCreatedAt({
       statePath,
       cwd,
       targetCreatedAtMs: createdAtMs,
@@ -319,6 +333,14 @@ function resolveCodexThread({
       includeArchived: true,
     });
     if (byCreatedAt) return readCodexThreadContext(statePath, byCreatedAt.id);
+
+    const uniqueLaterThread = findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt({
+      statePath,
+      cwd,
+      minCreatedAtMs: createdAtMs,
+      includeArchived: true,
+    });
+    if (uniqueLaterThread) return readCodexThreadContext(statePath, uniqueLaterThread.id);
   }
 
   return null;
