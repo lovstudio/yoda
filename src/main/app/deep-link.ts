@@ -14,6 +14,8 @@ import { conversations, projects, tasks } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 
+const DEV_PROTOCOL_REGISTRATION_ENV = 'YODA_REGISTER_DEEP_LINKS';
+
 class DeepLinkService {
   private started = false;
   private rendererReady = false;
@@ -70,6 +72,10 @@ class DeepLinkService {
   }
 
   private registerProtocolClient(): void {
+    if (import.meta.env.DEV && process.env[DEV_PROTOCOL_REGISTRATION_ENV] !== '1') {
+      return;
+    }
+
     try {
       const proc = process as NodeJS.Process & { defaultApp?: boolean };
       const ok =
