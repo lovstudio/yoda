@@ -80,7 +80,14 @@ export async function moveTaskToProject(
       path: targetProject.path,
       workspaceProvider: targetProject.workspaceProvider,
     });
-    if (!migrate.success) return migrate;
+    if (!migrate.success) {
+      log.warn('moveTaskToProject: worktree migration failed', {
+        taskId,
+        targetProjectId,
+        error: migrate.error,
+      });
+      return migrate;
+    }
     sourceBranchReset = migrate.data.targetBaseBranch;
   } else if (projectManager.getProject(task.projectId)) {
     // Stop any live session running in the old project context before the rows
@@ -174,6 +181,13 @@ async function migrateWorktreeBranch(
 
   const git = (args: string[]) => source.ctx.exec('git', args);
 
+  // The destination must be a git repo to receive the branch — several
+  // registered projects (incl. the internal Default) have no git.
+  const targetIsRepo = await git(['-C', targetProject.path, 'rev-parse', '--git-dir'])
+    .then(() => true)
+    .catch(() => false);
+  if (!targetIsRepo) return err({ type: 'target-not-git' });
+
   try {
     // 1) Commit any uncommitted work in the worktree so the push carries it.
     const worktreePath = await source.getWorktreeForBranch(taskBranch);
@@ -186,6 +200,10 @@ async function migrateWorktreeBranch(
           worktreePath,
           ...(await commitIdentityArgs(git, worktreePath)),
           'commit',
+          // Skip the repo's pre-commit hooks: this is an internal WIP snapshot
+          // for migration, not a user commit — lint/format hooks must not be
+          // able to abort (or hang) the move.
+          '--no-verify',
           '-m',
           'Snapshot before moving to another project',
         ]);

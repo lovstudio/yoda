@@ -125,6 +125,8 @@ export type MoveTaskToProjectError =
   | { type: 'unsupported-transport' }
   /** The source project must be open to migrate its worktree. */
   | { type: 'source-project-not-open' }
+  /** The destination project has no git repository to receive the worktree branch. */
+  | { type: 'target-not-git' }
   /** A git step (commit / push / branch) failed while migrating the worktree. */
   | { type: 'git-error'; detail: string };
 

@@ -1378,7 +1378,8 @@
       "errorHasSubtasks": "请先移动或移除该任务的子任务。",
       "errorUnsupportedTransport": "带 worktree 的任务只能在两个本地项目之间移动。",
       "errorSourceNotOpen": "请先打开源项目再移动该任务。",
-      "errorGit": "迁移 worktree 时 git 出错：{{detail}}",
+      "errorTargetNotGit": "目标项目没有 git 仓库，无法把带 worktree 的任务迁移进去。",
+      "errorGitTitle": "迁移 worktree 时 git 出错",
       "errorGeneric": "无法移动该任务。"
     },
     "sessionPanel": {

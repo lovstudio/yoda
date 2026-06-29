@@ -57,7 +57,7 @@ export function useMoveTaskToProject(): MoveTaskToProject {
       const runMove = async (): Promise<void> => {
         const error = await taskManager.moveTaskToProject(taskId, targetProjectId);
         if (error) {
-          toast({ title: formatMoveError(error, t), variant: 'destructive' });
+          toast({ ...formatMoveError(error, t), variant: 'destructive' });
           return;
         }
         // The route still points at the old project — follow the task home.
@@ -87,19 +87,32 @@ export function useMoveTaskToProject(): MoveTaskToProject {
   );
 }
 
-function formatMoveError(error: MoveTaskToProjectError, t: TFunction): string {
+/**
+ * Title + copyable description for a failed move. The description always carries
+ * the concrete reason (git output or error type) so it can be copied from the
+ * toast for debugging.
+ */
+function formatMoveError(
+  error: MoveTaskToProjectError,
+  t: TFunction
+): { title: string; description: string } {
   switch (error.type) {
     case 'has-subtasks':
-      return t('tasks.moveToProject.errorHasSubtasks');
+      return { title: t('tasks.moveToProject.errorHasSubtasks'), description: error.type };
     case 'unsupported-transport':
-      return t('tasks.moveToProject.errorUnsupportedTransport');
+      return {
+        title: t('tasks.moveToProject.errorUnsupportedTransport'),
+        description: error.type,
+      };
     case 'source-project-not-open':
-      return t('tasks.moveToProject.errorSourceNotOpen');
+      return { title: t('tasks.moveToProject.errorSourceNotOpen'), description: error.type };
+    case 'target-not-git':
+      return { title: t('tasks.moveToProject.errorTargetNotGit'), description: error.type };
     case 'git-error':
-      return t('tasks.moveToProject.errorGit', { detail: error.detail });
+      return { title: t('tasks.moveToProject.errorGitTitle'), description: error.detail };
     case 'project-not-found':
     case 'task-not-found':
     case 'same-project':
-      return t('tasks.moveToProject.errorGeneric');
+      return { title: t('tasks.moveToProject.errorGeneric'), description: error.type };
   }
 }

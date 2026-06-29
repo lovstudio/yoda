@@ -1378,7 +1378,8 @@
       "errorHasSubtasks": "Move or remove this task's subtasks first.",
       "errorUnsupportedTransport": "Worktree tasks can only move between two local projects.",
       "errorSourceNotOpen": "Open the source project before moving this task.",
-      "errorGit": "Git failed while migrating the worktree: {{detail}}",
+      "errorTargetNotGit": "The destination project has no git repository, so a worktree task can't be moved into it.",
+      "errorGitTitle": "Git failed while migrating the worktree",
       "errorGeneric": "Could not move the task."
     },
     "sessionPanel": {
