@@ -54,8 +54,11 @@ const UNREGISTERED_PHASE_KEY: Record<UnregisteredProject['phase'], string> = {
 
 export const SidebarProjectItem = observer(function SidebarProjectItem({
   projectId,
+  isDropTarget = false,
 }: {
   projectId: string;
+  /** Highlighted as the drop target while a task is dragged over this project. */
+  isDropTarget?: boolean;
 }) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
@@ -285,7 +288,10 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         <TooltipTrigger
           render={
             <SidebarMenuRow
-              className={cn('group/row h-8 justify-between flex px-1')}
+              className={cn(
+                'group/row h-8 justify-between flex px-1',
+                isDropTarget && 'ring-2 ring-inset ring-primary bg-primary/10'
+              )}
               data-active={isProjectActive || undefined}
               isActive={isProjectActive}
               role="button"

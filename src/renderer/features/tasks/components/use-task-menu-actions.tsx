@@ -1,8 +1,6 @@
-import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { buildTaskDeepLink } from '@shared/deep-links';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
-import type { MoveTaskToProjectError } from '@shared/tasks';
 import {
   getProjectStore,
   getRepositoryStore,
@@ -17,13 +15,8 @@ import {
   taskChildren,
 } from '@renderer/features/tasks/stores/task-selectors';
 import { OVERVIEW_TAB_ID } from '@renderer/features/tasks/tabs/tab-manager-store';
-import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
-import {
-  useNavigate,
-  useParams,
-  useWorkspaceSlots,
-} from '@renderer/lib/layout/navigation-provider';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { log } from '@renderer/utils/logger';
 import { copyTaskLink, type TaskMenuActions } from './task-context-menu';
@@ -33,6 +26,7 @@ import {
   resolveTaskMenuSessionFields,
   selectPreferredConversation,
 } from './task-menu-session-info';
+import { useMoveTaskToProject } from './use-move-task-to-project';
 
 /**
  * Shared wiring for the task entity's menu. Every surface that shows a task
@@ -43,14 +37,12 @@ import {
 export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuActions | null {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
-  const { currentView } = useWorkspaceSlots();
-  const { params: routeTaskParams } = useParams('task');
   const showRename = useShowModal('renameTaskModal');
   const showArchiveWithNote = useShowModal('archiveTaskWithNoteModal');
   const showCreateSubtask = useShowModal('newSubtaskModal');
   const showSetParent = useShowModal('setParentTaskModal');
   const showCreateParent = useShowModal('createParentTaskModal');
-  const showConfirmMove = useShowModal('confirmActionModal');
+  const moveTaskToProject = useMoveTaskToProject();
   const { archiveTask } = useArchiveTask(projectId);
 
   const task = getTaskStore(projectId, taskId);
@@ -104,41 +96,6 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
   // process re-validates all of this authoritatively.
   const canMoveToProject =
     !isArchived && task.state !== 'unregistered' && childTaskIds.length === 0;
-
-  const handleMoveToProject = (targetProjectId: string): void => {
-    const followsActiveRoute =
-      currentView === 'task' &&
-      routeTaskParams.projectId === projectId &&
-      routeTaskParams.taskId === taskId;
-    const runMove = async (): Promise<void> => {
-      const error = await taskManager?.moveTaskToProject(taskId, targetProjectId);
-      if (error) {
-        toast({ title: formatMoveError(error, t), variant: 'destructive' });
-        return;
-      }
-      // The route still points at the old project — follow the task to its new home.
-      if (followsActiveRoute) navigate('task', { projectId: targetProjectId, taskId });
-    };
-    // Worktree tasks migrate their branch (uncommitted work gets committed) and
-    // tasks with stored sessions leave their transcript behind — warn before
-    // re-homing in either case.
-    const warning = branchName
-      ? t('tasks.moveToProject.confirmWorktreeWarning')
-      : hasStoredConversations
-        ? t('tasks.moveToProject.confirmHistoryWarning')
-        : undefined;
-    if (warning) {
-      showConfirmMove({
-        title: t('tasks.moveToProject.confirmTitle'),
-        description: warning,
-        confirmLabel: t('tasks.moveToProject.confirmLabel'),
-        variant: 'default',
-        onSuccess: () => void runMove(),
-      });
-      return;
-    }
-    void runMove();
-  };
 
   // The menu "open details" entry enters the task and activates its fixed
   // Overview tab (task info / sessions / sub-tasks), distinguishing it from a
@@ -226,7 +183,9 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
       !isArchived && task.state !== 'unregistered'
         ? () => splitViewStore.add({ projectId, taskId })
         : undefined,
-    onMoveToProject: canMoveToProject ? handleMoveToProject : undefined,
+    onMoveToProject: canMoveToProject
+      ? (targetProjectId: string) => moveTaskToProject(projectId, taskId, targetProjectId)
+      : undefined,
     // Compare-group parent: route to it as primary and tile all its children
     // (the alternative candidates) side by side.
     onTileCandidates:
@@ -237,21 +196,4 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
           }
         : undefined,
   };
-}
-
-function formatMoveError(error: MoveTaskToProjectError, t: TFunction): string {
-  switch (error.type) {
-    case 'has-subtasks':
-      return t('tasks.moveToProject.errorHasSubtasks');
-    case 'unsupported-transport':
-      return t('tasks.moveToProject.errorUnsupportedTransport');
-    case 'source-project-not-open':
-      return t('tasks.moveToProject.errorSourceNotOpen');
-    case 'git-error':
-      return t('tasks.moveToProject.errorGit', { detail: error.detail });
-    case 'project-not-found':
-    case 'task-not-found':
-    case 'same-project':
-      return t('tasks.moveToProject.errorGeneric');
-  }
 }

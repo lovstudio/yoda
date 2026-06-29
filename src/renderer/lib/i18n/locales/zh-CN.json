@@ -1366,6 +1366,7 @@
       "createParent": "增设父任务（分组）",
       "moveToProject": "移动到项目",
       "moveToProjectEmpty": "没有其他项目",
+      "moveToProjectSearch": "搜索项目…",
       "showSessionHistoryDock": "显示底部会话记录",
       "hideSessionHistoryDock": "隐藏底部会话记录"
     },
