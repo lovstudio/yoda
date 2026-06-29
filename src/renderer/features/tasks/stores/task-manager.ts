@@ -629,8 +629,12 @@ export class TaskManagerStore {
 
     // Stop a running/booting session before the rows move; the main process
     // also tears down defensively, but doing it here keeps this store's view in
-    // sync (the task leaves as unprovisioned).
-    if (isProvisioned(task) || (isUnprovisioned(task) && task.phase !== 'idle')) {
+    // sync (the task leaves as unprovisioned). Skip it for worktree tasks: the
+    // main process must commit + push the worktree's changes before teardown
+    // removes it, so it owns the teardown ordering in that path.
+    const hasWorktree =
+      isRegistered(task) && 'taskBranch' in task.data && Boolean(task.data.taskBranch);
+    if (!hasWorktree && (isProvisioned(task) || (isUnprovisioned(task) && task.phase !== 'idle'))) {
       await this.teardownTask(taskId).catch(() => {});
     }
 

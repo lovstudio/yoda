@@ -98,11 +98,12 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
         }
       : undefined;
 
-  // "Move to project" is the lightweight re-home (option A): eligible only for
-  // no-worktree leaf tasks, so there's no branch/worktree to migrate and no
-  // subtree to split. The main process re-validates this authoritatively.
+  // "Move to project" re-homes a task under another project. Leaf tasks only —
+  // a subtree would straddle two projects. Worktree tasks are eligible too: the
+  // main process migrates their branch into the destination repo. The main
+  // process re-validates all of this authoritatively.
   const canMoveToProject =
-    !isArchived && task.state !== 'unregistered' && !branchName && childTaskIds.length === 0;
+    !isArchived && task.state !== 'unregistered' && childTaskIds.length === 0;
 
   const handleMoveToProject = (targetProjectId: string): void => {
     const followsActiveRoute =
@@ -118,12 +119,18 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
       // The route still points at the old project — follow the task to its new home.
       if (followsActiveRoute) navigate('task', { projectId: targetProjectId, taskId });
     };
-    // A task with stored sessions keeps its transcript at the old working dir;
-    // warn that history won't follow before re-homing it.
-    if (hasStoredConversations) {
+    // Worktree tasks migrate their branch (uncommitted work gets committed) and
+    // tasks with stored sessions leave their transcript behind — warn before
+    // re-homing in either case.
+    const warning = branchName
+      ? t('tasks.moveToProject.confirmWorktreeWarning')
+      : hasStoredConversations
+        ? t('tasks.moveToProject.confirmHistoryWarning')
+        : undefined;
+    if (warning) {
       showConfirmMove({
         title: t('tasks.moveToProject.confirmTitle'),
-        description: t('tasks.moveToProject.confirmHistoryWarning'),
+        description: warning,
         confirmLabel: t('tasks.moveToProject.confirmLabel'),
         variant: 'default',
         onSuccess: () => void runMove(),
@@ -234,10 +241,14 @@ export function useTaskMenuActions(projectId: string, taskId: string): TaskMenuA
 
 function formatMoveError(error: MoveTaskToProjectError, t: TFunction): string {
   switch (error.type) {
-    case 'has-worktree':
-      return t('tasks.moveToProject.errorHasWorktree');
     case 'has-subtasks':
       return t('tasks.moveToProject.errorHasSubtasks');
+    case 'unsupported-transport':
+      return t('tasks.moveToProject.errorUnsupportedTransport');
+    case 'source-project-not-open':
+      return t('tasks.moveToProject.errorSourceNotOpen');
+    case 'git-error':
+      return t('tasks.moveToProject.errorGit', { detail: error.detail });
     case 'project-not-found':
     case 'task-not-found':
     case 'same-project':

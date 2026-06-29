@@ -1372,9 +1372,12 @@
     "moveToProject": {
       "confirmTitle": "Move task to another project?",
       "confirmHistoryWarning": "This task already has session history. The history stays at its current working directory and won't follow the task — it re-runs fresh in the new project.",
+      "confirmWorktreeWarning": "This task has a git worktree. Any uncommitted changes are committed, then the branch is migrated into the destination project's repository (the source worktree and branch are removed). Session history stays at the old working directory and won't follow.",
       "confirmLabel": "Move",
-      "errorHasWorktree": "Only tasks without a git worktree can be moved.",
       "errorHasSubtasks": "Move or remove this task's subtasks first.",
+      "errorUnsupportedTransport": "Worktree tasks can only move between two local projects.",
+      "errorSourceNotOpen": "Open the source project before moving this task.",
+      "errorGit": "Git failed while migrating the worktree: {{detail}}",
       "errorGeneric": "Could not move the task."
     },
     "sessionPanel": {

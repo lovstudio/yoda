@@ -1372,9 +1372,12 @@
     "moveToProject": {
       "confirmTitle": "移动任务到其他项目？",
       "confirmHistoryWarning": "该任务已有会话历史。历史保存在当前工作目录、不会随任务迁移——任务将在新项目中重新开始。",
+      "confirmWorktreeWarning": "该任务有 git worktree。未提交的改动会先被提交，然后分支会被迁移到目标项目的仓库（源 worktree 和分支会被移除）。会话历史保留在原工作目录、不会随任务迁移。",
       "confirmLabel": "移动",
-      "errorHasWorktree": "只有没有 git worktree 的任务才能移动。",
       "errorHasSubtasks": "请先移动或移除该任务的子任务。",
+      "errorUnsupportedTransport": "带 worktree 的任务只能在两个本地项目之间移动。",
+      "errorSourceNotOpen": "请先打开源项目再移动该任务。",
+      "errorGit": "迁移 worktree 时 git 出错：{{detail}}",
       "errorGeneric": "无法移动该任务。"
     },
     "sessionPanel": {

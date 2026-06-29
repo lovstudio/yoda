@@ -119,10 +119,14 @@ export type MoveTaskToProjectError =
   | { type: 'task-not-found' }
   | { type: 'project-not-found' }
   | { type: 'same-project' }
-  /** The task owns a git worktree/branch — only no-worktree tasks can be re-homed. */
-  | { type: 'has-worktree' }
   /** The task has subtasks — moving would split a cross-project parent/child tree. */
-  | { type: 'has-subtasks' };
+  | { type: 'has-subtasks' }
+  /** A worktree task can only migrate between two local projects (no SSH yet). */
+  | { type: 'unsupported-transport' }
+  /** The source project must be open to migrate its worktree. */
+  | { type: 'source-project-not-open' }
+  /** A git step (commit / push / branch) failed while migrating the worktree. */
+  | { type: 'git-error'; detail: string };
 
 export type ArchiveTaskResult = {
   /** The requested task plus all cascaded descendants, in archive order. */
