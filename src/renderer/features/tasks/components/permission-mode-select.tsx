@@ -36,6 +36,10 @@ export function PermissionModeSelect({
 
   return (
     <Select
+      // Non-modal so the dropdown doesn't trap focus / install a dismiss guard
+      // when nested inside the composer settings Popover — otherwise closing the
+      // select swallows the popover's next outside-press (needing two clicks).
+      modal={false}
       value={current}
       onValueChange={(value) => {
         if (value) permissionModes.setMode(runtimeId, value as string);
