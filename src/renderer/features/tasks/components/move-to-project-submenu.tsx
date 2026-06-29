@@ -2,7 +2,7 @@ import { FolderGit2, Search } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
+import { sidebarStore } from '@renderer/lib/stores/app-state';
 import {
   ContextMenuItem,
   ContextMenuSeparator,
@@ -34,12 +34,15 @@ interface MoveTarget {
   name: string;
 }
 
-/** Registered projects (incl. the Default project) other than the current one. */
+/**
+ * Registered projects other than the current one, in the same order they appear
+ * in the sidebar (custom drag order + active workspace/type filters) so the
+ * target list matches what the user is looking at.
+ */
 function useMoveTargets(currentProjectId: string): MoveTarget[] {
-  return Array.from(getProjectManagerStore().projects.values())
+  return sidebarStore.orderedProjects
     .filter((p) => p.state !== 'unregistered' && p.data !== null && p.id !== currentProjectId)
-    .map((p) => ({ id: p.id, name: p.displayName }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .map((p) => ({ id: p.id, name: p.displayName }));
 }
 
 function useFilteredTargets(currentProjectId: string) {
