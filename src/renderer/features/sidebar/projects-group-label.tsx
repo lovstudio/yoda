@@ -4,6 +4,7 @@ import {
   ChevronsUpDown,
   CircleDot,
   EyeOff,
+  FolderTree,
   ListRestart,
   MessageSquareOff,
   Settings2,
@@ -19,8 +20,16 @@ import type {
   SidebarTaskSortBy,
 } from '@shared/view-state';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@renderer/lib/ui/context-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import {
   Select,
@@ -38,14 +47,34 @@ import type { ProjectTypeFilter } from './sidebar-store';
 
 export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
   const { t } = useTranslation();
+  const { navigate } = useNavigate();
 
   return (
-    <SidebarSectionHeader
-      label={t('sidebar.projects')}
-      collapsed={sidebarStore.projectsCollapsed}
-      onToggle={() => sidebarStore.toggleProjectsCollapsed()}
-      rightSlot={<ProjectsSettingsMenu />}
-    />
+    <ContextMenu>
+      <ContextMenuTrigger className="block">
+        <SidebarSectionHeader
+          label={t('sidebar.projects')}
+          collapsed={sidebarStore.projectsCollapsed}
+          onToggle={() => sidebarStore.toggleProjectsCollapsed()}
+          rightSlot={<ProjectsSettingsMenu />}
+        />
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={() => navigate('projectsOverview')}>
+          <FolderTree className="size-4" />
+          {t('sidebar.projectsOverview')}
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => sidebarStore.expandAllProjects()}>
+          <ChevronsUpDown className="size-4" />
+          {t('sidebar.expandAll')}
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => sidebarStore.collapseAllProjects()}>
+          <ChevronsDownUp className="size-4" />
+          {t('sidebar.collapseAll')}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 });
 

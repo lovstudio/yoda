@@ -126,6 +126,7 @@
     "hideNav": "隐藏侧边栏导航",
     "dropToAddProject": "拖入以添加项目",
     "projects": "项目",
+    "projectsOverview": "项目总览",
     "tasks": "任务",
     "pinned": "已置顶",
     "sortBy": "排序方式",
@@ -3070,6 +3071,15 @@
     "filesSelected": "已选择 {{count}} 个文件",
     "filesSelected_plural": "已选择 {{count}} 个文件",
     "allFiles": "所有文件"
+  },
+  "projectsOverview": {
+    "title": "项目总览",
+    "subtitle": "所有工作区的项目一览，含已归档项目。",
+    "active": "活跃",
+    "archived": "已归档",
+    "activeTasks": "{{count}} 个进行中",
+    "emptyActive": "暂无活跃项目。",
+    "archiveFailed": "归档项目失败"
   },
   "projects": {
     "selectProject": "选择项目",

@@ -220,6 +220,12 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     })();
   };
 
+  const handleArchiveProject = () => {
+    if (project.state === 'unregistered') return;
+    void getProjectManagerStore().archiveProject(projectId);
+    if (currentProjectId === projectId) navigate('home');
+  };
+
   const handleRemoveProject = () => {
     if (project.state === 'unregistered') return;
     const displayName = project.displayName;
@@ -265,8 +271,10 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         ? undefined
         : () => showManageRunScripts({ projectId, projectName: project.displayName }),
     onRename: project.state === 'unregistered' ? undefined : () => showRenameProject({ projectId }),
+    canArchiveProject: project.state !== 'unregistered',
     canArchiveProjectTasks: Boolean(mountedProject && activeTaskCount > 0),
     canRemoveProject: project.state !== 'unregistered',
+    onArchiveProject: handleArchiveProject,
     onArchiveProjectTasks: handleArchiveProjectTasks,
     onRemoveProject: handleRemoveProject,
     currentWorkspaceId: project.data?.workspaceId ?? null,

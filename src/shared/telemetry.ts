@@ -24,6 +24,7 @@ export type FocusView =
   | 'usage'
   | 'roadmap'
   | 'kanban'
+  | 'projectsOverview'
   | 'library';
 export type FocusMainPanel = 'agents' | 'editor' | 'diff';
 export type FocusedRegion = 'main' | 'bottom';

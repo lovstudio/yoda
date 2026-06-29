@@ -7,6 +7,7 @@ import {
   Cpu,
   FileText,
   FlaskConical,
+  FolderTree,
   GitCompare,
   House,
   LayoutDashboard,
@@ -87,6 +88,7 @@ const VIEW_ICONS: Partial<Record<ViewId, LucideIcon>> = {
   usage: ChartColumn,
   roadmap: Milestone,
   kanban: SquareKanban,
+  projectsOverview: FolderTree,
 };
 
 /**

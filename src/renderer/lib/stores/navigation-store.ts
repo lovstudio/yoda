@@ -48,6 +48,7 @@ export const viewEvents: Record<
   kanban: 'kanban_viewed',
   aiLab: 'ai_lab_viewed',
   library: 'library_viewed',
+  projectsOverview: 'project_viewed',
 };
 
 export class NavigationStore implements Snapshottable<NavigationSnapshot> {

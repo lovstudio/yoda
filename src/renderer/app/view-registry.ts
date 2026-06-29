@@ -10,6 +10,7 @@ import { maasView } from '@renderer/features/maas/maas-view';
 import { mcpView } from '@renderer/features/mcp/mcp-view';
 import { mobileView } from '@renderer/features/mobile/mobile-view';
 import { projectFileView } from '@renderer/features/project-file/view';
+import { projectsOverviewView } from '@renderer/features/projects/projects-overview-view';
 import { projectView } from '@renderer/features/projects/view';
 import { roadmapView } from '@renderer/features/roadmap/roadmap-view';
 import { settingsView } from '@renderer/features/settings/settings-view';
@@ -35,6 +36,7 @@ export const views = {
   mobile: mobileView,
   roadmap: roadmapView,
   kanban: kanbanView,
+  projectsOverview: projectsOverviewView,
   project: projectView,
   task: taskView,
   file: projectFileView,

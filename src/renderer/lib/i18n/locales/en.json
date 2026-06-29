@@ -126,6 +126,7 @@
     "hideNav": "Hide sidebar navigation",
     "dropToAddProject": "Drop to add project",
     "projects": "Projects",
+    "projectsOverview": "Projects overview",
     "tasks": "Tasks",
     "pinned": "Pinned",
     "sortBy": "Sort by",
@@ -3070,6 +3071,15 @@
     "filesSelected": "{{count}} file selected",
     "filesSelected_plural": "{{count}} files selected",
     "allFiles": "All files"
+  },
+  "projectsOverview": {
+    "title": "Projects overview",
+    "subtitle": "All projects across workspaces, including archived ones.",
+    "active": "Active",
+    "archived": "Archived",
+    "activeTasks": "{{count}} active",
+    "emptyActive": "No active projects.",
+    "archiveFailed": "Failed to archive project"
   },
   "projects": {
     "selectProject": "Select project",

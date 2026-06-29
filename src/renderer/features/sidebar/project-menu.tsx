@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 import {
   Archive,
+  ArchiveX,
   CableIcon,
   Copy,
   FolderOpen,
@@ -49,8 +50,10 @@ interface ProjectMenuActions {
   onChangeSshConnection?: () => void;
   onConfigureScripts?: () => void;
   onRename?: () => void;
+  canArchiveProject: boolean;
   canArchiveProjectTasks: boolean;
   canRemoveProject: boolean;
+  onArchiveProject: () => void;
   onArchiveProjectTasks: () => void;
   onRemoveProject: () => void;
   /** Current sidebar workspace assignment (null = default/unassigned). */
@@ -182,9 +185,17 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
 
   // group 4 — project lifecycle
   items.push({
-    key: 'archive-project-tasks',
+    key: 'archive-project',
     group: 4,
     icon: Archive,
+    label: t('sidebar.archiveProject'),
+    onSelect: actions.onArchiveProject,
+    disabled: !actions.canArchiveProject,
+  });
+  items.push({
+    key: 'archive-project-tasks',
+    group: 4,
+    icon: ArchiveX,
     label: t('sidebar.archiveProjectTasks'),
     onSelect: actions.onArchiveProjectTasks,
     disabled: !actions.canArchiveProjectTasks,
