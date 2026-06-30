@@ -156,7 +156,7 @@ export function ZenmuxUsageModal(_props: Props) {
 
   return (
     <>
-      <DialogHeader className="min-w-0 flex-1 items-start gap-4">
+      <DialogHeader className="min-w-0 flex-1 items-center gap-4">
         <div className="min-w-0 flex-1">
           <DialogTitle className="text-lg font-semibold tracking-normal text-foreground normal-case">
             {usageSection.title}
@@ -165,7 +165,7 @@ export function ZenmuxUsageModal(_props: Props) {
             {usageSection.description}
           </DialogDescription>
         </div>
-        <div className="mt-0.5 flex shrink-0 items-center">{usageSection.action}</div>
+        <div className="flex shrink-0 items-center">{usageSection.action}</div>
       </DialogHeader>
       <DialogContentArea className="gap-0 overflow-hidden px-6 pb-6 pt-0">
         {usageSection.component}
