@@ -11,6 +11,7 @@ import {
   Layers,
   Loader2,
   MessageSquare,
+  MoreHorizontal,
   Plug,
   RefreshCw,
   Unplug,
@@ -31,6 +32,12 @@ import {
 import { rpc } from '@renderer/lib/ipc';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { Input } from '@renderer/lib/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
@@ -186,31 +193,30 @@ export const MaasView: React.FC<{ embedded?: boolean }> = ({ embedded = false })
   }, []);
 
   const recordsToolbarActions = (
-    <div className="flex items-center gap-2">
-      {selectedPlatformId === 'zenmux' && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => void rpc.app.openExternal(ZENMUX_LOGS_URL)}
-          aria-label={t('maas.records.openZenmuxLogs')}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="ghost" size="icon-xs" aria-label={t('common.more')}>
+            <MoreHorizontal className="size-3.5" />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-40">
+        {selectedPlatformId === 'zenmux' && (
+          <DropdownMenuItem onClick={() => void rpc.app.openExternal(ZENMUX_LOGS_URL)}>
+            <ExternalLink className="size-3.5" />
+            {t('maas.records.openZenmuxLogs')}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem
+          disabled={!selectedConnection.connected || recordsQuery.reloading}
+          onClick={recordsQuery.reload}
         >
-          <ExternalLink className="h-3.5 w-3.5" />
-          {t('maas.records.openZenmuxLogs')}
-        </Button>
-      )}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={!selectedConnection.connected || recordsQuery.reloading}
-        onClick={recordsQuery.reload}
-        aria-label={t('maas.records.reload')}
-      >
-        <RefreshCw className={cn('h-3.5 w-3.5', recordsQuery.reloading && 'animate-spin')} />
-        {t('maas.records.reload')}
-      </Button>
-    </div>
+          <RefreshCw className={cn('size-3.5', recordsQuery.reloading && 'animate-spin')} />
+          {t('maas.records.reload')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 
   const recordsFilters = (
