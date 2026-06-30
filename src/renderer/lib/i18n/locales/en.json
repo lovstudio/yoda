@@ -2702,6 +2702,7 @@
       "reload": "Reload",
       "openZenmuxLogs": "Open Logs",
       "viewUsage": "View usage",
+      "filterLabel": "Type",
       "scrollHint": "Scroll to load more",
       "end": "End of records",
       "input": "Tokens",

@@ -2702,6 +2702,7 @@
       "reload": "刷新",
       "openZenmuxLogs": "打开 Logs",
       "viewUsage": "查看用量",
+      "filterLabel": "类型",
       "scrollHint": "继续滚动加载更多",
       "end": "统计已到末尾",
       "input": "Token",

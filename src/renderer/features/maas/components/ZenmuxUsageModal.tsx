@@ -29,7 +29,6 @@ import { Button } from '@renderer/lib/ui/button';
 import {
   DialogContentArea,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@renderer/lib/ui/dialog';
@@ -146,8 +145,7 @@ function formatDateRange(period: { startingAt: string; endingAt: string } | null
   return `${formatDate(period.startingAt)} - ${formatDate(period.endingAt)}`;
 }
 
-export function ZenmuxUsageModal({ onClose }: Props) {
-  const { t } = useTranslation();
+export function ZenmuxUsageModal(_props: Props) {
   const { data: connections } = useMaasConnections();
   const connection = findZenmuxConnection(connections);
   const usageSection = useZenmuxUsageSection({
@@ -158,23 +156,20 @@ export function ZenmuxUsageModal({ onClose }: Props) {
 
   return (
     <>
-      <DialogHeader className="min-w-0 flex-1 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <DialogTitle className="text-base font-semibold tracking-normal text-foreground normal-case">
+      <DialogHeader className="min-w-0 flex-1 items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <DialogTitle className="text-lg font-semibold tracking-normal text-foreground normal-case">
             {usageSection.title}
           </DialogTitle>
-          <DialogDescription className="mt-1 text-xs">{usageSection.description}</DialogDescription>
+          <DialogDescription className="mt-1 text-sm leading-relaxed">
+            {usageSection.description}
+          </DialogDescription>
         </div>
-        <div className="shrink-0">{usageSection.action}</div>
+        <div className="mt-0.5 flex shrink-0 items-center">{usageSection.action}</div>
       </DialogHeader>
-      <DialogContentArea className="overflow-hidden pt-0">
+      <DialogContentArea className="gap-0 overflow-hidden px-6 pb-6 pt-0">
         {usageSection.component}
       </DialogContentArea>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
-          {t('common.close')}
-        </Button>
-      </DialogFooter>
     </>
   );
 }
@@ -257,18 +252,22 @@ const ZenmuxUsageRecords: React.FC<{
   const { t } = useTranslation();
 
   return (
-    <div className="flex min-w-0 flex-col gap-3">
-      <div className="flex max-w-full justify-end">
+    <div className="@container flex min-h-0 min-w-0 flex-col gap-3">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <span className="text-xs font-medium text-foreground-muted">
+          {t('maas.records.filterLabel')}
+        </span>
         <ToggleGroup
           multiple={false}
           value={[filterKind]}
-          className="h-auto max-w-full flex-wrap justify-start overflow-hidden"
+          aria-label={t('maas.records.filterLabel')}
+          className="h-auto max-w-full flex-wrap justify-end overflow-hidden rounded-lg border border-border/70 bg-background-1 p-0.5"
           onValueChange={([value]) => {
             if (value) onFilterKindChange(value as MaasInvocationFilterKind);
           }}
         >
           {FILTERS.map((kind) => (
-            <ToggleGroupItem key={kind} value={kind} className="gap-1.5">
+            <ToggleGroupItem key={kind} value={kind} className="h-7 gap-1.5 px-2.5 text-xs">
               {kind === 'all' ? (
                 <Activity className="h-3.5 w-3.5" />
               ) : (
@@ -281,8 +280,8 @@ const ZenmuxUsageRecords: React.FC<{
       </div>
       <div
         className={cn(
-          '@container flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-muted/10',
-          embedded ? 'h-[360px]' : 'h-[460px]'
+          '@container flex min-h-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-background',
+          embedded ? 'h-[360px]' : 'h-[62vh] min-h-[22rem] max-h-[34rem]'
         )}
       >
         <RecordFeed
@@ -368,7 +367,7 @@ const RecordFeed: React.FC<{
           ))}
         </div>
       ) : (
-        <div className="space-y-2 p-4">
+        <div className="divide-y divide-border/60">
           {records.map((record) => (
             <InvocationRecordRow key={record.id} record={record} showKind={filterKind === 'all'} />
           ))}
@@ -399,43 +398,42 @@ const InvocationRecordRow: React.FC<{ record: MaasInvocationRecord; showKind: bo
   const Icon = meta.icon;
 
   return (
-    <article className="rounded-md border border-border bg-background px-4 py-3">
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <span
-            className={cn(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-md',
-              meta.previewClassName
-            )}
-          >
-            <Icon className="h-4 w-4" />
-          </span>
-          <div className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h3 className="truncate text-sm font-medium">{record.title}</h3>
-              {showKind && (
-                <Badge variant="outline" className={cn('shrink-0', meta.badgeClassName)}>
-                  {t(`maas.records.filters.${record.kind}`)}
-                </Badge>
-              )}
-              <Badge variant="outline" className={cn('shrink-0', STATUS_CLASS_NAME[record.status])}>
-                {t(`maas.records.status.${record.status}`)}
+    <article className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-4 px-4 py-3 transition-colors hover:bg-background-1/60">
+      <div className="flex min-w-0 items-start gap-3">
+        <span
+          className={cn(
+            'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
+            meta.previewClassName
+          )}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h3 className="min-w-0 truncate text-sm font-medium">{record.title}</h3>
+            {showKind && (
+              <Badge variant="outline" className={cn('shrink-0', meta.badgeClassName)}>
+                {t(`maas.records.filters.${record.kind}`)}
               </Badge>
-            </div>
-            {record.prompt && (
-              <p className="mt-1 truncate text-xs text-muted-foreground">{record.prompt}</p>
             )}
-            {record.outputSummary && (
-              <p className="mt-1 truncate text-xs text-foreground-muted">{record.outputSummary}</p>
-            )}
+            <Badge variant="outline" className={cn('shrink-0', STATUS_CLASS_NAME[record.status])}>
+              {t(`maas.records.status.${record.status}`)}
+            </Badge>
           </div>
+          {record.prompt && (
+            <p className="mt-1 truncate text-xs text-muted-foreground">{record.prompt}</p>
+          )}
+          {record.outputSummary && (
+            <p className="mt-1 truncate text-xs text-foreground-muted">{record.outputSummary}</p>
+          )}
+          <RecordMetrics record={record} />
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground">
+      </div>
+      <div className="pt-1 text-right">
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
           {formatDateTime(record.createdAt)}
         </span>
       </div>
-
-      <RecordMetrics record={record} />
     </article>
   );
 };
@@ -545,7 +543,7 @@ const RecordMetrics: React.FC<{ record: MaasInvocationRecord; compact?: boolean 
         return (
           <span
             key={item.label}
-            className="inline-flex h-6 items-center gap-1 rounded-md border border-border bg-background-secondary px-2 text-[11px] text-muted-foreground"
+            className="inline-flex h-6 items-center gap-1 rounded-md border border-border/70 bg-background-secondary px-2 text-[11px] text-muted-foreground"
           >
             <Icon className="h-3 w-3" />
             <span>{item.label}</span>
@@ -554,7 +552,7 @@ const RecordMetrics: React.FC<{ record: MaasInvocationRecord; compact?: boolean 
         );
       })}
       {record.assetCount && (
-        <span className="inline-flex h-6 items-center rounded-md border border-border bg-background-secondary px-2 text-[11px] text-muted-foreground">
+        <span className="inline-flex h-6 items-center rounded-md border border-border/70 bg-background-secondary px-2 text-[11px] text-muted-foreground">
           {t('maas.records.assets', { count: record.assetCount })}
         </span>
       )}
