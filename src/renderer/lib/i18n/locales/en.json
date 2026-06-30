@@ -2626,16 +2626,16 @@
     "connectedCount": "{{count}} connected",
     "platforms": {
       "zenmux": {
-        "description": "Unified routing, observability, and billing across model providers."
+        "description": "Use a unified API standard to invoke models from different providers."
       },
       "openrouter": {
-        "description": "OpenAI-compatible model routing with provider fallback."
+        "description": "Access hundreds of AI models through a single endpoint, while automatically handling fallbacks."
       },
       "siliconflow": {
-        "description": "Hosted open model APIs for text, image, and embedding workloads."
+        "description": "Use SiliconFlow API to call GenAI capabilities; call via OpenAI interface."
       },
       "custom": {
-        "description": "Any OpenAI-compatible MaaS endpoint managed by your team."
+        "description": "Creates a model response for the given chat conversation."
       }
     },
     "connection": {

@@ -2626,16 +2626,16 @@
     "connectedCount": "已连接 {{count}} 个",
     "platforms": {
       "zenmux": {
-        "description": "统一模型路由、可观测性与多 Provider 计费。"
+        "description": "使用统一 API 标准调用不同 Provider 的模型。"
       },
       "openrouter": {
-        "description": "兼容 OpenAI 协议的模型路由与 Provider 兜底。"
+        "description": "通过单一端点访问数百个 AI 模型，并自动处理回退。"
       },
       "siliconflow": {
-        "description": "面向文本、图像与 Embedding 的开放模型托管 API。"
+        "description": "使用 SiliconFlow API 调用 GenAI 能力，支持 OpenAI 接口调用。"
       },
       "custom": {
-        "description": "团队自管的任意 OpenAI 兼容 MaaS 端点。"
+        "description": "为给定聊天对话创建模型响应。"
       }
     },
     "connection": {

@@ -101,7 +101,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformId, MaasPlatformDefinition> = {
   zenmux: {
     id: 'zenmux',
     name: 'ZenMux',
-    description: 'Unified routing, observability, and billing across model providers.',
+    description: 'Use a unified API standard to invoke models from different providers.',
     defaultEndpoint: 'https://zenmux.ai/api/v1',
     docsUrl: 'https://zenmux.ai/docs/',
     capabilities: ['text', 'image', 'embedding', 'video'],
@@ -109,7 +109,8 @@ export const MAAS_PLATFORMS: Record<MaasPlatformId, MaasPlatformDefinition> = {
   openrouter: {
     id: 'openrouter',
     name: 'OpenRouter',
-    description: 'OpenAI-compatible model routing with provider fallback.',
+    description:
+      'Access hundreds of AI models through a single endpoint, while automatically handling fallbacks.',
     defaultEndpoint: 'https://openrouter.ai/api/v1',
     docsUrl: 'https://openrouter.ai/docs',
     capabilities: ['text', 'image'],
@@ -117,7 +118,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformId, MaasPlatformDefinition> = {
   siliconflow: {
     id: 'siliconflow',
     name: 'SiliconFlow',
-    description: 'Hosted open model APIs for text and embedding workloads.',
+    description: 'Use SiliconFlow API to call GenAI capabilities; call via OpenAI interface.',
     defaultEndpoint: 'https://api.siliconflow.cn/v1',
     docsUrl: 'https://docs.siliconflow.cn/',
     capabilities: ['text', 'embedding', 'image'],
@@ -125,7 +126,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformId, MaasPlatformDefinition> = {
   custom: {
     id: 'custom',
     name: 'Custom OpenAI',
-    description: 'Any OpenAI-compatible MaaS endpoint managed by your team.',
+    description: 'Creates a model response for the given chat conversation.',
     defaultEndpoint: 'https://api.example.com/v1',
     docsUrl: 'https://platform.openai.com/docs/api-reference',
     capabilities: ['text', 'image', 'embedding'],
