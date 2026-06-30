@@ -7,6 +7,7 @@ import type { RuntimeCustomConfig } from '@shared/app-settings';
 import type { AgentModelCandidateInferenceResult } from '@shared/runtime-model-candidates';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import CustomCommandModal from '@renderer/features/settings/components/CustomCommandModal';
+import StatuslineSettingsCard from '@renderer/features/settings/components/StatuslineSettingsCard';
 import { useRuntimeSettings } from '@renderer/features/settings/use-runtime-settings';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
@@ -39,6 +40,12 @@ export const AgentTabSettings: React.FC<{ agentId: RuntimeId }> = observer(
         </AgentSection>
 
         <AgentNamingSettings agentId={agentId} agentName={provider.name} />
+
+        {agentId === 'claude' && (
+          <AgentSection title={t('settings.statusline.title')}>
+            <StatuslineSettingsCard />
+          </AgentSection>
+        )}
 
         <AgentSection
           title={t('agents.settings.configTitle')}

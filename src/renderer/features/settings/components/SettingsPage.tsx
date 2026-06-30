@@ -38,7 +38,6 @@ import LanguageCard from './LanguageCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import OpenInAppsSettingsCard from './OpenInAppsSettingsCard';
 import PromptsSettingsCard from './PromptsSettingsCard';
-import StatuslineSettingsCard from './StatuslineSettingsCard';
 import {
   AutoGenerateTaskNamesRow,
   AutoTrustWorktreesRow,
@@ -289,11 +288,6 @@ export function SettingsPage({
       description: t('settings.agentsTab.description'),
       sections: [
         { id: 'default-agent', component: <DefaultRuntimeSettingsCard /> },
-        {
-          id: 'statusline-templates',
-          title: t('settings.statusline.title'),
-          component: <StatuslineSettingsCard />,
-        },
         {
           id: 'cli-agents',
           title: t('settings.agentsTab.cliAgents'),
