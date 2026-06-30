@@ -13,6 +13,7 @@ export const accountAuthSuccessChannel = defineEvent<{
     userId: string;
     username: string;
     nickname: string;
+    nicknameOverride: string;
     name: string;
     avatarUrl: string;
     email: string;

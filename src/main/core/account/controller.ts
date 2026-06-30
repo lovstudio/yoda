@@ -22,6 +22,20 @@ export const accountController = createRPCController({
     }
   },
 
+  updateNickname: async (nickname: string) => {
+    try {
+      const session = await yodaAccountService.updateNickname(nickname);
+      return { success: true, session };
+    } catch (error) {
+      log.error('Failed to update account nickname:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update nickname',
+        session: await yodaAccountService.getSession(),
+      };
+    }
+  },
+
   signIn: async (provider?: string) => {
     try {
       const result = await yodaAccountService.signIn(provider);

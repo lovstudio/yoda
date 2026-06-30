@@ -14,6 +14,7 @@ export interface AccountUser {
   userId: string;
   username: string;
   nickname: string;
+  nicknameOverride: string;
   name: string;
   avatarUrl: string;
   email: string;
@@ -24,6 +25,7 @@ export interface CachedProfile {
   userId: string;
   username: string;
   nickname?: string;
+  nicknameOverride?: string;
   name: string;
   avatarUrl: string;
   email: string;
@@ -108,25 +110,23 @@ function normalizeAccountNames(
   const nickname = hasNickname
     ? toTrimmedString(input.nickname)
     : toTrimmedString(fallback?.nickname);
-  const rawName = hasName
-    ? toTrimmedString(input.name)
-    : hasNickname
-      ? ''
-      : toTrimmedString(fallback?.name);
+  const rawName = hasName ? toTrimmedString(input.name) : toTrimmedString(fallback?.name);
 
   return {
     nickname,
-    name: nickname || rawName,
+    name: rawName,
   };
 }
 
 function accountUserFromProfile(profile: CachedProfile): AccountUser {
   const names = normalizeAccountNames(profile);
+  const nicknameOverride = toTrimmedString(profile.nicknameOverride);
   return {
     userId: profile.userId,
     username: profile.username,
     nickname: names.nickname,
-    name: names.name,
+    nicknameOverride,
+    name: nicknameOverride || names.nickname || names.name,
     avatarUrl: profile.avatarUrl,
     email: profile.email,
   };
@@ -160,6 +160,25 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
 
   async refreshSession(): Promise<SessionState> {
     await this.validateSession({ forceRefresh: true });
+    return this.getSession();
+  }
+
+  async updateNickname(nickname: string): Promise<SessionState> {
+    const profile = this.cachedProfile ?? (await accountKV.get('profile'));
+    if (!profile?.hasAccount) {
+      throw new Error('No signed-in account');
+    }
+
+    const updated: CachedProfile = { ...profile };
+    const trimmed = nickname.trim();
+    if (trimmed) {
+      updated.nicknameOverride = trimmed;
+    } else {
+      delete updated.nicknameOverride;
+    }
+
+    this.cachedProfile = updated;
+    await accountKV.set('profile', updated);
     return this.getSession();
   }
 
@@ -258,11 +277,16 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
 
       const username = deriveUsernameFromEmail(session.user.email);
       const names = normalizeAccountNames(session.user);
+      const nicknameOverride =
+        this.cachedProfile?.userId === session.user.id
+          ? this.cachedProfile.nicknameOverride
+          : undefined;
       const profile: CachedProfile = {
         hasAccount: true,
         userId: session.user.id,
         username,
         nickname: names.nickname,
+        nicknameOverride,
         name: names.name,
         avatarUrl: session.user.avatarUrl?.trim() ?? '',
         email: session.user.email,

@@ -36,6 +36,22 @@ export function useAccountRefreshSession() {
   });
 }
 
+export function useAccountUpdateNickname() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (nickname: string) => {
+      const result = await rpc.account.updateNickname(nickname);
+      if (!result.success || !result.session) {
+        throw new Error(result.error || 'Failed to update nickname');
+      }
+      return result.session;
+    },
+    onSuccess: (session) => {
+      queryClient.setQueryData(ACCOUNT_SESSION_KEY, session);
+    },
+  });
+}
+
 /**
  * Pre-warm the auth server (DNS + TLS + serverless cold start) while a
  * sign-in affordance is visible, so the device-code request is fast when
