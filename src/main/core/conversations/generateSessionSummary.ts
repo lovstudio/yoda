@@ -5,6 +5,7 @@ import type {
   SessionSummaryScope,
   SessionTranscriptMessage,
 } from '@shared/conversations';
+import type { TaskOutputLanguage } from '@shared/project-settings';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import type { SummaryContext } from '@shared/session-summary';
 import { extractAgentMessageText, runAgentCli } from '@main/core/agent-cli/run-agent-cli';
@@ -34,8 +35,8 @@ export interface ResolvedSummaryRuntime {
   runtimeName: string;
   model: string | null;
   systemPrompt: string;
-  /** Output language for the summary: 'app' | 'prompt' | 'en' | 'zh-CN'. */
-  language: string;
+  /** Output language for the summary: 'skip' | 'app' | 'prompt' | 'en' | 'zh-CN'. */
+  language: TaskOutputLanguage;
   /** Which transcript parts to feed (per-scope; see settings). */
   context: SummaryContext;
 }
@@ -142,6 +143,7 @@ export async function generateSessionSummary(
   scope: SessionSummaryScope,
   onDelta?: (delta: string) => void
 ): Promise<SessionSummary | null> {
+  if (runtime.language === 'skip') return null;
   const { runtimeId, runtimeName } = runtime;
   const { messages: transcriptMessages, prompt } = draft;
 

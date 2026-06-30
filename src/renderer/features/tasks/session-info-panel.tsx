@@ -699,6 +699,11 @@ function emptySummaryCopy(status: SessionSummaryStatus | undefined): {
         label: 'tasks.sessionPanel.summaryFailed',
         description: 'tasks.sessionPanel.summaryFailedDescription',
       };
+    case 'skipped':
+      return {
+        label: 'tasks.sessionPanel.summarySkipped',
+        description: 'tasks.sessionPanel.summarySkippedDescription',
+      };
     default:
       return {
         label: 'tasks.sessionPanel.summaryEmpty',
@@ -1222,6 +1227,12 @@ const OverviewTitleTab = observer(function OverviewTitleTab({
         provisionedTask.path
       );
       setNamingSnapshot(result.snapshot);
+      if (result.snapshot.status === 'skipped') {
+        toast({
+          title: t('tasks.sessionInfo.agentRenameSkipped'),
+        });
+        return;
+      }
       await renameToTitle(result.title);
       toast({
         title: t('tasks.sessionInfo.agentRenameComplete'),
@@ -1375,6 +1386,7 @@ function getSessionNamingStatusKey(
   if (isGenerating || snapshot?.status === 'generating') return 'tasks.rename.statusGenerating';
   if (snapshot?.status === 'ready') return 'tasks.rename.statusReady';
   if (snapshot?.status === 'failed') return 'tasks.rename.statusFailed';
+  if (snapshot?.status === 'skipped') return 'tasks.rename.statusSkipped';
   return 'tasks.rename.statusIdle';
 }
 
@@ -1456,6 +1468,7 @@ function summarySourceLabelKey(status: SessionSummaryStatus | undefined): string
 }
 
 const SUMMARY_LANGUAGE_KEYS: Record<string, string> = {
+  skip: 'settings.tasks.namingLanguageSkip',
   app: 'settings.tasks.namingLanguageApp',
   prompt: 'settings.tasks.namingLanguagePrompt',
   en: 'settings.tasks.namingLanguageEn',
@@ -2043,6 +2056,7 @@ function getSessionSummaryStatusKey(
   if (isGenerating || snapshot?.status === 'generating') return 'tasks.rename.statusGenerating';
   if (snapshot?.status === 'ready') return 'tasks.rename.statusReady';
   if (snapshot?.status === 'failed') return 'tasks.rename.statusFailed';
+  if (snapshot?.status === 'skipped') return 'tasks.rename.statusSkipped';
   return 'tasks.rename.statusIdle';
 }
 

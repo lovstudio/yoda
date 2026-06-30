@@ -6,6 +6,7 @@ export function resolvePromptRewriteTargetLanguage(
   language: TaskOutputLanguage,
   appLanguage?: PromptRewriteTargetLanguage | null
 ): PromptRewriteTargetLanguage | null {
+  if (language === 'skip') return null;
   if (language === 'en' || language === 'zh-CN') return language;
   if (language === 'app') return appLanguage ?? null;
   return null;

@@ -12,7 +12,11 @@ import {
 import { KANBAN_STATUSES } from '@shared/kanban';
 import { MAAS_PLATFORM_IDS } from '@shared/maas';
 import { openInAppIdSchema } from '@shared/openInApps';
-import { promptPrincipleSchema, quickActionSchema } from '@shared/project-settings';
+import {
+  promptPrincipleSchema,
+  quickActionSchema,
+  taskOutputLanguageValues,
+} from '@shared/project-settings';
 import { RUNTIME_MODEL_CANDIDATE_SOURCES } from '@shared/runtime-model-candidates';
 import { AGENT_ACCOUNT_PROVIDER_IDS, RUNTIME_IDS, RUNTIMES } from '@shared/runtime-registry';
 import {
@@ -78,15 +82,15 @@ export const taskSettingsSchema = z.object({
   /** Agent that drives session-summary generation. Empty = built-in summary Agent. */
   summaryAgentId: z.string().catch(''),
   /** Target language for rewriting the user's input prompt before sending. */
-  inputPromptLanguage: z.enum(['app', 'prompt', 'en', 'zh-CN']).catch('prompt'),
+  inputPromptLanguage: z.enum(taskOutputLanguageValues).catch('prompt'),
   /** Output language for generated session summaries. */
-  summaryLanguage: z.enum(['app', 'prompt', 'en', 'zh-CN']).catch('app'),
+  summaryLanguage: z.enum(taskOutputLanguageValues).catch('app'),
   /** Which transcript parts feed the `recent` summary (defaults to user-only for speed). */
   summaryContextRecent: summaryContextSchema.catch(DEFAULT_SUMMARY_CONTEXT_RECENT),
   /** Which transcript parts feed the `global` summary (defaults to everything). */
   summaryContextGlobal: summaryContextSchema.catch(DEFAULT_SUMMARY_CONTEXT_GLOBAL),
   namingModel: z.string(),
-  namingLanguage: z.enum(['app', 'prompt', 'en', 'zh-CN']),
+  namingLanguage: z.enum(taskOutputLanguageValues),
   namingContext: z.object(
     Object.fromEntries(TASK_NAMING_CONTEXT_SOURCE_IDS.map((id) => [id, z.boolean()])) as Record<
       (typeof TASK_NAMING_CONTEXT_SOURCE_IDS)[number],

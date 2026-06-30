@@ -184,6 +184,7 @@ export type SessionSummaryScope = 'global' | 'recent';
  * - `generated`: summarized the conversation on demand
  * - `manual`: a user-written summary overrides compaction and generation
  * - `running`: session is mid-turn; will summarize once idle
+ * - `skipped`: summary generation is disabled by settings
  * - `empty`: no user prompts to summarize yet
  * - `failed`: generation was attempted but produced nothing
  * - `unsupported`: provider has no summary support
@@ -193,6 +194,7 @@ export type SessionSummaryStatus =
   | 'generated'
   | 'manual'
   | 'running'
+  | 'skipped'
   | 'empty'
   | 'failed'
   | 'unsupported';

@@ -12,6 +12,7 @@ import {
   type TaskNamingContextSource,
   type TaskNamingDebugStage,
   type TaskNamingDebugTrace,
+  type TaskNamingLanguage,
   type TaskNamingSettings,
   type TaskNamingSnapshot,
   type TaskNamingStatus,
@@ -199,6 +200,16 @@ export async function resolveNamingRuntime(
   };
 }
 
+export async function resolveTaskNamingLanguage(
+  projectId?: string | null
+): Promise<TaskNamingLanguage> {
+  const [taskSettings, composerDefaults] = await Promise.all([
+    appSettingsService.get('tasks'),
+    getProjectComposerDefaults(projectId),
+  ]);
+  return composerDefaults?.namingLanguage ?? taskSettings.namingLanguage;
+}
+
 export async function buildCommonProjectNamingSources(input: {
   projectId: string;
   project?: ProjectProvider | null;
@@ -360,10 +371,29 @@ export async function generateTaskNames(
     durationMs: Date.now() - startedAt,
     defaultRuntime,
     namingModelConfigured: Boolean(settings.model.trim()),
+    language: settings.language,
     context: settings.context,
     recentTaskLimit: settings.recentTaskLimit,
     timeoutMs: settings.requestTimeoutMs,
   });
+  if (settings.language === 'skip') {
+    const message = 'Task naming is disabled by language setting.';
+    const context = await buildTaskNamingContextSnapshot(input, settings);
+    const snapshot = await saveNamingSnapshot({
+      taskId: input.taskId,
+      projectId: input.projectId,
+      status: 'skipped',
+      model: settings.model,
+      context,
+      error: message,
+    });
+    console.log('[DEBUG][task-naming] skipped:', {
+      taskId: input.taskId,
+      projectId: input.projectId,
+      totalDurationMs: Date.now() - startedAt,
+    });
+    return { success: false, message, snapshot };
+  }
   recordStage('providerConfig', Date.now() - startedAt, {
     runtimeId,
     hasProviderConfig: Boolean(providerConfig),

@@ -10,6 +10,7 @@ describe('prompt rewrite helpers', () => {
     expect(resolvePromptRewriteTargetLanguage('zh-CN')).toBe('zh-CN');
     expect(resolvePromptRewriteTargetLanguage('en')).toBe('en');
     expect(resolvePromptRewriteTargetLanguage('app', 'zh-CN')).toBe('zh-CN');
+    expect(resolvePromptRewriteTargetLanguage('skip', 'en')).toBeNull();
     expect(resolvePromptRewriteTargetLanguage('prompt', 'en')).toBeNull();
     expect(resolvePromptRewriteTargetLanguage('app')).toBeNull();
   });

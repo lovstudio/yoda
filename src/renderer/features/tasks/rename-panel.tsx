@@ -384,6 +384,7 @@ function getNamingStatusKey(snapshot: TaskNamingSnapshot | null, isRegenerating:
   if (isRegenerating || snapshot?.status === 'generating') return 'tasks.rename.statusGenerating';
   if (snapshot?.status === 'ready') return 'tasks.rename.statusReady';
   if (snapshot?.status === 'failed') return 'tasks.rename.statusFailed';
+  if (snapshot?.status === 'skipped') return 'tasks.rename.statusSkipped';
   return 'tasks.rename.statusIdle';
 }
 

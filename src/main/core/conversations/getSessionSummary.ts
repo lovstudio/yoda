@@ -129,6 +129,27 @@ export async function getSessionSummary(
   // Provider/model/prompt/context come from the configured summary Agent, NOT
   // the session's runtime — so a dead session runtime never blocks summaries.
   const runtime = await resolveSummaryRuntime(scope, projectId);
+  if (runtime.language === 'skip') {
+    if (scope === 'global') {
+      saveSessionSummarySnapshot({
+        conversationId,
+        projectId,
+        taskId,
+        runtime,
+        draft: null,
+        status: 'skipped',
+        error: 'Session summary generation is disabled by language setting.',
+      });
+    }
+    log.info('[session-summary] resolved', {
+      runtimeId: runtime.runtimeId,
+      scope,
+      status: 'skipped',
+      contextDurationMs,
+      totalDurationMs: Date.now() - startedAt,
+    });
+    return { summary: null, status: 'skipped' };
+  }
   const ctx = runtime.context;
   // Apply the role context BEFORE slicing so `recent` keeps the last N of the
   // INCLUDED roles (e.g. last 10 user messages when assistant is excluded),
@@ -346,6 +367,9 @@ export async function getSessionSummaryPreview(
       loadContext(runtimeId, cwd, conversationId, conversationTitle, conversationCreatedAt),
       resolveSummaryRuntime('global', projectId),
     ]);
+    if (runtime.language === 'skip') {
+      return createSessionSummarySnapshot({ ...base, status: 'skipped', runtime, draft: null });
+    }
     const messages = (loaded?.messages ?? []).filter((m) =>
       m.role === 'assistant' ? runtime.context.assistant : runtime.context.user
     );

@@ -13,7 +13,10 @@ import {
 } from '@shared/tasks';
 import { projectManager } from '@main/core/projects/project-manager';
 import type { ProjectProvider } from '@main/core/projects/project-provider';
-import { generateTaskNames } from '@main/core/tasks/name-generation/task-naming-service';
+import {
+  generateTaskNames,
+  resolveTaskNamingLanguage,
+} from '@main/core/tasks/name-generation/task-naming-service';
 import { taskEvents } from '@main/core/tasks/task-events';
 import { taskManager } from '@main/core/tasks/task-manager';
 import { db } from '@main/db/client';
@@ -437,7 +440,12 @@ export async function createTask(
   // name and surface that slug as the "First user prompt" — the user can trigger
   // naming manually later once the task has content.
   const hasInitialPrompt = Boolean(params.initialConversation?.initialPrompt?.trim());
-  const shouldGenerate = taskSettings.autoGenerateName && hasInitialPrompt;
+  const namingLanguage =
+    taskSettings.autoGenerateName && hasInitialPrompt
+      ? await resolveTaskNamingLanguage(params.projectId)
+      : taskSettings.namingLanguage;
+  const shouldGenerate =
+    taskSettings.autoGenerateName && hasInitialPrompt && namingLanguage !== 'skip';
   // When auto-naming owns the branch: 'hash' mode passes an empty seed so the
   // branch is just `prefix/<suffix>`; 'ai' mode keeps the placeholder seed and
   // renames the branch in the background once the naming agent returns a slug.
@@ -634,12 +642,17 @@ export async function retryTaskSetup(
 
   const displayName = row.name;
   const hasInitialPrompt = Boolean(params.initialConversation?.initialPrompt?.trim());
-  const shouldGenerate = taskSettings.autoGenerateName && hasInitialPrompt;
+  const namingLanguage =
+    taskSettings.autoGenerateName && hasInitialPrompt
+      ? await resolveTaskNamingLanguage(projectId)
+      : taskSettings.namingLanguage;
+  const shouldGenerate =
+    taskSettings.autoGenerateName && hasInitialPrompt && namingLanguage !== 'skip';
   // Naming runs in the background and never blocks provisioning. 'hash' branch
   // naming uses a suffix-only branch name; 'ai' renames the branch later.
   const autoNamesBranch =
     !manualBranchName?.trim() &&
-    taskSettings.autoGenerateName &&
+    shouldGenerate &&
     createTaskStrategyRequiresBranchName(params.strategy);
   const nextBranchSeed =
     manualBranchName?.trim() ||
