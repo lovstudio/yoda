@@ -187,10 +187,11 @@ export const MaasConnectedCountBadge: React.FC = () => {
   return <Badge variant="secondary">{t('maas.connectedCount', { count: connectedCount })}</Badge>;
 };
 
-export const MaasView: React.FC<{ embedded?: boolean; showSectionChrome?: boolean }> = ({
-  embedded = false,
-  showSectionChrome = true,
-}) => {
+export const MaasView: React.FC<{
+  embedded?: boolean;
+  showSectionChrome?: boolean;
+  onOpenUsage?: () => void;
+}> = ({ embedded = false, showSectionChrome = true, onOpenUsage }) => {
   const { t } = useTranslation();
   const { data: connections, isLoading } = useMaasConnections();
   const { data: platformDescriptions } = useMaasPlatformDescriptions();
@@ -224,7 +225,7 @@ export const MaasView: React.FC<{ embedded?: boolean; showSectionChrome?: boolea
           key={platformId}
           connection={findConnection(connections, platformId)}
           officialDescription={platformDescriptionById.get(platformId)}
-          embedded={embedded}
+          onOpenUsage={onOpenUsage}
           loading={isLoading}
         />
       ))}
@@ -370,9 +371,9 @@ const MaasChapter: React.FC<{
 const PlatformAccordionItem: React.FC<{
   connection: MaasConnection;
   officialDescription?: MaasPlatformOfficialDescription;
-  embedded: boolean;
+  onOpenUsage?: () => void;
   loading: boolean;
-}> = ({ connection, officialDescription, embedded, loading }) => {
+}> = ({ connection, officialDescription, onOpenUsage, loading }) => {
   const { t } = useTranslation();
   const platform = MAAS_PLATFORMS[connection.platformId];
   const statusLabel = connection.connected ? t('maas.connected') : t('maas.notConnected');
@@ -467,7 +468,7 @@ const PlatformAccordionItem: React.FC<{
           key={`${connection.platformId}:${connection.keyFingerprint ?? 'empty'}`}
           connection={connection}
           officialDescription={officialDescription}
-          embedded={embedded}
+          onOpenUsage={onOpenUsage}
           className="border-t border-border/50"
         />
       </AccordionPrimitive.Content>
@@ -478,9 +479,9 @@ const PlatformAccordionItem: React.FC<{
 const ConnectionPanel: React.FC<{
   connection: MaasConnection;
   officialDescription?: MaasPlatformOfficialDescription;
-  embedded: boolean;
+  onOpenUsage?: () => void;
   className?: string;
-}> = ({ connection, officialDescription, embedded, className }) => {
+}> = ({ connection, officialDescription, onOpenUsage, className }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const connectMutation = useConnectMaasPlatform();
@@ -739,6 +740,18 @@ const ConnectionPanel: React.FC<{
                   })
                 : t('maas.connection.neverChecked')}
             </span>
+            {connection.platformId === 'zenmux' && onOpenUsage && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={onOpenUsage}
+              >
+                <Activity className="h-3.5 w-3.5" />
+                {t('maas.records.viewInUsage')}
+              </Button>
+            )}
           </div>
           <Button type="submit" size="sm" disabled={submitDisabled} className="w-full @3xl:w-auto">
             {saving ? (
@@ -750,17 +763,15 @@ const ConnectionPanel: React.FC<{
           </Button>
         </div>
       </form>
-      {connection.platformId === 'zenmux' && (
-        <ZenmuxUsagePanel connection={connection} embedded={embedded} />
-      )}
     </section>
   );
 };
 
-const ZenmuxUsagePanel: React.FC<{
-  connection: MaasConnection;
-  embedded: boolean;
-}> = ({ connection, embedded }) => {
+export const ZenmuxUsageSettingsSection: React.FC<{
+  embedded?: boolean;
+}> = ({ embedded = true }) => {
+  const { data: connections } = useMaasConnections();
+  const connection = findConnection(connections, 'zenmux');
   const usageSection = useZenmuxUsageSection({
     connection,
     embedded,

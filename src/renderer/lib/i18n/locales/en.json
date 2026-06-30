@@ -2701,6 +2701,7 @@
       "errorTitle": "Could not load usage statistics",
       "reload": "Reload",
       "openZenmuxLogs": "Open Logs",
+      "viewInUsage": "View usage",
       "scrollHint": "Scroll to load more",
       "end": "End of records",
       "input": "Tokens",

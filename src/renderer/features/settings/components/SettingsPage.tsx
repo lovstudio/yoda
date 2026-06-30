@@ -7,7 +7,7 @@ import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
 import { AiLogsPanel } from '@renderer/features/ai-logs/components/AiLogsPanel';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
 import { KanbanBoard } from '@renderer/features/kanban/components/KanbanBoard';
-import { MaasView } from '@renderer/features/maas/components/MaasView';
+import { MaasView, ZenmuxUsageSettingsSection } from '@renderer/features/maas/components/MaasView';
 import { McpView } from '@renderer/features/mcp/components/McpView';
 import { MobileView } from '@renderer/features/mobile/mobile-view';
 import { RoadmapView } from '@renderer/features/roadmap/components/RoadmapView';
@@ -85,6 +85,7 @@ export type SettingsPageTab =
 
 interface SectionConfig {
   id: string;
+  anchorId?: string;
   title?: string;
   description?: React.ReactNode;
   action?: React.ReactNode;
@@ -208,6 +209,26 @@ export function SettingsPage({
   const tabGroups = useSettingsTabGroups();
   // In the side pane the chip-strip row hosts the tab picker — don't double it.
   const isPinHosted = useIsPinHosted();
+  const [pendingScrollTarget, setPendingScrollTarget] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!pendingScrollTarget || activeTab !== 'usage') return;
+
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(pendingScrollTarget)?.scrollIntoView({
+        block: 'start',
+        behavior: 'smooth',
+      });
+      setPendingScrollTarget(null);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab, pendingScrollTarget]);
+
+  const openZenmuxUsage = React.useCallback(() => {
+    setPendingScrollTarget('settings-zenmux-usage');
+    onTabChange('usage');
+  }, [onTabChange]);
 
   const tabContent: Record<string, TabContentConfig> = {
     general: {
@@ -359,12 +380,20 @@ export function SettingsPage({
     maas: {
       title: t('maas.title'),
       description: t('maas.subtitle'),
-      component: <MaasView embedded />,
+      component: <MaasView embedded onOpenUsage={openZenmuxUsage} />,
     },
     usage: {
       title: t('usage.title'),
       description: t('usage.subtitle'),
-      sections: [{ id: 'usage', surface: 'plain', component: <UsageView embedded /> }],
+      sections: [
+        { id: 'usage', surface: 'plain', component: <UsageView embedded /> },
+        {
+          id: 'zenmux-usage',
+          anchorId: 'settings-zenmux-usage',
+          surface: 'plain',
+          component: <ZenmuxUsageSettingsSection embedded />,
+        },
+      ],
     },
     'ai-logs': {
       title: t('aiLogs.title'),
@@ -554,7 +583,11 @@ export function SettingsPage({
                   );
                   const usePanelSurface = section.surface !== 'plain';
                   return (
-                    <div key={section.id} className="flex flex-col gap-3">
+                    <div
+                      key={section.id}
+                      id={section.anchorId}
+                      className="scroll-mt-8 flex flex-col gap-3"
+                    >
                       {hasChapterHeader && (
                         <div className="flex min-w-0 items-start justify-between gap-3">
                           <div className="min-w-0">
