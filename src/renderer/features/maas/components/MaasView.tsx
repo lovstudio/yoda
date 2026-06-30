@@ -1,5 +1,7 @@
+import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import {
   Activity,
+  ChevronDown,
   Clock,
   Database,
   ExternalLink,
@@ -98,6 +100,10 @@ function findConnection(
   );
 }
 
+function isMaasPlatformId(value: string): value is MaasPlatformId {
+  return (MAAS_PLATFORM_IDS as readonly string[]).includes(value);
+}
+
 function formatCount(value: number): string {
   return new Intl.NumberFormat().format(value);
 }
@@ -147,6 +153,7 @@ export const MaasView: React.FC<{ embedded?: boolean }> = ({ embedded = false })
   const { t } = useTranslation();
   const { data: connections, isLoading } = useMaasConnections();
   const [selectedPlatformId, setSelectedPlatformId] = useState<MaasPlatformId>('zenmux');
+  const [expandedPlatformId, setExpandedPlatformId] = useState<MaasPlatformId | ''>('zenmux');
   const [filterKind, setFilterKind] = useState<MaasInvocationFilterKind>('all');
   const selectedConnection = findConnection(connections, selectedPlatformId);
   const connectedCount = connections?.filter((connection) => connection.connected).length ?? 0;
@@ -168,6 +175,16 @@ export const MaasView: React.FC<{ embedded?: boolean }> = ({ embedded = false })
             range: formatDateRange(recordsQuery.period),
           });
 
+  const handlePlatformValueChange = useCallback((value: string) => {
+    if (value === '') {
+      setExpandedPlatformId('');
+      return;
+    }
+    if (!isMaasPlatformId(value)) return;
+    setExpandedPlatformId(value);
+    setSelectedPlatformId(value);
+  }, []);
+
   return (
     <div
       className={cn(
@@ -177,7 +194,7 @@ export const MaasView: React.FC<{ embedded?: boolean }> = ({ embedded = false })
         embedded ? 'h-[560px] overflow-hidden rounded-xl border border-border' : 'h-full'
       )}
     >
-      <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-background-tertiary @max-3xl:w-44">
+      <main className="@container flex min-h-0 min-w-0 flex-1 flex-col">
         {!embedded && (
           <div className="border-b border-border px-4 py-4">
             <div className="flex items-center gap-2">
@@ -190,34 +207,30 @@ export const MaasView: React.FC<{ embedded?: boolean }> = ({ embedded = false })
           </div>
         )}
 
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="text-xs font-medium text-muted-foreground">
-            {t('maas.platformsTitle')}
-          </span>
-          <Badge variant="secondary">{t('maas.connectedCount', { count: connectedCount })}</Badge>
-        </div>
+        <section className="shrink-0 border-b border-border bg-background-secondary px-4 py-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="text-xs font-medium text-muted-foreground">
+              {t('maas.platformsTitle')}
+            </span>
+            <Badge variant="secondary">{t('maas.connectedCount', { count: connectedCount })}</Badge>
+          </div>
 
-        <div className="flex-1 space-y-2 overflow-y-auto p-2">
-          {MAAS_PLATFORM_IDS.map((platformId) => {
-            const connection = findConnection(connections, platformId);
-            return (
-              <PlatformButton
+          <AccordionPrimitive.Root
+            type="single"
+            collapsible
+            value={expandedPlatformId}
+            onValueChange={handlePlatformValueChange}
+            className="overflow-hidden rounded-xl border border-border/60 bg-muted/10"
+          >
+            {MAAS_PLATFORM_IDS.map((platformId) => (
+              <PlatformAccordionItem
                 key={platformId}
-                connection={connection}
-                selected={platformId === selectedPlatformId}
-                onSelect={() => setSelectedPlatformId(platformId)}
+                connection={findConnection(connections, platformId)}
                 loading={isLoading}
               />
-            );
-          })}
-        </div>
-      </aside>
-
-      <main className="@container flex min-w-0 flex-1 flex-col">
-        <ConnectionPanel
-          key={`${selectedConnection.platformId}:${selectedConnection.keyFingerprint ?? 'empty'}`}
-          connection={selectedConnection}
-        />
+            ))}
+          </AccordionPrimitive.Root>
+        </section>
 
         <section className="flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-3">
@@ -289,52 +302,70 @@ export const MaasView: React.FC<{ embedded?: boolean }> = ({ embedded = false })
   );
 };
 
-const PlatformButton: React.FC<{
+const PlatformAccordionItem: React.FC<{
   connection: MaasConnection;
-  selected: boolean;
   loading: boolean;
-  onSelect: () => void;
-}> = ({ connection, selected, loading, onSelect }) => {
+}> = ({ connection, loading }) => {
   const { t } = useTranslation();
   const platform = MAAS_PLATFORMS[connection.platformId];
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        'flex w-full flex-col gap-2 rounded-md border px-3 py-3 text-left transition',
-        selected
-          ? 'border-border-1 bg-background text-foreground shadow-xs'
-          : 'border-transparent text-foreground-muted hover:bg-background-tertiary-1 hover:text-foreground'
-      )}
+    <AccordionPrimitive.Item
+      value={connection.platformId}
+      className="border-b border-border/50 transition-colors last:border-b-0 data-[state=open]:bg-background-1/40"
     >
-      <span className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-sm font-medium">{platform.name}</span>
-        <span
-          className={cn(
-            'h-2 w-2 shrink-0 rounded-full',
-            connection.connected ? 'bg-emerald-500' : 'bg-muted-foreground/40',
-            loading && 'animate-pulse'
-          )}
+      <AccordionPrimitive.Header className="flex items-center gap-1 pr-2.5">
+        <AccordionPrimitive.Trigger className="group flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left outline-none transition-colors hover:bg-muted/30 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border">
+          <ChevronDown
+            className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200 group-data-[state=open]:rotate-180"
+            aria-hidden="true"
+          />
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-background-secondary">
+            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="truncate text-sm text-foreground">{platform.name}</span>
+            <span className="truncate font-mono text-[10px] text-muted-foreground">
+              {connection.endpoint}
+            </span>
+          </span>
+          <span className="hidden min-w-0 max-w-64 truncate text-xs text-muted-foreground @4xl:block">
+            {t(`maas.platforms.${connection.platformId}.description`)}
+          </span>
+          <Badge variant={connection.connected ? 'outline' : 'secondary'} className="shrink-0">
+            {connection.connected ? t('maas.connected') : t('maas.notConnected')}
+          </Badge>
+          <span
+            className={cn(
+              'h-1.5 w-1.5 shrink-0 rounded-full',
+              connection.connected ? 'bg-emerald-500' : 'bg-muted-foreground/40',
+              loading && 'animate-pulse'
+            )}
+          />
+        </AccordionPrimitive.Trigger>
+      </AccordionPrimitive.Header>
+      <AccordionPrimitive.Content
+        className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+        style={
+          {
+            '--accordion-panel-height': 'var(--radix-accordion-content-height)',
+          } as React.CSSProperties
+        }
+      >
+        <ConnectionPanel
+          key={`${connection.platformId}:${connection.keyFingerprint ?? 'empty'}`}
+          connection={connection}
+          className="border-t border-border/50"
         />
-      </span>
-      <span className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-        {t(`maas.platforms.${connection.platformId}.description`)}
-      </span>
-      <span className="flex items-center justify-between gap-2">
-        <span className="truncate font-mono text-[10px] text-muted-foreground">
-          {connection.endpoint}
-        </span>
-        <Badge variant={connection.connected ? 'outline' : 'secondary'} className="shrink-0">
-          {connection.connected ? t('maas.connected') : t('maas.notConnected')}
-        </Badge>
-      </span>
-    </button>
+      </AccordionPrimitive.Content>
+    </AccordionPrimitive.Item>
   );
 };
 
-const ConnectionPanel: React.FC<{ connection: MaasConnection }> = ({ connection }) => {
+const ConnectionPanel: React.FC<{ connection: MaasConnection; className?: string }> = ({
+  connection,
+  className,
+}) => {
   const { t } = useTranslation();
   const platform = MAAS_PLATFORMS[connection.platformId];
   const connectMutation = useConnectMaasPlatform();
@@ -386,7 +417,7 @@ const ConnectionPanel: React.FC<{ connection: MaasConnection }> = ({ connection 
   };
 
   return (
-    <section className="shrink-0 border-b border-border bg-background-secondary px-6 py-4">
+    <section className={cn('@container bg-background px-4 py-4', className)}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
