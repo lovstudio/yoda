@@ -41,6 +41,7 @@ import {
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { Input } from '@renderer/lib/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import {
   useConnectMaasPlatform,
@@ -468,19 +469,28 @@ const ConnectionPanel: React.FC<{
             {saving ? t('maas.connection.saving') : t('maas.connection.save')}
           </Button>
           {connection.connected && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={disconnecting}
-              onClick={handleDisconnect}
-              aria-label={t('maas.connection.disconnect')}
-            >
-              {disconnecting ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Unplug className="h-3.5 w-3.5" />
-              )}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon-sm"
+                    disabled={disconnecting}
+                    onClick={handleDisconnect}
+                    aria-label={t('maas.connection.disconnect')}
+                    title={t('maas.connection.disconnect')}
+                  >
+                    {disconnecting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Unplug className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                }
+              />
+              <TooltipContent>{t('maas.connection.disconnect')}</TooltipContent>
+            </Tooltip>
           )}
         </div>
       </form>
