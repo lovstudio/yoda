@@ -1,4 +1,4 @@
-import { LogIn, LogOut, RefreshCw, RotateCcw, Save, User } from 'lucide-react';
+import { LogIn, LogOut, Save, User } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { accountDisplayName } from '@renderer/lib/account-display';
@@ -6,7 +6,6 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import {
   useAccountAuthWarmUp,
   useAccountHealth,
-  useAccountRefreshSession,
   useAccountSession,
   useAccountSignIn,
   useAccountSignOut,
@@ -16,8 +15,6 @@ import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { Label } from '@renderer/lib/ui/label';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
-import { cn } from '@renderer/utils/utils';
 import { ServerUnavailableMessage } from './ServerUnavailableMessage';
 
 export function AccountTab() {
@@ -189,30 +186,13 @@ function SignedInAccountPanel({
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
-  const refreshSessionMutation = useAccountRefreshSession();
   const updateNicknameMutation = useAccountUpdateNickname();
   const displayName = accountDisplayName(user);
   const [nicknameDraft, setNicknameDraft] = useState(displayName);
 
   const nicknameDirty = nicknameDraft.trim() !== displayName.trim();
   const nicknameBusy = updateNicknameMutation.isPending;
-  const controlsDisabled = refreshSessionMutation.isPending || signOutPending || nicknameBusy;
-
-  const handleRefreshSession = () => {
-    refreshSessionMutation.mutate(undefined, {
-      onSuccess: (session) => {
-        if (session.user) setNicknameDraft(accountDisplayName(session.user));
-      },
-      onError: (err) => {
-        const message = err instanceof Error ? err.message : t('settings.account.refreshFailed');
-        toast({
-          title: t('settings.account.refreshFailed'),
-          description: message,
-          variant: 'destructive',
-        });
-      },
-    });
-  };
+  const controlsDisabled = signOutPending || nicknameBusy;
 
   const handleNicknameSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -257,75 +237,29 @@ function SignedInAccountPanel({
   };
 
   return (
-    <div className="@container flex flex-col gap-4">
-      <div className="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
+    <div className="@container divide-y divide-border/60">
+      <section className="flex min-w-0 items-center gap-3 pb-4">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="relative shrink-0">
-            {user.avatarUrl ? (
-              <img
-                src={user.avatarUrl}
-                alt={displayName}
-                className="size-11 rounded-full border border-border/60"
-              />
-            ) : (
-              <div className="flex size-11 items-center justify-center rounded-full border border-border/60 bg-muted">
-                <User className="h-5 w-5 text-muted-foreground" />
-              </div>
-            )}
-            <span className="absolute right-0 bottom-0 size-3 rounded-full border-2 border-background bg-emerald-500" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <p className="min-w-0 truncate text-base font-semibold text-foreground">
-                {displayName}
-              </p>
-              <span className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
-                <span className="size-1.5 rounded-full bg-emerald-500" />
-                {t('settings.account.connectedStatus')}
-              </span>
+          {user.avatarUrl ? (
+            <img
+              src={user.avatarUrl}
+              alt={displayName}
+              className="size-12 shrink-0 rounded-full border border-border/60"
+            />
+          ) : (
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-full border border-border/60 bg-muted">
+              <User className="h-5 w-5 text-muted-foreground" />
             </div>
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold text-foreground">{displayName}</p>
             {user.email && <p className="truncate text-sm text-foreground-muted">{user.email}</p>}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 @2xl:justify-end">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label={t('settings.account.refresh')}
-                  onClick={handleRefreshSession}
-                  disabled={controlsDisabled}
-                >
-                  <RefreshCw
-                    className={cn(
-                      'h-3.5 w-3.5',
-                      refreshSessionMutation.isPending && 'animate-spin'
-                    )}
-                  />
-                </Button>
-              }
-            />
-            <TooltipContent>{t('settings.account.refresh')}</TooltipContent>
-          </Tooltip>
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            className="w-fit"
-            onClick={onSignOut}
-            disabled={controlsDisabled}
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            {t('settings.account.signOut')}
-          </Button>
-        </div>
-      </div>
+      </section>
 
       <form
-        className="grid gap-3 border-t border-border/60 pt-4 @2xl:grid-cols-[9rem_minmax(0,1fr)] @2xl:items-start"
+        className="grid gap-3 py-4 @2xl:grid-cols-[10rem_minmax(0,1fr)] @2xl:items-start"
         onSubmit={handleNicknameSubmit}
       >
         <div className="min-w-0">
@@ -336,45 +270,60 @@ function SignedInAccountPanel({
             {t('settings.account.displayNicknameDescription')}
           </p>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Input
-            id="account-display-nickname"
-            className="h-9 min-w-48 flex-1 basis-64"
-            value={nicknameDraft}
-            maxLength={80}
-            placeholder={t('settings.account.displayNicknamePlaceholder')}
-            disabled={controlsDisabled}
-            onChange={(event) => setNicknameDraft(event.currentTarget.value)}
-          />
-          <Button
-            type="submit"
-            variant="default"
-            size="sm"
-            disabled={controlsDisabled || !nicknameDirty}
-            className="w-fit"
-          >
-            <Save className="h-3.5 w-3.5" />
-            {nicknameBusy ? t('settings.account.nicknameSaving') : t('common.save')}
-          </Button>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t('settings.account.resetNickname')}
-                  disabled={controlsDisabled || !user.nicknameOverride}
-                  onClick={handleNicknameReset}
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </Button>
-              }
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Input
+              id="account-display-nickname"
+              className="h-9 min-w-48 flex-1 basis-64"
+              value={nicknameDraft}
+              maxLength={80}
+              placeholder={t('settings.account.displayNicknamePlaceholder')}
+              disabled={controlsDisabled}
+              onChange={(event) => setNicknameDraft(event.currentTarget.value)}
             />
-            <TooltipContent>{t('settings.account.resetNickname')}</TooltipContent>
-          </Tooltip>
+            <Button
+              type="submit"
+              variant="default"
+              size="sm"
+              disabled={controlsDisabled || !nicknameDirty}
+              className="w-fit"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {nicknameBusy ? t('settings.account.nicknameSaving') : t('common.save')}
+            </Button>
+          </div>
+          {user.nicknameOverride && (
+            <button
+              type="button"
+              className="w-fit text-xs text-foreground-passive underline-offset-4 hover:text-foreground hover:underline disabled:pointer-events-none disabled:opacity-50"
+              disabled={controlsDisabled}
+              onClick={handleNicknameReset}
+            >
+              {t('settings.account.resetNickname')}
+            </button>
+          )}
         </div>
       </form>
+
+      <section className="flex flex-col gap-3 pt-4 @2xl:flex-row @2xl:items-center @2xl:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">{t('settings.account.signOut')}</p>
+          <p className="mt-1 text-xs text-foreground-passive">
+            {t('settings.account.signOutDescription')}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          className="w-fit"
+          onClick={onSignOut}
+          disabled={signOutPending || nicknameBusy}
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          {t('settings.account.signOut')}
+        </Button>
+      </section>
     </div>
   );
 }
