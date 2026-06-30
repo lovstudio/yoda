@@ -861,7 +861,9 @@ function modelCandidateDescriptionKey(candidate: GlobalLlmModelCandidate): strin
   ) {
     return 'reasoning';
   }
-  if (hasAnyToken(text, ['haiku', 'mini', 'nano', 'flash', 'lite', 'quick', 'small'])) {
+  if (hasAnyToken(text, ['nano'])) return 'nano';
+  if (hasAnyToken(text, ['mini'])) return 'mini';
+  if (hasAnyToken(text, ['haiku', 'flash', 'lite', 'quick', 'small'])) {
     return 'fast';
   }
   if (
