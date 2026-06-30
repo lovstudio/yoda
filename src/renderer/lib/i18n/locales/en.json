@@ -3093,6 +3093,20 @@
     "active": "Active",
     "archived": "Archived",
     "activeTasks": "{{count}} active",
+    "configureColumns": "Customize columns",
+    "columns": {
+      "name": "Name",
+      "kind": "Kind",
+      "path": "Path",
+      "activeTasks": "Active tasks",
+      "usage": "Usage",
+      "createdAt": "Created",
+      "updatedAt": "Modified"
+    },
+    "kind": {
+      "local": "Local",
+      "ssh": "SSH"
+    },
     "usageColumn": "Usage",
     "usageTokens": "{{value}} tokens",
     "usageEmpty": "No usage",
