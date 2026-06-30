@@ -3093,6 +3093,11 @@
     "active": "Active",
     "archived": "Archived",
     "activeTasks": "{{count}} active",
+    "usageColumn": "Usage",
+    "usageTokens": "{{value}} tokens",
+    "usageEmpty": "No usage",
+    "usageLoading": "Loading...",
+    "usageUnavailable": "Unavailable",
     "emptyActive": "No active projects.",
     "archiveFailed": "Failed to archive project"
   },

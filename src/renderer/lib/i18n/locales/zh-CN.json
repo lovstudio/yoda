@@ -3093,6 +3093,11 @@
     "active": "活跃",
     "archived": "已归档",
     "activeTasks": "{{count}} 个进行中",
+    "usageColumn": "用量",
+    "usageTokens": "{{value}} tokens",
+    "usageEmpty": "暂无用量",
+    "usageLoading": "加载中…",
+    "usageUnavailable": "不可用",
     "emptyActive": "暂无活跃项目。",
     "archiveFailed": "归档项目失败"
   },

@@ -10,12 +10,14 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { projectDisplayName, type LocalProject, type SshProject } from '@shared/projects';
+import type { ProjectUsage } from '@shared/stats';
 import type { ProjectStore } from '@renderer/features/projects/stores/project';
 import {
   asMounted,
   getProjectManagerStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { isRegistered } from '@renderer/features/tasks/stores/task';
+import { useUsageOverview } from '@renderer/features/usage/useUsageOverview';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -23,6 +25,7 @@ import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
+import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 
 const ARCHIVED_QUERY_KEY = ['archivedProjects'];
 
@@ -55,6 +58,16 @@ const ProjectsOverview = observer(function ProjectsOverview() {
     queryKey: ARCHIVED_QUERY_KEY,
     queryFn: () => rpc.projects.getArchivedProjects(),
   });
+  const {
+    data: usageOverview,
+    isLoading: isUsageLoading,
+    isError: isUsageError,
+  } = useUsageOverview();
+  const usageByProject = new Map<string, ProjectUsage>(
+    (usageOverview?.byProject ?? [])
+      .filter((entry) => !entry.external)
+      .map((entry) => [entry.projectId, entry])
+  );
 
   const active = Array.from(getProjectManagerStore().projects.values()).filter(
     (store) => store.state !== 'unregistered' && !store.data?.isInternal
@@ -141,6 +154,11 @@ const ProjectsOverview = observer(function ProjectsOverview() {
                         {t('projectsOverview.activeTasks', { count })}
                       </Badge>
                     )}
+                    <ProjectUsageColumn
+                      usage={usageByProject.get(store.id)}
+                      isLoading={isUsageLoading}
+                      isError={isUsageError}
+                    />
                     {data && (
                       <>
                         <Button
@@ -188,6 +206,11 @@ const ProjectsOverview = observer(function ProjectsOverview() {
                       </span>
                       <span className="truncate text-xs text-foreground-muted">{project.path}</span>
                     </div>
+                    <ProjectUsageColumn
+                      usage={usageByProject.get(project.id)}
+                      isLoading={isUsageLoading}
+                      isError={isUsageError}
+                    />
                     <Button
                       variant="outline"
                       size="sm"
@@ -215,6 +238,61 @@ const ProjectsOverview = observer(function ProjectsOverview() {
     </div>
   );
 });
+
+function ProjectUsageColumn({
+  usage,
+  isLoading,
+  isError,
+}: {
+  usage?: ProjectUsage;
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  const { t } = useTranslation();
+  const content = (() => {
+    if (isError) {
+      return {
+        value: t('projectsOverview.usageUnavailable'),
+        detail: undefined,
+        title: t('usage.loadFailed'),
+      };
+    }
+    if (isLoading) {
+      return {
+        value: t('projectsOverview.usageLoading'),
+        detail: undefined,
+        title: t('usage.loadingHint'),
+      };
+    }
+    if (!usage) {
+      return {
+        value: t('projectsOverview.usageEmpty'),
+        detail: undefined,
+        title: t('projectsOverview.usageEmpty'),
+      };
+    }
+    const tokens = formatCompactNumber(usage.tokens.total);
+    const sessions = t('usage.sessionCount', { count: usage.sessionCount });
+    return {
+      value: t('projectsOverview.usageTokens', { value: tokens }),
+      detail: sessions,
+      title: `${tokens} - ${sessions}`,
+    };
+  })();
+
+  return (
+    <div
+      className="flex w-28 shrink-0 flex-col items-end text-right"
+      title={content.title}
+      aria-label={t('projectsOverview.usageColumn')}
+    >
+      <span className="font-mono text-xs tabular-nums text-foreground-muted">{content.value}</span>
+      {content.detail && (
+        <span className="text-[11px] text-foreground-passive">{content.detail}</span>
+      )}
+    </div>
+  );
+}
 
 function SectionTitle({ label, count }: { label: string; count: number }) {
   return (
