@@ -387,6 +387,14 @@
         "aiGateway": "AI Gateway",
         "runtimeCatalog": "Runtime catalog"
       },
+      "modelDiscoveryDescriptions": {
+        "coding": "适合代码生成、重构和代理式编码流程。",
+        "reasoning": "适合复杂推理、方案规划和高风险代码改动。",
+        "balanced": "适合日常编码、写作和通用助手任务。",
+        "fast": "适合短编辑、轻量自动化和低延迟场景。",
+        "longContext": "适合长文件、大上下文或需要读取大量材料的任务。",
+        "general": "当前 Client 可用的通用模型候选。"
+      },
       "reasoningEffort": "推理深度",
       "reasoningEffortDescription": "Profile 级别的推理偏好，供支持该能力的调用场景使用。",
       "reasoning": {

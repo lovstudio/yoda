@@ -17,6 +17,7 @@ type SourceLoadResult = {
   source: GlobalLlmModelDiscoverySource;
   models: string[];
   names?: Map<string, string>;
+  descriptions?: Map<string, string>;
   error?: string;
 };
 
@@ -45,25 +46,27 @@ async function loadGatewayModels(input: GlobalLlmModelDiscoveryInput): Promise<S
     const runtime = getRuntime(input.runtimeId);
     const response = await gateway.getAvailableModels();
     const gatewayModelIds = response.models.map((model) => model.id);
-    const modelNamesByGatewayId = new Map(
-      response.models.map((model) => [model.id, model.name] as const)
-    );
     const models = runtime
       ? filterModelsForRuntime(runtime, gatewayModelIds)
       : normalizeModelCandidates(gatewayModelIds);
     const names = new Map<string, string>();
+    const descriptions = new Map<string, string>();
 
     if (runtime) {
       for (const model of response.models) {
         for (const normalized of filterModelsForRuntime(runtime, [model.id])) {
           if (model.name) names.set(normalized, model.name);
+          if (model.description) descriptions.set(normalized, model.description);
         }
       }
     } else {
-      for (const [id, name] of modelNamesByGatewayId) names.set(id, name);
+      for (const model of response.models) {
+        if (model.name) names.set(model.id, model.name);
+        if (model.description) descriptions.set(model.id, model.description);
+      }
     }
 
-    return { source: 'aiGateway', models, names };
+    return { source: 'aiGateway', models, names, descriptions };
   } catch (error) {
     return {
       source: 'aiGateway',
@@ -99,12 +102,14 @@ function mergeModelCandidates(results: readonly SourceLoadResult[]): GlobalLlmMo
       if (current) {
         if (!current.sources.includes(result.source)) current.sources.push(result.source);
         if (!current.name) current.name = result.names?.get(model) ?? null;
+        if (!current.description) current.description = result.descriptions?.get(model) ?? null;
         continue;
       }
 
       byModel.set(model, {
         id: model,
         name: result.names?.get(model) ?? null,
+        description: result.descriptions?.get(model) ?? null,
         sources: [result.source],
       });
     }

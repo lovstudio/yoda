@@ -806,14 +806,15 @@ function runtimeLabel(runtimeId: RuntimeId | null): string {
 
 function modelCandidateTitle(t: TFunction, candidate: GlobalLlmModelCandidate): string {
   const sources = modelCandidateSources(t, candidate);
-  return candidate.name
-    ? `${candidate.id} · ${candidate.name} · ${sources}`
-    : `${candidate.id} · ${sources}`;
+  return [candidate.id, candidate.name, modelCandidateDescription(t, candidate), sources]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function modelCandidateSubtitle(t: TFunction, candidate: GlobalLlmModelCandidate): string {
-  const sources = modelCandidateSources(t, candidate);
-  return candidate.name ? `${candidate.name} · ${sources}` : sources;
+  return (
+    modelCandidateDescription(t, candidate) ?? candidate.name ?? modelCandidateSources(t, candidate)
+  );
 }
 
 function modelCandidateSources(t: TFunction, candidate: GlobalLlmModelCandidate): string {
@@ -822,12 +823,79 @@ function modelCandidateSources(t: TFunction, candidate: GlobalLlmModelCandidate)
     .join(', ');
 }
 
+function modelCandidateDescription(
+  t: TFunction,
+  candidate: GlobalLlmModelCandidate
+): string | null {
+  const explicitDescription = compactModelDescription(candidate.description);
+  if (explicitDescription) return explicitDescription;
+
+  const key = modelCandidateDescriptionKey(candidate);
+  return key ? t(`settings.llm.modelDiscoveryDescriptions.${key}`) : null;
+}
+
+function compactModelDescription(description: string | null | undefined): string | null {
+  const value = description?.replace(/\s+/g, ' ').trim();
+  if (!value) return null;
+  return value.length > 120 ? `${value.slice(0, 117).trim()}...` : value;
+}
+
+function modelCandidateDescriptionKey(candidate: GlobalLlmModelCandidate): string {
+  const text = `${candidate.id} ${candidate.name ?? ''}`.toLowerCase();
+
+  if (hasAnyToken(text, ['coder', 'code'])) return 'coding';
+  if (hasAnyToken(text, ['128k', '200k', '1m', 'long-context', 'longcontext'])) {
+    return 'longContext';
+  }
+  if (
+    hasAnyToken(text, [
+      'opus',
+      'o3',
+      'o4',
+      'r1',
+      'reason',
+      'thinking',
+      'gemini-2.5-pro',
+      'gemini-3-pro',
+    ])
+  ) {
+    return 'reasoning';
+  }
+  if (hasAnyToken(text, ['haiku', 'mini', 'nano', 'flash', 'lite', 'quick', 'small'])) {
+    return 'fast';
+  }
+  if (
+    hasAnyToken(text, [
+      'sonnet',
+      'gpt-5',
+      'gpt-4.1',
+      'gpt-4o',
+      'gemini-2.5',
+      'gemini-3',
+      'qwen3',
+      'kimi-k2',
+      'deepseek-v3',
+    ])
+  ) {
+    return 'balanced';
+  }
+
+  return 'general';
+}
+
+function hasAnyToken(value: string, tokens: readonly string[]): boolean {
+  return tokens.some((token) => value.includes(token));
+}
+
 function modelCandidateMatchesQuery(candidate: GlobalLlmModelCandidate, query: string): boolean {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return true;
-  return [candidate.id, candidate.name ?? '', ...candidate.sources].some((value) =>
-    value.toLowerCase().includes(normalizedQuery)
-  );
+  return [
+    candidate.id,
+    candidate.name ?? '',
+    candidate.description ?? '',
+    ...candidate.sources,
+  ].some((value) => value.toLowerCase().includes(normalizedQuery));
 }
 
 function isAccessMethodSupported(
