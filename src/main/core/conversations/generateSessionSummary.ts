@@ -9,6 +9,7 @@ import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import type { SummaryContext } from '@shared/session-summary';
 import { extractAgentMessageText, runAgentCli } from '@main/core/agent-cli/run-agent-cli';
 import { resolveSelectedUtilityAgent } from '@main/core/agents-config/builtin-agent-resolver';
+import { getProjectComposerDefaults } from '@main/core/projects/settings/composer-default-overrides';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { log } from '@main/lib/logger';
@@ -46,11 +47,13 @@ export interface ResolvedSummaryRuntime {
  * session's own — possibly dead — runtime.
  */
 export async function resolveSummaryRuntime(
-  scope: SessionSummaryScope
+  scope: SessionSummaryScope,
+  projectId?: string | null
 ): Promise<ResolvedSummaryRuntime> {
-  const [taskSettings, defaultRuntime] = await Promise.all([
+  const [taskSettings, defaultRuntime, composerDefaults] = await Promise.all([
     appSettingsService.get('tasks'),
     appSettingsService.get('defaultRuntime'),
+    getProjectComposerDefaults(projectId),
   ]);
   const summaryAgent = await resolveSelectedUtilityAgent(
     taskSettings.summaryAgentId,
@@ -62,7 +65,7 @@ export async function resolveSummaryRuntime(
     runtimeName: getRuntime(runtimeId)?.name ?? runtimeId,
     model: summaryAgent.model,
     systemPrompt: summaryAgent.systemPrompt,
-    language: taskSettings.summaryLanguage,
+    language: composerDefaults?.summaryLanguage ?? taskSettings.summaryLanguage,
     context:
       scope === 'recent' ? taskSettings.summaryContextRecent : taskSettings.summaryContextGlobal,
   };
