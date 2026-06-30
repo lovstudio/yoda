@@ -5,6 +5,18 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.13.12 — 2026-07-01
+
+### Added
+
+- Account: support a local nickname override and show the updated display name
+  across account surfaces.
+
+### Changed
+
+- Settings: simplify the account panel, hide the username in the account
+  summary, and move sign out into account actions.
+
 ## 0.13.11 — 2026-06-30
 
 ### Added
