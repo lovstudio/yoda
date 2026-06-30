@@ -1,6 +1,6 @@
 {
   "name": "yoda",
-  "version": "0.13.12",
+  "version": "0.14.0",
   "description": "Yoda — master agentic coding through precise parallel orchestration of multiple coding agents",
   "license": "Apache-2.0",
   "type": "module",
