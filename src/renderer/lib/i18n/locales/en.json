@@ -2634,8 +2634,6 @@
       "disconnect": "Disconnect",
       "removeKey": "Remove key",
       "disconnectHint": "Remove the API key saved on this device and stop using this platform connection. This does not delete platform logs or billing data.",
-      "connectedSummary": "Credentials are saved on this device, so this platform can continue routing model calls.",
-      "notConnectedSummary": "Save an API key to enable this platform for model routing.",
       "storedKeyAriaLabel": "Saved API key, click to copy",
       "storedKeyHelper": "The key is saved on this device. The UI shows only a masked value; copy it to the clipboard or replace it with a new key.",
       "savedKeyHelper": "Leave this blank to keep the saved key. Enter a new key to replace the local credential.",

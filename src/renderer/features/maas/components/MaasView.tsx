@@ -17,7 +17,6 @@ import {
   Plug,
   RefreshCw,
   Trash2,
-  Unplug,
   X,
   Zap,
 } from 'lucide-react';
@@ -301,6 +300,7 @@ const PlatformAccordionItem: React.FC<{
 }> = ({ connection, loading }) => {
   const { t } = useTranslation();
   const platform = MAAS_PLATFORMS[connection.platformId];
+  const statusLabel = connection.connected ? t('maas.connected') : t('maas.notConnected');
 
   return (
     <AccordionPrimitive.Item
@@ -316,26 +316,65 @@ const PlatformAccordionItem: React.FC<{
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-background-secondary">
             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
           </span>
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 flex-1 items-center gap-2">
             <span className="truncate text-sm text-foreground">{platform.name}</span>
-            <span className="truncate font-mono text-[10px] text-muted-foreground">
-              {connection.endpoint}
-            </span>
           </span>
           <span className="hidden min-w-0 max-w-64 truncate text-xs text-muted-foreground @4xl:block">
             {t(`maas.platforms.${connection.platformId}.description`)}
           </span>
-          <Badge variant={connection.connected ? 'outline' : 'secondary'} className="shrink-0">
-            {connection.connected ? t('maas.connected') : t('maas.notConnected')}
-          </Badge>
-          <span
-            className={cn(
-              'h-1.5 w-1.5 shrink-0 rounded-full',
-              connection.connected ? 'bg-emerald-500' : 'bg-muted-foreground/40',
-              loading && 'animate-pulse'
-            )}
-          />
         </AccordionPrimitive.Trigger>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <span
+                role="status"
+                tabIndex={0}
+                aria-label={statusLabel}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md outline-none transition-colors hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-border"
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'h-2 w-2 rounded-full',
+                    connection.connected ? 'bg-emerald-500' : 'bg-muted-foreground/40',
+                    loading && 'animate-pulse'
+                  )}
+                />
+              </span>
+            }
+          />
+          <TooltipContent className="block max-w-64 text-left leading-relaxed">
+            <span className="block font-medium">{statusLabel}</span>
+            {connection.keyFingerprint && (
+              <span className="mt-1 block">
+                {t('maas.connection.keyFingerprint', { fingerprint: connection.keyFingerprint })}
+              </span>
+            )}
+            <span className="mt-1 block">
+              {connection.lastCheckedAt
+                ? t('maas.connection.lastChecked', {
+                    time: formatDateTime(connection.lastCheckedAt),
+                  })
+                : t('maas.connection.neverChecked')}
+            </span>
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label={t('maas.connection.openDocs')}
+                onClick={() => void rpc.app.openExternal(platform.docsUrl)}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            }
+          />
+          <TooltipContent>{t('maas.connection.openDocs')}</TooltipContent>
+        </Tooltip>
       </AccordionPrimitive.Header>
       <AccordionPrimitive.Content
         className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
@@ -361,7 +400,6 @@ const ConnectionPanel: React.FC<{
 }> = ({ connection, className }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
-  const platform = MAAS_PLATFORMS[connection.platformId];
   const connectMutation = useConnectMaasPlatform();
   const disconnectMutation = useDisconnectMaasPlatform();
   const [apiKey, setApiKey] = useState('');
@@ -470,62 +508,6 @@ const ConnectionPanel: React.FC<{
   return (
     <section className={cn('@container bg-background px-4 py-4', className)}>
       <form onSubmit={handleSubmit} className="grid gap-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <span
-            className={cn(
-              'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border',
-              connection.connected
-                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                : 'border-border bg-background-secondary text-muted-foreground'
-            )}
-          >
-            {connection.connected ? <Plug className="h-4 w-4" /> : <Unplug className="h-4 w-4" />}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-start justify-between gap-2">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h2 className="text-base font-semibold">{platform.name}</h2>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    connection.connected
-                      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                      : 'bg-background text-muted-foreground'
-                  )}
-                >
-                  {connection.connected ? t('maas.connected') : t('maas.notConnected')}
-                </Badge>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={t('maas.connection.openDocs')}
-                        onClick={() => void rpc.app.openExternal(platform.docsUrl)}
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>{t('maas.connection.openDocs')}</TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-              {t(`maas.platforms.${connection.platformId}.description`)}
-            </p>
-            <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-foreground-muted">
-              {connection.connected
-                ? t('maas.connection.connectedSummary')
-                : t('maas.connection.notConnectedSummary')}
-            </p>
-          </div>
-        </div>
-
         <div className="grid gap-3 @3xl:grid-cols-[minmax(10rem,0.9fr)_minmax(16rem,1.4fr)]">
           <label className="grid gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">

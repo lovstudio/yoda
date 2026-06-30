@@ -2634,8 +2634,6 @@
       "disconnect": "断开连接",
       "removeKey": "移除 Key",
       "disconnectHint": "移除本机保存的 API Key，停止使用这个平台连接；不会删除平台侧日志或账单数据。",
-      "connectedSummary": "本机已保存访问凭据，可继续通过此平台调用模型。",
-      "notConnectedSummary": "保存 API Key 后启用此平台，并用于模型路由。",
       "storedKeyAriaLabel": "已保存的 API Key，点击复制",
       "storedKeyHelper": "Key 已保存在本机。界面只显示 Mask，可复制到剪贴板或替换为新 Key。",
       "savedKeyHelper": "留空会继续使用已保存的 Key；填写新 Key 会替换本机保存内容。",
