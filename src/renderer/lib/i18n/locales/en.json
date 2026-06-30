@@ -233,6 +233,26 @@
       "loadFailed": "Failed to load project settings.",
       "saveFailed": "Failed to save project settings."
     },
+    "captureAutomation": {
+      "menuLabel": "Quick operation…",
+      "title": "Quick operation — {{name}}",
+      "intentLabel": "Natural-language operation",
+      "intentPlaceholder": "Example: Start this project locally, install dependencies if needed, keep the dev server running, and verify the localhost URL.",
+      "intentDescription": "This MVP keeps execution explicit: natural language becomes a reviewable quick-operation prompt, while shell scripts stay editable before saving.",
+      "quickActionTarget": "Quick action",
+      "runScriptTarget": "Run scripts",
+      "skillTarget": "Skill draft",
+      "actionLabel": "Action label",
+      "actionLabelPlaceholder": "Local start",
+      "actionCommand": "Action prompt",
+      "quickActionDescription": "Saved as a project quick action. Running it creates a no-worktree task with this prompt.",
+      "skillDraft": "Skill draft",
+      "skillDraftDescription": "Draft only for now. Copy it into a skill when the operation needs reusable judgment, fallbacks, or verification rules.",
+      "copySkillDraft": "Copy draft",
+      "save": "Save",
+      "defaultLabel": "Project operation",
+      "commandRequired": "Action prompt is required."
+    },
     "mobileConnection": {
       "title": "Mobile connection",
       "heading": "Connect Yoda Mobile",

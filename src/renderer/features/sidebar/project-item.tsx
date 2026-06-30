@@ -66,6 +66,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const { params: taskParams } = useParams('task');
   const showChangeConnectionModal = useShowModal('changeProjectConnectionModal');
   const showManageRunScripts = useShowModal('manageRunScriptsModal');
+  const showCaptureAutomation = useShowModal('captureProjectAutomationModal');
   const showRenameProject = useShowModal('renameProjectModal');
   const showConfirmRemoveProject = useShowModal('confirmActionModal');
   const [isMenuOpen, setMenuOpen] = useState(false);
@@ -245,6 +246,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     isSsh: isSshProject,
     canReconnect,
     projectPath,
+    sshConnectionId,
     onCopyYodaLink:
       project.state === 'unregistered'
         ? undefined
@@ -269,6 +271,10 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
       project.state === 'unregistered'
         ? undefined
         : () => showManageRunScripts({ projectId, projectName: project.displayName }),
+    onCaptureAutomation:
+      project.state === 'unregistered'
+        ? undefined
+        : () => showCaptureAutomation({ projectId, projectName: project.displayName }),
     onRename: project.state === 'unregistered' ? undefined : () => showRenameProject({ projectId }),
     canArchiveProject: project.state !== 'unregistered',
     canArchiveProjectTasks: Boolean(mountedProject && activeTaskCount > 0),

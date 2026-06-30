@@ -7,6 +7,7 @@ import { IntegrationSetupModal } from '@renderer/features/integrations/integrati
 import { ZenmuxUsageModal } from '@renderer/features/maas/components/ZenmuxUsageModal';
 import { McpModal } from '@renderer/features/mcp/components/McpModal';
 import { AddProjectModal } from '@renderer/features/projects/components/add-project-modal/add-project-modal';
+import { CaptureProjectAutomationModal } from '@renderer/features/projects/components/capture-project-automation-modal';
 import { ExpressCreateProjectModal } from '@renderer/features/projects/components/express-create-project-modal';
 import { InitialCommitModal } from '@renderer/features/projects/components/initial-commit-modal';
 import { ManageRunScriptsModal } from '@renderer/features/projects/components/manage-run-scripts-modal';
@@ -90,6 +91,7 @@ export const modalRegistry = {
   archiveTaskWithNoteModal: createModal(ArchiveTaskWithNoteModal, { size: 'sm' }),
   archivedSessionTranscriptModal: createModal(ArchivedSessionTranscriptModal, { size: 'lg' }),
   shareProjectConfigModal: createModal(ShareProjectConfigModal, { size: 'md' }),
+  captureProjectAutomationModal: createModal(CaptureProjectAutomationModal, { size: 'lg' }),
   manageRunScriptsModal: createModal(ManageRunScriptsModal, { size: 'md' }),
   manageQuickActionsModal: createModal(ManageQuickActionsModal, { size: 'md' }),
   integrationSetupModal: createModal(IntegrationSetupModal, { size: 'md' }),

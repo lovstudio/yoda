@@ -4,7 +4,6 @@ import {
   ArchiveX,
   CableIcon,
   Copy,
-  FolderOpen,
   Info,
   PencilLine,
   Pin,
@@ -12,6 +11,7 @@ import {
   RotateCcw,
   Settings2,
   Trash2,
+  WandSparkles,
 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -19,6 +19,10 @@ import {
   WorkspaceAssignContextSubmenu,
   WorkspaceAssignDropdownSubmenu,
 } from '@renderer/features/workspaces/workspace-assign-submenu';
+import {
+  OpenInContextSubmenu,
+  OpenInDropdownSubmenu,
+} from '@renderer/lib/components/titlebar/open-in-menu';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import {
@@ -42,6 +46,7 @@ interface ProjectMenuActions {
   isSsh: boolean;
   canReconnect: boolean;
   projectPath?: string;
+  sshConnectionId?: string | null;
   onCopyYodaLink?: () => void;
   onPin: () => void;
   onUnpin: () => void;
@@ -49,6 +54,7 @@ interface ProjectMenuActions {
   onReconnect?: () => void;
   onChangeSshConnection?: () => void;
   onConfigureScripts?: () => void;
+  onCaptureAutomation?: () => void;
   onRename?: () => void;
   canArchiveProject: boolean;
   canArchiveProjectTasks: boolean;
@@ -65,11 +71,12 @@ interface ProjectMenuActions {
 interface MenuItemDescriptor {
   key: string;
   group: number;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  onSelect: () => void;
+  icon?: React.ComponentType<{ className?: string }>;
+  label?: string;
+  onSelect?: () => void;
   disabled?: boolean;
   variant?: 'default' | 'destructive';
+  kind?: 'action' | 'open-in';
 }
 
 function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
@@ -87,9 +94,15 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
     });
   }
 
-  // group 1 — path utilities
+  // Keep "Open in..." in the first group with primary project actions.
   if (actions.projectPath) {
     const path = actions.projectPath;
+    items.push({
+      key: 'open-in',
+      group: 0,
+      kind: 'open-in',
+    });
+    // group 1 — path utilities
     items.push({
       key: 'copy-project-path',
       group: 1,
@@ -99,17 +112,6 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
         void copyProjectPath(path, t);
       },
     });
-    if (!actions.isSsh) {
-      items.push({
-        key: 'open-project-path',
-        group: 1,
-        icon: FolderOpen,
-        label: t('sidebar.openProjectPath'),
-        onSelect: () => {
-          void openProjectPath(path, t);
-        },
-      });
-    }
   }
   if (actions.onCopyYodaLink) {
     items.push({
@@ -150,16 +152,6 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
       onSelect: actions.onRename,
     });
   }
-  if (actions.onConfigureScripts) {
-    items.push({
-      key: 'configure-scripts',
-      group: 2,
-      icon: Settings2,
-      label: t('sidebar.runScripts.configure'),
-      onSelect: actions.onConfigureScripts,
-    });
-  }
-
   // group 3 — ssh
   if (actions.isSsh) {
     if (actions.onReconnect) {
@@ -210,6 +202,26 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
     variant: 'destructive',
   });
 
+  // group 5 — repeatable project operations
+  if (actions.onConfigureScripts) {
+    items.push({
+      key: 'configure-scripts',
+      group: 5,
+      icon: Settings2,
+      label: t('sidebar.runScripts.configure'),
+      onSelect: actions.onConfigureScripts,
+    });
+  }
+  if (actions.onCaptureAutomation) {
+    items.push({
+      key: 'capture-automation',
+      group: 5,
+      icon: WandSparkles,
+      label: t('sidebar.captureAutomation.menuLabel'),
+      onSelect: actions.onCaptureAutomation,
+    });
+  }
+
   return items;
 }
 
@@ -222,19 +234,6 @@ async function copyProjectPath(path: string, t: TFunction) {
     toast({
       title: t('common.copyFailed'),
       description: t('sidebar.copyProjectPathFailed'),
-      variant: 'destructive',
-    });
-  }
-}
-
-async function openProjectPath(path: string, t: TFunction) {
-  try {
-    const res = await rpc.app.openIn({ app: 'finder', path });
-    if (!res?.success) throw new Error(res?.error ?? t('common.unknownError'));
-  } catch (error) {
-    toast({
-      title: t('openIn.failed'),
-      description: error instanceof Error ? error.message : String(error),
       variant: 'destructive',
     });
   }
@@ -255,16 +254,36 @@ export function ProjectContextMenu({ children, ...actions }: ProjectContextMenuP
         {items.map((item, index) => {
           const prev = items[index - 1];
           const showSeparator = prev && prev.group !== item.group;
+          const workspaceAssign = item.key === 'remove-project' ? actions.onAssignWorkspace : null;
+          if (item.kind === 'open-in' && actions.projectPath) {
+            return (
+              <React.Fragment key={item.key}>
+                {showSeparator && <ContextMenuSeparator />}
+                <OpenInContextSubmenu
+                  path={actions.projectPath}
+                  isRemote={actions.isSsh}
+                  sshConnectionId={actions.sshConnectionId ?? null}
+                />
+              </React.Fragment>
+            );
+          }
           const Icon = item.icon;
+          if (!Icon || !item.label || !item.onSelect) return null;
           return (
             <React.Fragment key={item.key}>
               {showSeparator && <ContextMenuSeparator />}
+              {workspaceAssign && (
+                <WorkspaceAssignContextSubmenu
+                  currentWorkspaceId={actions.currentWorkspaceId ?? null}
+                  onAssign={workspaceAssign}
+                />
+              )}
               <ContextMenuItem
                 disabled={item.disabled}
                 variant={item.variant}
                 onClick={(e) => {
                   e.stopPropagation();
-                  item.onSelect();
+                  item.onSelect?.();
                 }}
               >
                 <Icon className="size-4" />
@@ -273,12 +292,6 @@ export function ProjectContextMenu({ children, ...actions }: ProjectContextMenuP
             </React.Fragment>
           );
         })}
-        {actions.onAssignWorkspace && (
-          <WorkspaceAssignContextSubmenu
-            currentWorkspaceId={actions.currentWorkspaceId ?? null}
-            onAssign={actions.onAssignWorkspace}
-          />
-        )}
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -306,16 +319,36 @@ export function ProjectActionsMenu({
         {items.map((item, index) => {
           const prev = items[index - 1];
           const showSeparator = prev && prev.group !== item.group;
+          const workspaceAssign = item.key === 'remove-project' ? actions.onAssignWorkspace : null;
+          if (item.kind === 'open-in' && actions.projectPath) {
+            return (
+              <React.Fragment key={item.key}>
+                {showSeparator && <DropdownMenuSeparator />}
+                <OpenInDropdownSubmenu
+                  path={actions.projectPath}
+                  isRemote={actions.isSsh}
+                  sshConnectionId={actions.sshConnectionId ?? null}
+                />
+              </React.Fragment>
+            );
+          }
           const Icon = item.icon;
+          if (!Icon || !item.label || !item.onSelect) return null;
           return (
             <React.Fragment key={item.key}>
               {showSeparator && <DropdownMenuSeparator />}
+              {workspaceAssign && (
+                <WorkspaceAssignDropdownSubmenu
+                  currentWorkspaceId={actions.currentWorkspaceId ?? null}
+                  onAssign={workspaceAssign}
+                />
+              )}
               <DropdownMenuItem
                 disabled={item.disabled}
                 variant={item.variant}
                 onClick={(e) => {
                   e.stopPropagation();
-                  item.onSelect();
+                  item.onSelect?.();
                 }}
               >
                 <Icon className="size-4" />
@@ -324,12 +357,6 @@ export function ProjectActionsMenu({
             </React.Fragment>
           );
         })}
-        {actions.onAssignWorkspace && (
-          <WorkspaceAssignDropdownSubmenu
-            currentWorkspaceId={actions.currentWorkspaceId ?? null}
-            onAssign={actions.onAssignWorkspace}
-          />
-        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

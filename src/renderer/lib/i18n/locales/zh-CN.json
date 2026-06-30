@@ -231,6 +231,26 @@
       "loadFailed": "加载项目设置失败。",
       "saveFailed": "保存项目设置失败。"
     },
+    "captureAutomation": {
+      "menuLabel": "快速操作…",
+      "title": "快速操作 — {{name}}",
+      "intentLabel": "自然语言操作",
+      "intentPlaceholder": "例如：本地启动这个项目，必要时安装依赖，保持 dev server 运行，并验证 localhost URL。",
+      "intentDescription": "当前 MVP 保持执行显式可控：自然语言会变成可审阅的快速操作 prompt，shell 脚本仍需保存前手工确认。",
+      "quickActionTarget": "快捷操作",
+      "runScriptTarget": "运行脚本",
+      "skillTarget": "Skill 草稿",
+      "actionLabel": "操作名称",
+      "actionLabelPlaceholder": "本地启动",
+      "actionCommand": "操作 prompt",
+      "quickActionDescription": "保存为项目快捷操作。运行时会创建一个 no-worktree task，并发送这个 prompt。",
+      "skillDraft": "Skill 草稿",
+      "skillDraftDescription": "当前只生成草稿。当操作需要可复用判断、回退和验证规则时，再复制成 skill。",
+      "copySkillDraft": "复制草稿",
+      "save": "保存",
+      "defaultLabel": "项目操作",
+      "commandRequired": "操作 prompt 不能为空。"
+    },
     "mobileConnection": {
       "title": "移动端连接",
       "heading": "连接 Yoda Mobile",

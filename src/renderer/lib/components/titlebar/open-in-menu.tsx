@@ -1,5 +1,5 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
-import { ChevronDown } from 'lucide-react';
+import { AppWindow, ChevronDown } from 'lucide-react';
 import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAppById, isValidOpenInAppId, type OpenInAppId } from '@shared/openInApps';
@@ -11,6 +11,18 @@ import {
 } from '@renderer/lib/hooks/useKeyboardShortcuts';
 import { useOpenInApps } from '@renderer/lib/hooks/useOpenInApps';
 import { rpc } from '@renderer/lib/ipc';
+import {
+  ContextMenuItem,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+} from '@renderer/lib/ui/context-menu';
+import {
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@renderer/lib/ui/select';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
@@ -25,20 +37,42 @@ interface OpenInMenuProps {
   showLabel?: boolean;
 }
 
-export const OpenInMenu: React.FC<OpenInMenuProps> = ({
-  path,
+interface OpenInMenuOptionsProps {
+  path: string;
+  isRemote?: boolean;
+  sshConnectionId?: string | null;
+}
+
+function OpenInAppIcon({
+  src,
+  label,
+  invertInDark,
   className,
+}: {
+  src?: string;
+  label: string;
+  invertInDark?: boolean;
+  className?: string;
+}) {
+  if (!src) return null;
+  return (
+    <img
+      src={src}
+      alt={label}
+      className={cn('size-4 rounded', invertInDark && 'dark:invert', className)}
+    />
+  );
+}
+
+export function useOpenInMenuOptions({
+  path,
   isRemote = false,
   sshConnectionId = null,
-  borderless = false,
-  showLabel = false,
-}) => {
+}: OpenInMenuOptionsProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { icons, labels, installedApps, availability, loading } = useOpenInApps();
   const { value: openIn, update } = useAppSettingsKey('openIn');
-  const { value: keyboard } = useAppSettingsKey('keyboard');
-  const openInHotkey = getEffectiveHotkey('openInEditor', keyboard);
 
   const defaultApp: OpenInAppId | null =
     openIn?.default && isValidOpenInAppId(openIn.default) ? openIn.default : null;
@@ -99,6 +133,42 @@ export const OpenInMenu: React.FC<OpenInMenuProps> = ({
     return menuApps[0]?.id;
   }, [defaultApp, menuApps]);
 
+  return {
+    availability,
+    buttonAppId,
+    defaultApp,
+    icons,
+    labels,
+    loading,
+    menuApps,
+    persistPreferredApp,
+    triggerOpenIn,
+  };
+}
+
+export const OpenInMenu: React.FC<OpenInMenuProps> = ({
+  path,
+  className,
+  isRemote = false,
+  sshConnectionId = null,
+  borderless = false,
+  showLabel = false,
+}) => {
+  const { t } = useTranslation();
+  const { value: keyboard } = useAppSettingsKey('keyboard');
+  const openInHotkey = getEffectiveHotkey('openInEditor', keyboard);
+  const {
+    availability,
+    buttonAppId,
+    defaultApp,
+    icons,
+    labels,
+    loading,
+    menuApps,
+    persistPreferredApp,
+    triggerOpenIn,
+  } = useOpenInMenuOptions({ path, isRemote, sshConnectionId });
+
   const buttonAppLabel = buttonAppId ? (labels[buttonAppId] ?? buttonAppId) : null;
 
   useHotkey(
@@ -139,13 +209,11 @@ export const OpenInMenu: React.FC<OpenInMenuProps> = ({
                 }
               >
                 {buttonAppId && icons[buttonAppId] && (
-                  <img
+                  <OpenInAppIcon
                     src={icons[buttonAppId]}
-                    alt={labels[buttonAppId] || buttonAppId}
-                    className={cn(
-                      'size-3.5 rounded',
-                      getAppById(buttonAppId)?.invertInDark && 'dark:invert'
-                    )}
+                    label={labels[buttonAppId] || buttonAppId}
+                    invertInDark={getAppById(buttonAppId)?.invertInDark}
+                    className="size-3.5"
                   />
                 )}
                 {showLabel && buttonAppLabel && (
@@ -189,13 +257,11 @@ export const OpenInMenu: React.FC<OpenInMenuProps> = ({
             const isAvailable = loading ? availability[app.id] === true : true;
             return (
               <SelectItem key={app.id} value={app.id} disabled={!isAvailable}>
-                {icons[app.id] && (
-                  <img
-                    src={icons[app.id]}
-                    alt={labels[app.id] || app.label}
-                    className={`h-4 w-4 rounded ${app.invertInDark ? 'dark:invert' : ''}`}
-                  />
-                )}
+                <OpenInAppIcon
+                  src={icons[app.id]}
+                  label={labels[app.id] || app.label}
+                  invertInDark={app.invertInDark}
+                />
                 {labels[app.id] || app.label}
               </SelectItem>
             );
@@ -205,3 +271,87 @@ export const OpenInMenu: React.FC<OpenInMenuProps> = ({
     </div>
   );
 };
+
+export function OpenInContextSubmenu({
+  path,
+  isRemote = false,
+  sshConnectionId = null,
+}: OpenInMenuOptionsProps) {
+  const { t } = useTranslation();
+  const { availability, icons, labels, loading, menuApps, triggerOpenIn } = useOpenInMenuOptions({
+    path,
+    isRemote,
+    sshConnectionId,
+  });
+
+  return (
+    <ContextMenuSub>
+      <ContextMenuSubTrigger disabled={loading || menuApps.length === 0}>
+        <AppWindow className="size-4" />
+        {t('openIn.openIn')}
+      </ContextMenuSubTrigger>
+      <ContextMenuSubContent>
+        {menuApps.map((app) => {
+          const isAvailable = loading ? availability[app.id] === true : true;
+          return (
+            <ContextMenuItem
+              key={app.id}
+              disabled={!isAvailable}
+              onClick={() => void triggerOpenIn(app.id)}
+            >
+              <OpenInAppIcon
+                src={icons[app.id]}
+                label={labels[app.id] || app.label}
+                invertInDark={app.invertInDark}
+                className="size-4"
+              />
+              {labels[app.id] || app.label}
+            </ContextMenuItem>
+          );
+        })}
+      </ContextMenuSubContent>
+    </ContextMenuSub>
+  );
+}
+
+export function OpenInDropdownSubmenu({
+  path,
+  isRemote = false,
+  sshConnectionId = null,
+}: OpenInMenuOptionsProps) {
+  const { t } = useTranslation();
+  const { availability, icons, labels, loading, menuApps, triggerOpenIn } = useOpenInMenuOptions({
+    path,
+    isRemote,
+    sshConnectionId,
+  });
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger disabled={loading || menuApps.length === 0}>
+        <AppWindow className="size-4" />
+        {t('openIn.openIn')}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        {menuApps.map((app) => {
+          const isAvailable = loading ? availability[app.id] === true : true;
+          return (
+            <DropdownMenuItem
+              key={app.id}
+              disabled={!isAvailable}
+              onClick={() => void triggerOpenIn(app.id)}
+            >
+              <OpenInAppIcon
+                src={icons[app.id]}
+                label={labels[app.id] || app.label}
+                invertInDark={app.invertInDark}
+                className="size-4"
+              />
+              {labels[app.id] || app.label}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
