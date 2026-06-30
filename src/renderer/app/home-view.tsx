@@ -2555,11 +2555,6 @@ export const HomeComposer = observer(function HomeComposer({
               />
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              <ComposerScopeToggle
-                source={attachImagesField.source}
-                canOverride={attachImagesField.canOverride}
-                onChange={attachImagesField.setSource}
-              />
               <Switch
                 size="sm"
                 checked={attachImagesAsPaths}
@@ -2572,28 +2567,19 @@ export const HomeComposer = observer(function HomeComposer({
             value={inputPromptLanguageField.value}
             options={INPUT_PROMPT_ENABLED_LANGUAGE_OPTIONS}
             disabledValues={['skip', 'prompt']}
-            source={inputPromptLanguageField.source}
-            canOverride={inputPromptLanguageField.canOverride}
             onValueChange={inputPromptLanguageField.setValue}
-            onScopeChange={inputPromptLanguageField.setSource}
           />
           <ComposerScopeSelectRow
             label={t('settings.tasks.sessionTitleLanguageLabel')}
             value={namingLanguageField.value}
             options={TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS}
-            source={namingLanguageField.source}
-            canOverride={namingLanguageField.canOverride}
             onValueChange={namingLanguageField.setValue}
-            onScopeChange={namingLanguageField.setSource}
           />
           <ComposerScopeSelectRow
             label={t('settings.tasks.summaryLanguageLabel')}
             value={summaryLanguageField.value}
             options={TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS}
-            source={summaryLanguageField.source}
-            canOverride={summaryLanguageField.canOverride}
             onValueChange={summaryLanguageField.setValue}
-            onScopeChange={summaryLanguageField.setSource}
           />
         </div>
         {runtimeId && (
@@ -3410,19 +3396,13 @@ function ComposerScopeSelectRow({
   value,
   options,
   disabledValues = ['skip'],
-  source,
-  canOverride,
   onValueChange,
-  onScopeChange,
 }: {
   label: string;
   value: TaskOutputLanguage;
   options: TaskOutputLanguage[];
   disabledValues?: TaskOutputLanguage[];
-  source: ComposerOverrideScope;
-  canOverride: boolean;
   onValueChange: (value: TaskOutputLanguage) => void;
-  onScopeChange: (source: ComposerOverrideScope) => void;
 }) {
   const { t } = useTranslation();
   const enabled = !disabledValues.includes(value);
@@ -3482,7 +3462,6 @@ function ComposerScopeSelectRow({
           )}
           onCheckedChange={(next) => onValueChange(next ? 'app' : 'skip')}
         />
-        <ComposerScopeToggle source={source} canOverride={canOverride} onChange={onScopeChange} />
       </div>
     </div>
   );
