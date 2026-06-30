@@ -3093,6 +3093,20 @@
     "active": "活跃",
     "archived": "已归档",
     "activeTasks": "{{count}} 个进行中",
+    "configureColumns": "自定义列",
+    "columns": {
+      "name": "名称",
+      "kind": "类型",
+      "path": "路径",
+      "activeTasks": "进行中任务",
+      "usage": "用量",
+      "createdAt": "创建日期",
+      "updatedAt": "最近修改"
+    },
+    "kind": {
+      "local": "本地",
+      "ssh": "SSH"
+    },
     "usageColumn": "用量",
     "usageTokens": "{{value}} tokens",
     "usageEmpty": "暂无用量",
