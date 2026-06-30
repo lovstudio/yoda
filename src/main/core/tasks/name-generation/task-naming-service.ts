@@ -3,8 +3,8 @@ import { and, desc, eq, ne } from 'drizzle-orm';
 import type { GlobalLlmSettings, RuntimeCustomConfig } from '@shared/app-settings';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import { taskNamingUpdatedChannel } from '@shared/events/taskEvents';
-import { getGlobalLlmRouteOrder } from '@shared/global-llm';
-import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
+import { getLlmProfile, normalizeLlmSettings, type LlmProfile } from '@shared/global-llm';
+import { findRuntimePermissionMode, getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import { deriveTaskSlug, normalizeTaskDisplayName } from '@shared/task-name';
 import {
   normalizeTaskNamingTimeoutMs,
@@ -19,12 +19,12 @@ import {
 import type { CreateTaskParams } from '@shared/tasks';
 import { resolveSelectedUtilityAgent } from '@main/core/agents-config/builtin-agent-resolver';
 import { aiLogService } from '@main/core/ai-logs/ai-log-service';
+import { parseShellWords } from '@main/core/conversations/impl/agent-command';
 import {
   resolveRuntimeBaseEnv,
   resolveRuntimeEnv,
 } from '@main/core/conversations/impl/runtime-env';
 import { getManualSummary, getStoredSummary } from '@main/core/conversations/session-summary-store';
-import { requestOpenAiCompatibleChat } from '@main/core/maas/openai-compatible-chat';
 import { projectManager } from '@main/core/projects/project-manager';
 import type { ProjectProvider } from '@main/core/projects/project-provider';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
@@ -82,7 +82,7 @@ export type ModelNamingPayload = Record<string, unknown> & {
 export type NamingPayloadResult = {
   payload: ModelNamingPayload;
   model: string;
-  method: 'agent-cli' | 'maas-chat';
+  method: 'agent-cli';
   stages: TaskNamingDebugStage[];
 };
 
@@ -90,6 +90,7 @@ export type AgentNamingRuntime = {
   runtimeId: RuntimeId;
   runtimeName: string;
   providerConfig: RuntimeCustomConfig;
+  profile: LlmProfile;
 };
 
 export type ResolvedNamingRuntime = {
@@ -100,6 +101,7 @@ export type ResolvedNamingRuntime = {
   runtimeName: string;
   providerConfig: RuntimeCustomConfig | null;
   runtime: AgentNamingRuntime | null;
+  llmProfile: LlmProfile;
   customSystemPrompt: string;
 };
 
@@ -131,24 +133,30 @@ type AgentNamingCommandResult = {
 
 export async function resolveNamingRuntime(
   fallbackProviderId?: RuntimeId | null,
-  options: { agentId?: string; model?: string } = {}
+  options: { agentId?: string; model?: string; profileId?: string } = {}
 ): Promise<ResolvedNamingRuntime> {
   const [taskSettings, defaultRuntime, llmSettings] = await Promise.all([
     appSettingsService.get('tasks'),
     appSettingsService.get('defaultRuntime'),
     appSettingsService.get('llm'),
   ]);
-  const configuredAgentId = (options.agentId ?? llmSettings.agentId) || taskSettings.namingAgentId;
+  const normalizedLlmSettings = normalizeLlmSettings(llmSettings);
+  const llmProfile = getLlmProfile(
+    normalizedLlmSettings,
+    options.profileId || normalizedLlmSettings.namingProfileId
+  );
+  const configuredAgentId = options.agentId || taskSettings.namingAgentId;
   const namingAgent = await resolveSelectedUtilityAgent(
     configuredAgentId,
     BUILTIN_AGENT_KEYS.naming
   );
-  const runtimeId = namingAgent.runtimeId ?? fallbackProviderId ?? defaultRuntime;
+  const runtimeId =
+    llmProfile.runtimeId ?? namingAgent.runtimeId ?? fallbackProviderId ?? defaultRuntime;
   const providerConfig = await runtimeOverrideSettings.getItem(runtimeId);
   const runtimeName = getRuntime(runtimeId)?.name ?? runtimeId;
   const agentNamingModel = normalizeTaskNamingModelForProvider(
     runtimeId,
-    options.model ?? namingAgent.model ?? providerConfig?.namingModel
+    options.model ?? llmProfile.model ?? namingAgent.model ?? providerConfig?.namingModel
   );
   const fallbackNamingModel = normalizeTaskNamingModelForProvider(
     runtimeId,
@@ -167,7 +175,7 @@ export async function resolveNamingRuntime(
   };
   return {
     settings,
-    llmSettings,
+    llmSettings: normalizedLlmSettings,
     defaultRuntime,
     runtimeId,
     runtimeName,
@@ -176,9 +184,15 @@ export async function resolveNamingRuntime(
       ? {
           runtimeId,
           runtimeName,
-          providerConfig: { ...providerConfig, namingModel: settings.model },
+          providerConfig: {
+            ...providerConfig,
+            authProvider: llmProfile.authProvider,
+            namingModel: settings.model,
+          },
+          profile: llmProfile,
         }
       : null,
+    llmProfile,
     customSystemPrompt: namingAgent.systemPrompt,
   };
 }
@@ -326,13 +340,15 @@ export async function generateTaskNames(
     hasInitialPrompt: Boolean(input.params.initialConversation?.initialPrompt),
   });
   const namingRuntime = await resolveNamingRuntime(input.params.initialConversation?.runtime);
-  const { settings, llmSettings, defaultRuntime, runtimeId, runtimeName, providerConfig, runtime } =
+  const { settings, defaultRuntime, runtimeId, runtimeName, providerConfig, runtime, llmProfile } =
     namingRuntime;
   recordStage('settings', Date.now() - startedAt, {
     defaultRuntime,
     namingModelConfigured: Boolean(settings.model.trim()),
     recentTaskLimit: settings.recentTaskLimit,
     timeoutMs: settings.requestTimeoutMs,
+    llmProfileId: llmProfile.id,
+    llmProfileName: llmProfile.name,
   });
   console.log('[DEBUG][task-naming] settings loaded:', {
     taskId: input.taskId,
@@ -355,6 +371,8 @@ export async function generateTaskNames(
     durationMs: Date.now() - startedAt,
     runtimeId,
     runtimeName,
+    llmProfileId: llmProfile.id,
+    authProvider: llmProfile.authProvider,
     hasProviderConfig: Boolean(providerConfig),
     hasNamingModel: Boolean(settings.model),
     hasNamingCommand: Boolean(providerConfig?.namingCommand?.trim()),
@@ -403,7 +421,6 @@ export async function generateTaskNames(
       input.includeBranchName,
       settings,
       runtime,
-      llmSettings,
       input.project.repoPath,
       promptParts.prompt
     );
@@ -636,54 +653,31 @@ async function requestNamingPayload(
   includeBranchName: boolean,
   settings: TaskNamingSettings,
   runtime: AgentNamingRuntime | null,
-  llmSettings: GlobalLlmSettings,
   cwd: string,
   prompt: string
 ): Promise<NamingPayloadResult> {
-  const routeOrder = getGlobalLlmRouteOrder(llmSettings);
-  const failedStages: TaskNamingDebugStage[] = [];
-  const errors: string[] = [];
-
-  if (routeOrder.length === 0) {
-    throw new NamingRequestError('No global LLM route is enabled.', failedStages);
-  }
-
-  for (const provider of routeOrder) {
-    const attemptStartedAt = Date.now();
-    try {
-      const result =
-        provider === 'maas'
-          ? await requestMaasNamingPayload({
-              context,
-              prompt,
-              includeBranchName,
-              settings,
-              llmSettings,
-            })
-          : await requestAgentNamingPayload({
-              context,
-              prompt,
-              includeBranchName,
-              settings,
-              runtime: requireAgentNamingRuntime(runtime),
-              cwd,
-            });
-      return { ...result, stages: [...failedStages, ...result.stages] };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      errors.push(`${provider}: ${message}`);
-      failedStages.push({
-        name: `${provider}Failed`,
-        durationMs: Date.now() - attemptStartedAt,
+  const startedAt = Date.now();
+  try {
+    return await requestAgentNamingPayload({
+      context,
+      prompt,
+      includeBranchName,
+      settings,
+      runtime: requireAgentNamingRuntime(runtime),
+      cwd,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new NamingRequestError(message, [
+      {
+        name: 'agentCliFailed',
+        durationMs: Date.now() - startedAt,
         metadata: {
-          provider,
           error: clip(message, 300).content,
         },
-      });
-    }
+      },
+    ]);
   }
-
-  throw new NamingRequestError(`All global LLM routes failed. ${errors.join('; ')}`, failedStages);
 }
 
 function requireAgentNamingRuntime(runtime: AgentNamingRuntime | null): AgentNamingRuntime {
@@ -701,63 +695,6 @@ class NamingRequestError extends Error {
     super(message);
     this.name = 'NamingRequestError';
   }
-}
-
-async function requestMaasNamingPayload(input: {
-  context: TaskNamingContextSnapshot;
-  prompt: string;
-  promptBuildDurationMs?: number;
-  includeBranchName?: boolean;
-  settings: Pick<TaskNamingSettings, 'requestTimeoutMs'>;
-  llmSettings: Pick<GlobalLlmSettings, 'maasModel'>;
-}): Promise<NamingPayloadResult> {
-  const startedAt = Date.now();
-  const includeBranchName = Boolean(input.includeBranchName);
-  const stages: TaskNamingDebugStage[] = [
-    {
-      name: 'prompt',
-      durationMs: input.promptBuildDurationMs ?? 0,
-      metadata: {
-        promptChars: input.prompt.length,
-        promptEstimatedTokens: estimateTokens(input.prompt),
-        includeBranchName,
-      },
-    },
-  ];
-  const requestStartedAt = Date.now();
-  const result = await requestOpenAiCompatibleChat({
-    model: input.llmSettings.maasModel,
-    messages: [{ role: 'user', content: input.prompt }],
-    maxTokens: 400,
-    temperature: 0.1,
-    timeoutMs: input.settings.requestTimeoutMs,
-    purpose: 'task-naming',
-  });
-  if (!result) {
-    throw new Error('MaaS chat is not connected or returned no content.');
-  }
-  stages.push({
-    name: 'maasChat',
-    durationMs: Date.now() - requestStartedAt,
-    metadata: {
-      platform: result.platformId,
-      model: result.model,
-      outputChars: result.content.length,
-      totalDurationMs: Date.now() - startedAt,
-    },
-  });
-  const parseStartedAt = Date.now();
-  const payload = parseNamingPayload(result.content);
-  stages.push({
-    name: 'parseJson',
-    durationMs: Date.now() - parseStartedAt,
-    metadata: {
-      hasTaskName: typeof payload.taskName === 'string',
-      hasBranchName: typeof payload.branchName === 'string',
-      hasSessionTitle: typeof payload.sessionTitle === 'string',
-    },
-  });
-  return { payload, model: result.model, method: 'maas-chat', stages };
 }
 
 export async function requestAgentNamingPayload(input: {
@@ -793,7 +730,10 @@ export async function requestAgentNamingPayload(input: {
   });
   const commandBuildStartedAt = Date.now();
   const command = withProviderStreamingMode(
-    buildAgentNamingCommand(input.runtime.providerConfig, input.prompt),
+    withProfilePermissionMode(
+      buildAgentNamingCommand(input.runtime.providerConfig, input.prompt),
+      input.runtime
+    ),
     input.runtime.runtimeId
   );
   stages.push({
@@ -806,6 +746,9 @@ export async function requestAgentNamingPayload(input: {
       stdinChars: command.stdin?.length ?? 0,
       timeoutMs: input.settings.requestTimeoutMs,
       jsonMode: isJsonModeCommand(command),
+      permissionMode: input.runtime.profile.permissionMode,
+      authProvider: input.runtime.profile.authProvider,
+      llmProfileId: input.runtime.profile.id,
     },
   });
   console.log('[DEBUG][agent-naming] naming command built:', {
@@ -837,6 +780,8 @@ export async function requestAgentNamingPayload(input: {
     metadata: {
       taskId: input.context.taskId,
       projectId: input.context.projectId,
+      llmProfileId: input.runtime.profile.id,
+      authProvider: input.runtime.profile.authProvider,
     },
   });
   stages.push({
@@ -972,6 +917,7 @@ export async function requestUtilityAgentJson(input: {
   metadata?: Record<string, string>;
   agentId?: string;
   model?: string;
+  profileId?: string;
 }): Promise<Record<string, unknown>> {
   const result = await requestUtilityAgentText(input);
   return parseNamingPayload(result.text) as Record<string, unknown>;
@@ -985,10 +931,12 @@ export async function requestUtilityAgentText(input: {
   metadata?: Record<string, string>;
   agentId?: string;
   model?: string;
+  profileId?: string;
 }): Promise<{ text: string; runtimeId: RuntimeId; runtimeName: string; model: string }> {
   const resolved = await resolveNamingRuntime(undefined, {
     agentId: input.agentId,
     model: input.model,
+    profileId: input.profileId,
   });
   if (!resolved.runtime) {
     throw new Error(`No naming command is configured for ${resolved.runtimeName}.`);
@@ -1015,7 +963,11 @@ export async function requestUtilityAgentText(input: {
     timeoutMs: resolved.settings.requestTimeoutMs,
     runtimeName: resolved.runtime.runtimeName,
     purpose: input.purpose ?? 'utility',
-    metadata: input.metadata,
+    metadata: {
+      ...input.metadata,
+      llmProfileId: resolved.runtime.profile.id,
+      authProvider: resolved.runtime.profile.authProvider,
+    },
   });
   return {
     text: extractAgentTextResponse(result.stdout),
@@ -1033,6 +985,32 @@ function withProviderStreamingMode(
     return command;
   }
   return { ...command, args: [...command.args, '--json'] };
+}
+
+function withProfilePermissionMode(
+  command: ReturnType<typeof buildAgentNamingCommand>,
+  runtime: AgentNamingRuntime
+): ReturnType<typeof buildAgentNamingCommand> {
+  const permission = findRuntimePermissionMode(
+    runtime.runtimeId,
+    runtime.profile.permissionMode,
+    runtime.providerConfig.autoApproveFlag
+  );
+  if (!permission) return command;
+  if (permission.usesAutoApproveFlag) {
+    const args = parseArgField(runtime.providerConfig.autoApproveFlag);
+    return args.length ? { ...command, args: [...command.args, ...args] } : command;
+  }
+  return permission.args?.length
+    ? { ...command, args: [...command.args, ...permission.args] }
+    : command;
+}
+
+function parseArgField(value: string | undefined): string[] {
+  if (!value) return [];
+  const parsed = parseShellWords(value);
+  if (!parsed.ok) throw new Error(parsed.reason);
+  return parsed.words;
 }
 
 function isJsonModeCommand(command: ReturnType<typeof buildAgentNamingCommand>): boolean {
