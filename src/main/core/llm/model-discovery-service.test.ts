@@ -23,11 +23,13 @@ vi.mock('@main/core/settings/runtime-model-catalog', () => ({
 }));
 
 describe('sortModelCandidatesForDisplay', () => {
-  it('prefers concrete recent models over aliases and keeps mini ahead of nano', () => {
+  it('prefers recent concrete variants over aliases and repeated base models', () => {
     const sorted = sortModelCandidatesForDisplay([
       candidate('chat-latest'),
       candidate('gpt-5.5-pro'),
       candidate('gpt-5.5'),
+      candidate('gpt-5.4-pro'),
+      candidate('gpt-5.4'),
       candidate('gpt-5.4-nano'),
       candidate('gpt-5.4-mini'),
     ]);
@@ -35,8 +37,10 @@ describe('sortModelCandidatesForDisplay', () => {
     expect(sorted.map((model) => model.id)).toEqual([
       'gpt-5.5-pro',
       'gpt-5.5',
+      'gpt-5.4-pro',
       'gpt-5.4-mini',
       'gpt-5.4-nano',
+      'gpt-5.4',
       'chat-latest',
     ]);
   });

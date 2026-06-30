@@ -184,11 +184,11 @@ function compareVersionsDesc(left: readonly number[], right: readonly number[]):
 function modelTierRank(value: string): number {
   if (hasAnyToken(value, ['pro', 'opus', 'ultra', 'max'])) return 80;
   if (hasAnyToken(value, ['reason', 'thinking', 'r1', 'o3'])) return 70;
-  if (hasAnyToken(value, ['nano'])) return 10;
-  if (hasAnyToken(value, ['mini'])) return 30;
+  if (hasAnyToken(value, ['mini'])) return 58;
+  if (hasAnyToken(value, ['nano'])) return 56;
   if (hasAnyToken(value, ['haiku', 'flash', 'lite', 'small'])) return 35;
   if (hasAnyToken(value, ['sonnet', 'coder', 'code'])) return 55;
-  return 60;
+  return 50;
 }
 
 function hasAnyToken(value: string, tokens: readonly string[]): boolean {
