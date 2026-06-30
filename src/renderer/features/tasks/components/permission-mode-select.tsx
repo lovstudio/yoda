@@ -22,11 +22,13 @@ export function PermissionModeSelect({
   className,
   contentPortaled = true,
   alignContentWithTrigger = true,
+  contentClassName,
 }: {
   runtimeId: RuntimeId | null | undefined;
   className?: string;
   contentPortaled?: boolean;
   alignContentWithTrigger?: boolean;
+  contentClassName?: string;
 }) {
   const { t } = useTranslation();
   const permissionModes = useRuntimePermissionModes();
@@ -35,6 +37,7 @@ export function PermissionModeSelect({
 
   const modes = permissionModes.getModes(runtimeId);
   const current = permissionModes.getMode(runtimeId);
+  const hasDescriptions = modes.some((mode) => mode.descriptionKey);
   const labelFor = (modeId: string | null) =>
     t(modes.find((m) => m.id === modeId)?.labelKey ?? 'permissionMode.default');
 
@@ -56,14 +59,35 @@ export function PermissionModeSelect({
       >
         <SelectValue>{(value: string | null) => labelFor(value)}</SelectValue>
       </SelectTrigger>
-      <SelectContent portaled={contentPortaled} alignItemWithTrigger={alignContentWithTrigger}>
+      <SelectContent
+        portaled={contentPortaled}
+        alignItemWithTrigger={alignContentWithTrigger}
+        className={cn(hasDescriptions && 'w-80 max-w-[calc(100vw-2rem)]', contentClassName)}
+      >
         {modes.map((mode) => (
           <SelectItem
             key={mode.id}
             value={mode.id}
-            className={cn(mode.danger && 'text-destructive')}
+            className={cn(
+              mode.descriptionKey && 'items-start py-2.5',
+              mode.danger && 'text-destructive'
+            )}
           >
-            {t(mode.labelKey)}
+            {mode.descriptionKey ? (
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="truncate">{t(mode.labelKey)}</span>
+                <span
+                  className={cn(
+                    'whitespace-normal text-xs leading-snug text-foreground-passive',
+                    mode.danger && 'text-destructive/75'
+                  )}
+                >
+                  {t(mode.descriptionKey)}
+                </span>
+              </span>
+            ) : (
+              t(mode.labelKey)
+            )}
           </SelectItem>
         ))}
       </SelectContent>

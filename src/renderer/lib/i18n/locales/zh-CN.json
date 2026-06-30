@@ -734,7 +734,17 @@
     "plan": "计划模式",
     "acceptEdits": "自动接受编辑",
     "fullAuto": "全自动",
-    "bypass": "跳过权限（危险）"
+    "bypass": "跳过权限（危险）",
+    "codex": {
+      "requestApproval": "请求批准",
+      "requestApprovalDesc": "编辑外部文件和使用互联网时始终询问",
+      "autoApprove": "替我审批",
+      "autoApproveDesc": "仅对检测到的风险操作请求批准",
+      "fullAccess": "完全访问权限",
+      "fullAccessDesc": "可不受限制地访问互联网和您电脑上的任何文件",
+      "custom": "自定义（config.toml）",
+      "customDesc": "使用 config.toml 中定义的权限"
+    }
   },
   "home": {
     "greeting": {
@@ -769,11 +779,15 @@
     "composerDefaultStrategyLabel": "默认新建 worktree",
     "composerDefaultReviewStrategyLabel": "评审默认新建 worktree",
     "composerDefaultReviewerLabel": "默认评审 agent",
+    "agentCliConfigLabel": "Agent CLI",
+    "agentCliConfigHint": "当前所选 Agent CLI 的运行权限与启动前会读取的指令文件。",
     "promptPrinciplesLabel": "Prompt 原则",
     "promptPrinciplesProjectHeading": "本项目",
     "promptPrincipleUnnamed": "未命名原则",
     "instructionFilesLabel": "指令文件",
     "instructionFilesHint": "客户端内置 system prompt 不可编辑。全局 CLAUDE.md 充当用户级 system prompt，项目 CLAUDE.md / AGENTS.md 是项目级 prompt。点击展开查看，悬停行尾可打开编辑。",
+    "instructionFilesHintClaude": "Claude CLI 的内置 system prompt 不可编辑。这里仅列出本次运行会读取的全局 CLAUDE.md 与项目级 CLAUDE.md / AGENTS.md。",
+    "instructionFilesHintCodex": "Codex CLI 的内置指令不可编辑。这里仅列出本次运行会读取的全局 AGENTS.md 与项目级 AGENTS.md / .codex/AGENTS.md。",
     "noInstructionFiles": "未找到指令文件",
     "manage": "管理",
     "imageTokenLabel": "图 {{index}}",

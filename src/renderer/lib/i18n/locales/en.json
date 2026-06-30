@@ -734,7 +734,17 @@
     "plan": "Plan mode",
     "acceptEdits": "Auto-accept edits",
     "fullAuto": "Full auto",
-    "bypass": "Bypass permissions"
+    "bypass": "Bypass permissions",
+    "codex": {
+      "requestApproval": "Request approval",
+      "requestApprovalDesc": "Always ask before editing external files or using the internet",
+      "autoApprove": "Approve for me",
+      "autoApproveDesc": "Only request approval for detected risky operations",
+      "fullAccess": "Full access",
+      "fullAccessDesc": "Access the internet and any file on your computer without restrictions",
+      "custom": "Custom (config.toml)",
+      "customDesc": "Use the permissions defined in config.toml"
+    }
   },
   "home": {
     "greeting": {
@@ -769,11 +779,15 @@
     "composerDefaultStrategyLabel": "New worktree by default",
     "composerDefaultReviewStrategyLabel": "New worktree for review",
     "composerDefaultReviewerLabel": "Default reviewer",
+    "agentCliConfigLabel": "Agent CLI",
+    "agentCliConfigHint": "Runtime permissions and instruction files read by the selected Agent CLI.",
     "promptPrinciplesLabel": "Prompt principles",
     "promptPrinciplesProjectHeading": "This project",
     "promptPrincipleUnnamed": "Untitled principle",
     "instructionFilesLabel": "Instruction files",
     "instructionFilesHint": "The client's built-in system prompt is not editable. The global CLAUDE.md acts as your user-level system prompt; the project's CLAUDE.md / AGENTS.md are the project-level prompts. Click to expand, hover a row to open and edit.",
+    "instructionFilesHintClaude": "The Claude CLI's built-in system prompt is not editable. This only lists the global CLAUDE.md and project CLAUDE.md / AGENTS.md files read by this run.",
+    "instructionFilesHintCodex": "The Codex CLI's built-in instructions are not editable. This only lists the global AGENTS.md and project AGENTS.md / .codex/AGENTS.md files read by this run.",
     "noInstructionFiles": "No instruction files found",
     "manage": "Manage",
     "imageTokenLabel": "Image {{index}}",

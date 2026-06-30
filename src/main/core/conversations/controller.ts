@@ -22,7 +22,7 @@ import {
   getSessionSummaryPreview,
   setManualSessionSummary,
 } from './getSessionSummary';
-import { getInstructionFiles } from './instruction-files';
+import { getInstructionFiles, getRuntimeInstructionFiles } from './instruction-files';
 import { interruptConversation } from './interruptConversation';
 import { renameConversation } from './renameConversation';
 import { restartConversation } from './restartConversation';
@@ -60,6 +60,7 @@ export const conversationController = createRPCController({
   setClaudeStatusline,
   getCodexSessionContext,
   getInstructionFiles,
+  getRuntimeInstructionFiles,
   getConversationSessionInfo,
   getSessionSummary,
   getSessionSummaryPreview,

@@ -31,6 +31,52 @@ describe('buildAgentCommand', () => {
     });
   });
 
+  it('maps Codex request-approval mode to explicit sandbox and approval flags', () => {
+    const command = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: runtimeConfigDefaults.codex,
+      permissionMode: 'default',
+      initialPrompt: 'Fix the issue',
+      sessionId: 'session-1',
+    });
+
+    expect(command).toEqual({
+      command: 'codex',
+      args: ['--sandbox', 'workspace-write', '--ask-for-approval', 'untrusted', 'Fix the issue'],
+    });
+  });
+
+  it('maps Codex approve-for-me mode to on-request approvals', () => {
+    const command = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: runtimeConfigDefaults.codex,
+      permissionMode: 'full-auto',
+      initialPrompt: 'Fix the issue',
+      sessionId: 'session-1',
+    });
+
+    expect(command).toEqual({
+      command: 'codex',
+      args: ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request', 'Fix the issue'],
+    });
+  });
+
+  it('lets Codex custom mode inherit config.toml permissions', () => {
+    const command = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: runtimeConfigDefaults.codex,
+      autoApprove: true,
+      permissionMode: 'custom',
+      initialPrompt: 'Fix the issue',
+      sessionId: 'session-1',
+    });
+
+    expect(command).toEqual({
+      command: 'codex',
+      args: ['Fix the issue'],
+    });
+  });
+
   it('passes prompt principles to Codex as developer instructions', () => {
     const command = buildAgentCommand({
       runtimeId: 'codex',

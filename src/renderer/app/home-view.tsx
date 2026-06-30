@@ -52,7 +52,7 @@ import {
 } from '@shared/agent-team';
 import { agentToDraft, type Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
-import type { ClaudeMemoryFile } from '@shared/conversations';
+import type { RuntimeInstructionFile } from '@shared/conversations';
 import type { Branch } from '@shared/git';
 import type { ComposerDefaults, ProjectPromptPrinciples } from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
@@ -2410,20 +2410,27 @@ export const HomeComposer = observer(function HomeComposer({
           </div>
         </div>
         {runtimeId && (
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <span className="text-xs text-foreground">{t('home.permissionModeLabel')}</span>
-              <InfoTooltip
-                label={t('home.permissionModeLabel')}
-                content={t('home.permissionModeDesc')}
+          <div className="mt-2 flex flex-col gap-2 border-t border-border/60 pt-2">
+            <ComposerSettingsHeader
+              label={`${t('home.agentCliConfigLabel')} · ${getRuntime(runtimeId)?.name ?? runtimeId}`}
+              hint={t('home.agentCliConfigHint')}
+            />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="text-xs text-foreground">{t('home.permissionModeLabel')}</span>
+                <InfoTooltip
+                  label={t('home.permissionModeLabel')}
+                  content={t('home.permissionModeDesc')}
+                />
+              </div>
+              <PermissionModeSelect
+                runtimeId={runtimeId}
+                className="shrink-0"
+                contentPortaled={false}
+                alignContentWithTrigger={false}
               />
             </div>
-            <PermissionModeSelect
-              runtimeId={runtimeId}
-              className="shrink-0"
-              contentPortaled={false}
-              alignContentWithTrigger={false}
-            />
+            <InstructionFilesSection runtimeId={runtimeId} projectPath={skillProjectPath} />
           </div>
         )}
         <Collapsible
@@ -2595,7 +2602,6 @@ export const HomeComposer = observer(function HomeComposer({
             </>
           ) : null}
         </div>
-        <InstructionFilesSection projectPath={skillProjectPath} />
       </PopoverContent>
     </Popover>
   );
@@ -3287,25 +3293,39 @@ function ComposerSettingsHeader({
 }
 
 /**
- * Composer-settings view onto the instruction files that will feed the next
- * session's prompt: the user-global CLAUDE.md (user-level system prompt) and
- * the project's CLAUDE.md / AGENTS.md (project prompt). View + open-to-edit;
- * the runtime's built-in system prompt is not editable and only gets a hint.
+ * Composer-settings view onto the human-authored instruction files that the
+ * selected runtime CLI reads before the next session starts. The data source is
+ * runtime-aware: Claude-compatible CLIs expose CLAUDE.md files, while Codex
+ * exposes AGENTS.md files.
  */
-function InstructionFilesSection({ projectPath }: { projectPath?: string }) {
+function InstructionFilesSection({
+  runtimeId,
+  projectPath,
+}: {
+  runtimeId: RuntimeId;
+  projectPath?: string;
+}) {
   const { t } = useTranslation();
-  const { data: files = [] } = useQuery<ClaudeMemoryFile[]>({
-    queryKey: ['instructionFiles', projectPath ?? null],
-    queryFn: () => rpc.conversations.getInstructionFiles(projectPath),
+  const runtimeCli = getRuntime(runtimeId)?.cli;
+  const supportsInstructionFiles = runtimeCli === 'claude' || runtimeCli === 'codex';
+  const hintKey =
+    runtimeCli === 'codex'
+      ? 'home.instructionFilesHintCodex'
+      : runtimeCli === 'claude'
+        ? 'home.instructionFilesHintClaude'
+        : 'home.instructionFilesHint';
+  const { data: files = [] } = useQuery<RuntimeInstructionFile[]>({
+    queryKey: ['instructionFiles', runtimeId, projectPath ?? null],
+    queryFn: () => rpc.conversations.getRuntimeInstructionFiles({ runtimeId, cwd: projectPath }),
+    enabled: supportsInstructionFiles,
     refetchOnWindowFocus: false,
   });
 
+  if (!supportsInstructionFiles) return null;
+
   return (
-    <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
-      <ComposerSettingsHeader
-        label={t('home.instructionFilesLabel')}
-        hint={t('home.instructionFilesHint')}
-      />
+    <div className="flex flex-col gap-1">
+      <ComposerSettingsHeader label={t('home.instructionFilesLabel')} hint={t(hintKey)} />
       {files.length === 0 ? (
         <p className="text-xs text-foreground-passive">{t('home.noInstructionFiles')}</p>
       ) : (

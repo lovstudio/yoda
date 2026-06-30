@@ -45,6 +45,8 @@ export type RuntimePermissionMode = {
   id: string;
   /** i18n key for the label, under the `permissionMode.*` namespace. */
   labelKey: string;
+  /** Optional i18n key for explanatory text shown inside richer selectors. */
+  descriptionKey?: string;
   /** Explicit CLI args appended for this mode. Empty/omitted = the CLI's own default. */
   args?: string[];
   /**
@@ -258,13 +260,30 @@ const CLAUDE_PERMISSION_MODES: RuntimePermissionMode[] = [
 
 /** Permission tiers for the Codex CLI (sandbox + approval policy). */
 const CODEX_PERMISSION_MODES: RuntimePermissionMode[] = [
-  { id: 'default', labelKey: 'permissionMode.default', args: [] },
-  { id: 'full-auto', labelKey: 'permissionMode.fullAuto', args: ['--full-auto'] },
+  {
+    id: 'default',
+    labelKey: 'permissionMode.codex.requestApproval',
+    descriptionKey: 'permissionMode.codex.requestApprovalDesc',
+    args: ['--sandbox', 'workspace-write', '--ask-for-approval', 'untrusted'],
+  },
+  {
+    id: 'full-auto',
+    labelKey: 'permissionMode.codex.autoApprove',
+    descriptionKey: 'permissionMode.codex.autoApproveDesc',
+    args: ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request'],
+  },
   {
     id: 'bypass',
-    labelKey: 'permissionMode.bypass',
+    labelKey: 'permissionMode.codex.fullAccess',
+    descriptionKey: 'permissionMode.codex.fullAccessDesc',
     args: ['--dangerously-bypass-approvals-and-sandbox'],
     danger: true,
+  },
+  {
+    id: 'custom',
+    labelKey: 'permissionMode.codex.custom',
+    descriptionKey: 'permissionMode.codex.customDesc',
+    args: [],
   },
 ];
 

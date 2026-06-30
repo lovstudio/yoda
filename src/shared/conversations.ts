@@ -90,6 +90,8 @@ export type CodexMemoryFile = {
   bytes: number;
 };
 
+export type RuntimeInstructionFile = ClaudeMemoryFile | CodexMemoryFile;
+
 /**
  * One entry of Claude Code's self-maintained memory store
  * (~/.claude/projects/<encoded-cwd>/memory/). Unlike CLAUDE.md / AGENTS.md

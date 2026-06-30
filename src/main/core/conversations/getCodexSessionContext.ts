@@ -6,7 +6,6 @@ import Database from 'better-sqlite3';
 import type {
   ClaudeSessionPrompt,
   CodexDynamicTool,
-  CodexMemoryFile,
   CodexSessionContext,
   CodexTurnContext,
   SessionSummary,
@@ -19,6 +18,7 @@ import {
   resolveCodexStatePath,
 } from '@main/core/session-title/codex-title-source';
 import { log } from '@main/lib/logger';
+import { getCodexInstructionFiles } from './instruction-files';
 import { scanCodexSkills } from './scanCodexSkills';
 
 type CodexThreadContextRow = {
@@ -95,7 +95,7 @@ export async function getCodexSessionContext(
 
   const [rollout, memoryFiles, dbDynamicTools, skills] = await Promise.all([
     loadRollout(thread.rolloutPath),
-    loadMemoryFiles(cwd),
+    getCodexInstructionFiles(cwd),
     loadDynamicTools(statePath, thread.id),
     scanCodexSkills(cwd, { codexHome }),
   ]);
@@ -699,29 +699,6 @@ function emptyRollout(): ParsedCodexRollout {
     modelProvider: null,
     summary: null,
   };
-}
-
-async function loadMemoryFiles(cwd: string): Promise<CodexMemoryFile[]> {
-  const candidates: {
-    kind: CodexMemoryFile['kind'];
-    path: string;
-  }[] = [
-    { kind: 'global-codex-agents', path: join(homedir(), '.codex', 'AGENTS.md') },
-    { kind: 'project-agents', path: join(cwd, 'AGENTS.md') },
-    { kind: 'project-codex-agents', path: join(cwd, '.codex', 'AGENTS.md') },
-  ];
-
-  const out = await Promise.all(
-    candidates.map(async ({ kind, path }) => {
-      try {
-        const content = await readFile(path, 'utf8');
-        return { kind, path, content, bytes: content.length };
-      } catch {
-        return null;
-      }
-    })
-  );
-  return out.filter((x): x is CodexMemoryFile => x !== null);
 }
 
 function safeParse(line: string): Record<string, unknown> | null {
