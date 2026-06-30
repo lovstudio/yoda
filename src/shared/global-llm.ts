@@ -62,6 +62,7 @@ export type GlobalLlmModelDiscoverySource = (typeof GLOBAL_LLM_MODEL_DISCOVERY_S
 export type GlobalLlmModelCandidate = {
   id: string;
   name: string | null;
+  description: string | null;
   sources: GlobalLlmModelDiscoverySource[];
 };
 

@@ -387,6 +387,14 @@
         "aiGateway": "AI Gateway",
         "runtimeCatalog": "Runtime catalog"
       },
+      "modelDiscoveryDescriptions": {
+        "coding": "Best for code generation, refactors, and agentic coding workflows.",
+        "reasoning": "Best for complex reasoning, planning, and high-stakes code changes.",
+        "balanced": "Balanced choice for everyday coding, writing, and assistant tasks.",
+        "fast": "Fast, cost-aware option for short edits and lightweight automation.",
+        "longContext": "Useful when the task needs larger context windows or long files.",
+        "general": "General-purpose model candidate for this client."
+      },
       "reasoningEffort": "Reasoning effort",
       "reasoningEffortDescription": "Profile-level reasoning preference for call paths that support it.",
       "reasoning": {
