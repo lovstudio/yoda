@@ -15,10 +15,10 @@ interface SettingRowProps {
  */
 export function SettingRow({ title, description, control }: SettingRowProps) {
   return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <div className="flex min-w-0 items-center gap-x-4">
+    <div className="flex w-full min-w-0 flex-col gap-1">
+      <div className="flex w-full min-w-0 flex-nowrap items-center gap-x-4">
         <div className="min-w-0 flex-1 break-words text-sm text-foreground">{title}</div>
-        <div className="flex shrink-0 items-center gap-1">{control}</div>
+        <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">{control}</div>
       </div>
       {description && (
         <div className="break-words text-xs text-foreground-passive">{description}</div>
