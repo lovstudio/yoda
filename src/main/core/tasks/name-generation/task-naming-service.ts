@@ -25,6 +25,7 @@ import {
 import { getManualSummary, getStoredSummary } from '@main/core/conversations/session-summary-store';
 import { projectManager } from '@main/core/projects/project-manager';
 import type { ProjectProvider } from '@main/core/projects/project-provider';
+import { getProjectComposerDefaults } from '@main/core/projects/settings/composer-default-overrides';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { db } from '@main/db/client';
@@ -127,11 +128,13 @@ type AgentNamingCommandResult = {
 };
 
 export async function resolveNamingRuntime(
-  fallbackProviderId?: RuntimeId | null
+  fallbackProviderId?: RuntimeId | null,
+  projectId?: string | null
 ): Promise<ResolvedNamingRuntime> {
-  const [taskSettings, defaultRuntime] = await Promise.all([
+  const [taskSettings, defaultRuntime, composerDefaults] = await Promise.all([
     appSettingsService.get('tasks'),
     appSettingsService.get('defaultRuntime'),
+    getProjectComposerDefaults(projectId),
   ]);
   const namingAgent = await resolveSelectedUtilityAgent(
     taskSettings.namingAgentId,
@@ -154,7 +157,7 @@ export async function resolveNamingRuntime(
   );
   const settings: TaskNamingSettings = {
     model,
-    language: taskSettings.namingLanguage,
+    language: composerDefaults?.namingLanguage ?? taskSettings.namingLanguage,
     context: taskSettings.namingContext,
     recentTaskLimit: taskSettings.namingRecentTaskLimit,
     requestTimeoutMs: normalizeTaskNamingTimeoutMs(taskSettings.namingRequestTimeoutMs),
@@ -318,7 +321,10 @@ export async function generateTaskNames(
     strategyKind: input.params.strategy.kind,
     hasInitialPrompt: Boolean(input.params.initialConversation?.initialPrompt),
   });
-  const namingRuntime = await resolveNamingRuntime(input.params.initialConversation?.runtime);
+  const namingRuntime = await resolveNamingRuntime(
+    input.params.initialConversation?.runtime,
+    input.projectId
+  );
   const { settings, defaultRuntime, runtimeId, runtimeName, providerConfig, runtime } =
     namingRuntime;
   recordStage('settings', Date.now() - startedAt, {
@@ -520,7 +526,7 @@ export async function getTaskNamingContextPreview(
       ? { kind: 'checkout-existing' as const }
       : { kind: 'no-worktree' as const },
   };
-  const { settings } = await resolveNamingRuntime(params.initialConversation?.runtime);
+  const { settings } = await resolveNamingRuntime(params.initialConversation?.runtime, projectId);
 
   return buildTaskNamingContextSnapshot(
     {

@@ -280,7 +280,7 @@ async function buildConversationNamingDraft(
     cwd
   );
   const messages = await loadSessionMessages(conversation, workingDirectory);
-  const namingRuntime = await resolveNamingRuntime(conversation.runtimeId);
+  const namingRuntime = await resolveNamingRuntime(conversation.runtimeId, projectId);
   const { settings, runtimeId, runtimeName, runtime } = namingRuntime;
   if (!runtime) {
     throw new Error(`No provider configuration is available for ${runtimeName}.`);

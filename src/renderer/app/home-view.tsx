@@ -54,7 +54,11 @@ import { agentToDraft, type Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import type { ClaudeMemoryFile } from '@shared/conversations';
 import type { Branch } from '@shared/git';
-import type { ComposerDefaults, ProjectPromptPrinciples } from '@shared/project-settings';
+import type {
+  ComposerDefaults,
+  ProjectPromptPrinciples,
+  TaskOutputLanguage,
+} from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { withSystemPrompt } from '@shared/prompt-format';
 import { REVIEW_MAX_ROUNDS } from '@shared/review-protocol';
@@ -127,6 +131,13 @@ import {
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
@@ -222,6 +233,8 @@ interface RunModeInputChrome {
 
 const MAX_COMPARE_VARIANTS = 5;
 const DEFAULT_REVIEWER_RUNTIME: RuntimeId = 'claude';
+const DEFAULT_TASK_OUTPUT_LANGUAGE: TaskOutputLanguage = 'app';
+const TASK_OUTPUT_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'prompt', 'zh-CN', 'en'];
 
 const NORMAL_PROMPT_KEY = 'normal:agent';
 const REVIEW_IMPLEMENTER_PROMPT_KEY = 'review:implementer';
@@ -570,6 +583,7 @@ export const HomeComposer = observer(function HomeComposer({
   })();
 
   const { value: draft, update: updateDraft } = useAppSettingsKey('homeDraft');
+  const { value: taskSettings, update: updateTaskSettings } = useAppSettingsKey('tasks');
 
   const isProjectLocked = !!(taskScopedTarget || parentTarget);
   const selectedProjectId =
@@ -1366,6 +1380,20 @@ export const HomeComposer = observer(function HomeComposer({
     hasProject: hasProjectOverrideTarget,
   });
   const attachImagesAsPaths = attachImagesField.value;
+  const namingLanguageField = dualField<TaskOutputLanguage>({
+    override: composerDefaults?.namingLanguage,
+    globalValue: taskSettings?.namingLanguage ?? DEFAULT_TASK_OUTPUT_LANGUAGE,
+    setGlobal: (value) => updateTaskSettings({ namingLanguage: value }),
+    setOverride: (value) => setComposerDefault('namingLanguage', value),
+    hasProject: hasProjectOverrideTarget,
+  });
+  const summaryLanguageField = dualField<TaskOutputLanguage>({
+    override: composerDefaults?.summaryLanguage,
+    globalValue: taskSettings?.summaryLanguage ?? DEFAULT_TASK_OUTPUT_LANGUAGE,
+    setGlobal: (value) => updateTaskSettings({ summaryLanguage: value }),
+    setOverride: (value) => setComposerDefault('summaryLanguage', value),
+    hasProject: hasProjectOverrideTarget,
+  });
   const setGlobalPrincipleProjectOverride = useCallback(
     (principle: { id: string; enabled: boolean }, enabled: boolean) => {
       saveProjectPromptPrinciples(setGlobalOverride(projectPromptPrinciples, principle, enabled));
@@ -2500,6 +2528,22 @@ export const HomeComposer = observer(function HomeComposer({
                 )
               }
             />
+            <ComposerScopeSelectRow
+              label={t('settings.tasks.namingLanguageLabel')}
+              value={namingLanguageField.value}
+              source={namingLanguageField.source}
+              canOverride={namingLanguageField.canOverride}
+              onValueChange={namingLanguageField.setValue}
+              onScopeChange={namingLanguageField.setSource}
+            />
+            <ComposerScopeSelectRow
+              label={t('settings.tasks.summaryLanguageLabel')}
+              value={summaryLanguageField.value}
+              source={summaryLanguageField.source}
+              canOverride={summaryLanguageField.canOverride}
+              onValueChange={summaryLanguageField.setValue}
+              onScopeChange={summaryLanguageField.setSource}
+            />
           </CollapsibleContent>
         </Collapsible>
         <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
@@ -3269,6 +3313,59 @@ function ComposerScopeRow({
           <span className="max-w-32 truncate text-[11px] text-foreground-passive">{value}</span>
         ) : null}
         <ComposerScopeToggle source={source} canOverride={canOverride} onChange={onChange} />
+      </div>
+    </div>
+  );
+}
+
+function taskOutputLanguageLabel(t: ReturnType<typeof useTranslation>['t'], value: string): string {
+  switch (value) {
+    case 'app':
+      return t('settings.tasks.namingLanguageApp');
+    case 'prompt':
+      return t('settings.tasks.namingLanguagePrompt');
+    case 'zh-CN':
+      return t('settings.tasks.namingLanguageZh');
+    case 'en':
+      return t('settings.tasks.namingLanguageEn');
+    default:
+      return value;
+  }
+}
+
+function ComposerScopeSelectRow({
+  label,
+  value,
+  source,
+  canOverride,
+  onValueChange,
+  onScopeChange,
+}: {
+  label: string;
+  value: TaskOutputLanguage;
+  source: ComposerOverrideScope;
+  canOverride: boolean;
+  onValueChange: (value: TaskOutputLanguage) => void;
+  onScopeChange: (source: ComposerOverrideScope) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="min-w-0 truncate text-xs text-foreground">{label}</span>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Select value={value} onValueChange={(next) => onValueChange(next as TaskOutputLanguage)}>
+          <SelectTrigger size="sm" className="h-6 w-28 text-[11px]">
+            <SelectValue>{taskOutputLanguageLabel(t, value)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {TASK_OUTPUT_LANGUAGE_OPTIONS.map((option) => (
+              <SelectItem key={option} value={option}>
+                {taskOutputLanguageLabel(t, option)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <ComposerScopeToggle source={source} canOverride={canOverride} onChange={onScopeChange} />
       </div>
     </div>
   );

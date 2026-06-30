@@ -79,6 +79,8 @@ export type ProjectDocsSettings = z.infer<typeof projectDocsSettingsSchema>;
 
 export const composerRunModeValues = ['normal', 'brainstorm', 'review', 'team'] as const;
 export const composerStrategyKindValues = ['new-branch', 'no-worktree'] as const;
+export const taskOutputLanguageValues = ['app', 'prompt', 'en', 'zh-CN'] as const;
+export type TaskOutputLanguage = (typeof taskOutputLanguageValues)[number];
 
 /**
  * A project's overrides for the home composer's run configuration. Every field
@@ -108,6 +110,8 @@ export const composerDefaultsSchema = z.object({
   reviewStrategyKind: z.enum(composerStrategyKindValues).optional(),
   reviewerRuntime: z.enum(RUNTIME_IDS).optional(),
   attachImagesAsPaths: z.boolean().optional(),
+  namingLanguage: z.enum(taskOutputLanguageValues).optional(),
+  summaryLanguage: z.enum(taskOutputLanguageValues).optional(),
 });
 
 export type ComposerDefaults = z.infer<typeof composerDefaultsSchema>;

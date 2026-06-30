@@ -752,7 +752,7 @@
     "composerScopeOverrideTooltip": "Overriding for this project — saved to project settings (.yoda.json). Click to revert to the global default.",
     "composerScopeProjectRequired": "Pick a project to set a project-specific override.",
     "composerRunDefaultsLabel": "Run defaults",
-    "composerRunDefaultsHint": "Per-project defaults for the agent, mode, base branch and worktree strategy. Each inherits your global default until you override it for this project.",
+    "composerRunDefaultsHint": "Per-project defaults for the agent, mode, base branch, worktree strategy, and generated-text language. Each inherits your global default until you override it for this project.",
     "composerDefaultRuntimeLabel": "Default agent",
     "composerDefaultRunModeLabel": "Default mode",
     "composerDefaultBaseBranchLabel": "Default base branch",

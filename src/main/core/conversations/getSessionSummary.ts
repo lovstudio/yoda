@@ -128,7 +128,7 @@ export async function getSessionSummary(
 
   // Provider/model/prompt/context come from the configured summary Agent, NOT
   // the session's runtime — so a dead session runtime never blocks summaries.
-  const runtime = await resolveSummaryRuntime(scope);
+  const runtime = await resolveSummaryRuntime(scope, projectId);
   const ctx = runtime.context;
   // Apply the role context BEFORE slicing so `recent` keeps the last N of the
   // INCLUDED roles (e.g. last 10 user messages when assistant is excluded),
@@ -344,7 +344,7 @@ export async function getSessionSummaryPreview(
   try {
     const [loaded, runtime] = await Promise.all([
       loadContext(runtimeId, cwd, conversationId, conversationTitle, conversationCreatedAt),
-      resolveSummaryRuntime('global'),
+      resolveSummaryRuntime('global', projectId),
     ]);
     const messages = (loaded?.messages ?? []).filter((m) =>
       m.role === 'assistant' ? runtime.context.assistant : runtime.context.user

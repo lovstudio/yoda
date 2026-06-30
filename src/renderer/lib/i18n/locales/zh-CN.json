@@ -752,7 +752,7 @@
     "composerScopeOverrideTooltip": "本项目覆盖 —— 已写入项目设置（.yoda.json）。点击恢复继承全局默认。",
     "composerScopeProjectRequired": "选择项目后才能设置项目级覆盖。",
     "composerRunDefaultsLabel": "运行默认",
-    "composerRunDefaultsHint": "按项目设置默认的 agent、模式、基线分支和 worktree 策略。未覆盖时各项继承你的全局默认。",
+    "composerRunDefaultsHint": "按项目设置默认的 agent、模式、基线分支、worktree 策略，以及生成文本语言。未覆盖时各项继承你的全局默认。",
     "composerDefaultRuntimeLabel": "默认 agent",
     "composerDefaultRunModeLabel": "默认模式",
     "composerDefaultBaseBranchLabel": "默认基线分支",
