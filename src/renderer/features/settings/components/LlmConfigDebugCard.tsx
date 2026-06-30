@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
 import {
   Bug,
-  Check,
   CheckCircle2,
   ChevronDown,
   Loader2,
@@ -43,13 +42,17 @@ import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-sel
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@renderer/lib/ui/dropdown-menu';
+  Combobox,
+  ComboboxCollection,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+} from '@renderer/lib/ui/combobox';
 import { Input } from '@renderer/lib/ui/input';
+import { InputGroupButton } from '@renderer/lib/ui/input-group';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import {
   Select,
@@ -418,24 +421,120 @@ const ModelField: React.FC<{
   const { t } = useTranslation();
   const visibleCandidates = candidates.slice(0, MODEL_CANDIDATE_MENU_LIMIT);
   const hiddenCandidateCount = Math.max(0, candidates.length - visibleCandidates.length);
+  const [modelDraft, setModelDraft] = useState(() => ({
+    profileId: profile.id,
+    savedModel: profile.model,
+    value: profile.model,
+  }));
+  const [open, setOpen] = useState(false);
+  const modelInput =
+    modelDraft.profileId === profile.id && modelDraft.savedModel === profile.model
+      ? modelDraft.value
+      : profile.model;
+  const selectedCandidate =
+    visibleCandidates.find((candidate) => candidate.id === profile.model) ?? null;
+
+  const setModelInput = (value: string) => {
+    setModelDraft({
+      profileId: profile.id,
+      savedModel: profile.model,
+      value,
+    });
+  };
+
+  const commitModelInput = () => {
+    const model = modelInput.trim();
+    setModelInput(model);
+    if (model !== profile.model) onModelChange(model);
+  };
 
   return (
     <div className="flex w-64 max-w-full flex-col gap-1">
       <div className="flex min-w-0 items-center gap-1.5">
-        <Input
-          key={`${profile.id}:${profile.model}`}
-          defaultValue={profile.model}
-          disabled={disabled}
-          placeholder={t('settings.llm.modelPlaceholder')}
-          className="h-8 min-w-0 flex-1"
-          onBlur={(event) => {
-            const model = event.target.value.trim();
-            if (model !== profile.model) onModelChange(model);
+        <Combobox
+          items={visibleCandidates}
+          value={selectedCandidate}
+          inputValue={modelInput}
+          open={open}
+          onOpenChange={disabled ? undefined : setOpen}
+          onInputValueChange={(value) => setModelInput(value)}
+          onValueChange={(candidate) => {
+            if (!candidate) return;
+            setModelInput(candidate.id);
+            onModelChange(candidate.id);
+            setOpen(false);
           }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') event.currentTarget.blur();
-          }}
-        />
+          itemToStringLabel={(candidate: GlobalLlmModelCandidate) => candidate.id}
+          itemToStringValue={(candidate: GlobalLlmModelCandidate) => candidate.id}
+          isItemEqualToValue={(candidate, value) => candidate.id === value.id}
+          filter={(candidate, query) => modelCandidateMatchesQuery(candidate, query)}
+          autoHighlight
+        >
+          <ComboboxInput
+            disabled={disabled}
+            placeholder={t('settings.llm.modelPlaceholder')}
+            className="h-8 min-w-0 flex-1"
+            showTrigger={false}
+            rightAddon={
+              <InputGroupButton
+                size="icon-xs"
+                variant="ghost"
+                render={<ComboboxTrigger />}
+                aria-label={t('settings.llm.model')}
+                title={t('settings.llm.model')}
+                disabled={disabled}
+                className="text-foreground-muted hover:text-foreground"
+              >
+                <ChevronDown className="size-3.5" />
+              </InputGroupButton>
+            }
+            onBlur={commitModelInput}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                commitModelInput();
+                event.currentTarget.blur();
+              }
+            }}
+          />
+          <ComboboxContent align="end" className="w-80 max-w-[min(22rem,calc(100vw-2rem))]">
+            <ComboboxList className="pb-0">
+              <ComboboxCollection>
+                {(candidate: GlobalLlmModelCandidate) => (
+                  <ComboboxItem
+                    key={candidate.id}
+                    value={candidate}
+                    title={modelCandidateTitle(t, candidate)}
+                    className="items-start gap-2 py-2"
+                  >
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate font-mono text-xs text-foreground">
+                        {candidate.id}
+                      </span>
+                      <span className="truncate text-xs text-foreground-muted">
+                        {modelCandidateSubtitle(t, candidate)}
+                      </span>
+                    </span>
+                  </ComboboxItem>
+                )}
+              </ComboboxCollection>
+            </ComboboxList>
+            <ComboboxEmpty className="px-2 text-xs">
+              {loading
+                ? t('settings.llm.modelDiscoveryLoading')
+                : t('settings.llm.modelDiscoveryEmpty')}
+            </ComboboxEmpty>
+            {hiddenCandidateCount > 0 && (
+              <div className="border-t border-border px-2 py-1.5 text-xs text-foreground-muted">
+                {t('settings.llm.modelDiscoveryMore', { count: hiddenCandidateCount })}
+              </div>
+            )}
+            {error && (
+              <div className="border-t border-border px-2 py-1.5 text-xs text-foreground-muted">
+                {t('settings.llm.modelDiscoveryPartial', { error })}
+              </div>
+            )}
+          </ComboboxContent>
+        </Combobox>
         <Button
           type="button"
           variant="ghost"
@@ -446,68 +545,6 @@ const ModelField: React.FC<{
         >
           <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-xs"
-                aria-label={t('settings.llm.model')}
-                title={t('settings.llm.model')}
-                disabled={disabled}
-              />
-            }
-          >
-            <ChevronDown className="size-3.5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80 max-w-[min(22rem,calc(100vw-2rem))]">
-            {visibleCandidates.length > 0 ? (
-              visibleCandidates.map((candidate) => (
-                <DropdownMenuItem
-                  key={candidate.id}
-                  title={modelCandidateTitle(t, candidate)}
-                  onClick={() => onModelChange(candidate.id)}
-                  className="items-start gap-2 py-2"
-                >
-                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-                    {candidate.id === profile.model && <Check className="size-3.5" />}
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate font-mono text-xs text-foreground">
-                      {candidate.id}
-                    </span>
-                    <span className="truncate text-xs text-foreground-muted">
-                      {modelCandidateSubtitle(t, candidate)}
-                    </span>
-                  </span>
-                </DropdownMenuItem>
-              ))
-            ) : (
-              <DropdownMenuItem disabled className="whitespace-normal text-xs">
-                {loading
-                  ? t('settings.llm.modelDiscoveryLoading')
-                  : t('settings.llm.modelDiscoveryEmpty')}
-              </DropdownMenuItem>
-            )}
-            {hiddenCandidateCount > 0 && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem disabled className="text-xs">
-                  {t('settings.llm.modelDiscoveryMore', { count: hiddenCandidateCount })}
-                </DropdownMenuItem>
-              </>
-            )}
-            {error && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem disabled className="whitespace-normal text-xs">
-                  {t('settings.llm.modelDiscoveryPartial', { error })}
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
       {error && (
         <span className="truncate text-xs text-foreground-passive" title={error}>
@@ -780,6 +817,14 @@ function modelCandidateSources(t: TFunction, candidate: GlobalLlmModelCandidate)
   return candidate.sources
     .map((source) => t(`settings.llm.modelDiscoverySources.${source}`))
     .join(', ');
+}
+
+function modelCandidateMatchesQuery(candidate: GlobalLlmModelCandidate, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  return [candidate.id, candidate.name ?? '', ...candidate.sources].some((value) =>
+    value.toLowerCase().includes(normalizedQuery)
+  );
 }
 
 function isAccessMethodSupported(
