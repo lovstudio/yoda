@@ -1,6 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
-import { Bug, CheckCircle2, Loader2, Plus, RefreshCw, Send, Trash2, XCircle } from 'lucide-react';
+import {
+  Bug,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Send,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GlobalLlmSettings } from '@shared/app-settings';
@@ -31,6 +42,13 @@ import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import {
@@ -386,7 +404,7 @@ export const LlmProfilesCard: React.FC = () => {
   );
 };
 
-const MODEL_CANDIDATE_BUTTON_LIMIT = 8;
+const MODEL_CANDIDATE_MENU_LIMIT = 24;
 
 const ModelField: React.FC<{
   profile: LlmProfile;
@@ -398,11 +416,11 @@ const ModelField: React.FC<{
   onModelChange: (model: string) => void;
 }> = ({ profile, candidates, disabled, loading, error, onRefresh, onModelChange }) => {
   const { t } = useTranslation();
-  const visibleCandidates = candidates.slice(0, MODEL_CANDIDATE_BUTTON_LIMIT);
+  const visibleCandidates = candidates.slice(0, MODEL_CANDIDATE_MENU_LIMIT);
   const hiddenCandidateCount = Math.max(0, candidates.length - visibleCandidates.length);
 
   return (
-    <div className="flex w-64 max-w-full flex-col gap-1.5">
+    <div className="flex w-64 max-w-full flex-col gap-1">
       <div className="flex min-w-0 items-center gap-1.5">
         <Input
           key={`${profile.id}:${profile.model}`}
@@ -428,39 +446,68 @@ const ModelField: React.FC<{
         >
           <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
         </Button>
-      </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-1">
-        {loading ? (
-          <span className="text-xs text-foreground-passive">
-            {t('settings.llm.modelDiscoveryLoading')}
-          </span>
-        ) : visibleCandidates.length > 0 ? (
-          <>
-            {visibleCandidates.map((candidate) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
               <Button
-                key={candidate.id}
                 type="button"
-                variant={candidate.id === profile.model ? 'secondary' : 'outline'}
-                size="xs"
-                title={modelCandidateTitle(t, candidate)}
-                onClick={() => onModelChange(candidate.id)}
+                variant="outline"
+                size="icon-xs"
+                aria-label={t('settings.llm.model')}
+                title={t('settings.llm.model')}
                 disabled={disabled}
-                className="max-w-full font-mono"
-              >
-                <span className="max-w-44 truncate">{candidate.id}</span>
-              </Button>
-            ))}
-            {hiddenCandidateCount > 0 && (
-              <span className="text-xs text-foreground-passive">
-                {t('settings.llm.modelDiscoveryMore', { count: hiddenCandidateCount })}
-              </span>
+              />
+            }
+          >
+            <ChevronDown className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-80 max-w-[min(22rem,calc(100vw-2rem))]">
+            {visibleCandidates.length > 0 ? (
+              visibleCandidates.map((candidate) => (
+                <DropdownMenuItem
+                  key={candidate.id}
+                  title={modelCandidateTitle(t, candidate)}
+                  onClick={() => onModelChange(candidate.id)}
+                  className="items-start gap-2 py-2"
+                >
+                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+                    {candidate.id === profile.model && <Check className="size-3.5" />}
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate font-mono text-xs text-foreground">
+                      {candidate.id}
+                    </span>
+                    <span className="truncate text-xs text-foreground-muted">
+                      {modelCandidateSubtitle(t, candidate)}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              ))
+            ) : (
+              <DropdownMenuItem disabled className="whitespace-normal text-xs">
+                {loading
+                  ? t('settings.llm.modelDiscoveryLoading')
+                  : t('settings.llm.modelDiscoveryEmpty')}
+              </DropdownMenuItem>
             )}
-          </>
-        ) : (
-          <span className="text-xs text-foreground-passive">
-            {t('settings.llm.modelDiscoveryEmpty')}
-          </span>
-        )}
+            {hiddenCandidateCount > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled className="text-xs">
+                  {t('settings.llm.modelDiscoveryMore', { count: hiddenCandidateCount })}
+                </DropdownMenuItem>
+              </>
+            )}
+            {error && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled className="whitespace-normal text-xs">
+                  {t('settings.llm.modelDiscoveryPartial', { error })}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {error && (
         <span className="truncate text-xs text-foreground-passive" title={error}>
@@ -718,12 +765,21 @@ function runtimeLabel(runtimeId: RuntimeId | null): string {
 }
 
 function modelCandidateTitle(t: TFunction, candidate: GlobalLlmModelCandidate): string {
-  const sources = candidate.sources
-    .map((source) => t(`settings.llm.modelDiscoverySources.${source}`))
-    .join(', ');
+  const sources = modelCandidateSources(t, candidate);
   return candidate.name
     ? `${candidate.id} · ${candidate.name} · ${sources}`
     : `${candidate.id} · ${sources}`;
+}
+
+function modelCandidateSubtitle(t: TFunction, candidate: GlobalLlmModelCandidate): string {
+  const sources = modelCandidateSources(t, candidate);
+  return candidate.name ? `${candidate.name} · ${sources}` : sources;
+}
+
+function modelCandidateSources(t: TFunction, candidate: GlobalLlmModelCandidate): string {
+  return candidate.sources
+    .map((source) => t(`settings.llm.modelDiscoverySources.${source}`))
+    .join(', ');
 }
 
 function isAccessMethodSupported(
