@@ -352,6 +352,12 @@
     "llm": {
       "title": "LLM config & debug",
       "description": "Manage the LLM Profiles Yoda uses for internal AI calls.",
+      "profilesSectionTitle": "Profiles",
+      "profilesSectionDescription": "Define reusable AI call profiles: Client, access method, model, reasoning effort, and permissions.",
+      "profileAssignmentsSectionTitle": "Profile-based settings",
+      "profileAssignmentsSectionDescription": "Choose which Profile powers default calls, auto-naming, and prompt translation.",
+      "profileDebugSectionTitle": "Profile debug",
+      "profileDebugSectionDescription": "Run an independent test call with the selected Profile to verify the access method and model.",
       "profiles": "Profiles",
       "newProfileName": "Profile {{index}}",
       "profileName": "Profile name",

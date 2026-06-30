@@ -352,6 +352,12 @@
     "llm": {
       "title": "LLM 配置与调试",
       "description": "管理 Yoda 内部 AI 调用使用的 LLM Profile。",
+      "profilesSectionTitle": "Profile",
+      "profilesSectionDescription": "定义可复用的 AI 调用方式：Client、接入方式、模型、推理深度和权限。",
+      "profileAssignmentsSectionTitle": "基于 Profile 的配置",
+      "profileAssignmentsSectionDescription": "为默认调用、自动命名和发送前翻译选择要使用的 Profile。",
+      "profileDebugSectionTitle": "Profile 调试",
+      "profileDebugSectionDescription": "用选定 Profile 发起一次独立测试调用，检查接入方式和模型是否可用。",
       "profiles": "Profile",
       "newProfileName": "Profile {{index}}",
       "profileName": "Profile 名称",

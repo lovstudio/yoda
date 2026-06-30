@@ -9,6 +9,7 @@ import {
   LLM_REASONING_EFFORT_IDS,
   normalizeLlmSettings,
   type GlobalLlmDebugResult,
+  type GlobalLlmSettingsShape,
   type LlmProfile,
   type LlmReasoningEffort,
 } from '@shared/global-llm';
@@ -36,41 +37,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@renderer/lib/ui/select';
-import { Separator } from '@renderer/lib/ui/separator';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 import { SettingRow } from './SettingRow';
 
-export const LlmConfigDebugCard: React.FC = () => {
+type LlmSettingsController = {
+  settings: GlobalLlmSettingsShape;
+  updateLlm: (partial: Partial<GlobalLlmSettings>) => void;
+  disabled: boolean;
+};
+
+type ProfileSelectProps = {
+  settings: GlobalLlmSettingsShape;
+  disabled: boolean;
+  value: string;
+  onValueChange: (value: string) => void;
+  className?: string;
+};
+
+export const LlmProfilesCard: React.FC = () => {
   const { t } = useTranslation();
-  const { value: llm, update, isLoading: loading, isSaving: saving } = useAppSettingsKey('llm');
+  const { settings, updateLlm, disabled } = useLlmSettingsController();
   const { data: maasConnections } = useMaasConnections();
-  const settings = useMemo(() => normalizeLlmSettings(llm), [llm]);
   const [selectedProfileId, setSelectedProfileId] = useState(settings.defaultProfileId);
-  const [debugProfileId, setDebugProfileId] = useState(settings.defaultProfileId);
-  const [debugPrompt, setDebugPrompt] = useState(() => t('settings.llm.debugDefaultPrompt'));
-  const [debugResult, setDebugResult] = useState<GlobalLlmDebugResult | null>(null);
-  const [debugging, setDebugging] = useState(false);
 
   const effectiveSelectedProfileId = settings.profiles.some(
     (profile) => profile.id === selectedProfileId
   )
     ? selectedProfileId
     : settings.defaultProfileId;
-  const effectiveDebugProfileId = settings.profiles.some((profile) => profile.id === debugProfileId)
-    ? debugProfileId
-    : settings.defaultProfileId;
   const selectedProfile = getLlmProfile(settings, effectiveSelectedProfileId);
   const accountProfile = getRuntimeAccountProfile(selectedProfile.runtimeId);
-  const disabled = loading || saving;
   const connectedMaasCount =
     maasConnections?.filter((connection) => connection.connected).length ?? 0;
   const selectedMaasConnection = maasConnections?.find(
     (connection) => connection.platformId === selectedProfile.maasPlatformId
   );
-
-  const updateLlm = (partial: Partial<GlobalLlmSettings>) => update(partial);
 
   const updateProfile = (profileId: string, patch: Partial<LlmProfile>) => {
     const profiles = settings.profiles.map((profile) =>
@@ -114,59 +117,8 @@ export const LlmConfigDebugCard: React.FC = () => {
     setSelectedProfileId(fallbackId);
   };
 
-  const runDebug = () => {
-    const prompt = debugPrompt.trim();
-    if (!prompt || debugging) return;
-    setDebugging(true);
-    setDebugResult(null);
-    const profileId = effectiveDebugProfileId || settings.defaultProfileId;
-    void rpc.llm
-      .debug({ prompt, profileId })
-      .then(setDebugResult)
-      .catch((error: Error) =>
-        setDebugResult({
-          success: false,
-          profileId: null,
-          profileName: null,
-          runtimeId: null,
-          authProvider: null,
-          maasPlatformId: null,
-          model: null,
-          output: '',
-          durationMs: 0,
-          error: error.message,
-        })
-      )
-      .finally(() => setDebugging(false));
-  };
-
-  const renderProfileSelect = (
-    value: string,
-    onValueChange: (value: string) => void,
-    className = 'w-56'
-  ) => (
-    <Select
-      value={value}
-      onValueChange={(nextValue) => {
-        if (nextValue) onValueChange(nextValue);
-      }}
-      disabled={disabled}
-    >
-      <SelectTrigger className={cn('h-8 max-w-full', className)}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {settings.profiles.map((profile) => (
-          <SelectItem key={profile.id} value={profile.id}>
-            {profile.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-
   return (
-    <div className="flex min-w-0 flex-col gap-4">
+    <div className="@container">
       <div className="grid min-w-0 gap-4 @4xl:grid-cols-[240px_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
@@ -408,134 +360,238 @@ export const LlmConfigDebugCard: React.FC = () => {
           />
         </div>
       </div>
-
-      <Separator />
-
-      <div className="flex min-w-0 flex-col gap-3">
-        <SettingRow
-          title={t('settings.llm.defaultProfile')}
-          description={t('settings.llm.defaultProfileDescription')}
-          control={renderProfileSelect(settings.defaultProfileId, (value) =>
-            updateLlm({ defaultProfileId: value })
-          )}
-        />
-        <SettingRow
-          title={t('settings.llm.namingProfile')}
-          description={t('settings.llm.namingProfileDescription')}
-          control={renderProfileSelect(settings.namingProfileId, (value) =>
-            updateLlm({ namingProfileId: value })
-          )}
-        />
-        <SettingRow
-          title={t('settings.llm.promptTranslation')}
-          description={t('settings.llm.promptTranslationDescription')}
-          control={
-            <Switch
-              checked={settings.promptTranslationEnabled}
-              disabled={disabled}
-              onCheckedChange={(checked) => updateLlm({ promptTranslationEnabled: checked })}
-            />
-          }
-        />
-        <SettingRow
-          title={t('settings.llm.promptTranslationProfile')}
-          description={t('settings.llm.promptTranslationProfileDescription')}
-          control={renderProfileSelect(settings.promptTranslationProfileId, (value) =>
-            updateLlm({ promptTranslationProfileId: value })
-          )}
-        />
-        <SettingRow
-          title={t('settings.llm.showOriginalPrompt')}
-          description={t('settings.llm.showOriginalPromptDescription')}
-          control={
-            <Switch
-              checked={settings.promptTranslationShowOriginal}
-              disabled={disabled || !settings.promptTranslationEnabled}
-              onCheckedChange={(checked) => updateLlm({ promptTranslationShowOriginal: checked })}
-            />
-          }
-        />
-      </div>
-
-      <Separator />
-
-      <div className="flex min-w-0 flex-col gap-2">
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <Bug className="size-4 shrink-0 text-foreground-muted" />
-            <h3 className="text-sm font-normal text-foreground">{t('settings.llm.debugTitle')}</h3>
-          </div>
-          {renderProfileSelect(effectiveDebugProfileId, setDebugProfileId, 'w-52')}
-        </div>
-        <div className="flex min-w-0 flex-col gap-2">
-          <MicroLabel className="text-foreground-passive">
-            {t('settings.llm.debugPrompt')}
-          </MicroLabel>
-          <Textarea
-            value={debugPrompt}
-            onChange={(event) => setDebugPrompt(event.target.value)}
-            className="min-h-24 resize-y"
-            disabled={debugging}
-          />
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-foreground-passive">{t('settings.llm.debugHint')}</span>
-            <Button
-              type="button"
-              size="sm"
-              onClick={runDebug}
-              disabled={debugging || !debugPrompt.trim()}
-            >
-              {debugging ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Send className="size-3.5" />
-              )}
-              {debugging ? t('settings.llm.debugRunning') : t('settings.llm.debugRun')}
-            </Button>
-          </div>
-        </div>
-        {debugResult && (
-          <div
-            className={cn(
-              'flex min-w-0 flex-col gap-2 rounded-md border p-3',
-              debugResult.success
-                ? 'border-emerald-500/20 bg-emerald-500/5'
-                : 'border-destructive/20 bg-destructive/5'
-            )}
-          >
-            <div className="flex min-w-0 items-center gap-2 text-xs">
-              {debugResult.success ? (
-                <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
-              ) : (
-                <XCircle className="size-3.5 shrink-0 text-destructive" />
-              )}
-              <span className="truncate text-foreground-muted">
-                {debugResult.success
-                  ? t('settings.llm.debugSuccess', {
-                      profile: debugResult.profileName ?? debugResult.profileId ?? '-',
-                      runtime: runtimeLabel(debugResult.runtimeId),
-                      access: debugResult.authProvider
-                        ? accessMethodLabel(t, debugResult.authProvider)
-                        : '-',
-                      model: debugResult.model ?? '-',
-                      duration: debugResult.durationMs,
-                    })
-                  : t('settings.llm.debugFailed', {
-                      error: debugResult.error ?? t('common.unknownError'),
-                    })}
-              </span>
-            </div>
-            {debugResult.output && (
-              <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background/70 p-2 text-xs text-foreground">
-                {debugResult.output}
-              </pre>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 };
+
+export const LlmProfileAssignmentsCard: React.FC = () => {
+  const { t } = useTranslation();
+  const { settings, updateLlm, disabled } = useLlmSettingsController();
+
+  return (
+    <div className="@container flex min-w-0 flex-col gap-3">
+      <SettingRow
+        title={t('settings.llm.defaultProfile')}
+        description={t('settings.llm.defaultProfileDescription')}
+        control={
+          <ProfileSelect
+            settings={settings}
+            disabled={disabled}
+            value={settings.defaultProfileId}
+            onValueChange={(value) => updateLlm({ defaultProfileId: value })}
+          />
+        }
+      />
+      <SettingRow
+        title={t('settings.llm.namingProfile')}
+        description={t('settings.llm.namingProfileDescription')}
+        control={
+          <ProfileSelect
+            settings={settings}
+            disabled={disabled}
+            value={settings.namingProfileId}
+            onValueChange={(value) => updateLlm({ namingProfileId: value })}
+          />
+        }
+      />
+      <SettingRow
+        title={t('settings.llm.promptTranslation')}
+        description={t('settings.llm.promptTranslationDescription')}
+        control={
+          <Switch
+            checked={settings.promptTranslationEnabled}
+            disabled={disabled}
+            onCheckedChange={(checked) => updateLlm({ promptTranslationEnabled: checked })}
+          />
+        }
+      />
+      <SettingRow
+        title={t('settings.llm.promptTranslationProfile')}
+        description={t('settings.llm.promptTranslationProfileDescription')}
+        control={
+          <ProfileSelect
+            settings={settings}
+            disabled={disabled}
+            value={settings.promptTranslationProfileId}
+            onValueChange={(value) => updateLlm({ promptTranslationProfileId: value })}
+          />
+        }
+      />
+      <SettingRow
+        title={t('settings.llm.showOriginalPrompt')}
+        description={t('settings.llm.showOriginalPromptDescription')}
+        control={
+          <Switch
+            checked={settings.promptTranslationShowOriginal}
+            disabled={disabled || !settings.promptTranslationEnabled}
+            onCheckedChange={(checked) => updateLlm({ promptTranslationShowOriginal: checked })}
+          />
+        }
+      />
+    </div>
+  );
+};
+
+export const LlmProfileDebugCard: React.FC = () => {
+  const { t } = useTranslation();
+  const { settings, disabled } = useLlmSettingsController();
+  const [debugProfileId, setDebugProfileId] = useState(settings.defaultProfileId);
+  const [debugPrompt, setDebugPrompt] = useState(() => t('settings.llm.debugDefaultPrompt'));
+  const [debugResult, setDebugResult] = useState<GlobalLlmDebugResult | null>(null);
+  const [debugging, setDebugging] = useState(false);
+
+  const effectiveDebugProfileId = settings.profiles.some((profile) => profile.id === debugProfileId)
+    ? debugProfileId
+    : settings.defaultProfileId;
+
+  const runDebug = () => {
+    const prompt = debugPrompt.trim();
+    if (!prompt || debugging) return;
+    setDebugging(true);
+    setDebugResult(null);
+    const profileId = effectiveDebugProfileId || settings.defaultProfileId;
+    void rpc.llm
+      .debug({ prompt, profileId })
+      .then(setDebugResult)
+      .catch((error: Error) =>
+        setDebugResult({
+          success: false,
+          profileId: null,
+          profileName: null,
+          runtimeId: null,
+          authProvider: null,
+          maasPlatformId: null,
+          model: null,
+          output: '',
+          durationMs: 0,
+          error: error.message,
+        })
+      )
+      .finally(() => setDebugging(false));
+  };
+
+  return (
+    <div className="@container flex min-w-0 flex-col gap-2">
+      <div className="flex min-w-0 items-center justify-between gap-3 @max-sm:flex-col @max-sm:items-stretch">
+        <div className="flex min-w-0 items-center gap-2">
+          <Bug className="size-4 shrink-0 text-foreground-muted" />
+          <h3 className="text-sm font-normal text-foreground">{t('settings.llm.debugTitle')}</h3>
+        </div>
+        <ProfileSelect
+          settings={settings}
+          disabled={disabled}
+          value={effectiveDebugProfileId}
+          onValueChange={setDebugProfileId}
+          className="w-52 @max-sm:w-full"
+        />
+      </div>
+      <div className="flex min-w-0 flex-col gap-2">
+        <MicroLabel className="text-foreground-passive">{t('settings.llm.debugPrompt')}</MicroLabel>
+        <Textarea
+          value={debugPrompt}
+          onChange={(event) => setDebugPrompt(event.target.value)}
+          className="min-h-24 resize-y"
+          disabled={debugging}
+        />
+        <div className="flex items-center justify-between gap-3 @max-sm:flex-col @max-sm:items-stretch">
+          <span className="text-xs text-foreground-passive">{t('settings.llm.debugHint')}</span>
+          <Button
+            type="button"
+            size="sm"
+            onClick={runDebug}
+            disabled={debugging || !debugPrompt.trim()}
+            className="@max-sm:w-full"
+          >
+            {debugging ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Send className="size-3.5" />
+            )}
+            {debugging ? t('settings.llm.debugRunning') : t('settings.llm.debugRun')}
+          </Button>
+        </div>
+      </div>
+      {debugResult && (
+        <div
+          className={cn(
+            'flex min-w-0 flex-col gap-2 rounded-md border p-3',
+            debugResult.success
+              ? 'border-emerald-500/20 bg-emerald-500/5'
+              : 'border-destructive/20 bg-destructive/5'
+          )}
+        >
+          <div className="flex min-w-0 items-center gap-2 text-xs">
+            {debugResult.success ? (
+              <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+            ) : (
+              <XCircle className="size-3.5 shrink-0 text-destructive" />
+            )}
+            <span className="truncate text-foreground-muted">
+              {debugResult.success
+                ? t('settings.llm.debugSuccess', {
+                    profile: debugResult.profileName ?? debugResult.profileId ?? '-',
+                    runtime: runtimeLabel(debugResult.runtimeId),
+                    access: debugResult.authProvider
+                      ? accessMethodLabel(t, debugResult.authProvider)
+                      : '-',
+                    model: debugResult.model ?? '-',
+                    duration: debugResult.durationMs,
+                  })
+                : t('settings.llm.debugFailed', {
+                    error: debugResult.error ?? t('common.unknownError'),
+                  })}
+            </span>
+          </div>
+          {debugResult.output && (
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background/70 p-2 text-xs text-foreground">
+              {debugResult.output}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+function useLlmSettingsController(): LlmSettingsController {
+  const { value: llm, update, isLoading: loading, isSaving: saving } = useAppSettingsKey('llm');
+  const settings = useMemo(() => normalizeLlmSettings(llm), [llm]);
+
+  return {
+    settings,
+    updateLlm: (partial: Partial<GlobalLlmSettings>) => update(partial),
+    disabled: loading || saving,
+  };
+}
+
+function ProfileSelect({
+  settings,
+  disabled,
+  value,
+  onValueChange,
+  className = 'w-56',
+}: ProfileSelectProps) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(nextValue) => {
+        if (nextValue) onValueChange(nextValue);
+      }}
+      disabled={disabled}
+    >
+      <SelectTrigger className={cn('h-8 max-w-full', className)}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {settings.profiles.map((profile) => (
+          <SelectItem key={profile.id} value={profile.id}>
+            {profile.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 function accessMethodLabel(t: TFunction, id: AgentAccountProviderId): string {
   switch (id) {

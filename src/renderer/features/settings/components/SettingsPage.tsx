@@ -39,7 +39,11 @@ import GithubSettingsCard from './GithubSettingsCard';
 import IntegrationsCard from './IntegrationsCard';
 import KeyboardSettingsCard from './KeyboardSettingsCard';
 import LanguageCard from './LanguageCard';
-import { LlmConfigDebugCard } from './LlmConfigDebugCard';
+import {
+  LlmProfileAssignmentsCard,
+  LlmProfileDebugCard,
+  LlmProfilesCard,
+} from './LlmConfigDebugCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import OpenInAppsSettingsCard from './OpenInAppsSettingsCard';
 import PromptsSettingsCard from './PromptsSettingsCard';
@@ -311,7 +315,26 @@ export function SettingsPage({
     llm: {
       title: t('settings.llm.title'),
       description: t('settings.llm.description'),
-      sections: [{ id: 'llm-config-debug', component: <LlmConfigDebugCard /> }],
+      sections: [
+        {
+          id: 'llm-profiles',
+          title: t('settings.llm.profilesSectionTitle'),
+          description: t('settings.llm.profilesSectionDescription'),
+          component: <LlmProfilesCard />,
+        },
+        {
+          id: 'llm-profile-assignments',
+          title: t('settings.llm.profileAssignmentsSectionTitle'),
+          description: t('settings.llm.profileAssignmentsSectionDescription'),
+          component: <LlmProfileAssignmentsCard />,
+        },
+        {
+          id: 'llm-profile-debug',
+          title: t('settings.llm.profileDebugSectionTitle'),
+          description: t('settings.llm.profileDebugSectionDescription'),
+          component: <LlmProfileDebugCard />,
+        },
+      ],
     },
     prompts: {
       title: t('settings.tabs.prompts'),
