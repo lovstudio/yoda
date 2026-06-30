@@ -508,6 +508,10 @@ const ConnectionPanel: React.FC<{
   return (
     <section className={cn('@container bg-background px-4 py-4', className)}>
       <form onSubmit={handleSubmit} className="grid gap-4">
+        <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+          {t(`maas.platforms.${connection.platformId}.description`)}
+        </p>
+
         <div className="grid gap-3 @3xl:grid-cols-[minmax(10rem,0.9fr)_minmax(16rem,1.4fr)]">
           <label className="grid gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">
