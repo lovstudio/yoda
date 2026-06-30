@@ -55,6 +55,39 @@ export type GlobalLlmDebugResult = {
   error?: string;
 };
 
+export const GLOBAL_LLM_MODEL_DISCOVERY_SOURCE_IDS = ['aiGateway', 'runtimeCatalog'] as const;
+
+export type GlobalLlmModelDiscoverySource = (typeof GLOBAL_LLM_MODEL_DISCOVERY_SOURCE_IDS)[number];
+
+export type GlobalLlmModelCandidate = {
+  id: string;
+  name: string | null;
+  sources: GlobalLlmModelDiscoverySource[];
+};
+
+export type GlobalLlmModelDiscoverySourceStatus = {
+  source: GlobalLlmModelDiscoverySource;
+  ok: boolean;
+  modelCount: number;
+  error?: string;
+};
+
+export type GlobalLlmModelDiscoveryInput = {
+  runtimeId: RuntimeId;
+  authProvider: AgentAccountProviderId;
+  maasPlatformId?: MaasPlatformId;
+  forceRefresh?: boolean;
+};
+
+export type GlobalLlmModelDiscoveryResult = {
+  runtimeId: RuntimeId;
+  authProvider: AgentAccountProviderId;
+  maasPlatformId: MaasPlatformId | null;
+  models: GlobalLlmModelCandidate[];
+  sources: GlobalLlmModelDiscoverySourceStatus[];
+  fetchedAt: string;
+};
+
 type LegacyGlobalLlmSettingsShape = {
   maasEnabled?: boolean;
   maasModel?: string;

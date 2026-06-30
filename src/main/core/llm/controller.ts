@@ -3,10 +3,13 @@ import {
   normalizeLlmSettings,
   type GlobalLlmDebugInput,
   type GlobalLlmDebugResult,
+  type GlobalLlmModelDiscoveryInput,
+  type GlobalLlmModelDiscoveryResult,
 } from '@shared/global-llm';
 import { createRPCController } from '@shared/ipc/rpc';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { requestUtilityAgentText } from '@main/core/tasks/name-generation/task-naming-service';
+import { discoverGlobalLlmModels } from './model-discovery-service';
 
 const MAX_DEBUG_PROMPT_CHARS = 8_000;
 
@@ -67,6 +70,13 @@ function failedResult(error: string, durationMs: number): GlobalLlmDebugResult {
   };
 }
 
+async function discoverModels(
+  input: GlobalLlmModelDiscoveryInput
+): Promise<GlobalLlmModelDiscoveryResult> {
+  return discoverGlobalLlmModels(input);
+}
+
 export const llmController = createRPCController({
   debug,
+  discoverModels,
 });

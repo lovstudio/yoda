@@ -378,6 +378,15 @@
       "model": "模型",
       "modelDescription": "传给当前 Client 的模型 ID；留空则使用 Client 或接入方式的默认模型。",
       "modelPlaceholder": "例如 claude-sonnet-4-5 或 openai/gpt-5-mini",
+      "modelDiscoveryRefresh": "刷新模型候选",
+      "modelDiscoveryLoading": "正在发现模型...",
+      "modelDiscoveryEmpty": "未发现候选；仍可手动输入。",
+      "modelDiscoveryMore": "另有 {{count}} 个",
+      "modelDiscoveryPartial": "部分来源失败：{{error}}",
+      "modelDiscoverySources": {
+        "aiGateway": "AI Gateway",
+        "runtimeCatalog": "Runtime catalog"
+      },
       "reasoningEffort": "推理深度",
       "reasoningEffortDescription": "Profile 级别的推理偏好，供支持该能力的调用场景使用。",
       "reasoning": {

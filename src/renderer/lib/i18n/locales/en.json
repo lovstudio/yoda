@@ -378,6 +378,15 @@
       "model": "Model",
       "modelDescription": "Model id passed to the current Client. Leave empty to use the Client or access method default.",
       "modelPlaceholder": "e.g. claude-sonnet-4-5 or openai/gpt-5-mini",
+      "modelDiscoveryRefresh": "Refresh model candidates",
+      "modelDiscoveryLoading": "Discovering models...",
+      "modelDiscoveryEmpty": "No candidates found; manual input is supported.",
+      "modelDiscoveryMore": "+{{count}} more",
+      "modelDiscoveryPartial": "Some sources failed: {{error}}",
+      "modelDiscoverySources": {
+        "aiGateway": "AI Gateway",
+        "runtimeCatalog": "Runtime catalog"
+      },
       "reasoningEffort": "Reasoning effort",
       "reasoningEffortDescription": "Profile-level reasoning preference for call paths that support it.",
       "reasoning": {

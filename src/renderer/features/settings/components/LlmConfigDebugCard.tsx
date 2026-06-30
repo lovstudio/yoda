@@ -1,5 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
-import { Bug, CheckCircle2, Loader2, Plus, Send, Trash2, XCircle } from 'lucide-react';
+import { Bug, CheckCircle2, Loader2, Plus, RefreshCw, Send, Trash2, XCircle } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GlobalLlmSettings } from '@shared/app-settings';
@@ -9,6 +10,8 @@ import {
   LLM_REASONING_EFFORT_IDS,
   normalizeLlmSettings,
   type GlobalLlmDebugResult,
+  type GlobalLlmModelCandidate,
+  type GlobalLlmModelDiscoveryResult,
   type GlobalLlmSettingsShape,
   type LlmProfile,
   type LlmReasoningEffort,
@@ -61,6 +64,7 @@ export const LlmProfilesCard: React.FC = () => {
   const { settings, updateLlm, disabled } = useLlmSettingsController();
   const { data: maasConnections } = useMaasConnections();
   const [selectedProfileId, setSelectedProfileId] = useState(settings.defaultProfileId);
+  const [modelRefreshToken, setModelRefreshToken] = useState(0);
 
   const effectiveSelectedProfileId = settings.profiles.some(
     (profile) => profile.id === selectedProfileId
@@ -74,6 +78,28 @@ export const LlmProfilesCard: React.FC = () => {
   const selectedMaasConnection = maasConnections?.find(
     (connection) => connection.platformId === selectedProfile.maasPlatformId
   );
+  const modelDiscoveryQuery = useQuery<GlobalLlmModelDiscoveryResult>({
+    queryKey: [
+      'llm',
+      'modelDiscovery',
+      selectedProfile.runtimeId,
+      selectedProfile.authProvider,
+      selectedProfile.maasPlatformId,
+      modelRefreshToken,
+    ] as const,
+    queryFn: () =>
+      rpc.llm.discoverModels({
+        runtimeId: selectedProfile.runtimeId,
+        authProvider: selectedProfile.authProvider,
+        maasPlatformId: selectedProfile.maasPlatformId,
+        forceRefresh: modelRefreshToken > 0,
+      }) as Promise<GlobalLlmModelDiscoveryResult>,
+    staleTime: 60_000,
+  });
+  const modelCandidates = modelDiscoveryQuery.data?.models ?? [];
+  const modelDiscoveryError = modelDiscoveryQuery.data?.sources.find(
+    (source) => source.error
+  )?.error;
 
   const updateProfile = (profileId: string, patch: Partial<LlmProfile>) => {
     const profiles = settings.profiles.map((profile) =>
@@ -278,19 +304,15 @@ export const LlmProfilesCard: React.FC = () => {
             title={t('settings.llm.model')}
             description={t('settings.llm.modelDescription')}
             control={
-              <Input
-                key={`${selectedProfile.id}:${selectedProfile.model}`}
-                defaultValue={selectedProfile.model}
+              <ModelField
+                key={selectedProfile.id}
+                profile={selectedProfile}
+                candidates={modelCandidates}
                 disabled={disabled}
-                placeholder={t('settings.llm.modelPlaceholder')}
-                className="h-8 w-56 max-w-full"
-                onBlur={(event) => {
-                  const model = event.target.value.trim();
-                  if (model !== selectedProfile.model) updateProfile(selectedProfile.id, { model });
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') event.currentTarget.blur();
-                }}
+                loading={modelDiscoveryQuery.isFetching}
+                error={modelDiscoveryError}
+                onRefresh={() => setModelRefreshToken((current) => current + 1)}
+                onModelChange={(model) => updateProfile(selectedProfile.id, { model })}
               />
             }
           />
@@ -360,6 +382,91 @@ export const LlmProfilesCard: React.FC = () => {
           />
         </div>
       </div>
+    </div>
+  );
+};
+
+const MODEL_CANDIDATE_BUTTON_LIMIT = 8;
+
+const ModelField: React.FC<{
+  profile: LlmProfile;
+  candidates: GlobalLlmModelCandidate[];
+  disabled: boolean;
+  loading: boolean;
+  error: string | undefined;
+  onRefresh: () => void;
+  onModelChange: (model: string) => void;
+}> = ({ profile, candidates, disabled, loading, error, onRefresh, onModelChange }) => {
+  const { t } = useTranslation();
+  const visibleCandidates = candidates.slice(0, MODEL_CANDIDATE_BUTTON_LIMIT);
+  const hiddenCandidateCount = Math.max(0, candidates.length - visibleCandidates.length);
+
+  return (
+    <div className="flex w-64 max-w-full flex-col gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <Input
+          key={`${profile.id}:${profile.model}`}
+          defaultValue={profile.model}
+          disabled={disabled}
+          placeholder={t('settings.llm.modelPlaceholder')}
+          className="h-8 min-w-0 flex-1"
+          onBlur={(event) => {
+            const model = event.target.value.trim();
+            if (model !== profile.model) onModelChange(model);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur();
+          }}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          title={t('settings.llm.modelDiscoveryRefresh')}
+          onClick={onRefresh}
+          disabled={disabled || loading}
+        >
+          <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
+        </Button>
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
+        {loading ? (
+          <span className="text-xs text-foreground-passive">
+            {t('settings.llm.modelDiscoveryLoading')}
+          </span>
+        ) : visibleCandidates.length > 0 ? (
+          <>
+            {visibleCandidates.map((candidate) => (
+              <Button
+                key={candidate.id}
+                type="button"
+                variant={candidate.id === profile.model ? 'secondary' : 'outline'}
+                size="xs"
+                title={modelCandidateTitle(t, candidate)}
+                onClick={() => onModelChange(candidate.id)}
+                disabled={disabled}
+                className="max-w-full font-mono"
+              >
+                <span className="max-w-44 truncate">{candidate.id}</span>
+              </Button>
+            ))}
+            {hiddenCandidateCount > 0 && (
+              <span className="text-xs text-foreground-passive">
+                {t('settings.llm.modelDiscoveryMore', { count: hiddenCandidateCount })}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-xs text-foreground-passive">
+            {t('settings.llm.modelDiscoveryEmpty')}
+          </span>
+        )}
+      </div>
+      {error && (
+        <span className="truncate text-xs text-foreground-passive" title={error}>
+          {t('settings.llm.modelDiscoveryPartial', { error })}
+        </span>
+      )}
     </div>
   );
 };
@@ -608,6 +715,15 @@ function accessMethodLabel(t: TFunction, id: AgentAccountProviderId): string {
 function runtimeLabel(runtimeId: RuntimeId | null): string {
   if (!runtimeId) return '-';
   return getRuntime(runtimeId)?.name ?? runtimeId;
+}
+
+function modelCandidateTitle(t: TFunction, candidate: GlobalLlmModelCandidate): string {
+  const sources = candidate.sources
+    .map((source) => t(`settings.llm.modelDiscoverySources.${source}`))
+    .join(', ');
+  return candidate.name
+    ? `${candidate.id} · ${candidate.name} · ${sources}`
+    : `${candidate.id} · ${sources}`;
 }
 
 function isAccessMethodSupported(
