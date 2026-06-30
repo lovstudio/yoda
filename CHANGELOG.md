@@ -5,6 +5,19 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.13.11 — 2026-06-30
+
+### Added
+
+- Generated task outputs can now skip language post-processing when no rewrite
+  is desired.
+
+### Changed
+
+- Language operations now default to disabled for generated task outputs.
+- Composer language controls are simpler, and disabled language selectors are no
+  longer shown.
+
 ## 0.13.10 — 2026-06-30
 
 ### Added
