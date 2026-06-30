@@ -4,6 +4,7 @@ import {
   Bug,
   CheckCircle2,
   ChevronDown,
+  Copy,
   Loader2,
   Plus,
   RefreshCw,
@@ -40,6 +41,7 @@ import {
 import { useMaasConnections } from '@renderer/features/maas/useMaas';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
+import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
 import {
@@ -631,9 +633,11 @@ export const LlmProfileAssignmentsCard: React.FC = () => {
 
 export const LlmProfileDebugCard: React.FC = () => {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const { settings, disabled } = useLlmSettingsController();
   const [debugProfileId, setDebugProfileId] = useState(settings.defaultProfileId);
   const [debugPrompt, setDebugPrompt] = useState(() => t('settings.llm.debugDefaultPrompt'));
+  const [lastDebugPrompt, setLastDebugPrompt] = useState('');
   const [debugResult, setDebugResult] = useState<GlobalLlmDebugResult | null>(null);
   const [debugging, setDebugging] = useState(false);
 
@@ -646,6 +650,7 @@ export const LlmProfileDebugCard: React.FC = () => {
     if (!prompt || debugging) return;
     setDebugging(true);
     setDebugResult(null);
+    setLastDebugPrompt(prompt);
     const profileId = effectiveDebugProfileId || settings.defaultProfileId;
     void rpc.llm
       .debug({ prompt, profileId })
@@ -665,6 +670,21 @@ export const LlmProfileDebugCard: React.FC = () => {
         })
       )
       .finally(() => setDebugging(false));
+  };
+
+  const copyDebugDetails = async (result: GlobalLlmDebugResult) => {
+    try {
+      const written = await rpc.app.clipboardWriteText(
+        formatLlmDebugDetails(result, lastDebugPrompt)
+      );
+      if (written?.success) {
+        toast({ title: t('common.debugInfoCopied') });
+        return;
+      }
+    } catch {
+      // handled below
+    }
+    toast({ title: t('common.copyFailed'), variant: 'destructive' });
   };
 
   return (
@@ -723,7 +743,7 @@ export const LlmProfileDebugCard: React.FC = () => {
             ) : (
               <XCircle className="size-3.5 shrink-0 text-destructive" />
             )}
-            <span className="truncate text-foreground-muted">
+            <span className="min-w-0 flex-1 truncate text-foreground-muted">
               {debugResult.success
                 ? t('settings.llm.debugSuccess', {
                     profile: debugResult.profileName ?? debugResult.profileId ?? '-',
@@ -738,6 +758,19 @@ export const LlmProfileDebugCard: React.FC = () => {
                     error: debugResult.error ?? t('common.unknownError'),
                   })}
             </span>
+            {!debugResult.success && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label={t('common.copyDebugInfo')}
+                title={t('common.copyDebugInfo')}
+                onClick={() => void copyDebugDetails(debugResult)}
+                className="shrink-0 text-foreground-muted hover:text-foreground"
+              >
+                <Copy className="size-3.5" />
+              </Button>
+            )}
           </div>
           {debugResult.output && (
             <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background/70 p-2 text-xs text-foreground">
@@ -749,6 +782,32 @@ export const LlmProfileDebugCard: React.FC = () => {
     </div>
   );
 };
+
+function formatLlmDebugDetails(result: GlobalLlmDebugResult, prompt: string): string {
+  const lines = [
+    'LLM debug details',
+    '',
+    `status: ${result.success ? 'success' : 'failed'}`,
+    `profile: ${result.profileName ?? result.profileId ?? '-'}`,
+    `profileId: ${result.profileId ?? '-'}`,
+    `runtime: ${result.runtimeId ?? '-'}`,
+    `access: ${result.authProvider ?? '-'}`,
+    `maasPlatform: ${result.maasPlatformId ?? '-'}`,
+    `model: ${result.model ?? '-'}`,
+    `durationMs: ${result.durationMs}`,
+    `error: ${result.error ?? '-'}`,
+  ];
+
+  if (prompt) {
+    lines.push('', 'prompt:', prompt);
+  }
+
+  if (result.output) {
+    lines.push('', 'output:', result.output);
+  }
+
+  return lines.join('\n');
+}
 
 function useLlmSettingsController(): LlmSettingsController {
   const { value: llm, update, isLoading: loading, isSaving: saving } = useAppSettingsKey('llm');
