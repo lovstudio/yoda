@@ -15,8 +15,8 @@ import {
 import { cn } from '@renderer/utils/utils';
 import { useMaasConnections } from '../useMaas';
 
-const ZENMUX_COST_URL = 'https://zenmux.ai/platform/analysis/cost';
-const ZENMUX_USAGE_URL = 'https://zenmux.ai/platform/analysis/usage';
+const ZENMUX_COST_URL = 'https://zenmux.ai/platform/cost';
+const ZENMUX_USAGE_URL = 'https://zenmux.ai/platform/usage';
 const ZENMUX_LOGS_URL = 'https://zenmux.ai/platform/logs';
 
 type Props = BaseModalProps<void>;

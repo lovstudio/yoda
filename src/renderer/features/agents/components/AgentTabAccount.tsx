@@ -829,7 +829,7 @@ const MaasConnectionList: React.FC<{ connections: MaasConnection[] }> = ({ conne
   );
 };
 
-const ZENMUX_COST_URL = 'https://zenmux.ai/platform/analysis/cost';
+const ZENMUX_COST_URL = 'https://zenmux.ai/platform/cost';
 
 const MaasUsageHandoffPanel: React.FC<{ connected: boolean }> = ({ connected }) => {
   const { t } = useTranslation();
