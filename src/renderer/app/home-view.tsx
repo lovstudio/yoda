@@ -3406,11 +3406,10 @@ function ComposerScopeSelectRow({
 }) {
   const { t } = useTranslation();
   const enabled = !disabledValues.includes(value);
-  const selectValue = enabled ? value : 'skip';
   return (
     <div
       className={cn(
-        'flex items-center justify-between gap-3 rounded-md px-1.5 py-1 transition-colors',
+        'flex min-h-8 items-center justify-between gap-3 rounded-md py-1 transition-colors',
         enabled ? 'bg-background-1/50' : 'bg-transparent'
       )}
     >
@@ -3422,29 +3421,21 @@ function ComposerScopeSelectRow({
       >
         {label}
       </span>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <Select
-          value={selectValue}
-          disabled={!enabled}
-          onValueChange={(next) => onValueChange(next as TaskOutputLanguage)}
-        >
-          <SelectTrigger
-            size="sm"
-            className={cn(
-              'h-6 w-28 text-[11px]',
-              !enabled && 'border-border/60 bg-background text-foreground-passive'
-            )}
-          >
-            <SelectValue>{taskOutputLanguageLabel(t, selectValue)}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((option) => (
-              <SelectItem key={option} value={option}>
-                {taskOutputLanguageLabel(t, option)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex shrink-0 items-center justify-end gap-1.5">
+        {enabled ? (
+          <Select value={value} onValueChange={(next) => onValueChange(next as TaskOutputLanguage)}>
+            <SelectTrigger size="sm" className="h-6 w-28 text-[11px]">
+              <SelectValue>{taskOutputLanguageLabel(t, value)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {options.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {taskOutputLanguageLabel(t, option)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
         <Switch
           size="sm"
           checked={enabled}
