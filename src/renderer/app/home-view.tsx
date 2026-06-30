@@ -88,6 +88,7 @@ import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
 import { useRuntimePermissionModes } from '@renderer/features/tasks/hooks/useRuntimePermissionModes';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import { accountGreetingName } from '@renderer/lib/account-display';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { AgentSlotSelector } from '@renderer/lib/components/agent-slot/agent-slot-selector';
 import { ProjectBranchSelector } from '@renderer/lib/components/project-branch-selector';
@@ -533,7 +534,7 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const { effectiveTheme } = useTheme();
   const { data: accountSession } = useAccountSession();
   const sessionUser = accountSession?.user;
-  const greetingName = sessionUser?.name?.trim() || sessionUser?.username || '';
+  const greetingName = sessionUser ? accountGreetingName(sessionUser) : '';
 
   return (
     <div className="@container flex h-full flex-col overflow-y-auto bg-background text-foreground">

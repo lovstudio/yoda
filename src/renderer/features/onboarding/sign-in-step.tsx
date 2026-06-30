@@ -1,6 +1,7 @@
 import { CheckCircle, LogIn, User } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { accountDisplayName } from '@renderer/lib/account-display';
 import {
   useAccountAuthWarmUp,
   useAccountSession,
@@ -47,6 +48,7 @@ export function SignInStep({ onComplete }: { onComplete: () => void }) {
 
   if (session?.isSignedIn && session.user) {
     const { user } = session;
+    const displayName = accountDisplayName(user);
     return (
       <div className="flex flex-col space-y-8 max-w-sm">
         <div className="flex flex-col items-center justify-center gap-6">
@@ -66,7 +68,7 @@ export function SignInStep({ onComplete }: { onComplete: () => void }) {
           </div>
           <div className="flex flex-col items-center justify-center gap-1">
             <h1 className="text-xl text-center">
-              {t('onboarding.connectedAs', { username: user.username })}
+              {t('onboarding.connectedAs', { name: displayName })}
             </h1>
             {user.email && (
               <p className="text-sm text-foreground-muted text-center">{user.email}</p>

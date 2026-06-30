@@ -13,6 +13,15 @@ export const accountController = createRPCController({
     }
   },
 
+  refreshSession: async () => {
+    try {
+      return await yodaAccountService.refreshSession();
+    } catch (error) {
+      log.error('Failed to refresh account session:', error);
+      return await yodaAccountService.getSession();
+    }
+  },
+
   signIn: async (provider?: string) => {
     try {
       const result = await yodaAccountService.signIn(provider);

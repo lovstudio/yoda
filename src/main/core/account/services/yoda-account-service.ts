@@ -13,6 +13,7 @@ import { accountCredentialStore } from './credential-store';
 export interface AccountUser {
   userId: string;
   username: string;
+  nickname: string;
   name: string;
   avatarUrl: string;
   email: string;
@@ -22,6 +23,7 @@ export interface CachedProfile {
   hasAccount: boolean;
   userId: string;
   username: string;
+  nickname?: string;
   name: string;
   avatarUrl: string;
   email: string;
@@ -63,7 +65,7 @@ interface DevicePollSuccessResponse {
   refreshToken: string;
   expiresIn: number;
   expiresAt: number;
-  user: { id: string; email: string; name?: string; avatarUrl?: string };
+  user: AccountProfilePayload;
 }
 
 interface DevicePollPendingResponse {
@@ -76,6 +78,58 @@ const accountKV = new KV<AccountKVSchema>('account');
 function deriveUsernameFromEmail(email: string): string {
   const local = email.split('@')[0] || 'user';
   return local.replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+type AccountProfilePayload = {
+  id: string;
+  email: string;
+  nickname?: string;
+  name?: string;
+  avatarUrl?: string;
+};
+
+function hasOwnKey<T extends object, K extends PropertyKey>(
+  value: T,
+  key: K
+): value is T & Record<K, unknown> {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function toTrimmedString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeAccountNames(
+  input: { nickname?: unknown; name?: unknown },
+  fallback?: Pick<CachedProfile, 'nickname' | 'name'>
+): { nickname: string; name: string } {
+  const hasNickname = hasOwnKey(input, 'nickname');
+  const hasName = hasOwnKey(input, 'name');
+  const nickname = hasNickname
+    ? toTrimmedString(input.nickname)
+    : toTrimmedString(fallback?.nickname);
+  const rawName = hasName
+    ? toTrimmedString(input.name)
+    : hasNickname
+      ? ''
+      : toTrimmedString(fallback?.name);
+
+  return {
+    nickname,
+    name: nickname || rawName,
+  };
+}
+
+function accountUserFromProfile(profile: CachedProfile): AccountUser {
+  const names = normalizeAccountNames(profile);
+  return {
+    userId: profile.userId,
+    username: profile.username,
+    nickname: names.nickname,
+    name: names.name,
+    avatarUrl: profile.avatarUrl,
+    email: profile.email,
+  };
 }
 
 export class YodaAccountService implements Hookable<AccountServiceHooks> {
@@ -98,19 +152,15 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
     const hasAccount = this.cachedProfile?.hasAccount === true;
     const isSignedIn = hasAccount && this.sessionToken !== null;
     return {
-      user:
-        isSignedIn && this.cachedProfile
-          ? {
-              userId: this.cachedProfile.userId,
-              username: this.cachedProfile.username,
-              name: this.cachedProfile.name ?? '',
-              avatarUrl: this.cachedProfile.avatarUrl,
-              email: this.cachedProfile.email,
-            }
-          : null,
+      user: isSignedIn && this.cachedProfile ? accountUserFromProfile(this.cachedProfile) : null,
       isSignedIn,
       hasAccount,
     };
+  }
+
+  async refreshSession(): Promise<SessionState> {
+    await this.validateSession({ forceRefresh: true });
+    return this.getSession();
   }
 
   getSessionToken(): string | null {
@@ -207,11 +257,13 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
       );
 
       const username = deriveUsernameFromEmail(session.user.email);
+      const names = normalizeAccountNames(session.user);
       const profile: CachedProfile = {
         hasAccount: true,
         userId: session.user.id,
         username,
-        name: session.user.name?.trim() ?? '',
+        nickname: names.nickname,
+        name: names.name,
         avatarUrl: session.user.avatarUrl?.trim() ?? '',
         email: session.user.email,
         lastValidated: new Date().toISOString(),
@@ -223,13 +275,7 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
       this.sessionToken = session.accessToken;
       this.cachedProfile = profile;
 
-      const user: AccountUser = {
-        userId: profile.userId,
-        username: profile.username,
-        name: profile.name,
-        avatarUrl: profile.avatarUrl,
-        email: profile.email,
-      };
+      const user = accountUserFromProfile(profile);
 
       events.emit(accountAuthSuccessChannel, { user });
       this._hooks.callHookBackground('accountChanged', user.username, user.userId, user.email);
@@ -376,16 +422,19 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
     const json = (await response.json()) as {
       accessToken: string;
       refreshToken: string;
-      user?: { id: string; email: string; name?: string; avatarUrl?: string };
+      user?: AccountProfilePayload;
     };
     await accountCredentialStore.set(json.accessToken);
     await accountKV.set('refreshToken', json.refreshToken);
     this.sessionToken = json.accessToken;
 
     if (json.user && this.cachedProfile) {
+      const names = normalizeAccountNames(json.user, this.cachedProfile);
       const updated: CachedProfile = {
         ...this.cachedProfile,
-        name: json.user.name?.trim() || this.cachedProfile.name || '',
+        userId: json.user.id || this.cachedProfile.userId,
+        nickname: names.nickname,
+        name: names.name,
         avatarUrl: json.user.avatarUrl?.trim() || this.cachedProfile.avatarUrl || '',
         email: json.user.email || this.cachedProfile.email,
         lastValidated: new Date().toISOString(),

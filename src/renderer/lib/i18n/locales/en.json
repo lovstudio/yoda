@@ -342,6 +342,9 @@
       "yodaAccount": "Yoda Account",
       "createAccountHint": "Create an Yoda account to automatically connect GitHub using OAuth2.",
       "connectedAs": "Connected as",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing…",
+      "refreshFailed": "Refresh failed",
       "signIn": "Sign In",
       "signingIn": "Signing in…",
       "signOut": "Sign Out",
@@ -813,7 +816,7 @@
     "signingIn": "Signing in…",
     "signInToLovstudio": "Sign in to Lovstudio",
     "signInDescription": "Yoda uses your Lovstudio account for sync and personalization. You can connect GitHub separately.",
-    "connectedAs": "Connected as @{{username}}",
+    "connectedAs": "Connected as {{name}}",
     "import": {
       "importing": "Importing…",
       "importData": "Import data",

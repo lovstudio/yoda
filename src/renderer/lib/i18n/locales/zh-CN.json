@@ -342,6 +342,9 @@
       "yodaAccount": "Yoda 账户",
       "createAccountHint": "创建一个 Yoda 账户即可通过 OAuth2 自动连接 GitHub。",
       "connectedAs": "已登录为",
+      "refresh": "刷新",
+      "refreshing": "刷新中…",
+      "refreshFailed": "刷新失败",
       "signIn": "登录",
       "signingIn": "登录中…",
       "signOut": "退出登录",
@@ -813,7 +816,7 @@
     "signingIn": "登录中…",
     "signInToLovstudio": "登录 Lovstudio",
     "signInDescription": "Yoda 使用你的 Lovstudio 账户进行同步与个性化。GitHub 可以单独连接。",
-    "connectedAs": "已登录为 @{{username}}",
+    "connectedAs": "已登录为 {{name}}",
     "import": {
       "importing": "导入中…",
       "importData": "导入数据",

@@ -1,16 +1,19 @@
-import { LogIn, LogOut, User } from 'lucide-react';
+import { LogIn, LogOut, RefreshCw, User } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { accountDisplayName } from '@renderer/lib/account-display';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import {
   useAccountAuthWarmUp,
   useAccountHealth,
+  useAccountRefreshSession,
   useAccountSession,
   useAccountSignIn,
   useAccountSignOut,
 } from '@renderer/lib/hooks/useAccount';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
+import { cn } from '@renderer/utils/utils';
 import { ServerUnavailableMessage } from './ServerUnavailableMessage';
 
 export function AccountTab() {
@@ -19,6 +22,7 @@ export function AccountTab() {
   const { data: serverAvailable } = useAccountHealth();
   const signInMutation = useAccountSignIn();
   const signOutMutation = useAccountSignOut();
+  const refreshSessionMutation = useAccountRefreshSession();
   const { toast } = useToast();
   const showConfirmSignOut = useShowModal('confirmActionModal');
   const showAccountDeviceFlow = useShowModal('accountDeviceFlowModal');
@@ -85,6 +89,19 @@ export function AccountTab() {
     });
   };
 
+  const handleRefreshSession = () => {
+    refreshSessionMutation.mutate(undefined, {
+      onError: (err) => {
+        const message = err instanceof Error ? err.message : t('settings.account.refreshFailed');
+        toast({
+          title: t('settings.account.refreshFailed'),
+          description: message,
+          variant: 'destructive',
+        });
+      },
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
@@ -94,6 +111,7 @@ export function AccountTab() {
   }
 
   if (isSignedIn && user) {
+    const displayName = accountDisplayName(user);
     return (
       <div className="flex flex-wrap items-center gap-4">
         {user.avatarUrl ? (
@@ -109,9 +127,8 @@ export function AccountTab() {
         )}
         <div className="min-w-0 flex-1 basis-56">
           <p className="text-sm font-medium text-foreground">
-            {t('settings.account.connectedAs')}{' '}
-            <span className="font-semibold">{user.name?.trim() || `@${user.username}`}</span>
-            {user.name?.trim() && (
+            {t('settings.account.connectedAs')} <span className="font-semibold">{displayName}</span>
+            {displayName !== `@${user.username}` && (
               <span className="ml-1 text-xs text-muted-foreground">@{user.username}</span>
             )}
           </p>
@@ -119,9 +136,23 @@ export function AccountTab() {
         </div>
         <Button
           type="button"
+          variant="outline"
+          className="w-fit"
+          onClick={handleRefreshSession}
+          disabled={refreshSessionMutation.isPending || signOutMutation.isPending}
+        >
+          <RefreshCw
+            className={cn('h-3.5 w-3.5', refreshSessionMutation.isPending && 'animate-spin')}
+          />
+          {refreshSessionMutation.isPending
+            ? t('settings.account.refreshing')
+            : t('settings.account.refresh')}
+        </Button>
+        <Button
+          type="button"
           className="w-fit"
           onClick={handleSignOut}
-          disabled={signOutMutation.isPending}
+          disabled={signOutMutation.isPending || refreshSessionMutation.isPending}
         >
           <LogOut className="h-3.5 w-3.5" />
           {t('settings.account.signOut')}

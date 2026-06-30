@@ -5,6 +5,7 @@ import {
   accountAuthErrorChannel,
   accountAuthSuccessChannel,
 } from '@shared/events/accountEvents';
+import { accountDisplayName } from '@renderer/lib/account-display';
 import { DeviceFlowPanel } from '@renderer/lib/components/device-flow-panel';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { events, rpc } from '@renderer/lib/ipc';
@@ -46,9 +47,7 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
   const [copied, setCopied] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState<{ username: string; email: string; avatarUrl: string } | null>(
-    null
-  );
+  const [user, setUser] = useState<{ username: string; name?: string; email: string } | null>(null);
   const [browserOpening, setBrowserOpening] = useState(false);
   const [browserOpenCountdown, setBrowserOpenCountdown] = useState(3);
 
@@ -237,7 +236,7 @@ export function AccountDeviceFlowModal({ onClose, onError }: AccountDeviceFlowMo
               description: t('auth.lovstudio.signedInWelcome'),
               detail: user ? (
                 <div className="text-center">
-                  <p className="text-sm font-medium">@{user.username}</p>
+                  <p className="text-sm font-medium">{accountDisplayName(user)}</p>
                   <p className="text-xs text-muted-foreground">{user.email}</p>
                 </div>
               ) : undefined,
