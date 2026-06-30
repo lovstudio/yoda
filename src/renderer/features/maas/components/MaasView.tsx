@@ -331,13 +331,11 @@ const MaasChapter: React.FC<{
 }> = ({ title, description, action, children }) => {
   return (
     <section className="flex min-w-0 flex-col gap-3">
-      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-sm font-normal text-foreground">{title}</h3>
-          {description && <p className="mt-1 text-xs text-foreground-muted">{description}</p>}
-        </div>
-        {action && <div className="flex min-w-0 max-w-full justify-end">{action}</div>}
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <h3 className="min-w-0 text-sm font-normal text-foreground">{title}</h3>
+        {action && <div className="flex shrink-0 justify-end">{action}</div>}
       </div>
+      {description && <p className="text-xs text-foreground-muted">{description}</p>}
       {children}
     </section>
   );
