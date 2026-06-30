@@ -1,6 +1,14 @@
 import z from 'zod';
 import { customThemeSelectionSchema, customThemesSettingsSchema } from '@shared/custom-theme';
-import { GLOBAL_LLM_PROVIDER_IDS } from '@shared/global-llm';
+import {
+  DEFAULT_LLM_PROFILE_ACCESS_METHOD,
+  DEFAULT_LLM_PROFILE_ID,
+  DEFAULT_LLM_PROFILE_MAAS_PLATFORM_ID,
+  DEFAULT_LLM_PROFILE_NAME,
+  DEFAULT_LLM_PROFILE_RUNTIME_ID,
+  LLM_REASONING_EFFORT_IDS,
+  normalizeLlmSettings,
+} from '@shared/global-llm';
 import { KANBAN_STATUSES } from '@shared/kanban';
 import { MAAS_PLATFORM_IDS } from '@shared/maas';
 import { openInAppIdSchema } from '@shared/openInApps';
@@ -170,15 +178,30 @@ export const maasSettingsSchema = z.object({
   connections: z.array(maasConnectionSchema),
 });
 
-export const globalLlmSettingsSchema = z.object({
-  maasEnabled: z.boolean().catch(false),
-  maasModel: z.string().catch(''),
-  agentEnabled: z.boolean().catch(true),
-  agentId: z.string().catch(''),
-  preferredProvider: z.enum(GLOBAL_LLM_PROVIDER_IDS).catch('maas'),
-  promptTranslationEnabled: z.boolean().catch(false),
-  promptTranslationShowOriginal: z.boolean().catch(true),
+export const llmProfileSchema = z.object({
+  id: z.string().min(1).catch(DEFAULT_LLM_PROFILE_ID),
+  name: z.string().min(1).catch(DEFAULT_LLM_PROFILE_NAME),
+  runtimeId: z.enum(RUNTIME_IDS).catch(DEFAULT_LLM_PROFILE_RUNTIME_ID),
+  authProvider: z.enum(AGENT_ACCOUNT_PROVIDER_IDS).catch(DEFAULT_LLM_PROFILE_ACCESS_METHOD),
+  maasPlatformId: maasPlatformIdSchema.catch(DEFAULT_LLM_PROFILE_MAAS_PLATFORM_ID),
+  model: z.string().catch(''),
+  reasoningEffort: z.enum(LLM_REASONING_EFFORT_IDS).catch('default'),
+  permissionMode: z.string().catch('default'),
 });
+
+export const globalLlmSettingsSchema = z
+  .preprocess(
+    (value) => normalizeLlmSettings(value as never),
+    z.object({
+      profiles: z.array(llmProfileSchema).min(1),
+      defaultProfileId: z.string(),
+      namingProfileId: z.string(),
+      promptTranslationEnabled: z.boolean().catch(false),
+      promptTranslationProfileId: z.string(),
+      promptTranslationShowOriginal: z.boolean().catch(true),
+    })
+  )
+  .transform((value) => normalizeLlmSettings(value));
 
 export const runtimeModelCandidateCacheEntrySchema = z.object({
   source: z.enum(RUNTIME_MODEL_CANDIDATE_SOURCES),

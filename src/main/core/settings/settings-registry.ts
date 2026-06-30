@@ -1,6 +1,11 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { AppSettings, AppSettingsKey } from '@shared/app-settings';
+import {
+  createDefaultLlmProfile,
+  DEFAULT_LLM_PROFILE_ID,
+  DEFAULT_LLM_PROFILE_NAME,
+} from '@shared/global-llm';
 import { MAAS_PLATFORMS } from '@shared/maas';
 import type { OpenInAppId } from '@shared/openInApps';
 import {
@@ -64,12 +69,16 @@ export const SETTINGS_DEFAULTS = {
     connections: [],
   },
   llm: {
-    maasEnabled: false,
-    maasModel: '',
-    agentEnabled: true,
-    agentId: '',
-    preferredProvider: 'maas' as const,
+    profiles: [
+      createDefaultLlmProfile({
+        id: DEFAULT_LLM_PROFILE_ID,
+        name: DEFAULT_LLM_PROFILE_NAME,
+      }),
+    ],
+    defaultProfileId: DEFAULT_LLM_PROFILE_ID,
+    namingProfileId: DEFAULT_LLM_PROFILE_ID,
     promptTranslationEnabled: false,
+    promptTranslationProfileId: DEFAULT_LLM_PROFILE_ID,
     promptTranslationShowOriginal: true,
   },
   runtimeModelCandidates: {
