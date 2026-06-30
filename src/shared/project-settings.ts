@@ -79,7 +79,7 @@ export type ProjectDocsSettings = z.infer<typeof projectDocsSettingsSchema>;
 
 export const composerRunModeValues = ['normal', 'brainstorm', 'review', 'team'] as const;
 export const composerStrategyKindValues = ['new-branch', 'no-worktree'] as const;
-export const taskOutputLanguageValues = ['app', 'prompt', 'en', 'zh-CN'] as const;
+export const taskOutputLanguageValues = ['skip', 'app', 'prompt', 'en', 'zh-CN'] as const;
 export type TaskOutputLanguage = (typeof taskOutputLanguageValues)[number];
 
 /**

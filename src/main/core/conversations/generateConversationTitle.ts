@@ -53,7 +53,7 @@ type ConversationNamingDraft = {
   settings: TaskNamingSettings;
   runtimeId: RuntimeId;
   runtimeName: string;
-  runtime: AgentNamingRuntime;
+  runtime: AgentNamingRuntime | null;
   model: string;
   context: TaskNamingContextSnapshot;
   systemPrompt: string;
@@ -124,9 +124,36 @@ export async function generateConversationTitle(
       estimatedCharacters: context.estimatedCharacters,
       namingModelConfigured: Boolean(model),
       timeoutMs: settings.requestTimeoutMs,
-      hasProviderConfig: true,
-      hasNamingCommand: Boolean(runtime.providerConfig.namingCommand?.trim()),
+      hasProviderConfig: Boolean(runtime),
+      hasNamingCommand: Boolean(runtime?.providerConfig.namingCommand?.trim()),
     });
+    if (settings.language === 'skip') {
+      const snapshot = saveConversationNamingSnapshot({
+        conversation,
+        status: 'skipped',
+        model,
+        runtimeId,
+        runtimeName,
+        context,
+        systemPrompt,
+        systemPromptEstimatedTokens,
+        prompt,
+        promptEstimatedTokens,
+        error: 'Session title generation is disabled by language setting.',
+      });
+      return {
+        title: conversation.title,
+        runtimeId,
+        runtimeName,
+        model,
+        messageCount: messages.length,
+        promptChars: prompt.length,
+        snapshot,
+      };
+    }
+    if (!runtime) {
+      throw new Error(`No provider configuration is available for ${runtimeName}.`);
+    }
     if (messages.length === 0) {
       throw new Error('No session transcript is available for Agent-based renaming.');
     }
@@ -226,6 +253,24 @@ export async function getConversationNamingPreview(
 ): Promise<ConversationNamingSnapshot> {
   try {
     const draft = await buildConversationNamingDraft(projectId, taskId, conversationId, cwd);
+    if (draft.settings.language === 'skip') {
+      return createConversationNamingSnapshot({
+        conversation: draft.conversation,
+        status: 'skipped',
+        model: draft.model,
+        runtimeId: draft.runtimeId,
+        runtimeName: draft.runtimeName,
+        context: draft.context,
+        systemPrompt: draft.systemPrompt,
+        systemPromptEstimatedTokens: draft.systemPromptEstimatedTokens,
+        prompt: draft.prompt,
+        promptEstimatedTokens: draft.promptEstimatedTokens,
+        error: 'Session title generation is disabled by language setting.',
+      });
+    }
+    if (!draft.runtime) {
+      throw new Error(`No provider configuration is available for ${draft.runtimeName}.`);
+    }
     return createConversationNamingSnapshot({
       conversation: draft.conversation,
       status: 'idle',
@@ -282,9 +327,6 @@ async function buildConversationNamingDraft(
   const messages = await loadSessionMessages(conversation, workingDirectory);
   const namingRuntime = await resolveNamingRuntime(conversation.runtimeId, { projectId });
   const { settings, runtimeId, runtimeName, runtime } = namingRuntime;
-  if (!runtime) {
-    throw new Error(`No provider configuration is available for ${runtimeName}.`);
-  }
   const context = await buildConversationNamingContextSnapshot({
     conversation,
     projectPath: workingDirectory,

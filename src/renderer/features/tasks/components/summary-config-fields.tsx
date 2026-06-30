@@ -127,6 +127,7 @@ export const SummaryConfigFields = observer(function SummaryConfigFields({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="skip">{t('settings.tasks.namingLanguageSkip')}</SelectItem>
             <SelectItem value="app">{t('settings.tasks.namingLanguageApp')}</SelectItem>
             <SelectItem value="prompt">{t('settings.tasks.namingLanguagePrompt')}</SelectItem>
             <SelectItem value="zh-CN">{t('settings.tasks.namingLanguageZh')}</SelectItem>

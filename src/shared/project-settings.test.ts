@@ -5,16 +5,16 @@ describe('shareableProjectSettingsSchema', () => {
   it('accepts composer language overrides', () => {
     const parsed = shareableProjectSettingsSchema.parse({
       composerDefaults: {
-        inputPromptLanguage: 'prompt',
+        inputPromptLanguage: 'skip',
         namingLanguage: 'zh-CN',
-        summaryLanguage: 'en',
+        summaryLanguage: 'skip',
       },
     });
 
     expect(parsed.composerDefaults).toMatchObject({
-      inputPromptLanguage: 'prompt',
+      inputPromptLanguage: 'skip',
       namingLanguage: 'zh-CN',
-      summaryLanguage: 'en',
+      summaryLanguage: 'skip',
     });
   });
 

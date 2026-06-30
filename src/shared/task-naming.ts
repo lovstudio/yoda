@@ -7,7 +7,7 @@ export const TASK_NAMING_CONTEXT_SOURCE_IDS = [
 
 export type TaskNamingContextSourceId = (typeof TASK_NAMING_CONTEXT_SOURCE_IDS)[number];
 
-export type TaskNamingLanguage = 'app' | 'prompt' | 'en' | 'zh-CN';
+export type TaskNamingLanguage = 'skip' | 'app' | 'prompt' | 'en' | 'zh-CN';
 
 export type TaskNamingContextSettings = Record<TaskNamingContextSourceId, boolean>;
 
@@ -40,7 +40,7 @@ export const DEFAULT_TASK_NAMING_CONTEXT: TaskNamingContextSettings = {
   recentTasks: true,
 };
 
-export type TaskNamingStatus = 'idle' | 'generating' | 'ready' | 'failed';
+export type TaskNamingStatus = 'idle' | 'generating' | 'ready' | 'failed' | 'skipped';
 
 export type TaskNamingContextSource = {
   id: string;
