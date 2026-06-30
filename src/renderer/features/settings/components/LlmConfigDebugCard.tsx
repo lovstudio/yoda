@@ -22,6 +22,7 @@ import {
   type GlobalLlmDebugResult,
   type GlobalLlmModelCandidate,
   type GlobalLlmModelDiscoveryResult,
+  type GlobalLlmModelDiscoverySourceStatus,
   type GlobalLlmSettingsShape,
   type LlmProfile,
   type LlmReasoningEffort,
@@ -119,9 +120,7 @@ export const LlmProfilesCard: React.FC = () => {
     staleTime: 60_000,
   });
   const modelCandidates = modelDiscoveryQuery.data?.models ?? [];
-  const modelDiscoveryError = modelDiscoveryQuery.data?.sources.find(
-    (source) => source.error
-  )?.error;
+  const modelDiscoveryIssue = modelDiscoveryQuery.data?.sources.find((source) => source.error);
 
   const updateProfile = (profileId: string, patch: Partial<LlmProfile>) => {
     const profiles = settings.profiles.map((profile) =>
@@ -334,7 +333,7 @@ export const LlmProfilesCard: React.FC = () => {
                 candidates={modelCandidates}
                 disabled={disabled}
                 loading={modelDiscoveryQuery.isFetching}
-                error={modelDiscoveryError}
+                sourceIssue={modelDiscoveryIssue}
                 onRefresh={() => setModelRefreshToken((current) => current + 1)}
                 onModelChange={(model) => updateProfile(selectedProfile.id, { model })}
               />
@@ -417,13 +416,14 @@ const ModelField: React.FC<{
   candidates: GlobalLlmModelCandidate[];
   disabled: boolean;
   loading: boolean;
-  error: string | undefined;
+  sourceIssue: GlobalLlmModelDiscoverySourceStatus | undefined;
   onRefresh: () => void;
   onModelChange: (model: string) => void;
-}> = ({ profile, candidates, disabled, loading, error, onRefresh, onModelChange }) => {
+}> = ({ profile, candidates, disabled, loading, sourceIssue, onRefresh, onModelChange }) => {
   const { t } = useTranslation();
   const visibleCandidates = candidates.slice(0, MODEL_CANDIDATE_MENU_LIMIT);
   const hiddenCandidateCount = Math.max(0, candidates.length - visibleCandidates.length);
+  const sourceIssueText = sourceIssue ? modelDiscoverySourceIssueText(t, sourceIssue) : null;
   const [modelDraft, setModelDraft] = useState(() => ({
     profileId: profile.id,
     savedModel: profile.model,
@@ -531,9 +531,12 @@ const ModelField: React.FC<{
                 {t('settings.llm.modelDiscoveryMore', { count: hiddenCandidateCount })}
               </div>
             )}
-            {error && (
-              <div className="border-t border-border px-2 py-1.5 text-xs text-foreground-muted">
-                {t('settings.llm.modelDiscoveryPartial', { error })}
+            {sourceIssueText && (
+              <div
+                className="truncate border-t border-border px-2 py-1.5 text-xs text-foreground-muted"
+                title={sourceIssue?.error}
+              >
+                {sourceIssueText}
               </div>
             )}
           </ComboboxContent>
@@ -549,9 +552,9 @@ const ModelField: React.FC<{
           <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
         </Button>
       </div>
-      {error && (
-        <span className="truncate text-xs text-foreground-passive" title={error}>
-          {t('settings.llm.modelDiscoveryPartial', { error })}
+      {sourceIssueText && (
+        <span className="truncate text-xs text-foreground-passive" title={sourceIssue?.error}>
+          {sourceIssueText}
         </span>
       )}
     </div>
@@ -821,6 +824,32 @@ function modelCandidateSources(t: TFunction, candidate: GlobalLlmModelCandidate)
   return candidate.sources
     .map((source) => t(`settings.llm.modelDiscoverySources.${source}`))
     .join(', ');
+}
+
+function modelDiscoverySourceIssueText(
+  t: TFunction,
+  source: GlobalLlmModelDiscoverySourceStatus
+): string {
+  if (source.source === 'aiGateway' && isAiGatewayAuthError(source.error)) {
+    return t('settings.llm.modelDiscoveryIssues.aiGatewayAuth');
+  }
+
+  const sourceName = t(`settings.llm.modelDiscoverySources.${source.source}`);
+  return t('settings.llm.modelDiscoveryPartial', {
+    error: `${sourceName}: ${compactDiscoveryError(source.error)}`,
+  });
+}
+
+function isAiGatewayAuthError(error: string | undefined): boolean {
+  return /authentication failed|no authentication provided|ai_gateway_api_key|apikey/i.test(
+    error ?? ''
+  );
+}
+
+function compactDiscoveryError(error: string | undefined): string {
+  const value = error?.replace(/\s+/g, ' ').trim();
+  if (!value) return 'unknown error';
+  return value.length > 120 ? `${value.slice(0, 117).trim()}...` : value;
 }
 
 function modelCandidateDescription(

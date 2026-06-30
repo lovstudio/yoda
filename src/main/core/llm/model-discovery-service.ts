@@ -115,7 +115,7 @@ function mergeModelCandidates(results: readonly SourceLoadResult[]): GlobalLlmMo
     }
   }
 
-  return [...byModel.values()].slice(0, MAX_DISCOVERED_MODELS);
+  return sortModelCandidatesForDisplay([...byModel.values()]).slice(0, MAX_DISCOVERED_MODELS);
 }
 
 function toSourceStatus(result: SourceLoadResult): GlobalLlmModelDiscoverySourceStatus {
@@ -125,4 +125,72 @@ function toSourceStatus(result: SourceLoadResult): GlobalLlmModelDiscoverySource
     modelCount: result.models.length,
     ...(result.error ? { error: result.error } : {}),
   };
+}
+
+export function sortModelCandidatesForDisplay(
+  candidates: readonly GlobalLlmModelCandidate[]
+): GlobalLlmModelCandidate[] {
+  return [...candidates].sort(compareModelCandidates);
+}
+
+function compareModelCandidates(
+  left: GlobalLlmModelCandidate,
+  right: GlobalLlmModelCandidate
+): number {
+  const leftKey = modelSortKey(left);
+  const rightKey = modelSortKey(right);
+
+  const version = compareVersionsDesc(leftKey.version, rightKey.version);
+  if (version !== 0) return version;
+
+  if (leftKey.aliasRank !== rightKey.aliasRank) return leftKey.aliasRank - rightKey.aliasRank;
+  if (leftKey.tierRank !== rightKey.tierRank) return rightKey.tierRank - leftKey.tierRank;
+  if (leftKey.sourceRank !== rightKey.sourceRank) return rightKey.sourceRank - leftKey.sourceRank;
+
+  return left.id.localeCompare(right.id);
+}
+
+function modelSortKey(candidate: GlobalLlmModelCandidate): {
+  aliasRank: number;
+  sourceRank: number;
+  tierRank: number;
+  version: number[];
+} {
+  const text = `${candidate.id} ${candidate.name ?? ''}`.toLowerCase();
+  return {
+    aliasRank: /\b(latest|default|current|chat-latest)\b/.test(text) ? 1 : 0,
+    sourceRank: candidate.sources.length,
+    tierRank: modelTierRank(text),
+    version: extractModelVersion(text),
+  };
+}
+
+function extractModelVersion(value: string): number[] {
+  const match = value.match(/\b(?:gpt|claude|gemini|qwen|kimi|deepseek|o)[-.]?(\d+(?:[.-]\d+)*)\b/);
+  const parts = match?.[1].split(/[.-]/) ?? value.match(/\d+/g)?.slice(0, 2) ?? [];
+  return parts.map((part) => Number.parseInt(part, 10)).filter(Number.isFinite);
+}
+
+function compareVersionsDesc(left: readonly number[], right: readonly number[]): number {
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = left[index] ?? -1;
+    const rightPart = right[index] ?? -1;
+    if (leftPart !== rightPart) return rightPart - leftPart;
+  }
+  return 0;
+}
+
+function modelTierRank(value: string): number {
+  if (hasAnyToken(value, ['pro', 'opus', 'ultra', 'max'])) return 80;
+  if (hasAnyToken(value, ['reason', 'thinking', 'r1', 'o3'])) return 70;
+  if (hasAnyToken(value, ['nano'])) return 10;
+  if (hasAnyToken(value, ['mini'])) return 30;
+  if (hasAnyToken(value, ['haiku', 'flash', 'lite', 'small'])) return 35;
+  if (hasAnyToken(value, ['sonnet', 'coder', 'code'])) return 55;
+  return 60;
+}
+
+function hasAnyToken(value: string, tokens: readonly string[]): boolean {
+  return tokens.some((token) => value.includes(token));
 }

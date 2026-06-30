@@ -387,6 +387,9 @@
         "aiGateway": "AI Gateway",
         "runtimeCatalog": "Runtime catalog"
       },
+      "modelDiscoveryIssues": {
+        "aiGatewayAuth": "AI Gateway 未配置鉴权，已使用本地候选。"
+      },
       "modelDiscoveryDescriptions": {
         "coding": "适合代码生成、重构和代理式编码流程。",
         "reasoning": "适合复杂推理、方案规划和高风险代码改动。",

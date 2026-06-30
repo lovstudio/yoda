@@ -387,6 +387,9 @@
         "aiGateway": "AI Gateway",
         "runtimeCatalog": "Runtime catalog"
       },
+      "modelDiscoveryIssues": {
+        "aiGatewayAuth": "AI Gateway authentication is not configured; using local candidates."
+      },
       "modelDiscoveryDescriptions": {
         "coding": "Best for code generation, refactors, and agentic coding workflows.",
         "reasoning": "Best for complex reasoning, planning, and high-stakes code changes.",
