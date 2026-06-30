@@ -152,7 +152,7 @@ export const LlmConfigDebugCard: React.FC = () => {
       }}
       disabled={disabled}
     >
-      <SelectTrigger className={cn('h-8', className)}>
+      <SelectTrigger className={cn('h-8 max-w-full', className)}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -167,7 +167,7 @@ export const LlmConfigDebugCard: React.FC = () => {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid min-w-0 gap-4 @4xl:grid-cols-[240px_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
             <MicroLabel className="text-foreground-passive">
@@ -217,7 +217,7 @@ export const LlmConfigDebugCard: React.FC = () => {
                   key={selectedProfile.id}
                   defaultValue={selectedProfile.name}
                   disabled={disabled}
-                  className="h-8 w-56"
+                  className="h-8 w-56 max-w-full"
                   onBlur={(event) => {
                     const name = event.target.value.trim();
                     if (name && name !== selectedProfile.name) {
@@ -244,7 +244,7 @@ export const LlmConfigDebugCard: React.FC = () => {
             title={t('settings.llm.agentClient')}
             description={t('settings.llm.agentClientDescription')}
             control={
-              <div className="w-56 shrink-0">
+              <div className="w-56 max-w-full shrink-0">
                 <AgentSelector
                   value={selectedProfile.runtimeId}
                   onChange={(runtimeId: RuntimeId) =>
@@ -272,8 +272,10 @@ export const LlmConfigDebugCard: React.FC = () => {
                 }
                 disabled={disabled}
               >
-                <SelectTrigger className="h-8 w-56">
-                  <SelectValue />
+                <SelectTrigger className="h-8 w-56 max-w-full">
+                  <SelectValue>
+                    {() => accessMethodLabel(t, selectedProfile.authProvider)}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {AGENT_ACCOUNT_PROVIDER_IDS.map((id) => (
@@ -305,8 +307,10 @@ export const LlmConfigDebugCard: React.FC = () => {
                 }
                 disabled={disabled || selectedProfile.authProvider !== 'yoda-maas'}
               >
-                <SelectTrigger className="h-8 w-56">
-                  <SelectValue />
+                <SelectTrigger className="h-8 w-56 max-w-full">
+                  <SelectValue>
+                    {() => MAAS_PLATFORMS[selectedProfile.maasPlatformId].name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {Object.values(MAAS_PLATFORMS).map((platform) => (
@@ -327,7 +331,7 @@ export const LlmConfigDebugCard: React.FC = () => {
                 defaultValue={selectedProfile.model}
                 disabled={disabled}
                 placeholder={t('settings.llm.modelPlaceholder')}
-                className="h-8 w-56"
+                className="h-8 w-56 max-w-full"
                 onBlur={(event) => {
                   const model = event.target.value.trim();
                   if (model !== selectedProfile.model) updateProfile(selectedProfile.id, { model });
@@ -351,8 +355,10 @@ export const LlmConfigDebugCard: React.FC = () => {
                 }
                 disabled={disabled}
               >
-                <SelectTrigger className="h-8 w-56">
-                  <SelectValue />
+                <SelectTrigger className="h-8 w-56 max-w-full">
+                  <SelectValue>
+                    {() => t(`settings.llm.reasoning.${selectedProfile.reasoningEffort}`)}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {LLM_REASONING_EFFORT_IDS.map((id) => (
@@ -375,7 +381,7 @@ export const LlmConfigDebugCard: React.FC = () => {
                 }}
                 disabled={disabled}
               >
-                <SelectTrigger className="h-8 w-56">
+                <SelectTrigger className="h-8 w-56 max-w-full">
                   <SelectValue>
                     {(value: string | null) =>
                       t(
