@@ -75,8 +75,10 @@ function formatDateTime(value: string | null): string {
 }
 
 function formatMaskedApiKey(fingerprint: string | null): string {
-  const suffix = fingerprint?.replace(/^\.\.\./, '').trim();
-  return suffix ? `**** **** **** ${suffix}` : '**** **** ****';
+  const value = fingerprint?.trim();
+  if (!value) return '****';
+  if (value.startsWith('...')) return `****${value}`;
+  return value;
 }
 
 function truncateAuditText(value: string, limit = 360): string {

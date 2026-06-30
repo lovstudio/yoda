@@ -96,8 +96,8 @@ function secretKey(platformId: MaasPlatformId): string {
 
 function keyFingerprint(apiKey: string): string {
   const trimmed = apiKey.trim();
-  if (trimmed.length <= 4) return 'configured';
-  return `...${trimmed.slice(-4)}`;
+  if (trimmed.length <= 4) return trimmed;
+  return `${trimmed.slice(0, 2)}...${trimmed.slice(-2)}`;
 }
 
 function defaultConnection(platformId: MaasPlatformId): MaasConnection {
@@ -344,8 +344,15 @@ export class MaasService {
 
   async listConnections(): Promise<MaasConnection[]> {
     const settings = await appSettingsService.get('maas');
-    return MAAS_PLATFORM_IDS.map((platformId) =>
-      toConnection(getConnectedPlatform(settings, platformId), platformId)
+    return Promise.all(
+      MAAS_PLATFORM_IDS.map(async (platformId) => {
+        const saved = getConnectedPlatform(settings, platformId);
+        if (!saved) return defaultConnection(platformId);
+
+        const apiKey = await encryptedAppSecretsStore.getSecret(secretKey(platformId));
+        const connection = apiKey ? { ...saved, keyFingerprint: keyFingerprint(apiKey) } : saved;
+        return toConnection(connection, platformId);
+      })
     );
   }
 
@@ -437,6 +444,7 @@ export class MaasService {
       const settings = await appSettingsService.get('maas');
       const existing = getConnectedPlatform(settings, input.platformId);
       const apiKey = input.apiKey?.trim() ?? '';
+      let retainedApiKey: string | null = null;
       if (!apiKey && !existing?.keyFingerprint) {
         return { success: false, error: 'A MaaS API key is required.' };
       }
@@ -450,6 +458,7 @@ export class MaasService {
             error: 'Stored MaaS API key is missing. Paste the key again to reconnect.',
           };
         }
+        retainedApiKey = existingApiKey;
       }
 
       const now = new Date().toISOString();
@@ -457,7 +466,11 @@ export class MaasService {
         platformId: input.platformId,
         displayName: input.displayName?.trim() || platform.name,
         endpoint: input.endpoint?.trim() || platform.defaultEndpoint,
-        keyFingerprint: apiKey ? keyFingerprint(apiKey) : (existing?.keyFingerprint ?? null),
+        keyFingerprint: apiKey
+          ? keyFingerprint(apiKey)
+          : retainedApiKey
+            ? keyFingerprint(retainedApiKey)
+            : (existing?.keyFingerprint ?? null),
         connectedAt: existing?.connectedAt ?? now,
         lastCheckedAt: now,
       };
