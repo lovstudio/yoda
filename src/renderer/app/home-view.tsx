@@ -2373,6 +2373,95 @@ export const HomeComposer = observer(function HomeComposer({
   );
 
   const promptInputChrome = getRunModeInputChrome(runMode);
+  const renderSystemPromptSection = (activeRuntimeId: RuntimeId): ReactNode => {
+    const runtime = getRuntime(activeRuntimeId);
+    if (!runtime?.appendSystemPromptFlag && !runtime?.appendSystemPromptConfigKey) return null;
+    const hintKey =
+      activeRuntimeId === 'codex'
+        ? 'home.systemPromptHintCodex'
+        : runtime.appendSystemPromptFlag === '--append-system-prompt'
+          ? 'home.systemPromptHintClaude'
+          : 'home.systemPromptHint';
+
+    return (
+      <div className="flex flex-col gap-1">
+        <ComposerSettingsHeader
+          label={t('home.systemPromptLabel')}
+          hint={t(hintKey)}
+          action={
+            <button
+              type="button"
+              className="font-mono text-[10px] uppercase tracking-widest text-foreground-passive transition-colors hover:text-foreground"
+              onClick={() => navigate('library', { section: 'prompts' })}
+            >
+              {t('home.manage')}
+            </button>
+          }
+        />
+        {promptPrinciples.length === 0 ? (
+          <p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>
+        ) : (
+          promptPrinciples.map((principle) => (
+            <div key={principle.id} className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="min-w-0 truncate text-xs text-foreground">
+                  {principle.name || t('home.promptPrincipleUnnamed')}
+                </span>
+                {principle.text ? (
+                  <InfoTooltip
+                    label={principle.name || t('home.promptPrincipleUnnamed')}
+                    content={<span className="whitespace-pre-wrap">{principle.text}</span>}
+                  />
+                ) : null}
+              </div>
+              <Switch
+                size="sm"
+                checked={
+                  selectedProjectId
+                    ? effectiveGlobalEnabled(projectPromptPrinciples, principle)
+                    : principle.enabled
+                }
+                onCheckedChange={(checked) =>
+                  selectedProjectId
+                    ? setGlobalPrincipleProjectOverride(principle, checked)
+                    : setPromptPrincipleEnabled(principle.id, checked)
+                }
+                aria-label={t('settings.prompts.toggle')}
+              />
+            </div>
+          ))
+        )}
+        {selectedProjectId && projectPrincipleItems.length > 0 ? (
+          <>
+            <div className="mt-1 text-[10px] font-medium uppercase tracking-wide text-foreground-passive">
+              {t('home.promptPrinciplesProjectHeading')}
+            </div>
+            {projectPrincipleItems.map((principle) => (
+              <div key={principle.id} className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="min-w-0 truncate text-xs text-foreground">
+                    {principle.name || t('home.promptPrincipleUnnamed')}
+                  </span>
+                  {principle.text ? (
+                    <InfoTooltip
+                      label={principle.name || t('home.promptPrincipleUnnamed')}
+                      content={<span className="whitespace-pre-wrap">{principle.text}</span>}
+                    />
+                  ) : null}
+                </div>
+                <Switch
+                  size="sm"
+                  checked={principle.enabled}
+                  onCheckedChange={(checked) => setProjectPrincipleEnabled(principle.id, checked)}
+                  aria-label={t('settings.prompts.toggle')}
+                />
+              </div>
+            ))}
+          </>
+        ) : null}
+      </div>
+    );
+  };
 
   // The composer-settings gear belongs to a config row (the base row in normal
   // mode, every config row in compare mode), so it is a render helper reused
@@ -2430,6 +2519,7 @@ export const HomeComposer = observer(function HomeComposer({
                 alignContentWithTrigger={false}
               />
             </div>
+            {renderSystemPromptSection(runtimeId)}
             <InstructionFilesSection runtimeId={runtimeId} projectPath={skillProjectPath} />
           </div>
         )}
@@ -2527,81 +2617,6 @@ export const HomeComposer = observer(function HomeComposer({
             />
           </CollapsibleContent>
         </Collapsible>
-        <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
-          <ComposerSettingsHeader
-            label={t('home.promptPrinciplesLabel')}
-            action={
-              <button
-                type="button"
-                className="font-mono text-[10px] uppercase tracking-widest text-foreground-passive transition-colors hover:text-foreground"
-                onClick={() => navigate('library', { section: 'prompts' })}
-              >
-                {t('home.manage')}
-              </button>
-            }
-          />
-          {promptPrinciples.length === 0 ? (
-            <p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>
-          ) : (
-            promptPrinciples.map((principle) => (
-              <div key={principle.id} className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="min-w-0 truncate text-xs text-foreground">
-                    {principle.name || t('home.promptPrincipleUnnamed')}
-                  </span>
-                  {principle.text ? (
-                    <InfoTooltip
-                      label={principle.name || t('home.promptPrincipleUnnamed')}
-                      content={<span className="whitespace-pre-wrap">{principle.text}</span>}
-                    />
-                  ) : null}
-                </div>
-                <Switch
-                  size="sm"
-                  checked={
-                    selectedProjectId
-                      ? effectiveGlobalEnabled(projectPromptPrinciples, principle)
-                      : principle.enabled
-                  }
-                  onCheckedChange={(checked) =>
-                    selectedProjectId
-                      ? setGlobalPrincipleProjectOverride(principle, checked)
-                      : setPromptPrincipleEnabled(principle.id, checked)
-                  }
-                  aria-label={t('settings.prompts.toggle')}
-                />
-              </div>
-            ))
-          )}
-          {selectedProjectId && projectPrincipleItems.length > 0 ? (
-            <>
-              <div className="mt-1 text-[10px] font-medium uppercase tracking-wide text-foreground-passive">
-                {t('home.promptPrinciplesProjectHeading')}
-              </div>
-              {projectPrincipleItems.map((principle) => (
-                <div key={principle.id} className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <span className="min-w-0 truncate text-xs text-foreground">
-                      {principle.name || t('home.promptPrincipleUnnamed')}
-                    </span>
-                    {principle.text ? (
-                      <InfoTooltip
-                        label={principle.name || t('home.promptPrincipleUnnamed')}
-                        content={<span className="whitespace-pre-wrap">{principle.text}</span>}
-                      />
-                    ) : null}
-                  </div>
-                  <Switch
-                    size="sm"
-                    checked={principle.enabled}
-                    onCheckedChange={(checked) => setProjectPrincipleEnabled(principle.id, checked)}
-                    aria-label={t('settings.prompts.toggle')}
-                  />
-                </div>
-              ))}
-            </>
-          ) : null}
-        </div>
       </PopoverContent>
     </Popover>
   );
