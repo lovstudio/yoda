@@ -7,11 +7,7 @@ import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
 import { AiLogsPanel } from '@renderer/features/ai-logs/components/AiLogsPanel';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
 import { KanbanBoard } from '@renderer/features/kanban/components/KanbanBoard';
-import {
-  MaasConnectedCountBadge,
-  MaasView,
-  useZenmuxUsageSettingsSection,
-} from '@renderer/features/maas/components/MaasView';
+import { MaasView } from '@renderer/features/maas/components/MaasView';
 import { McpView } from '@renderer/features/mcp/components/McpView';
 import { MobileView } from '@renderer/features/mobile/mobile-view';
 import { RoadmapView } from '@renderer/features/roadmap/components/RoadmapView';
@@ -93,6 +89,14 @@ interface SectionConfig {
   description?: React.ReactNode;
   action?: React.ReactNode;
   component: React.ReactNode;
+}
+
+interface TabContentConfig {
+  title: string;
+  titleHint?: React.ReactNode;
+  description: string;
+  component?: React.ReactNode;
+  sections?: SectionConfig[];
 }
 
 type SettingsTabEntry = { id: SettingsPageTab; label: string; badge?: string };
@@ -203,15 +207,8 @@ export function SettingsPage({
   const tabGroups = useSettingsTabGroups();
   // In the side pane the chip-strip row hosts the tab picker — don't double it.
   const isPinHosted = useIsPinHosted();
-  const zenmuxUsageSection = useZenmuxUsageSettingsSection({
-    embedded: true,
-    enabled: activeTab === 'maas',
-  });
 
-  const tabContent: Record<
-    string,
-    { title: string; titleHint?: React.ReactNode; description: string; sections: SectionConfig[] }
-  > = {
+  const tabContent: Record<string, TabContentConfig> = {
     general: {
       title: t('settings.tabs.general'),
       description: t('settings.general.description'),
@@ -355,21 +352,7 @@ export function SettingsPage({
     maas: {
       title: t('maas.title'),
       description: t('maas.subtitle'),
-      sections: [
-        {
-          id: 'maas-platforms',
-          title: t('maas.platformsTitle'),
-          action: <MaasConnectedCountBadge />,
-          component: <MaasView embedded showSectionChrome={false} />,
-        },
-        {
-          id: 'maas-usage',
-          title: t('maas.records.title'),
-          description: zenmuxUsageSection.description,
-          action: zenmuxUsageSection.action,
-          component: zenmuxUsageSection.component,
-        },
-      ],
+      component: <MaasView embedded />,
     },
     usage: {
       title: t('usage.title'),
@@ -549,7 +532,8 @@ export function SettingsPage({
                   </div>
                   <Separator />
                 </div>
-                {currentContent.sections.map((section) => {
+                {currentContent.component}
+                {currentContent.sections?.map((section) => {
                   const hasChapterHeader = Boolean(
                     section.title || section.description || section.action
                   );

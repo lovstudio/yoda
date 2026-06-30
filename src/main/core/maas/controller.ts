@@ -11,6 +11,17 @@ async function listConnections() {
   return maasService.listConnections();
 }
 
+async function listPlatformDescriptions(args?: { forceRefresh?: boolean }) {
+  return maasService.listPlatformDescriptions(!!args?.forceRefresh);
+}
+
+async function getPlatformInfoSnapshot(args: {
+  platformId: MaasPlatformId;
+  forceRefresh?: boolean;
+}) {
+  return maasService.getPlatformInfoSnapshot(args.platformId, !!args.forceRefresh);
+}
+
 async function connectPlatform(input: MaasConnectInput) {
   return maasService.connectPlatform(input);
 }
@@ -43,6 +54,8 @@ async function getUsageSummary(args: MaasUsageSummaryInput) {
 
 export const maasController = createRPCController({
   listConnections,
+  listPlatformDescriptions,
+  getPlatformInfoSnapshot,
   connectPlatform,
   disconnectPlatform,
   checkConnection,

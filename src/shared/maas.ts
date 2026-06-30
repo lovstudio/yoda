@@ -41,7 +41,28 @@ export type MaasPlatformDefinition = {
   description: string;
   defaultEndpoint: string;
   docsUrl: string;
+  officialDescriptionUrl: string;
   capabilities: MaasInvocationKind[];
+};
+
+export type MaasPlatformDescriptionSource = 'official-meta' | 'official-body-summary' | 'fallback';
+
+export type MaasPlatformOfficialDescription = {
+  platformId: MaasPlatformId;
+  description: string;
+  source: MaasPlatformDescriptionSource;
+  sourceUrl: string | null;
+  fetchedAt: string | null;
+  metaDescription: string | null;
+  bodySummary: string | null;
+  bodyTextExcerpt: string | null;
+  bodyCharCount: number | null;
+  error: string | null;
+};
+
+export type MaasPlatformInfoSnapshot = MaasPlatformOfficialDescription & {
+  version: number;
+  bodyText: string | null;
 };
 
 export type MaasInvocationRecord = {
@@ -104,6 +125,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformId, MaasPlatformDefinition> = {
     description: 'Use a unified API standard to invoke models from different providers.',
     defaultEndpoint: 'https://zenmux.ai/api/v1',
     docsUrl: 'https://zenmux.ai/docs/',
+    officialDescriptionUrl: 'https://zenmux.ai/docs/',
     capabilities: ['text', 'image', 'embedding', 'video'],
   },
   openrouter: {
@@ -113,6 +135,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformId, MaasPlatformDefinition> = {
       'Access hundreds of AI models through a single endpoint, while automatically handling fallbacks.',
     defaultEndpoint: 'https://openrouter.ai/api/v1',
     docsUrl: 'https://openrouter.ai/docs',
+    officialDescriptionUrl: 'https://openrouter.ai/docs',
     capabilities: ['text', 'image'],
   },
   siliconflow: {
@@ -121,6 +144,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformId, MaasPlatformDefinition> = {
     description: 'Use SiliconFlow API to call GenAI capabilities; call via OpenAI interface.',
     defaultEndpoint: 'https://api.siliconflow.cn/v1',
     docsUrl: 'https://docs.siliconflow.cn/',
+    officialDescriptionUrl: 'https://docs.siliconflow.cn/',
     capabilities: ['text', 'embedding', 'image'],
   },
   custom: {
@@ -129,6 +153,7 @@ export const MAAS_PLATFORMS: Record<MaasPlatformId, MaasPlatformDefinition> = {
     description: 'Creates a model response for the given chat conversation.',
     defaultEndpoint: 'https://api.example.com/v1',
     docsUrl: 'https://platform.openai.com/docs/api-reference',
+    officialDescriptionUrl: 'https://platform.openai.com/docs/api-reference',
     capabilities: ['text', 'image', 'embedding'],
   },
 };

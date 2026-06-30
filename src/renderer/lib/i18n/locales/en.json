@@ -2644,6 +2644,22 @@
         "description": "Creates a model response for the given chat conversation."
       }
     },
+    "platformDescription": {
+      "source": {
+        "official-meta": "Official meta",
+        "official-body-summary": "Page summary",
+        "fallback": "Fallback"
+      },
+      "hint": {
+        "official-meta": "Extracted from the official page meta description.",
+        "official-body-summary": "Meta description was missing or unsuitable, so this was summarized from the official page body.",
+        "fallback": "Official page text could not be used; showing the built-in fallback description."
+      },
+      "metaLabel": "Meta",
+      "bodySummaryLabel": "Summary",
+      "bodyExcerptLabel": "Body excerpt ({{count}} chars)",
+      "errorLabel": "Fetch error: {{error}}"
+    },
     "connection": {
       "displayName": "Name",
       "endpoint": "Endpoint",

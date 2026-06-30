@@ -31,6 +31,7 @@ import {
   type MaasInvocationKind,
   type MaasInvocationRecord,
   type MaasPlatformId,
+  type MaasPlatformOfficialDescription,
 } from '@shared/maas';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -58,6 +59,7 @@ import {
   useDisconnectMaasPlatform,
   useMaasConnections,
   useMaasInvocationRecords,
+  useMaasPlatformDescriptions,
 } from '../useMaas';
 
 const FILTERS: MaasInvocationFilterKind[] = ['all', ...MAAS_INVOCATION_KINDS];
@@ -172,6 +174,11 @@ function formatMaskedApiKey(fingerprint: string | null): string {
   return suffix ? `**** **** **** ${suffix}` : '**** **** ****';
 }
 
+function truncateAuditText(value: string, limit = 360): string {
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit - 3).trim()}...`;
+}
+
 export const MaasConnectedCountBadge: React.FC = () => {
   const { t } = useTranslation();
   const { data: connections } = useMaasConnections();
@@ -186,12 +193,14 @@ export const MaasView: React.FC<{ embedded?: boolean; showSectionChrome?: boolea
 }) => {
   const { t } = useTranslation();
   const { data: connections, isLoading } = useMaasConnections();
+  const { data: platformDescriptions } = useMaasPlatformDescriptions();
   const [expandedPlatformId, setExpandedPlatformId] = useState<MaasPlatformId | ''>('zenmux');
   const connectedCount = connections?.filter((connection) => connection.connected).length ?? 0;
-  const zenmuxUsageSection = useZenmuxUsageSettingsSection({
-    embedded,
-    enabled: showSectionChrome,
-  });
+  const platformDescriptionById = useMemo(
+    () =>
+      new Map(platformDescriptions?.map((description) => [description.platformId, description])),
+    [platformDescriptions]
+  );
 
   const handlePlatformValueChange = useCallback((value: string) => {
     if (value === '') {
@@ -214,6 +223,8 @@ export const MaasView: React.FC<{ embedded?: boolean; showSectionChrome?: boolea
         <PlatformAccordionItem
           key={platformId}
           connection={findConnection(connections, platformId)}
+          officialDescription={platformDescriptionById.get(platformId)}
+          embedded={embedded}
           loading={isLoading}
         />
       ))}
@@ -238,13 +249,6 @@ export const MaasView: React.FC<{ embedded?: boolean; showSectionChrome?: boolea
             }
           >
             {platformAccordion}
-          </MaasChapter>
-          <MaasChapter
-            title={t('maas.records.title')}
-            description={zenmuxUsageSection.description}
-            action={zenmuxUsageSection.action}
-          >
-            {zenmuxUsageSection.component}
           </MaasChapter>
         </>
       ) : (
@@ -276,6 +280,75 @@ export const MaasView: React.FC<{ embedded?: boolean; showSectionChrome?: boolea
   );
 };
 
+const MaasDescriptionSourceBadge: React.FC<{
+  description: MaasPlatformOfficialDescription;
+}> = ({ description }) => {
+  const { t } = useTranslation();
+  const sourceLabel = t(`maas.platformDescription.source.${description.source}`);
+  const sourceHint = t(`maas.platformDescription.hint.${description.source}`);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            tabIndex={0}
+            className={cn(
+              'inline-flex h-5 shrink-0 cursor-help items-center rounded border px-1.5 text-[10px] leading-none outline-none transition-colors focus-visible:ring-1 focus-visible:ring-border',
+              description.source === 'fallback'
+                ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+            )}
+          >
+            {sourceLabel}
+          </span>
+        }
+      />
+      <TooltipContent className="block max-w-[28rem] text-left leading-relaxed">
+        <span className="block font-medium">{sourceHint}</span>
+        {description.sourceUrl && (
+          <span className="mt-1 block break-all text-foreground-muted">
+            {description.sourceUrl}
+          </span>
+        )}
+        {description.metaDescription && (
+          <span className="mt-2 block">
+            <span className="font-medium">{t('maas.platformDescription.metaLabel')}</span>
+            <span className="mt-0.5 block text-foreground-muted">
+              {truncateAuditText(description.metaDescription)}
+            </span>
+          </span>
+        )}
+        {description.bodySummary && (
+          <span className="mt-2 block">
+            <span className="font-medium">{t('maas.platformDescription.bodySummaryLabel')}</span>
+            <span className="mt-0.5 block text-foreground-muted">
+              {truncateAuditText(description.bodySummary)}
+            </span>
+          </span>
+        )}
+        {description.bodyTextExcerpt && (
+          <span className="mt-2 block">
+            <span className="font-medium">
+              {t('maas.platformDescription.bodyExcerptLabel', {
+                count: description.bodyCharCount ?? description.bodyTextExcerpt.length,
+              })}
+            </span>
+            <span className="mt-0.5 block text-foreground-muted">
+              {truncateAuditText(description.bodyTextExcerpt)}
+            </span>
+          </span>
+        )}
+        {description.error && (
+          <span className="mt-2 block text-destructive">
+            {t('maas.platformDescription.errorLabel', { error: description.error })}
+          </span>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
 const MaasChapter: React.FC<{
   title: string;
   description?: React.ReactNode;
@@ -296,11 +369,17 @@ const MaasChapter: React.FC<{
 
 const PlatformAccordionItem: React.FC<{
   connection: MaasConnection;
+  officialDescription?: MaasPlatformOfficialDescription;
+  embedded: boolean;
   loading: boolean;
-}> = ({ connection, loading }) => {
+}> = ({ connection, officialDescription, embedded, loading }) => {
   const { t } = useTranslation();
   const platform = MAAS_PLATFORMS[connection.platformId];
   const statusLabel = connection.connected ? t('maas.connected') : t('maas.notConnected');
+  const description =
+    officialDescription?.source === 'fallback' || !officialDescription
+      ? t(`maas.platforms.${connection.platformId}.description`)
+      : officialDescription.description;
 
   return (
     <AccordionPrimitive.Item
@@ -320,7 +399,7 @@ const PlatformAccordionItem: React.FC<{
             <span className="truncate text-sm text-foreground">{platform.name}</span>
           </span>
           <span className="hidden min-w-0 max-w-64 truncate text-xs text-muted-foreground @4xl:block">
-            {t(`maas.platforms.${connection.platformId}.description`)}
+            {description}
           </span>
         </AccordionPrimitive.Trigger>
         <Tooltip>
@@ -387,6 +466,8 @@ const PlatformAccordionItem: React.FC<{
         <ConnectionPanel
           key={`${connection.platformId}:${connection.keyFingerprint ?? 'empty'}`}
           connection={connection}
+          officialDescription={officialDescription}
+          embedded={embedded}
           className="border-t border-border/50"
         />
       </AccordionPrimitive.Content>
@@ -396,8 +477,10 @@ const PlatformAccordionItem: React.FC<{
 
 const ConnectionPanel: React.FC<{
   connection: MaasConnection;
+  officialDescription?: MaasPlatformOfficialDescription;
+  embedded: boolean;
   className?: string;
-}> = ({ connection, className }) => {
+}> = ({ connection, officialDescription, embedded, className }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const connectMutation = useConnectMaasPlatform();
@@ -430,6 +513,10 @@ const ConnectionPanel: React.FC<{
     connection.platformId === 'zenmux'
       ? t('maas.connection.zenmuxManagementKeyPlaceholder')
       : t('maas.connection.apiKeyPlaceholder');
+  const platformDescription =
+    officialDescription?.source === 'fallback' || !officialDescription
+      ? t(`maas.platforms.${connection.platformId}.description`)
+      : officialDescription.description;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -508,9 +595,10 @@ const ConnectionPanel: React.FC<{
   return (
     <section className={cn('@container bg-background px-4 py-4', className)}>
       <form onSubmit={handleSubmit} className="grid gap-4">
-        <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
-          {t(`maas.platforms.${connection.platformId}.description`)}
-        </p>
+        <div className="flex max-w-2xl flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-relaxed text-muted-foreground">
+          <span>{platformDescription}</span>
+          {officialDescription && <MaasDescriptionSourceBadge description={officialDescription} />}
+        </div>
 
         <div className="grid gap-3 @3xl:grid-cols-[minmax(10rem,0.9fr)_minmax(16rem,1.4fr)]">
           <label className="grid gap-1.5">
@@ -662,30 +750,54 @@ const ConnectionPanel: React.FC<{
           </Button>
         </div>
       </form>
+      {connection.platformId === 'zenmux' && (
+        <ZenmuxUsagePanel connection={connection} embedded={embedded} />
+      )}
     </section>
   );
 };
 
-export function useZenmuxUsageSettingsSection({
+const ZenmuxUsagePanel: React.FC<{
+  connection: MaasConnection;
+  embedded: boolean;
+}> = ({ connection, embedded }) => {
+  const usageSection = useZenmuxUsageSection({
+    connection,
+    embedded,
+    enabled: connection.connected,
+  });
+
+  return (
+    <section className="mt-4 flex min-w-0 flex-col gap-3 border-t border-border/50 pt-4">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h4 className="text-sm font-normal text-foreground">{usageSection.title}</h4>
+          <p className="mt-1 text-xs text-foreground-muted">{usageSection.description}</p>
+        </div>
+        <div className="shrink-0">{usageSection.action}</div>
+      </div>
+      {usageSection.component}
+    </section>
+  );
+};
+
+function useZenmuxUsageSection({
+  connection,
   embedded,
   enabled,
 }: {
+  connection: MaasConnection;
   embedded: boolean;
   enabled: boolean;
 }): {
+  title: string;
   description: React.ReactNode;
   action: React.ReactNode;
   component: React.ReactNode;
 } {
   const { t } = useTranslation();
-  const { data: connections } = useMaasConnections(enabled);
-  const connection = findConnection(connections, 'zenmux');
   const [filterKind, setFilterKind] = useState<MaasInvocationFilterKind>('all');
-  const recordsQuery = useMaasInvocationRecords(
-    'zenmux',
-    filterKind,
-    enabled && connection.connected
-  );
+  const recordsQuery = useMaasInvocationRecords('zenmux', filterKind, enabled);
   const recordsSubtitle = !connection.connected
     ? t('maas.records.emptyNoConnection')
     : recordsQuery.error
@@ -699,6 +811,7 @@ export function useZenmuxUsageSettingsSection({
           });
 
   return {
+    title: t('maas.records.title'),
     description: recordsSubtitle,
     action: (
       <DropdownMenu>

@@ -1,4 +1,4 @@
-import { clipboard } from 'electron';
+import { clipboard, net } from 'electron';
 import type { MaasSettings } from '@shared/app-settings';
 import {
   MAAS_PLATFORM_IDS,
@@ -12,6 +12,8 @@ import {
   type MaasInvocationRecord,
   type MaasPlatformConnection,
   type MaasPlatformId,
+  type MaasPlatformInfoSnapshot,
+  type MaasPlatformOfficialDescription,
   type MaasUsageSummary,
   type MaasUsageSummaryInput,
 } from '@shared/maas';
@@ -20,9 +22,18 @@ import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
 import { encryptedAppSecretsStore } from '../secrets/encrypted-app-secrets-store';
 import { appSettingsService } from '../settings/settings-service';
+import {
+  extractMaasPlatformInfoSnapshot,
+  fallbackMaasPlatformInfoSnapshot,
+  MAAS_PLATFORM_INFO_SNAPSHOT_VERSION,
+  toMaasPlatformOfficialDescription,
+} from './platform-description';
+import { getMaasPlatformInfoSnapshot, setMaasPlatformInfoSnapshot } from './platform-info-store';
 
 const SECRET_PREFIX = 'yoda-maas-token';
 const REAL_RECORDS_CACHE_TTL_MS = 30_000;
+const PLATFORM_INFO_CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
+const PLATFORM_DESCRIPTION_TIMEOUT_MS = 10_000;
 const ZENMUX_MODEL_CATALOG_CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
 const ZENMUX_MODEL_CATALOG_TIMEOUT_MS = 10_000;
 const ZENMUX_USAGE_LOOKBACK_DAYS = 60;
@@ -308,8 +319,25 @@ function sumNullable(
   return hasValue ? total : null;
 }
 
+function isFreshPlatformInfoSnapshot(
+  snapshot: MaasPlatformInfoSnapshot,
+  platform: (typeof MAAS_PLATFORMS)[MaasPlatformId]
+): boolean {
+  if (snapshot.version !== MAAS_PLATFORM_INFO_SNAPSHOT_VERSION) return false;
+  if (snapshot.sourceUrl !== (platform.officialDescriptionUrl || platform.docsUrl)) return false;
+  if (!snapshot.fetchedAt) return false;
+
+  const fetchedAt = new Date(snapshot.fetchedAt).getTime();
+  if (!Number.isFinite(fetchedAt)) return false;
+  return Date.now() - fetchedAt < PLATFORM_INFO_CACHE_TTL_MS;
+}
+
 export class MaasService {
   private readonly recordsCacheByConnection = new Map<string, TTLCache<RealRecordsResult>>();
+  private readonly platformInfoCacheById = new Map<
+    MaasPlatformId,
+    TTLCache<MaasPlatformInfoSnapshot>
+  >();
   private readonly zenmuxModelCatalogCache = new TTLCache<string[]>(
     ZENMUX_MODEL_CATALOG_CACHE_TTL_MS
   );
@@ -319,6 +347,34 @@ export class MaasService {
     return MAAS_PLATFORM_IDS.map((platformId) =>
       toConnection(getConnectedPlatform(settings, platformId), platformId)
     );
+  }
+
+  async listPlatformDescriptions(forceRefresh = false): Promise<MaasPlatformOfficialDescription[]> {
+    const snapshots = await Promise.all(
+      MAAS_PLATFORM_IDS.map((platformId) => this.getPlatformInfoSnapshot(platformId, forceRefresh))
+    );
+
+    return snapshots.map(toMaasPlatformOfficialDescription);
+  }
+
+  async getPlatformInfoSnapshot(
+    platformId: MaasPlatformId,
+    forceRefresh = false
+  ): Promise<MaasPlatformInfoSnapshot> {
+    if (!isMaasPlatformId(platformId)) {
+      throw new Error('Unsupported MaaS platform.');
+    }
+
+    let cache = this.platformInfoCacheById.get(platformId);
+    if (!cache) {
+      cache = new TTLCache<MaasPlatformInfoSnapshot>(PLATFORM_INFO_CACHE_TTL_MS);
+      this.platformInfoCacheById.set(platformId, cache);
+    }
+    if (forceRefresh) {
+      cache.invalidate();
+    }
+
+    return cache.get(() => this.loadPlatformInfoSnapshot(platformId, forceRefresh));
   }
 
   /**
@@ -632,6 +688,67 @@ export class MaasService {
     }
 
     return cache.get(() => this.fetchZenmuxUsageRecords(connection));
+  }
+
+  private async loadPlatformInfoSnapshot(
+    platformId: MaasPlatformId,
+    forceRefresh: boolean
+  ): Promise<MaasPlatformInfoSnapshot> {
+    const platform = MAAS_PLATFORMS[platformId];
+    const stored = await getMaasPlatformInfoSnapshot(platformId);
+    if (!forceRefresh && stored && isFreshPlatformInfoSnapshot(stored, platform)) {
+      return stored;
+    }
+
+    const result = await this.fetchPlatformInfoSnapshot(platform);
+    if (result.persist) {
+      await setMaasPlatformInfoSnapshot(platformId, result.snapshot);
+      return result.snapshot;
+    }
+
+    return stored ?? result.snapshot;
+  }
+
+  private async fetchPlatformInfoSnapshot(
+    platform: (typeof MAAS_PLATFORMS)[MaasPlatformId]
+  ): Promise<{ snapshot: MaasPlatformInfoSnapshot; persist: boolean }> {
+    const sourceUrl = platform.officialDescriptionUrl || platform.docsUrl;
+    try {
+      const response = await net.fetch(sourceUrl, {
+        headers: {
+          Accept: 'text/html,application/xhtml+xml',
+        },
+        signal: AbortSignal.timeout(PLATFORM_DESCRIPTION_TIMEOUT_MS),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Official page returned ${response.status} ${response.statusText || ''}`.trim()
+        );
+      }
+
+      const html = await response.text();
+      return {
+        snapshot: extractMaasPlatformInfoSnapshot({
+          platform,
+          sourceUrl,
+          html,
+        }),
+        persist: true,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error && error.name === 'TimeoutError'
+          ? `Request timed out after ${PLATFORM_DESCRIPTION_TIMEOUT_MS / 1000}s.`
+          : error instanceof Error
+            ? error.message
+            : 'Official page request failed.';
+      log.warn(`Failed to fetch MaaS platform description for ${platform.id}:`, error);
+      return {
+        snapshot: fallbackMaasPlatformInfoSnapshot(platform, sourceUrl, message),
+        persist: false,
+      };
+    }
   }
 
   private async fetchZenmuxUsageRecords(

@@ -4,15 +4,22 @@ import type {
   MaasConnectInput,
   MaasInvocationFilterKind,
   MaasPlatformId,
+  MaasPlatformOfficialDescription,
   MaasUsageSummary,
 } from '@shared/maas';
 import { rpc } from '@renderer/lib/ipc';
 
 const PAGE_SIZE = 24;
 const REAL_USAGE_QUERY_VERSION = 'zenmux-management-statistics-v2';
+const PLATFORM_DESCRIPTION_QUERY_VERSION = 'official-page-description-v1';
 
 export const maasQueryKeys = {
   connections: ['maas', 'connections'] as const,
+  platformDescriptions: [
+    'maas',
+    'platform-descriptions',
+    PLATFORM_DESCRIPTION_QUERY_VERSION,
+  ] as const,
   records: (platformId: MaasPlatformId, kind: MaasInvocationFilterKind, refreshSequence = 0) =>
     ['maas', 'records', REAL_USAGE_QUERY_VERSION, platformId, kind, refreshSequence] as const,
   summary: (
@@ -40,6 +47,15 @@ export function useMaasConnections(enabled = true) {
     queryFn: () => rpc.maas.listConnections(),
     enabled,
     staleTime: 30_000,
+  });
+}
+
+export function useMaasPlatformDescriptions(enabled = true) {
+  return useQuery<MaasPlatformOfficialDescription[]>({
+    queryKey: maasQueryKeys.platformDescriptions,
+    queryFn: () => rpc.maas.listPlatformDescriptions(),
+    enabled,
+    staleTime: 24 * 60 * 60 * 1_000,
   });
 }
 

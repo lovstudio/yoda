@@ -2644,6 +2644,22 @@
         "description": "为给定聊天对话创建模型响应。"
       }
     },
+    "platformDescription": {
+      "source": {
+        "official-meta": "官方 Meta",
+        "official-body-summary": "正文摘要",
+        "fallback": "兜底"
+      },
+      "hint": {
+        "official-meta": "从官方页面的 meta description 提取。",
+        "official-body-summary": "meta description 缺失或不合适，因此从官方页面正文提取并摘要。",
+        "fallback": "官方页面文本不可用，当前显示内置兜底描述。"
+      },
+      "metaLabel": "Meta",
+      "bodySummaryLabel": "摘要",
+      "bodyExcerptLabel": "正文摘录（{{count}} 字符）",
+      "errorLabel": "抓取错误：{{error}}"
+    },
     "connection": {
       "displayName": "名称",
       "endpoint": "端点",
