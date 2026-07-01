@@ -1735,6 +1735,7 @@
       "cancelEdit": "Cancel",
       "updateFailed": "Failed to update agent"
     },
+    "settings": { "title": "Room settings" },
     "preset": { "review": "Review loop", "freeform": "Freeform" },
     "mode": { "review": "Review loop", "freeform": "Freeform" },
     "taskExisting": "Existing task",

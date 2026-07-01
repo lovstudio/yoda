@@ -1,8 +1,13 @@
-import { Send, TerminalSquare, Users } from 'lucide-react';
+import { Send, Settings, TerminalSquare, Users } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RoomMember, RoomMessage, RoomSnapshot } from '@shared/team-room';
+import {
+  DEFAULT_ROUTING_HOP_LIMIT,
+  normalizeRoutingHopLimit,
+  type RoutingHopLimit,
+} from '@shared/team-routing-limit';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
@@ -77,6 +82,7 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <RoomSettingsPopover room={snapshot.room} />
           <TeamIntroPopover
             agents={agents}
             preset={snapshot.room.preset}
@@ -134,6 +140,96 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
       </div>
       <Composer members={snapshot.members} />
     </section>
+  );
+});
+
+const RoomSettingsPopover = observer(function RoomSettingsPopover({
+  room,
+}: {
+  room: RoomSnapshot['room'];
+}) {
+  const { t } = useTranslation();
+  const [routingHopLimit, setRoutingHopLimit] = useState<RoutingHopLimit>(room.routingHopLimit);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setRoutingHopLimit(room.routingHopLimit);
+  }, [room.id, room.routingHopLimit]);
+
+  const dirty = routingHopLimit !== room.routingHopLimit;
+  const save = async () => {
+    if (!dirty || saving) return;
+    setSaving(true);
+    try {
+      await agentRoomStore.updateRoomConfig({ roomId: room.id, routingHopLimit });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        aria-label={t('agentRoom.settings.title')}
+        title={t('agentRoom.settings.title')}
+        className="flex size-8 cursor-pointer items-center justify-center rounded-md border border-border text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground"
+      >
+        <Settings className="size-4" />
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="w-80 gap-3 border border-border bg-background p-3 text-foreground shadow-lg"
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <Settings className="size-4 text-primary" />
+            <div className="min-w-0 flex-1 text-sm font-semibold">
+              {t('agentRoom.settings.title')}
+            </div>
+          </div>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-foreground-muted">
+              {t('agentRoom.field.routingHopLimit')}
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                step={1}
+                disabled={routingHopLimit === null}
+                value={routingHopLimit ?? ''}
+                onChange={(e) =>
+                  setRoutingHopLimit(normalizeRoutingHopLimit(Number(e.target.value)))
+                }
+                className="min-w-0 flex-1 rounded-md border border-border bg-background-1 px-3 py-2 text-sm outline-none focus:border-primary/60 disabled:opacity-50"
+              />
+              <span className="flex shrink-0 items-center gap-1.5 text-xs text-foreground-muted">
+                <input
+                  type="checkbox"
+                  checked={routingHopLimit === null}
+                  onChange={(e) =>
+                    setRoutingHopLimit(e.target.checked ? null : DEFAULT_ROUTING_HOP_LIMIT)
+                  }
+                />
+                {t('agentRoom.field.routingHopLimitInfinite')}
+              </span>
+            </div>
+            <span className="text-[11px] text-foreground-passive">
+              {t('agentRoom.field.routingHopLimitHint')}
+            </span>
+          </label>
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={!dirty || saving}
+            className="flex h-8 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+          >
+            {saving ? t('common.saving') : t('common.save')}
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 });
 

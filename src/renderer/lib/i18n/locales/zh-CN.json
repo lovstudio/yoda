@@ -1735,6 +1735,7 @@
       "cancelEdit": "取消",
       "updateFailed": "更新 Agent 失败"
     },
+    "settings": { "title": "房间设置" },
     "preset": { "review": "评审循环", "freeform": "自由" },
     "mode": { "review": "评审循环", "freeform": "自由" },
     "taskExisting": "已有任务",

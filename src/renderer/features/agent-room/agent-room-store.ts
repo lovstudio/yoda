@@ -149,6 +149,18 @@ class AgentRoomStore {
     await this.selectRoom(params.roomId);
   }
 
+  async updateRoomConfig(params: {
+    roomId: string;
+    routingHopLimit: RoutingHopLimit;
+  }): Promise<void> {
+    await rpc.teamRooms.updateRoomConfig(params);
+    if (this.activeRoomId === params.roomId) {
+      await this.refreshSnapshot();
+      return;
+    }
+    await this.selectRoom(params.roomId);
+  }
+
   /** `/stop` — interrupt every running agent in the active room (Esc to each). */
   async stopRoom(): Promise<void> {
     const snap = this.snapshot;

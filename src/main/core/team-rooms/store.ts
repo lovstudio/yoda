@@ -155,6 +155,27 @@ export async function getRoom(roomId: string): Promise<RoomSnapshot | null> {
   return { room: mapRoom(room), members, messages };
 }
 
+export type UpdateRoomConfigParams = {
+  roomId: string;
+  routingHopLimit: RoutingHopLimit;
+};
+
+export async function updateRoomConfig(params: UpdateRoomConfigParams): Promise<TeamRoom> {
+  const [row] = await db
+    .update(teamRooms)
+    .set({
+      routingHopLimit: normalizeRoutingHopLimit(params.routingHopLimit),
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(teamRooms.id, params.roomId))
+    .returning();
+  if (!row) throw new Error(`Team room ${params.roomId} not found`);
+
+  const room = mapRoom(row);
+  events.emit(teamRoomUpdatedChannel, { roomId: params.roomId }, params.roomId);
+  return room;
+}
+
 // ── members ──────────────────────────────────────────────────────────────────
 
 export type AddMemberParams = {
