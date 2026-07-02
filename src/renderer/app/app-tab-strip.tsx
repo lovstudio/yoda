@@ -9,6 +9,7 @@ import {
   FlaskConical,
   FolderTree,
   GitCompare,
+  GitPullRequest,
   House,
   LayoutDashboard,
   ListTodo,
@@ -200,7 +201,7 @@ const PLUS_BUTTON_CLASS =
 
 /**
  * The strip's "+" in a project scope: a menu that opens the project's
- * non-overview pages (tasks/sessions/harness/docs/settings) as tabs, plus a
+ * non-overview pages (tasks/PRs/sessions/harness/docs/settings) as tabs, plus a
  * shortcut to start a new task. Overview is the fixed tab and pages already
  * open are omitted. Docs is always offered — opening it unconfigured lands on
  * the Docs page's empty state, which guides the user to configure a source.
@@ -458,6 +459,8 @@ function describeProjectTab(
   switch (view) {
     case 'tasks':
       return { label: t('projects.sessions'), icon: lucideIcon(ListTodo) };
+    case 'pullRequests':
+      return { label: t('pullRequests.title'), icon: lucideIcon(GitPullRequest) };
     case 'sessions':
       return { label: t('tasks.conversations.sessions'), icon: lucideIcon(MessageSquare) };
     case 'harness':
