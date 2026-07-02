@@ -86,9 +86,9 @@ export const RepoStatusCard = observer(function RepoStatusCard({
       </header>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
         <dt className="text-foreground-muted">{t('common.path')}</dt>
-        <dd className="flex min-w-0 items-center gap-1 font-mono" title={projectPath}>
-          <span className="min-w-0 truncate">{projectPath}</span>
-          <FilePathActionsDropdown target={projectPathTarget} className="shrink-0" />
+        <dd className="flex min-w-0 items-center gap-2 font-mono" title={projectPath}>
+          <span className="min-w-0 flex-1 truncate">{projectPath}</span>
+          <FilePathActionsDropdown target={projectPathTarget} className="ml-auto shrink-0" />
         </dd>
         <dt className="text-foreground-muted">{t('projects.currentBranch')}</dt>
         <dd className="font-mono inline-flex items-center gap-1">
