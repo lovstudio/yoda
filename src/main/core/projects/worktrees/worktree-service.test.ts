@@ -55,9 +55,25 @@ describe('WorktreeService', () => {
     });
   });
 
+  // Windows briefly locks git worktree/index files on teardown; retry rmSync so
+  // afterEach cleanup does not fail with EPERM. The first attempt succeeds on POSIX.
+  function rmSyncRetry(target: string): void {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        fs.rmSync(target, { recursive: true, force: true });
+        return;
+      } catch {
+        const end = Date.now() + 25 * (attempt + 1);
+        while (Date.now() < end) {
+          /* backoff before retrying */
+        }
+      }
+    }
+  }
+
   afterEach(() => {
-    fs.rmSync(repoDir, { recursive: true, force: true });
-    fs.rmSync(poolDir, { recursive: true, force: true });
+    rmSyncRetry(repoDir);
+    rmSyncRetry(poolDir);
   });
 
   function makeService(
@@ -163,7 +179,9 @@ describe('WorktreeService', () => {
 
       expect(result.success).toBe(true);
       if (!result.success) throw new Error('expected success');
-      expect(result.data).toBe(fs.realpathSync(externalPath));
+      // Yoda may return forward-slash worktree paths even on Windows; normalize
+      // both sides before comparing so the assert is separator-agnostic.
+      expect(path.normalize(result.data)).toBe(path.normalize(fs.realpathSync(externalPath)));
 
       fs.rmSync(externalDir, { recursive: true, force: true });
     });
@@ -211,7 +229,9 @@ describe('WorktreeService', () => {
 
       expect(result.success).toBe(true);
       if (!result.success) throw new Error('expected success');
-      expect(result.data).toBe(fs.realpathSync(externalPath));
+      // Yoda may return forward-slash worktree paths even on Windows; normalize
+      // both sides before comparing so the assert is separator-agnostic.
+      expect(path.normalize(result.data)).toBe(path.normalize(fs.realpathSync(externalPath)));
 
       fs.rmSync(externalDir, { recursive: true, force: true });
     });

@@ -31,11 +31,15 @@ const missingCtx = makeCtx(async () => {
   throw new Error('missing');
 });
 
+// The dependency probe uses `where` on Windows and `which` on POSIX, and the
+// resolved executable path is platform-specific. Mock both so the install/probe
+// flow works on every platform.
+const resolvedCodex = process.platform === 'win32' ? 'C:\\bin\\codex.exe' : '/bin/codex';
 const availableCtx = makeCtx(async (command, args = []) => {
-  if (command === 'which' && args[0] === 'codex') {
-    return { stdout: '/bin/codex\n', stderr: '' };
+  if ((command === 'which' || command === 'where') && args[0] === 'codex') {
+    return { stdout: `${resolvedCodex}\n`, stderr: '' };
   }
-  if (command === '/bin/codex' && args[0] === '--version') {
+  if (command === resolvedCodex && args[0] === '--version') {
     return { stdout: 'codex-cli 1.2.3\n', stderr: '' };
   }
   throw new Error('missing');
