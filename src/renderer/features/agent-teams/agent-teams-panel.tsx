@@ -1,5 +1,6 @@
 import { Copy, Crown, Plus, Trash2, Users, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   isBuiltinTeamId,
   type AgentTeam,
@@ -18,6 +19,9 @@ import { useAgents } from '@renderer/features/agents-config/use-agents';
 import { AgentCard } from '@renderer/lib/components/agent-card/agent-card';
 import { AgentMetaRow } from '@renderer/lib/components/agent-card/agent-meta-row';
 import { AgentInfoHover } from '@renderer/lib/components/agent-slot/agent-info-card';
+import { AvatarInput, type AvatarFileError } from '@renderer/lib/components/avatar-input';
+import { avatarDisplayText, AvatarValue } from '@renderer/lib/components/avatar-value';
+import { useToast } from '@renderer/lib/hooks/use-toast';
 import { cn } from '@renderer/utils/utils';
 import { useAgentTeams } from './use-agent-teams';
 
@@ -217,7 +221,11 @@ export function AgentTeamsMainPanel() {
                   : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
               )}
             >
-              <span className="text-base leading-none">{team.icon}</span>
+              <AvatarValue
+                name={team.name}
+                value={team.icon}
+                className="size-5 rounded-md text-xs"
+              />
               <span className="min-w-0 flex-1 truncate">{team.name}</span>
               {isBuiltinTeamId(team.id) && (
                 <span className="shrink-0 text-[10px] text-foreground-muted">built-in</span>
@@ -240,7 +248,11 @@ export function AgentTeamsMainPanel() {
         ) : selected ? (
           <div className="mx-auto w-full max-w-lg">
             <div className="mb-4 flex items-center gap-3">
-              <span className="text-2xl">{selected.icon}</span>
+              <AvatarValue
+                name={selected.name}
+                value={selected.icon}
+                className="size-9 rounded-lg text-lg"
+              />
               <h2 className="flex-1 text-lg font-semibold">{selected.name}</h2>
               {isBuiltin ? (
                 <button
@@ -322,8 +334,19 @@ function TeamEditor({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
   const runtimeOptions = RUNTIMES.filter((r) => r.terminalOnly);
   const setMembers = (members: AgentTeamMember[]) => onChange({ ...draft, members });
+  const showAvatarFileError = (error: AvatarFileError) => {
+    const key =
+      error === 'too-large'
+        ? 'common.avatarFileTooLarge'
+        : error === 'unsupported'
+          ? 'common.avatarUnsupported'
+          : 'common.avatarReadFailed';
+    toast({ title: t(key), variant: 'destructive' });
+  };
 
   const addAgent = (agentId: string) => {
     const agent = agents.find((a) => a.id === agentId);
@@ -350,12 +373,17 @@ function TeamEditor({
     <div className="mx-auto w-full max-w-lg">
       <h2 className="mb-4 text-lg font-semibold">Team</h2>
       <div className="flex flex-col gap-3">
-        <div className="flex gap-2">
-          <input
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+          <AvatarInput
+            id="agent-team-avatar"
+            name={draft.name}
             value={draft.icon}
-            onChange={(e) => onChange({ ...draft, icon: e.target.value })}
-            className="w-14 rounded-md border border-border bg-background-1 px-3 py-2 text-center text-lg outline-none focus:border-primary/60"
-            aria-label="Team icon"
+            onChange={(icon) => onChange({ ...draft, icon })}
+            inputLabel="Team avatar"
+            placeholder={t('common.avatarPlaceholder')}
+            uploadTitle={t('common.uploadPhoto')}
+            clearTitle={t('common.clearAvatar')}
+            onFileError={showAvatarFileError}
           />
           <input
             value={draft.name}
@@ -491,7 +519,7 @@ function TeamEditor({
               .filter((a) => !usedAgentRefs.has(a.id))
               .map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.icon} {a.name}
+                  {avatarDisplayText(a.name, a.icon)} {a.name}
                 </option>
               ))}
           </select>

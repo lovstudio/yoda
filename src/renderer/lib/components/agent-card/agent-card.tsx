@@ -3,9 +3,9 @@ import { cn } from '@renderer/utils/utils';
 import { AgentAvatar } from './agent-avatar';
 
 interface AgentCardProps {
-  /** Drives the fallback monogram avatar and is the card's title. */
+  /** Drives the fallback avatar and is the card's title. */
   name: string;
-  /** Optional user-authored Agent glyph. */
+  /** Optional user-authored Agent glyph/image value. */
   icon?: string;
   description?: string;
   /** Tiny label above the name (e.g. a role). */

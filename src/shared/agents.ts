@@ -16,7 +16,7 @@ export interface Agent {
   slug: string;
   name: string;
   description: string;
-  /** A single emoji or short glyph used as the card avatar. */
+  /** Emoji/glyph, image URL, or data URL used as the card avatar. */
   icon: string;
   systemPrompt: string;
   /** Skill ids this agent enables when it runs. */

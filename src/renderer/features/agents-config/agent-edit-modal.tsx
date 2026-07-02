@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { agentToDraft, emptyAgentDraft, type Agent, type AgentDraft } from '@shared/agents';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
+import { AvatarInput, type AvatarFileError } from '@renderer/lib/components/avatar-input';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import type { BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { useCloseGuard } from '@renderer/lib/modal/use-close-guard';
@@ -35,6 +36,16 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
 
   const set = <K extends keyof AgentDraft>(key: K, value: AgentDraft[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
+
+  const showAvatarFileError = (error: AvatarFileError) => {
+    const key =
+      error === 'too-large'
+        ? 'common.avatarFileTooLarge'
+        : error === 'unsupported'
+          ? 'common.avatarUnsupported'
+          : 'common.avatarReadFailed';
+    toast({ title: t(key), variant: 'destructive' });
+  };
 
   const toggleSkill = (id: string) =>
     setDraft((prev) => ({
@@ -70,19 +81,24 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
 
       <DialogContentArea>
         <div className="space-y-4">
-          <div className="flex gap-3">
-            <div className="w-16 space-y-2">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+            <div className="space-y-2">
               <Label htmlFor="agent-icon" className="text-xs">
                 {t('agentManager.icon')}
               </Label>
-              <Input
+              <AvatarInput
                 id="agent-icon"
+                name={draft.name}
                 value={draft.icon}
-                onChange={(e) => set('icon', e.target.value.slice(0, 4))}
-                className="text-center text-lg"
+                onChange={(value) => set('icon', value)}
+                inputLabel={t('agentManager.icon')}
+                placeholder={t('common.avatarPlaceholder')}
+                uploadTitle={t('common.uploadPhoto')}
+                clearTitle={t('common.clearAvatar')}
+                onFileError={showAvatarFileError}
               />
             </div>
-            <div className="flex-1 space-y-2">
+            <div className="space-y-2">
               <Label htmlFor="agent-name" className="text-xs">
                 {t('common.name')}
               </Label>

@@ -38,7 +38,7 @@ export interface AgentTeamMember {
 export interface AgentTeam {
   id: string;
   name: string;
-  /** Emoji/glyph avatar (matches Agent.icon). */
+  /** Emoji/glyph, image URL, or data URL avatar (matches Agent.icon). */
   icon: string;
   routing: TeamRouting;
   /** Code-defined built-ins are not editable/deletable. */

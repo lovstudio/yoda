@@ -8,6 +8,7 @@ import {
   normalizeRoutingHopLimit,
   type RoutingHopLimit,
 } from '@shared/team-routing-limit';
+import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { rpc } from '@renderer/lib/ipc';
 import { cn } from '@renderer/utils/utils';
 import { agentRoomStore } from './agent-room-store';
@@ -318,7 +319,11 @@ export const NewRoomForm = observer(function NewRoomForm({ onClose }: { onClose:
                           on ? 'bg-primary/10 text-foreground' : 'hover:bg-background-2'
                         )}
                       >
-                        <span className="text-base">{a.icon}</span>
+                        <AvatarValue
+                          name={a.name}
+                          value={a.icon}
+                          className="size-6 rounded-md text-xs"
+                        />
                         <span className="min-w-0 flex-1 truncate">{a.name}</span>
                         {on && <Check className="size-4 text-primary" />}
                       </button>

@@ -5,19 +5,14 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RoomMember } from '@shared/team-room';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import { AvatarInput, type AvatarFileError } from '@renderer/lib/components/avatar-input';
+import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { cn } from '@renderer/utils/utils';
 import { ACCENT_AVATAR, STATUS_DOT, STATUS_LABEL } from './accent';
 import { agentRoomStore } from './agent-room-store';
 import { taskRoomQueryKey } from './task-room-chat';
-
-const monogram = (name: string) => name.trim().charAt(0).toUpperCase() || '?';
-const MAX_MEMBER_ICON_LENGTH = 4;
-
-function avatarText(member: Pick<RoomMember, 'displayName' | 'icon'>): string {
-  return member.icon.trim() || monogram(member.displayName);
-}
 
 /** Look up a member in the (singleton) loaded room snapshot. */
 function memberById(memberId: string): RoomMember | undefined {
@@ -31,14 +26,11 @@ export function roomMemberTabMeta(memberId: string): { label: string; icon: Reac
   return {
     label: member.displayName,
     icon: (
-      <span
-        className={cn(
-          'flex size-3.5 items-center justify-center rounded text-[10px] font-semibold',
-          ACCENT_AVATAR[member.accent]
-        )}
-      >
-        {avatarText(member)}
-      </span>
+      <AvatarValue
+        name={member.displayName}
+        value={member.icon}
+        className={cn('size-3.5 rounded text-[10px] font-semibold', ACCENT_AVATAR[member.accent])}
+      />
     ),
   };
 }
@@ -96,6 +88,16 @@ export const RoomMemberDetail = observer(function RoomMemberDetail({
     setEditing(false);
   };
 
+  const showAvatarFileError = (error: AvatarFileError) => {
+    const key =
+      error === 'too-large'
+        ? 'common.avatarFileTooLarge'
+        : error === 'unsupported'
+          ? 'common.avatarUnsupported'
+          : 'common.avatarReadFailed';
+    toast({ title: t(key), variant: 'destructive' });
+  };
+
   const saveProfile = async () => {
     if (!member || saving) return;
     const displayName = nameDraft.trim();
@@ -131,42 +133,46 @@ export const RoomMemberDetail = observer(function RoomMemberDetail({
   return (
     <div className="h-full overflow-y-auto p-4">
       <div className="flex items-start gap-3">
-        {editing ? (
-          <input
-            aria-label={t('agentRoom.member.avatar')}
-            value={iconDraft}
-            onChange={(event) => setIconDraft(event.target.value.slice(0, MAX_MEMBER_ICON_LENGTH))}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void saveProfile();
-              if (event.key === 'Escape') cancelEdit();
-            }}
+        {!editing && (
+          <AvatarValue
+            name={member.displayName}
+            value={member.icon}
             className={cn(
-              'flex size-11 shrink-0 rounded-xl border border-border bg-background-1 text-center text-base font-semibold outline-none focus:border-primary/60',
+              'size-11 rounded-xl text-base font-semibold',
               ACCENT_AVATAR[member.accent]
             )}
           />
-        ) : (
-          <div
-            className={cn(
-              'flex size-11 shrink-0 items-center justify-center rounded-xl text-base font-semibold',
-              ACCENT_AVATAR[member.accent]
-            )}
-          >
-            {avatarText(member)}
-          </div>
         )}
         <div className="min-w-0 flex-1">
           {editing ? (
-            <input
-              aria-label={t('agentRoom.member.name')}
-              value={nameDraft}
-              onChange={(event) => setNameDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void saveProfile();
-                if (event.key === 'Escape') cancelEdit();
-              }}
-              className="h-8 w-full min-w-0 rounded-md border border-border bg-background-1 px-2 text-sm font-semibold outline-none focus:border-primary/60"
-            />
+            <div className="flex min-w-0 flex-col gap-2">
+              <input
+                aria-label={t('agentRoom.member.name')}
+                value={nameDraft}
+                onChange={(event) => setNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void saveProfile();
+                  if (event.key === 'Escape') cancelEdit();
+                }}
+                className="h-8 w-full min-w-0 rounded-md border border-border bg-background-1 px-2 text-sm font-semibold outline-none focus:border-primary/60"
+              />
+              <AvatarInput
+                id={`room-member-avatar-${member.id}`}
+                name={nameDraft || member.displayName}
+                value={iconDraft}
+                onChange={setIconDraft}
+                inputLabel={t('agentRoom.member.avatar')}
+                placeholder={t('common.avatarPlaceholder')}
+                uploadTitle={t('common.uploadPhoto')}
+                clearTitle={t('common.clearAvatar')}
+                onFileError={showAvatarFileError}
+                previewClassName={cn('size-11 rounded-xl text-base', ACCENT_AVATAR[member.accent])}
+                onInputKeyDown={(event) => {
+                  if (event.key === 'Enter') void saveProfile();
+                  if (event.key === 'Escape') cancelEdit();
+                }}
+              />
+            </div>
           ) : (
             <div className="truncate text-base font-semibold">{member.displayName}</div>
           )}

@@ -9,6 +9,7 @@ import {
   type RoutingHopLimit,
 } from '@shared/team-routing-limit';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { cn } from '@renderer/utils/utils';
@@ -21,9 +22,6 @@ import {
   STATUS_TEXT,
 } from './accent';
 import { agentRoomStore } from './agent-room-store';
-
-const monogram = (name: string) => name.trim().charAt(0).toUpperCase() || '?';
-const avatarText = (displayName: string, icon?: string) => icon?.trim() || monogram(displayName);
 
 /** Opens an agent's detail / a session as a normal task tab (defaulting to the sidebar). */
 type OpenTab = (id: string) => void;
@@ -99,14 +97,14 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
                 className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-transparent px-1.5 py-1 transition-colors hover:border-border hover:bg-background-2"
               >
                 <div className="relative">
-                  <div
+                  <AvatarValue
+                    name={m.displayName}
+                    value={m.icon}
                     className={cn(
-                      'flex size-6 items-center justify-center rounded-md text-[11px] font-semibold',
+                      'size-6 rounded-md text-[11px] font-semibold',
                       ACCENT_AVATAR[m.accent]
                     )}
-                  >
-                    {avatarText(m.displayName, m.icon)}
-                  </div>
+                  />
                   <span
                     className={cn(
                       'absolute -bottom-0.5 -right-0.5 size-2 rounded-full ring-2 ring-background',
@@ -323,14 +321,11 @@ const TeamIntroPanel = observer(function TeamIntroPanel({
             title={t('agentRoom.viewAgent')}
             className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border border-transparent px-1.5 py-1 text-left transition-colors hover:bg-background-2"
           >
-            <div
-              className={cn(
-                'flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold',
-                ACCENT_AVATAR[m.accent]
-              )}
-            >
-              {avatarText(m.displayName, m.icon)}
-            </div>
+            <AvatarValue
+              name={m.displayName}
+              value={m.icon}
+              className={cn('size-7 rounded-lg text-xs font-semibold', ACCENT_AVATAR[m.accent])}
+            />
             <span className="text-sm font-medium">{m.displayName}</span>
             <span className="ml-auto flex items-center gap-1 text-[10px] text-foreground-muted">
               <span className={cn('size-1.5 rounded-full', STATUS_DOT[m.status])} />
@@ -397,22 +392,20 @@ function MessageRow({
           type="button"
           onClick={openDetail}
           title={t('agentRoom.viewAgent')}
-          className={cn(
-            'flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-sm font-semibold transition-opacity hover:opacity-80',
-            ACCENT_AVATAR[accent]
-          )}
+          className="shrink-0 cursor-pointer transition-opacity hover:opacity-80"
         >
-          {avatarText(name, author?.icon)}
+          <AvatarValue
+            name={name}
+            value={author?.icon}
+            className={cn('size-9 rounded-lg text-sm font-semibold', ACCENT_AVATAR[accent])}
+          />
         </button>
       ) : (
-        <div
-          className={cn(
-            'flex size-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold',
-            ACCENT_AVATAR[accent]
-          )}
-        >
-          {avatarText(name, author?.icon)}
-        </div>
+        <AvatarValue
+          name={name}
+          value={author?.icon}
+          className={cn('size-9 rounded-lg text-sm font-semibold', ACCENT_AVATAR[accent])}
+        />
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -610,14 +603,14 @@ const Composer = observer(function Composer({ members }: { members: RoomMember[]
                 </>
               ) : (
                 <>
-                  <div
+                  <AvatarValue
+                    name={s.displayName}
+                    value={s.icon}
                     className={cn(
-                      'flex size-6 items-center justify-center rounded-md text-xs font-semibold',
+                      'size-6 rounded-md text-xs font-semibold',
                       ACCENT_AVATAR[s.accent]
                     )}
-                  >
-                    {avatarText(s.displayName, s.icon)}
-                  </div>
+                  />
                   <span className="flex-1 truncate">{s.displayName}</span>
                   {s.status && (
                     <span className="flex items-center gap-1 text-[10px] text-foreground-muted">
