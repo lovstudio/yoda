@@ -255,7 +255,10 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
         }}
         onPointerUp={() => setIsHandleDragging(false)}
         onPointerCancel={() => setIsHandleDragging(false)}
-        className={taskView.isTerminalDrawerOpen ? 'flex' : 'hidden'}
+        className={cn(
+          "z-10 -mb-7 h-7 bg-transparent before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-border before:content-['']",
+          taskView.isTerminalDrawerOpen ? 'flex' : 'hidden'
+        )}
       />
       <ResizablePanel
         id="task-terminal-drawer"

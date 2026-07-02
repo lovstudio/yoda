@@ -86,13 +86,13 @@ export const BottomPanel = observer(function BottomPanel() {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border px-2">
+      <div className="pointer-events-none relative z-20 flex h-7 shrink-0 items-center gap-1 border-b border-border px-2">
         {/* Mode tabs side by side (same interaction as the sidebar chip
             strip): each closable, draggable to reorder, "+" adds the rest. */}
         <div
           ref={dropZone.dropRef}
           className={cn(
-            'flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-sm',
+            'pointer-events-auto flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-sm',
             dropZone.isOver && 'bg-background-tertiary-1'
           )}
         >
@@ -130,7 +130,7 @@ export const BottomPanel = observer(function BottomPanel() {
           ) : null}
         </div>
         {/* Tail: config-type actions, close last. */}
-        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+        <div className="pointer-events-auto ml-auto flex shrink-0 items-center gap-0.5">
           {tab === 'scripts' ? (
             <button
               type="button"
