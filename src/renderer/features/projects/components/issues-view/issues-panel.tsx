@@ -5,9 +5,11 @@ import type { Issue } from '@shared/tasks';
 import { useIssues } from '@renderer/features/integrations/use-issues';
 import { CreateIssueButton } from '@renderer/features/projects/components/issues-view/create-issue-button';
 import {
+  getLinkedTaskStores,
   IssueLinkedTasks,
   IssueTaskLinkPopover,
 } from '@renderer/features/projects/components/issues-view/issue-task-links';
+import { useIssueTaskCreation } from '@renderer/features/projects/components/issues-view/use-issue-task-creation';
 import { getRepositoryStore } from '@renderer/features/projects/stores/project-selectors';
 import {
   IssueIdentifier,
@@ -37,6 +39,7 @@ const ProjectIssueRow = observer(function ProjectIssueRow({
   const { t } = useTranslation();
   const showCreateTaskModal = useShowModal('taskModal');
   const assignees = issue.assignees ?? [];
+  const alreadyInTask = getLinkedTaskStores(projectId, issue).length > 0;
 
   return (
     <div className="group relative flex items-start gap-3 rounded-lg p-3 py-4 hover:bg-background-1 transition-colors">
@@ -100,12 +103,13 @@ const ProjectIssueRow = observer(function ProjectIssueRow({
         <Button
           variant="outline"
           size="sm"
+          disabled={alreadyInTask}
           onClick={() =>
             showCreateTaskModal({ projectId, strategy: 'from-issue', initialIssue: issue })
           }
         >
           <ScanSearch className="size-3.5" />
-          {t('issues.createTask')}
+          {alreadyInTask ? t('issues.alreadyInTask') : t('issues.createTask')}
         </Button>
       </div>
     </div>
@@ -137,6 +141,24 @@ export const IssuesPanel = observer(function IssuesPanel() {
     initialLimit: ISSUE_FETCH_LIMIT,
     enabled: Boolean(repositoryUrl) && isInitialized && authenticated,
   });
+  const { createIssueTasks, isCreatingIssueTasks, taskableIssues } = useIssueTaskCreation(
+    projectId,
+    issues
+  );
+  const showConfirm = useShowModal('confirmActionModal');
+
+  const confirmCreateIssueTasks = () => {
+    if (taskableIssues.length === 0) return;
+    showConfirm({
+      title: t('issues.createTasksTitle', { count: taskableIssues.length }),
+      description: t('issues.createTasksDescription', { count: taskableIssues.length }),
+      confirmLabel: t('issues.createTasksConfirm'),
+      variant: 'default',
+      onSuccess: () => {
+        void createIssueTasks(taskableIssues);
+      },
+    });
+  };
 
   if (!repositoryUrl) {
     return (
@@ -199,6 +221,21 @@ export const IssuesPanel = observer(function IssuesPanel() {
             {t('issues.openCount', { count: issues.length })}
           </div>
           <div className="flex min-w-0 items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={confirmCreateIssueTasks}
+              disabled={taskableIssues.length === 0 || isCreatingIssueTasks}
+            >
+              {isCreatingIssueTasks ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <ScanSearch className="size-3.5" />
+              )}
+              {taskableIssues.length > 0
+                ? t('issues.createTasksCount', { count: taskableIssues.length })
+                : t('issues.allIssuesInTasks')}
+            </Button>
             <CreateIssueButton
               repositoryUrl={repositoryUrl}
               projectId={projectId}
