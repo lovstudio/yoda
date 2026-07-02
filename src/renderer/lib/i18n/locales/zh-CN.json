@@ -203,6 +203,23 @@
       "saving": "保存中…",
       "failed": "重命名项目失败"
     },
+    "moveProjectPath": {
+      "menuLabel": "移动项目路径…",
+      "title": "移动项目路径",
+      "nameLabel": "项目名",
+      "pathLabel": "项目路径",
+      "pathHint": "使用已存在的 git 仓库根目录。",
+      "selectDirectory": "选择目录",
+      "selectDirectoryTitle": "选择项目目录",
+      "selectDirectoryMessage": "选择该项目要使用的仓库根目录。",
+      "projectMissing": "项目不存在。",
+      "nameRequired": "项目名不能为空。",
+      "pathRequired": "项目路径不能为空。",
+      "unchanged": "项目名和路径没有变化。",
+      "submit": "保存",
+      "saving": "保存中…",
+      "failed": "移动项目路径失败"
+    },
     "archiveTask": "归档任务",
     "taskArchived": "任务已归档",
     "confirmArchive": "确认归档",

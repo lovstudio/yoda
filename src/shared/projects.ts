@@ -46,6 +46,11 @@ export function projectDisplayName(p: Pick<LocalProject, 'name' | 'alias'>): str
 
 export const MAX_PROJECT_ALIAS_LENGTH = 80;
 
+export type MoveProjectPathParams = {
+  name: string;
+  path: string;
+};
+
 export type CreateLocalProjectParams = {
   type: 'local';
   id?: string;

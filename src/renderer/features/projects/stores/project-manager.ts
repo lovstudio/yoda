@@ -1,6 +1,6 @@
 import { makeObservable, observable, runInAction } from 'mobx';
 import { sshConnectionEventChannel } from '@shared/events/sshEvents';
-import { type LocalProject, type SshProject } from '@shared/projects';
+import { type LocalProject, type MoveProjectPathParams, type SshProject } from '@shared/projects';
 import type { ProjectViewSnapshot } from '@shared/view-state';
 import { resolveProjectWorkspaceConflict } from '@renderer/features/workspaces/project-workspace-conflict';
 import { events, rpc } from '@renderer/lib/ipc';
@@ -435,6 +435,24 @@ export class ProjectManagerStore {
     });
 
     // Wait for any existing in-flight mount to settle before attempting a fresh mount
+    const inFlight = this._projectMountPromises.get(projectId);
+    if (inFlight) await inFlight.catch(() => {});
+
+    this.mountProject(projectId).catch(() => {});
+  }
+
+  async moveProjectPath(projectId: string, params: MoveProjectPathParams): Promise<void> {
+    const updatedProject = await rpc.projects.moveProjectPath(projectId, params);
+
+    runInAction(() => {
+      const current = this.projects.get(projectId);
+      if (current) {
+        current.transitionToUnmounted(updatedProject, 'opening');
+      } else {
+        this.projects.set(projectId, createUnmountedProject(updatedProject, 'opening'));
+      }
+    });
+
     const inFlight = this._projectMountPromises.get(projectId);
     if (inFlight) await inFlight.catch(() => {});
 

@@ -68,6 +68,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const showManageRunScripts = useShowModal('manageRunScriptsModal');
   const showCaptureAutomation = useShowModal('captureProjectAutomationModal');
   const showRenameProject = useShowModal('renameProjectModal');
+  const showMoveProjectPath = useShowModal('moveProjectPathModal');
   const showConfirmRemoveProject = useShowModal('confirmActionModal');
   const [isMenuOpen, setMenuOpen] = useState(false);
   // Alt/Option-held hover hints (and click) that the row pins into the global
@@ -276,6 +277,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         ? undefined
         : () => showCaptureAutomation({ projectId, projectName: project.displayName }),
     onRename: project.state === 'unregistered' ? undefined : () => showRenameProject({ projectId }),
+    onMovePath:
+      project.state === 'unregistered' ? undefined : () => showMoveProjectPath({ projectId }),
     canArchiveProject: project.state !== 'unregistered',
     canArchiveProjectTasks: Boolean(mountedProject && activeTaskCount > 0),
     canRemoveProject: project.state !== 'unregistered',

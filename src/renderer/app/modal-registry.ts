@@ -11,6 +11,7 @@ import { CaptureProjectAutomationModal } from '@renderer/features/projects/compo
 import { ExpressCreateProjectModal } from '@renderer/features/projects/components/express-create-project-modal';
 import { InitialCommitModal } from '@renderer/features/projects/components/initial-commit-modal';
 import { ManageRunScriptsModal } from '@renderer/features/projects/components/manage-run-scripts-modal';
+import { MoveProjectPathModal } from '@renderer/features/projects/components/move-project-path-modal';
 import { ManageQuickActionsModal } from '@renderer/features/projects/components/overview-view/manage-quick-actions-modal';
 import { RenameProjectModal } from '@renderer/features/projects/components/rename-project-modal';
 import { ShareProjectConfigModal } from '@renderer/features/projects/components/settings-view/share-project-config-modal';
@@ -86,6 +87,7 @@ export const modalRegistry = {
   sessionPromptsModal: createModal(SessionPromptsModal, { size: 'lg' }),
   leakedPromptViewerModal: createModal(LeakedPromptViewerModal, { size: 'lg' }),
   renameProjectModal: createModal(RenameProjectModal, { size: 'xs' }),
+  moveProjectPathModal: createModal(MoveProjectPathModal, { size: 'sm' }),
   createWorkspaceModal: createModal(CreateWorkspaceModal, { size: 'xs' }),
   projectWorkspaceConflictModal: createModal(ProjectWorkspaceConflictModal, { size: 'sm' }),
   archiveTaskWithNoteModal: createModal(ArchiveTaskWithNoteModal, { size: 'sm' }),

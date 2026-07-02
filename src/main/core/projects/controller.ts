@@ -8,6 +8,7 @@ import { archiveProject } from './operations/archiveProject';
 import { createProject, inspectProjectPath } from './operations/createProject';
 import { deleteProject } from './operations/deleteProject';
 import { getArchivedProjects, getProjects } from './operations/getProjects';
+import { moveProjectPath } from './operations/moveProjectPath';
 import { openProject } from './operations/openProject';
 import { prepareQuickProject } from './operations/prepareQuickProject';
 import { unarchiveProject } from './operations/unarchiveProject';
@@ -34,6 +35,7 @@ export const projectController = createRPCController({
   shareProjectSettingsToConfig,
   updateProjectConnection,
   updateProjectAlias,
+  moveProjectPath,
   openProject,
 
   // Acquires the slim project-view workspace that backs project-level file

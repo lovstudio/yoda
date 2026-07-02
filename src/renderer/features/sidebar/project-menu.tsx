@@ -4,6 +4,7 @@ import {
   ArchiveX,
   CableIcon,
   Copy,
+  FolderPen,
   Info,
   PencilLine,
   Pin,
@@ -56,6 +57,7 @@ interface ProjectMenuActions {
   onConfigureScripts?: () => void;
   onCaptureAutomation?: () => void;
   onRename?: () => void;
+  onMovePath?: () => void;
   canArchiveProject: boolean;
   canArchiveProjectTasks: boolean;
   canRemoveProject: boolean;
@@ -150,6 +152,15 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
       icon: PencilLine,
       label: t('sidebar.renameProject.menuLabel'),
       onSelect: actions.onRename,
+    });
+  }
+  if (actions.onMovePath) {
+    items.push({
+      key: 'move-path',
+      group: 2,
+      icon: FolderPen,
+      label: t('sidebar.moveProjectPath.menuLabel'),
+      onSelect: actions.onMovePath,
     });
   }
   // group 3 — ssh

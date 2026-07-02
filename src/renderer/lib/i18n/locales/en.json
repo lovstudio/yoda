@@ -205,6 +205,23 @@
       "saving": "Saving…",
       "failed": "Failed to rename project"
     },
+    "moveProjectPath": {
+      "menuLabel": "Move project path…",
+      "title": "Move project path",
+      "nameLabel": "Project name",
+      "pathLabel": "Project path",
+      "pathHint": "Use an existing git repository root.",
+      "selectDirectory": "Select directory",
+      "selectDirectoryTitle": "Select project directory",
+      "selectDirectoryMessage": "Choose the repository root to use for this project.",
+      "projectMissing": "Project not found.",
+      "nameRequired": "Project name is required.",
+      "pathRequired": "Project path is required.",
+      "unchanged": "Name and path are unchanged.",
+      "submit": "Save",
+      "saving": "Saving…",
+      "failed": "Failed to move project path"
+    },
     "archiveTask": "Archive task",
     "taskArchived": "Task archived",
     "confirmArchive": "Confirm archive",
