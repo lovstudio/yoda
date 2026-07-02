@@ -1,5 +1,9 @@
 import { makeAutoObservable } from 'mobx';
-import type { BottomPanelTab, TaskSidebarViewSnapshot } from '@shared/view-state';
+import type {
+  BottomPanelTab,
+  TaskBottomPanelSnapshot,
+  TaskSidebarViewSnapshot,
+} from '@shared/view-state';
 import {
   SESSION_PANEL_UNITS,
   type SessionPanelUnit,
@@ -16,9 +20,14 @@ const DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS = ['basic'];
 const DEFAULT_BOTTOM_PANEL_OPEN = false;
 const DEFAULT_BOTTOM_PANEL_TAB: BottomPanelTab = 'terminals';
 const DEFAULT_BOTTOM_PANEL_FULL_WIDTH = true;
+const BOTTOM_PANEL_TABS = ['terminals', 'scripts', 'session'] as const;
 
 function normalizeOpenSectionIds(value: string[]): string[] {
   return Array.from(new Set(value));
+}
+
+function isBottomPanelTab(value: unknown): value is BottomPanelTab {
+  return BOTTOM_PANEL_TABS.includes(value as BottomPanelTab);
 }
 
 export class TaskSidebarPreferenceStore {
@@ -52,6 +61,33 @@ export class TaskSidebarPreferenceStore {
       openBottomPanelTabs: [...this.openBottomPanelTabs],
       isBottomPanelFullWidth: this.isBottomPanelFullWidth,
     };
+  }
+
+  get bottomPanelSnapshot(): TaskBottomPanelSnapshot {
+    return {
+      isBottomPanelOpen: this.isBottomPanelOpen,
+      bottomPanelTab: this.bottomPanelTab,
+      openBottomPanelTabs: [...this.openBottomPanelTabs],
+      isBottomPanelFullWidth: this.isBottomPanelFullWidth,
+    };
+  }
+
+  restoreBottomPanelSnapshot(snapshot?: Partial<TaskBottomPanelSnapshot>): void {
+    if (!snapshot) return;
+    if (typeof snapshot.isBottomPanelOpen === 'boolean') {
+      this.isBottomPanelOpen = snapshot.isBottomPanelOpen;
+    }
+    if (isBottomPanelTab(snapshot.bottomPanelTab)) {
+      this.bottomPanelTab = snapshot.bottomPanelTab;
+    }
+    if (Array.isArray(snapshot.openBottomPanelTabs)) {
+      this.openBottomPanelTabs = Array.from(
+        new Set(snapshot.openBottomPanelTabs.filter(isBottomPanelTab))
+      );
+    }
+    if (typeof snapshot.isBottomPanelFullWidth === 'boolean') {
+      this.isBottomPanelFullWidth = snapshot.isBottomPanelFullWidth;
+    }
   }
 
   setSidebarTab(tab: SidebarTab): void {

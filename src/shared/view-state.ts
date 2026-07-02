@@ -69,6 +69,18 @@ export interface ActiveFile {
 
 export type BottomPanelTab = 'terminals' | 'scripts' | 'session';
 
+/** Persisted per-task bottom drawer chrome. */
+export type TaskBottomPanelSnapshot = {
+  /** Whether the bottom drawer is open. */
+  isBottomPanelOpen?: boolean;
+  /** Which content the bottom drawer shows (terminals / scripts / session history). */
+  bottomPanelTab?: BottomPanelTab;
+  /** Mode tabs added to the bottom drawer strip (each independently closable). */
+  openBottomPanelTabs?: string[];
+  /** Drawer spans the full window width (under the sidebar) vs. only the main column. */
+  isBottomPanelFullWidth?: boolean;
+};
+
 /** One visited page in the task's in-app browser history (most recent first). */
 export type BrowserHistoryEntry = { url: string; title: string };
 
@@ -90,6 +102,8 @@ export type TaskViewSnapshot = {
   isTerminalDrawerOpen?: boolean;
   /** @deprecated Bottom drawer chrome is runtime-only; legacy snapshots are ignored. */
   bottomPanelTab?: BottomPanelTab;
+  /** Persisted bottom drawer chrome, scoped to this task. */
+  bottomPanel?: TaskBottomPanelSnapshot;
   tabManager?: TabManagerSnapshot;
   /** The task's resident in-app browser card (current page + visit history). */
   browser?: TaskBrowserSnapshot;

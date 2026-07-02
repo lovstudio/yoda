@@ -3,6 +3,7 @@ import { Terminal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDefaultLayout } from 'react-resizable-panels';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
@@ -35,12 +36,20 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
     mountedProject?.data.type === 'ssh' ? mountedProject.data.connectionId : undefined;
   const [isPanelFocused, setIsPanelFocused] = useState(false);
   const newTerminalHotkey = getEffectiveHotkey('newTerminal', keyboard);
+  const drawerLayoutId = `terminal-drawer-inner:${taskId}`;
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
+    id: drawerLayoutId,
+    storage: localStorage,
+  });
 
   const autoFocus =
     isActive &&
     provisionedTask.taskView.isTerminalDrawerOpen &&
     provisionedTask.taskView.activeBottomPanelTab === 'terminals' &&
     provisionedTask.taskView.focusedRegion === 'bottom';
+  const isVisible =
+    provisionedTask.taskView.isTerminalDrawerOpen &&
+    provisionedTask.taskView.activeBottomPanelTab === 'terminals';
 
   const activeTerminalId = terminalTabView.activeTabId;
   const activeSession =
@@ -85,8 +94,10 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
   return (
     <ResizablePanelGroup
       orientation="horizontal"
-      id={`terminal-drawer-inner:${taskId}`}
+      id={drawerLayoutId}
       className="h-full"
+      defaultLayout={defaultLayout}
+      onLayoutChanged={onLayoutChanged}
       onFocus={() => {
         setIsPanelFocused(true);
         provisionedTask.taskView.setFocusedRegion('bottom');
@@ -103,6 +114,7 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
           activeSession={activeSession}
           allSessionIds={allSessionIds}
           paneId="terminal-drawer"
+          active={isVisible}
           autoFocus={autoFocus}
           emptyState={emptyState}
           remoteConnectionId={remoteConnectionId}

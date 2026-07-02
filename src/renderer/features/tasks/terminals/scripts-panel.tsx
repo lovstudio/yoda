@@ -1,6 +1,7 @@
 import { ScrollText } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
+import { useDefaultLayout } from 'react-resizable-panels';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
@@ -27,12 +28,20 @@ export const ScriptsPanel = observer(function ScriptsPanel() {
     mountedProject?.data.type === 'ssh' ? mountedProject.data.connectionId : undefined;
   const fileLinks = useWorkspaceFileLinks(remoteConnectionId);
   const webLinks = useWorkspaceWebLinks();
+  const drawerLayoutId = `scripts-drawer-inner:${taskId}`;
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
+    id: drawerLayoutId,
+    storage: localStorage,
+  });
 
   const autoFocus =
     isActive &&
     provisionedTask.taskView.isTerminalDrawerOpen &&
     provisionedTask.taskView.activeBottomPanelTab === 'scripts' &&
     provisionedTask.taskView.focusedRegion === 'bottom';
+  const isVisible =
+    provisionedTask.taskView.isTerminalDrawerOpen &&
+    provisionedTask.taskView.activeBottomPanelTab === 'scripts';
 
   const scripts = lifecycleScriptsMgr?.tabs ?? [];
   const activeScript = lifecycleScriptsMgr?.activeTab ?? scripts[0];
@@ -80,8 +89,10 @@ export const ScriptsPanel = observer(function ScriptsPanel() {
   return (
     <ResizablePanelGroup
       orientation="horizontal"
-      id={`scripts-drawer-inner:${taskId}`}
+      id={drawerLayoutId}
       className="h-full"
+      defaultLayout={defaultLayout}
+      onLayoutChanged={onLayoutChanged}
       onFocus={() => provisionedTask.taskView.setFocusedRegion('bottom')}
     >
       <ResizablePanel id="scripts-drawer-pty" minSize="30%">
@@ -90,6 +101,7 @@ export const ScriptsPanel = observer(function ScriptsPanel() {
           activeSession={activeScript?.session ?? null}
           allSessionIds={scripts.map((s) => s.session.sessionId)}
           paneId="scripts-drawer"
+          active={isVisible}
           autoFocus={autoFocus}
           emptyState={null}
           remoteConnectionId={remoteConnectionId}

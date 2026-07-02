@@ -181,7 +181,7 @@ export async function buildTaskFromWorkspace(
     terminals: terminalProvider,
   };
 
-  void Promise.all(
+  await Promise.all(
     hydrate.terminals.map((term) =>
       terminalProvider.spawnTerminal(term).catch((e) => {
         log.error(`${logPrefix}: failed to hydrate terminal`, {

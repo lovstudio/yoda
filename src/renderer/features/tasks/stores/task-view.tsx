@@ -98,6 +98,7 @@ export class TaskViewStore {
     this.terminalTabs = new TerminalTabViewStore(resources.terminals);
     this.diffView = new DiffViewStore(resources.git, resources.pr);
     this.browser = new TaskBrowserStore(savedSnapshot?.browser);
+    this.sidebarPrefs.restoreBottomPanelSnapshot(savedSnapshot?.bottomPanel);
 
     // Restore tab state from the unified tabManager snapshot.
     if (savedSnapshot?.tabManager) {
@@ -232,6 +233,7 @@ export class TaskViewStore {
       focusedRegion: this.focusedRegion,
       tabManager: this.tabManager.snapshot,
       browser: this.browser.snapshot,
+      bottomPanel: this.sidebarPrefs.bottomPanelSnapshot,
       terminals: this.terminalTabs.snapshot,
       editor: this.editorView.snapshot,
       diffView: this.diffView.snapshot,
@@ -303,7 +305,7 @@ export class TaskViewStore {
     });
   }
 
-  /** Bottom drawer chrome is per-task runtime state (see sidebarPrefs). */
+  /** Bottom drawer chrome is persisted per task through TaskViewSnapshot.bottomPanel. */
   get isTerminalDrawerOpen(): boolean {
     return this.sidebarPrefs.isBottomPanelOpen;
   }

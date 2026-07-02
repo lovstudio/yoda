@@ -3,7 +3,7 @@ import { SESSION_PANEL_UNITS } from '@renderer/features/tasks/types';
 import { TaskSidebarPreferenceStore } from './task-sidebar-preferences';
 
 describe('TaskSidebarPreferenceStore', () => {
-  it('starts from runtime defaults instead of restored task state', () => {
+  it('starts from drawer defaults', () => {
     const store = new TaskSidebarPreferenceStore();
 
     expect(store.snapshot).toEqual({
@@ -18,6 +18,24 @@ describe('TaskSidebarPreferenceStore', () => {
       bottomPanelTab: 'terminals',
       openBottomPanelTabs: ['terminals'],
       isBottomPanelFullWidth: true,
+    });
+  });
+
+  it('restores persisted bottom drawer state', () => {
+    const store = new TaskSidebarPreferenceStore();
+
+    store.restoreBottomPanelSnapshot({
+      isBottomPanelOpen: true,
+      bottomPanelTab: 'scripts',
+      openBottomPanelTabs: ['terminals', 'scripts', 'scripts', 'invalid'],
+      isBottomPanelFullWidth: false,
+    });
+
+    expect(store.bottomPanelSnapshot).toEqual({
+      isBottomPanelOpen: true,
+      bottomPanelTab: 'scripts',
+      openBottomPanelTabs: ['terminals', 'scripts'],
+      isBottomPanelFullWidth: false,
     });
   });
 

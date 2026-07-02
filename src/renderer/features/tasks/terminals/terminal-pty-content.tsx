@@ -1,9 +1,11 @@
+import { Loader2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import { PtyPane } from '@renderer/lib/pty/pty-pane';
 import { type PtySession } from '@renderer/lib/pty/pty-session';
 import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
+import { scheduleTerminalRelayout } from '@renderer/lib/pty/terminal-relayout';
 import { TerminalSearchOverlay } from '@renderer/lib/pty/terminal-search-overlay';
 import type { TerminalWebLinkOptions } from '@renderer/lib/pty/terminal-web-links';
 import { useTerminalSearch } from '@renderer/lib/pty/use-terminal-search';
@@ -14,6 +16,7 @@ export interface TerminalPtyContentProps {
   activeSession: PtySession | null;
   allSessionIds: string[];
   paneId: string;
+  active?: boolean;
   autoFocus?: boolean;
   onFocusChange?: (focused: boolean) => void;
   onEnterPress?: () => void;
@@ -30,6 +33,7 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
   activeSession,
   allSessionIds,
   paneId,
+  active = true,
   autoFocus,
   onFocusChange,
   onEnterPress,
@@ -42,6 +46,8 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
   className,
 }: TerminalPtyContentProps) {
   const activeSessionId = activeSession?.sessionId ?? null;
+  const activePty = activeSession?.status === 'ready' ? activeSession.pty : null;
+  const isPtyReady = Boolean(activeSessionId && activePty);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
@@ -57,9 +63,9 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
     handleSearchQueryChange,
     stepSearch,
   } = useTerminalSearch({
-    terminal: activeSession?.pty?.terminal,
+    terminal: activePty?.terminal,
     containerRef: terminalContainerRef,
-    enabled: Boolean(activeSession?.pty),
+    enabled: Boolean(activePty),
     onCloseFocus: () => terminalRef.current?.focus(),
   });
 
@@ -84,6 +90,11 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
     }
   }, [sessionStatus]);
 
+  useEffect(() => {
+    if (!active || !isPtyReady) return;
+    scheduleTerminalRelayout();
+  }, [active, activeSessionId, isPtyReady]);
+
   const sessionIds = useMemo(() => allSessionIds, [allSessionIds]);
 
   const hasSessions = sessionIds.length > 0;
@@ -105,7 +116,7 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
           emptyState
         ) : (
           <div className="flex min-h-0 flex-1 flex-col">
-            {activeSessionId && activeSession?.status === 'ready' && activeSession.pty ? (
+            {activeSessionId && activePty ? (
               <div ref={terminalContainerRef} className="relative flex h-full min-h-0 flex-1">
                 <TerminalSearchOverlay
                   isOpen={isSearchOpen}
@@ -120,7 +131,7 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
                 <PtyPane
                   ref={terminalRef}
                   sessionId={activeSessionId}
-                  pty={activeSession.pty}
+                  pty={activePty}
                   className="h-full w-full "
                   themeOverride={{
                     background: cssVar('--background'),
@@ -132,6 +143,10 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
                   fileLinks={fileLinks}
                   webLinks={webLinks}
                 />
+              </div>
+            ) : activeSessionId ? (
+              <div className="flex h-full min-h-0 flex-1 items-center justify-center text-foreground-muted">
+                <Loader2 className="size-4 animate-spin" />
               </div>
             ) : null}
           </div>
