@@ -64,7 +64,16 @@ const ICON_BUTTON_CLASS =
  * actions sit at the strip's tail and close is last. All panels stay mounted
  * so PTY state survives switches.
  */
-export const BottomPanel = observer(function BottomPanel() {
+type HeaderResizeHandlers = Pick<
+  React.HTMLAttributes<HTMLDivElement>,
+  'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel'
+>;
+
+export const BottomPanel = observer(function BottomPanel({
+  headerResizeHandlers,
+}: {
+  headerResizeHandlers?: HeaderResizeHandlers;
+}) {
   const { t } = useTranslation();
   const { projectId } = useTaskViewContext();
   const provisionedTask = useProvisionedTask();
@@ -87,12 +96,19 @@ export const BottomPanel = observer(function BottomPanel() {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <div className="pointer-events-none relative z-20 flex h-7 shrink-0 items-center gap-1 border-b border-border px-2">
+        {headerResizeHandlers ? (
+          <div
+            aria-hidden
+            className="pointer-events-auto absolute inset-0 z-0 cursor-row-resize"
+            {...headerResizeHandlers}
+          />
+        ) : null}
         {/* Mode tabs side by side (same interaction as the sidebar chip
             strip): each closable, draggable to reorder, "+" adds the rest. */}
         <div
           ref={dropZone.dropRef}
           className={cn(
-            'pointer-events-auto flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-sm',
+            'pointer-events-auto relative z-10 flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-sm',
             dropZone.isOver && 'bg-background-tertiary-1'
           )}
         >
@@ -130,7 +146,7 @@ export const BottomPanel = observer(function BottomPanel() {
           ) : null}
         </div>
         {/* Tail: config-type actions, close last. */}
-        <div className="pointer-events-auto ml-auto flex shrink-0 items-center gap-0.5">
+        <div className="pointer-events-auto relative z-10 ml-auto flex shrink-0 items-center gap-0.5">
           {tab === 'scripts' ? (
             <button
               type="button"

@@ -1,6 +1,12 @@
 import { Eye, Loader2, Pencil } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { Activity, useEffect, useRef, useState } from 'react';
+import {
+  Activity,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePanelRef, type Layout } from 'react-resizable-panels';
 import { RoomMemberDetail } from '@renderer/features/agent-room/room-member-detail';
@@ -217,7 +223,60 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
   const { taskId } = useTaskViewContext();
   const { taskView } = useProvisionedTask();
   const bottomPanelRef = usePanelRef();
+  const verticalGroupRef = useRef<HTMLDivElement>(null);
+  const isHandleDraggingRef = useRef(false);
+  const headerResizeRef = useRef<{
+    pointerId: number;
+    startY: number;
+    startDrawerHeight: number;
+    groupHeight: number;
+  } | null>(null);
   const [isHandleDragging, setIsHandleDragging] = useState(false);
+
+  const setDrawerDragging = (dragging: boolean) => {
+    isHandleDraggingRef.current = dragging;
+    setIsHandleDragging(dragging);
+  };
+
+  const endHeaderResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = headerResizeRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    headerResizeRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setDrawerDragging(false);
+  };
+
+  const headerResizeHandlers = {
+    onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      const panel = bottomPanelRef.current;
+      const group = verticalGroupRef.current;
+      if (!panel || !group) return;
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      headerResizeRef.current = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startDrawerHeight: panel.getSize().inPixels,
+        groupHeight: group.getBoundingClientRect().height,
+      };
+      setDrawerDragging(true);
+    },
+    onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = headerResizeRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      const nextHeight = Math.max(
+        0,
+        Math.min(drag.groupHeight, drag.startDrawerHeight + drag.startY - event.clientY)
+      );
+      bottomPanelRef.current?.resize(`${Math.round(nextHeight)}px`);
+    },
+    onPointerUp: endHeaderResize,
+    onPointerCancel: endHeaderResize,
+  };
 
   useEffect(() => {
     const panel = bottomPanelRef.current;
@@ -234,8 +293,10 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
     <ResizablePanelGroup
       orientation="vertical"
       className="min-h-0 min-w-0 overflow-hidden bg-background text-foreground"
+      elementRef={verticalGroupRef}
       id={`task-main-vertical:${taskId}`}
       defaultLayout={runtimeDrawerLayouts.get(taskId)}
+      resizeTargetMinimumSize={{ coarse: 1, fine: 1 }}
       onLayoutChanged={(next) => {
         runtimeDrawerLayouts.set(taskId, next);
       }}
@@ -251,14 +312,11 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
       <ResizableHandle
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
-          setIsHandleDragging(true);
+          setDrawerDragging(true);
         }}
-        onPointerUp={() => setIsHandleDragging(false)}
-        onPointerCancel={() => setIsHandleDragging(false)}
-        className={cn(
-          "z-10 bg-border after:bg-transparent after:content-[''] aria-[orientation=horizontal]:after:top-0 aria-[orientation=horizontal]:after:bottom-auto aria-[orientation=horizontal]:after:h-7 aria-[orientation=horizontal]:after:translate-y-0",
-          taskView.isTerminalDrawerOpen ? 'flex' : 'hidden'
-        )}
+        onPointerUp={() => setDrawerDragging(false)}
+        onPointerCancel={() => setDrawerDragging(false)}
+        className={cn('z-10', taskView.isTerminalDrawerOpen ? 'flex' : 'hidden')}
       />
       <ResizablePanel
         id="task-terminal-drawer"
@@ -276,14 +334,14 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
           // resizes (mount, restore, store-driven expand/collapse) must not
           // write back, or one task's restored geometry would clobber another's
           // per-task open state.
-          if (!isHandleDragging) return;
+          if (!isHandleDraggingRef.current) return;
           const wantOpen = !(bottomPanelRef.current?.isCollapsed() ?? false);
           if (taskView.isTerminalDrawerOpen !== wantOpen) {
             taskView.setTerminalDrawerOpen(wantOpen);
           }
         }}
       >
-        <BottomPanel />
+        <BottomPanel headerResizeHandlers={headerResizeHandlers} />
       </ResizablePanel>
     </ResizablePanelGroup>
   );
