@@ -68,6 +68,8 @@ describe('sync agent project path artifacts', () => {
         INSERT INTO threads (id, cwd) VALUES
           ('one', '/old/repo'),
           ('two', '/old/repo'),
+          ('child', '/old/repo/.git'),
+          ('sibling', '/old/repository'),
           ('other', '/other/repo');
       `);
     } finally {
@@ -76,13 +78,15 @@ describe('sync agent project path artifacts', () => {
 
     const result = syncCodexProjectArtifacts('/old/repo', '/new/repo', statePath);
 
-    expect(result.updatedThreads).toBe(2);
+    expect(result.updatedThreads).toBe(3);
     const verifyDb = new Database(statePath, { readonly: true });
     try {
       const rows = verifyDb.prepare('SELECT id, cwd FROM threads ORDER BY id').all();
       expect(rows).toEqual([
+        { id: 'child', cwd: '/new/repo/.git' },
         { id: 'one', cwd: '/new/repo' },
         { id: 'other', cwd: '/other/repo' },
+        { id: 'sibling', cwd: '/old/repository' },
         { id: 'two', cwd: '/new/repo' },
       ]);
     } finally {

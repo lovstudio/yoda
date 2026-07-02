@@ -166,6 +166,48 @@ describe('getCodexSessionContext', () => {
     expect(context?.rolloutPath).toBe(rolloutPath);
   });
 
+  it('can resolve a moved-path Codex thread by title prefix and created_at', async () => {
+    const oldCwd = join(dir, 'old-repo');
+    writeRollout(rolloutPath, { id: 'thread-1', cwd: oldCwd });
+    insertThread(statePath, rolloutPath, {
+      id: 'thread-1',
+      cwd: oldCwd,
+      title: 'Build a search service for a long ebook prompt',
+      firstUserMessage: 'Build a search service for a long ebook prompt',
+      createdAtMs: Date.parse('2026-06-02T11:00:00.000Z'),
+    });
+
+    const context = await getCodexSessionContext(
+      cwd,
+      'yoda-conversation-id',
+      'Build a search service',
+      '2026-06-02 11:00:00'
+    );
+
+    expect(context?.threadId).toBe('thread-1');
+    expect(context?.cwd).toBe(oldCwd);
+    expect(context?.rolloutPath).toBe(rolloutPath);
+  });
+
+  it('can resolve a moved-path rollout when the state DB has no matching thread', async () => {
+    const oldCwd = join(dir, 'old-repo');
+    const sessionDir = join(codexHome, 'sessions', '2026', '06', '02');
+    const sessionRolloutPath = join(sessionDir, 'rollout-2026-06-02T11-00-00-thread-1.jsonl');
+    mkdirSync(sessionDir, { recursive: true });
+    writeRollout(sessionRolloutPath, { cwd: oldCwd, id: 'thread-1' });
+
+    const context = await getCodexSessionContext(
+      cwd,
+      'yoda-conversation-id',
+      'Implement Codex con',
+      '2026-06-02 11:00:00'
+    );
+
+    expect(context?.threadId).toBe('thread-1');
+    expect(context?.cwd).toBe(oldCwd);
+    expect(context?.rolloutPath).toBe(sessionRolloutPath);
+  });
+
   it('falls back to rollout files when the state DB has no matching thread', async () => {
     const sessionDir = join(codexHome, 'sessions', '2026', '06', '02');
     const sessionRolloutPath = join(sessionDir, 'rollout-2026-06-02T11-00-00-conversation-1.jsonl');

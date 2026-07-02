@@ -13,6 +13,7 @@ import type {
 } from '@shared/conversations';
 import {
   findClosestCodexThreadRefByCreatedAt,
+  findClosestCodexThreadRefByTitleAndCreatedAt,
   findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt,
   getClaimedCodexThreadId,
   resolveCodexStatePath,
@@ -176,7 +177,9 @@ async function resolveCodexThreadFromRollouts({
   const targetCreatedAtMs = parseTimestampMs(conversationCreatedAt);
   let closestCreatedAtRow: { row: CodexThreadContextRow; distanceMs: number } | null = null;
   let uniqueLaterCreatedAtRow: CodexThreadContextRow | null = null;
+  let closestMovedPathRow: { row: CodexThreadContextRow; distanceMs: number } | null = null;
   let hasMultipleLaterCreatedAtRows = false;
+  let hasMultipleMovedPathRows = false;
 
   for (const rolloutPath of rolloutPaths) {
     let raw: string;
@@ -187,7 +190,21 @@ async function resolveCodexThreadFromRollouts({
     }
 
     const meta = parseCodexRolloutMeta(raw);
-    if (!meta || meta.cwd !== cwd) continue;
+    if (!meta) continue;
+
+    const sameCwd = meta.cwd === cwd;
+    const rowCreatedAtMs = parseTimestampMs(meta.timestamp);
+    const movedPathDistanceMs =
+      targetCreatedAtMs !== undefined && rowCreatedAtMs !== undefined
+        ? Math.abs(rowCreatedAtMs - targetCreatedAtMs)
+        : undefined;
+    const canCheckMovedPath =
+      !sameCwd &&
+      meta.id !== conversationId &&
+      title &&
+      movedPathDistanceMs !== undefined &&
+      movedPathDistanceMs <= CODEX_CREATED_AT_MATCH_MAX_DISTANCE_MS;
+    if (!sameCwd && meta.id !== conversationId && !canCheckMovedPath) continue;
 
     const parsed = parseCodexRollout(raw, null);
     const firstUserMessage = parsed.prompts[0]?.text ?? null;
@@ -207,9 +224,24 @@ async function resolveCodexThreadFromRollouts({
     };
 
     if (row.id === conversationId) return row;
-    if (title && (row.title === title || row.firstUserMessage === title)) return row;
+    if (!sameCwd) {
+      if (
+        canCheckMovedPath &&
+        movedPathDistanceMs !== undefined &&
+        title &&
+        matchesCodexTitle(row, title)
+      ) {
+        if (closestMovedPathRow && closestMovedPathRow.row.id !== row.id) {
+          hasMultipleMovedPathRows = true;
+        } else {
+          closestMovedPathRow = { row, distanceMs: movedPathDistanceMs };
+        }
+      }
+      continue;
+    }
 
-    const rowCreatedAtMs = parseTimestampMs(meta.timestamp);
+    if (title && matchesCodexTitle(row, title)) return row;
+
     if (targetCreatedAtMs !== undefined && rowCreatedAtMs !== undefined) {
       const distanceMs = Math.abs(rowCreatedAtMs - targetCreatedAtMs);
       if (
@@ -230,6 +262,7 @@ async function resolveCodexThreadFromRollouts({
 
   return (
     closestCreatedAtRow?.row ??
+    (hasMultipleMovedPathRows ? null : closestMovedPathRow?.row) ??
     (hasMultipleLaterCreatedAtRows ? null : uniqueLaterCreatedAtRow) ??
     null
   );
@@ -334,6 +367,17 @@ function resolveCodexThread({
     });
     if (byCreatedAt) return readCodexThreadContext(statePath, byCreatedAt.id);
 
+    if (title) {
+      const byMovedPathTitle = findClosestCodexThreadRefByTitleAndCreatedAt({
+        statePath,
+        title,
+        targetCreatedAtMs: createdAtMs,
+        maxDistanceMs: CODEX_CREATED_AT_MATCH_MAX_DISTANCE_MS,
+        includeArchived: true,
+      });
+      if (byMovedPathTitle) return readCodexThreadContext(statePath, byMovedPathTitle.id);
+    }
+
     const uniqueLaterThread = findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt({
       statePath,
       cwd,
@@ -412,6 +456,19 @@ function findCodexThreadByTitle(
         .get(cwd, title, title, title);
       return parseCodexThreadContextRow(row);
     }) ?? null
+  );
+}
+
+function matchesCodexTitle(row: CodexThreadContextRow, title: string): boolean {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) return false;
+  const candidates = [row.title, row.firstUserMessage].filter(
+    (value): value is string => typeof value === 'string' && value.length > 0
+  );
+  return candidates.some(
+    (candidate) =>
+      candidate === trimmedTitle ||
+      (trimmedTitle.length >= 16 && candidate.startsWith(trimmedTitle))
   );
 }
 

@@ -42,6 +42,7 @@ const READY_POLL_MAX_MS = 5 * 60_000;
 const RESUME_START_GRACE_MS = 10_000;
 const NEW_SESSION_THREAD_CREATE_GRACE_MS = 1_000;
 const NEW_SESSION_THREAD_CREATE_MAX_DRIFT_MS = 60_000;
+const TITLE_PREFIX_MATCH_MIN_LENGTH = 16;
 
 const activeCodexThreadTitlePollers = new Set<CodexThreadTitlePoller>();
 const claimedCodexThreadOwners = new Map<string, string>();
@@ -248,6 +249,73 @@ export function findClosestCodexThreadRefByCreatedAt(params: {
         params.targetCreatedAtMs
       );
     return parseCodexThreadRef(row);
+  });
+}
+
+export function findClosestCodexThreadRefByTitleAndCreatedAt(params: {
+  statePath: string;
+  title: string;
+  targetCreatedAtMs: number;
+  maxDistanceMs: number;
+  includeArchived?: boolean;
+}): CodexThreadRef | undefined {
+  const title = params.title.trim();
+  if (!title) return undefined;
+
+  const minCreatedAtMs = params.targetCreatedAtMs - params.maxDistanceMs;
+  const maxCreatedAtMs = params.targetCreatedAtMs + params.maxDistanceMs;
+  return withCodexState(params.statePath, (db) => {
+    const rows = db
+      .prepare(
+        `
+          SELECT
+            id,
+            cwd,
+            title,
+            first_user_message AS firstUserMessage,
+            COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
+            COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
+          FROM threads
+          WHERE (? = 1 OR archived = 0)
+            AND COALESCE(created_at_ms, created_at * 1000) >= ?
+            AND COALESCE(created_at_ms, created_at * 1000) <= ?
+            AND (
+              title = ?
+              OR first_user_message = ?
+              OR preview = ?
+              OR (
+                ? = 1
+                AND (
+                  substr(title, 1, ?) = ?
+                  OR substr(first_user_message, 1, ?) = ?
+                  OR substr(preview, 1, ?) = ?
+                )
+              )
+            )
+          ORDER BY ABS(COALESCE(created_at_ms, created_at * 1000) - ?) ASC,
+            COALESCE(created_at_ms, created_at * 1000) ASC,
+            id ASC
+          LIMIT 2
+        `
+      )
+      .all(
+        params.includeArchived ? 1 : 0,
+        minCreatedAtMs,
+        maxCreatedAtMs,
+        title,
+        title,
+        title,
+        title.length >= TITLE_PREFIX_MATCH_MIN_LENGTH ? 1 : 0,
+        title.length,
+        title,
+        title.length,
+        title,
+        title.length,
+        title,
+        params.targetCreatedAtMs
+      );
+    if (!Array.isArray(rows) || rows.length !== 1) return undefined;
+    return parseCodexThreadRef(rows[0]);
   });
 }
 

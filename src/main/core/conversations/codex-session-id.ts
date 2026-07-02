@@ -1,6 +1,7 @@
 import type { Conversation } from '@shared/conversations';
 import {
   findClosestCodexThreadRefByCreatedAt,
+  findClosestCodexThreadRefByTitleAndCreatedAt,
   findCodexThreadTitleByTitle,
   findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt,
   getClaimedCodexThreadId,
@@ -113,6 +114,17 @@ export function resolveCodexThreadForConversation({
     includeArchived: true,
   });
   if (byCreatedAt) return toResolvedThread(byCreatedAt);
+
+  if (trimmedTitle) {
+    const byMovedPathTitle = findClosestCodexThreadRefByTitleAndCreatedAt({
+      statePath,
+      title: trimmedTitle,
+      targetCreatedAtMs: createdAtMs,
+      maxDistanceMs: CODEX_CREATED_AT_MATCH_MAX_DISTANCE_MS,
+      includeArchived: true,
+    });
+    if (byMovedPathTitle) return toResolvedThread(byMovedPathTitle);
+  }
 
   const uniqueLaterThread = findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt({
     statePath,

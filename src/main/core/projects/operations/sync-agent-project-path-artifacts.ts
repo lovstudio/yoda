@@ -96,7 +96,9 @@ export function syncCodexProjectArtifacts(
   newPath: string,
   statePath = resolveCodexStatePath()
 ): CodexProjectArtifactSyncResult {
-  if (oldPath === newPath || !existsSync(statePath)) {
+  const normalizedOldPath = trimTrailingSeparators(oldPath);
+  const normalizedNewPath = trimTrailingSeparators(newPath);
+  if (normalizedOldPath === normalizedNewPath || !existsSync(statePath)) {
     return { updatedThreads: 0, statePath };
   }
 
@@ -107,7 +109,23 @@ export function syncCodexProjectArtifacts(
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'threads'")
       .get();
     if (!table) return { updatedThreads: 0, statePath };
-    const result = db.prepare('UPDATE threads SET cwd = ? WHERE cwd = ?').run(newPath, oldPath);
+    const oldPathPrefix = `${normalizedOldPath}/`;
+    const result = db
+      .prepare(
+        `
+          UPDATE threads
+          SET cwd = ? || substr(cwd, ?)
+          WHERE cwd = ?
+            OR substr(cwd, 1, ?) = ?
+        `
+      )
+      .run(
+        normalizedNewPath,
+        normalizedOldPath.length + 1,
+        normalizedOldPath,
+        oldPathPrefix.length,
+        oldPathPrefix
+      );
     return { updatedThreads: result.changes, statePath };
   } catch (error) {
     if (isMissingCodexStateShape(error)) return { updatedThreads: 0, statePath };
@@ -115,6 +133,14 @@ export function syncCodexProjectArtifacts(
   } finally {
     db.close();
   }
+}
+
+function trimTrailingSeparators(value: string): string {
+  let out = value.trim();
+  while (out.length > 1 && out.endsWith('/')) {
+    out = out.slice(0, -1);
+  }
+  return out;
 }
 
 async function syncWithLog<T>(label: string, run: () => Promise<T> | T, fallback: () => T) {

@@ -134,6 +134,35 @@ describe('resolveCodexThreadIdForConversation', () => {
     ).toBe('delayed-codex-thread');
   });
 
+  it('resolves a moved-path Codex thread by title prefix and creation time', () => {
+    insertThread(statePath, {
+      id: 'moved-path-thread',
+      cwd: '/old/repo',
+      title: 'Build a search service for a long ebook prompt',
+      createdAtMs: Date.parse('2026-06-04T06:45:37.040Z'),
+      updatedAtMs: Date.parse('2026-06-04T06:56:25.777Z'),
+    });
+
+    expect(
+      resolveAgentResumeSession(
+        {
+          id: 'conversation-1',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          runtimeId: 'codex',
+          title: 'Build a search service',
+          createdAt: '2026-06-04 06:45:36',
+          lastInteractedAt: null,
+          isInitialConversation: true,
+        },
+        '/new/repo'
+      )
+    ).toEqual({
+      sessionId: 'moved-path-thread',
+      sessionTitle: 'Build a search service for a long ebook prompt',
+    });
+  });
+
   it('does not guess a delayed Codex thread when the later cwd match is ambiguous', () => {
     insertThread(statePath, {
       id: 'delayed-codex-thread-1',
