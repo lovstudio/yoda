@@ -1,16 +1,14 @@
-import { ChevronDown, MessageSquare, Minus, Plus } from 'lucide-react';
+import { ChevronDown, MessageSquare, Minus, MoreHorizontal, Plus } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ClaudeSessionPrompt } from '@shared/conversations';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { displaySessionPromptText } from '@renderer/features/tasks/context-panel-prompt-display';
 import { useSessionPrompts } from '@renderer/features/tasks/session-info-panel';
+import { buildPromptPreviewItems } from '@renderer/features/tasks/session-prompts-preview';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { cn } from '@renderer/utils/utils';
-
-/** Height of one prompt row (h-6) — used to cap the docked list to N rows. */
-export const SESSION_PROMPT_ROW_PX = 24;
 
 /**
  * The active conversation's prompt history rendered as a scrollable list, oldest
@@ -46,29 +44,9 @@ export const SessionPromptList = observer(function SessionPromptList({
         pinnedToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
       }}
     >
-      {prompts.map((prompt, index) => {
-        const text = displaySessionPromptText(prompt.text).trim();
-        const timestamp = prompt.timestamp ? new Date(prompt.timestamp).toLocaleTimeString() : null;
-        return (
-          <div
-            key={prompt.id || `prompt-${index}`}
-            className="group flex h-6 w-full min-w-0 items-center gap-2 px-3"
-            title={text}
-          >
-            <span className="w-6 shrink-0 text-right font-mono text-[10px] text-foreground-passive">
-              {index + 1}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-xs leading-5 text-foreground-muted">
-              {text}
-            </span>
-            {timestamp ? (
-              <span className="shrink-0 font-mono text-[10px] text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100">
-                {timestamp}
-              </span>
-            ) : null}
-          </div>
-        );
-      })}
+      {prompts.map((prompt, index) => (
+        <SessionPromptRow key={prompt.id || `prompt-${index}`} prompt={prompt} index={index + 1} />
+      ))}
     </div>
   );
 });
@@ -110,12 +88,14 @@ export const SessionHistoryPanel = observer(function SessionHistoryPanel({
 
 const MIN_DOCK_ROWS = 1;
 const MAX_DOCK_ROWS = 20;
+const DOCK_PROMPT_HEAD_COUNT = 1;
 
 /**
  * The same prompt history docked at the bottom of the conversation pane, gated
  * behind the `interface.dockSessionHistory` setting (toggled from the task
- * menu). Caps to N visible rows — adjustable inline via the header — and can be
- * collapsed; collapsing also stops the background fetch.
+ * menu). Shows the first prompt and N latest prompts — adjustable inline via
+ * the header — with a clickable ellipsis opening the full modal. Collapsing
+ * also stops the background fetch.
  */
 export const DockedSessionHistory = observer(function DockedSessionHistory() {
   const { t } = useTranslation();
@@ -173,9 +153,10 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
       </div>
       {!collapsed ? (
         prompts.hasPrompts ? (
-          <SessionPromptList
+          <DockedSessionPromptPreview
             prompts={prompts.prompts}
-            style={{ maxHeight: rows * SESSION_PROMPT_ROW_PX }}
+            tailCount={rows}
+            onOpenAll={prompts.openPromptsModal}
           />
         ) : (
           <div className="px-3 pb-2 text-xs text-foreground-passive">
@@ -186,3 +167,99 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
     </div>
   );
 });
+
+function DockedSessionPromptPreview({
+  prompts,
+  tailCount,
+  onOpenAll,
+}: {
+  prompts: ClaudeSessionPrompt[];
+  tailCount: number;
+  onOpenAll: () => void;
+}) {
+  const { t } = useTranslation();
+  const previewItems = useMemo(
+    () => buildPromptPreviewItems(prompts, DOCK_PROMPT_HEAD_COUNT, tailCount),
+    [prompts, tailCount]
+  );
+
+  return (
+    <div className="py-1">
+      {previewItems.map((item) =>
+        item.type === 'truncated' ? (
+          <button
+            key="truncated"
+            type="button"
+            className="flex h-6 w-full min-w-0 items-center justify-center gap-1.5 px-3 text-[11px] text-foreground-passive transition-colors hover:bg-background-1 hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+            onClick={onOpenAll}
+            aria-label={t('tasks.sessionInfo.viewAllPrompts')}
+            title={t('tasks.sessionInfo.viewAllPrompts')}
+          >
+            <MoreHorizontal className="size-3.5" />
+            <span>{t('tasks.sessionInfo.truncatedPrompts', { count: item.hiddenCount })}</span>
+          </button>
+        ) : (
+          <SessionPromptRow
+            key={item.prompt.id || `prompt-${item.promptIndex}`}
+            prompt={item.prompt}
+            index={item.promptIndex}
+            onClick={onOpenAll}
+          />
+        )
+      )}
+    </div>
+  );
+}
+
+function SessionPromptRow({
+  prompt,
+  index,
+  onClick,
+}: {
+  prompt: ClaudeSessionPrompt;
+  index: number;
+  onClick?: () => void;
+}) {
+  const text = displaySessionPromptText(prompt.text).trim();
+  const timestamp = prompt.timestamp ? new Date(prompt.timestamp).toLocaleTimeString() : null;
+  const className =
+    'group flex h-6 w-full min-w-0 items-center gap-2 px-3 text-left transition-colors';
+
+  const content = (
+    <>
+      <span className="w-6 shrink-0 text-right font-mono text-[10px] text-foreground-passive">
+        {index}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-xs leading-5 text-foreground-muted">
+        {text}
+      </span>
+      {timestamp ? (
+        <span className="shrink-0 font-mono text-[10px] text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+          {timestamp}
+        </span>
+      ) : null}
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={cn(
+          className,
+          'hover:bg-background-1 hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border'
+        )}
+        title={text}
+        onClick={onClick}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className={className} title={text}>
+      {content}
+    </div>
+  );
+}

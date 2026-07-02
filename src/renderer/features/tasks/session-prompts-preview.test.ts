@@ -38,4 +38,14 @@ describe('buildPromptPreviewItems', () => {
       'prompt:8',
     ]);
   });
+
+  it('supports custom head and tail counts', () => {
+    expect(buildPromptPreviewItems(makePrompts(7), 1, 3).map(itemKey)).toEqual([
+      'prompt:1',
+      'truncated:3',
+      'prompt:5',
+      'prompt:6',
+      'prompt:7',
+    ]);
+  });
 });

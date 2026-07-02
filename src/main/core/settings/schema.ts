@@ -359,7 +359,7 @@ export const interfaceSettingsSchema = z.object({
   autoRightSidebarBehavior: z.boolean(),
   /** Dock the active session's prompt history at the bottom of the conversation pane. */
   dockSessionHistory: z.boolean(),
-  /** Visible row count for the docked prompt history before it scrolls. */
+  /** Number of latest prompts shown after the first prompt in the docked history preview. */
   dockSessionHistoryRows: z.number().int().min(1).max(20),
 });
 
