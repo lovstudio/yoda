@@ -294,15 +294,15 @@ function beginShutdown(mode: TeardownMode): void {
           log.error('Failed to detach project manager:', projectManagerResult.reason);
         }
       } finally {
-        app.exit(0);
+        app.quit();
       }
     })();
   });
 }
 
 app.on('before-quit', (event) => {
-  event.preventDefault();
   if (shutdownStarted) return;
+  event.preventDefault();
 
   const summary = taskManager.getActiveAgentSessionSummary();
   if (summary.running <= 0) {

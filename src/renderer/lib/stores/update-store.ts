@@ -194,6 +194,7 @@ export class UpdateStore {
       }
       if (!res.success) {
         this._failDownload(res.error ?? i18n.t('settings.update.downloadFailed'));
+        return;
       }
     } catch {
       this._failDownload(i18n.t('settings.update.downloadFailed'));
@@ -212,6 +213,7 @@ export class UpdateStore {
       }
       if (!res.success) {
         this._failInstall(res.error ?? i18n.t('settings.update.installFailed'));
+        return;
       }
     } catch {
       this._failInstall(i18n.t('settings.update.installFailed'));
