@@ -179,6 +179,7 @@ export class WorktreeService {
           checkedOutPath,
           'status',
           '--porcelain',
+          '--untracked-files=no',
         ]);
         if (stdout.trim()) {
           return err({
