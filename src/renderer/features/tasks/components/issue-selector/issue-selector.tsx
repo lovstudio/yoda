@@ -78,26 +78,49 @@ export function ProviderLogo({
   return <img src={src} alt={alt} className={className ?? 'h-3.5 w-3.5'} />;
 }
 
-export function LinkedIssueIndicator({ linkedTo }: { linkedTo: LinkedIssueInfo }) {
+export function LinkedIssueIndicator({ linkedTo }: { linkedTo: LinkedIssueInfo[] }) {
   const { t } = useTranslation();
+  const visibleTasks = linkedTo.slice(0, 3);
+  const hiddenCount = Math.max(0, linkedTo.length - visibleTasks.length);
 
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <span className="ml-auto flex shrink-0 items-center text-foreground-muted">
+          <span className="ml-auto flex shrink-0 items-center gap-1 text-foreground-muted">
             <Link2 className="size-3.5" />
+            {linkedTo.length > 1 ? (
+              <span className="text-[10px] leading-none tabular-nums">{linkedTo.length}</span>
+            ) : null}
           </span>
         }
       />
-      <TooltipContent>
-        {t('issues.alreadyLinkedToTask', { name: linkedTo.taskName })}
+      <TooltipContent className="max-w-64">
+        <div className="flex flex-col gap-1">
+          <div>
+            {linkedTo.length === 1
+              ? t('issues.alreadyLinkedToTask', { taskName: linkedTo[0]?.taskName })
+              : t('issues.alreadyLinkedToTasks', { count: linkedTo.length })}
+          </div>
+          {linkedTo.length > 1 ? (
+            <div className="flex flex-col gap-0.5 text-foreground-muted">
+              {visibleTasks.map((task) => (
+                <span key={task.taskId} className="truncate">
+                  {task.taskName}
+                </span>
+              ))}
+              {hiddenCount > 0 ? (
+                <span>{t('issues.moreTasks', { count: hiddenCount })}</span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </TooltipContent>
     </Tooltip>
   );
 }
 
-export function IssueRow({ issue, linkedTo }: { issue: Issue; linkedTo?: LinkedIssueInfo }) {
+export function IssueRow({ issue, linkedTo }: { issue: Issue; linkedTo?: LinkedIssueInfo[] }) {
   return (
     <span className="flex min-w-0 items-center gap-2 w-full">
       <Tooltip>
