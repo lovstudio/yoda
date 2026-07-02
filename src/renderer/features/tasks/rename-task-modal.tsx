@@ -1,3 +1,4 @@
+import { RefreshCw, Sparkles } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -39,6 +40,7 @@ export const RenameTaskModal = observer(function RenameTaskModal({
   const { t } = useTranslation();
   const [name, setName] = useState(currentName);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingName, setIsGeneratingName] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const taskManager = getTaskManagerStore(projectId);
@@ -55,6 +57,7 @@ export const RenameTaskModal = observer(function RenameTaskModal({
   const isEmpty = normalizedName.length === 0;
   const slugWouldBeEmpty = !isEmpty && derivedSlug.length === 0;
   const isValid = !isEmpty && !isDuplicate && !isUnchanged && !slugWouldBeEmpty;
+  const isBusy = isSubmitting || isGeneratingName;
 
   const validationMessage = isDuplicate
     ? t('tasks.rename.duplicate')
@@ -70,7 +73,7 @@ export const RenameTaskModal = observer(function RenameTaskModal({
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!isValid) return;
+    if (!isValid || isBusy) return;
     const task = taskManager?.tasks.get(taskId);
     if (!task) return;
     setIsSubmitting(true);
@@ -82,7 +85,20 @@ export const RenameTaskModal = observer(function RenameTaskModal({
       setError(e instanceof Error ? e.message : t('tasks.rename.renameFailed'));
       setIsSubmitting(false);
     }
-  }, [isValid, taskManager, taskId, normalizedName, onSuccess, t]);
+  }, [isValid, isBusy, taskManager, taskId, normalizedName, onSuccess, t]);
+
+  const handleAiRename = useCallback(async () => {
+    if (!taskManager || isBusy) return;
+    setIsGeneratingName(true);
+    setError(null);
+    try {
+      await taskManager.regenerateTaskName(taskId);
+      onSuccess();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('tasks.rename.aiRenameFailed'));
+      setIsGeneratingName(false);
+    }
+  }, [isBusy, onSuccess, taskId, taskManager, t]);
 
   return (
     <>
@@ -102,6 +118,7 @@ export const RenameTaskModal = observer(function RenameTaskModal({
                 }
               }}
               maxLength={MAX_TASK_NAME_LENGTH}
+              disabled={isBusy}
               autoFocus
             />
             {validationMessage && !isUnchanged && (
@@ -119,13 +136,33 @@ export const RenameTaskModal = observer(function RenameTaskModal({
           </Field>
         </FieldGroup>
       </DialogContentArea>
-      <DialogFooter>
-        <Button variant="outline" onClick={onClose}>
+      <DialogFooter className="sm:justify-between">
+        <Button variant="outline" className="w-full sm:w-auto" onClick={onClose} disabled={isBusy}>
           {t('common.cancel')}
         </Button>
-        <ConfirmButton onClick={() => void handleSubmit()} disabled={!isValid || isSubmitting}>
-          {isSubmitting ? t('tasks.rename.renaming') : t('tasks.rename.submit')}
-        </ConfirmButton>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full sm:w-auto"
+            onClick={() => void handleAiRename()}
+            disabled={!taskManager || isBusy}
+          >
+            {isGeneratingName ? (
+              <RefreshCw className="size-3 animate-spin" />
+            ) : (
+              <Sparkles className="size-3" />
+            )}
+            {isGeneratingName ? t('tasks.rename.aiNamingSimple') : t('tasks.rename.aiName')}
+          </Button>
+          <ConfirmButton
+            className="w-full sm:w-auto"
+            onClick={() => void handleSubmit()}
+            disabled={!isValid || isBusy}
+          >
+            {isSubmitting ? t('tasks.rename.renaming') : t('tasks.rename.submit')}
+          </ConfirmButton>
+        </div>
       </DialogFooter>
     </>
   );
