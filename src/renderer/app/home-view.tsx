@@ -1,11 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Anchor,
-  ArrowUp,
   Bot,
   Check,
   ChevronDown,
-  Copy,
   FileText,
   Folder,
   FolderOpen,
@@ -13,38 +11,27 @@ import {
   GitCompare,
   GitFork,
   GripVertical,
-  Image as ImageIcon,
   Lightbulb,
-  Loader2,
-  Mic,
   Monitor,
-  Paperclip,
   Repeat2,
   Server,
   Settings2,
   ShieldCheck,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type ClipboardEvent,
   type ComponentType,
-  type DragEvent,
-  type KeyboardEvent,
-  type MouseEvent,
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
-import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import {
   BUILTIN_REVIEW_TEAM_ID,
   BUILTIN_STARTUP_TEAM_ID,
@@ -63,7 +50,6 @@ import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { withSystemPrompt } from '@shared/prompt-format';
 import { REVIEW_MAX_ROUNDS } from '@shared/review-protocol';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
-import type { CatalogIndex } from '@shared/skills/types';
 import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import {
@@ -80,7 +66,6 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
-import { recordSkillInvocation } from '@renderer/features/skills/skill-usage-stats';
 import { ContextItem, memoryFileLabel } from '@renderer/features/tasks/components/context-item';
 import { PermissionModeSelect } from '@renderer/features/tasks/components/permission-mode-select';
 import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
@@ -103,19 +88,7 @@ import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
-import {
-  Combobox,
-  ComboboxCollection,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxGroup,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxLabel,
-  ComboboxList,
-  ComboboxTrigger,
-  ComboboxValue,
-} from '@renderer/lib/ui/combobox';
+import { ComboboxTrigger, ComboboxValue } from '@renderer/lib/ui/combobox';
 import {
   Dialog,
   DialogContent,
@@ -141,43 +114,16 @@ import {
   SelectValue,
 } from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
-import { Textarea } from '@renderer/lib/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { formatBytes } from '@renderer/utils/formatBytes';
-import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import {
   dualField,
   withComposerDefault,
   type ComposerOverrideScope,
 } from './composer-project-overrides';
-import {
-  applyMarkdownEnterEdit,
-  applyMarkdownTabEdit,
-  type MarkdownTextareaEdit,
-  type TextSelection,
-} from './markdown-textarea-editing';
-import {
-  applyPathCompletion,
-  buildPathCompletionItems,
-  findActivePathMention,
-  splitPathMentionQuery,
-  type ActivePathMention,
-  type PathCompletionItem,
-} from './path-mention-autocomplete';
-import {
-  fileTokenLabel,
-  findTokenRanges,
-  measureTokenRects,
-  serializePromptWithTokens,
-  snapSelectionToTokens,
-  tokenAtPoint,
-  tokenText,
-  uniqueTokenLabel,
-  type PromptToken,
-  type PromptTokenKind,
-  type TokenRect,
-} from './prompt-attachment-tokens';
+import { ComposerPromptInput } from './composer-prompt-input';
+import { serializePromptWithTokens, type PromptToken } from './prompt-attachment-tokens';
 
 type TaskStrategyKind = 'new-branch' | 'no-worktree';
 /** Strategy actually submitted to createTask — adds checkout-existing, which is
@@ -200,7 +146,6 @@ type CompareVariant = {
   /** Selected starting branch; null = the project's default branch. */
   baseBranch: Branch | null;
 };
-type SkillShortcutPrefix = '/' | '$';
 
 type HomeComposerSubmitTarget =
   | { kind: 'new-task'; parentTask?: { projectId: string; taskId: string } }
@@ -274,20 +219,6 @@ function defaultBuiltinKeyForSlot(slotKey: string): string | undefined {
 const ADVANCED_INPUT_CONTAINER_CLASS =
   'border-border bg-background-1 ring-1 ring-sky-500/15 focus-within:border-sky-500/30 focus-within:ring-sky-500/25';
 
-interface SkillShortcutOption {
-  value: string;
-  label: string;
-  description: string;
-  command: string;
-}
-
-interface ActiveSkillShortcut {
-  start: number;
-  end: number;
-  prefix: SkillShortcutPrefix;
-  query: string;
-}
-
 function getGreetingKey(hour: number): string {
   if (hour >= 5 && hour < 9) return 'home.greeting.earlyMorning';
   if (hour >= 9 && hour < 12) return 'home.greeting.morning';
@@ -295,153 +226,6 @@ function getGreetingKey(hour: number): string {
   if (hour >= 14 && hour < 18) return 'home.greeting.afternoon';
   if (hour >= 18 && hour < 22) return 'home.greeting.evening';
   return 'home.greeting.lateNight';
-}
-
-const IMAGE_ATTACHMENT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
-
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(',', 2)[1] ?? '');
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
-    reader.readAsDataURL(file);
-  });
-}
-
-function insertPromptText(
-  value: string,
-  selection: { start: number; end: number },
-  insertText: string
-): { value: string; caret: number } {
-  const start = Math.max(0, Math.min(selection.start, value.length));
-  const end = Math.max(start, Math.min(selection.end, value.length));
-  const before = value.slice(0, start);
-  const after = value.slice(end);
-  const leading = before.length > 0 && !/\s$/.test(before) ? ' ' : '';
-  const trailing = after.length > 0 ? (/^\s/.test(after) ? '' : ' ') : ' ';
-  const insertion = `${leading}${insertText}${trailing}`;
-  return {
-    value: `${before}${insertion}${after}`,
-    caret: before.length + insertion.length,
-  };
-}
-
-// execCommand('insertText') with a large payload locks the renderer: Chromium
-// builds the undo transaction roughly per-character, so inserting a multi-KB
-// prompt template freezes the main thread. Above this size we skip the native
-// pipeline and assign directly — losing fine-grained undo for that one edit is
-// an acceptable trade for not hanging.
-const NATIVE_EDIT_MAX_INSERT = 2000;
-
-// Applies a programmatic edit through the native editing pipeline
-// (execCommand) so the browser undo stack (Ctrl/Cmd+Z) keeps working.
-// Direct value assignment on a controlled textarea would wipe it.
-function applyNativeTextareaEdit(
-  textarea: HTMLTextAreaElement,
-  nextValue: string,
-  selection: TextSelection
-): void {
-  const current = textarea.value;
-  if (current !== nextValue) {
-    let prefix = 0;
-    const maxShared = Math.min(current.length, nextValue.length);
-    while (prefix < maxShared && current[prefix] === nextValue[prefix]) prefix += 1;
-    let suffix = 0;
-    while (
-      suffix < maxShared - prefix &&
-      current[current.length - 1 - suffix] === nextValue[nextValue.length - 1 - suffix]
-    ) {
-      suffix += 1;
-    }
-    const inserted = nextValue.slice(prefix, nextValue.length - suffix);
-    textarea.focus();
-    textarea.setSelectionRange(prefix, current.length - suffix);
-    const applied =
-      inserted.length <= NATIVE_EDIT_MAX_INSERT &&
-      (inserted.length > 0
-        ? document.execCommand('insertText', false, inserted)
-        : document.execCommand('delete'));
-    if (!applied || textarea.value !== nextValue) {
-      // Fallback (also the large-insert path): assign via the native setter so
-      // React's value tracker still sees the change and onChange fires.
-      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-      setValue?.call(textarea, nextValue);
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }
-  textarea.setSelectionRange(selection.start, selection.end);
-}
-
-function findActiveSkillShortcut(value: string, caret: number): ActiveSkillShortcut | null {
-  const beforeCaret = value.slice(0, caret);
-  const match = /(^|[\s([{,])([/$])([A-Za-z0-9_:-]*)$/.exec(beforeCaret);
-  if (!match) return null;
-
-  const query = match[3] ?? '';
-  return {
-    start: caret - query.length - 1,
-    end: caret,
-    prefix: match[2] as SkillShortcutPrefix,
-    query,
-  };
-}
-
-function applySkillShortcut(
-  value: string,
-  shortcut: ActiveSkillShortcut,
-  command: string
-): { value: string; caret: number } {
-  const before = value.slice(0, shortcut.start);
-  const after = value.slice(shortcut.end);
-  const trailing = after.length > 0 ? (/^\s/.test(after) ? '' : ' ') : ' ';
-  const insertion = `${command}${trailing}`;
-  return {
-    value: `${before}${insertion}${after}`,
-    caret: before.length + insertion.length,
-  };
-}
-
-// Returns a match score for `query` against `text`, or null when no match.
-// Higher is better. Exact > prefix > substring > subsequence (fuzzy).
-function fuzzyMatchScore(text: string, query: string): number | null {
-  if (text === query) return 1000;
-  if (text.startsWith(query)) return 900 - text.length;
-  const idx = text.indexOf(query);
-  if (idx >= 0) return 700 - idx - text.length;
-
-  // Subsequence match: every query char appears in order (e.g. "factch" -> "fact-check").
-  // Require at least 2 chars so a single letter doesn't fuzzy-match everything.
-  if (query.length < 2) return null;
-  let firstMatch = -1;
-  let ti = 0;
-  let gaps = 0;
-  let prevMatch = -1;
-  for (let qi = 0; qi < query.length; qi++) {
-    const ch = query[qi];
-    const found = text.indexOf(ch, ti);
-    if (found < 0) return null;
-    if (firstMatch < 0) firstMatch = found;
-    if (prevMatch >= 0) gaps += found - prevMatch - 1;
-    prevMatch = found;
-    ti = found + 1;
-  }
-  // Reject matches whose span is wildly larger than the query — those are coincidental.
-  const span = prevMatch - firstMatch + 1;
-  if (span > query.length * 3 + 2) return null;
-  return 400 - gaps - text.length;
-}
-
-function skillShortcutOptionScore(item: SkillShortcutOption, query: string): number | null {
-  const q = query.toLowerCase();
-  // Fuzzy (subsequence) only on the short identifiers — label/value/command.
-  // description is matched by substring only; subsequence over long prose matches almost anything.
-  const scores = [
-    fuzzyMatchScore(item.label.toLowerCase(), q),
-    fuzzyMatchScore(item.value.toLowerCase(), q),
-    fuzzyMatchScore(item.command.toLowerCase(), q),
-    item.description.toLowerCase().includes(q) ? 200 : null,
-  ].filter((s): s is number => s !== null);
-  return scores.length > 0 ? Math.max(...scores) : null;
 }
 
 function getRunModeInputChrome(mode: HomeRunMode): RunModeInputChrome {
@@ -907,63 +691,9 @@ export const HomeComposer = observer(function HomeComposer({
   // Local project root, so the skill picker can surface project-local skills
   // alongside the global ones. SSH projects have no local path to scan.
   const skillProjectPath = projectData?.type === 'local' ? projectData.path : undefined;
-  const {
-    data: skillCatalog = null,
-    isPending: skillsLoading,
-    isError: skillsError,
-  } = useQuery<CatalogIndex>({
-    queryKey: ['skills', 'catalog', skillProjectPath ?? null],
-    queryFn: async () => {
-      const result = await rpc.skills.getCatalog(
-        skillProjectPath ? { projectPath: skillProjectPath } : undefined
-      );
-      if (result.success && result.data) return result.data;
-      throw new Error(result.error ?? 'Failed to load catalog');
-    },
-  });
-  const skillShortcutOptions = useMemo<SkillShortcutOption[]>(() => {
-    const installed = (skillCatalog?.skills ?? [])
-      .filter((skill) => skill.installed)
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
-
-    return installed.map((skill) => ({
-      value: skill.id,
-      label: skill.displayName,
-      description: skill.description,
-      command: runtimeId ? applyAgentCommandPrefix(runtimeId, skill.id) : skill.id,
-    }));
-  }, [runtimeId, skillCatalog?.skills]);
-  const skillIdByShortcutCommand = useMemo(
-    () => new Map(skillShortcutOptions.map((skill) => [skill.command, skill.value])),
-    [skillShortcutOptions]
-  );
-
   const persistedPrompt = draft?.prompt ?? '';
   const [prompt, setPrompt] = useState(persistedPrompt);
-  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
-  // Landing on home (sidebar "new task", the tab strip's "+") should put the
-  // caret straight into the prompt — the panel remounts on every navigation.
-  useEffect(() => {
-    promptTextareaRef.current?.focus({ preventScroll: true });
-  }, []);
-  const [promptFocused, setPromptFocused] = useState(false);
-  const [promptSelection, setPromptSelection] = useState({ start: 0, end: 0 });
-  const promptSelectionRef = useRef(promptSelection);
-  // Attachments live inside the prompt as inline sentinel tokens (`@[图片1]`,
-  // `@[report.pdf]`); this registry maps each label to its path/preview.
   const [promptTokens, setPromptTokens] = useState<PromptToken[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const promptTokensRef = useRef(promptTokens);
-  promptTokensRef.current = promptTokens;
-  // Object URLs survive React state; release them when the composer unmounts.
-  useEffect(
-    () => () => {
-      for (const token of promptTokensRef.current) {
-        if (token.previewUrl) URL.revokeObjectURL(token.previewUrl);
-      }
-    },
-    []
-  );
   const clearPromptTokens = useCallback(() => {
     setPromptTokens((prev) => {
       for (const token of prev) {
@@ -972,160 +702,19 @@ export const HomeComposer = observer(function HomeComposer({
       return [];
     });
   }, []);
-  // NOTE: registrations are deliberately kept when their sentinel text is
-  // deleted — undo (Cmd+Z) restores the text and the mapping must still hold.
-  // Serialization only acts on sentinels present in the text; preview URLs
-  // are revoked on submit/unmount.
-  //
-  // Current occurrences of registered tokens in the text, in document order.
-  const tokenRanges = useMemo(() => findTokenRanges(prompt, promptTokens), [prompt, promptTokens]);
-  const tokenRangesRef = useRef(tokenRanges);
-  tokenRangesRef.current = tokenRanges;
-  // Pixel rects of each token occurrence inside the textarea (mirror-measured)
-  // — drives the pill highlights, hover preview, and right-click hit testing.
-  const [tokenRects, setTokenRects] = useState<Map<string, TokenRect[]>>(new Map());
-  const [promptScrollTop, setPromptScrollTop] = useState(0);
-  const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
-  const [tokenMenu, setTokenMenu] = useState<{
-    tokenId: string;
-    left: number;
-    top: number;
-  } | null>(null);
-  // Layout effect (not rAF): the chip overlay is opaque and must be in place
-  // before paint, or the raw sentinel text would flash through while typing.
-  useLayoutEffect(() => {
-    const textarea = promptTextareaRef.current;
-    if (!textarea) return;
-    setTokenRects(measureTokenRects(textarea, tokenRanges));
-  }, [tokenRanges]);
-  useEffect(() => {
-    const textarea = promptTextareaRef.current;
-    if (!textarea) return;
-    const observer = new ResizeObserver(() => {
-      setTokenRects(
-        measureTokenRects(textarea, findTokenRanges(textarea.value, promptTokensRef.current))
-      );
-    });
-    observer.observe(textarea);
-    return () => observer.disconnect();
-  }, []);
-  const hitTestToken = useCallback(
-    (e: MouseEvent<HTMLTextAreaElement>): string | null => {
-      const textarea = e.currentTarget;
-      const rect = textarea.getBoundingClientRect();
-      return tokenAtPoint(
-        tokenRects,
-        e.clientX - rect.left,
-        e.clientY - rect.top + textarea.scrollTop
-      );
+  const persistPromptTokens = useCallback(
+    (next: PromptToken[]) => {
+      setPromptTokens(next);
+      updateDraft({
+        promptTokens: next.map((token) => ({
+          kind: token.kind,
+          label: token.label,
+          path: token.path,
+        })),
+      });
     },
-    [tokenRects]
+    [updateDraft]
   );
-  const handlePromptMouseMove = useCallback(
-    (e: MouseEvent<HTMLTextAreaElement>) => {
-      setHoveredTokenId(hitTestToken(e));
-    },
-    [hitTestToken]
-  );
-  const handlePromptContextMenu = useCallback(
-    (e: MouseEvent<HTMLTextAreaElement>) => {
-      const tokenId = hitTestToken(e);
-      if (!tokenId) return;
-      e.preventDefault();
-      const rect = e.currentTarget.getBoundingClientRect();
-      setTokenMenu({ tokenId, left: e.clientX - rect.left, top: e.clientY - rect.top });
-    },
-    [hitTestToken]
-  );
-  const handlePromptMouseDown = useCallback(
-    (e: MouseEvent<HTMLTextAreaElement>) => {
-      // Suppress double-click word-selection on a token — the native selection
-      // would paint over the chip (ghosting); the gesture means "open".
-      if (e.detail > 1 && hitTestToken(e)) e.preventDefault();
-    },
-    [hitTestToken]
-  );
-  const handlePromptDoubleClick = useCallback(
-    (e: MouseEvent<HTMLTextAreaElement>) => {
-      const tokenId = hitTestToken(e);
-      if (!tokenId) return;
-      const token = promptTokensRef.current.find((item) => item.id === tokenId);
-      if (!token) return;
-      e.preventDefault();
-      void rpc.app.openIn({ app: 'finder', path: token.path }).catch(() => {});
-    },
-    [hitTestToken]
-  );
-  const [pathCompletionItems, setPathCompletionItems] = useState<PathCompletionItem[]>([]);
-  const [pathCompletionOpen, setPathCompletionOpen] = useState(false);
-  const [pathCompletionLoading, setPathCompletionLoading] = useState(false);
-  const [pathCompletionError, setPathCompletionError] = useState(false);
-  const [activePathCompletionIndex, setActivePathCompletionIndex] = useState(0);
-  const [activeSkillShortcutIndex, setActiveSkillShortcutIndex] = useState(0);
-  const [dismissedSkillShortcutKey, setDismissedSkillShortcutKey] = useState<string | null>(null);
-  const pathCompletionRequestRef = useRef(0);
-  const activePathMention = useMemo(
-    () =>
-      promptSelection.start === promptSelection.end
-        ? findActivePathMention(prompt, promptSelection.start)
-        : null,
-    [prompt, promptSelection]
-  );
-  const activeSkillShortcut = useMemo(
-    () =>
-      promptSelection.start === promptSelection.end
-        ? findActiveSkillShortcut(prompt, promptSelection.start)
-        : null,
-    [prompt, promptSelection]
-  );
-  const activeSkillShortcutKey = activeSkillShortcut
-    ? `${activeSkillShortcut.start}:${activeSkillShortcut.end}:${activeSkillShortcut.prefix}:${activeSkillShortcut.query}`
-    : null;
-  const filteredSkillShortcutOptions = useMemo(() => {
-    if (!activeSkillShortcut) return [];
-    const query = activeSkillShortcut.query.trim();
-    if (!query) return skillShortcutOptions.slice(0, 50);
-    const scored = skillShortcutOptions
-      .map((item) => ({ item, score: skillShortcutOptionScore(item, query) }))
-      .filter(
-        (entry): entry is { item: SkillShortcutOption; score: number } => entry.score !== null
-      )
-      .sort((a, b) => b.score - a.score);
-    return scored.slice(0, 50).map((entry) => entry.item);
-  }, [activeSkillShortcut, skillShortcutOptions]);
-  const effectiveSkillShortcutIndex =
-    filteredSkillShortcutOptions.length === 0
-      ? 0
-      : Math.min(activeSkillShortcutIndex, filteredSkillShortcutOptions.length - 1);
-  const skillShortcutMenuOpen =
-    promptFocused &&
-    !!runtimeId &&
-    !!activeSkillShortcut &&
-    activeSkillShortcutKey !== dismissedSkillShortcutKey &&
-    !skillsError &&
-    (skillsLoading ||
-      filteredSkillShortcutOptions.length > 0 ||
-      activeSkillShortcut.query.length > 0);
-  const updatePromptSelection = useCallback((target: HTMLTextAreaElement) => {
-    const raw = { start: target.selectionStart, end: target.selectionEnd };
-    // Tokens are atomic: the caret may not land inside one, and a range
-    // selection swallows overlapped tokens whole.
-    const next = snapSelectionToTokens(
-      raw,
-      tokenRangesRef.current,
-      promptSelectionRef.current.start
-    );
-    if (next.start !== raw.start || next.end !== raw.end) {
-      target.setSelectionRange(next.start, next.end);
-    }
-    promptSelectionRef.current = next;
-    setPromptSelection((current) =>
-      current.start === next.start && current.end === next.end ? current : next
-    );
-  }, []);
-  useEffect(() => {
-    promptSelectionRef.current = promptSelection;
-  }, [promptSelection]);
   const hydratedPromptRef = useRef(false);
   useEffect(() => {
     if (hydratedPromptRef.current) return;
@@ -1152,145 +741,6 @@ export const HomeComposer = observer(function HomeComposer({
       if (promptWriteRef.current) clearTimeout(promptWriteRef.current);
     };
   }, [prompt, persistedPrompt, updateDraft]);
-
-  const focusPromptForVoiceInput = useCallback(() => {
-    const textarea = promptTextareaRef.current;
-    if (!textarea) return;
-    const selection = promptSelectionRef.current;
-    const start = Math.max(0, Math.min(selection.start, textarea.value.length));
-    const end = Math.max(start, Math.min(selection.end, textarea.value.length));
-    textarea.focus({ preventScroll: true });
-    textarea.setSelectionRange(start, end);
-    setPromptFocused(true);
-    updatePromptSelection(textarea);
-  }, [updatePromptSelection]);
-
-  const [voiceInputTriggering, setVoiceInputTriggering] = useState(false);
-  const copyVoiceInputError = useCallback(
-    async (message: string) => {
-      const result = await rpc.app.clipboardWriteText(message);
-      if (result.success) {
-        toast.success(t('common.copied'));
-        return;
-      }
-      toast.error(result.error ?? t('common.copyFailed'));
-    },
-    [t]
-  );
-  const showVoiceInputErrorToast = useCallback(
-    (error: string) => {
-      const title = t('home.voiceTriggerFailedToast');
-      const copyLabel = t('common.copy');
-      const copyText = `${title}\n${error}`;
-      toast.error(
-        <div className="flex w-full min-w-0 items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">{title}</span>
-          <button
-            type="button"
-            aria-label={copyLabel}
-            title={copyLabel}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void copyVoiceInputError(copyText);
-            }}
-            className="flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Copy className="size-3.5" />
-          </button>
-        </div>,
-        {
-          icon: null,
-          classNames: {
-            content: 'w-full min-w-0',
-            title: 'w-full',
-            description: 'w-full',
-          },
-          description: (
-            <div className="mt-2 max-h-28 w-full overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-background-1/80 px-2.5 py-2 text-xs leading-relaxed text-foreground-muted">
-              {error}
-            </div>
-          ),
-        }
-      );
-    },
-    [copyVoiceInputError, t]
-  );
-  const handleVoiceInput = useCallback(async () => {
-    if (voiceInputTriggering) return;
-    focusPromptForVoiceInput();
-    setVoiceInputTriggering(true);
-
-    try {
-      const result = await rpc.app.triggerVoiceInput({ provider: 'typeless' });
-      if (!result.success) {
-        showVoiceInputErrorToast(result.error ?? t('common.unknownError'));
-        return;
-      }
-      toast.success(t('home.voiceTriggeredToast', { shortcut: result.shortcut }));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      showVoiceInputErrorToast(message);
-    } finally {
-      setVoiceInputTriggering(false);
-      focusPromptForVoiceInput();
-    }
-  }, [focusPromptForVoiceInput, showVoiceInputErrorToast, t, voiceInputTriggering]);
-
-  useEffect(() => {
-    if (!activePathMention) {
-      pathCompletionRequestRef.current += 1;
-      setPathCompletionOpen(false);
-      setPathCompletionItems([]);
-      setPathCompletionLoading(false);
-      setPathCompletionError(false);
-      return;
-    }
-
-    const queryParts = splitPathMentionQuery(activePathMention.query);
-    const projectId = projectData?.id ?? null;
-    const requestId = pathCompletionRequestRef.current + 1;
-    pathCompletionRequestRef.current = requestId;
-    setPathCompletionOpen(true);
-    setPathCompletionLoading(true);
-    setPathCompletionError(false);
-
-    const timer = setTimeout(() => {
-      rpc.fs
-        .listPathCompletions(projectId, queryParts.directoryPath, {
-          pathKind: queryParts.isAbsolute ? 'absolute' : 'relative',
-          recursive: false,
-          includeHidden: true,
-          maxEntries: 80,
-          timeBudgetMs: 1_000,
-        })
-        .then((result) => {
-          if (pathCompletionRequestRef.current !== requestId) return;
-          if (!result.success) {
-            setPathCompletionItems([]);
-            setPathCompletionError(false);
-            return;
-          }
-          setPathCompletionItems(
-            buildPathCompletionItems(result.data.entries, queryParts).slice(0, 50)
-          );
-          setActivePathCompletionIndex(0);
-        })
-        .catch(() => {
-          if (pathCompletionRequestRef.current !== requestId) return;
-          setPathCompletionItems([]);
-          setPathCompletionError(false);
-        })
-        .finally(() => {
-          if (pathCompletionRequestRef.current !== requestId) return;
-          setPathCompletionLoading(false);
-        });
-    }, 80);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [activePathMention, projectData?.id]);
 
   const [submitting, setSubmitting] = useState(false);
   const standardStrategyOverridden = composerDefaults?.standardStrategyKind !== undefined;
@@ -2106,341 +1556,6 @@ export const HomeComposer = observer(function HomeComposer({
     void handleSubmit();
   }, [canSubmit, needsInitialCommit, selectedProjectId, showInitialCommitModal, handleSubmit, t]);
 
-  const applyPromptEdit = useCallback(
-    (value: string, selection: TextSelection) => {
-      const textarea = promptTextareaRef.current;
-      // Native pipeline first so Ctrl/Cmd+Z can undo programmatic edits;
-      // its input event syncs React state through onChange.
-      if (textarea) applyNativeTextareaEdit(textarea, value, selection);
-      setPrompt(value);
-      setPromptSelection(selection);
-      requestAnimationFrame(() => {
-        const target = promptTextareaRef.current;
-        if (!target) return;
-        target.focus();
-        target.setSelectionRange(selection.start, selection.end);
-        updatePromptSelection(target);
-      });
-    },
-    [updatePromptSelection]
-  );
-
-  const commitPathCompletion = useCallback(
-    (item: PathCompletionItem, mention: ActivePathMention | null = activePathMention) => {
-      if (!mention) return;
-      const next = applyPathCompletion(prompt, mention, item.insertText);
-      applyPromptEdit(next.value, { start: next.caret, end: next.caret });
-      setPathCompletionOpen(item.type === 'dir');
-    },
-    [activePathMention, applyPromptEdit, prompt]
-  );
-
-  const commitSkillShortcut = useCallback(
-    (command: string, shortcut: ActiveSkillShortcut | null = null) => {
-      const next = shortcut
-        ? applySkillShortcut(prompt, shortcut, command)
-        : insertPromptText(prompt, promptSelection, command);
-      const skillId = skillIdByShortcutCommand.get(command);
-      if (skillId) recordSkillInvocation(skillId);
-      applyPromptEdit(next.value, { start: next.caret, end: next.caret });
-      // Selecting an item must close the menu. If the inserted command still
-      // parses as an active shortcut at the new caret (e.g. no trailing space
-      // was added), dismiss that key so the menu doesn't immediately reopen.
-      const lingering = findActiveSkillShortcut(next.value, next.caret);
-      setDismissedSkillShortcutKey(
-        lingering
-          ? `${lingering.start}:${lingering.end}:${lingering.prefix}:${lingering.query}`
-          : null
-      );
-      setActiveSkillShortcutIndex(0);
-    },
-    [applyPromptEdit, prompt, promptSelection, skillIdByShortcutCommand]
-  );
-
-  // Inserts text at the caret. Reads the live textarea value (not the
-  // `prompt` closure) so async insertions (pasted screenshots after the
-  // temp-file roundtrip) and batched sequential inserts always land in the
-  // current text.
-  const insertPromptSnippet = useCallback(
-    (snippet: string) => {
-      const textarea = promptTextareaRef.current;
-      const value = textarea ? textarea.value : prompt;
-      const selection = textarea
-        ? { start: textarea.selectionStart, end: textarea.selectionEnd }
-        : promptSelectionRef.current;
-      const next = insertPromptText(value, selection, snippet);
-      applyPromptEdit(next.value, { start: next.caret, end: next.caret });
-    },
-    [applyPromptEdit, prompt]
-  );
-
-  // Registers an attachment and inserts its inline sentinel at the caret.
-  const insertAttachmentToken = useCallback(
-    (kind: PromptTokenKind, path: string, name: string, previewUrl?: string) => {
-      const existing = promptTokensRef.current;
-      const base =
-        kind === 'image'
-          ? t('home.imageTokenLabel', {
-              index: existing.filter((token) => token.kind === 'image').length + 1,
-            })
-          : fileTokenLabel(name);
-      const label = uniqueTokenLabel(base, existing);
-      const next = [...existing, { id: crypto.randomUUID(), kind, label, path, previewUrl }];
-      setPromptTokens(next);
-      updateDraft({
-        promptTokens: next.map((token) => ({
-          kind: token.kind,
-          label: token.label,
-          path: token.path,
-        })),
-      });
-      insertPromptSnippet(tokenText(label));
-    },
-    [insertPromptSnippet, t, updateDraft]
-  );
-
-  // Deletes a token's sentinel from the text; the orphan-GC effect then drops
-  // its registration and revokes the preview URL.
-  const removeTokenFromPrompt = useCallback(
-    (token: PromptToken) => {
-      const textarea = promptTextareaRef.current;
-      const value = textarea ? textarea.value : prompt;
-      const next = value.split(tokenText(token.label)).join('');
-      const caret = Math.min(
-        textarea ? textarea.selectionStart : promptSelectionRef.current.start,
-        next.length
-      );
-      applyPromptEdit(next, { start: caret, end: caret });
-    },
-    [applyPromptEdit, prompt]
-  );
-
-  const attachFiles = useCallback(
-    (files: File[]) => {
-      for (const file of files) {
-        const filePath = window.electronAPI.getPathForFile(file).trim();
-        if (!filePath) continue;
-        if (file.type.startsWith('image/') || IMAGE_ATTACHMENT_RE.test(filePath)) {
-          insertAttachmentToken('image', filePath, file.name, URL.createObjectURL(file));
-        } else {
-          insertAttachmentToken('file', filePath, file.name);
-        }
-      }
-    },
-    [insertAttachmentToken]
-  );
-
-  const handlePromptPaste = useCallback(
-    (e: ClipboardEvent<HTMLTextAreaElement>) => {
-      const imageFiles = Array.from(e.clipboardData.files).filter((file) =>
-        file.type.startsWith('image/')
-      );
-      if (imageFiles.length === 0) return;
-      e.preventDefault();
-      for (const file of imageFiles) {
-        // A file copied from the OS keeps its path; a raw screenshot doesn't,
-        // so its bytes get persisted to a temp file in the main process.
-        const existingPath = window.electronAPI.getPathForFile(file).trim();
-        if (existingPath) {
-          insertAttachmentToken('image', existingPath, file.name, URL.createObjectURL(file));
-          continue;
-        }
-        const previewUrl = URL.createObjectURL(file);
-        void (async () => {
-          try {
-            const base64 = await readFileAsBase64(file);
-            const result = await rpc.fs.saveClipboardImage(base64, file.type);
-            if (!result.success || !result.data) throw new Error('saveClipboardImage failed');
-            insertAttachmentToken(
-              'image',
-              result.data.absPath,
-              file.name || 'pasted-image',
-              previewUrl
-            );
-          } catch {
-            URL.revokeObjectURL(previewUrl);
-            toast.error(t('home.attachPasteFailedToast'));
-          }
-        })();
-      }
-    },
-    [insertAttachmentToken, t]
-  );
-
-  // Dropping a file on the prompt attaches it like the picker/paste paths do;
-  // preventDefault stops the textarea's text-insert and the window navigating
-  // to the dropped file.
-  const handlePromptDrop = useCallback(
-    (e: DragEvent<HTMLTextAreaElement>) => {
-      const files = Array.from(e.dataTransfer.files);
-      if (files.length === 0) return;
-      e.preventDefault();
-      attachFiles(files);
-    },
-    [attachFiles]
-  );
-
-  const applyPromptMarkdownEdit = useCallback(
-    (next: MarkdownTextareaEdit) => {
-      applyPromptEdit(next.value, next.selection);
-    },
-    [applyPromptEdit]
-  );
-
-  const applyPromptTabEdit = useCallback(
-    (target: HTMLTextAreaElement, direction: 'indent' | 'outdent') => {
-      applyPromptMarkdownEdit(
-        applyMarkdownTabEdit(
-          prompt,
-          { start: target.selectionStart, end: target.selectionEnd },
-          direction
-        )
-      );
-    },
-    [applyPromptMarkdownEdit, prompt]
-  );
-
-  const applyPromptEnterEdit = useCallback(
-    (target: HTMLTextAreaElement): boolean => {
-      const next = applyMarkdownEnterEdit(prompt, {
-        start: target.selectionStart,
-        end: target.selectionEnd,
-      });
-      if (!next) return false;
-      applyPromptMarkdownEdit(next);
-      return true;
-    },
-    [applyPromptMarkdownEdit, prompt]
-  );
-
-  const handlePromptKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (skillShortcutMenuOpen && activeSkillShortcut) {
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          setActiveSkillShortcutIndex((index) =>
-            filteredSkillShortcutOptions.length === 0
-              ? 0
-              : (index + 1) % filteredSkillShortcutOptions.length
-          );
-          return;
-        }
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          setActiveSkillShortcutIndex((index) =>
-            filteredSkillShortcutOptions.length === 0
-              ? 0
-              : (index - 1 + filteredSkillShortcutOptions.length) %
-                filteredSkillShortcutOptions.length
-          );
-          return;
-        }
-        if ((e.key === 'Enter' && !isImeComposing(e)) || e.key === 'Tab') {
-          const item = filteredSkillShortcutOptions[effectiveSkillShortcutIndex];
-          if (!item && e.key === 'Tab') {
-            e.preventDefault();
-            applyPromptTabEdit(e.currentTarget, e.shiftKey ? 'outdent' : 'indent');
-            return;
-          }
-          e.preventDefault();
-          if (item) commitSkillShortcut(item.command, activeSkillShortcut);
-          return;
-        }
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          setDismissedSkillShortcutKey(activeSkillShortcutKey);
-          return;
-        }
-      }
-
-      if (pathCompletionOpen && activePathMention) {
-        if (e.key === 'ArrowDown' && pathCompletionItems.length > 0) {
-          e.preventDefault();
-          setActivePathCompletionIndex((index) => (index + 1) % pathCompletionItems.length);
-          return;
-        }
-        if (e.key === 'ArrowUp' && pathCompletionItems.length > 0) {
-          e.preventDefault();
-          setActivePathCompletionIndex(
-            (index) => (index - 1 + pathCompletionItems.length) % pathCompletionItems.length
-          );
-          return;
-        }
-        if (
-          ((e.key === 'Enter' && !isImeComposing(e)) || e.key === 'Tab') &&
-          pathCompletionItems.length > 0
-        ) {
-          e.preventDefault();
-          commitPathCompletion(pathCompletionItems[activePathCompletionIndex]);
-          return;
-        }
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          setPathCompletionOpen(false);
-          return;
-        }
-      }
-
-      // Atomic token deletion: Backspace at a token's end (or Delete at its
-      // start) removes the whole sentinel. The caret can only sit at token
-      // boundaries (selection snapping), so these two cases cover all edits.
-      if ((e.key === 'Backspace' || e.key === 'Delete') && !isImeComposing(e)) {
-        const target = e.currentTarget;
-        if (target.selectionStart === target.selectionEnd) {
-          const caret = target.selectionStart;
-          const range =
-            e.key === 'Backspace'
-              ? tokenRangesRef.current.find((item) => item.end === caret)
-              : tokenRangesRef.current.find((item) => item.start === caret);
-          if (range) {
-            e.preventDefault();
-            const value = target.value;
-            applyPromptEdit(value.slice(0, range.start) + value.slice(range.end), {
-              start: range.start,
-              end: range.start,
-            });
-            return;
-          }
-        }
-      }
-
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        applyPromptTabEdit(e.currentTarget, e.shiftKey ? 'outdent' : 'indent');
-        return;
-      }
-
-      if (e.key === 'Enter' && !isImeComposing(e)) {
-        if (applyPromptEnterEdit(e.currentTarget)) {
-          e.preventDefault();
-          return;
-        }
-
-        if (!e.shiftKey) {
-          e.preventDefault();
-          submit();
-        }
-      }
-    },
-    [
-      activePathCompletionIndex,
-      activePathMention,
-      activeSkillShortcut,
-      activeSkillShortcutKey,
-      applyPromptEdit,
-      applyPromptEnterEdit,
-      applyPromptTabEdit,
-      commitPathCompletion,
-      commitSkillShortcut,
-      effectiveSkillShortcutIndex,
-      filteredSkillShortcutOptions,
-      pathCompletionItems,
-      pathCompletionOpen,
-      skillShortcutMenuOpen,
-      submit,
-    ]
-  );
-
   const promptInputChrome = getRunModeInputChrome(runMode);
   const renderSystemPromptSection = (activeRuntimeId: RuntimeId): ReactNode => {
     const runtime = getRuntime(activeRuntimeId);
@@ -2724,295 +1839,20 @@ export const HomeComposer = observer(function HomeComposer({
 
   return (
     <div className={className}>
-      <div
-        className={cn(
-          'rounded-lg border shadow-sm transition-[background-color,border-color,box-shadow]',
-          promptInputChrome.containerClassName
-        )}
-      >
-        <div className="flex flex-col">
-          <div className="relative">
-            <Textarea
-              ref={promptTextareaRef}
-              placeholder={t('home.promptPlaceholder')}
-              value={prompt}
-              onChange={(e) => {
-                setPrompt(e.target.value);
-                updatePromptSelection(e.target);
-              }}
-              onSelect={(e) => updatePromptSelection(e.currentTarget)}
-              onClick={(e) => updatePromptSelection(e.currentTarget)}
-              onFocus={(e) => {
-                setPromptFocused(true);
-                updatePromptSelection(e.currentTarget);
-                if (activePathMention) setPathCompletionOpen(true);
-              }}
-              onKeyUp={(e) => updatePromptSelection(e.currentTarget)}
-              onBlur={() => {
-                setPromptFocused(false);
-                setPathCompletionOpen(false);
-              }}
-              onKeyDown={handlePromptKeyDown}
-              onPaste={handlePromptPaste}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handlePromptDrop}
-              onScroll={(e) => setPromptScrollTop(e.currentTarget.scrollTop)}
-              onMouseMove={handlePromptMouseMove}
-              onMouseLeave={() => setHoveredTokenId(null)}
-              onMouseDown={handlePromptMouseDown}
-              onDoubleClick={handlePromptDoubleClick}
-              onContextMenu={handlePromptContextMenu}
-              className={cn(
-                'min-h-28 resize-none border-0 bg-transparent px-5 py-4 text-base placeholder:text-foreground-muted focus-visible:border-0 focus-visible:ring-0',
-                hoveredTokenId && 'cursor-default'
-              )}
-            />
-            {tokenRects.size > 0 && (
-              // Opaque chip overlay ABOVE the textarea text: the sentinel only
-              // provides layout/caret geometry, the visible entity is ours
-              // (icon + label, hover/selected states). pointer-events-none so
-              // clicks, hover and right-click stay on the textarea handlers.
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 z-[5] overflow-hidden"
-              >
-                {Array.from(tokenRects.entries()).flatMap(([tokenId, rects]) => {
-                  const token = promptTokens.find((item) => item.id === tokenId);
-                  if (!token) return [];
-                  const range = tokenRanges.find((item) => item.token.id === tokenId);
-                  const selected =
-                    !!range &&
-                    promptSelection.start !== promptSelection.end &&
-                    promptSelection.start <= range.start &&
-                    promptSelection.end >= range.end;
-                  const TokenIcon = token.kind === 'image' ? ImageIcon : FileText;
-                  return rects.map((rect, index) => (
-                    <div
-                      key={`${tokenId}:${index}`}
-                      className={cn(
-                        // Inset within the sentinel rect for breathing room —
-                        // the exposed edges are ink-free en-space delimiters.
-                        'absolute flex items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-[5px] border bg-background-2 px-1 transition-colors',
-                        hoveredTokenId === tokenId
-                          ? 'border-primary/60 bg-background-3'
-                          : 'border-border',
-                        selected && 'border-primary bg-primary/15'
-                      )}
-                      style={{
-                        left: rect.left + 3,
-                        // The measured rect is the glyph inline box (~1.2em),
-                        // tighter than the chip's contents need — grow 1px
-                        // into the line box's half-leading on each side so the
-                        // label never clips vertically.
-                        top: rect.top - promptScrollTop - 1,
-                        width: Math.max(rect.width - 6, 0),
-                        height: rect.height + 2,
-                      }}
-                    >
-                      {index === 0 && (
-                        <>
-                          <TokenIcon className="size-3 shrink-0 text-foreground-muted" />
-                          <span className="truncate text-xs leading-none text-foreground">
-                            {token.label}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  ));
-                })}
-              </div>
-            )}
-            {pathCompletionOpen && activePathMention && (
-              <PathCompletionMenu
-                items={pathCompletionItems}
-                activeIndex={activePathCompletionIndex}
-                loading={pathCompletionLoading}
-                error={pathCompletionError}
-                showEmpty={activePathMention.query.length > 0}
-                labels={{
-                  loading: t('common.loading'),
-                  error: t('common.error'),
-                  noResults: t('common.noResults'),
-                }}
-                onActiveIndexChange={setActivePathCompletionIndex}
-                onSelect={(item) => commitPathCompletion(item, activePathMention)}
-              />
-            )}
-            {skillShortcutMenuOpen && activeSkillShortcut && (
-              <SkillShortcutMenu
-                items={filteredSkillShortcutOptions}
-                activeIndex={effectiveSkillShortcutIndex}
-                loading={skillsLoading}
-                showEmpty={activeSkillShortcut.query.length > 0}
-                labels={{
-                  loading: t('common.loading'),
-                  noResults: t('skills.noMatches'),
-                }}
-                onActiveIndexChange={setActiveSkillShortcutIndex}
-                onSelect={(item) => commitSkillShortcut(item.command, activeSkillShortcut)}
-              />
-            )}
-            {!tokenMenu &&
-              hoveredTokenId &&
-              (() => {
-                const token = promptTokens.find((item) => item.id === hoveredTokenId);
-                const rect = tokenRects.get(hoveredTokenId)?.[0];
-                if (!token || !rect) return null;
-                return (
-                  <div
-                    className="pointer-events-none absolute z-20 max-w-72 rounded-md border border-border bg-background-quaternary p-1.5 shadow-md"
-                    style={{ left: rect.left, top: rect.top - promptScrollTop + rect.height + 6 }}
-                  >
-                    {token.kind === 'image' && token.previewUrl ? (
-                      <img
-                        src={token.previewUrl}
-                        alt={token.label}
-                        className="max-h-44 max-w-full rounded-sm object-contain"
-                      />
-                    ) : null}
-                    <div className="mt-1 truncate px-0.5 text-[11px] text-foreground-muted">
-                      {token.path}
-                    </div>
-                  </div>
-                );
-              })()}
-            {tokenMenu &&
-              (() => {
-                const token = promptTokens.find((item) => item.id === tokenMenu.tokenId);
-                if (!token) return null;
-                const closeMenu = () => setTokenMenu(null);
-                const menuItemClass =
-                  'flex w-full items-center rounded-sm px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-background-2';
-                return (
-                  <>
-                    <div
-                      className="fixed inset-0 z-30"
-                      onClick={closeMenu}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        closeMenu();
-                      }}
-                    />
-                    <div
-                      className="absolute z-40 min-w-44 rounded-md border border-border bg-background-quaternary p-1 shadow-md"
-                      style={{ left: tokenMenu.left, top: tokenMenu.top }}
-                    >
-                      <button
-                        type="button"
-                        className={menuItemClass}
-                        onClick={() => {
-                          void navigator.clipboard.writeText(token.path);
-                          closeMenu();
-                        }}
-                      >
-                        {t('home.tokenCopyPath')}
-                      </button>
-                      <button
-                        type="button"
-                        className={menuItemClass}
-                        onClick={() => {
-                          void rpc.app
-                            .openIn({ app: 'finder', path: token.path, reveal: true })
-                            .catch(() => {});
-                          closeMenu();
-                        }}
-                      >
-                        {t('home.tokenRevealInFinder')}
-                      </button>
-                      <button
-                        type="button"
-                        className={menuItemClass}
-                        onClick={() => {
-                          void rpc.app.openIn({ app: 'finder', path: token.path }).catch(() => {});
-                          closeMenu();
-                        }}
-                      >
-                        {t('home.tokenOpenDefault')}
-                      </button>
-                      <div className="my-1 h-px bg-border" />
-                      <button
-                        type="button"
-                        className={menuItemClass}
-                        onClick={() => {
-                          removeTokenFromPrompt(token);
-                          closeMenu();
-                        }}
-                      >
-                        {t('home.tokenRemove')}
-                      </button>
-                    </div>
-                  </>
-                );
-              })()}
-          </div>
-          <div className="flex items-center justify-between gap-2 px-2.5 py-2">
-            <div className="flex items-center gap-1">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  attachFiles(Array.from(e.target.files ?? []));
-                  e.target.value = '';
-                }}
-              />
-              <button
-                type="button"
-                aria-label={t('home.attachAria')}
-                title={
-                  runHostKind === 'ssh' ? t('home.attachSshUnsupported') : t('home.attachAria')
-                }
-                disabled={runHostKind === 'ssh'}
-                onClick={() => fileInputRef.current?.click()}
-                className="flex size-8 shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-              >
-                <Paperclip className="size-4" />
-              </button>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <SkillShortcutSelector
-                runtimeId={runtimeId}
-                options={skillShortcutOptions}
-                isLoading={skillsLoading}
-                isError={skillsError}
-                onInsert={commitSkillShortcut}
-                className="h-8 gap-1.5 rounded-full border-0 bg-background-2/60 px-3 text-xs font-medium text-foreground transition-colors hover:bg-background-2"
-              />
-              <button
-                type="button"
-                aria-label={t('home.voiceAria')}
-                aria-busy={voiceInputTriggering}
-                title={t('home.voiceTooltip')}
-                disabled={voiceInputTriggering}
-                onClick={() => void handleVoiceInput()}
-                className={cn(
-                  'flex size-8 shrink-0 items-center justify-center rounded-full transition-colors',
-                  voiceInputTriggering
-                    ? 'bg-primary/10 text-primary hover:bg-primary/15'
-                    : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
-                )}
-              >
-                <Mic className={cn('size-4', voiceInputTriggering && 'animate-pulse')} />
-              </button>
-              <button
-                type="button"
-                aria-label={t('home.submitAria')}
-                disabled={!canSubmit}
-                onClick={submit}
-                className={cn(
-                  'flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-150',
-                  canSubmit
-                    ? 'scale-100 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
-                    : 'scale-95 text-foreground-muted/60'
-                )}
-              >
-                <ArrowUp className={cn('size-4 transition-transform', canSubmit && 'scale-110')} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <ComposerPromptInput
+        value={prompt}
+        onChange={setPrompt}
+        tokens={promptTokens}
+        onTokensChange={persistPromptTokens}
+        runtimeId={runtimeId}
+        projectId={projectData?.id ?? null}
+        projectPath={skillProjectPath}
+        runHostKind={runHostKind}
+        containerClassName={promptInputChrome.containerClassName}
+        canSubmit={canSubmit}
+        onSubmit={submit}
+        autoFocus
+      />
 
       <div className="@container/composer mt-3 flex flex-col gap-2">
         {/* Toolbar chips wrap to extra rows in narrow hosts — never min-w-max +
@@ -3544,276 +2384,6 @@ interface TaskScopedProjectButtonProps {
 
 interface RunHostSelectorProps {
   kind: RunHostKind;
-}
-
-interface PathCompletionMenuProps {
-  items: PathCompletionItem[];
-  activeIndex: number;
-  loading: boolean;
-  error: boolean;
-  showEmpty: boolean;
-  labels: {
-    loading: string;
-    error: string;
-    noResults: string;
-  };
-  onActiveIndexChange: (index: number) => void;
-  onSelect: (item: PathCompletionItem) => void;
-}
-
-function PathCompletionMenu({
-  items,
-  activeIndex,
-  loading,
-  error,
-  showEmpty,
-  labels,
-  onActiveIndexChange,
-  onSelect,
-}: PathCompletionMenuProps) {
-  if (!loading && !error && items.length === 0 && !showEmpty) return null;
-
-  return (
-    <div
-      role="listbox"
-      className="absolute left-3 right-3 top-full z-40 mt-1 max-h-64 overflow-hidden rounded-lg border border-border bg-background-quaternary py-1 text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
-    >
-      {loading && items.length === 0 ? (
-        <div className="flex items-center gap-2 px-3 py-2 text-foreground-muted">
-          <Loader2 className="size-3.5 animate-spin" />
-          <span>{labels.loading}</span>
-        </div>
-      ) : error ? (
-        <div className="px-3 py-2 text-foreground-muted">{labels.error}</div>
-      ) : items.length === 0 && showEmpty ? (
-        <div className="px-3 py-2 text-foreground-muted">{labels.noResults}</div>
-      ) : items.length === 0 ? null : (
-        <div className="max-h-64 overflow-y-auto">
-          {items.map((item, index) => {
-            const Icon = item.type === 'dir' ? Folder : FileText;
-            const active = index === activeIndex;
-            return (
-              <button
-                key={`${item.type}:${item.path}`}
-                type="button"
-                role="option"
-                aria-selected={active}
-                onMouseEnter={() => onActiveIndexChange(index)}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  onSelect(item);
-                }}
-                className={cn(
-                  'flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left transition-colors',
-                  active ? 'bg-background-2 text-foreground' : 'text-foreground-muted'
-                )}
-              >
-                <Icon className="size-4 shrink-0 text-foreground-passive" />
-                <span className="truncate font-mono text-xs">{item.insertText}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface SkillShortcutMenuProps {
-  items: SkillShortcutOption[];
-  activeIndex: number;
-  loading: boolean;
-  showEmpty: boolean;
-  labels: {
-    loading: string;
-    noResults: string;
-  };
-  onActiveIndexChange: (index: number) => void;
-  onSelect: (item: SkillShortcutOption) => void;
-}
-
-function SkillShortcutMenu({
-  items,
-  activeIndex,
-  loading,
-  showEmpty,
-  labels,
-  onActiveIndexChange,
-  onSelect,
-}: SkillShortcutMenuProps) {
-  const activeItemRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    activeItemRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [activeIndex]);
-
-  if (!loading && items.length === 0 && !showEmpty) return null;
-
-  return (
-    <div
-      role="listbox"
-      className="absolute left-3 right-3 top-full z-40 mt-1 max-h-72 overflow-hidden rounded-lg border border-border bg-background-quaternary py-1 text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
-    >
-      {loading && items.length === 0 ? (
-        <div className="flex items-center gap-2 px-3 py-2 text-foreground-muted">
-          <Loader2 className="size-3.5 animate-spin" />
-          <span>{labels.loading}</span>
-        </div>
-      ) : items.length === 0 && showEmpty ? (
-        <div className="px-3 py-2 text-foreground-muted">{labels.noResults}</div>
-      ) : items.length === 0 ? null : (
-        <div className="max-h-72 overflow-y-auto">
-          {items.map((item, index) => {
-            const active = index === activeIndex;
-            return (
-              <button
-                key={item.value}
-                ref={active ? activeItemRef : undefined}
-                type="button"
-                role="option"
-                aria-selected={active}
-                onMouseEnter={() => onActiveIndexChange(index)}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  onSelect(item);
-                }}
-                className={cn(
-                  'flex w-full min-w-0 items-start gap-2 px-3 py-2 text-left transition-colors',
-                  active ? 'bg-background-2 text-foreground' : 'text-foreground-muted'
-                )}
-              >
-                <Sparkles className="mt-0.5 size-4 shrink-0 text-foreground-passive" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    <code className="shrink-0 rounded bg-background-quaternary-2 px-1.5 py-0.5 font-mono text-[10px] text-foreground-muted">
-                      {item.command}
-                    </code>
-                  </div>
-                  {item.description ? (
-                    <p className="mt-0.5 line-clamp-1 text-xs text-foreground-muted">
-                      {item.description}
-                    </p>
-                  ) : null}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface SkillShortcutSelectorProps {
-  runtimeId: RuntimeId | null;
-  options: SkillShortcutOption[];
-  isLoading: boolean;
-  isError: boolean;
-  onInsert: (command: string) => void;
-  className?: string;
-}
-
-interface SkillShortcutGroup {
-  value: string;
-  label: string;
-  items: SkillShortcutOption[];
-}
-
-function SkillShortcutSelector({
-  runtimeId,
-  options,
-  isLoading,
-  isError,
-  onInsert,
-  className,
-}: SkillShortcutSelectorProps) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const groups = useMemo<SkillShortcutGroup[]>(
-    () => [{ value: 'installed', label: t('skills.installed'), items: options }],
-    [options, t]
-  );
-  const disabled = !runtimeId || isLoading || isError || options.length === 0;
-
-  const handleValueChange = useCallback(
-    (item: SkillShortcutOption | null) => {
-      if (!item || disabled) return;
-      onInsert(item.command);
-      setOpen(false);
-    },
-    [disabled, onInsert]
-  );
-
-  return (
-    <Combobox
-      items={groups}
-      value={null}
-      onValueChange={handleValueChange}
-      open={!disabled && open}
-      onOpenChange={disabled ? undefined : setOpen}
-      isItemEqualToValue={(a: SkillShortcutOption, b: SkillShortcutOption) => a.value === b.value}
-      filter={(item: SkillShortcutOption, query) => {
-        const q = query.toLowerCase();
-        return (
-          item.label.toLowerCase().includes(q) ||
-          item.value.toLowerCase().includes(q) ||
-          item.command.toLowerCase().includes(q) ||
-          item.description.toLowerCase().includes(q)
-        );
-      }}
-      autoHighlight
-    >
-      <ComboboxTrigger
-        disabled={disabled}
-        aria-label={t('home.skillShortcutAria')}
-        className={cn(
-          'flex h-9 min-w-0 items-center gap-2 rounded-md border border-border bg-transparent px-2.5 py-1 text-sm outline-none',
-          disabled && 'cursor-not-allowed opacity-60',
-          className
-        )}
-      >
-        <Sparkles className="size-3.5 shrink-0 text-foreground-muted" />
-        <span className="min-w-0 truncate text-left">{t('home.skillShortcutLabel')}</span>
-        {isLoading ? (
-          <Loader2 className="size-3.5 shrink-0 animate-spin text-foreground-muted" />
-        ) : (
-          <ChevronDown className="size-3.5 shrink-0 text-foreground-muted" />
-        )}
-      </ComboboxTrigger>
-      <ComboboxContent className="w-96 min-w-(--anchor-width)">
-        <ComboboxInput showTrigger={false} placeholder={t('home.searchSkills')} />
-        <ComboboxEmpty>{t('skills.noMatches')}</ComboboxEmpty>
-        <ComboboxList className="pb-0">
-          {(group: SkillShortcutGroup) => (
-            <ComboboxGroup key={group.value} items={group.items} className="py-1">
-              <ComboboxLabel>{group.label}</ComboboxLabel>
-              <ComboboxCollection>
-                {(item: SkillShortcutOption) => (
-                  <ComboboxItem key={item.value} value={item} className="items-start gap-2 py-2">
-                    <Sparkles className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                        <code className="shrink-0 rounded bg-background-quaternary-2 px-1.5 py-0.5 font-mono text-[10px] text-foreground-muted">
-                          {item.command}
-                        </code>
-                      </div>
-                      {item.description ? (
-                        <p className="mt-0.5 line-clamp-1 text-xs text-foreground-muted">
-                          {item.description}
-                        </p>
-                      ) : null}
-                    </div>
-                  </ComboboxItem>
-                )}
-              </ComboboxCollection>
-            </ComboboxGroup>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
-  );
 }
 
 interface RunModeOption {

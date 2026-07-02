@@ -1,9 +1,20 @@
 import { Bot, FileCode2, ListPlus, WandSparkles } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { QuickAction } from '@shared/project-settings';
-import { getProjectSettingsStore } from '@renderer/features/projects/stores/project-selectors';
+import { ComposerPromptInput } from '@renderer/app/composer-prompt-input';
+import {
+  serializePromptWithTokens,
+  type PromptToken,
+} from '@renderer/app/prompt-attachment-tokens';
+import {
+  asMounted,
+  getProjectSettingsStore,
+  getProjectStore,
+} from '@renderer/features/projects/stores/project-selectors';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
@@ -83,21 +94,42 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [intent, setIntent] = useState('');
+  const [intentTokens, setIntentTokens] = useState<PromptToken[]>([]);
   const [target, setTarget] = useState<Target>('quickAction');
   const [label, setLabel] = useState('');
   const [command, setCommand] = useState(fallbackQuickActionPrompt);
   const [setupScript, setSetupScript] = useState('');
   const [runScript, setRunScript] = useState('');
   const [teardownScript, setTeardownScript] = useState('');
+  const settingsStore = getProjectSettingsStore(projectId);
+  const projectStore = getProjectStore(projectId);
+  const mountedProject = asMounted(projectStore);
+  const projectData = mountedProject?.data;
+  const connectionId = projectData?.type === 'ssh' ? projectData.connectionId : undefined;
+  const projectPath = projectData?.type === 'local' ? projectData.path : undefined;
+  const runHostKind = projectData?.type === 'ssh' ? 'ssh' : 'local';
+  const { value: homeDraft } = useAppSettingsKey('homeDraft');
+  const runtimeOverrideValue =
+    settingsStore?.settings?.composerDefaults?.runtimeId ?? homeDraft?.runtimeOverride ?? null;
+  const ignoreRuntimeOverride = useCallback(() => {}, []);
+  const { runtimeId } = useEffectiveRuntime(connectionId, {
+    value: runtimeOverrideValue,
+    set: ignoreRuntimeOverride,
+  });
+  const serializedIntent = useMemo(
+    () => serializePromptWithTokens(intent, intentTokens, { imagesAsPaths: true }).text,
+    [intent, intentTokens]
+  );
 
   useEffect(() => {
     let cancelled = false;
-    const settingsStore = getProjectSettingsStore(projectId);
     if (!settingsStore) {
       setError(t('projects.projectNotReady'));
       setLoading(false);
       return;
     }
+    setError(null);
+    setLoading(true);
     void (async () => {
       await settingsStore.pageData.load();
       if (cancelled) return;
@@ -110,20 +142,19 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     return () => {
       cancelled = true;
     };
-  }, [projectId, t]);
+  }, [settingsStore, t]);
 
-  const suggestedLabel = useMemo(() => compactTitle(intent), [intent]);
+  const suggestedLabel = useMemo(() => compactTitle(serializedIntent), [serializedIntent]);
   const skillDraft = useMemo(
-    () => buildSkillDraft(intent, label || suggestedLabel, command),
-    [command, intent, label, suggestedLabel]
+    () => buildSkillDraft(serializedIntent, label || suggestedLabel, command),
+    [command, serializedIntent, label, suggestedLabel]
   );
 
-  const handleIntentChange = (nextIntent: string) => {
-    setIntent(nextIntent);
-    const nextLabel = compactTitle(nextIntent);
-    if (!label.trim()) setLabel(nextLabel);
-    setCommand(buildQuickActionCommand(nextIntent));
-  };
+  useEffect(() => {
+    const nextLabel = compactTitle(serializedIntent);
+    setLabel((current) => (current.trim() ? current : nextLabel));
+    setCommand(buildQuickActionCommand(serializedIntent));
+  }, [serializedIntent]);
 
   const saveQuickAction = async () => {
     const settingsStore = getProjectSettingsStore(projectId);
@@ -201,12 +232,18 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
         <FieldGroup>
           <Field>
             <FieldLabel>{t('sidebar.captureAutomation.intentLabel')}</FieldLabel>
-            <Textarea
-              rows={4}
+            <ComposerPromptInput
               value={intent}
+              onChange={setIntent}
+              tokens={intentTokens}
+              onTokensChange={setIntentTokens}
+              runtimeId={runtimeId}
+              projectId={projectId}
+              projectPath={projectPath}
+              runHostKind={runHostKind}
               disabled={loading}
               placeholder={t('sidebar.captureAutomation.intentPlaceholder')}
-              onChange={(e) => handleIntentChange(e.target.value)}
+              showSubmitButton={false}
             />
             <FieldDescription>{t('sidebar.captureAutomation.intentDescription')}</FieldDescription>
           </Field>
