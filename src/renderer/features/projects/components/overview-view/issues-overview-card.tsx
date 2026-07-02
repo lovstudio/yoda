@@ -1,16 +1,26 @@
-import { ArrowRight, CircleDot, ExternalLink, MoreHorizontal } from 'lucide-react';
+import {
+  ArrowRight,
+  CircleDot,
+  ExternalLink,
+  Loader2,
+  MoreHorizontal,
+  ScanSearch,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import type { Issue } from '@shared/tasks';
 import { useIssues } from '@renderer/features/integrations/use-issues';
 import { CreateIssueButton } from '@renderer/features/projects/components/issues-view/create-issue-button';
 import {
+  getLinkedTaskStores,
   IssueLinkedTasks,
   IssueTaskLinkPopover,
 } from '@renderer/features/projects/components/issues-view/issue-task-links';
+import { useIssueTaskCreation } from '@renderer/features/projects/components/issues-view/use-issue-task-creation';
 import { getRepositoryStore } from '@renderer/features/projects/stores/project-selectors';
 import { IssueIdentifier } from '@renderer/features/tasks/components/issue-selector/issue-selector';
 import { rpc } from '@renderer/lib/ipc';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { useGithubContext } from '@renderer/lib/providers/github-context-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
@@ -37,9 +47,31 @@ function IssueOverviewActions({
   onViewAll: () => void;
 }) {
   const { t } = useTranslation();
+  const showCreateTaskModal = useShowModal('taskModal');
+  const alreadyInTask = getLinkedTaskStores(projectId, issue).length > 0;
 
   return (
     <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity group-hover/issue:opacity-100">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              disabled={alreadyInTask}
+              aria-label={alreadyInTask ? t('issues.alreadyInTask') : t('issues.createTask')}
+              onClick={() =>
+                showCreateTaskModal({ projectId, strategy: 'from-issue', initialIssue: issue })
+              }
+            >
+              <ScanSearch className="size-3.5" />
+            </Button>
+          }
+        />
+        <TooltipContent>
+          {alreadyInTask ? t('issues.alreadyInTask') : t('issues.createTask')}
+        </TooltipContent>
+      </Tooltip>
       <IssueTaskLinkPopover issue={issue} projectId={projectId} iconOnly />
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -83,14 +115,32 @@ export const IssuesOverviewCard = observer(function IssuesOverviewCard({
   });
 
   const recentIssues = issues.slice(0, RECENT_LIMIT);
+  const { createIssueTasks, isCreatingIssueTasks, taskableIssues } = useIssueTaskCreation(
+    projectId,
+    issues
+  );
+  const showConfirm = useShowModal('confirmActionModal');
 
   const goToIssues = () => {
     appState.appTabs.openTab('project', { projectId, view: 'issues' });
   };
 
+  const confirmCreateIssueTasks = () => {
+    if (taskableIssues.length === 0) return;
+    showConfirm({
+      title: t('issues.createTasksTitle', { count: taskableIssues.length }),
+      description: t('issues.createTasksDescription', { count: taskableIssues.length }),
+      confirmLabel: t('issues.createTasksConfirm'),
+      variant: 'default',
+      onSuccess: () => {
+        void createIssueTasks(taskableIssues);
+      },
+    });
+  };
+
   return (
     <section className="rounded-lg border border-border bg-background-elevated p-4">
-      <header className="mb-3 flex items-center justify-between">
+      <header className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h2 className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
             <CircleDot className="size-3.5" />
@@ -101,6 +151,26 @@ export const IssuesOverviewCard = observer(function IssuesOverviewCard({
           </span>
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={confirmCreateIssueTasks}
+            disabled={
+              !repositoryUrl ||
+              !authenticated ||
+              taskableIssues.length === 0 ||
+              isCreatingIssueTasks
+            }
+          >
+            {isCreatingIssueTasks ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <ScanSearch className="size-3.5" />
+            )}
+            {taskableIssues.length > 0
+              ? t('issues.createTasksCount', { count: taskableIssues.length })
+              : t('issues.allIssuesInTasks')}
+          </Button>
           <CreateIssueButton
             repositoryUrl={repositoryUrl}
             projectId={projectId}
