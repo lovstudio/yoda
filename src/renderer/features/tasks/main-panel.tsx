@@ -256,7 +256,7 @@ const DrawerVerticalSplit = observer(function DrawerVerticalSplit({
         onPointerUp={() => setIsHandleDragging(false)}
         onPointerCancel={() => setIsHandleDragging(false)}
         className={cn(
-          "z-10 -mb-7 h-7 bg-transparent before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-border before:content-['']",
+          "z-10 bg-border after:bg-transparent after:content-[''] aria-[orientation=horizontal]:after:top-0 aria-[orientation=horizontal]:after:bottom-auto aria-[orientation=horizontal]:after:h-7 aria-[orientation=horizontal]:after:translate-y-0",
           taskView.isTerminalDrawerOpen ? 'flex' : 'hidden'
         )}
       />
