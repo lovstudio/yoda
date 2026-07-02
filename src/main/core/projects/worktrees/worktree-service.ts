@@ -298,7 +298,17 @@ export class WorktreeService {
     if (!checkedOutPath) return undefined;
     try {
       const realPoolPath = await this.host.realPathAbsolute(this.worktreePoolPath);
-      if (checkedOutPath.startsWith(realPoolPath)) return checkedOutPath;
+      // git reports forward-slash paths even on Windows while realpath uses the
+      // native separator; normalize both before the prefix compare, and require a
+      // directory boundary so the pool prefix can't match an unrelated sibling.
+      const normalizedTarget = path.normalize(checkedOutPath);
+      const normalizedPool = path.normalize(realPoolPath);
+      if (
+        normalizedTarget === normalizedPool ||
+        normalizedTarget.startsWith(normalizedPool + path.sep)
+      ) {
+        return normalizedTarget;
+      }
     } catch {}
     return undefined;
   }
