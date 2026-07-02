@@ -43,11 +43,13 @@ import { type ModalComponent } from '@renderer/lib/modal/modal-provider';
 
 export type ModalSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 export type ModalPosition = 'center' | 'top';
+export type ModalScope = 'viewport' | 'container';
 
 export type ModalRegistryEntry<TProps = unknown, TResult = unknown> = {
   component: ModalComponent<TProps, TResult>;
   size?: ModalSize;
   position?: ModalPosition;
+  scope?: ModalScope;
 };
 
 export function createModal<TProps, TResult>(
@@ -80,7 +82,7 @@ export const modalRegistry = {
   agentEditModal: createModal(AgentEditModal, { size: 'lg' }),
   conflictDialog: createModal(ConflictDialog, { size: 'sm' }),
   createPrModal: createModal(CreatePrModal, { size: 'md' }),
-  renameTaskModal: createModal(RenameTaskModal, { size: 'xs' }),
+  renameTaskModal: createModal(RenameTaskModal, { size: 'xs', scope: 'container' }),
   renameConversationModal: createModal(RenameConversationModal, { size: 'xs' }),
   setParentTaskModal: createModal(SetParentTaskModal, { size: 'sm' }),
   createParentTaskModal: createModal(CreateParentTaskModal, { size: 'xs' }),

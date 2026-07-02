@@ -1,6 +1,6 @@
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { observer } from 'mobx-react-lite';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, type ReactNode } from 'react';
 import {
   modalRegistry,
   type ModalPosition,
@@ -49,6 +49,7 @@ export const ModalRenderer = observer(function ModalRenderer() {
   const DisplayComponent = lastComponentRef.current;
   const displayArgs = lastArgsRef.current;
   const displayEntry = lastEntryRef.current;
+  const isContainerScoped = displayEntry?.scope === 'container';
 
   const handleOpenChange = (
     open: boolean,
@@ -72,29 +73,45 @@ export const ModalRenderer = observer(function ModalRenderer() {
     return target;
   }, []);
 
+  const content = (
+    <ModalSurface isContainerScoped={isContainerScoped}>
+      <DialogOverlay className={isContainerScoped ? 'absolute' : undefined} />
+      <DialogPrimitive.Popup
+        ref={popupRef}
+        finalFocus={false}
+        initialFocus={initialFocus}
+        data-slot="dialog-content"
+        onKeyDownCapture={(e) => {
+          if ((e.metaKey || e.ctrlKey || e.altKey) && e.key === 'Enter') {
+            e.preventDefault();
+          }
+        }}
+        className={cn(
+          'fixed left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col overflow-hidden rounded-xl bg-background-quaternary text-sm ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+          isContainerScoped && 'absolute max-h-[calc(100%-2rem)]',
+          POSITION_CLASSES[displayEntry?.position ?? 'center'],
+          SIZE_CLASSES[displayEntry?.size ?? 'md']
+        )}
+      >
+        {DisplayComponent && displayArgs ? <DisplayComponent {...displayArgs} /> : null}
+      </DialogPrimitive.Popup>
+    </ModalSurface>
+  );
+
   return (
     <Dialog open={modalStore.isOpen} onOpenChange={handleOpenChange}>
-      <DialogPortal>
-        <DialogOverlay />
-        <DialogPrimitive.Popup
-          ref={popupRef}
-          finalFocus={false}
-          initialFocus={initialFocus}
-          data-slot="dialog-content"
-          onKeyDownCapture={(e) => {
-            if ((e.metaKey || e.ctrlKey || e.altKey) && e.key === 'Enter') {
-              e.preventDefault();
-            }
-          }}
-          className={cn(
-            'fixed left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col overflow-hidden rounded-xl bg-background-quaternary text-sm ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
-            POSITION_CLASSES[displayEntry?.position ?? 'center'],
-            SIZE_CLASSES[displayEntry?.size ?? 'md']
-          )}
-        >
-          {DisplayComponent && displayArgs ? <DisplayComponent {...displayArgs} /> : null}
-        </DialogPrimitive.Popup>
-      </DialogPortal>
+      {content}
     </Dialog>
   );
 });
+
+function ModalSurface({
+  isContainerScoped,
+  children,
+}: {
+  isContainerScoped: boolean;
+  children: ReactNode;
+}) {
+  if (isContainerScoped) return <>{children}</>;
+  return <DialogPortal>{children}</DialogPortal>;
+}
