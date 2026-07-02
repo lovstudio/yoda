@@ -752,6 +752,17 @@
       "tmux": "tmux",
       "font": "Terminal font",
       "fontDescription": "Choose the font family for the terminal.",
+      "renderer": "Terminal renderer",
+      "rendererDescription": "Choose whether terminals use WebGL, DOM compatibility rendering, or automatic fallback.",
+      "rendererAuto": "Auto",
+      "rendererWebgl": "WebGL",
+      "rendererDom": "DOM",
+      "rendererNoActive": "No active terminals.",
+      "rendererActiveWebgl": "{{count}} active terminal(s) using WebGL.",
+      "rendererActiveDom": "{{count}} active terminal(s) using DOM rendering.",
+      "rendererActiveMixed": "{{webgl}} WebGL and {{dom}} DOM terminal(s) active.",
+      "rendererFallbackActive": "{{count}} terminal(s) are using DOM fallback.",
+      "rendererStrictFailureActive": "{{count}} terminal(s) failed strict WebGL mode.",
       "searchFontPlaceholder": "Search or type custom font",
       "searchFontAria": "Search font options",
       "scrollbackLines": "Terminal history",
@@ -3002,6 +3013,14 @@
       "openUrl": "Open URL",
       "copyUrl": "Copy URL",
       "urlCopied": "URL copied"
+    },
+    "renderer": {
+      "fallbackTitle": "Terminal switched to DOM renderer",
+      "fallbackUnavailableDescription": "WebGL is unavailable on this system, so the terminal is using the DOM compatibility renderer.",
+      "fallbackContextLostDescription": "The WebGL context was lost, so the terminal switched to the DOM compatibility renderer.",
+      "strictFailureTitle": "WebGL terminal renderer failed",
+      "strictUnavailableDescription": "Strict WebGL mode is selected, but WebGL is unavailable. The terminal is using the DOM emergency renderer so the session remains readable.",
+      "strictContextLostDescription": "Strict WebGL mode is selected, but the WebGL context was lost. The terminal is using the DOM emergency renderer so the session remains readable."
     }
   },
   "integrations": {

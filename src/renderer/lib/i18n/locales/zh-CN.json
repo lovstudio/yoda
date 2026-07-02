@@ -752,6 +752,17 @@
       "tmux": "tmux",
       "font": "终端字体",
       "fontDescription": "选择终端使用的字体。",
+      "renderer": "终端渲染器",
+      "rendererDescription": "选择终端使用 WebGL、DOM 兼容渲染，或在不可用时自动降级。",
+      "rendererAuto": "自动",
+      "rendererWebgl": "WebGL",
+      "rendererDom": "DOM",
+      "rendererNoActive": "当前没有活跃终端。",
+      "rendererActiveWebgl": "{{count}} 个活跃终端正在使用 WebGL。",
+      "rendererActiveDom": "{{count}} 个活跃终端正在使用 DOM 渲染。",
+      "rendererActiveMixed": "{{webgl}} 个 WebGL、{{dom}} 个 DOM 终端处于活跃状态。",
+      "rendererFallbackActive": "{{count}} 个终端正在使用 DOM 降级渲染。",
+      "rendererStrictFailureActive": "{{count}} 个终端的严格 WebGL 模式失败。",
       "searchFontPlaceholder": "搜索或输入自定义字体",
       "searchFontAria": "搜索字体选项",
       "scrollbackLines": "终端历史行数",
@@ -3002,6 +3013,14 @@
       "openUrl": "打开链接",
       "copyUrl": "复制链接",
       "urlCopied": "链接已复制"
+    },
+    "renderer": {
+      "fallbackTitle": "终端已切换到 DOM 渲染器",
+      "fallbackUnavailableDescription": "当前系统不可用 WebGL，终端已改用 DOM 兼容渲染器。",
+      "fallbackContextLostDescription": "WebGL context 已丢失，终端已切换到 DOM 兼容渲染器。",
+      "strictFailureTitle": "WebGL 终端渲染器失败",
+      "strictUnavailableDescription": "当前选择了严格 WebGL 模式，但 WebGL 不可用。为了保持 session 可读，终端正在使用 DOM 应急渲染器。",
+      "strictContextLostDescription": "当前选择了严格 WebGL 模式，但 WebGL context 已丢失。为了保持 session 可读，终端正在使用 DOM 应急渲染器。"
     }
   },
   "integrations": {

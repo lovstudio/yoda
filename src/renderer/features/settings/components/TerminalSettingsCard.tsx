@@ -1,17 +1,32 @@
 import { Check, ChevronDown } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  DEFAULT_TERMINAL_RENDERER,
   MAX_TERMINAL_SCROLLBACK_LINES,
   MIN_TERMINAL_SCROLLBACK_LINES,
   normalizeTerminalScrollbackLines,
+  TERMINAL_RENDERERS,
+  type TerminalRenderer,
 } from '@shared/terminal-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { rpc } from '@renderer/lib/ipc';
+import {
+  getTerminalRendererDiagnostics,
+  subscribeTerminalRendererDiagnostics,
+} from '@renderer/lib/pty/pty';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
+import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { SettingRow } from './SettingRow';
 
 type FontOption = {
@@ -30,6 +45,12 @@ const POPULAR_FONTS = [
   'Source Code Pro',
   'MesloLGS NF',
 ];
+
+const RENDERER_LABEL_KEYS = {
+  auto: 'settings.terminal.rendererAuto',
+  webgl: 'settings.terminal.rendererWebgl',
+  dom: 'settings.terminal.rendererDom',
+} satisfies Record<TerminalRenderer, string>;
 
 const toOptionId = (font: string) =>
   `font-${font
@@ -56,10 +77,53 @@ const TerminalSettingsCard: React.FC = () => {
   const [loadingFonts, setLoadingFonts] = useState<boolean>(false);
 
   const fontFamily = terminal?.fontFamily ?? '';
+  const renderer = terminal?.renderer ?? DEFAULT_TERMINAL_RENDERER;
   const autoCopyOnSelection = terminal?.autoCopyOnSelection ?? true;
   const scrollbackLines = normalizeTerminalScrollbackLines(terminal?.scrollbackLines);
+  const rendererDiagnostics = useSyncExternalStore(
+    subscribeTerminalRendererDiagnostics,
+    getTerminalRendererDiagnostics,
+    getTerminalRendererDiagnostics
+  );
   const [scrollbackDraft, setScrollbackDraft] = useState<string>(String(scrollbackLines));
   const skipScrollbackCommitRef = useRef(false);
+
+  const rendererStatusText = useMemo(() => {
+    if (rendererDiagnostics.activeCount === 0) {
+      return t('settings.terminal.rendererNoActive');
+    }
+    if (rendererDiagnostics.strictFailureCount > 0) {
+      return t('settings.terminal.rendererStrictFailureActive', {
+        count: rendererDiagnostics.strictFailureCount,
+      });
+    }
+    if (rendererDiagnostics.fallbackCount > 0) {
+      return t('settings.terminal.rendererFallbackActive', {
+        count: rendererDiagnostics.fallbackCount,
+      });
+    }
+    if (rendererDiagnostics.webglCount > 0 && rendererDiagnostics.domCount > 0) {
+      return t('settings.terminal.rendererActiveMixed', {
+        webgl: rendererDiagnostics.webglCount,
+        dom: rendererDiagnostics.domCount,
+      });
+    }
+    if (rendererDiagnostics.webglCount > 0) {
+      return t('settings.terminal.rendererActiveWebgl', {
+        count: rendererDiagnostics.webglCount,
+      });
+    }
+    return t('settings.terminal.rendererActiveDom', {
+      count: rendererDiagnostics.domCount,
+    });
+  }, [rendererDiagnostics, t]);
+
+  const rendererStatusClass =
+    rendererDiagnostics.strictFailureCount > 0
+      ? 'text-foreground-destructive'
+      : rendererDiagnostics.fallbackCount > 0
+        ? 'text-foreground-muted'
+        : 'text-foreground-passive';
 
   const popularOptions = useMemo<FontOption[]>(() => {
     return [
@@ -139,6 +203,17 @@ const TerminalSettingsCard: React.FC = () => {
       );
     },
     [update]
+  );
+
+  const applyRenderer = useCallback(
+    (next: TerminalRenderer) => {
+      if (next === renderer) return;
+      update({ renderer: next });
+      window.dispatchEvent(
+        new CustomEvent('terminal-renderer-changed', { detail: { renderer: next } })
+      );
+    },
+    [renderer, update]
   );
 
   const toggleAutoCopy = useCallback(
@@ -293,6 +368,36 @@ const TerminalSettingsCard: React.FC = () => {
                 </div>
               </PopoverContent>
             </Popover>
+          </div>
+        }
+      />
+      <SettingRow
+        title={t('settings.terminal.renderer')}
+        description={t('settings.terminal.rendererDescription')}
+        control={
+          <div className="flex w-[183px] flex-shrink-0 flex-col gap-1.5">
+            <ToggleGroup
+              value={[renderer]}
+              onValueChange={([next]) => {
+                if (next) applyRenderer(next as TerminalRenderer);
+              }}
+              className="w-full"
+            >
+              {TERMINAL_RENDERERS.map((option) => (
+                <ToggleGroupItem
+                  key={option}
+                  value={option}
+                  disabled={loading || saving}
+                  aria-label={t(RENDERER_LABEL_KEYS[option])}
+                  className="flex-1 text-xs"
+                >
+                  {t(RENDERER_LABEL_KEYS[option])}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <span className={`text-[11px] leading-snug ${rendererStatusClass}`}>
+              {rendererStatusText}
+            </span>
           </div>
         }
       />

@@ -31,9 +31,11 @@ import {
   TASK_NAMING_CONTEXT_SOURCE_IDS,
 } from '@shared/task-naming';
 import {
+  DEFAULT_TERMINAL_RENDERER,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
   MAX_TERMINAL_SCROLLBACK_LINES,
   MIN_TERMINAL_SCROLLBACK_LINES,
+  TERMINAL_RENDERERS,
 } from '@shared/terminal-settings';
 import { DEFAULT_RUNTIME_ID } from './settings-registry';
 
@@ -238,6 +240,7 @@ export const runtimeModelCandidatesSettingsSchema = z.preprocess(
 
 export const terminalSettingsSchema = z.object({
   fontFamily: z.string().optional(),
+  renderer: z.enum(TERMINAL_RENDERERS).catch(DEFAULT_TERMINAL_RENDERER),
   autoCopyOnSelection: z.boolean(),
   scrollbackLines: z
     .number()

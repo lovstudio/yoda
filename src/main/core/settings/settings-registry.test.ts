@@ -12,4 +12,8 @@ describe('settings defaults', () => {
     expect(tasks.namingLanguage).toBe('skip');
     expect(tasks.summaryLanguage).toBe('skip');
   });
+
+  it('uses automatic terminal renderer selection by default', () => {
+    expect(getDefaultForKey('terminal').renderer).toBe('auto');
+  });
 });

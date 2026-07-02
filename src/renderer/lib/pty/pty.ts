@@ -2,9 +2,14 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal, type IDisposable, type ITerminalOptions } from '@xterm/xterm';
 import { ptyDataChannel } from '@shared/events/ptyEvents';
 import {
+  DEFAULT_TERMINAL_RENDERER,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
+  normalizeTerminalRenderer,
   normalizeTerminalScrollbackLines,
+  type TerminalRenderer,
 } from '@shared/terminal-settings';
+import { toast } from '@renderer/lib/hooks/use-toast';
+import i18n from '@renderer/lib/i18n';
 import { events, rpc } from '@renderer/lib/ipc';
 import { cssVar } from '@renderer/utils/cssVars';
 import { log } from '@renderer/utils/logger';
@@ -35,6 +40,78 @@ export const TERMINAL_LINE_HEIGHT = 1.0;
  * Everything else is event-driven; see FrontendPty.commitResize().
  */
 const UNFREEZE_FALLBACK_MS = 300;
+
+export type TerminalRendererEngine = 'webgl' | 'dom';
+export type TerminalRendererIssue = 'webgl-unavailable' | 'webgl-context-lost';
+
+type TerminalRendererDiagnosticsEntry = {
+  preference: TerminalRenderer;
+  engine: TerminalRendererEngine;
+  issue: TerminalRendererIssue | null;
+};
+
+export type TerminalRendererDiagnostics = {
+  activeCount: number;
+  webglCount: number;
+  domCount: number;
+  fallbackCount: number;
+  strictFailureCount: number;
+  issueCounts: Record<TerminalRendererIssue, number>;
+};
+
+function createEmptyTerminalRendererDiagnostics(): TerminalRendererDiagnostics {
+  return {
+    activeCount: 0,
+    webglCount: 0,
+    domCount: 0,
+    fallbackCount: 0,
+    strictFailureCount: 0,
+    issueCounts: {
+      'webgl-unavailable': 0,
+      'webgl-context-lost': 0,
+    },
+  };
+}
+
+let terminalRendererDiagnosticsSnapshot = createEmptyTerminalRendererDiagnostics();
+const terminalRendererDiagnosticsListeners = new Set<() => void>();
+
+function recomputeTerminalRendererDiagnostics(): TerminalRendererDiagnostics {
+  const diagnostics = createEmptyTerminalRendererDiagnostics();
+  diagnostics.activeCount = FrontendPty.all.size;
+
+  for (const pty of FrontendPty.all) {
+    const entry = pty.getRendererDiagnosticsEntry();
+    if (entry.engine === 'webgl') diagnostics.webglCount += 1;
+    if (entry.engine === 'dom') diagnostics.domCount += 1;
+    if (!entry.issue) continue;
+
+    diagnostics.issueCounts[entry.issue] += 1;
+    if (entry.preference === 'webgl') {
+      diagnostics.strictFailureCount += 1;
+    } else {
+      diagnostics.fallbackCount += 1;
+    }
+  }
+
+  return diagnostics;
+}
+
+function notifyTerminalRendererDiagnosticsChanged(): void {
+  terminalRendererDiagnosticsSnapshot = recomputeTerminalRendererDiagnostics();
+  for (const listener of terminalRendererDiagnosticsListeners) {
+    listener();
+  }
+}
+
+export function getTerminalRendererDiagnostics(): TerminalRendererDiagnostics {
+  return terminalRendererDiagnosticsSnapshot;
+}
+
+export function subscribeTerminalRendererDiagnostics(listener: () => void): () => void {
+  terminalRendererDiagnosticsListeners.add(listener);
+  return () => terminalRendererDiagnosticsListeners.delete(listener);
+}
 
 export const DEFAULT_TERMINAL_FONT_FAMILY = [
   'Menlo',
@@ -94,6 +171,7 @@ export function buildTheme(theme?: SessionTheme): ITerminalOptions['theme'] {
 export class FrontendPty {
   /** All live FrontendPty instances — used for app-wide operations (e.g. theme updates). */
   static readonly all = new Set<FrontendPty>();
+  private static readonly reportedRendererFailures = new Set<string>();
 
   /**
    * Record the dimensions last sent to the backend for a session. Called by
@@ -156,6 +234,9 @@ export class FrontendPty {
   /** Overrides OSC 8 hyperlink activation while a pane hosts this terminal; null = system browser. */
   private linkOpener: ((url: string) => void) | null = null;
   private readonly scrollDisposable: { dispose(): void };
+  private rendererPreference: TerminalRenderer = DEFAULT_TERMINAL_RENDERER;
+  private rendererEngine: TerminalRendererEngine = 'dom';
+  private rendererIssue: TerminalRendererIssue | null = null;
   private webglAddon: WebglAddon | null = null;
   private webglContextLossDisposable: IDisposable | null = null;
 
@@ -205,7 +286,8 @@ export class FrontendPty {
     registerOsc52ClipboardHandler(this.terminal);
 
     this.terminal.open(this.ownedContainer);
-    this.loadWebglRenderer();
+    FrontendPty.all.add(this);
+    notifyTerminalRendererDiagnosticsChanged();
     this.attachWheelScrollPolicy();
     this.scrollDisposable = this.terminal.onScroll((viewportY) => {
       this.savedViewportY = viewportY;
@@ -221,7 +303,6 @@ export class FrontendPty {
     }
 
     ensureXtermHost().appendChild(this.ownedContainer);
-    FrontendPty.all.add(this);
   }
 
   /**
@@ -273,38 +354,134 @@ export class FrontendPty {
     this.linkOpener = opener;
   }
 
+  getRendererDiagnosticsEntry(): TerminalRendererDiagnosticsEntry {
+    return {
+      preference: this.rendererPreference,
+      engine: this.rendererEngine,
+      issue: this.rendererIssue,
+    };
+  }
+
+  setRendererPreference(renderer: unknown): void {
+    const next = normalizeTerminalRenderer(renderer);
+    const changed = this.rendererPreference !== next;
+    this.rendererPreference = next;
+    if (changed) notifyTerminalRendererDiagnosticsChanged();
+    this.applyRendererPreference();
+  }
+
+  private applyRendererPreference(): void {
+    if (this.rendererPreference === 'dom') {
+      this.disposeWebglRenderer();
+      this.hasFreezeSnapshot = false;
+      this.setRendererState('dom', null);
+      this.refreshAllRows();
+      return;
+    }
+
+    if (this.webglAddon) {
+      this.setRendererState('webgl', null);
+      return;
+    }
+
+    this.loadWebglRenderer();
+  }
+
+  private setRendererState(
+    engine: TerminalRendererEngine,
+    issue: TerminalRendererIssue | null
+  ): void {
+    if (this.rendererEngine === engine && this.rendererIssue === issue) return;
+    this.rendererEngine = engine;
+    this.rendererIssue = issue;
+    notifyTerminalRendererDiagnosticsChanged();
+  }
+
+  private disposeWebglRenderer(): void {
+    this.webglContextLossDisposable?.dispose();
+    this.webglContextLossDisposable = null;
+    this.webglAddon?.dispose();
+    this.webglAddon = null;
+  }
+
+  private refreshAllRows(): void {
+    try {
+      this.terminal.refresh(0, Math.max(0, this.terminal.rows - 1));
+    } catch {}
+  }
+
   private loadWebglRenderer(): void {
+    let webglAddon: WebglAddon | null = null;
+    let contextLossDisposable: IDisposable | null = null;
+
     try {
       // Default (preserveDrawingBuffer: false) — the drawing buffer is cleared
       // on every composite, so the renderer cannot accumulate stale text rows.
       // Resize freeze-frames replay snapshots captured during onRender instead
       // of reading the live canvas at resize time.
-      const webglAddon = new WebglAddon();
-      const contextLossDisposable = webglAddon.onContextLoss(() => {
-        log.warn('FrontendPty: WebGL renderer context lost; falling back to DOM renderer', {
-          sessionId: this.sessionId,
-        });
-        this.webglContextLossDisposable?.dispose();
-        this.webglContextLossDisposable = null;
-        this.webglAddon?.dispose();
-        this.webglAddon = null;
-        this.hasFreezeSnapshot = false;
-        this.terminal.refresh(0, Math.max(0, this.terminal.rows - 1));
+      webglAddon = new WebglAddon();
+      contextLossDisposable = webglAddon.onContextLoss(() => {
+        this.handleWebglRendererFailure('webgl-context-lost');
       });
       this.terminal.loadAddon(webglAddon);
       this.webglAddon = webglAddon;
       this.webglContextLossDisposable = contextLossDisposable;
+      this.setRendererState('webgl', null);
     } catch (error) {
-      log.debug('FrontendPty: WebGL renderer unavailable; using DOM renderer', {
-        sessionId: this.sessionId,
-        error: String(error),
-      });
-      this.webglContextLossDisposable?.dispose();
-      this.webglContextLossDisposable = null;
-      this.webglAddon?.dispose();
-      this.webglAddon = null;
-      this.hasFreezeSnapshot = false;
+      contextLossDisposable?.dispose();
+      webglAddon?.dispose();
+      this.handleWebglRendererFailure('webgl-unavailable', error);
     }
+  }
+
+  private handleWebglRendererFailure(issue: TerminalRendererIssue, error?: unknown): void {
+    const strict = this.rendererPreference === 'webgl';
+    log.warn(
+      strict
+        ? 'FrontendPty: WebGL renderer failed in strict mode; DOM emergency renderer active'
+        : 'FrontendPty: WebGL renderer failed; using DOM compatibility renderer',
+      {
+        sessionId: this.sessionId,
+        issue,
+        error: error ? String(error) : undefined,
+      }
+    );
+
+    this.disposeWebglRenderer();
+    this.hasFreezeSnapshot = false;
+    this.setRendererState('dom', issue);
+    this.refreshAllRows();
+    this.notifyRendererFailure(issue, error);
+  }
+
+  private notifyRendererFailure(issue: TerminalRendererIssue, error?: unknown): void {
+    const strict = this.rendererPreference === 'webgl';
+    const toastKey = `${strict ? 'strict' : 'auto'}:${issue}`;
+    if (FrontendPty.reportedRendererFailures.has(toastKey)) return;
+    FrontendPty.reportedRendererFailures.add(toastKey);
+
+    const title = strict
+      ? i18n.t('terminal.renderer.strictFailureTitle')
+      : i18n.t('terminal.renderer.fallbackTitle');
+    const descriptionKey = strict
+      ? issue === 'webgl-context-lost'
+        ? 'terminal.renderer.strictContextLostDescription'
+        : 'terminal.renderer.strictUnavailableDescription'
+      : issue === 'webgl-context-lost'
+        ? 'terminal.renderer.fallbackContextLostDescription'
+        : 'terminal.renderer.fallbackUnavailableDescription';
+
+    toast({
+      title,
+      description: i18n.t(descriptionKey),
+      variant: strict ? 'destructive' : undefined,
+      debugInfo: {
+        sessionId: this.sessionId,
+        preference: this.rendererPreference,
+        issue,
+        error: error ? String(error) : undefined,
+      },
+    });
   }
 
   setScrollbackLines(scrollbackLines: unknown): void {
@@ -582,6 +759,7 @@ export class FrontendPty {
    */
   dispose(): void {
     FrontendPty.all.delete(this);
+    notifyTerminalRendererDiagnosticsChanged();
     this.unfreeze();
     this.freezeOverlay?.remove();
     this.freezeOverlay = null;
