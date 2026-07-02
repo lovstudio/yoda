@@ -222,8 +222,12 @@
       "nameRequired": "项目名不能为空。",
       "pathRequired": "项目路径不能为空。",
       "unchanged": "项目名和路径没有变化。",
+      "targetExistsTitle": "目标项目已存在",
+      "targetExistsDescription": "该路径已注册为「{{project}}」。要将当前项目合并到该目标项目吗？",
       "submit": "保存",
       "saving": "保存中…",
+      "mergeSubmit": "合并",
+      "merging": "合并中…",
       "failed": "移动项目路径失败"
     },
     "archiveTask": "归档任务",

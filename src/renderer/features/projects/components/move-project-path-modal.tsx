@@ -1,7 +1,8 @@
-import { FolderOpen } from 'lucide-react';
+import { AlertTriangle, FolderOpen } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { projectDisplayName, type Project } from '@shared/projects';
 import { RemoteDirectorySelector } from '@renderer/features/projects/components/add-project-modal/remote-directory-selector';
 import {
   getProjectManagerStore,
@@ -9,6 +10,7 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { rpc } from '@renderer/lib/ipc';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
+import { Alert, AlertDescription, AlertTitle } from '@renderer/lib/ui/alert';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
 import {
@@ -41,9 +43,11 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
 
   const [name, setName] = useState(currentName);
   const [path, setPath] = useState(currentPath);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitMode, setSubmitMode] = useState<'save' | 'merge' | null>(null);
+  const [conflictProject, setConflictProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const isSubmitting = submitMode !== null;
   const trimmedName = name.trim();
   const trimmedPath = path.trim();
   const isUnchanged = trimmedName === currentName && trimmedPath === currentPath;
@@ -61,6 +65,7 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
   const handleNameChange = (nextName: string) => {
     setName(nextName);
     setError(null);
+    setConflictProject(null);
     if (shouldSyncPathWithName.current) {
       setPath((current) => replacePathLeaf(current, nextName.trim()));
     }
@@ -70,6 +75,7 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
     shouldSyncPathWithName.current = false;
     setPath(nextPath);
     setError(null);
+    setConflictProject(null);
   };
 
   const handleSelectLocalPath = async () => {
@@ -81,21 +87,42 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
     handlePathChange(selected);
   };
 
-  const handleSubmit = useCallback(async () => {
-    if (!isValid) return;
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      await getProjectManagerStore().moveProjectPath(projectId, {
-        name: trimmedName,
-        path: trimmedPath,
-      });
-      onSuccess();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('sidebar.moveProjectPath.failed'));
-      setIsSubmitting(false);
-    }
-  }, [isValid, projectId, trimmedName, trimmedPath, onSuccess, t]);
+  const handleSubmit = useCallback(
+    async (mergeExistingProjectId?: string) => {
+      if (!isValid) return;
+      setSubmitMode(mergeExistingProjectId ? 'merge' : 'save');
+      setError(null);
+      try {
+        if (!mergeExistingProjectId && data) {
+          const inspection =
+            data.type === 'ssh'
+              ? await rpc.projects.inspectProjectPath({
+                  type: 'ssh',
+                  path: trimmedPath,
+                  connectionId: data.connectionId,
+                })
+              : await rpc.projects.inspectProjectPath({ type: 'local', path: trimmedPath });
+          const existing = inspection.existingProject;
+          if (existing && existing.id !== projectId) {
+            setConflictProject(existing);
+            setSubmitMode(null);
+            return;
+          }
+        }
+
+        await getProjectManagerStore().moveProjectPath(projectId, {
+          name: trimmedName,
+          path: trimmedPath,
+          ...(mergeExistingProjectId ? { mergeExistingProjectId } : {}),
+        });
+        onSuccess();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : t('sidebar.moveProjectPath.failed'));
+        setSubmitMode(null);
+      }
+    },
+    [data, isValid, projectId, trimmedName, trimmedPath, onSuccess, t]
+  );
 
   return (
     <>
@@ -110,7 +137,7 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !isImeComposing(e)) {
+                if (e.key === 'Enter' && !conflictProject && !isImeComposing(e)) {
                   void handleSubmit();
                 }
               }}
@@ -132,7 +159,7 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
                   value={path}
                   onChange={(e) => handlePathChange(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !isImeComposing(e)) {
+                    if (e.key === 'Enter' && !conflictProject && !isImeComposing(e)) {
                       void handleSubmit();
                     }
                   }}
@@ -158,15 +185,44 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
             )}
             {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
           </Field>
+          {conflictProject && (
+            <Alert className="border-amber-500/30 bg-amber-500/10">
+              <AlertTriangle className="size-4 text-amber-600" />
+              <AlertTitle>{t('sidebar.moveProjectPath.targetExistsTitle')}</AlertTitle>
+              <AlertDescription>
+                <p>
+                  {t('sidebar.moveProjectPath.targetExistsDescription', {
+                    project: projectDisplayName(conflictProject),
+                  })}
+                </p>
+                <p className="mt-1 break-all font-mono text-[11px] text-foreground-muted">
+                  {conflictProject.path}
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
         </FieldGroup>
       </DialogContentArea>
       <DialogFooter>
         <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
           {t('common.cancel')}
         </Button>
-        <ConfirmButton onClick={() => void handleSubmit()} disabled={!isValid || isSubmitting}>
-          {isSubmitting ? t('sidebar.moveProjectPath.saving') : t('sidebar.moveProjectPath.submit')}
-        </ConfirmButton>
+        {conflictProject ? (
+          <ConfirmButton
+            onClick={() => void handleSubmit(conflictProject.id)}
+            disabled={!isValid || isSubmitting}
+          >
+            {submitMode === 'merge'
+              ? t('sidebar.moveProjectPath.merging')
+              : t('sidebar.moveProjectPath.mergeSubmit')}
+          </ConfirmButton>
+        ) : (
+          <ConfirmButton onClick={() => void handleSubmit()} disabled={!isValid || isSubmitting}>
+            {submitMode === 'save'
+              ? t('sidebar.moveProjectPath.saving')
+              : t('sidebar.moveProjectPath.submit')}
+          </ConfirmButton>
+        )}
       </DialogFooter>
     </>
   );

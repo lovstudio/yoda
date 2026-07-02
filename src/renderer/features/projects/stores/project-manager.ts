@@ -443,20 +443,34 @@ export class ProjectManagerStore {
 
   async moveProjectPath(projectId: string, params: MoveProjectPathParams): Promise<void> {
     const updatedProject = await rpc.projects.moveProjectPath(projectId, params);
+    const realId = updatedProject.id;
 
     runInAction(() => {
-      const current = this.projects.get(projectId);
+      if (realId !== projectId) {
+        const source = this.projects.get(projectId);
+        source?.mountedProject?.dispose();
+        this.projects.delete(projectId);
+        appState.sidebar.setProjectOrder(
+          appState.sidebar.projectOrder.filter((id) => id !== projectId)
+        );
+      }
+
+      const current = this.projects.get(realId);
       if (current) {
         current.transitionToUnmounted(updatedProject, 'opening');
       } else {
-        this.projects.set(projectId, createUnmountedProject(updatedProject, 'opening'));
+        this.projects.set(realId, createUnmountedProject(updatedProject, 'opening'));
       }
+      appState.sidebar.prependProjectOrder(realId);
     });
 
-    const inFlight = this._projectMountPromises.get(projectId);
-    if (inFlight) await inFlight.catch(() => {});
+    const inFlights = [
+      this._projectMountPromises.get(projectId),
+      realId !== projectId ? this._projectMountPromises.get(realId) : undefined,
+    ].filter((promise): promise is Promise<void> => Boolean(promise));
+    await Promise.allSettled(inFlights);
 
-    this.mountProject(projectId).catch(() => {});
+    this.mountProject(realId).catch(() => {});
   }
 
   removeUnregisteredProject(projectId: string): void {

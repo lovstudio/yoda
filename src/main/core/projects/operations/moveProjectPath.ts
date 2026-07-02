@@ -7,10 +7,25 @@ import { LocalFileSystem } from '@main/core/fs/impl/local-fs';
 import { SshFileSystem } from '@main/core/fs/impl/ssh-fs';
 import { GitService } from '@main/core/git/impl/git-service';
 import { githubConnectionService } from '@main/core/github/services/github-connection-service';
+import { projectEvents } from '@main/core/projects/project-events';
 import { projectManager } from '@main/core/projects/project-manager';
+import { prSyncEngine } from '@main/core/pull-requests/pr-sync-engine';
 import { sshConnectionManager } from '@main/core/ssh/ssh-connection-manager';
-import { db } from '@main/db/client';
-import { projects } from '@main/db/schema';
+import { viewStateService } from '@main/core/view-state/view-state-service';
+import { db, sqlite } from '@main/db/client';
+import {
+  automations,
+  conversations,
+  editorBuffers,
+  projectRemotes,
+  projects,
+  projectSettings,
+  reviewOrchestrations,
+  taskNamingSnapshots,
+  tasks,
+  teamRooms,
+  terminals,
+} from '@main/db/schema';
 import { log } from '@main/lib/logger';
 import { checkIsValidDirectory } from '../path-utils';
 import { resolveProjectBaseRef } from './create-project-utils';
@@ -49,7 +64,10 @@ export async function moveProjectPath(
     .limit(1);
 
   if (existing && existing.id !== projectId) {
-    throw new Error(`A project at ${target.rootPath} already exists.`);
+    if (params.mergeExistingProjectId !== existing.id) {
+      throw new Error(`A project at ${target.rootPath} already exists.`);
+    }
+    return mergeProjectIntoExisting(row, existing);
   }
 
   if (
@@ -85,6 +103,98 @@ export async function moveProjectPath(
   }
 
   return mapProjectRow(updated);
+}
+
+async function mergeProjectIntoExisting(source: ProjectRow, target: ProjectRow): Promise<Project> {
+  if (target.archivedAt) {
+    throw new Error('Cannot merge into an archived project');
+  }
+  if (target.isInternal === 1) {
+    throw new Error('Cannot merge into an internal project');
+  }
+  if (source.workspaceProvider !== target.workspaceProvider) {
+    throw new Error('Cannot merge projects with different workspace providers');
+  }
+  if (source.workspaceProvider === 'ssh' && source.sshConnectionId !== target.sshConnectionId) {
+    throw new Error('Cannot merge projects from different SSH connections');
+  }
+
+  const closeResult = await projectManager.closeProject(source.id, { mode: 'detach' });
+  if (!closeResult.success) {
+    log.warn('moveProjectPath: closeProject before merge failed', {
+      projectId: source.id,
+      error: closeResult.error.message,
+    });
+  }
+
+  await prSyncEngine.deleteProjectData(source.id);
+
+  const [updatedTarget] = await db.transaction(async (tx) => {
+    await tx
+      .update(tasks)
+      .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(tasks.projectId, source.id));
+    await tx
+      .update(conversations)
+      .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(conversations.projectId, source.id));
+    await tx
+      .update(terminals)
+      .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(terminals.projectId, source.id));
+    await tx
+      .update(taskNamingSnapshots)
+      .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(taskNamingSnapshots.projectId, source.id));
+    await tx
+      .update(reviewOrchestrations)
+      .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(reviewOrchestrations.projectId, source.id));
+    await tx
+      .update(teamRooms)
+      .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(teamRooms.projectId, source.id));
+    await tx
+      .update(automations)
+      .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(automations.projectId, source.id));
+
+    await tx.delete(editorBuffers).where(eq(editorBuffers.projectId, source.id));
+    await tx.delete(projectSettings).where(eq(projectSettings.projectId, source.id));
+    await tx.delete(projectRemotes).where(eq(projectRemotes.projectId, source.id));
+    await tx.delete(projects).where(eq(projects.id, source.id));
+
+    return tx
+      .update(projects)
+      .set({ updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(projects.id, target.id))
+      .returning();
+  });
+  if (!updatedTarget) throw new Error(`Project ${target.id} not found`);
+
+  await syncAgentProjectPathArtifacts(source.path, target.path);
+  reassignSearchIndex(source.id, target.id);
+  void viewStateService.del(`project:${source.id}`);
+  projectEvents._emit('project:deleted', source.id);
+
+  return mapProjectRow(updatedTarget);
+}
+
+function reassignSearchIndex(sourceProjectId: string, targetProjectId: string): void {
+  try {
+    sqlite
+      .prepare(`UPDATE search_index SET project_id = ? WHERE project_id = ?`)
+      .run(targetProjectId, sourceProjectId);
+    sqlite
+      .prepare(`DELETE FROM search_index WHERE item_type = 'project' AND item_id = ?`)
+      .run(sourceProjectId);
+  } catch (error) {
+    log.warn('moveProjectPath: failed to reassign search index during merge', {
+      sourceProjectId,
+      targetProjectId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function resolveLocalTarget(path: string): Promise<ResolvedMoveTarget> {

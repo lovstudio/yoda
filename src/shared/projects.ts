@@ -49,6 +49,7 @@ export const MAX_PROJECT_ALIAS_LENGTH = 80;
 export type MoveProjectPathParams = {
   name: string;
   path: string;
+  mergeExistingProjectId?: string;
 };
 
 export type CreateLocalProjectParams = {

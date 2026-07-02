@@ -224,8 +224,12 @@
       "nameRequired": "Project name is required.",
       "pathRequired": "Project path is required.",
       "unchanged": "Name and path are unchanged.",
+      "targetExistsTitle": "Target project exists",
+      "targetExistsDescription": "This path is already registered as \"{{project}}\". Merge this project into that target instead?",
       "submit": "Save",
       "saving": "Saving…",
+      "mergeSubmit": "Merge",
+      "merging": "Merging…",
       "failed": "Failed to move project path"
     },
     "archiveTask": "Archive task",
