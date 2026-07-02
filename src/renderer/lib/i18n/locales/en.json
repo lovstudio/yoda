@@ -3104,6 +3104,7 @@
     "createIssue": "Create issue",
     "createIssueFailed": "Failed to create issue.",
     "createTask": "Create task",
+    "createAdditionalTask": "Create another task",
     "createTasksCount": "Create {{count}} tasks",
     "createTasksTitle": "Create tasks for {{count}} issues?",
     "createTasksDescription": "Yoda will create tasks for open issues that are not already in tasks and link each issue to its task.",

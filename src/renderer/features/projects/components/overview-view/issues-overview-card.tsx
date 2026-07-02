@@ -58,8 +58,7 @@ function IssueOverviewActions({
             <Button
               variant="ghost"
               size="icon-xs"
-              disabled={alreadyInTask}
-              aria-label={alreadyInTask ? t('issues.alreadyInTask') : t('issues.createTask')}
+              aria-label={alreadyInTask ? t('issues.createAdditionalTask') : t('issues.createTask')}
               onClick={() =>
                 showCreateTaskModal({ projectId, strategy: 'from-issue', initialIssue: issue })
               }
@@ -69,7 +68,7 @@ function IssueOverviewActions({
           }
         />
         <TooltipContent>
-          {alreadyInTask ? t('issues.alreadyInTask') : t('issues.createTask')}
+          {alreadyInTask ? t('issues.createAdditionalTask') : t('issues.createTask')}
         </TooltipContent>
       </Tooltip>
       <IssueTaskLinkPopover issue={issue} projectId={projectId} iconOnly />

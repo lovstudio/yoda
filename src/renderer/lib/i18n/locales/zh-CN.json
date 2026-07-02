@@ -3104,6 +3104,7 @@
     "createIssue": "创建 Issue",
     "createIssueFailed": "创建 Issue 失败。",
     "createTask": "创建任务",
+    "createAdditionalTask": "创建额外任务",
     "createTasksCount": "创建 {{count}} 个任务",
     "createTasksTitle": "为 {{count}} 个 Issue 创建任务？",
     "createTasksDescription": "Yoda 会为尚未在任务中的打开 Issue 创建任务，并把 Issue 关联到对应任务。",

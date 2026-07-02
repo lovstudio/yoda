@@ -103,13 +103,12 @@ const ProjectIssueRow = observer(function ProjectIssueRow({
         <Button
           variant="outline"
           size="sm"
-          disabled={alreadyInTask}
           onClick={() =>
             showCreateTaskModal({ projectId, strategy: 'from-issue', initialIssue: issue })
           }
         >
           <ScanSearch className="size-3.5" />
-          {alreadyInTask ? t('issues.alreadyInTask') : t('issues.createTask')}
+          {alreadyInTask ? t('issues.createAdditionalTask') : t('issues.createTask')}
         </Button>
       </div>
     </div>
