@@ -1,9 +1,9 @@
 import { ChevronRight, FolderOpen } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getPrNumber, isForkPr, type PullRequest } from '@shared/pull-requests';
-import type { CreateTaskParams, Issue } from '@shared/tasks';
+import { formatIssueFixPrompt, type CreateTaskParams, type Issue } from '@shared/tasks';
 import {
   getProjectManagerStore,
   getRepositoryStore,
@@ -40,6 +40,10 @@ import { useFromIssueMode } from './use-from-issue-mode';
 import { useFromPullRequestMode } from './use-from-pull-request-mode';
 
 type CreateTaskStrategy = 'from-branch' | 'from-issue' | 'from-pull-request';
+
+function issuePromptKey(issue: Issue): string {
+  return issue.url || `${issue.provider}:${issue.identifier}`;
+}
 
 export const CreateTaskModal = observer(function CreateTaskModal({
   projectId,
@@ -80,6 +84,8 @@ export const CreateTaskModal = observer(function CreateTaskModal({
   const connectionId = projectData?.type === 'ssh' ? projectData.connectionId : undefined;
 
   const initialConversation = useInitialConversationState(connectionId);
+  const lastAutoIssuePromptRef = useRef<string | null>(null);
+  const [promptedIssueKey, setPromptedIssueKey] = useState<string | null>(null);
 
   useEffect(() => setUseBYOI(false), [selectedProjectId]);
   useEffect(() => {
@@ -120,6 +126,25 @@ export const CreateTaskModal = observer(function CreateTaskModal({
   );
   const fromPR = useFromPullRequestMode(selectedProjectId, defaultBranch, isUnborn, initialPR);
   const fromPrUnavailable = selectedStrategy === 'from-pull-request' && !repositoryUrl;
+
+  useEffect(() => {
+    const issue = selectedStrategy === 'from-issue' ? fromIssue.linkedIssue : null;
+    const key = issue ? issuePromptKey(issue) : null;
+    if (!issue || !key) {
+      if (promptedIssueKey !== null) setPromptedIssueKey(null);
+      return;
+    }
+
+    if (key === promptedIssueKey) return;
+
+    const nextPrompt = formatIssueFixPrompt(issue);
+    const currentPrompt = initialConversation.prompt;
+    if (currentPrompt.trim().length === 0 || currentPrompt === lastAutoIssuePromptRef.current) {
+      initialConversation.setPrompt(nextPrompt);
+      lastAutoIssuePromptRef.current = nextPrompt;
+    }
+    setPromptedIssueKey(key);
+  }, [fromIssue.linkedIssue, initialConversation, promptedIssueKey, selectedStrategy]);
 
   const activeMode = {
     'from-branch': fromBranch,

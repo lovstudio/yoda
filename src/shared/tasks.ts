@@ -186,3 +186,14 @@ export function formatIssueAsPrompt(issue: Issue, initialPrompt?: string): strin
   if (initialPrompt?.trim()) parts.push('', initialPrompt.trim());
   return parts.join('\n');
 }
+
+export function formatIssueFixPrompt(issue: Issue): string {
+  return formatIssueAsPrompt(
+    issue,
+    [
+      'Fix the linked issue.',
+      'Use the issue title, URL, and description as context. Inspect the codebase to identify the right change, implement it, and run relevant verification.',
+      'When finished, summarize what changed and which checks were run.',
+    ].join('\n')
+  );
+}

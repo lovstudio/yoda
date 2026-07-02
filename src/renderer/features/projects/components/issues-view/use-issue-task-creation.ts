@@ -1,9 +1,16 @@
 import { useState } from 'react';
 import type { Branch } from '@shared/git';
+import type { RuntimeId } from '@shared/runtime-registry';
 import { ensureUniqueTaskDisplayName, normalizeTaskDisplayName } from '@shared/task-name';
-import type { CreateTaskParams, Issue } from '@shared/tasks';
-import { getRepositoryStore } from '@renderer/features/projects/stores/project-selectors';
+import { formatIssueFixPrompt, type CreateTaskParams, type Issue } from '@shared/tasks';
+import {
+  getProjectManagerStore,
+  getRepositoryStore,
+  mountedProjectData,
+} from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
+import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { resolveBranchLikeTaskStrategy } from '@renderer/features/tasks/create-task-modal/create-task-strategy';
 import { getIssueTaskName } from '@renderer/features/tasks/create-task-modal/issue-task-name';
 import { getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -56,6 +63,7 @@ function buildIssueTaskParams({
   isUnborn,
   createBranchAndWorktree,
   pushBranch,
+  runtimeId,
 }: {
   id: string;
   projectId: string;
@@ -65,7 +73,10 @@ function buildIssueTaskParams({
   isUnborn: boolean;
   createBranchAndWorktree: boolean;
   pushBranch: boolean;
+  runtimeId: RuntimeId | null;
 }): CreateTaskParams {
+  const initialPrompt = formatIssueFixPrompt(issue);
+
   return {
     id,
     projectId,
@@ -78,12 +89,25 @@ function buildIssueTaskParams({
       pushBranch,
     }),
     linkedIssue: issue,
+    initialConversation: runtimeId
+      ? {
+          id: crypto.randomUUID(),
+          projectId,
+          taskId: id,
+          runtime: runtimeId,
+          title: initialConversationTitle(runtimeId, initialPrompt, []),
+          initialPrompt,
+        }
+      : undefined,
   };
 }
 
 export function useIssueTaskCreation(projectId: string, issues: Issue[]) {
   const [isCreatingIssueTasks, setIsCreatingIssueTasks] = useState(false);
   const { value: projectSettings } = useAppSettingsKey('project');
+  const projectData = mountedProjectData(getProjectManagerStore().projects.get(projectId));
+  const connectionId = projectData?.type === 'ssh' ? projectData.connectionId : undefined;
+  const { runtimeId } = useEffectiveRuntime(connectionId);
 
   const taskableIssues = issues.filter(
     (issue) => getLinkedTaskStores(projectId, issue).length === 0
@@ -141,6 +165,7 @@ export function useIssueTaskCreation(projectId: string, issues: Issue[]) {
           isUnborn: repo.isUnborn,
           createBranchAndWorktree,
           pushBranch,
+          runtimeId,
         });
 
         try {
