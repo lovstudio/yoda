@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { QuickAction } from '@shared/project-settings';
+import { taskNameFromPrompt } from '@shared/task-name';
 import { ComposerPromptInput } from '@renderer/app/composer-prompt-input';
 import {
   serializePromptWithTokens,
@@ -41,15 +42,6 @@ const fallbackQuickActionPrompt =
 
 function genId(): string {
   return crypto.randomUUID();
-}
-
-function compactTitle(input: string): string {
-  const firstLine = input
-    .split('\n')
-    .map((line) => line.trim())
-    .find(Boolean);
-  if (!firstLine) return '';
-  return firstLine.length > 18 ? `${firstLine.slice(0, 18).trim()}...` : firstLine;
 }
 
 function buildQuickActionCommand(intent: string): string {
@@ -97,6 +89,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   const [intentTokens, setIntentTokens] = useState<PromptToken[]>([]);
   const [target, setTarget] = useState<Target>('quickAction');
   const [label, setLabel] = useState('');
+  const [labelOverridden, setLabelOverridden] = useState(false);
   const [command, setCommand] = useState(fallbackQuickActionPrompt);
   const [setupScript, setSetupScript] = useState('');
   const [runScript, setRunScript] = useState('');
@@ -144,17 +137,25 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     };
   }, [settingsStore, t]);
 
-  const suggestedLabel = useMemo(() => compactTitle(serializedIntent), [serializedIntent]);
+  const suggestedLabel = useMemo(() => taskNameFromPrompt(serializedIntent), [serializedIntent]);
   const skillDraft = useMemo(
     () => buildSkillDraft(serializedIntent, label || suggestedLabel, command),
     [command, serializedIntent, label, suggestedLabel]
   );
 
   useEffect(() => {
-    const nextLabel = compactTitle(serializedIntent);
-    setLabel((current) => (current.trim() ? current : nextLabel));
     setCommand(buildQuickActionCommand(serializedIntent));
   }, [serializedIntent]);
+
+  useEffect(() => {
+    if (labelOverridden) return;
+    setLabel(suggestedLabel);
+  }, [labelOverridden, suggestedLabel]);
+
+  const handleLabelChange = (next: string) => {
+    setLabel(next);
+    setLabelOverridden(next.trim().length > 0);
+  };
 
   const saveQuickAction = async () => {
     const settingsStore = getProjectSettingsStore(projectId);
@@ -286,7 +287,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
                   value={label}
                   disabled={loading}
                   placeholder={t('sidebar.captureAutomation.actionLabelPlaceholder')}
-                  onChange={(e) => setLabel(e.target.value)}
+                  onChange={(e) => handleLabelChange(e.target.value)}
                 />
               </Field>
               <Field>
