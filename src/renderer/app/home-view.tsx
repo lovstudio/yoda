@@ -124,6 +124,7 @@ import {
 } from './composer-project-overrides';
 import { ComposerPromptInput } from './composer-prompt-input';
 import { serializePromptWithTokens, type PromptToken } from './prompt-attachment-tokens';
+import { promptRewriteFailureDescription, resolveSubmitRequirement } from './submit-prompt-rewrite';
 
 type TaskStrategyKind = 'new-branch' | 'no-worktree';
 /** Strategy actually submitted to createTask — adds checkout-existing, which is
@@ -962,13 +963,18 @@ export const HomeComposer = observer(function HomeComposer({
         imagesAsPaths: attachImagesAsPaths,
       });
       const rawRequirement = serialized.text.trim();
-      let requirement: string;
-      try {
-        requirement = await rewriteInputRequirement(rawRequirement);
-      } catch {
-        toast.error(t('home.promptRewriteFailed'));
-        return;
-      }
+      const requirement = await resolveSubmitRequirement({
+        rawRequirement,
+        rewriteRequirement: rewriteInputRequirement,
+        onRewriteFailure: (error) => {
+          toast({
+            title: t('home.promptRewriteFailed'),
+            description: promptRewriteFailureDescription(error, t('common.unknownError')),
+            variant: 'destructive',
+            debugInfo: error,
+          });
+        },
+      });
       const imagePaths = serialized.imagePaths.length > 0 ? serialized.imagePaths : undefined;
       const resetComposer = () => {
         setPrompt('');

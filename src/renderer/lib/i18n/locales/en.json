@@ -915,7 +915,7 @@
     "attachAria": "Attach files",
     "attachSshUnsupported": "Local attachments are not supported for SSH projects",
     "attachPasteFailedToast": "Could not attach the pasted image",
-    "promptRewriteFailed": "Prompt rewrite failed. The agent was not started.",
+    "promptRewriteFailed": "Prompt translation failed. Continuing with the original prompt.",
     "composerSettingsAria": "Input settings",
     "composerSettingsLabel": "Config",
     "attachImagesAsPathsLabel": "Send images as file paths",
