@@ -13,6 +13,7 @@ import { probeOfficialApi } from './official-api-probe-service';
 import { runtimeModelCandidatesService } from './runtime-model-candidates-service';
 import { runtimeOverrideSettings } from './runtime-settings-service';
 import { getSubscriptionAccount } from './subscription-account-service';
+import { startSubscriptionLogin } from './subscription-login-service';
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
@@ -52,6 +53,8 @@ export const runtimeSettingsController = createRPCController({
 
   getSubscriptionAccount: (id: RuntimeId): Promise<AgentSubscriptionAccount> =>
     getSubscriptionAccount(id),
+
+  startSubscriptionLogin: (id: RuntimeId) => startSubscriptionLogin(id),
 
   getLocalUsage: (id: RuntimeId, args?: { forceRefresh?: boolean }): Promise<AgentLocalUsage> =>
     getLocalUsage(id, args),

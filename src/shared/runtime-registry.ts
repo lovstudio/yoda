@@ -167,6 +167,8 @@ export type OfficialApiProbeSpec = {
 export type RuntimeAccountProfile = {
   officialSubscription: {
     supported: boolean;
+    /** Interactive command that lets the user sign in or switch the local CLI account. */
+    loginCommand?: string;
   };
   officialApi: {
     envVars: readonly string[];
@@ -878,7 +880,7 @@ const MULTI_MODEL_API_ENV = [
 
 export const RUNTIME_ACCOUNT_PROFILES = {
   codex: {
-    officialSubscription: { supported: true },
+    officialSubscription: { supported: true, loginCommand: 'codex login' },
     officialApi: {
       envVars: OPENAI_API_ENV,
       probe: {
@@ -892,7 +894,7 @@ export const RUNTIME_ACCOUNT_PROFILES = {
     maas: { supported: true, providerHints: ['openai', 'azure'] },
   },
   claude: {
-    officialSubscription: { supported: true },
+    officialSubscription: { supported: true, loginCommand: 'claude auth login' },
     officialApi: {
       envVars: ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL'],
       probe: {
@@ -930,7 +932,7 @@ export const RUNTIME_ACCOUNT_PROFILES = {
     maas: { supported: true, providerHints: [] },
   },
   gemini: {
-    officialSubscription: { supported: true },
+    officialSubscription: { supported: true, loginCommand: 'gemini' },
     officialApi: {
       envVars: GOOGLE_API_ENV,
       probe: {

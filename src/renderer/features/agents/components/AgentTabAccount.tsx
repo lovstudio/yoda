@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { CheckCircle2, ChevronDown, ExternalLink, RefreshCw, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ExternalLink, LogIn, RefreshCw, XCircle } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +16,7 @@ import {
 } from '@shared/runtime-registry';
 import { useCheckMaasConnection, useMaasConnections } from '@renderer/features/maas/useMaas';
 import { useRuntimeSettings } from '@renderer/features/settings/use-runtime-settings';
+import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -81,6 +82,7 @@ export const AgentTabAccount: React.FC<AgentTabAccountProps> = observer(function
   agentId,
 }) {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const { navigate } = useNavigate();
   const provider = getRuntime(agentId);
   const profile = getRuntimeAccountProfile(agentId);
@@ -109,6 +111,24 @@ export const AgentTabAccount: React.FC<AgentTabAccountProps> = observer(function
   });
   const probeApi = useMutation({
     mutationFn: () => rpc.runtimeSettings.probeOfficialApi(agentId),
+  });
+  const startSubscriptionLogin = useMutation({
+    mutationFn: () => rpc.runtimeSettings.startSubscriptionLogin(agentId),
+    onSuccess: () => {
+      toast({
+        title: t('agents.account.loginStarted'),
+        description: t('agents.account.loginStartedDescription', {
+          name: provider?.name ?? agentId,
+        }),
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: t('agents.account.loginFailed'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    },
   });
   const checkMaas = useCheckMaasConnection();
 
@@ -198,6 +218,7 @@ export const AgentTabAccount: React.FC<AgentTabAccountProps> = observer(function
           : t('agents.account.statusRuntimeDetected');
   const subscriptionReady = runtimeDetected && (!account?.supported || account.loggedIn);
   const recheckPending = probeRuntime.isPending || subscriptionAccount.isFetching;
+  const subscriptionLoginSupported = Boolean(profile.officialSubscription.loginCommand);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-6">
@@ -228,6 +249,20 @@ export const AgentTabAccount: React.FC<AgentTabAccountProps> = observer(function
               onToggle={toggleExpanded}
               actions={
                 <>
+                  {subscriptionLoginSupported && (
+                    <Button
+                      type="button"
+                      variant={account?.loggedIn ? 'outline' : 'default'}
+                      size="sm"
+                      disabled={!runtimeDetected || startSubscriptionLogin.isPending}
+                      onClick={() => startSubscriptionLogin.mutate()}
+                    >
+                      <LogIn className="h-3.5 w-3.5" />
+                      {account?.loggedIn
+                        ? t('agents.account.switchAccount')
+                        : t('agents.account.signIn')}
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
