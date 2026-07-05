@@ -103,6 +103,34 @@ describe('SearchService conversations', () => {
       taskArchived: false,
     });
   });
+
+  it('keeps text-matched sessions from archived tasks findable in scoped session search', async () => {
+    const { SearchService } = await import('./search-service');
+    const service = new SearchService();
+    service.initialize();
+
+    const page = service.searchPaged({
+      query: 'Task archived',
+      kind: 'conversation',
+      offset: 0,
+      limit: 10,
+      context: {},
+    });
+
+    expect(page.items).toEqual([
+      expect.objectContaining({
+        kind: 'conversation',
+        id: 'task-archived-conversation',
+        projectId: 'project-1',
+        taskId: 'archived-task',
+        title: 'Task archived session',
+        archived: true,
+        conversationArchived: false,
+        taskArchived: true,
+      }),
+    ]);
+    expect(page.nextOffset).toBeNull();
+  });
 });
 
 function createSchema(db: Database.Database): void {
