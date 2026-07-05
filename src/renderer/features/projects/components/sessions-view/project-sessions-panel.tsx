@@ -7,6 +7,7 @@ import type { Conversation } from '@shared/conversations';
 import {
   conversationArchivedChannel,
   conversationRenamedChannel,
+  conversationUnarchivedChannel,
 } from '@shared/events/conversationEvents';
 import { openTaskTarget } from '@renderer/app/open-task-target';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
@@ -18,13 +19,18 @@ import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { agentConfig } from '@renderer/utils/agentConfig';
+import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 
 const projectSessionsQueryKey = (projectId: string) => ['project-sessions', projectId] as const;
 
 function getConversationSortTime(conversation: Conversation): number {
   const raw =
-    conversation.lastInteractedAt ?? conversation.updatedAt ?? conversation.createdAt ?? '';
+    conversation.archivedAt ??
+    conversation.lastInteractedAt ??
+    conversation.updatedAt ??
+    conversation.createdAt ??
+    '';
   const time = new Date(raw).getTime();
   return Number.isNaN(time) ? 0 : time;
 }
@@ -41,10 +47,30 @@ const ProjectSessionRow = observer(function ProjectSessionRow({
     task?.data.name ??
     t('projects.sessionsView.taskFallback', { id: conversation.taskId.slice(0, 8) });
   const liveConversation = asProvisioned(task)?.conversations.conversations.get(conversation.id);
+  const taskArchivedAt = task?.data && 'archivedAt' in task.data ? task.data.archivedAt : undefined;
+  const isArchived = Boolean(conversation.archivedAt || taskArchivedAt);
   const config = agentConfig[conversation.runtimeId];
   const title = conversation.title.trim() || conversation.id;
   const interactedAt =
-    conversation.lastInteractedAt ?? conversation.updatedAt ?? conversation.createdAt ?? '';
+    conversation.archivedAt ??
+    conversation.lastInteractedAt ??
+    conversation.updatedAt ??
+    conversation.createdAt ??
+    '';
+
+  const handleOpen = async () => {
+    if (taskArchivedAt) {
+      await getTaskManagerStore(conversation.projectId)?.restoreTask(conversation.taskId);
+    }
+    openTaskTarget(
+      {
+        projectId: conversation.projectId,
+        taskId: conversation.taskId,
+        conversationId: conversation.id,
+      },
+      navigate
+    );
+  };
 
   return (
     <button
@@ -56,14 +82,12 @@ const ProjectSessionRow = observer(function ProjectSessionRow({
       title={`${title} · ${taskName}`}
       aria-label={t('projects.sessionsView.openSession', { title })}
       onClick={() =>
-        openTaskTarget(
-          {
-            projectId: conversation.projectId,
-            taskId: conversation.taskId,
+        void handleOpen().catch((error: unknown) => {
+          log.warn('ProjectSessionsPanel: failed to open session', {
             conversationId: conversation.id,
-          },
-          navigate
-        )
+            error,
+          });
+        })
       }
     >
       <span className="flex size-6 shrink-0 items-center justify-center rounded bg-background-2">
@@ -79,7 +103,19 @@ const ProjectSessionRow = observer(function ProjectSessionRow({
           <MessageSquare className="size-4 text-foreground-passive" />
         )}
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{title}</span>
+      <span
+        className={cn(
+          'min-w-0 flex-1 truncate text-sm text-foreground',
+          isArchived && 'text-foreground-passive line-through'
+        )}
+      >
+        {title}
+      </span>
+      {isArchived && (
+        <span className="shrink-0 rounded bg-background-quaternary px-1.5 py-0.5 text-[10px] text-foreground/50">
+          {t('projects.archived')}
+        </span>
+      )}
       <span className="hidden min-w-24 max-w-44 truncate text-xs text-foreground-muted sm:block">
         {taskName}
       </span>
@@ -125,16 +161,22 @@ export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
         )
       );
     });
+    const refresh = () => {
+      void queryClient.invalidateQueries({ queryKey });
+    };
     const offArchived = events.on(conversationArchivedChannel, (event) => {
       if (event.projectId !== projectId) return;
-      queryClient.setQueryData<Conversation[]>(queryKey, (current) =>
-        current?.filter((conversation) => conversation.id !== event.conversationId)
-      );
+      refresh();
+    });
+    const offUnarchived = events.on(conversationUnarchivedChannel, (event) => {
+      if (event.projectId !== projectId) return;
+      refresh();
     });
 
     return () => {
       offRenamed();
       offArchived();
+      offUnarchived();
     };
   }, [projectId, queryClient, queryKey]);
 

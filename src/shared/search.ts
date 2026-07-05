@@ -8,8 +8,12 @@ export interface SearchItem {
   title: string;
   subtitle: string;
   score: number;
-  /** True for archived tasks — surfaced in search but visually de-emphasised. */
+  /** True when the item itself or its owning task is archived. */
   archived?: boolean;
+  /** Conversation results: true when the owning task is archived. */
+  taskArchived?: boolean;
+  /** Conversation results: true when the conversation row itself is archived. */
+  conversationArchived?: boolean;
   /** ISO timestamp of last activity (task/conversation) or last update (project). */
   timestamp?: string | null;
 }

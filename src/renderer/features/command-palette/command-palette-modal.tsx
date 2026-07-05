@@ -13,12 +13,9 @@ import React, { useDeferredValue, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SearchItem } from '@shared/search';
 import { ALL_WORKSPACES_ID } from '@shared/workspaces';
+import { openTaskTarget } from '@renderer/app/open-task-target';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
-import {
-  getTaskManagerStore,
-  getTaskStore,
-  getTaskView,
-} from '@renderer/features/tasks/stores/task-selectors';
+import { getTaskManagerStore, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { commandRegistry } from '@renderer/lib/commands/registry';
 import { useMobxValue } from '@renderer/lib/hooks/use-mobx-value';
 import { APP_SHORTCUTS } from '@renderer/lib/hooks/useKeyboardShortcuts';
@@ -238,6 +235,7 @@ export function CommandPaletteModal({
               title: task.name,
               subtitle: '',
               score: 0,
+              archived: 'archivedAt' in task && Boolean(task.archivedAt),
             },
           ];
         })
@@ -270,12 +268,14 @@ export function CommandPaletteModal({
     if (!item.projectId || !item.taskId) return;
     // The conversation may belong to an archived task; restore it first so the
     // task view can mount (mirrors handleNavigateToTask).
-    if (item.archived) {
+    if (item.taskArchived) {
       void getTaskManagerStore(item.projectId)?.restoreTask(item.taskId);
     }
-    getTaskView(item.projectId, item.taskId)?.tabManager.openConversation(item.id);
     onClose();
-    navigate('task', { projectId: item.projectId, taskId: item.taskId });
+    openTaskTarget(
+      { projectId: item.projectId, taskId: item.taskId, conversationId: item.id },
+      navigate
+    );
   };
 
   const sessionsChipDisabled = !projectId || !projectPath;
