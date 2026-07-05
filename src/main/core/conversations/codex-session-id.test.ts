@@ -163,6 +163,62 @@ describe('resolveCodexThreadIdForConversation', () => {
     });
   });
 
+  it('resolves a moved-path Codex thread by unique nearby creation time when the title no longer matches', () => {
+    insertThread(statePath, {
+      id: 'moved-path-thread',
+      cwd: '/old/repo',
+      title: 'Original prompt title',
+      createdAtMs: Date.parse('2026-06-04T06:45:37.040Z'),
+      updatedAtMs: Date.parse('2026-06-04T06:56:25.777Z'),
+    });
+
+    expect(
+      resolveAgentResumeSession(
+        {
+          id: 'conversation-1',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          runtimeId: 'codex',
+          title: 'Renamed Yoda session',
+          createdAt: '2026-06-04 06:45:36',
+          lastInteractedAt: null,
+          isInitialConversation: true,
+        },
+        '/new/repo'
+      )
+    ).toEqual({
+      sessionId: 'moved-path-thread',
+      sessionTitle: 'Original prompt title',
+    });
+  });
+
+  it('does not guess a moved-path Codex thread when nearby creation time is ambiguous', () => {
+    insertThread(statePath, {
+      id: 'moved-path-thread-1',
+      cwd: '/old/repo-a',
+      title: 'Original prompt title A',
+      createdAtMs: Date.parse('2026-06-04T06:45:37.040Z'),
+      updatedAtMs: Date.parse('2026-06-04T06:56:25.777Z'),
+    });
+    insertThread(statePath, {
+      id: 'moved-path-thread-2',
+      cwd: '/old/repo-b',
+      title: 'Original prompt title B',
+      createdAtMs: Date.parse('2026-06-04T06:45:38.000Z'),
+      updatedAtMs: Date.parse('2026-06-04T06:56:25.777Z'),
+    });
+
+    expect(
+      resolveCodexThreadIdForConversation({
+        conversationId: 'conversation-1',
+        cwd: '/new/repo',
+        title: 'Renamed Yoda session',
+        createdAt: '2026-06-04 06:45:36',
+        statePath,
+      })
+    ).toBeUndefined();
+  });
+
   it('does not guess a delayed Codex thread when the later cwd match is ambiguous', () => {
     insertThread(statePath, {
       id: 'delayed-codex-thread-1',
