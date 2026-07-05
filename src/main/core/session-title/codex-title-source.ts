@@ -319,6 +319,46 @@ export function findClosestCodexThreadRefByTitleAndCreatedAt(params: {
   });
 }
 
+export function findUniqueCodexThreadRefByCreatedAt(params: {
+  statePath: string;
+  targetCreatedAtMs: number;
+  maxDistanceMs: number;
+  includeArchived?: boolean;
+}): CodexThreadRef | undefined {
+  const minCreatedAtMs = params.targetCreatedAtMs - params.maxDistanceMs;
+  const maxCreatedAtMs = params.targetCreatedAtMs + params.maxDistanceMs;
+  return withCodexState(params.statePath, (db) => {
+    const rows = db
+      .prepare(
+        `
+          SELECT
+            id,
+            cwd,
+            title,
+            first_user_message AS firstUserMessage,
+            COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
+            COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
+          FROM threads
+          WHERE (? = 1 OR archived = 0)
+            AND COALESCE(created_at_ms, created_at * 1000) >= ?
+            AND COALESCE(created_at_ms, created_at * 1000) <= ?
+          ORDER BY ABS(COALESCE(created_at_ms, created_at * 1000) - ?) ASC,
+            COALESCE(created_at_ms, created_at * 1000) ASC,
+            id ASC
+          LIMIT 2
+        `
+      )
+      .all(
+        params.includeArchived ? 1 : 0,
+        minCreatedAtMs,
+        maxCreatedAtMs,
+        params.targetCreatedAtMs
+      );
+    if (!Array.isArray(rows) || rows.length !== 1) return undefined;
+    return parseCodexThreadRef(rows[0]);
+  });
+}
+
 export function findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt(params: {
   statePath: string;
   cwd: string;
