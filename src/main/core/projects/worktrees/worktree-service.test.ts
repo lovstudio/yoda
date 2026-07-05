@@ -41,6 +41,22 @@ function makeSettings(preservePatterns: string[] = []): ProjectSettingsProvider 
 
 const originRemote = (url = 'ssh://example.com/repo.git'): Remote => ({ name: 'origin', url });
 
+function overrideRemoveAbsolute(
+  base: WorktreeHost,
+  removeAbsolute: WorktreeHost['removeAbsolute']
+): WorktreeHost {
+  return {
+    existsAbsolute: base.existsAbsolute.bind(base),
+    mkdirAbsolute: base.mkdirAbsolute.bind(base),
+    removeAbsolute,
+    realPathAbsolute: base.realPathAbsolute.bind(base),
+    globAbsolute: base.globAbsolute.bind(base),
+    readFileAbsolute: base.readFileAbsolute.bind(base),
+    copyFileAbsolute: base.copyFileAbsolute.bind(base),
+    statAbsolute: base.statAbsolute.bind(base),
+  };
+}
+
 describe('WorktreeService', () => {
   let repoDir: string;
   let poolDir: string;
@@ -117,6 +133,29 @@ describe('WorktreeService', () => {
       // Both resolve back to their own paths by branch name.
       expect(await svc.getWorktree('task-a/same-leaf')).toBe(fs.realpathSync(first.data));
       expect(await svc.getWorktree('task-b/same-leaf')).toBe(fs.realpathSync(second.data));
+    });
+
+    it('uses the flattened branch path when a stale leaf directory cannot be removed', async () => {
+      await git(['branch', 'task/stale-leaf'], { cwd: repoDir });
+      const stalePath = path.join(poolDir, 'stale-leaf');
+      fs.mkdirSync(path.join(stalePath, 'node_modules', 'electron'), { recursive: true });
+      const realHost = host;
+      host = overrideRemoveAbsolute(realHost, async () => ({
+        success: false,
+        error: 'busy',
+      }));
+      const svc = makeService();
+
+      const result = await svc.checkoutBranchWorktree(
+        { type: 'local', branch: 'main' },
+        'task/stale-leaf'
+      );
+
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error('expected success');
+      expect(result.data).toBe(path.join(poolDir, 'task-stale-leaf'));
+      expect(fs.existsSync(path.join(result.data, '.git'))).toBe(true);
+      expect(fs.existsSync(stalePath)).toBe(true);
     });
 
     it('creates a worktree from a remote source branch when branch is not local', async () => {

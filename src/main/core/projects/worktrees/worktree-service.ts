@@ -22,6 +22,7 @@ export type ServeWorktreeError =
  * on timeout we fall through to the local branch.
  */
 const FETCH_TIMEOUT_MS = 20_000;
+const STALE_WORKTREE_CLEANUP_TIMEOUT_MS = 3_000;
 
 export class WorktreeService {
   private gitOpQueue: Promise<unknown> = Promise.resolve();
@@ -82,7 +83,45 @@ export class WorktreeService {
   private async removeStaleWorktreeDir(
     targetPath: string
   ): Promise<Result<void, ServeWorktreeError>> {
-    const removal = await this.host.removeAbsolute(targetPath, { recursive: true });
+    const timedOut = Symbol('stale-worktree-cleanup-timeout');
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const removalPromise = this.host
+      .removeAbsolute(targetPath, { recursive: true })
+      .catch((error: unknown) => ({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    const timeoutPromise = new Promise<typeof timedOut>((resolve) => {
+      timeout = setTimeout(() => resolve(timedOut), STALE_WORKTREE_CLEANUP_TIMEOUT_MS);
+    });
+    const removal = await Promise.race([removalPromise, timeoutPromise]);
+    if (timeout) clearTimeout(timeout);
+
+    if (removal === timedOut) {
+      void removalPromise
+        .then(async (finished) => {
+          await this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
+          if (!finished.success && (await this.host.existsAbsolute(targetPath))) {
+            log.warn('WorktreeService: stale worktree directory cleanup failed after timeout', {
+              targetPath,
+              error: finished.error,
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          log.warn('WorktreeService: stale worktree directory cleanup rejected after timeout', {
+            targetPath,
+            error: String(error),
+          });
+        });
+      return err({
+        type: 'worktree-setup-failed',
+        cause: new Error(
+          `Timed out after ${STALE_WORKTREE_CLEANUP_TIMEOUT_MS}ms removing stale worktree directory at ${targetPath}`
+        ),
+      });
+    }
+
     await this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
     if (!removal.success && (await this.host.existsAbsolute(targetPath))) {
       return err({
@@ -228,14 +267,26 @@ export class WorktreeService {
   private async resolveWorktreeTargetPath(
     branchName: string
   ): Promise<Result<string, ServeWorktreeError>> {
+    let staleCleanupFailure: ServeWorktreeError | undefined;
     for (const dirName of this.worktreeDirCandidates(branchName)) {
       const targetPath = path.join(this.worktreePoolPath, dirName);
       if (!(await this.host.existsAbsolute(targetPath))) return ok(targetPath);
       if (await this.isValidWorktree(targetPath)) continue;
       const cleanup = await this.removeStaleWorktreeDir(targetPath);
-      if (!cleanup.success) return cleanup;
-      return ok(targetPath);
+      if (cleanup.success) return ok(targetPath);
+      staleCleanupFailure = cleanup.error;
+      log.warn('WorktreeService: stale worktree directory cleanup failed; trying next candidate', {
+        branchName,
+        targetPath,
+        error:
+          cleanup.error.type === 'worktree-setup-failed'
+            ? cleanup.error.cause instanceof Error
+              ? cleanup.error.cause.message
+              : String(cleanup.error.cause)
+            : cleanup.error.type,
+      });
     }
+    if (staleCleanupFailure) return err(staleCleanupFailure);
     return err({
       type: 'worktree-setup-failed',
       cause: new Error(`All worktree directory candidates for "${branchName}" are occupied`),
