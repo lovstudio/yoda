@@ -376,6 +376,9 @@ export async function createTask(
     params: {
       ...params,
       sourceBranch: dbSourceBranch,
+      initialConversation: params.initialConversation
+        ? { ...params.initialConversation, deferInitialPrompt: undefined }
+        : undefined,
     },
   });
 

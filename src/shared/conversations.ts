@@ -285,6 +285,8 @@ export type CreateConversationParams = {
   isInitialConversation?: boolean;
   initialSize?: { cols: number; rows: number };
   initialPrompt?: string;
+  /** Keep initialPrompt for naming/title context, but start the agent idle so the caller can inject later. */
+  deferInitialPrompt?: boolean;
   /** Absolute local paths of image attachments to deliver with the initial prompt. */
   imagePaths?: string[];
   /** Agent's configured model for this new session (passed via the runtime's modelFlag). */

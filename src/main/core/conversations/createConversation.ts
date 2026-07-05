@@ -87,13 +87,15 @@ export async function createConversation(params: CreateConversationParams): Prom
 
   conversationEvents._emit('conversation:created', conversation);
 
+  const sessionInitialPrompt = params.deferInitialPrompt ? undefined : params.initialPrompt;
+  const sessionImagePaths = params.deferInitialPrompt ? undefined : params.imagePaths;
   await task.conversations.startSession(
     conversation,
     params.initialSize,
     false,
-    params.initialPrompt,
+    sessionInitialPrompt,
     undefined,
-    params.imagePaths,
+    sessionImagePaths,
     params.model
   );
   telemetryService.capture('conversation_created', {
