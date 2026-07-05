@@ -9,7 +9,6 @@ import {
   conversationRenamedChannel,
   conversationUnarchivedChannel,
 } from '@shared/events/conversationEvents';
-import { openTaskTarget } from '@renderer/app/open-task-target';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { asProvisioned, getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -21,6 +20,10 @@ import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
+import {
+  getProjectSessionTaskArchivedAt,
+  openProjectSessionConversation,
+} from './project-session-open';
 
 const projectSessionsQueryKey = (projectId: string) => ['project-sessions', projectId] as const;
 
@@ -47,7 +50,7 @@ const ProjectSessionRow = observer(function ProjectSessionRow({
     task?.data.name ??
     t('projects.sessionsView.taskFallback', { id: conversation.taskId.slice(0, 8) });
   const liveConversation = asProvisioned(task)?.conversations.conversations.get(conversation.id);
-  const taskArchivedAt = task?.data && 'archivedAt' in task.data ? task.data.archivedAt : undefined;
+  const taskArchivedAt = getProjectSessionTaskArchivedAt(conversation);
   const isArchived = Boolean(conversation.archivedAt || taskArchivedAt);
   const config = agentConfig[conversation.runtimeId];
   const title = conversation.title.trim() || conversation.id;
@@ -59,17 +62,7 @@ const ProjectSessionRow = observer(function ProjectSessionRow({
     '';
 
   const handleOpen = async () => {
-    if (taskArchivedAt) {
-      await getTaskManagerStore(conversation.projectId)?.restoreTask(conversation.taskId);
-    }
-    openTaskTarget(
-      {
-        projectId: conversation.projectId,
-        taskId: conversation.taskId,
-        conversationId: conversation.id,
-      },
-      navigate
-    );
+    await openProjectSessionConversation(conversation, navigate);
   };
 
   return (
