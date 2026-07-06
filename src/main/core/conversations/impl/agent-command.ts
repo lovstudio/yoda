@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import { findRuntimePermissionMode, getRuntime, type RuntimeId } from '@shared/runtime-registry';
 
@@ -206,7 +210,21 @@ export function buildAgentCommand({
     !args.includes('--settings') &&
     !extraArgs.includes('--settings')
   ) {
-    args.push('--settings', JSON.stringify({ theme: terminalThemeMode }));
+    // On Windows, CMD.exe cannot reliably pass inline JSON containing double
+    // quotes as a CLI argument. The ^" escape sequence CMD uses inside quoted
+    // strings toggles the quoting state rather than preserving the literal ",
+    // so {"theme":"light"} arrives as {^"theme":^"light"} and Claude CLI treats
+    // it as a file path -> "Settings file not found". Write the JSON to a temp
+    // file and pass the file path instead. On POSIX shells, single-quote
+    // wrapping preserves the JSON faithfully, so inline passing works fine.
+    const settingsJson = JSON.stringify({ theme: terminalThemeMode });
+    if (process.platform === 'win32') {
+      const settingsFile = path.join(tmpdir(), 'yoda-settings-' + randomUUID() + '.json');
+      writeFileSync(settingsFile, settingsJson, 'utf8');
+      args.push('--settings', settingsFile);
+    } else {
+      args.push('--settings', settingsJson);
+    }
   }
 
   args.push(...extraArgs);
