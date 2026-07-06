@@ -104,14 +104,7 @@ const s3 = new S3mini({
 for (const item of uploads) {
   const data = readFileSync(item.file);
   info(`Uploading ${item.label} (${(data.length / 1024 / 1024).toFixed(1)} MB) -> ${item.key}`);
-  await s3.putAnyObject(
-    item.key,
-    new Uint8Array(data),
-    item.contentType,
-    undefined,
-    undefined,
-    data.length
-  );
+  await s3.putObject(item.key, new Uint8Array(data), item.contentType);
 }
 
 info(`China mirror uploaded to ${publicBaseUrl}`);
