@@ -5,6 +5,22 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.14.3 — 2026-07-06
+
+### Added
+
+- Releases: mirror production installers, blockmaps, and updater manifests to
+  the China CDN at `cdn.cs-magic.cn/yoda`.
+- Settings: add an update source selector so packaged builds can check and
+  download updates from the China mirror when GitHub is unreliable.
+- Website: add China mirror download links for macOS, Windows, and Linux.
+
+### Changed
+
+- Release CI now embeds the configured China mirror feed URL into production
+  builds and uploads mirror artifacts when the `release` environment secrets are
+  available.
+
 ## 0.14.2 — 2026-07-06
 
 ### Added
