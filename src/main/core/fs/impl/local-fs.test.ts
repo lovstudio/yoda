@@ -1,9 +1,25 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FileWatchEvent } from '@shared/fs';
 import { FileSystemError } from '../types';
 import { LocalFileSystem } from './local-fs';
+
+const parcelWatcherMock = vi.hoisted(() => ({
+  subscribe: vi.fn(),
+}));
+
+vi.mock('@parcel/watcher', () => ({
+  default: parcelWatcherMock,
+}));
+
+type MockWatcherEvent = {
+  type: 'create' | 'update' | 'delete';
+  path: string;
+};
+
+type MockWatcherCallback = (err: Error | null, events: MockWatcherEvent[]) => void;
 
 describe('LocalFileSystem', () => {
   let tempDir: string;
@@ -15,6 +31,7 @@ describe('LocalFileSystem', () => {
   });
 
   afterEach(() => {
+    parcelWatcherMock.subscribe.mockReset();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -518,6 +535,54 @@ describe('LocalFileSystem', () => {
 
       expect(result.truncated).toBe(true);
       expect(result.content.length).toBe(50);
+    });
+  });
+
+  describe('watch', () => {
+    it('filters ignored directories in JS without passing native ignore options', async () => {
+      let onNativeEvents: MockWatcherCallback | undefined;
+      const unsubscribe = vi.fn();
+
+      parcelWatcherMock.subscribe.mockImplementation(
+        (_root: string, callback: MockWatcherCallback) => {
+          onNativeEvents = callback;
+          return Promise.resolve({ unsubscribe });
+        }
+      );
+
+      const received: FileWatchEvent[] = [];
+      const watcher = fsService.watch((events) => received.push(...events), { debounceMs: 1 });
+
+      await vi.waitFor(() => {
+        expect(parcelWatcherMock.subscribe).toHaveBeenCalledTimes(1);
+      });
+
+      const subscribeCall = parcelWatcherMock.subscribe.mock.calls[0];
+      expect(subscribeCall).toHaveLength(2);
+      expect(subscribeCall[0]).toBe(tempDir);
+
+      const visibleDir = path.join(tempDir, 'src');
+      fs.mkdirSync(visibleDir);
+      const visibleFile = path.join(visibleDir, 'visible.ts');
+      fs.writeFileSync(visibleFile, 'const visible = true;');
+
+      const ignoredDir = path.join(tempDir, 'node_modules', 'pkg');
+      fs.mkdirSync(ignoredDir, { recursive: true });
+      const ignoredFile = path.join(ignoredDir, 'index.ts');
+      fs.writeFileSync(ignoredFile, 'const ignored = true;');
+
+      onNativeEvents?.(null, [
+        { type: 'create', path: ignoredFile },
+        { type: 'create', path: visibleFile },
+      ]);
+
+      await vi.waitFor(() => {
+        expect(received).toHaveLength(1);
+      });
+
+      expect(received).toEqual([{ type: 'create', entryType: 'file', path: 'src/visible.ts' }]);
+
+      watcher.close();
     });
   });
 });

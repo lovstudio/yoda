@@ -113,8 +113,18 @@ const WATCH_IGNORED_NAMES = [
   '.windsurf',
 ];
 
-// Glob patterns for parcel/watcher ignore option, derived from WATCH_IGNORED_NAMES.
-const WATCH_IGNORE_GLOBS = WATCH_IGNORED_NAMES.map((n) => `**/${n}/**`);
+// Set for fast JS-level ignore matching (moved from native glob to JS to avoid
+// @parcel/watcher native stack overflow on long paths, see parcel-bundler/watcher#250).
+const WATCH_IGNORED_SET = new Set(WATCH_IGNORED_NAMES);
+
+// Returns true if any path segment matches an ignored directory name.
+function isWatchIgnored(relPath: string): boolean {
+  const segments = relPath.split('/');
+  for (const seg of segments) {
+    if (WATCH_IGNORED_SET.has(seg)) return true;
+  }
+  return false;
+}
 
 // Allowed extensions for readImage (images + pdf, both previewed via data URL)
 const ALLOWED_IMAGE_EXTENSIONS = new Set([
@@ -769,6 +779,10 @@ export class LocalFileSystem implements FileSystemProvider {
             // Skip paths outside the project root (shouldn't happen, but guard anyway).
             if (rel.startsWith('..')) continue;
 
+            // Skip ignored directories (moved from native { ignore } option to JS-level
+            // filtering to prevent @parcel/watcher native stack overflow on long paths).
+            if (isWatchIgnored(rel)) continue;
+
             let entryType: 'file' | 'directory' = 'file';
             if (e.type !== 'delete') {
               try {
@@ -780,8 +794,9 @@ export class LocalFileSystem implements FileSystemProvider {
             const type = e.type === 'update' ? ('modify' as const) : e.type;
             enqueue({ type, entryType, path: rel });
           }
-        },
-        { ignore: WATCH_IGNORE_GLOBS }
+        }
+        // No native ignore option: glob matching in native code causes stack overflow
+        // on long paths (parcel-bundler/watcher#250). Filtering is done in JS instead.
       )
       .then((sub) => {
         if (closed) {
