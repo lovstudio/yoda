@@ -5,6 +5,32 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.14.2 — 2026-07-06
+
+### Added
+
+- Agent runtime: add a login/re-login action in the account panel for switching
+  official runtime subscriptions.
+- Pull requests: seed review tasks with richer fix context so spawned agent work
+  starts with PR title, URL, branch, description, and changed-file metadata.
+- Sessions: add regressions for archived task session recovery.
+
+### Changed
+
+- Prompt rewrite now fails open during task submission so agent startup can
+  continue with the original prompt when rewrite preprocessing fails.
+- Session recovery now resolves moved Codex resume sessions and keeps archived
+  task sessions findable after project path changes.
+- Worktree provisioning no longer stalls on stale worktree directories.
+
+### Fixed
+
+- File watcher: move ignored-directory filtering out of `@parcel/watcher` native
+  glob handling and into JavaScript to avoid Windows native crashes on long
+  paths.
+- Packaging: include `zod` as a runtime dependency so packaged builds can load
+  `@ai-sdk/provider-utils` from `app.asar`.
+
 ## 0.14.1 — 2026-07-02
 
 ### Added
