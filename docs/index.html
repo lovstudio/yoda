@@ -658,6 +658,11 @@
         color: var(--ink);
       }
 
+      .download-links a.mirror-link {
+        border-color: rgba(144, 238, 144, 0.32);
+        color: var(--lime);
+      }
+
       .integrations {
         display: flex;
         flex-wrap: wrap;
@@ -1158,8 +1163,8 @@
             <p class="section-kicker">Download</p>
             <h2 id="download-title">Install Yoda on your workstation.</h2>
             <p>
-              Native desktop builds are published through GitHub Releases for macOS, Windows, and
-              Linux. Choose the installer that matches your machine.
+              Native desktop builds are published through GitHub Releases and mirrored to a China
+              CDN for macOS, Windows, and Linux. Choose the installer that matches your machine.
             </p>
           </div>
           <div class="download-list" aria-label="Download options">
@@ -1188,6 +1193,22 @@
                 >
                 <a href="https://github.com/lovstudio/yoda/releases/latest/download/yoda-x64.exe"
                   >EXE installer</a
+                >
+              </div>
+            </div>
+            <div class="download-row">
+              <strong>China mirror</strong>
+              <div class="download-links">
+                <a class="mirror-link" href="https://cdn.cs-magic.cn/yoda/latest/yoda-arm64.dmg"
+                  >macOS Apple Silicon</a
+                >
+                <a class="mirror-link" href="https://cdn.cs-magic.cn/yoda/latest/yoda-x64.msi"
+                  >Windows MSI</a
+                >
+                <a
+                  class="mirror-link"
+                  href="https://cdn.cs-magic.cn/yoda/latest/yoda-x86_64.AppImage"
+                  >Linux AppImage</a
                 >
               </div>
             </div>

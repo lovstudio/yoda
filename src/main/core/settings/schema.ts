@@ -488,6 +488,7 @@ export const promptPrinciplesSettingsSchema = z.object({
  *  The updater runs in its own Electron session and does not pick up a CLI/shell
  *  proxy, so users behind ClashX-style proxies need this to reach GitHub. */
 export const updatesSettingsSchema = z.object({
+  source: z.enum(['official', 'china']).default('official'),
   proxyMode: z.enum(['auto', 'custom']).default('auto'),
   proxyUrl: z.string().default(''),
 });

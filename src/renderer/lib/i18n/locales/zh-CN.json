@@ -649,6 +649,13 @@
       "installFailed": "更新安装失败",
       "retry": "重试",
       "manualDownload": "手动下载",
+      "source": {
+        "title": "更新源",
+        "description": "国内镜像会从 cdn.cs-magic.cn 检查并下载更新，适合 GitHub 访问不稳定的网络。",
+        "unavailableDescription": "此构建未内置国内镜像地址，将继续使用官方 GitHub 更新源。",
+        "official": "官方 GitHub",
+        "china": "国内镜像"
+      },
       "proxy": {
         "title": "更新代理",
         "description": "部分网络下更新器无法访问 GitHub。若下载持续失败，可设置代理。「自动」会跟随系统代理。",

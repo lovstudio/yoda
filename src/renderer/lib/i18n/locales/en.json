@@ -649,6 +649,13 @@
       "installFailed": "Couldn't install the update",
       "retry": "Retry",
       "manualDownload": "Download manually",
+      "source": {
+        "title": "Update source",
+        "description": "The China mirror checks and downloads updates from cdn.cs-magic.cn for networks where GitHub is unreliable.",
+        "unavailableDescription": "This build does not include a China mirror URL, so updates will continue to use GitHub.",
+        "official": "GitHub",
+        "china": "China mirror"
+      },
       "proxy": {
         "title": "Update proxy",
         "description": "The updater can't reach GitHub on some networks. Use a proxy if downloads keep failing. \"Auto\" follows your system proxy.",

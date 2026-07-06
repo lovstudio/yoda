@@ -3,7 +3,12 @@ import _electronUpdater, {
   type UpdateInfo,
   type Logger as UpdaterLogger,
 } from 'electron-updater';
-import { UPDATE_CHANNEL } from '@shared/app-identity';
+import {
+  CN_UPDATE_FEED_BASE_URL,
+  UPDATE_CHANNEL,
+  UPDATE_FEED_BASE_URL,
+} from '@shared/app-identity';
+import type { UpdatesSettings } from '@shared/app-settings';
 import {
   updateAvailableEvent,
   updateCheckingEvent,
@@ -55,6 +60,8 @@ class UpdateService implements IInitializable, IDisposable {
   private active = false;
   private installRequested = false;
   private installRestartGuardTimer?: NodeJS.Timeout;
+  private appliedFeedUrl: string | null = null;
+  private appliedFeedSource: UpdatesSettings['source'] | null = null;
 
   constructor() {
     this.updateState = {
@@ -195,15 +202,52 @@ class UpdateService implements IInitializable, IDisposable {
       this.updateState.error = undefined;
     }
 
-    await this.applyProxyConfig();
+    const feed = await this.applyUpdateSourceConfig();
+    await this.applyProxyConfig(feed.url);
 
     log.info('Checking for updates...', {
       channel: UPDATE_CHANNEL,
       currentVersion: this.updateState.currentVersion,
+      source: feed.source,
+      feedUrl: feed.url,
     });
 
     const result = await autoUpdater.checkForUpdatesAndNotify();
     return result?.updateInfo ?? null;
+  }
+
+  private resolveUpdateFeedConfig(cfg: UpdatesSettings): {
+    source: UpdatesSettings['source'];
+    url: string;
+  } {
+    if (cfg.source === 'china') {
+      if (CN_UPDATE_FEED_BASE_URL) {
+        return { source: 'china', url: CN_UPDATE_FEED_BASE_URL };
+      }
+      log.warn('China update source requested, but no mirror URL is embedded in this build');
+    }
+
+    return { source: 'official', url: UPDATE_FEED_BASE_URL };
+  }
+
+  private async applyUpdateSourceConfig(): Promise<{
+    source: UpdatesSettings['source'];
+    url: string;
+  }> {
+    const cfg = await appSettingsService.get('updates');
+    const feed = this.resolveUpdateFeedConfig(cfg);
+
+    if (feed.url !== this.appliedFeedUrl || feed.source !== this.appliedFeedSource) {
+      autoUpdater.setFeedURL(feed.url);
+      this.appliedFeedUrl = feed.url;
+      this.appliedFeedSource = feed.source;
+      log.info('Updater feed source applied', {
+        source: feed.source,
+        feedUrl: feed.url,
+      });
+    }
+
+    return feed;
   }
 
   /**
@@ -213,7 +257,7 @@ class UpdateService implements IInitializable, IDisposable {
    * explicitly route the updater session: `custom` uses the user's proxy URL,
    * `auto` follows the OS proxy (and logs what it resolved for diagnostics).
    */
-  private async applyProxyConfig(): Promise<void> {
+  private async applyProxyConfig(proxyProbeUrl: string): Promise<void> {
     try {
       const sess = autoUpdater.netSession;
       if (!sess) return;
@@ -228,7 +272,7 @@ class UpdateService implements IInitializable, IDisposable {
       }
 
       await sess.setProxy({ mode: 'system' });
-      const resolved = await sess.resolveProxy('https://github.com');
+      const resolved = await sess.resolveProxy(proxyProbeUrl);
       log.info('Updater proxy: auto (system)', { resolved });
     } catch (error) {
       log.warn('Failed to apply updater proxy config:', formatUpdaterError(error));
@@ -253,7 +297,7 @@ class UpdateService implements IInitializable, IDisposable {
     events.emit(updateDownloadingEvent, { version: this.updateState.availableVersion });
 
     try {
-      await this.applyProxyConfig();
+      await this.applyProxyConfig(this.appliedFeedUrl ?? UPDATE_FEED_BASE_URL);
       await autoUpdater.downloadUpdate();
     } catch (error: unknown) {
       const errorMessage = formatUpdaterError(error);
