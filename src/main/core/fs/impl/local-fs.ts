@@ -794,7 +794,7 @@ export class LocalFileSystem implements FileSystemProvider {
             const type = e.type === 'update' ? ('modify' as const) : e.type;
             enqueue({ type, entryType, path: rel });
           }
-        },
+        }
         // No native ignore option: glob matching in native code causes stack overflow
         // on long paths (parcel-bundler/watcher#250). Filtering is done in JS instead.
       )
