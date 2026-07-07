@@ -8,6 +8,9 @@ import { projects } from '@main/db/schema';
 import { injectClipboardImagesAndPrompt, substituteImageMentions } from './impl/image-attachments';
 import { injectPrompt } from './inject-prompt';
 
+const PTY_WAIT_TIMEOUT_MS = 10_000;
+const PTY_WAIT_INTERVAL_MS = 100;
+
 export type InjectConversationPromptParams = {
   projectId: string;
   taskId: string;
@@ -26,7 +29,7 @@ export async function injectConversationPrompt(
     conversationId: params.conversationId,
   };
   const sessionId = makePtySessionId(params.projectId, params.taskId, params.conversationId);
-  const pty = ptySessionRegistry.get(sessionId);
+  const pty = await waitForPtySession(sessionId);
   if (!pty) return false;
 
   const prompt = params.prompt ?? '';
@@ -69,4 +72,20 @@ async function canUseLocalClipboardImagePaste(
     .where(eq(projects.id, projectId))
     .limit(1);
   return project?.workspaceProvider === 'local';
+}
+
+async function waitForPtySession(
+  sessionId: string
+): Promise<ReturnType<typeof ptySessionRegistry.get>> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < PTY_WAIT_TIMEOUT_MS) {
+    const pty = ptySessionRegistry.get(sessionId);
+    if (pty) return pty;
+    await sleep(PTY_WAIT_INTERVAL_MS);
+  }
+  return ptySessionRegistry.get(sessionId);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
