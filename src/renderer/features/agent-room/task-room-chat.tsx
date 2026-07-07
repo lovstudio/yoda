@@ -5,10 +5,7 @@ import { useEffect } from 'react';
 import { rpc } from '@renderer/lib/ipc';
 import { RoomChat } from './agent-room-panel';
 import { agentRoomStore } from './agent-room-store';
-
-/** React Query key for "does this task have a team room" — shared so callers dedupe. */
-export const taskRoomQueryKey = (projectId: string, taskId: string) =>
-  ['roomForTask', projectId, taskId] as const;
+import { taskRoomQueryKey } from './team-room-queries';
 
 /**
  * The team-room group chat for a task, embedded in the task's Overview tab when

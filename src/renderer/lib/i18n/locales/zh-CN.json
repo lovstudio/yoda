@@ -317,6 +317,7 @@
       "securityNote": "连接二维码包含当前桌面端 Gateway Token。请只在可信设备和可信网络中使用。"
     },
     "needsReview": "需要审查",
+    "multiAgentTask": "多智能体任务",
     "expressMode": "一键建任务",
     "expressModeDescription": "点击项目行的「+」时不再打开主页配置，而是立即创建任务并进入：自动生成任务名，从默认分支建任务分支，用上次使用的客户端直接开启会话。客户端或默认分支尚未就绪时，仍会打开主页让你补全。",
     "toggleSubtasks": "展开/折叠子任务",

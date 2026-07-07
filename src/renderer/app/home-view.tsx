@@ -51,6 +51,7 @@ import { withSystemPrompt } from '@shared/prompt-format';
 import { REVIEW_MAX_ROUNDS } from '@shared/review-protocol';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
+import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import {
   effectiveGlobalEnabled,
@@ -1206,9 +1207,11 @@ export const HomeComposer = observer(function HomeComposer({
                 requirement: resolvedRequirement,
               })
               .then(() =>
-                queryClient.invalidateQueries({
-                  queryKey: ['roomForTask', taskScopedTarget.projectId, taskScopedTarget.taskId],
-                })
+                invalidateTeamRoomQueries(
+                  queryClient,
+                  taskScopedTarget.projectId,
+                  taskScopedTarget.taskId
+                )
               );
           // Instantiate a chat room from the team template on this task; the
           // conductor drives the iterative @-routing (members appear as the
@@ -1667,11 +1670,7 @@ export const HomeComposer = observer(function HomeComposer({
               teamId,
               requirement: resolvedRequirement,
             })
-            .then(() =>
-              queryClient.invalidateQueries({
-                queryKey: ['roomForTask', mounted.data.id, taskId],
-              })
-            );
+            .then(() => invalidateTeamRoomQueries(queryClient, mounted.data.id, taskId));
         const roomPromise = deferInitialPrompt
           ? createPromise.then(async () => {
               const resolvedRequirement = await requirementPromise;

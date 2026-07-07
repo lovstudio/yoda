@@ -1,4 +1,4 @@
-import { Archive, ChevronRight, GitBranch, Loader2, MoreHorizontal } from 'lucide-react';
+import { Archive, ChevronRight, GitBranch, Loader2, MoreHorizontal, Users } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -42,6 +42,8 @@ interface SidebarTaskItemProps {
   childCount?: number;
   /** Terminal-tree guide state per indent slot — see SidebarRow.treeTrail. */
   treeTrail?: boolean[];
+  /** True when this task is backed by an Agent Room / team workflow. */
+  isMultiAgent?: boolean;
 }
 
 /** Indent per subtask level; depth is visually capped so deep trees stay readable. */
@@ -55,6 +57,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   depth = 0,
   childCount = 0,
   treeTrail,
+  isMultiAgent = false,
 }: SidebarTaskItemProps) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
@@ -178,7 +181,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                 // (min-h-8 keeps branch-less rows at the original 32px). `relative`
                 // anchors the compact branch gutter inside the pl-8 icon column.
                 'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1',
-                taskIndentClass
+                taskIndentClass,
+                isMultiAgent &&
+                  'bg-amber-500/[0.07] ring-1 ring-inset ring-amber-500/20 hover:bg-amber-500/[0.11] data-[active=true]:ring-amber-500/45'
               )}
               isActive={isActive}
               onMouseDown={(e) => e.preventDefault()}
@@ -291,6 +296,16 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                     {rowVariant === 'flat' && (
                       <span className="shrink-0 truncate max-w-[8rem] rounded-sm bg-background-tertiary-2 px-1 text-[10px] uppercase tracking-wide text-foreground-tertiary">
                         {projectName}
+                      </span>
+                    )}
+                    {isMultiAgent && (
+                      <span
+                        role="img"
+                        aria-label={t('sidebar.multiAgentTask')}
+                        title={t('sidebar.multiAgentTask')}
+                        className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm bg-amber-500/15 text-amber-700 ring-1 ring-inset ring-amber-500/25 dark:text-amber-300"
+                      >
+                        <Users className="size-3" />
                       </span>
                     )}
                     <RenderPrBadge task={task} />

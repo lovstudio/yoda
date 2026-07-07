@@ -12,7 +12,7 @@ import { rpc } from '@renderer/lib/ipc';
 import { cn } from '@renderer/utils/utils';
 import { ACCENT_AVATAR, STATUS_DOT, STATUS_LABEL } from './accent';
 import { agentRoomStore } from './agent-room-store';
-import { taskRoomQueryKey } from './task-room-chat';
+import { taskRoomQueryKey } from './team-room-queries';
 
 /** Look up a member in the (singleton) loaded room snapshot. */
 function memberById(memberId: string): RoomMember | undefined {

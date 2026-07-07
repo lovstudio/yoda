@@ -319,6 +319,7 @@
       "securityNote": "The connection code includes this desktop gateway token. Use it only with trusted devices on trusted networks."
     },
     "needsReview": "Needs review",
+    "multiAgentTask": "Multi-agent task",
     "toggleSubtasks": "Toggle subtasks",
     "setParentFailed": "Failed to move task",
     "kanban": "Kanban"
