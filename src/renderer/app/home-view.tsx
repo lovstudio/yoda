@@ -98,12 +98,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@renderer/lib/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@renderer/lib/ui/dropdown-menu';
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
@@ -3261,58 +3255,17 @@ function Chip({ icon: Icon, children }: ChipProps) {
 
 function RunHostSelector({ kind }: RunHostSelectorProps) {
   const { t } = useTranslation();
-  const options: Array<{
-    kind: RunHostKind;
-    icon: ComponentType<{ className?: string }>;
-    label: string;
-  }> = [
-    { kind: 'local', icon: Monitor, label: t('home.runHostLocal') },
-    { kind: 'ssh', icon: Server, label: t('home.runHostSsh') },
-  ];
-  const current = options.find((option) => option.kind === kind) ?? options[0];
-  const CurrentIcon = current.icon;
+  const label = kind === 'ssh' ? t('home.runHostSsh') : t('home.runHostLocal');
+  const Icon = kind === 'ssh' ? Server : Monitor;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type="button"
-            aria-label={t('home.runHostAria')}
-            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
-          >
-            <CurrentIcon className="size-3.5 text-foreground-muted" />
-            <span>{current.label}</span>
-            <ChevronDown className="size-3 text-foreground-muted" />
-          </button>
-        }
-      />
-      <DropdownMenuContent align="start" className="w-56 p-1.5">
-        {options.map((option) => {
-          const Icon = option.icon;
-          const active = option.kind === kind;
-          return (
-            <DropdownMenuItem
-              key={option.kind}
-              disabled={!active}
-              className="gap-2 rounded-md px-2.5 py-2"
-            >
-              <Icon className="size-4 shrink-0 text-foreground-muted" />
-              <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                {option.label}
-              </span>
-              {active ? (
-                <Check className="size-3.5 shrink-0 text-foreground-muted" />
-              ) : option.kind === 'ssh' ? (
-                <span className="shrink-0 rounded-sm bg-background-2 px-1.5 py-0.5 text-[10px] text-foreground-muted">
-                  {t('common.comingSoon')}
-                </span>
-              ) : null}
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <span
+      aria-label={t('home.runHostAria')}
+      className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground"
+    >
+      <Icon className="size-3.5 text-foreground-muted" />
+      <span>{label}</span>
+    </span>
   );
 }
 
