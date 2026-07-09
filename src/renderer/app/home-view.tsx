@@ -376,6 +376,7 @@ export const HomeComposer = observer(function HomeComposer({
 
   const { params: homeParams, setParams: setHomeParams } = useParams('home');
   const homeProjectId = homeParams.projectId;
+  const homeRouteProject = homeProjectId ? projectManager.projects.get(homeProjectId) : undefined;
 
   const navProjectId = (() => {
     const nav = appState.navigation;
@@ -410,13 +411,23 @@ export const HomeComposer = observer(function HomeComposer({
   const draftProjectId = draft?.selectedProjectId ?? null;
   useEffect(() => {
     if (!homeProjectId || isProjectLocked) return;
+    if (!homeRouteProject?.data) return;
+    void projectManager.mountProject(homeProjectId).catch(() => {});
     updateDraft(
       homeProjectId === draftProjectId
         ? { selectedProjectId: homeProjectId }
         : { selectedProjectId: homeProjectId, baseBranch: null }
     );
     setHomeParams({ projectId: undefined });
-  }, [homeProjectId, setHomeParams, isProjectLocked, updateDraft, draftProjectId]);
+  }, [
+    homeProjectId,
+    homeRouteProject?.data,
+    projectManager,
+    setHomeParams,
+    isProjectLocked,
+    updateDraft,
+    draftProjectId,
+  ]);
 
   const projectStore = selectedProjectId
     ? projectManager.projects.get(selectedProjectId)

@@ -4,10 +4,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { basenameFromAnyPath } from '@shared/path-name';
 import { projectDisplayName } from '@shared/projects';
-import {
-  asMounted,
-  getProjectManagerStore,
-} from '@renderer/features/projects/stores/project-selectors';
+import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -74,17 +71,18 @@ export const ProjectSelector = observer(function ProjectSelector({
   const [query, setQuery] = useState('');
   const { toast } = useToast();
   const showExpressCreateModal = useShowModal('expressCreateProjectModal');
+  const projectManager = getProjectManagerStore();
 
-  const options: ProjectOption[] = Array.from(getProjectManagerStore().projects.entries()).flatMap(
+  const options: ProjectOption[] = Array.from(projectManager.projects.entries()).flatMap(
     ([id, store]) => {
-      const mounted = asMounted(store);
-      if (!mounted || mounted.data.isInternal) return [];
+      const project = store.data;
+      if (!project || project.isInternal) return [];
       return [
         {
           kind: 'project',
           value: id,
-          label: projectDisplayName(mounted.data),
-          path: mounted.data.path,
+          label: projectDisplayName(project),
+          path: project.path,
         },
       ];
     }
@@ -145,6 +143,7 @@ export const ProjectSelector = observer(function ProjectSelector({
       setOpen(false);
       return;
     }
+    void projectManager.mountProject(item.value).catch(() => {});
     onChange(item.value);
     setOpen(false);
   }
@@ -182,7 +181,7 @@ export const ProjectSelector = observer(function ProjectSelector({
         return;
       }
 
-      const projectId = await getProjectManagerStore().createProject(
+      const projectId = await projectManager.createProject(
         { type: 'local' },
         {
           mode: 'pick',
@@ -233,6 +232,8 @@ export const ProjectSelector = observer(function ProjectSelector({
       open={open}
       onOpenChange={setOpen}
       onInputValueChange={setQuery}
+      itemToStringLabel={(item: ProjectSelectorOption) => item.label}
+      itemToStringValue={(item: ProjectSelectorOption) => item.value}
       isItemEqualToValue={(a: ProjectSelectorOption, b: ProjectSelectorOption) =>
         a.kind === b.kind && a.value === b.value
       }

@@ -140,6 +140,9 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     // Express mode requires a runnable runtime config. Fall back to the home
     // view whenever any prerequisite is missing so the user can fix it there.
     if (!expressMode || !mounted || !expressProviderId || !defaultBranch) {
+      void getProjectManagerStore()
+        .mountProject(projectId)
+        .catch(() => {});
       navigate('home', { projectId });
       return;
     }
