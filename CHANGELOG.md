@@ -5,6 +5,29 @@ All notable changes to Yoda will be documented in this file.
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
 
+## 0.14.4 — 2026-07-09
+
+### Added
+
+- Tasks: support moving SSH-backed task worktrees between projects through a
+  git-bundle shuttle, keeping remote tasks first-class across project moves.
+- Skills: add search to the skill shortcut menu so large local skill catalogs
+  are easier to filter from the composer.
+
+### Changed
+
+- Home: make the run-host selector interactive and show SSH-backed projects as
+  available instead of a disabled coming-soon state.
+- Sidebar: simplify the multi-agent task marker while keeping team-room tasks
+  visually distinct from normal task rows.
+
+### Fixed
+
+- Conversations: deferred prompt injection now waits for the live PTY to be
+  ready before sending the queued prompt.
+- Skills: fix shortcut menu clipping so filtered results remain usable in the
+  popup.
+
 ## 0.14.3 — 2026-07-06
 
 ### Added
