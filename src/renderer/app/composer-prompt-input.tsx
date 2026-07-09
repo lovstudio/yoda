@@ -19,10 +19,13 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
+  type CSSProperties,
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type RefObject,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import type { RuntimeId } from '@shared/runtime-registry';
@@ -88,6 +91,14 @@ interface ActiveSkillShortcut {
   query: string;
 }
 
+interface ComposerMenuPosition {
+  left: number;
+  width: number;
+  maxHeight: number;
+  side: 'top' | 'bottom';
+  offset: number;
+}
+
 export type ComposerPromptInputRunHostKind = 'local' | 'ssh';
 
 export interface ComposerPromptInputProps {
@@ -111,6 +122,11 @@ export interface ComposerPromptInputProps {
 }
 
 const IMAGE_ATTACHMENT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+const MENU_VIEWPORT_GUTTER = 8;
+const MENU_ANCHOR_INSET = 12;
+const MENU_SIDE_OFFSET = 4;
+const SKILL_SHORTCUT_MENU_MAX_HEIGHT = 288;
+const SKILL_SHORTCUT_MENU_MIN_HEIGHT = 96;
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -208,6 +224,42 @@ function applySkillShortcut(
   };
 }
 
+function measureComposerMenuPosition(anchor: HTMLElement): ComposerMenuPosition {
+  const rect = anchor.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const desiredLeft = rect.left + MENU_ANCHOR_INSET;
+  const desiredWidth = Math.max(160, rect.width - MENU_ANCHOR_INSET * 2);
+  const maxWidth = Math.max(160, viewportWidth - MENU_VIEWPORT_GUTTER * 2);
+  const width = Math.min(desiredWidth, maxWidth);
+  const left = Math.min(
+    Math.max(MENU_VIEWPORT_GUTTER, desiredLeft),
+    viewportWidth - width - MENU_VIEWPORT_GUTTER
+  );
+  const availableBelow = viewportHeight - rect.bottom - MENU_VIEWPORT_GUTTER - MENU_SIDE_OFFSET;
+  const availableAbove = rect.top - MENU_VIEWPORT_GUTTER - MENU_SIDE_OFFSET;
+  const side =
+    availableBelow < SKILL_SHORTCUT_MENU_MIN_HEIGHT && availableAbove > availableBelow
+      ? 'top'
+      : 'bottom';
+  const availableHeight = side === 'top' ? availableAbove : availableBelow;
+  const maxHeight = Math.max(
+    SKILL_SHORTCUT_MENU_MIN_HEIGHT,
+    Math.min(SKILL_SHORTCUT_MENU_MAX_HEIGHT, availableHeight)
+  );
+
+  return {
+    left,
+    width,
+    maxHeight,
+    side,
+    offset:
+      side === 'top'
+        ? viewportHeight - rect.top + MENU_SIDE_OFFSET
+        : rect.bottom + MENU_SIDE_OFFSET,
+  };
+}
+
 function fuzzyMatchScore(text: string, query: string): number | null {
   if (text === query) return 1000;
   if (text.startsWith(query)) return 900 - text.length;
@@ -264,6 +316,7 @@ export function ComposerPromptInput({
   onSubmit,
 }: ComposerPromptInputProps) {
   const { t } = useTranslation();
+  const inputAnchorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
@@ -883,7 +936,7 @@ export function ComposerPromptInput({
         )}
       >
         <div className="flex flex-col">
-          <div className="relative">
+          <div ref={inputAnchorRef} className="relative">
             <Textarea
               ref={textareaRef}
               placeholder={placeholder ?? t('home.promptPlaceholder')}
@@ -1003,6 +1056,7 @@ export function ComposerPromptInput({
             )}
             {skillShortcutMenuOpen && activeSkillShortcut && (
               <SkillShortcutMenu
+                anchorRef={inputAnchorRef}
                 items={filteredSkillShortcutOptions}
                 activeIndex={effectiveSkillShortcutIndex}
                 loading={skillsLoading}
@@ -1261,6 +1315,7 @@ function PathCompletionMenu({
 }
 
 interface SkillShortcutMenuProps {
+  anchorRef: RefObject<HTMLDivElement | null>;
   items: SkillShortcutOption[];
   activeIndex: number;
   loading: boolean;
@@ -1274,6 +1329,7 @@ interface SkillShortcutMenuProps {
 }
 
 function SkillShortcutMenu({
+  anchorRef,
   items,
   activeIndex,
   loading,
@@ -1283,17 +1339,54 @@ function SkillShortcutMenu({
   onSelect,
 }: SkillShortcutMenuProps) {
   const activeItemRef = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState<ComposerMenuPosition | null>(null);
+
+  const updatePosition = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    setPosition(measureComposerMenuPosition(anchor));
+  }, [anchorRef]);
 
   useEffect(() => {
     activeItemRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [activeIndex]);
+  }, [activeIndex, position]);
+
+  useLayoutEffect(() => {
+    updatePosition();
+    const anchor = anchorRef.current;
+    if (!anchor) return undefined;
+
+    const observer = new ResizeObserver(updatePosition);
+    observer.observe(anchor);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [anchorRef, updatePosition, items.length, loading, showEmpty]);
 
   if (!loading && items.length === 0 && !showEmpty) return null;
+  if (!position || typeof document === 'undefined') return null;
 
-  return (
+  const style: CSSProperties = {
+    left: position.left,
+    width: position.width,
+    maxHeight: position.maxHeight,
+  };
+  if (position.side === 'top') {
+    style.bottom = position.offset;
+  } else {
+    style.top = position.offset;
+  }
+
+  return createPortal(
     <div
       role="listbox"
-      className="absolute left-3 right-3 top-full z-40 mt-1 max-h-72 overflow-hidden rounded-lg border border-border bg-background-quaternary py-1 text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
+      className="fixed z-[60] overflow-hidden rounded-lg border border-border bg-background-quaternary py-1 text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
+      style={style}
     >
       {loading && items.length === 0 ? (
         <div className="flex items-center gap-2 px-3 py-2 text-foreground-muted">
@@ -1303,7 +1396,7 @@ function SkillShortcutMenu({
       ) : items.length === 0 && showEmpty ? (
         <div className="px-3 py-2 text-foreground-muted">{labels.noResults}</div>
       ) : items.length === 0 ? null : (
-        <div className="max-h-72 overflow-y-auto">
+        <div className="overflow-y-auto" style={{ maxHeight: position.maxHeight }}>
           {items.map((item, index) => {
             const active = index === activeIndex;
             return (
@@ -1342,7 +1435,8 @@ function SkillShortcutMenu({
           })}
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
 
