@@ -185,9 +185,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                 // (min-h-8 keeps branch-less rows at the original 32px). `relative`
                 // anchors the compact branch gutter inside the pl-8 icon column.
                 'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1',
-                taskIndentClass,
-                isMultiAgent &&
-                  'bg-amber-500/[0.07] ring-1 ring-inset ring-amber-500/20 hover:bg-amber-500/[0.11] data-[active=true]:ring-amber-500/45'
+                taskIndentClass
               )}
               isActive={isActive}
               onMouseDown={(e) => e.preventDefault()}
@@ -432,9 +430,7 @@ function MultiAgentTaskIcon({ label, className }: { label: string; className?: s
         className
       )}
     >
-      <span className="inline-flex size-4 items-center justify-center rounded-sm bg-amber-500/15 ring-1 ring-inset ring-amber-500/25">
-        <Users className="size-3" />
-      </span>
+      <Users className="size-4" />
     </span>
   );
 }
