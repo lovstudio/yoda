@@ -993,7 +993,7 @@
     "teamLeader": "leader",
     "teamManageHint": "Manage teams in Library → Agent Teams.",
     "modelDefault": "Default",
-    "runHostAria": "Run host",
+    "runHostAria": "Choose run host",
     "runHostLocal": "Local host",
     "runHostSsh": "SSH host",
     "agentLabel": "Agent",

@@ -97,6 +97,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@renderer/lib/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
@@ -365,6 +371,7 @@ export const HomeComposer = observer(function HomeComposer({
   const parentTarget = submitTarget.kind === 'new-task' ? (submitTarget.parentTask ?? null) : null;
 
   const projectManager = getProjectManagerStore();
+  const showAddProjectModal = useShowModal('addProjectModal');
 
   const { params: homeParams, setParams: setHomeParams } = useParams('home');
   const homeProjectId = homeParams.projectId;
@@ -501,6 +508,35 @@ export const HomeComposer = observer(function HomeComposer({
       : 'no-worktree';
   const selectedBranchRunsInPlace = selectedBranchSubmitKind === 'no-worktree';
   const runHostKind: RunHostKind = projectData?.type === 'ssh' ? 'ssh' : 'local';
+  const findProjectIdByRunHost = useCallback(
+    (nextKind: RunHostKind): string | null => {
+      for (const [id, store] of projectManager.projects) {
+        const candidate = asMounted(store);
+        if (!candidate || candidate.data.isInternal) continue;
+        if ((nextKind === 'ssh') === (candidate.data.type === 'ssh')) return id;
+      }
+      return null;
+    },
+    [projectManager.projects]
+  );
+  const openAddProjectForRunHost = useCallback(
+    (nextKind: RunHostKind) => {
+      showAddProjectModal({ strategy: nextKind, mode: 'pick' });
+    },
+    [showAddProjectModal]
+  );
+  const selectRunHostProject = useCallback(
+    (nextKind: RunHostKind) => {
+      if (nextKind === runHostKind) return;
+      const nextProjectId = findProjectIdByRunHost(nextKind);
+      if (nextProjectId) {
+        setSelectedProjectId(nextProjectId);
+        return;
+      }
+      openAddProjectForRunHost(nextKind);
+    },
+    [findProjectIdByRunHost, openAddProjectForRunHost, runHostKind, setSelectedProjectId]
+  );
   const strategyLabels = useMemo(
     () => ({
       newBranchTitle: t('home.strategyNewBranchTitle', { branch: selectedBranchLabel }),
@@ -2075,26 +2111,35 @@ export const HomeComposer = observer(function HomeComposer({
             hidden while comparing. */}
         {!taskScopedTarget && mounted && runMode === 'normal' && compareVariants.length > 0 && (
           <div className="flex flex-col gap-2">
-            {compareVariants.map((variant, index) => (
-              <CompareVariantRow
-                key={variant.id}
-                variant={variant}
-                strategyLabels={strategyLabels}
-                runHostKind={
-                  asMounted(
-                    variant.projectId ? projectManager.projects.get(variant.projectId) : undefined
-                  )?.data.type === 'ssh'
-                    ? 'ssh'
-                    : 'local'
-                }
-                modelLabel={compareModelLabel}
-                renderSettings={renderComposerSettingsButton}
-                trailing={index === 0 ? renderAddCompareButton() : undefined}
-                onChange={(patch) => updateVariant(variant.id, patch)}
-                onRemove={() => removeVariant(variant.id)}
-                onReorder={reorderVariant}
-              />
-            ))}
+            {compareVariants.map((variant, index) => {
+              const variantRunHostKind: RunHostKind =
+                asMounted(
+                  variant.projectId ? projectManager.projects.get(variant.projectId) : undefined
+                )?.data.type === 'ssh'
+                  ? 'ssh'
+                  : 'local';
+              return (
+                <CompareVariantRow
+                  key={variant.id}
+                  variant={variant}
+                  strategyLabels={strategyLabels}
+                  runHostKind={variantRunHostKind}
+                  modelLabel={compareModelLabel}
+                  renderSettings={renderComposerSettingsButton}
+                  trailing={index === 0 ? renderAddCompareButton() : undefined}
+                  onChange={(patch) => updateVariant(variant.id, patch)}
+                  onRunHostChange={(nextKind) => {
+                    if (nextKind === variantRunHostKind) return;
+                    const nextProjectId = findProjectIdByRunHost(nextKind);
+                    if (nextProjectId)
+                      updateVariant(variant.id, { projectId: nextProjectId, baseBranch: null });
+                    else openAddProjectForRunHost(nextKind);
+                  }}
+                  onRemove={() => removeVariant(variant.id)}
+                  onReorder={reorderVariant}
+                />
+              );
+            })}
           </div>
         )}
         {compareVariants.length === 0 && (
@@ -2122,7 +2167,10 @@ export const HomeComposer = observer(function HomeComposer({
                 }
               />
             )}
-            <RunHostSelector kind={runHostKind} />
+            <RunHostSelector
+              kind={runHostKind}
+              onSelectKind={isProjectLocked ? undefined : selectRunHostProject}
+            />
             {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
             {!taskScopedTarget && mounted && runMode === 'team' && (
               <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
@@ -2211,6 +2259,7 @@ function CompareVariantRow({
   renderSettings,
   trailing,
   onChange,
+  onRunHostChange,
   onRemove,
   onReorder,
 }: {
@@ -2221,6 +2270,7 @@ function CompareVariantRow({
   renderSettings: () => ReactNode;
   trailing?: ReactNode;
   onChange: (patch: Partial<CompareVariant>) => void;
+  onRunHostChange?: (kind: RunHostKind) => void;
   onRemove: () => void;
   onReorder: (fromId: string, toId: string) => void;
 }) {
@@ -2269,7 +2319,7 @@ function CompareVariantRow({
           </ComboboxTrigger>
         }
       />
-      {variant.projectId && <RunHostSelector kind={runHostKind} />}
+      {variant.projectId && <RunHostSelector kind={runHostKind} onSelectKind={onRunHostChange} />}
       {variant.projectId && (
         <BaseBranchChip
           projectId={variant.projectId}
@@ -2596,6 +2646,7 @@ interface TaskScopedProjectButtonProps {
 
 interface RunHostSelectorProps {
   kind: RunHostKind;
+  onSelectKind?: (kind: RunHostKind) => void;
 }
 
 interface RunModeOption {
@@ -3254,19 +3305,55 @@ function Chip({ icon: Icon, children }: ChipProps) {
   );
 }
 
-function RunHostSelector({ kind }: RunHostSelectorProps) {
+function RunHostSelector({ kind, onSelectKind }: RunHostSelectorProps) {
   const { t } = useTranslation();
-  const label = kind === 'ssh' ? t('home.runHostSsh') : t('home.runHostLocal');
-  const Icon = kind === 'ssh' ? Server : Monitor;
+  const options: Array<{
+    kind: RunHostKind;
+    icon: ComponentType<{ className?: string }>;
+    label: string;
+  }> = [
+    { kind: 'local', icon: Monitor, label: t('home.runHostLocal') },
+    { kind: 'ssh', icon: Server, label: t('home.runHostSsh') },
+  ];
+  const current = options.find((option) => option.kind === kind) ?? options[0];
+  const CurrentIcon = current.icon;
 
   return (
-    <span
-      aria-label={t('home.runHostAria')}
-      className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground"
-    >
-      <Icon className="size-3.5 text-foreground-muted" />
-      <span>{label}</span>
-    </span>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label={t('home.runHostAria')}
+            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2"
+          >
+            <CurrentIcon className="size-3.5 text-foreground-muted" />
+            <span>{current.label}</span>
+            <ChevronDown className="size-3 text-foreground-muted" />
+          </button>
+        }
+      />
+      <DropdownMenuContent align="start" className="w-48 p-1.5">
+        {options.map((option) => {
+          const Icon = option.icon;
+          const active = option.kind === kind;
+          return (
+            <DropdownMenuItem
+              key={option.kind}
+              disabled={!onSelectKind || active}
+              onClick={() => onSelectKind?.(option.kind)}
+              className="gap-2 rounded-md px-2.5 py-2"
+            >
+              <Icon className="size-4 shrink-0 text-foreground-muted" />
+              <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                {option.label}
+              </span>
+              {active && <Check className="size-3.5 shrink-0 text-foreground-muted" />}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

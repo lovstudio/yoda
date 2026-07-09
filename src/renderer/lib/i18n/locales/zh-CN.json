@@ -993,7 +993,7 @@
     "teamLeader": "leader",
     "teamManageHint": "在 资源库 → 智能体团队 中管理团队。",
     "modelDefault": "默认",
-    "runHostAria": "运行宿主机",
+    "runHostAria": "选择运行宿主机",
     "runHostLocal": "本机",
     "runHostSsh": "SSH 主机",
     "agentLabel": "Agent",
