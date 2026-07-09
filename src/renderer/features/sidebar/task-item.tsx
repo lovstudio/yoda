@@ -115,6 +115,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const branchDisplay = sidebarStore.taskBranchDisplay;
   const taskIndentClass =
     rowVariant === 'underProject' ? (hasRootToggle ? undefined : 'pl-8') : 'pl-2';
+  const multiAgentLabel = t('sidebar.multiAgentTask');
+  const showMultiAgentIconInReservedSlot =
+    isMultiAgent && rowVariant === 'underProject' && treeDepth === 0 && !hasRootToggle;
+  const showMultiAgentIconInline = isMultiAgent && !showMultiAgentIconInReservedSlot;
 
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
@@ -278,6 +282,13 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                     )}
                   />
                 )}
+                {showMultiAgentIconInReservedSlot && (
+                  <MultiAgentTaskIcon
+                    label={multiAgentLabel}
+                    className="absolute left-1 top-1/2 -translate-y-1/2"
+                  />
+                )}
+                {showMultiAgentIconInline && <MultiAgentTaskIcon label={multiAgentLabel} />}
                 <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
                   <div className="flex min-w-0 items-center gap-1">
                     <span
@@ -296,16 +307,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                     {rowVariant === 'flat' && (
                       <span className="shrink-0 truncate max-w-[8rem] rounded-sm bg-background-tertiary-2 px-1 text-[10px] uppercase tracking-wide text-foreground-tertiary">
                         {projectName}
-                      </span>
-                    )}
-                    {isMultiAgent && (
-                      <span
-                        role="img"
-                        aria-label={t('sidebar.multiAgentTask')}
-                        title={t('sidebar.multiAgentTask')}
-                        className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm bg-amber-500/15 text-amber-700 ring-1 ring-inset ring-amber-500/25 dark:text-amber-300"
-                      >
-                        <Users className="size-3" />
                       </span>
                     )}
                     <RenderPrBadge task={task} />
@@ -419,6 +420,24 @@ const RenderPrBadge = observer(function RenderPrBadge({ task }: { task: TaskStor
   const pr = selectCurrentPr(task.data.prs);
   return pr ? <PrBadge variant="compact" pr={pr} /> : null;
 });
+
+function MultiAgentTaskIcon({ label, className }: { label: string; className?: string }) {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={cn(
+        'inline-flex size-6 shrink-0 items-center justify-center text-amber-700 dark:text-amber-300',
+        className
+      )}
+    >
+      <span className="inline-flex size-4 items-center justify-center rounded-sm bg-amber-500/15 ring-1 ring-inset ring-amber-500/25">
+        <Users className="size-3" />
+      </span>
+    </span>
+  );
+}
 
 /**
  * One indent slot of the terminal-style tree guide. Non-elbow slots draw a
