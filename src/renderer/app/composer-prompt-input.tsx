@@ -9,6 +9,7 @@ import {
   Loader2,
   Mic,
   Paperclip,
+  Search,
   Sparkles,
 } from 'lucide-react';
 import {
@@ -260,6 +261,10 @@ function measureComposerMenuPosition(anchor: HTMLElement): ComposerMenuPosition 
   };
 }
 
+function isTargetInSkillShortcutMenu(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[data-skill-shortcut-menu]') !== null;
+}
+
 function fuzzyMatchScore(text: string, query: string): number | null {
   if (text === query) return 1000;
   if (text.startsWith(query)) return 900 - text.length;
@@ -433,6 +438,7 @@ export function ComposerPromptInput({
   const [pathCompletionError, setPathCompletionError] = useState(false);
   const [activePathCompletionIndex, setActivePathCompletionIndex] = useState(0);
   const [activeSkillShortcutIndex, setActiveSkillShortcutIndex] = useState(0);
+  const [skillShortcutSearchQuery, setSkillShortcutSearchQuery] = useState('');
   const [dismissedSkillShortcutKey, setDismissedSkillShortcutKey] = useState<string | null>(null);
   const pathCompletionRequestRef = useRef(0);
 
@@ -451,7 +457,8 @@ export function ComposerPromptInput({
     : null;
   const filteredSkillShortcutOptions = useMemo(() => {
     if (!activeSkillShortcut) return [];
-    const query = activeSkillShortcut.query.trim();
+    const searchQuery = skillShortcutSearchQuery.trim();
+    const query = searchQuery || activeSkillShortcut.query.trim();
     if (!query) return skillShortcutOptions.slice(0, 50);
     const scored = skillShortcutOptions
       .map((item) => ({ item, score: skillShortcutOptionScore(item, query) }))
@@ -460,7 +467,7 @@ export function ComposerPromptInput({
       )
       .sort((a, b) => b.score - a.score);
     return scored.slice(0, 50).map((entry) => entry.item);
-  }, [activeSkillShortcut, skillShortcutOptions]);
+  }, [activeSkillShortcut, skillShortcutOptions, skillShortcutSearchQuery]);
   const effectiveSkillShortcutIndex =
     filteredSkillShortcutOptions.length === 0
       ? 0
@@ -473,7 +480,18 @@ export function ComposerPromptInput({
     !skillsError &&
     (skillsLoading ||
       filteredSkillShortcutOptions.length > 0 ||
-      activeSkillShortcut.query.length > 0);
+      activeSkillShortcut.query.length > 0 ||
+      skillShortcutSearchQuery.trim().length > 0);
+
+  useEffect(() => {
+    setActiveSkillShortcutIndex(0);
+  }, [activeSkillShortcutKey, skillShortcutSearchQuery]);
+
+  useEffect(() => {
+    if (!skillShortcutMenuOpen && skillShortcutSearchQuery) {
+      setSkillShortcutSearchQuery('');
+    }
+  }, [skillShortcutMenuOpen, skillShortcutSearchQuery]);
 
   useEffect(() => {
     if (!activePathMention || disabled) {
@@ -954,7 +972,8 @@ export function ComposerPromptInput({
                 if (activePathMention) setPathCompletionOpen(true);
               }}
               onKeyUp={(event) => updateSelection(event.currentTarget)}
-              onBlur={() => {
+              onBlur={(event) => {
+                if (isTargetInSkillShortcutMenu(event.relatedTarget)) return;
                 setFocused(false);
                 setPathCompletionOpen(false);
               }}
@@ -1060,12 +1079,29 @@ export function ComposerPromptInput({
                 items={filteredSkillShortcutOptions}
                 activeIndex={effectiveSkillShortcutIndex}
                 loading={skillsLoading}
-                showEmpty={activeSkillShortcut.query.length > 0}
+                searchValue={skillShortcutSearchQuery}
+                showEmpty={
+                  activeSkillShortcut.query.length > 0 || skillShortcutSearchQuery.trim().length > 0
+                }
                 labels={{
                   loading: t('common.loading'),
                   noResults: t('skills.noMatches'),
+                  search: t('common.search'),
+                  searchPlaceholder: t('home.searchSkills'),
                 }}
                 onActiveIndexChange={setActiveSkillShortcutIndex}
+                onDismiss={() => {
+                  setDismissedSkillShortcutKey(activeSkillShortcutKey);
+                  setSkillShortcutSearchQuery('');
+                  requestAnimationFrame(() => {
+                    textareaRef.current?.focus({ preventScroll: true });
+                  });
+                }}
+                onFocusExit={() => {
+                  setFocused(false);
+                  setSkillShortcutSearchQuery('');
+                }}
+                onSearchValueChange={setSkillShortcutSearchQuery}
                 onSelect={(item) => commitSkillShortcut(item.command, activeSkillShortcut)}
               />
             )}
@@ -1319,12 +1355,18 @@ interface SkillShortcutMenuProps {
   items: SkillShortcutOption[];
   activeIndex: number;
   loading: boolean;
+  searchValue: string;
   showEmpty: boolean;
   labels: {
     loading: string;
     noResults: string;
+    search: string;
+    searchPlaceholder: string;
   };
   onActiveIndexChange: (index: number) => void;
+  onDismiss: () => void;
+  onFocusExit: () => void;
+  onSearchValueChange: (value: string) => void;
   onSelect: (item: SkillShortcutOption) => void;
 }
 
@@ -1333,9 +1375,13 @@ function SkillShortcutMenu({
   items,
   activeIndex,
   loading,
+  searchValue,
   showEmpty,
   labels,
   onActiveIndexChange,
+  onDismiss,
+  onFocusExit,
+  onSearchValueChange,
   onSelect,
 }: SkillShortcutMenuProps) {
   const activeItemRef = useRef<HTMLButtonElement>(null);
@@ -1382,12 +1428,61 @@ function SkillShortcutMenu({
     style.top = position.offset;
   }
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      onActiveIndexChange(items.length === 0 ? 0 : (activeIndex + 1) % items.length);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      onActiveIndexChange(items.length === 0 ? 0 : (activeIndex - 1 + items.length) % items.length);
+      return;
+    }
+    if (
+      (event.key === 'Enter' && !isImeComposing(event)) ||
+      (event.key === 'Tab' && items.length > 0)
+    ) {
+      event.preventDefault();
+      const item = items[activeIndex];
+      if (item) onSelect(item);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onDismiss();
+    }
+  };
+
   return createPortal(
     <div
-      role="listbox"
-      className="fixed z-[60] overflow-hidden rounded-lg border border-border bg-background-quaternary py-1 text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
+      data-skill-shortcut-menu
+      className="fixed z-[60] flex flex-col overflow-hidden rounded-lg border border-border bg-background-quaternary text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
       style={style}
+      onBlurCapture={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (isTargetInSkillShortcutMenu(nextTarget)) return;
+        if (nextTarget instanceof Node && anchorRef.current?.contains(nextTarget)) return;
+        onFocusExit();
+      }}
+      onKeyDown={handleKeyDown}
+      onMouseDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
     >
+      <div className="border-b border-border px-2 py-1.5">
+        <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-background px-2 text-foreground-muted focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/40">
+          <Search className="size-3.5 shrink-0" />
+          <span className="sr-only">{labels.search}</span>
+          <input
+            type="search"
+            value={searchValue}
+            aria-label={labels.search}
+            placeholder={labels.searchPlaceholder}
+            onChange={(event) => onSearchValueChange(event.target.value)}
+            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-foreground-muted"
+          />
+        </label>
+      </div>
       {loading && items.length === 0 ? (
         <div className="flex items-center gap-2 px-3 py-2 text-foreground-muted">
           <Loader2 className="size-3.5 animate-spin" />
@@ -1396,7 +1491,7 @@ function SkillShortcutMenu({
       ) : items.length === 0 && showEmpty ? (
         <div className="px-3 py-2 text-foreground-muted">{labels.noResults}</div>
       ) : items.length === 0 ? null : (
-        <div className="overflow-y-auto" style={{ maxHeight: position.maxHeight }}>
+        <div role="listbox" className="min-h-0 overflow-y-auto py-1">
           {items.map((item, index) => {
             const active = index === activeIndex;
             return (
