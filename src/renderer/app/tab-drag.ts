@@ -104,6 +104,11 @@ export function tabDragSource(payload: () => TabDragPayload): TabDragSourceProps
       window.addEventListener('mousemove', onMouseMove, true);
       window.addEventListener('mouseup', onMouseUp, true);
       window.addEventListener('keydown', onKeyDown, true);
+      // A mouseup outside the frameless Electron window is not delivered to
+      // this renderer. Without this guard, that abandoned gesture can be
+      // completed by a later click (such as the task sidebar's add-card menu)
+      // and its click will be swallowed as if it had finished the drag.
+      window.addEventListener('blur', endDrag, { once: true });
     },
   };
 }
@@ -175,6 +180,7 @@ function endDrag(): void {
   window.removeEventListener('mousemove', onMouseMove, true);
   window.removeEventListener('mouseup', onMouseUp, true);
   window.removeEventListener('keydown', onKeyDown, true);
+  window.removeEventListener('blur', endDrag);
   active?.over?.setIsOver(false);
   active?.ghost.remove();
   document.body.style.cursor = '';
