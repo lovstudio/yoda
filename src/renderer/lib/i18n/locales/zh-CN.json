@@ -3066,6 +3066,7 @@
     "contextLastResetLabel": "最近压缩",
     "contextCompactionsLabel": "自动压缩次数",
     "contextLastCompactionLabel": "最近自动压缩",
+    "sessionHistory": "对话记录",
     "compactContext": "压缩上下文",
     "compactingContext": "正在压缩上下文…",
     "compactContextStarted": "已开始压缩上下文",

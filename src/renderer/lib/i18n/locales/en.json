@@ -3066,6 +3066,7 @@
     "contextLastResetLabel": "Last compaction",
     "contextCompactionsLabel": "Automatic compactions",
     "contextLastCompactionLabel": "Last automatic compaction",
+    "sessionHistory": "Prompt history",
     "compactContext": "Compact context",
     "compactingContext": "Compacting context…",
     "compactContextStarted": "Context compaction started",
