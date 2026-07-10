@@ -145,16 +145,28 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             <>
               <span aria-hidden>·</span>
               <span
-                aria-label={t('workspaceRuntime.contextUsage', {
-                  used: formatCompactNumber(sessionContext.usedTokens),
-                  limit: formatCompactNumber(sessionContext.limitTokens),
-                  percent: contextPercent,
-                })}
-                className="shrink-0 font-mono tabular-nums text-foreground-passive"
+                className="flex shrink-0 items-center gap-1.5 font-mono tabular-nums text-foreground-passive"
                 title={contextTitle ?? undefined}
               >
                 {formatCompactNumber(sessionContext.usedTokens)} /{' '}
-                {formatCompactNumber(sessionContext.limitTokens)} · {contextPercent}%
+                {formatCompactNumber(sessionContext.limitTokens)}
+                <span
+                  aria-label={t('workspaceRuntime.contextUsage', {
+                    used: formatCompactNumber(sessionContext.usedTokens),
+                    limit: formatCompactNumber(sessionContext.limitTokens),
+                    percent: contextPercent,
+                  })}
+                  aria-valuemax={100}
+                  aria-valuemin={0}
+                  aria-valuenow={contextPercent}
+                  className="h-1 w-9 overflow-hidden rounded-full bg-foreground-muted/20"
+                  role="progressbar"
+                >
+                  <span
+                    className="block h-full rounded-full bg-foreground-muted/80 transition-[width] duration-300"
+                    style={{ width: `${Math.min(100, Math.max(0, contextPercent))}%` }}
+                  />
+                </span>
               </span>
             </>
           ) : null}
