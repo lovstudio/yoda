@@ -328,6 +328,8 @@ export const runtimeCustomConfigEntrySchema = z.object({
   sessionIdOnResumeOnly: z.boolean().optional(),
   extraArgs: z.string().optional(),
   env: z.record(z.string(), z.string()).optional(),
+  /** Default model for new sessions when an Agent/slot does not override it. */
+  defaultModel: z.string().optional(),
   namingModel: z.string().optional(),
   namingCommand: z.string().optional(),
 });

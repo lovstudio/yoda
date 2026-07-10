@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { runtimeConfigDefaults } from '@main/core/settings/schema';
-import { buildAgentCommand } from './agent-command';
+import { buildAgentCommand, normalizeRuntimeModelArgs } from './agent-command';
 
 function makeConfig(overrides: Partial<RuntimeCustomConfig> = {}): RuntimeCustomConfig {
   return {
@@ -260,6 +260,132 @@ describe('buildAgentCommand', () => {
 
     expect(result.args).toContain('--model');
     expect(result.args).toContain('Claude Sonnet');
+  });
+
+  it('uses the runtime default model when the Agent does not select one', () => {
+    const result = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: { ...runtimeConfigDefaults.codex, defaultModel: 'gpt-5.6-codex' },
+      sessionId: 'conv-1',
+    });
+
+    expect(result.args).toContain('--model');
+    expect(result.args).toContain('gpt-5.6-codex');
+  });
+
+  it('lets the Agent model override the runtime default and does not add it on resume', () => {
+    const providerConfig = { ...runtimeConfigDefaults.codex, defaultModel: 'gpt-5.6-codex' };
+    const fresh = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig,
+      model: 'o4-mini',
+      sessionId: 'conv-1',
+    });
+    const resumed = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig,
+      model: 'o4-mini',
+      sessionId: 'conv-1',
+      isResuming: true,
+    });
+
+    expect(fresh.args).toContain('o4-mini');
+    expect(fresh.args).not.toContain('gpt-5.6-codex');
+    expect(resumed.args).not.toContain('--model');
+  });
+
+  it('keeps only the Agent model when defaults and extra args also select models', () => {
+    const result = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: {
+        ...runtimeConfigDefaults.codex,
+        defaultArgs: ['--model', 'default-args-model'],
+        defaultModel: 'runtime-default-model',
+        extraArgs: '--model=extra-args-model',
+      },
+      model: 'agent-model',
+      initialPrompt: 'Fix the issue',
+      sessionId: 'conv-1',
+    });
+
+    expect(result.args).toEqual(['--model', 'agent-model', 'Fix the issue']);
+  });
+
+  it('removes short model aliases when an Agent model is selected', () => {
+    const result = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: {
+        ...runtimeConfigDefaults.codex,
+        defaultArgs: ['-m=default-args-model'],
+        extraArgs: '-m extra-args-model',
+      },
+      model: 'agent-model',
+      sessionId: 'conv-1',
+    });
+
+    expect(result.args).toEqual(['--model', 'agent-model']);
+  });
+
+  it('lets the runtime default model override model values in existing args', () => {
+    const result = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: {
+        ...runtimeConfigDefaults.codex,
+        defaultArgs: ['--model=default-args-model'],
+        defaultModel: 'runtime-default-model',
+        extraArgs: '--model extra-args-model',
+      },
+      sessionId: 'conv-1',
+    });
+
+    expect(result.args).toEqual(['--model', 'runtime-default-model']);
+  });
+
+  it('uses the last existing model value when no Agent or runtime default is set', () => {
+    const result = buildAgentCommand({
+      runtimeId: 'claude',
+      providerConfig: makeConfig({
+        defaultArgs: ['--model', 'default-args-model'],
+        extraArgs: '--model=extra-args-model',
+      }),
+      sessionId: 'conv-1',
+    });
+
+    expect(result.args).toEqual(['--session-id', 'conv-1', '--model', 'extra-args-model']);
+  });
+
+  it('normalizes equals-form and multi-token model flags', () => {
+    expect(
+      normalizeRuntimeModelArgs(
+        ['--config', 'model=old-model', '--verbose', '--config', 'model', 'new-model'],
+        '--config model'
+      )
+    ).toEqual(['--verbose', '--config', 'model', 'new-model']);
+    expect(normalizeRuntimeModelArgs(['--model', 'old-model'], '--model=', 'new-model')).toEqual([
+      '--model=new-model',
+    ]);
+  });
+
+  it('does not normalize or inject model arguments while resuming', () => {
+    const result = buildAgentCommand({
+      runtimeId: 'claude',
+      providerConfig: makeConfig({
+        defaultArgs: ['--model', 'default-args-model'],
+        defaultModel: 'runtime-default-model',
+        extraArgs: '--model=extra-args-model',
+      }),
+      model: 'agent-model',
+      sessionId: 'conv-1',
+      isResuming: true,
+    });
+
+    expect(result.args).toEqual([
+      '--model',
+      'default-args-model',
+      '--resume',
+      'conv-1',
+      '--model=extra-args-model',
+    ]);
   });
 
   it('rejects shell control syntax that makes managed args ambiguous', () => {

@@ -2173,6 +2173,32 @@
     "docs": "文档",
     "openInFinder": "打开",
     "unset": "未设置",
+    "runtimeInfo": {
+      "version": "版本",
+      "latestVersion": "最新 v{{version}}",
+      "updateAvailable": "可更新至 v{{version}}",
+      "model": "模型",
+      "executable": "可执行文件",
+      "config": "配置",
+      "auth": "认证",
+      "authProviders": {
+        "official-subscription": "官方订阅",
+        "official-api": "官方 API",
+        "yoda-maas": "Yoda MaaS"
+      },
+      "configDetected": "已检测",
+      "configMissing": "尚未创建",
+      "clientDefault": "客户端默认",
+      "agentOverride": "Agent 覆盖",
+      "yodaDefault": "Yoda 默认",
+      "cliConfig": "CLI 配置",
+      "cliDefault": "CLI 默认",
+      "openCli": "打开 CLI",
+      "update": "更新",
+      "doctor": "诊断",
+      "refresh": "刷新运行时信息",
+      "manage": "管理运行时"
+    },
     "tabs": {
       "account": "Auth",
       "maas": "客户端",
@@ -2231,7 +2257,7 @@
       "signIn": "登录",
       "switchAccount": "重新登录",
       "loginStarted": "已打开登录流程",
-      "loginStartedDescription": "请在终端完成 {{name}} 登录，然后重新检测账号。",
+      "loginStartedDescription": "请在 Yoda 内置终端完成 {{name}} 登录，然后重新检测账号。",
       "loginFailed": "无法启动登录",
       "recheckRuntime": "重新检测",
       "testConnection": "测试连接",
@@ -2322,6 +2348,10 @@
       "execTitle": "执行参数",
       "execDescription": "覆盖 {{name}} 的启动命令、CLI、附加参数等。",
       "editExec": "编辑执行参数",
+      "defaultModelTitle": "默认会话模型",
+      "defaultModelDescription": "当所选 Agent 没有覆盖模型时，新建 {{name}} 会话使用这里的模型。",
+      "defaultModelPlaceholder": "使用 CLI 默认模型",
+      "defaultModelPriority": "优先级：Agent 或 slot 模型 → 当前运行时默认 → CLI 原生默认。",
       "namingTitle": "任务命名",
       "namingDescription": "可选地覆盖 {{name}} 生成自动任务标题和分支 slug 时使用的模型。留空则使用你当前运行该 Agent 时使用的模型。",
       "namingModel": "命名模型覆盖",
@@ -3015,6 +3045,15 @@
     "goBack": "后退",
     "goForward": "前进",
     "toggleLeftSidebar": "切换左侧边栏"
+  },
+  "workspaceRuntime": {
+    "cliTitle": "Yoda 命令行",
+    "cli": "命令行",
+    "newShell": "重新打开干净的 Shell",
+    "manage": "管理运行时",
+    "refresh": "刷新运行时检测",
+    "taskTerminal": "任务终端",
+    "openRuntime": "在 Yoda 内打开 {{name}}"
   },
   "openIn": {
     "failed": "打开失败",

@@ -20,6 +20,7 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
+import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { RadioGroup, RadioGroupItem } from '@renderer/lib/ui/radio-group';
@@ -113,7 +114,7 @@ export const AgentTabAccount: React.FC<AgentTabAccountProps> = observer(function
     mutationFn: () => rpc.runtimeSettings.probeOfficialApi(agentId),
   });
   const startSubscriptionLogin = useMutation({
-    mutationFn: () => rpc.runtimeSettings.startSubscriptionLogin(agentId),
+    mutationFn: () => workspaceShellStore.runRuntimeAction(agentId, 'login'),
     onSuccess: () => {
       toast({
         title: t('agents.account.loginStarted'),

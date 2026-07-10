@@ -210,6 +210,31 @@ export class DependencyManager implements IInitializable {
     return ok(state);
   }
 
+  /** Upgrade an existing dependency and re-probe its actual path/version. */
+  async update(id: DependencyId): Promise<DependencyInstallResult> {
+    const descriptor = getDependencyDescriptor(id);
+    if (!descriptor) {
+      return err({ type: 'unknown-dependency', id });
+    }
+    // Installation and in-place update are separate capabilities. An install
+    // command may be destructive, interactive, or simply unable to upgrade an
+    // existing binary, so never silently substitute it for an update command.
+    const updateCommand = descriptor.updateCommand;
+    if (!updateCommand) {
+      return err({ type: 'no-install-command', id });
+    }
+
+    log.info(`[DependencyManager] Updating ${id}: ${updateCommand}`);
+    const updateResult = await this.runInstallCommand(updateCommand);
+    if (!updateResult.success) return err(updateResult.error);
+
+    const state = await this.probe(id);
+    if (state.status !== 'available') {
+      return err({ type: 'not-detected-after-install', id });
+    }
+    return ok(state);
+  }
+
   private async resolveFirstPath(descriptor: DependencyDescriptor): Promise<string | null> {
     for (const command of descriptor.commands) {
       const path = await resolveCommandPath(command, this.ctx);

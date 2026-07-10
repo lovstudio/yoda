@@ -3244,6 +3244,7 @@ function Agent({
           <div className="flex min-w-0 items-center gap-1">
             <AgentSelector
               value={runtime}
+              model={selectedAgent.model}
               onChange={onChange}
               connectionId={connectionId}
               className="h-7 min-w-0 flex-1 rounded-md border-transparent bg-transparent text-sm transition-colors hover:bg-background-2"

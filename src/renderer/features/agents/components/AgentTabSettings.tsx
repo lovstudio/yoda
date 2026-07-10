@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import type { AgentModelCandidateInferenceResult } from '@shared/runtime-model-candidates';
+import { expandRuntimeHome, resolveRuntimePaths } from '@shared/runtime-paths';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import CustomCommandModal from '@renderer/features/settings/components/CustomCommandModal';
 import StatuslineSettingsCard from '@renderer/features/settings/components/StatuslineSettingsCard';
@@ -15,7 +16,6 @@ import { Input } from '@renderer/lib/ui/input';
 import { Label } from '@renderer/lib/ui/label';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { log } from '@renderer/utils/logger';
-import { expandHome, resolveAgentPaths } from './agent-paths';
 import { AgentSection } from './AgentSection';
 
 export const AgentTabSettings: React.FC<{ agentId: RuntimeId }> = observer(
@@ -23,7 +23,7 @@ export const AgentTabSettings: React.FC<{ agentId: RuntimeId }> = observer(
     const { t } = useTranslation();
     const [customOpen, setCustomOpen] = useState(false);
     const provider = getRuntime(agentId);
-    const paths = resolveAgentPaths(agentId);
+    const paths = resolveRuntimePaths(agentId);
 
     if (!provider) return null;
 
@@ -38,6 +38,8 @@ export const AgentTabSettings: React.FC<{ agentId: RuntimeId }> = observer(
             {t('agents.settings.editExec')}
           </Button>
         </AgentSection>
+
+        <AgentDefaultModelSettings agentId={agentId} agentName={provider.name} />
 
         <AgentNamingSettings agentId={agentId} agentName={provider.name} />
 
@@ -74,6 +76,57 @@ export const AgentTabSettings: React.FC<{ agentId: RuntimeId }> = observer(
     );
   }
 );
+
+const AgentDefaultModelSettings: React.FC<{ agentId: RuntimeId; agentName: string }> = ({
+  agentId,
+  agentName,
+}) => {
+  const { t } = useTranslation();
+  const { value, isLoading, isSaving, update } = useRuntimeSettings(agentId);
+  const applied = value?.defaultModel ?? '';
+  const [draftModel, setDraftModel] = useState<string>();
+  const model = draftModel ?? applied;
+
+  const save = () => {
+    const next: RuntimeCustomConfig = { ...(value ?? {}) };
+    const trimmed = model.trim();
+    if (trimmed) next.defaultModel = trimmed;
+    else delete next.defaultModel;
+    update(next);
+  };
+
+  return (
+    <AgentSection
+      title={t('agents.settings.defaultModelTitle')}
+      description={t('agents.settings.defaultModelDescription', { name: agentName })}
+    >
+      <div className="flex items-center gap-2">
+        <Input
+          value={model}
+          disabled={isLoading || isSaving}
+          onChange={(event) => setDraftModel(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') save();
+          }}
+          placeholder={t('agents.settings.defaultModelPlaceholder')}
+          className="h-8 flex-1 font-mono text-xs"
+        />
+        <Button
+          type="button"
+          size="sm"
+          onClick={save}
+          disabled={isLoading || isSaving || model.trim() === applied}
+        >
+          <Save className="h-3.5 w-3.5" />
+          {t('common.save')}
+        </Button>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {t('agents.settings.defaultModelPriority')}
+      </p>
+    </AgentSection>
+  );
+};
 
 const AgentNamingSettings: React.FC<{ agentId: RuntimeId; agentName: string }> = ({
   agentId,
@@ -253,7 +306,7 @@ const ConfigPathRow: React.FC<{ path: string }> = ({ path }) => {
   const { t } = useTranslation();
   const handleOpen = async () => {
     const home = await rpc.app.getHomeDir();
-    await rpc.app.openIn({ app: 'finder', path: expandHome(path, home) });
+    await rpc.app.openIn({ app: 'finder', path: expandRuntimeHome(path, home) });
   };
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">

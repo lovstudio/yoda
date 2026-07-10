@@ -20,6 +20,11 @@ codex, claude, devin, qwen, droid, gemini, cursor, copilot, amp, opencode, herme
 - keystroke injection behavior
 - resume and session flags
 - optional plan activation and auto-start commands
+- optional runtime-native update commands used by the embedded workspace CLI
+
+Runtime status cards combine dependency probes with `runtimeSettings.getRuntimeSnapshot(...)`;
+keep config/model/update detection in that main-process service rather than reading user config files
+directly from renderer components.
 
 ## Agent Event Classifiers
 

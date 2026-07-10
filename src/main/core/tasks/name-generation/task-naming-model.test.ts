@@ -7,6 +7,12 @@ import {
 } from './task-naming-model';
 
 describe('resolveCurrentAgentModel', () => {
+  it('uses the persisted runtime default when no launch arg overrides it', () => {
+    expect(resolveCurrentAgentModel(config({ defaultModel: 'gpt-5.6-codex' }))).toBe(
+      'gpt-5.6-codex'
+    );
+  });
+
   it('reads --model from extra args', () => {
     expect(resolveCurrentAgentModel(config({ extraArgs: '--model claude-sonnet-4-6' }))).toBe(
       'claude-sonnet-4-6'

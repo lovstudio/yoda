@@ -1,5 +1,5 @@
-import { type ReactNode } from 'react';
-import { useDefaultLayout } from 'react-resizable-panels';
+import { useEffect, type ReactNode } from 'react';
+import { useDefaultLayout, usePanelRef } from 'react-resizable-panels';
 import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { cn } from '@renderer/utils/utils';
@@ -85,17 +85,66 @@ export function WorkspaceLayout({ leftSidebar, mainContent, rightPane }: Workspa
 interface WorkspaceContentLayoutProps {
   titlebarSlot: ReactNode;
   mainPanel: ReactNode;
+  bottomBar?: ReactNode;
+  bottomPane?: ReactNode;
+  isBottomPaneOpen?: boolean;
+  onBottomPaneOpenChange?: (open: boolean) => void;
 }
 
-export function WorkspaceContentLayout({ titlebarSlot, mainPanel }: WorkspaceContentLayoutProps) {
+export function WorkspaceContentLayout({
+  titlebarSlot,
+  mainPanel,
+  bottomBar,
+  bottomPane,
+  isBottomPaneOpen = false,
+  onBottomPaneOpenChange,
+}: WorkspaceContentLayoutProps) {
+  const bottomPanelRef = usePanelRef();
+
+  useEffect(() => {
+    const panel = bottomPanelRef.current;
+    if (!panel) return;
+    if (isBottomPaneOpen && panel.isCollapsed()) panel.expand();
+    if (!isBottomPaneOpen && !panel.isCollapsed()) panel.collapse();
+  }, [bottomPanelRef, isBottomPaneOpen]);
+
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
       <div className="select-none">{titlebarSlot}</div>
-      <div className="flex-1 overflow-hidden bg-background text-foreground">
-        <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
-          {mainPanel}
-        </div>
+      <div className="min-h-0 flex-1 overflow-hidden bg-background text-foreground">
+        <ResizablePanelGroup
+          id="workspace-content-vertical"
+          orientation="vertical"
+          className="min-h-0"
+        >
+          <ResizablePanel
+            id="workspace-content-main"
+            minSize="30%"
+            className="min-h-0 overflow-hidden"
+          >
+            <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
+              {mainPanel}
+            </div>
+          </ResizablePanel>
+          <ResizableHandle className={isBottomPaneOpen ? 'flex' : 'hidden'} />
+          <ResizablePanel
+            id="workspace-content-bottom"
+            panelRef={bottomPanelRef}
+            defaultSize="32%"
+            minSize="120px"
+            collapsedSize="0%"
+            collapsible
+            className="min-h-0 overflow-hidden"
+            onResize={() => {
+              const open = !(bottomPanelRef.current?.isCollapsed() ?? true);
+              if (open !== isBottomPaneOpen) onBottomPaneOpenChange?.(open);
+            }}
+          >
+            {bottomPane}
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
+      {bottomBar}
     </div>
   );
 }

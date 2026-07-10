@@ -2173,6 +2173,32 @@
     "docs": "Docs",
     "openInFinder": "Open",
     "unset": "unset",
+    "runtimeInfo": {
+      "version": "Version",
+      "latestVersion": "Latest v{{version}}",
+      "updateAvailable": "v{{version}} available",
+      "model": "Model",
+      "executable": "Executable",
+      "config": "Config",
+      "auth": "Auth",
+      "authProviders": {
+        "official-subscription": "Official subscription",
+        "official-api": "Official API",
+        "yoda-maas": "Yoda MaaS"
+      },
+      "configDetected": "Detected",
+      "configMissing": "Not created",
+      "clientDefault": "Client default",
+      "agentOverride": "Agent override",
+      "yodaDefault": "Yoda default",
+      "cliConfig": "CLI config",
+      "cliDefault": "CLI default",
+      "openCli": "Open CLI",
+      "update": "Update",
+      "doctor": "Diagnose",
+      "refresh": "Refresh runtime info",
+      "manage": "Manage runtime"
+    },
     "tabs": {
       "account": "Auth",
       "maas": "Client",
@@ -2231,7 +2257,7 @@
       "signIn": "Sign in",
       "switchAccount": "Sign in again",
       "loginStarted": "Login started",
-      "loginStartedDescription": "Finish the {{name}} login flow in the terminal, then re-detect the account.",
+      "loginStartedDescription": "Finish the {{name}} login flow in Yoda's terminal, then re-detect the account.",
       "loginFailed": "Could not start login",
       "recheckRuntime": "Re-detect",
       "testConnection": "Test connection",
@@ -2322,6 +2348,10 @@
       "execTitle": "Execution parameters",
       "execDescription": "Override the launch command, CLI, and extra args for {{name}}.",
       "editExec": "Edit execution",
+      "defaultModelTitle": "Default session model",
+      "defaultModelDescription": "Use this model for new {{name}} sessions when the selected Agent does not override it.",
+      "defaultModelPlaceholder": "Use the CLI default",
+      "defaultModelPriority": "Priority: Agent or slot model → this runtime default → the CLI's native default.",
       "namingTitle": "Task naming",
       "namingDescription": "Optionally override the model {{name}} uses for automatic task titles and branch slugs. Leave it empty to use the model you already run this agent with.",
       "namingModel": "Naming model override",
@@ -3015,6 +3045,15 @@
     "goBack": "Go back",
     "goForward": "Go forward",
     "toggleLeftSidebar": "Toggle left sidebar"
+  },
+  "workspaceRuntime": {
+    "cliTitle": "Yoda CLI",
+    "cli": "CLI",
+    "newShell": "Restart with a clean shell",
+    "manage": "Manage runtime",
+    "refresh": "Refresh runtime detection",
+    "taskTerminal": "Task terminal",
+    "openRuntime": "Open {{name}} inside Yoda"
   },
   "openIn": {
     "failed": "Failed to open",

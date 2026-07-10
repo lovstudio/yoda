@@ -250,6 +250,7 @@ export const LlmProfilesCard: React.FC = () => {
               <div className="w-56 max-w-full shrink-0">
                 <AgentSelector
                   value={selectedProfile.runtimeId}
+                  model={selectedProfile.model}
                   onChange={(runtimeId: RuntimeId) =>
                     updateProfile(selectedProfile.id, {
                       runtimeId,

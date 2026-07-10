@@ -130,6 +130,7 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
               <Label className="text-xs">{t('agentManager.preferredRuntime')}</Label>
               <AgentSelector
                 value={draft.preferredRuntime}
+                model={draft.model}
                 onChange={(provider) => set('preferredRuntime', provider)}
                 className="h-9 text-sm"
               />

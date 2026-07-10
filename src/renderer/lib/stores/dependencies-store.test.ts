@@ -17,6 +17,7 @@ vi.mock('../../lib/ipc', () => ({
     dependencies: {
       getAll: vi.fn(async () => ({})),
       install: vi.fn(),
+      update: vi.fn(),
       probeAll: vi.fn(async () => {}),
       probeCategory: vi.fn(async () => {}),
     },
@@ -64,6 +65,18 @@ describe('DependenciesStore install', () => {
     expect(rpc.dependencies.install).toHaveBeenCalledWith('codex', undefined);
     expect(rpc.dependencies.probeCategory).toHaveBeenCalledWith('agent', undefined);
     expect(store.local.data?.codex?.status).toBe('available');
+  });
+
+  it('updates and refreshes an installed runtime', async () => {
+    vi.mocked(rpc.dependencies.update).mockResolvedValueOnce(ok(availableAgent('codex')));
+    vi.mocked(rpc.dependencies.getAll).mockResolvedValueOnce({ codex: availableAgent('codex') });
+    const store = new DependenciesStore();
+
+    const result = await store.update('codex');
+
+    expect(result.success).toBe(true);
+    expect(rpc.dependencies.update).toHaveBeenCalledWith('codex', undefined);
+    expect(store.local.data?.codex?.version).toBe('1.0.0');
   });
 
   it('does not update local dependency state after a failed install result', async () => {

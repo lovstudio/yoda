@@ -35,6 +35,8 @@ interface AgentSelectorProps {
   connectionId?: string;
   installable?: boolean;
   autoFocus?: boolean;
+  /** Agent/slot model override that will be passed to this runtime. */
+  model?: string | null;
 }
 
 export const AgentSelector: React.FC<AgentSelectorProps> = observer(
@@ -46,10 +48,11 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
     connectionId,
     installable = true,
     autoFocus = false,
+    model,
   }) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
-    const { groups, installingAgents, installAgent } = useAgentAvailability({
+    const { groups, dependencyData, installingAgents, installAgent } = useAgentAvailability({
       connectionId,
       value,
     });
@@ -57,6 +60,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
 
     const selectedConfig = value ? agentConfig[value] : null;
     const selectedOption = value ? allOptions.find((o) => o.value === value) : null;
+    const selectedDependency = value ? dependencyData?.[value] : undefined;
 
     function handleValueChange(item: AgentOption | null) {
       if (!item || disabled || item.disabled) return;
@@ -96,6 +100,11 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
                 className="h-4 w-4 shrink-0 rounded-sm"
               />
               <span className="flex-1 truncate text-left">{selectedConfig.name}</span>
+              {selectedDependency?.version ? (
+                <span className="shrink-0 text-[10px] tabular-nums text-foreground-muted">
+                  v{selectedDependency.version}
+                </span>
+              ) : null}
             </>
           ) : (
             <span className="flex-1 truncate text-foreground-muted">
@@ -113,9 +122,16 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
                 <ComboboxCollection>
                   {(item: AgentOption) => {
                     const config = agentConfig[item.agentId];
+                    const dependency = dependencyData?.[item.agentId];
                     const showInstall = canInstallAgentOption(item, installable);
                     return (
-                      <AgentTooltipRow key={item.value} id={item.agentId}>
+                      <AgentTooltipRow
+                        key={item.value}
+                        id={item.agentId}
+                        dependency={dependency}
+                        model={model}
+                        connectionId={connectionId}
+                      >
                         <ComboboxItem
                           value={item}
                           disabled={isComboboxOptionDisabled(item)}
@@ -146,6 +162,11 @@ export const AgentSelector: React.FC<AgentSelectorProps> = observer(
                           >
                             {item.label}
                           </span>
+                          {dependency?.version ? (
+                            <span className="shrink-0 text-[10px] tabular-nums text-foreground-muted">
+                              v{dependency.version}
+                            </span>
+                          ) : null}
                           <AgentInstallButton
                             agentId={item.agentId}
                             canInstall={installable}

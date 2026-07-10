@@ -136,6 +136,36 @@ describe('DependencyManager install', () => {
     if (result.success) expect(result.data.status).toBe('available');
   });
 
+  it('uses the runtime-native update command before re-probing', async () => {
+    const runInstallCommand = vi.fn(async () => ok<void>());
+    const manager = new DependencyManager(availableCtx, {
+      emitEvents: false,
+      runInstallCommand,
+    });
+
+    const result = await manager.update('codex');
+
+    expect(runInstallCommand).toHaveBeenCalledWith('codex update');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.version).toBe('1.2.3');
+  });
+
+  it('does not treat an install command as an in-place update command', async () => {
+    const runInstallCommand = vi.fn(async () => ok<void>());
+    const manager = new DependencyManager(availableCtx, {
+      emitEvents: false,
+      runInstallCommand,
+    });
+
+    const result = await manager.update('claude');
+
+    expect(runInstallCommand).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      success: false,
+      error: { type: 'no-install-command', id: 'claude' },
+    });
+  });
+
   it('emits dependency updates with the SSH connection id', async () => {
     const manager = new DependencyManager(availableCtx, {
       connectionId: 'ssh-1',

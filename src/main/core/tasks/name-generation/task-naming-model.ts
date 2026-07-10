@@ -26,7 +26,7 @@ export function resolveCurrentAgentModel(providerConfig: RuntimeCustomConfig | u
     }
   }
 
-  return '';
+  return providerConfig?.defaultModel?.trim() ?? '';
 }
 
 export function resolvePreferredTaskNamingModel({

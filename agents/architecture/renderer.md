@@ -6,6 +6,8 @@
 - `src/renderer/views/Workspace.tsx`: main post-onboarding shell
 - `src/renderer/components/MainContent.tsx`: switches between views (projects, tasks, settings, skills, MCP, home)
 - `src/renderer/core/ipc.ts`: typed RPC client (`rpc`) and event emitter (`events`) used throughout renderer
+- `src/renderer/app/workspace-runtime-bar.tsx`: shell-level runtime status/actions and embedded CLI entry
+- `src/renderer/app/workspace-shell-panel.tsx`: cross-route embedded CLI drawer, separate from task terminals
 
 ## View Areas (`src/renderer/views/`)
 

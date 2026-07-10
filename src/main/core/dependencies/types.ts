@@ -23,6 +23,8 @@ export interface DependencyDescriptor {
   installHint?: string;
   /** Machine-executable install command, e.g. "npm install -g @openai/codex". */
   installCommand?: string;
+  /** Runtime-native in-place update command. */
+  updateCommand?: string;
   /** Resolve a machine-executable install command from the execution target. */
   resolveInstallCommand?: (ctx: IExecutionContext) => Promise<string | undefined>;
   /**
