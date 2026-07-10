@@ -1,4 +1,4 @@
-import { Gauge, Terminal } from 'lucide-react';
+import { Brain, Gauge, Terminal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -203,9 +203,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                     limit: formatCompactNumber(sessionContext.limitTokens),
                     percent: contextPercent,
                   })}
-                  className="flex h-5 shrink-0 items-center rounded-sm px-1 transition-colors hover:bg-background-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+                  className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
                   title={contextTitle ?? undefined}
                 >
+                  <Brain className="size-3.5" />
+                  <span>{t('workspaceRuntime.contextUsageShort')}</span>
                   <ContextProgressBar percent={contextPercent} tone={contextTone} compact />
                 </PopoverTrigger>
                 <PopoverContent

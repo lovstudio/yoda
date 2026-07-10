@@ -3052,6 +3052,7 @@
     "currentSession": "当前会话",
     "currentSessionTitle": "当前会话使用 {{name}}",
     "contextUsage": "上下文 {{used}}/{{limit}}（{{percent}}%）",
+    "contextUsageShort": "上下文",
     "contextUsageTitle": "当前上下文：{{used}} / {{limit}}（{{percent}}%）",
     "contextPopoverTitle": "上下文窗口",
     "contextPopoverDescription": "当前会话记忆占用",

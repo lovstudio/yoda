@@ -3052,6 +3052,7 @@
     "currentSession": "Current session",
     "currentSessionTitle": "Current session uses {{name}}",
     "contextUsage": "Context {{used}}/{{limit}} ({{percent}}%)",
+    "contextUsageShort": "Context",
     "contextUsageTitle": "Current context: {{used}} / {{limit}} ({{percent}}%)",
     "contextPopoverTitle": "Context window",
     "contextPopoverDescription": "Active session memory",
