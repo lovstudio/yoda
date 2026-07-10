@@ -24,6 +24,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import type { ConversationStore } from './conversation-manager';
+import { shouldAutoResumeConversation } from './conversation-session-utils';
 
 export function getResumeInitialSize(
   pty: FrontendPty,
@@ -75,12 +76,13 @@ export const ConversationSession = observer(function ConversationSession({
   const session = conversation.session;
   const sessionId = session?.sessionId ?? null;
   const sessionStatus = session?.status;
+  const sessionPty = session?.pty ?? null;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<{ focus: () => void }>(null);
   const focusPendingRef = useRef(false);
-  const lastAutoResumeSessionRef = useRef<string | null>(null);
+  const lastAutoResumePtyRef = useRef<FrontendPty | null>(null);
 
   const {
     isSearchOpen,
@@ -119,15 +121,25 @@ export const ConversationSession = observer(function ConversationSession({
   // Resume the PTY when visible + ready (once per session id).
   useEffect(() => {
     if (!isVisible) {
-      lastAutoResumeSessionRef.current = null;
+      lastAutoResumePtyRef.current = null;
       return;
     }
-    if (!sessionId || session?.status !== 'ready' || !session.pty) return;
-    if (lastAutoResumeSessionRef.current === sessionId) return;
-    lastAutoResumeSessionRef.current = sessionId;
-    const initialSize = getResumeInitialSize(session.pty, terminalContainerRef.current);
+    if (
+      !sessionPty ||
+      !shouldAutoResumeConversation({
+        isVisible,
+        sessionId,
+        sessionStatus,
+        sessionPty,
+        lastAutoResumePty: lastAutoResumePtyRef.current,
+      })
+    ) {
+      return;
+    }
+    lastAutoResumePtyRef.current = sessionPty;
+    const initialSize = getResumeInitialSize(sessionPty, terminalContainerRef.current);
     void conversations.resumeConversation(conversation.data.id, initialSize);
-  }, [conversation, session, sessionId, sessionStatus, conversations, isVisible]);
+  }, [conversation, conversations, isVisible, sessionId, sessionPty, sessionStatus]);
 
   const markConversationSubmitted = (forceWorking = false) => {
     conversation.setWorking({ force: forceWorking });
