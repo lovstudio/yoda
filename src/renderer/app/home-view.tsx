@@ -413,11 +413,14 @@ export const HomeComposer = observer(function HomeComposer({
     if (!homeProjectId || isProjectLocked) return;
     if (!homeRouteProject?.data) return;
     void projectManager.mountProject(homeProjectId).catch(() => {});
-    updateDraft(
-      homeProjectId === draftProjectId
-        ? { selectedProjectId: homeProjectId }
-        : { selectedProjectId: homeProjectId, baseBranch: null }
-    );
+    if (homeProjectId !== draftProjectId) {
+      updateDraft({ selectedProjectId: homeProjectId, baseBranch: null });
+      return;
+    }
+    // Keep the navigation-scoped project until the optimistic settings update
+    // has reached the draft. Clearing it first leaves a render with neither
+    // source, so the composer briefly becomes projectless and disables modes
+    // that require a project.
     setHomeParams({ projectId: undefined });
   }, [
     homeProjectId,
