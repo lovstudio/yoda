@@ -63,11 +63,10 @@ export async function deleteWorkspace(id: string): Promise<void> {
 }
 
 export async function reorderWorkspaces(orderedIds: string[]): Promise<void> {
-  await db.transaction(async (tx) => {
+  db.transaction((tx) => {
     const now = new Date().toISOString();
     for (let i = 0; i < orderedIds.length; i++) {
-      await tx
-        .update(workspaces)
+      tx.update(workspaces)
         .set({ sortOrder: i, updatedAt: now })
         .where(eq(workspaces.id, orderedIds[i]));
     }
