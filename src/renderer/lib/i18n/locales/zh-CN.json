@@ -3050,6 +3050,7 @@
     "terminal": "终端",
     "currentSession": "当前会话",
     "currentSessionTitle": "当前会话使用 {{name}}",
+    "contextUsage": "上下文 {{tokens}}",
     "actions": {
       "open": "{{name}} 交互控制台",
       "update": "更新 {{name}}",

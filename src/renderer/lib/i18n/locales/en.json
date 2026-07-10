@@ -3050,6 +3050,7 @@
     "terminal": "Terminal",
     "currentSession": "Current session",
     "currentSessionTitle": "Current session uses {{name}}",
+    "contextUsage": "Context {{tokens}}",
     "actions": {
       "open": "{{name}} console",
       "update": "Update {{name}}",

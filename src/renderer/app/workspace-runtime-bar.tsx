@@ -2,9 +2,12 @@ import { Terminal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { getRuntime, isValidRuntimeId, type RuntimeId } from '@shared/runtime-registry';
+import { tokenBreakdownTitle } from '@renderer/features/tasks/components/task-stats-strip';
+import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
+import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
 
 export function explicitConversationRuntimeId(value: unknown): RuntimeId | null {
@@ -25,6 +28,17 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     provisionedTask?.taskView.tabManager.activeConversation?.data.runtimeId
   );
   const runtime = runtimeId ? getRuntime(runtimeId) : null;
+  const activeConversationId = provisionedTask?.taskView.tabManager.activeConversationId;
+  const { data: taskStats } = useTaskStats(params?.projectId ?? '', params?.taskId ?? '', {
+    enabled: Boolean(
+      route === 'task' && params?.projectId && params.taskId && activeConversationId
+    ),
+  });
+  const sessionTokens =
+    route === 'task' && activeConversationId
+      ? (taskStats?.conversations.find((item) => item.conversationId === activeConversationId)
+          ?.tokens ?? null)
+      : null;
   const connectionId = provisionedTask?.workspace.sshConnectionId;
   const dependency = runtimeId
     ? connectionId
@@ -76,6 +90,19 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           <span className="truncate text-foreground">{runtime?.name ?? runtimeId}</span>
           {dependency?.version ? (
             <span className="shrink-0 tabular-nums">v{dependency.version}</span>
+          ) : null}
+          {sessionTokens ? (
+            <>
+              <span aria-hidden>·</span>
+              <span
+                className="shrink-0 rounded border border-border/70 bg-background px-1 py-0.5 text-foreground-passive"
+                title={tokenBreakdownTitle(sessionTokens, t)}
+              >
+                {t('workspaceRuntime.contextUsage', {
+                  tokens: formatCompactNumber(sessionTokens.total),
+                })}
+              </span>
+            </>
           ) : null}
         </div>
       ) : null}
