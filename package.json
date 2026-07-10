@@ -131,7 +131,7 @@
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.24.2",
     "drizzle-orm": "^0.32.1",
-    "electron": "^41.7.1",
+    "electron": "^42.0.0",
     "electron-builder": "^26.8.1",
     "electron-updater": "^6.3.9",
     "electron-vite": "^5.0.0",
@@ -193,12 +193,15 @@
   "dependencies": {
     "@parcel/watcher": "^2.5.6",
     "ai": "^7.0.8",
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^12.11.1",
     "node-pty": "1.1.0",
     "ssh2": "^1.17.0",
     "zod": "^4.3.6"
   },
   "pnpm": {
+    "overrides": {
+      "node-abi": "^4.31.0"
+    },
     "onlyBuiltDependencies": [
       "better-sqlite3",
       "node-pty",

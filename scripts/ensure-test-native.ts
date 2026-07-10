@@ -1,8 +1,8 @@
 /**
  * Ensures a Node-ABI build of better-sqlite3 exists for vitest.
  *
- * postinstall rebuilds better-sqlite3 against Electron's V8 ABI (e.g. 145 for
- * Electron 41), but vitest runs in plain Node (ABI 137). Tests that
+ * postinstall rebuilds better-sqlite3 against Electron's V8 ABI, but vitest
+ * runs in plain Node (ABI 137). Tests that
  * `new Database()` directly fail with NODE_MODULE_VERSION mismatch.
  *
  * This script keeps a Node-ABI copy at a known cache path so vitest can load
