@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.1
+
+### Patch Changes
+
+- Fix the Electron runtime crash on macOS 26 by upgrading Electron and the native rebuild chain.
+
 All notable changes to Yoda will be documented in this file.
 
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
