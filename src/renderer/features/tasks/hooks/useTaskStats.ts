@@ -11,7 +11,11 @@ const taskStatsQueryKey = (projectId: string, taskId: string) =>
  * Refreshed when an agent session for this task exits — that's when the
  * transcript and diff snapshot move.
  */
-export function useTaskStats(projectId: string, taskId: string, options?: { enabled?: boolean }) {
+export function useTaskStats(
+  projectId: string,
+  taskId: string,
+  options?: { enabled?: boolean; refetchInterval?: number | false }
+) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -26,6 +30,7 @@ export function useTaskStats(projectId: string, taskId: string, options?: { enab
     queryFn: () => rpc.stats.getTaskStats(projectId, taskId),
     staleTime: 30_000,
     refetchOnWindowFocus: true,
+    refetchInterval: options?.refetchInterval,
     enabled: options?.enabled ?? true,
   });
 }

@@ -1,3 +1,4 @@
+import type { SessionContextUsage, SessionRateLimit } from '@shared/stats';
 import { resolveCodexThreadForConversation } from '@main/core/conversations/codex-session-id';
 import {
   readCodexThreadRolloutPath,
@@ -52,6 +53,7 @@ type CumulativeUsage = {
 export function parseCodexUsage(raw: string): SessionTokenUsage | null {
   const entries: UsageEntry[] = [];
   let previous: CumulativeUsage = { input: 0, cached: 0, output: 0, reasoning: 0 };
+  let context: SessionContextUsage | null = null;
   // Rollouts carry the active model on `turn_context` rows; each token_count
   // delta is attributed to the most recent one (ccusage parity).
   let currentModel: string | null = null;
@@ -72,6 +74,11 @@ export function parseCodexUsage(raw: string): SessionTokenUsage | null {
     if (payload?.type !== 'token_count') continue;
     const total = objectValue(objectValue(payload.info)?.total_token_usage);
     if (!total) continue;
+
+    const nextContext = readContextUsage(payload, stringValue(row.timestamp), context);
+    if (nextContext) {
+      context = nextContext;
+    }
 
     const current: CumulativeUsage = {
       input: numberValue(total.input_tokens),
@@ -98,7 +105,50 @@ export function parseCodexUsage(raw: string): SessionTokenUsage | null {
     );
   }
 
-  return aggregateUsageEntries(entries);
+  const usage = aggregateUsageEntries(entries);
+  return usage ? { ...usage, context } : null;
+}
+
+function readContextUsage(
+  payload: Record<string, unknown>,
+  timestamp: string | null,
+  previousContext: SessionContextUsage | null
+): SessionContextUsage | null {
+  const info = objectValue(payload.info);
+  const last = objectValue(info?.last_token_usage);
+  const limitTokens = numberValue(info?.model_context_window);
+  if (!last || limitTokens <= 0) return null;
+
+  const usedTokens = numberValue(last.total_tokens);
+  if (usedTokens <= 0) return null;
+  const reset = previousContext != null && usedTokens < previousContext.usedTokens;
+  return {
+    usedTokens,
+    limitTokens,
+    resetCount: (previousContext?.resetCount ?? 0) + Number(reset),
+    lastResetAt: reset ? timestamp : (previousContext?.lastResetAt ?? null),
+    rateLimits: readRateLimits(objectValue(payload.rate_limits)),
+  };
+}
+
+function readRateLimits(value: Record<string, unknown> | null): SessionRateLimit[] {
+  if (!value) return [];
+  return [value.primary, value.secondary]
+    .map((item) => objectValue(item))
+    .flatMap((item): SessionRateLimit[] => {
+      if (!item) return [];
+      const windowMinutes = numberValue(item.window_minutes);
+      const usedPercent = numberValue(item.used_percent);
+      if (windowMinutes <= 0 || usedPercent < 0) return [];
+      const resetsAtSeconds = numberValue(item.resets_at);
+      return [
+        {
+          windowMinutes,
+          usedPercent,
+          resetsAt: resetsAtSeconds > 0 ? new Date(resetsAtSeconds * 1000).toISOString() : null,
+        },
+      ];
+    });
 }
 
 /**

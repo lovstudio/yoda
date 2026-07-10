@@ -2,6 +2,7 @@ import {
   addTokenBuckets,
   emptyTokenBuckets,
   type DailyTokenUsage,
+  type SessionContextUsage,
   type TokenBuckets,
 } from '@shared/stats';
 import { formatLocalDateKey } from '../local-date';
@@ -14,6 +15,8 @@ export type ModelTokenUsage = {
 
 export type SessionTokenUsage = {
   total: TokenBuckets;
+  /** Latest live context-window measurement, when the provider exposes it. */
+  context: SessionContextUsage | null;
   /** Sorted ascending by date. Entries without a parseable timestamp only count toward `total`. */
   daily: DailyTokenUsage[];
   /** Sorted by total, descending. */
@@ -79,6 +82,7 @@ export function aggregateUsageEntries(entries: Iterable<UsageEntry>): SessionTok
   if (!seen) return null;
   return {
     total,
+    context: null,
     daily: sortedDaily(daily),
     byModel: sortedByModel(byModel),
   };
@@ -104,7 +108,12 @@ export function mergeSessionUsages(usages: SessionTokenUsage[]): SessionTokenUsa
       else byModel.set(model.model, { ...model.tokens });
     }
   }
-  return { total, daily: sortedDaily(daily), byModel: sortedByModel(byModel) };
+  return {
+    total,
+    context: usages.at(-1)?.context ?? null,
+    daily: sortedDaily(daily),
+    byModel: sortedByModel(byModel),
+  };
 }
 
 function sortedDaily(daily: Map<string, TokenBuckets>): DailyTokenUsage[] {

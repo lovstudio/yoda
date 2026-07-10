@@ -2,7 +2,6 @@ import { Terminal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { getRuntime, isValidRuntimeId, type RuntimeId } from '@shared/runtime-registry';
-import { tokenBreakdownTitle } from '@renderer/features/tasks/components/task-stats-strip';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -33,12 +32,63 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     enabled: Boolean(
       route === 'task' && params?.projectId && params.taskId && activeConversationId
     ),
+    // Codex appends live context-window snapshots to its rollout while a turn
+    // is running. Keep the status bar current without waiting for session exit.
+    refetchInterval: activeConversationId ? 15_000 : false,
   });
-  const sessionTokens =
+  const activeSessionUsage =
     route === 'task' && activeConversationId
-      ? (taskStats?.conversations.find((item) => item.conversationId === activeConversationId)
-          ?.tokens ?? null)
+      ? (taskStats?.conversations.find((item) => item.conversationId === activeConversationId) ??
+        null)
       : null;
+  const sessionTokens = activeSessionUsage?.tokens ?? null;
+  const sessionContext = activeSessionUsage?.context ?? null;
+  const contextPercent = sessionContext
+    ? Math.round((sessionContext.usedTokens / sessionContext.limitTokens) * 100)
+    : null;
+  const contextTitle = sessionContext
+    ? [
+        t('workspaceRuntime.contextUsageTitle', {
+          used: formatCompactNumber(sessionContext.usedTokens),
+          limit: formatCompactNumber(sessionContext.limitTokens),
+          percent: contextPercent,
+        }),
+        ...(sessionTokens
+          ? [
+              t('workspaceRuntime.sessionTokenTotal', {
+                tokens: formatCompactNumber(sessionTokens.total),
+              }),
+            ]
+          : []),
+        ...(sessionContext.resetCount > 0
+          ? [
+              t('workspaceRuntime.contextResets', { count: sessionContext.resetCount }),
+              ...(sessionContext.lastResetAt
+                ? [
+                    t('workspaceRuntime.contextLastReset', {
+                      time: new Intl.DateTimeFormat(undefined, {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }).format(new Date(sessionContext.lastResetAt)),
+                    }),
+                  ]
+                : []),
+            ]
+          : []),
+        ...sessionContext.rateLimits.map((limit) =>
+          t('workspaceRuntime.quotaUsage', {
+            window: t('workspaceRuntime.quotaWindow', { minutes: limit.windowMinutes }),
+            percent: Math.round(limit.usedPercent),
+            resetAt: limit.resetsAt
+              ? new Intl.DateTimeFormat(undefined, {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }).format(new Date(limit.resetsAt))
+              : t('tasks.sessionInfo.unknown'),
+          })
+        ),
+      ].join('\n')
+    : null;
   const connectionId = provisionedTask?.workspace.sshConnectionId;
   const dependency = runtimeId
     ? connectionId
@@ -91,15 +141,17 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           {dependency?.version ? (
             <span className="shrink-0 tabular-nums">v{dependency.version}</span>
           ) : null}
-          {sessionTokens ? (
+          {sessionContext && contextPercent != null ? (
             <>
               <span aria-hidden>·</span>
               <span
                 className="shrink-0 rounded border border-border/70 bg-background px-1 py-0.5 text-foreground-passive"
-                title={tokenBreakdownTitle(sessionTokens, t)}
+                title={contextTitle ?? undefined}
               >
                 {t('workspaceRuntime.contextUsage', {
-                  tokens: formatCompactNumber(sessionTokens.total),
+                  used: formatCompactNumber(sessionContext.usedTokens),
+                  limit: formatCompactNumber(sessionContext.limitTokens),
+                  percent: contextPercent,
                 })}
               </span>
             </>
