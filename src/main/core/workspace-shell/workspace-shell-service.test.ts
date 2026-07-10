@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getDependencyManager: vi.fn(),
   getRuntimeConfig: vi.fn(),
   spawnLocalPty: vi.fn(),
+  exitHandlers: [] as Array<(info: { exitCode?: number }) => void>,
 }));
 
 vi.mock('@main/core/dependencies/dependency-manager', () => ({
@@ -33,6 +34,7 @@ vi.mock('@main/utils/userEnv', () => ({ ensureUserBinDirsInPath: vi.fn() }));
 describe('workspace shell runtime actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.exitHandlers.length = 0;
     mocks.getDependencyManager.mockResolvedValue({
       get: vi.fn(() => ({
         id: 'codex',
@@ -46,7 +48,7 @@ describe('workspace shell runtime actions', () => {
     });
     mocks.getRuntimeConfig.mockResolvedValue({ cli: 'codex', defaultModel: 'gpt-5.6-codex' });
     mocks.spawnLocalPty.mockReturnValue({
-      onExit: vi.fn(),
+      onExit: vi.fn((handler) => mocks.exitHandlers.push(handler)),
       kill: vi.fn(),
     });
   });
@@ -142,5 +144,34 @@ describe('workspace shell runtime actions', () => {
 
     await execute;
     expect(mocks.spawnLocalPty).not.toHaveBeenCalled();
+  });
+
+  it('launches a runtime action with the renderer measured size and requested cwd', async () => {
+    const service = new WorkspaceShellService();
+    const sessionId = 'workspace-shell:measured-action';
+
+    await service.execute(sessionId, {
+      runtimeId: 'codex',
+      action: 'open',
+      cwd: process.cwd(),
+      initialSize: { cols: 144, rows: 38 },
+    });
+
+    expect(mocks.spawnLocalPty).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: process.cwd(), cols: 144, rows: 38 })
+    );
+  });
+
+  it('keeps completed runtime output instead of replacing it with a plain shell', async () => {
+    const service = new WorkspaceShellService();
+    await service.execute('workspace-shell:completed-action', {
+      runtimeId: 'codex',
+      action: 'open',
+    });
+
+    mocks.exitHandlers[0]?.({ exitCode: 0 });
+    await Promise.resolve();
+
+    expect(mocks.spawnLocalPty).toHaveBeenCalledTimes(1);
   });
 });

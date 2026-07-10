@@ -3047,13 +3047,15 @@
     "toggleLeftSidebar": "切换左侧边栏"
   },
   "workspaceRuntime": {
-    "cliTitle": "Yoda 命令行",
-    "cli": "命令行",
-    "newShell": "重新打开干净的 Shell",
-    "manage": "管理运行时",
-    "refresh": "刷新运行时检测",
-    "taskTerminal": "任务终端",
-    "openRuntime": "在 Yoda 内打开 {{name}}"
+    "terminal": "终端",
+    "currentSession": "当前会话",
+    "currentSessionTitle": "当前会话使用 {{name}}",
+    "actions": {
+      "open": "{{name}} 交互控制台",
+      "update": "更新 {{name}}",
+      "login": "登录 {{name}}",
+      "doctor": "诊断 {{name}}"
+    }
   },
   "openIn": {
     "failed": "打开失败",

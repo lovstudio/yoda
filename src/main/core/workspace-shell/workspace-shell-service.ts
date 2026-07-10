@@ -171,8 +171,8 @@ export class WorkspaceShellService {
     assertSessionId(sessionId);
     const operationToken = this.beginOperation(sessionId);
     const existing = this.sessions.get(sessionId);
-    const cwd = existing?.cwd ?? os.homedir();
-    const size = existing?.size ?? DEFAULT_SIZE;
+    const cwd = await resolveCwd(request.cwd ?? existing?.cwd);
+    const size = request.initialSize ?? existing?.size ?? DEFAULT_SIZE;
     const command = await resolveRuntimeActionCommand(request);
     if (!this.isCurrentOperation(sessionId, operationToken)) return { sessionId };
     this.replace(sessionId, cwd, size, operationToken, { kind: 'argv', ...command }, request);
@@ -226,13 +226,7 @@ export class WorkspaceShellService {
       if (this.sessions.get(sessionId)?.pty !== pty) return;
       this.sessions.delete(sessionId);
       if (!action) return;
-      void this.afterRuntimeAction(action, exitCode).finally(() => {
-        setTimeout(() => {
-          if (this.isCurrentOperation(sessionId, operationToken) && !this.sessions.has(sessionId)) {
-            this.replace(sessionId, cwd, size, operationToken);
-          }
-        }, 150);
-      });
+      void this.afterRuntimeAction(action, exitCode);
     });
     ptySessionRegistry.register(sessionId, pty, { preserveBufferOnExit: Boolean(action) });
   }

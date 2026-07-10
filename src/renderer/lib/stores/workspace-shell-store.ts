@@ -1,52 +1,98 @@
 import { makeAutoObservable, observable, runInAction } from 'mobx';
-import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
+import type { RuntimeId } from '@shared/runtime-registry';
 import type { WorkspaceShellAction } from '@shared/workspace-shell';
 import { rpc } from '@renderer/lib/ipc';
 import { PtySession } from '@renderer/lib/pty/pty-session';
 
+export type WorkspaceShellMode = 'shell' | 'runtime-action';
+
+type TerminalSize = { cols: number; rows: number };
+
 export class WorkspaceShellStore {
   isOpen = false;
   isStarting = false;
-  title = 'Terminal';
   error: string | null = null;
   session: PtySession | null = null;
-  private startPromise: Promise<PtySession> | null = null;
+  mode: WorkspaceShellMode = 'shell';
+  runtimeId: RuntimeId | null = null;
+  runtimeAction: WorkspaceShellAction | null = null;
+  cwd: string | undefined;
+  private operationVersion = 0;
 
   constructor() {
-    makeAutoObservable<this, 'startPromise'>(this, {
+    makeAutoObservable<this, 'operationVersion'>(this, {
       session: observable.ref,
-      startPromise: false,
+      operationVersion: false,
     });
   }
 
-  async openShell(): Promise<void> {
-    this.isOpen = true;
-    this.title = 'Terminal';
-    this.error = null;
+  get isShellOpen(): boolean {
+    return this.isOpen && this.mode === 'shell';
+  }
+
+  async toggleShell(cwd?: string): Promise<void> {
+    if (this.isShellOpen) {
+      this.close();
+      return;
+    }
+    await this.openShell(cwd);
+  }
+
+  async openShell(cwd?: string, forceRestart = false): Promise<void> {
+    const normalizedCwd = cwd?.trim() || undefined;
+    if (!forceRestart && this.session && this.mode === 'shell' && this.cwd === normalizedCwd) {
+      this.isOpen = true;
+      this.error = null;
+      return;
+    }
+
+    const operation = this.beginOperation('shell', normalizedCwd);
+    const previousSize = this.currentSize();
     try {
-      const alreadyStarted = this.session !== null;
-      const session = await this.ensureSession();
-      if (alreadyStarted) await rpc.workspaceShell.start({ sessionId: session.sessionId });
-    } catch (error) {
-      runInAction(() => {
-        this.error = error instanceof Error ? error.message : String(error);
+      const session = await this.replaceSession(operation);
+      if (!session) return;
+      await rpc.workspaceShell.start({
+        sessionId: session.sessionId,
+        cwd: normalizedCwd,
+        initialSize: this.currentSize() ?? previousSize,
       });
+    } catch (error) {
+      this.recordError(operation, error);
       throw error;
+    } finally {
+      this.finishOperation(operation);
     }
   }
 
-  async runRuntimeAction(runtimeId: RuntimeId, action: WorkspaceShellAction): Promise<void> {
-    this.isOpen = true;
-    this.title = getRuntime(runtimeId)?.name ?? runtimeId;
-    this.error = null;
+  async restartShell(): Promise<void> {
+    await this.openShell(this.cwd, true);
+  }
+
+  async runRuntimeAction(
+    runtimeId: RuntimeId,
+    action: WorkspaceShellAction,
+    cwd?: string
+  ): Promise<void> {
+    const normalizedCwd = cwd?.trim() || undefined;
+    const operation = this.beginOperation('runtime-action', normalizedCwd, runtimeId, action);
+    const previousSize = this.currentSize();
     try {
-      const session = await this.ensureSession();
-      await rpc.workspaceShell.execute(session.sessionId, { runtimeId, action });
-    } catch (error) {
-      runInAction(() => {
-        this.error = error instanceof Error ? error.message : String(error);
+      // Runtime actions always get a fresh frontend terminal. Reusing an xterm
+      // after killing a full-screen Agent TUI leaves alternate-buffer and size
+      // state behind, which is the source of the corrupted console rendering.
+      const session = await this.replaceSession(operation);
+      if (!session) return;
+      await rpc.workspaceShell.execute(session.sessionId, {
+        runtimeId,
+        action,
+        cwd: normalizedCwd,
+        initialSize: this.currentSize() ?? previousSize,
       });
+    } catch (error) {
+      this.recordError(operation, error);
       throw error;
+    } finally {
+      this.finishOperation(operation);
     }
   }
 
@@ -55,48 +101,79 @@ export class WorkspaceShellStore {
   }
 
   async reset(): Promise<void> {
+    this.operationVersion += 1;
     const session = this.session;
     this.session = null;
-    this.startPromise = null;
+    this.isOpen = false;
+    this.isStarting = false;
+    this.error = null;
+    this.mode = 'shell';
+    this.runtimeId = null;
+    this.runtimeAction = null;
+    this.cwd = undefined;
     session?.dispose();
     if (session) await rpc.workspaceShell.stop(session.sessionId);
   }
 
-  private ensureSession(): Promise<PtySession> {
-    if (this.session) return Promise.resolve(this.session);
-    if (this.startPromise) return this.startPromise;
-
-    const start = this.startSession();
-    this.startPromise = start;
-    return start.finally(() => {
-      if (this.startPromise === start) this.startPromise = null;
-    });
+  private beginOperation(
+    mode: WorkspaceShellMode,
+    cwd: string | undefined,
+    runtimeId: RuntimeId | null = null,
+    runtimeAction: WorkspaceShellAction | null = null
+  ): number {
+    this.operationVersion += 1;
+    this.isOpen = true;
+    this.isStarting = true;
+    this.error = null;
+    this.mode = mode;
+    this.runtimeId = runtimeId;
+    this.runtimeAction = runtimeAction;
+    this.cwd = cwd;
+    return this.operationVersion;
   }
 
-  private async startSession(): Promise<PtySession> {
-    this.isStarting = true;
+  private async replaceSession(operation: number): Promise<PtySession | null> {
+    const previous = this.session;
+    runInAction(() => {
+      this.session = null;
+    });
+    previous?.dispose();
+    if (previous) {
+      await rpc.workspaceShell.stop(previous.sessionId).catch(() => {});
+    }
+    if (operation !== this.operationVersion) return null;
+
     const session = new PtySession(`workspace-shell:${crypto.randomUUID()}`);
     runInAction(() => {
       this.session = session;
     });
-    try {
-      // Subscribe before the backend starts so even a very fast command cannot
-      // emit output before the renderer has installed its listener.
-      await session.connect();
-      await rpc.workspaceShell.start({ sessionId: session.sessionId });
-      return session;
-    } catch (error) {
-      session.dispose();
-      runInAction(() => {
-        if (this.session === session) this.session = null;
-        this.error = error instanceof Error ? error.message : String(error);
-      });
-      throw error;
-    } finally {
-      runInAction(() => {
-        this.isStarting = false;
-      });
-    }
+    await session.connect();
+    if (operation === this.operationVersion) return session;
+
+    session.dispose();
+    runInAction(() => {
+      if (this.session === session) this.session = null;
+    });
+    return null;
+  }
+
+  private currentSize(): TerminalSize | undefined {
+    const dimensions = this.session?.pty?.lastSentDims;
+    return dimensions ? { ...dimensions } : undefined;
+  }
+
+  private recordError(operation: number, error: unknown): void {
+    if (operation !== this.operationVersion) return;
+    runInAction(() => {
+      this.error = error instanceof Error ? error.message : String(error);
+    });
+  }
+
+  private finishOperation(operation: number): void {
+    if (operation !== this.operationVersion) return;
+    runInAction(() => {
+      this.isStarting = false;
+    });
   }
 }
 

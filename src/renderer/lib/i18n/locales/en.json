@@ -3047,13 +3047,15 @@
     "toggleLeftSidebar": "Toggle left sidebar"
   },
   "workspaceRuntime": {
-    "cliTitle": "Yoda CLI",
-    "cli": "CLI",
-    "newShell": "Restart with a clean shell",
-    "manage": "Manage runtime",
-    "refresh": "Refresh runtime detection",
-    "taskTerminal": "Task terminal",
-    "openRuntime": "Open {{name}} inside Yoda"
+    "terminal": "Terminal",
+    "currentSession": "Current session",
+    "currentSessionTitle": "Current session uses {{name}}",
+    "actions": {
+      "open": "{{name}} console",
+      "update": "Update {{name}}",
+      "login": "Sign in to {{name}}",
+      "doctor": "Diagnose {{name}}"
+    }
   },
   "openIn": {
     "failed": "Failed to open",

@@ -6,6 +6,8 @@ export type WorkspaceShellAction = (typeof WORKSPACE_SHELL_ACTIONS)[number];
 export type WorkspaceShellRuntimeAction = {
   runtimeId: RuntimeId;
   action: WorkspaceShellAction;
+  cwd?: string;
+  initialSize?: { cols: number; rows: number };
 };
 
 export type StartWorkspaceShellParams = {
