@@ -2196,6 +2196,7 @@
       "openCli": "Open CLI",
       "update": "Update",
       "doctor": "Diagnose",
+      "actions": "Actions",
       "refresh": "Refresh runtime info",
       "manage": "Manage runtime"
     },
@@ -3072,8 +3073,14 @@
     "quotaTitle": "Rate limits",
     "quotaUsage": "{{window}} usage: {{percent}}%, resets at {{resetAt}}",
     "accountUsage": "Account usage",
+    "accountUsageShort": "Account",
     "accountUsageDescription": "CLI account quota windows",
     "accountQuotaReset": "Resets at {{time}}",
+    "accountQuotaStatus": "{{remaining}}% remaining · resets {{reset}}",
+    "accountQuotaProviderControlled": "Quota resets are controlled by the provider and cannot be reset manually in Yoda.",
+    "refreshAccountUsage": "Refresh usage",
+    "refreshingAccountUsage": "Refreshing…",
+    "accountUsageRefreshed": "Account usage refreshed",
     "manageAccount": "Manage account",
     "actions": {
       "open": "{{name}} console",

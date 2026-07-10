@@ -157,74 +157,71 @@ export const AgentInfoCard: React.FC<Props> = ({ id, dependency, selectedModel, 
         ) : null}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        {installed && !connectionId ? (
-          <>
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => {
-                void workspaceShellStore.runRuntimeAction(id, 'open').catch(() => {});
-              }}
-            >
-              <Terminal className="size-3.5" />
-              {t('agents.runtimeInfo.openCli')}
+      <div className="mt-3 border-t border-border pt-3">
+        <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
+          {t('agents.runtimeInfo.actions')}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {installed && !connectionId ? (
+            <>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => {
+                  void workspaceShellStore.runRuntimeAction(id, 'open').catch(() => {});
+                }}
+              >
+                <Terminal className="size-3.5" />
+                {t('agents.runtimeInfo.openCli')}
+              </Button>
+              {snapshot?.update.command ? (
+                <Button
+                  variant={snapshot.update.available ? 'default' : 'outline'}
+                  size="xs"
+                  onClick={() => {
+                    void workspaceShellStore.runRuntimeAction(id, 'update').catch(() => {});
+                  }}
+                >
+                  <RefreshCw className="size-3.5" />
+                  {t('agents.runtimeInfo.update')}
+                </Button>
+              ) : null}
+              {id === 'codex' ? (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => {
+                    void workspaceShellStore.runRuntimeAction(id, 'doctor').catch(() => {});
+                  }}
+                >
+                  <Stethoscope className="size-3.5" />
+                  {t('agents.runtimeInfo.doctor')}
+                </Button>
+              ) : null}
+            </>
+          ) : null}
+          {!connectionId ? (
+            <Button variant="outline" size="xs" onClick={manage}>
+              <Settings2 className="size-3.5" />
+              {t('agents.runtimeInfo.manage')}
             </Button>
-            {snapshot?.update.command ? (
-              <Button
-                variant={snapshot.update.available ? 'default' : 'outline'}
-                size="xs"
-                onClick={() => {
-                  void workspaceShellStore.runRuntimeAction(id, 'update').catch(() => {});
-                }}
-              >
-                <RefreshCw className="size-3.5" />
-                {t('agents.runtimeInfo.update')}
-              </Button>
-            ) : null}
-            {id === 'codex' ? (
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => {
-                  void workspaceShellStore.runRuntimeAction(id, 'doctor').catch(() => {});
-                }}
-              >
-                <Stethoscope className="size-3.5" />
-                {t('agents.runtimeInfo.doctor')}
-              </Button>
-            ) : null}
-          </>
-        ) : null}
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          title={t('agents.runtimeInfo.refresh')}
-          disabled={snapshotQuery.isFetching}
-          onClick={() => void refresh()}
-        >
-          <RefreshCw className={cn('size-3.5', snapshotQuery.isFetching && 'animate-spin')} />
-        </Button>
-        {!connectionId ? (
+          ) : null}
+          {docUrl ? (
+            <Button variant="ghost" size="xs" onClick={() => void rpc.app.openExternal(docUrl)}>
+              <ArrowUpRight className="size-3.5" />
+              {t('agents.docs')}
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
-            size="icon-xs"
-            title={t('agents.runtimeInfo.manage')}
-            onClick={manage}
+            size="xs"
+            disabled={snapshotQuery.isFetching}
+            onClick={() => void refresh()}
           >
-            <Settings2 className="size-3.5" />
+            <RefreshCw className={cn('size-3.5', snapshotQuery.isFetching && 'animate-spin')} />
+            {t('agents.runtimeInfo.refresh')}
           </Button>
-        ) : null}
-        {docUrl ? (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            title={t('agents.docs')}
-            onClick={() => void rpc.app.openExternal(docUrl)}
-          >
-            <ArrowUpRight className="size-3.5" />
-          </Button>
-        ) : null}
+        </div>
       </div>
 
       {!installed && installCommand ? (

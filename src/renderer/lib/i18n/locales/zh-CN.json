@@ -2196,6 +2196,7 @@
       "openCli": "打开 CLI",
       "update": "更新",
       "doctor": "诊断",
+      "actions": "操作",
       "refresh": "刷新运行时信息",
       "manage": "管理运行时"
     },
@@ -3072,8 +3073,14 @@
     "quotaTitle": "用量额度",
     "quotaUsage": "{{window}} 用量：{{percent}}%，{{resetAt}} 重置",
     "accountUsage": "账号用量",
+    "accountUsageShort": "账号",
     "accountUsageDescription": "当前 CLI 账号的额度窗口",
     "accountQuotaReset": "{{time}} 重置",
+    "accountQuotaStatus": "剩余 {{remaining}}% · {{reset}} 重置",
+    "accountQuotaProviderControlled": "额度重置由服务商控制，Yoda 无法手动重置。",
+    "refreshAccountUsage": "刷新用量",
+    "refreshingAccountUsage": "刷新中…",
+    "accountUsageRefreshed": "账号用量已刷新",
     "manageAccount": "管理账号",
     "actions": {
       "open": "{{name}} 交互控制台",

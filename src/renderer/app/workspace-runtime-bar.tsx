@@ -36,7 +36,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   );
   const runtime = runtimeId ? getRuntime(runtimeId) : null;
   const activeConversationId = provisionedTask?.taskView.tabManager.activeConversationId;
-  const { data: taskStats } = useTaskStats(params?.projectId ?? '', params?.taskId ?? '', {
+  const {
+    data: taskStats,
+    refetch: refreshTaskStats,
+    isRefetching: isRefreshingUsage,
+  } = useTaskStats(params?.projectId ?? '', params?.taskId ?? '', {
     enabled: Boolean(
       route === 'task' && params?.projectId && params.taskId && activeConversationId
     ),
@@ -103,6 +107,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const canCompactContext = Boolean(
     runtimeId === 'codex' && params?.projectId && params.taskId && activeConversationId
   );
+  const shortAccountWindow = sessionContext?.rateLimits[0] ?? null;
 
   const toggleTerminal = () => {
     if (provisionedTask) {
@@ -154,6 +159,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const manageAccount = () => {
     if (!runtimeId || connectionId) return;
     appState.sidePane.pinView('settings', { tab: 'clis-models', runtimeId });
+  };
+
+  const refreshAccountUsage = async () => {
+    await refreshTaskStats();
+    toast.success(t('workspaceRuntime.accountUsageRefreshed'));
   };
 
   return (
@@ -274,7 +284,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               </Popover>
             </>
           ) : null}
-          {sessionContext?.rateLimits.length ? (
+          {shortAccountWindow && sessionContext ? (
             <>
               <span aria-hidden>·</span>
               <Popover>
@@ -284,7 +294,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   title={t('workspaceRuntime.accountUsage')}
                 >
                   <Gauge className="size-3.5" />
-                  <span>{t('workspaceRuntime.accountUsage')}</span>
+                  <span>{t('workspaceRuntime.accountUsageShort')}</span>
+                  <ContextProgressBar
+                    compact
+                    percent={Math.round(shortAccountWindow.usedPercent)}
+                    tone={getUsageTone(Math.round(shortAccountWindow.usedPercent))}
+                  />
                 </PopoverTrigger>
                 <PopoverContent
                   align="start"
@@ -316,9 +331,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                           </div>
                           <ContextProgressBar percent={percent} tone={getUsageTone(percent)} />
                           <span className="text-[11px] text-foreground-passive">
-                            {t('workspaceRuntime.accountQuotaReset', {
-                              time: limit.resetsAt
-                                ? formatPopoverTime(limit.resetsAt)
+                            {t('workspaceRuntime.accountQuotaStatus', {
+                              remaining: Math.max(0, 100 - percent),
+                              reset: limit.resetsAt
+                                ? formatResetCountdown(limit.resetsAt)
                                 : t('tasks.sessionInfo.unknown'),
                             })}
                           </span>
@@ -326,18 +342,34 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                       );
                     })}
                   </div>
-                  {!connectionId ? (
-                    <div className="border-t border-border p-3">
+                  <div className="border-t border-border p-3">
+                    <p className="mb-2 text-[11px] leading-relaxed text-foreground-passive">
+                      {t('workspaceRuntime.accountQuotaProviderControlled')}
+                    </p>
+                    <div className="flex gap-2">
                       <Button
-                        className="w-full"
+                        className="flex-1"
+                        disabled={isRefreshingUsage}
                         size="sm"
                         variant="outline"
-                        onClick={manageAccount}
+                        onClick={() => void refreshAccountUsage()}
                       >
-                        {t('workspaceRuntime.manageAccount')}
+                        {isRefreshingUsage
+                          ? t('workspaceRuntime.refreshingAccountUsage')
+                          : t('workspaceRuntime.refreshAccountUsage')}
                       </Button>
+                      {!connectionId ? (
+                        <Button
+                          className="flex-1"
+                          size="sm"
+                          variant="outline"
+                          onClick={manageAccount}
+                        >
+                          {t('workspaceRuntime.manageAccount')}
+                        </Button>
+                      ) : null}
                     </div>
-                  ) : null}
+                  </div>
                 </PopoverContent>
               </Popover>
             </>
@@ -404,6 +436,24 @@ function formatPopoverTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(
     new Date(value)
   );
+}
+
+function formatResetCountdown(value: string): string {
+  const remainingMinutes = Math.max(
+    0,
+    Math.ceil((new Date(value).getTime() - Date.now()) / 60_000)
+  );
+  const formatter = new Intl.RelativeTimeFormat(undefined, {
+    numeric: 'always',
+    style: 'short',
+  });
+
+  if (remainingMinutes < 60) return formatter.format(remainingMinutes, 'minute');
+
+  const remainingHours = Math.ceil(remainingMinutes / 60);
+  if (remainingHours < 48) return formatter.format(remainingHours, 'hour');
+
+  return formatter.format(Math.ceil(remainingHours / 24), 'day');
 }
 
 function getUsageTone(percent: number): string {
