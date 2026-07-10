@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { getRuntime, isValidRuntimeId, type RuntimeId } from '@shared/runtime-registry';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
@@ -129,28 +130,45 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   return (
     <div className="flex h-7 shrink-0 items-center gap-2 border-t border-border bg-background-secondary px-2 text-[11px] text-foreground-muted">
       {runtimeId ? (
-        <div
-          className="flex min-w-0 items-center gap-1.5"
-          title={t('workspaceRuntime.currentSessionTitle', {
-            name: runtime?.name ?? runtimeId,
-          })}
-        >
-          <span
-            className={cn(
-              'size-1.5 shrink-0 rounded-full',
-              dependency?.status === 'available'
-                ? 'bg-emerald-500'
-                : dependency
-                  ? 'bg-amber-500'
-                  : 'bg-foreground-muted/40'
-            )}
-          />
-          <span className="truncate font-medium text-foreground">{runtime?.name ?? runtimeId}</span>
-          {dependency?.version ? (
-            <span className="shrink-0 tabular-nums text-foreground-passive">
-              v{dependency.version}
-            </span>
-          ) : null}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Popover>
+            <PopoverTrigger
+              aria-label={t('workspaceRuntime.currentSessionTitle', {
+                name: runtime?.name ?? runtimeId,
+              })}
+              className="flex h-5 min-w-0 items-center gap-1.5 rounded-sm px-1 text-foreground-muted transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+              title={t('workspaceRuntime.currentSessionTitle', {
+                name: runtime?.name ?? runtimeId,
+              })}
+            >
+              <span
+                className={cn(
+                  'size-1.5 shrink-0 rounded-full',
+                  dependency?.status === 'available'
+                    ? 'bg-emerald-500'
+                    : dependency
+                      ? 'bg-amber-500'
+                      : 'bg-foreground-muted/40'
+                )}
+              />
+              <span className="truncate font-medium text-foreground">
+                {runtime?.name ?? runtimeId}
+              </span>
+              {dependency?.version ? (
+                <span className="shrink-0 tabular-nums text-foreground-passive">
+                  v{dependency.version}
+                </span>
+              ) : null}
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              side="top"
+              sideOffset={8}
+              className="w-auto border border-border bg-background p-0 text-foreground shadow-lg"
+            >
+              <AgentInfoCard id={runtimeId} dependency={dependency} connectionId={connectionId} />
+            </PopoverContent>
+          </Popover>
           {sessionContext && contextPercent != null ? (
             <>
               <span aria-hidden>·</span>
@@ -161,13 +179,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                     limit: formatCompactNumber(sessionContext.limitTokens),
                     percent: contextPercent,
                   })}
-                  className="flex h-5 shrink-0 items-center gap-1.5 rounded-sm px-1 font-mono tabular-nums text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+                  className="flex h-5 shrink-0 items-center rounded-sm px-1 transition-colors hover:bg-background-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
                   title={contextTitle ?? undefined}
                 >
-                  <span>
-                    {formatCompactNumber(sessionContext.usedTokens)} /{' '}
-                    {formatCompactNumber(sessionContext.limitTokens)}
-                  </span>
                   <ContextProgressBar percent={contextPercent} tone={contextTone} compact />
                 </PopoverTrigger>
                 <PopoverContent
