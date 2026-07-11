@@ -1,4 +1,4 @@
-import { FolderPlus, Zap } from 'lucide-react';
+import { FolderPlus, FolderX, Zap } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -286,14 +286,17 @@ export const ProjectSelector = observer(function ProjectSelector({
                         <span className="min-w-0 truncate">{item.label}</span>
                       </>
                     ) : item.kind === 'projectless' ? (
-                      <Tooltip>
-                        <TooltipTrigger render={<span className="min-w-0 truncate" />}>
-                          {item.label}
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-64 text-left">
-                          {item.description}
-                        </TooltipContent>
-                      </Tooltip>
+                      <>
+                        <FolderX className="size-4 text-foreground-muted" />
+                        <Tooltip>
+                          <TooltipTrigger render={<span className="min-w-0 truncate" />}>
+                            {item.label}
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-64 text-left">
+                            {item.description}
+                          </TooltipContent>
+                        </Tooltip>
+                      </>
                     ) : (
                       <span className="flex min-w-0 flex-col">
                         <span className="min-w-0 truncate">{item.label}</span>
