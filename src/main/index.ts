@@ -268,41 +268,58 @@ process.on('SIGTERM', () => app.quit());
 process.on('SIGINT', () => app.quit());
 
 let shutdownStarted = false;
+let shutdownPromise: Promise<void> | null = null;
 
-function beginShutdown(mode: TeardownMode): void {
-  if (shutdownStarted) return;
+function prepareShutdown(mode: TeardownMode): Promise<void> {
+  if (shutdownPromise) return shutdownPromise;
 
   shutdownStarted = true;
   markAppQuitting();
   telemetryService.capture('app_closed');
-  void telemetryService.dispose().finally(() => {
-    void (async () => {
-      try {
-        agentHookService.dispose();
-        agentSessionRuntimeStore.dispose();
-        mobileGatewayService.dispose();
-        updateService.dispose();
-        prSyncScheduler.dispose();
-        const [gitWatcherResult, projectManagerResult] = await Promise.allSettled([
-          gitWatcherRegistry.dispose(),
-          projectManager.dispose({ mode }),
-        ]);
-        if (gitWatcherResult.status === 'rejected') {
-          log.error('Failed to shutdown git watcher registry:', gitWatcherResult.reason);
-        }
-        if (projectManagerResult.status === 'rejected') {
-          log.error('Failed to detach project manager:', projectManagerResult.reason);
-        }
-      } finally {
-        app.exit(0);
+  shutdownPromise = (async () => {
+    try {
+      await telemetryService.dispose();
+    } catch (error) {
+      log.error('Failed to dispose telemetry during shutdown:', error);
+    }
+
+    try {
+      agentHookService.dispose();
+      agentSessionRuntimeStore.dispose();
+      mobileGatewayService.dispose();
+      updateService.dispose();
+      prSyncScheduler.dispose();
+      const [gitWatcherResult, projectManagerResult] = await Promise.allSettled([
+        gitWatcherRegistry.dispose(),
+        projectManager.dispose({ mode }),
+      ]);
+      if (gitWatcherResult.status === 'rejected') {
+        log.error('Failed to shutdown git watcher registry:', gitWatcherResult.reason);
       }
-    })();
+      if (projectManagerResult.status === 'rejected') {
+        log.error('Failed to detach project manager:', projectManagerResult.reason);
+      }
+    } catch (error) {
+      log.error('Unexpected error during application shutdown:', error);
+    }
+  })();
+  return shutdownPromise;
+}
+
+function beginShutdown(mode: TeardownMode): void {
+  void prepareShutdown(mode).finally(() => {
+    app.exit(0);
   });
 }
 
+updateService.setPrepareInstallRestart(() => prepareShutdown('terminate'));
+
 app.on('before-quit', (event) => {
-  event.preventDefault();
+  // Once cleanup has completed, the updater must be allowed to own the real
+  // quit. Preventing this event makes Squirrel.Mac relaunch the unchanged app.
   if (shutdownStarted) return;
+
+  event.preventDefault();
 
   const summary = taskManager.getActiveAgentSessionSummary();
   if (summary.running <= 0) {

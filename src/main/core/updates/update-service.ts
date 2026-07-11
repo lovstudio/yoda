@@ -24,6 +24,7 @@ import { appSettingsService } from '@main/core/settings/settings-service';
 import { events } from '@main/lib/events';
 import type { IDisposable, IInitializable } from '@main/lib/lifecycle';
 import { log } from '@main/lib/logger';
+import { handoffInstallRestart } from './install-restart';
 import { formatUpdaterError, sanitizeUpdaterLogArgs } from './utils';
 
 const { autoUpdater } = _electronUpdater;
@@ -33,6 +34,8 @@ const ALLOW_DOWNGRADE = false;
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const STARTUP_DELAY_MS = 30 * 1000; // 30 seconds
 const INSTALL_RESTART_GUARD_TIMEOUT_MS = 2 * 60 * 1000;
+
+type PrepareInstallRestart = () => Promise<void>;
 
 export interface UpdateState {
   status: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'error';
@@ -60,6 +63,7 @@ class UpdateService implements IInitializable, IDisposable {
   private active = false;
   private installRequested = false;
   private installRestartGuardTimer?: NodeJS.Timeout;
+  private prepareInstallRestart: PrepareInstallRestart = async () => {};
   private appliedFeedUrl: string | null = null;
   private appliedFeedSource: UpdatesSettings['source'] | null = null;
 
@@ -100,7 +104,7 @@ class UpdateService implements IInitializable, IDisposable {
     autoUpdater.requestHeaders = { 'Cache-Control': 'no-cache' };
 
     const updaterLogger: UpdaterLogger = {
-      info: (...args: unknown[]) => log.debug('[autoUpdater]', ...sanitizeUpdaterLogArgs(args)),
+      info: (...args: unknown[]) => log.info('[autoUpdater]', ...sanitizeUpdaterLogArgs(args)),
       warn: (...args: unknown[]) => log.warn('[autoUpdater]', ...sanitizeUpdaterLogArgs(args)),
       error: (...args: unknown[]) => log.error('[autoUpdater]', ...sanitizeUpdaterLogArgs(args)),
     };
@@ -316,6 +320,10 @@ class UpdateService implements IInitializable, IDisposable {
     }
   }
 
+  setPrepareInstallRestart(handler: PrepareInstallRestart): void {
+    this.prepareInstallRestart = handler;
+  }
+
   quitAndInstall(): void {
     if (!this.active) throw new Error('Update service is not active');
     if (this.installRequested) {
@@ -360,11 +368,12 @@ class UpdateService implements IInitializable, IDisposable {
     }, INSTALL_RESTART_GUARD_TIMEOUT_MS);
 
     setTimeout(() => {
-      try {
+      void handoffInstallRestart(this.prepareInstallRestart, () => {
+        log.info('Application cleanup completed; handing restart to auto-updater');
         autoUpdater.quitAndInstall(false, true);
-      } catch (error) {
-        rollback(`quitAndInstall threw: ${formatUpdaterError(error)}`);
-      }
+      }).catch((error) => {
+        rollback(`Failed to prepare update restart: ${formatUpdaterError(error)}`);
+      });
     }, 250);
   }
 
