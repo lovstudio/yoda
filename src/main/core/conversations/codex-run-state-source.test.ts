@@ -228,6 +228,37 @@ describe('resolveCodexRolloutPathForConversation', () => {
       readCodexTurnVerdict('yoda-conversation-1', { cwd: '/repo', startedAtMs, statePath })
     ).resolves.toEqual({ state: 'idle', lastStartedAt: at });
   });
+
+  it('prefers an explicit resumed thread over the most recently updated thread in the same cwd', () => {
+    dir = mkdtempSync(join(tmpdir(), 'yoda-codex-run-state-'));
+    const statePath = join(dir, 'state_5.sqlite');
+    createStateDb(statePath);
+    insertThread(statePath, {
+      id: 'resumed-thread',
+      cwd: '/shared-repo',
+      rolloutPath: '/rollouts/resumed.jsonl',
+      createdAtMs: Date.parse('2026-07-09T01:37:01.000Z'),
+      updatedAtMs: Date.parse('2026-07-09T02:00:00.000Z'),
+    });
+    insertThread(statePath, {
+      id: 'other-task-thread',
+      cwd: '/shared-repo',
+      rolloutPath: '/rollouts/other.jsonl',
+      createdAtMs: Date.parse('2026-07-10T03:48:19.000Z'),
+      updatedAtMs: Date.parse('2026-07-11T06:51:15.000Z'),
+    });
+
+    expect(
+      resolveCodexRolloutPathForConversation({
+        conversationId: 'yoda-conversation',
+        cwd: '/shared-repo',
+        startedAtMs: Date.parse('2026-07-11T07:00:00.000Z'),
+        isResuming: true,
+        threadId: 'resumed-thread',
+        statePath,
+      })
+    ).toBe('/rollouts/resumed.jsonl');
+  });
 });
 
 function createStateDb(statePath: string): void {

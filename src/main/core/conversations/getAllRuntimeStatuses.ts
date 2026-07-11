@@ -32,6 +32,8 @@ export async function getAllRuntimeStatuses(): Promise<RuntimeStatusEntry[]> {
       taskId: conversations.taskId,
       conversationId: conversations.id,
       runtime: conversations.runtime,
+      title: conversations.title,
+      createdAt: conversations.createdAt,
     })
     .from(conversations)
     .innerJoin(tasks, eq(conversations.taskId, tasks.id))
@@ -44,7 +46,7 @@ export async function getAllRuntimeStatuses(): Promise<RuntimeStatusEntry[]> {
   const cwdByTask = new Map<string, string | undefined>();
 
   const entries: RuntimeStatusEntry[] = [];
-  for (const { projectId, taskId, conversationId, runtime } of rows) {
+  for (const { projectId, taskId, conversationId, runtime, title, createdAt } of rows) {
     const taskKey = `${projectId}\0${taskId}`;
     if (!cwdByTask.has(taskKey)) {
       cwdByTask.set(taskKey, resolveTask(projectId, taskId)?.conversations.taskPath);
@@ -55,6 +57,8 @@ export async function getAllRuntimeStatuses(): Promise<RuntimeStatusEntry[]> {
       conversationId,
       provider: runtime ?? '',
       cwd: cwdByTask.get(taskKey) ?? '',
+      title,
+      createdAt,
     });
     entries.push({ projectId, taskId, conversationId, status });
   }
