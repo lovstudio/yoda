@@ -132,6 +132,12 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
       autoExpandedActiveIdRef.current = null;
       return;
     }
+    if (currentView === 'task' && taskParams.projectId && taskParams.taskId) {
+      const activeTask = getRegisteredTaskData(taskParams.projectId, taskParams.taskId);
+      if (activeTask?.archivedAt || activeTask?.archiveRequestedAt) {
+        return;
+      }
+    }
     if (autoExpandedActiveIdRef.current === activeSidebarDndId) return;
 
     const hiddenGroupId = findHiddenTaskGroupId(
