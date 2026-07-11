@@ -1,0 +1,56 @@
+diff --git a/sparkle-cli/SPUCommandLineDriver.m b/sparkle-cli/SPUCommandLineDriver.m
+index 940f5bb..ac21320 100644
+--- a/sparkle-cli/SPUCommandLineDriver.m
++++ b/sparkle-cli/SPUCommandLineDriver.m
+@@ -204,6 +204,14 @@ - (nullable NSString *)feedURLStringForUpdater:(SPUUpdater *)__unused updater
+     return _customFeedURL;
+ }
+ 
++- (void)updater:(SPUUpdater *)__unused updater willDownloadUpdate:(SUAppcastItem *)item withRequest:(NSMutableURLRequest *)request
++{
++    if (!item.deltaUpdate) {
++        fprintf(stderr, "YODA_EVENT {\"type\":\"full-update-blocked\",\"version\":\"%s\"}\n", item.versionString.UTF8String);
++        request.URL = [NSURL URLWithString:@"http://127.0.0.1:9/yoda-full-update-disabled"];
++    }
++}
++
+ // In case we find an update during probing
+ - (void)updater:(SPUUpdater *)__unused updater didFindValidUpdate:(SUAppcastItem *)item
+ {
+diff --git a/sparkle-cli/SPUCommandLineUserDriver.m b/sparkle-cli/SPUCommandLineUserDriver.m
+index 3cf85fd..cf058a9 100644
+--- a/sparkle-cli/SPUCommandLineUserDriver.m
++++ b/sparkle-cli/SPUCommandLineUserDriver.m
+@@ -75,6 +75,7 @@ - (void)displayPlainTextReleaseNotes:(NSData *)releaseNotes encoding:(NSStringEn
+ 
+ - (void)showUpdateWithAppcastItem:(SUAppcastItem *)appcastItem updateAdjective:(NSString *)updateAdjective
+ {
++    fprintf(stderr, "YODA_EVENT {\"type\":\"update-found\",\"version\":\"%s\",\"delta\":%s}\n", appcastItem.displayVersionString.UTF8String, appcastItem.deltaUpdate ? "true" : "false");
+     if (_verbose) {
+         fprintf(stderr, "Found %s update! (%s)\n", updateAdjective.UTF8String, appcastItem.displayVersionString.UTF8String);
+         
+@@ -172,6 +173,7 @@ - (void)showDownloadInitiatedWithCancellation:(void (^)(void))__unused cancellat
+ 
+ - (void)showDownloadDidReceiveExpectedContentLength:(uint64_t)expectedContentLength
+ {
++    fprintf(stderr, "YODA_EVENT {\"type\":\"download-start\",\"total\":%llu}\n", expectedContentLength);
+     if (_verbose) {
+         fprintf(stderr, "Downloading %llu bytes...\n", expectedContentLength);
+     }
+@@ -187,6 +189,8 @@ - (void)showDownloadDidReceiveDataOfLength:(uint64_t)length
+     if (_bytesDownloaded > _bytesToDownload) {
+         _bytesToDownload = _bytesDownloaded;
+     }
++
++    fprintf(stderr, "YODA_EVENT {\"type\":\"download-progress\",\"transferred\":%llu,\"total\":%llu}\n", _bytesDownloaded, _bytesToDownload);
+     
+     if (_bytesToDownload > 0 && _verbose) {
+         NSString *currentProgressPercentage = [NSString stringWithFormat:@"%.0f%%", ((double)_bytesDownloaded * 100.0 / (double)_bytesToDownload)];
+@@ -224,6 +228,7 @@ - (void)showExtractionReceivedProgress:(double)progress
+ 
+ - (void)showReadyToInstallAndRelaunch:(void (^)(SPUUserUpdateChoice))installUpdateHandler
+ {
++    fprintf(stderr, "YODA_EVENT {\"type\":\"ready-to-install\"}\n");
+     if (_deferInstallation) {
+         if (_verbose) {
+             fprintf(stderr, "Deferring Installation.\n");

@@ -3,6 +3,8 @@ node_modules/
 dist/
 out/
 /release/
+/build/sparkle/
+/.cache/sparkle/
 
 # Logs
 *.log
