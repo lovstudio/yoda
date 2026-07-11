@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.4
+
+### Patch Changes
+
+- Keep default tasks projectless and preserve the correct projectless icon option when creating a task.
+- Refresh live Codex account usage in the workspace runtime bar and account settings panel.
+
 ## 0.15.3
 
 ### Patch Changes
