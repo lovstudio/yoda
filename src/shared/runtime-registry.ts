@@ -263,6 +263,15 @@ export type AgentAccountUsage = {
   error: string | null;
 };
 
+export type AgentAccountResetOutcome = 'reset' | 'nothingToReset' | 'noCredit' | 'alreadyRedeemed';
+
+export type AgentAccountResetResult = {
+  runtimeId: RuntimeId;
+  supported: boolean;
+  outcome: AgentAccountResetOutcome | null;
+  error: string | null;
+};
+
 /** Permission tiers for the Claude CLI, shared by its API-compatible clones. */
 const CLAUDE_PERMISSION_MODES: RuntimePermissionMode[] = [
   { id: 'default', labelKey: 'permissionMode.default', args: [] },

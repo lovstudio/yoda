@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCodexRateLimits } from './codex-account-usage-service';
+import { parseCodexRateLimits, parseCodexResetOutcome } from './codex-account-usage-service';
 
 describe('parseCodexRateLimits', () => {
   it('parses live quota windows and available reset credits', () => {
@@ -28,5 +28,20 @@ describe('parseCodexRateLimits', () => {
     expect(
       parseCodexRateLimits({ rateLimits: {}, rateLimitResetCredits: { availableCount: 0 } })
     ).toEqual({ rateLimits: [], resetCreditsAvailable: 0 });
+  });
+});
+
+describe('parseCodexResetOutcome', () => {
+  it.each(['reset', 'nothingToReset', 'noCredit', 'alreadyRedeemed'] as const)(
+    'accepts the official %s outcome',
+    (outcome) => {
+      expect(parseCodexResetOutcome({ outcome })).toBe(outcome);
+    }
+  );
+
+  it('rejects unknown outcomes instead of reporting a false success', () => {
+    expect(() => parseCodexResetOutcome({ outcome: 'pending' })).toThrow(
+      'Codex returned an unknown account reset outcome.'
+    );
   });
 });

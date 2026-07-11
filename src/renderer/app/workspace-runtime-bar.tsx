@@ -20,6 +20,7 @@ import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
 import { Button } from '@renderer/lib/ui/button';
@@ -35,9 +36,11 @@ export function explicitConversationRuntimeId(value: unknown): RuntimeId | null 
 export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const showConfirmActionModal = useShowModal('confirmActionModal');
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
   const [isCompacting, setIsCompacting] = useState(false);
+  const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
   const [sessionPromptCount, setSessionPromptCount] = useState<{
     conversationId: string;
     count: number;
@@ -222,13 +225,47 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     appState.sidePane.pinView('settings', { tab: 'clis-models', runtimeId });
   };
 
-  const refreshAccountUsage = async () => {
-    const result = await refreshAccountUsageQuery();
-    if (result.error || result.data?.error) {
-      toast.error(t('workspaceRuntime.accountUsageRefreshFailed'));
-      return;
+  const handleAccountUsagePopoverOpen = (open: boolean) => {
+    if (open && runtimeId === 'codex' && !connectionId) {
+      void refreshAccountUsageQuery();
     }
-    toast.success(t('workspaceRuntime.accountUsageRefreshed'));
+  };
+
+  const resetAccountUsage = async () => {
+    if (!runtimeId || runtimeId !== 'codex' || connectionId) return;
+    setIsResettingAccountUsage(true);
+    try {
+      const result = await rpc.runtimeSettings.resetAccountUsage(runtimeId);
+      if (result.error || !result.outcome) {
+        toast.error(t('workspaceRuntime.accountUsageResetFailed'));
+        return;
+      }
+      if (result.outcome === 'nothingToReset') {
+        toast(t('workspaceRuntime.accountUsageNothingToReset'));
+        return;
+      }
+      if (result.outcome === 'noCredit') {
+        toast.error(t('workspaceRuntime.accountUsageNoResetCredit'));
+        await refreshAccountUsageQuery();
+        return;
+      }
+      await refreshAccountUsageQuery();
+      toast.success(t('workspaceRuntime.accountUsageResetSuccess'));
+    } catch {
+      toast.error(t('workspaceRuntime.accountUsageResetFailed'));
+    } finally {
+      setIsResettingAccountUsage(false);
+    }
+  };
+
+  const confirmAccountUsageReset = () => {
+    showConfirmActionModal({
+      title: t('workspaceRuntime.confirmAccountUsageResetTitle'),
+      description: t('workspaceRuntime.confirmAccountUsageResetDescription'),
+      confirmLabel: t('workspaceRuntime.resetAccountUsage'),
+      variant: 'default',
+      onSuccess: () => void resetAccountUsage(),
+    });
   };
 
   const toggleSessionHistoryDock = () => {
@@ -383,10 +420,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               </Popover>
             </>
           ) : null}
-          {shortAccountWindow ? (
+          {shortAccountWindow || (runtimeId === 'codex' && !connectionId) ? (
             <>
               <span aria-hidden>·</span>
-              <Popover>
+              <Popover onOpenChange={handleAccountUsagePopoverOpen}>
                 <PopoverTrigger
                   aria-label={t('workspaceRuntime.accountUsage')}
                   className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
@@ -394,11 +431,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                 >
                   <Gauge className="size-3.5" />
                   <span>{t('workspaceRuntime.accountUsageShort')}</span>
-                  <ContextProgressBar
-                    compact
-                    percent={Math.round(shortAccountWindow.usedPercent)}
-                    tone={getUsageTone(Math.round(shortAccountWindow.usedPercent))}
-                  />
+                  {shortAccountWindow ? (
+                    <ContextProgressBar
+                      compact
+                      percent={Math.round(shortAccountWindow.usedPercent)}
+                      tone={getUsageTone(Math.round(shortAccountWindow.usedPercent))}
+                    />
+                  ) : null}
                 </PopoverTrigger>
                 <PopoverContent
                   align="start"
@@ -459,19 +498,26 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   ) : null}
                   <div className="border-t border-border p-3">
                     <p className="mb-2 text-[11px] leading-relaxed text-foreground-passive">
-                      {t('workspaceRuntime.accountQuotaProviderControlled')}
+                      {t('workspaceRuntime.accountQuotaResetDescription')}
                     </p>
                     <div className="flex gap-2">
                       <Button
                         className="flex-1"
-                        disabled={isRefreshingUsage}
+                        disabled={
+                          isRefreshingUsage ||
+                          isResettingAccountUsage ||
+                          accountUsage?.resetCreditsAvailable == null ||
+                          accountUsage.resetCreditsAvailable <= 0
+                        }
                         size="sm"
                         variant="outline"
-                        onClick={() => void refreshAccountUsage()}
+                        onClick={confirmAccountUsageReset}
                       >
-                        {isRefreshingUsage
-                          ? t('workspaceRuntime.refreshingAccountUsage')
-                          : t('workspaceRuntime.refreshAccountUsage')}
+                        {isResettingAccountUsage
+                          ? t('workspaceRuntime.resettingAccountUsage')
+                          : accountUsage?.resetCreditsAvailable === 0
+                            ? t('workspaceRuntime.noAccountResetCredits')
+                            : t('workspaceRuntime.resetAccountUsage')}
                       </Button>
                       {!connectionId ? (
                         <Button

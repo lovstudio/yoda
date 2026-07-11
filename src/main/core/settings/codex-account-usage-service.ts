@@ -1,6 +1,9 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import type {
   AgentAccountRateLimitWindow,
+  AgentAccountResetOutcome,
+  AgentAccountResetResult,
   AgentAccountUsage,
   RuntimeId,
 } from '@shared/runtime-registry';
@@ -21,7 +24,7 @@ type CodexRateLimitResponse = {
 export async function getCodexAccountUsage(): Promise<AgentAccountUsage> {
   const fetchedAt = new Date().toISOString();
   try {
-    const result = await requestCodexRateLimits();
+    const result = await requestCodexAppServer('account/rateLimits/read', {});
     const parsed = parseCodexRateLimits(result);
     return { runtimeId: 'codex', supported: true, ...parsed, fetchedAt, error: null };
   } catch (error) {
@@ -32,6 +35,27 @@ export async function getCodexAccountUsage(): Promise<AgentAccountUsage> {
       resetCreditsAvailable: null,
       fetchedAt,
       error: error instanceof Error ? error.message : 'Failed to read Codex account usage.',
+    };
+  }
+}
+
+export async function resetCodexAccountUsage(): Promise<AgentAccountResetResult> {
+  try {
+    const result = await requestCodexAppServer('account/rateLimitResetCredit/consume', {
+      idempotencyKey: randomUUID(),
+    });
+    return {
+      runtimeId: 'codex',
+      supported: true,
+      outcome: parseCodexResetOutcome(result),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      runtimeId: 'codex',
+      supported: true,
+      outcome: null,
+      error: error instanceof Error ? error.message : 'Failed to reset Codex account usage.',
     };
   }
 }
@@ -48,7 +72,17 @@ export function getAccountUsage(id: RuntimeId): Promise<AgentAccountUsage> {
   });
 }
 
-function requestCodexRateLimits(): Promise<unknown> {
+export function resetAccountUsage(id: RuntimeId): Promise<AgentAccountResetResult> {
+  if (id === 'codex') return resetCodexAccountUsage();
+  return Promise.resolve({
+    runtimeId: id,
+    supported: false,
+    outcome: null,
+    error: null,
+  });
+}
+
+function requestCodexAppServer(method: string, params: Record<string, unknown>): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const child = spawn('codex', ['app-server', '--stdio'], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -82,7 +116,7 @@ function requestCodexRateLimits(): Promise<unknown> {
           return;
         }
         write({ method: 'initialized', params: {} });
-        write({ id: 2, method: 'account/rateLimits/read', params: {} });
+        write({ id: 2, method, params });
       } else if (response.id === 2) {
         if (response.error) {
           finish(new Error(readRpcError(response.error, 'Codex account usage request failed.')));
@@ -128,6 +162,19 @@ function requestCodexRateLimits(): Promise<unknown> {
       params: { clientInfo: { name: 'yoda', title: 'Yoda', version: '0.15.3' } },
     });
   });
+}
+
+export function parseCodexResetOutcome(value: unknown): AgentAccountResetOutcome {
+  const outcome = objectValue(value)?.outcome;
+  if (
+    outcome === 'reset' ||
+    outcome === 'nothingToReset' ||
+    outcome === 'noCredit' ||
+    outcome === 'alreadyRedeemed'
+  ) {
+    return outcome;
+  }
+  throw new Error('Codex returned an unknown account reset outcome.');
 }
 
 function readRpcError(error: { message?: unknown }, fallback: string): string {
