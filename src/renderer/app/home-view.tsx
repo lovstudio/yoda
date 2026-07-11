@@ -51,6 +51,7 @@ import { withSystemPrompt } from '@shared/prompt-format';
 import { REVIEW_MAX_ROUNDS } from '@shared/review-protocol';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
+import { resolveHomeProjectId } from '@renderer/app/home-project-selection';
 import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import {
@@ -393,12 +394,12 @@ export const HomeComposer = observer(function HomeComposer({
   const { value: taskSettings, update: updateTaskSettings } = useAppSettingsKey('tasks');
 
   const isProjectLocked = !!(taskScopedTarget || parentTarget);
-  const selectedProjectId =
-    taskScopedTarget?.projectId ??
-    parentTarget?.projectId ??
-    homeProjectId ??
-    navProjectId ??
-    (draft === undefined ? undefined : (draft.selectedProjectId ?? undefined));
+  const selectedProjectId = resolveHomeProjectId({
+    lockedProjectId: taskScopedTarget?.projectId ?? parentTarget?.projectId,
+    homeProjectId,
+    navigationProjectId: navProjectId,
+    draftProjectId: draft?.selectedProjectId,
+  });
   const setSelectedProjectId = useCallback(
     (next: string | undefined) => {
       if (isProjectLocked) return;
@@ -410,7 +411,16 @@ export const HomeComposer = observer(function HomeComposer({
 
   const draftProjectId = draft?.selectedProjectId ?? null;
   useEffect(() => {
-    if (!homeProjectId || isProjectLocked) return;
+    if (isProjectLocked) return;
+    if (homeProjectId === INTERNAL_PROJECT_ID) {
+      if (draftProjectId !== null) {
+        updateDraft({ selectedProjectId: null, baseBranch: null });
+        return;
+      }
+      setHomeParams({ projectId: undefined });
+      return;
+    }
+    if (!homeProjectId) return;
     if (!homeRouteProject?.data) return;
     void projectManager.mountProject(homeProjectId).catch(() => {});
     if (homeProjectId !== draftProjectId) {
