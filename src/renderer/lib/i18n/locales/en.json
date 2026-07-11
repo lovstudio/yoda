@@ -3080,9 +3080,12 @@
     "accountQuotaReset": "Resets at {{time}}",
     "accountQuotaStatus": "{{remaining}}% remaining · resets {{reset}}",
     "accountQuotaProviderControlled": "Quota resets are controlled by the provider and cannot be reset manually in Yoda.",
+    "accountResetCredits": "Available resets",
+    "accountResetCreditsCount": "{{count}}",
     "refreshAccountUsage": "Refresh usage",
     "refreshingAccountUsage": "Refreshing…",
     "accountUsageRefreshed": "Account usage refreshed",
+    "accountUsageRefreshFailed": "Failed to refresh account usage",
     "manageAccount": "Manage account",
     "actions": {
       "open": "{{name}} console",

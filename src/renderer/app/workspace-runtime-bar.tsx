@@ -1,8 +1,14 @@
+import { useQuery } from '@tanstack/react-query';
 import { Brain, Gauge, MessageSquare, Terminal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getRuntime, isValidRuntimeId, type RuntimeId } from '@shared/runtime-registry';
+import {
+  getRuntime,
+  isValidRuntimeId,
+  type AgentAccountUsage,
+  type RuntimeId,
+} from '@shared/runtime-registry';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import {
@@ -51,11 +57,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const runtime = runtimeId ? getRuntime(runtimeId) : null;
   const runtimeConfig = runtimeId ? agentConfig[runtimeId] : null;
   const activeConversationId = provisionedTask?.taskView.tabManager.activeConversationId;
-  const {
-    data: taskStats,
-    refetch: refreshTaskStats,
-    isRefetching: isRefreshingUsage,
-  } = useTaskStats(params?.projectId ?? '', params?.taskId ?? '', {
+  const { data: taskStats } = useTaskStats(params?.projectId ?? '', params?.taskId ?? '', {
     enabled: Boolean(
       route === 'task' && params?.projectId && params.taskId && activeConversationId
     ),
@@ -122,7 +124,25 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const canCompactContext = Boolean(
     runtimeId === 'codex' && params?.projectId && params.taskId && activeConversationId
   );
-  const shortAccountWindow = sessionContext?.rateLimits[0] ?? null;
+  const {
+    data: accountUsage,
+    refetch: refreshAccountUsageQuery,
+    isFetching: isRefreshingUsage,
+  } = useQuery<AgentAccountUsage>({
+    queryKey: ['runtimeSettings', runtimeId, 'accountUsage'],
+    queryFn: () => {
+      if (!runtimeId) throw new Error('A runtime is required to read account usage.');
+      return rpc.runtimeSettings.getAccountUsage(runtimeId) as Promise<AgentAccountUsage>;
+    },
+    enabled: runtimeId === 'codex' && !connectionId,
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+  });
+  const accountRateLimits =
+    accountUsage && !accountUsage.error && accountUsage.rateLimits.length > 0
+      ? accountUsage.rateLimits
+      : (sessionContext?.rateLimits ?? []);
+  const shortAccountWindow = accountRateLimits[0] ?? null;
   const sessionHistoryDocked = interfaceSettings?.dockSessionHistory ?? true;
   const displayedPromptCount =
     sessionPromptCount && sessionPromptCount.conversationId === activeConversation?.id
@@ -203,7 +223,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   };
 
   const refreshAccountUsage = async () => {
-    await refreshTaskStats();
+    const result = await refreshAccountUsageQuery();
+    if (result.error || result.data?.error) {
+      toast.error(t('workspaceRuntime.accountUsageRefreshFailed'));
+      return;
+    }
     toast.success(t('workspaceRuntime.accountUsageRefreshed'));
   };
 
@@ -359,7 +383,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               </Popover>
             </>
           ) : null}
-          {shortAccountWindow && sessionContext ? (
+          {shortAccountWindow ? (
             <>
               <span aria-hidden>·</span>
               <Popover>
@@ -390,7 +414,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   </div>
                   <div className="border-t border-border" />
                   <div className="flex flex-col gap-3 p-3">
-                    {sessionContext.rateLimits.map((limit) => {
+                    {accountRateLimits.map((limit) => {
                       const percent = Math.round(limit.usedPercent);
                       return (
                         <div key={limit.windowMinutes} className="flex flex-col gap-1.5">
@@ -417,6 +441,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                       );
                     })}
                   </div>
+                  {accountUsage?.resetCreditsAvailable != null ? (
+                    <div className="border-t border-border px-3 py-2.5 text-xs">
+                      <span className="text-foreground-passive">
+                        {t('workspaceRuntime.accountResetCredits')}
+                      </span>
+                      <span className="float-right font-mono tabular-nums text-foreground">
+                        {t('workspaceRuntime.accountResetCreditsCount', {
+                          count: accountUsage.resetCreditsAvailable,
+                        })}
+                      </span>
+                    </div>
+                  ) : null}
                   <div className="border-t border-border p-3">
                     <p className="mb-2 text-[11px] leading-relaxed text-foreground-passive">
                       {t('workspaceRuntime.accountQuotaProviderControlled')}

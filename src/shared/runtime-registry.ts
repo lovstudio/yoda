@@ -247,6 +247,22 @@ export type AgentSubscriptionAccount = {
   error: string | null;
 };
 
+export type AgentAccountRateLimitWindow = {
+  windowMinutes: number;
+  usedPercent: number;
+  resetsAt: string | null;
+};
+
+/** Live subscription quota read from the provider CLI account API. */
+export type AgentAccountUsage = {
+  runtimeId: RuntimeId;
+  supported: boolean;
+  rateLimits: AgentAccountRateLimitWindow[];
+  resetCreditsAvailable: number | null;
+  fetchedAt: string;
+  error: string | null;
+};
+
 /** Permission tiers for the Claude CLI, shared by its API-compatible clones. */
 const CLAUDE_PERMISSION_MODES: RuntimePermissionMode[] = [
   { id: 'default', labelKey: 'permissionMode.default', args: [] },

@@ -8,6 +8,7 @@ import {
   type RuntimeAccountStatus,
   type RuntimeId,
 } from '@shared/runtime-registry';
+import { getAccountUsage } from './codex-account-usage-service';
 import { getLocalUsage } from './local-usage-service';
 import { probeOfficialApi } from './official-api-probe-service';
 import { runtimeModelCandidatesService } from './runtime-model-candidates-service';
@@ -59,6 +60,8 @@ export const runtimeSettingsController = createRPCController({
 
   getSubscriptionAccount: (id: RuntimeId): Promise<AgentSubscriptionAccount> =>
     getSubscriptionAccount(id),
+
+  getAccountUsage,
 
   startSubscriptionLogin: (id: RuntimeId) => startSubscriptionLogin(id),
 
