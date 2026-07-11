@@ -9,7 +9,9 @@ describe('handoffInstallRestart', () => {
       await Promise.resolve();
       calls.push('prepare:done');
     });
-    const quitAndInstall = vi.fn(() => calls.push('quitAndInstall'));
+    const quitAndInstall = vi.fn(() => {
+      calls.push('quitAndInstall');
+    });
 
     await handoffInstallRestart(prepare, quitAndInstall);
 

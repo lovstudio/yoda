@@ -7,8 +7,11 @@ import { formatUpdaterError } from './utils';
 export const updateController = createRPCController({
   check: async () => {
     try {
+      if (!updateService.isActive()) {
+        return { success: true, result: null, serviceActive: false };
+      }
       const result = await updateService.checkForUpdates();
-      return { success: true, result: result ?? null };
+      return { success: true, result: result ?? null, serviceActive: true };
     } catch (error) {
       return { success: false, error: formatUpdaterError(error) };
     }

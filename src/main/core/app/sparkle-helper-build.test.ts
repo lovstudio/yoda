@@ -24,6 +24,7 @@ describe('Yoda Sparkle helper patch', () => {
     expect(patch).toContain('download-start');
     expect(patch).toContain('download-progress');
     expect(patch).toContain('ready-to-install');
+    expect(patch).toContain('\\"type\\":\\"installing\\"');
   });
 
   it.each([

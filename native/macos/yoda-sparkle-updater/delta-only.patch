@@ -21,14 +21,14 @@ diff --git a/sparkle-cli/SPUCommandLineUserDriver.m b/sparkle-cli/SPUCommandLine
 index 3cf85fd..cf058a9 100644
 --- a/sparkle-cli/SPUCommandLineUserDriver.m
 +++ b/sparkle-cli/SPUCommandLineUserDriver.m
-@@ -75,6 +75,7 @@ - (void)displayPlainTextReleaseNotes:(NSData *)releaseNotes encoding:(NSStringEn
+@@ -93,6 +93,7 @@ - (void)showUpdateWithAppcastItem:(SUAppcastItem *)appcastItem updateAdjective:
  
- - (void)showUpdateWithAppcastItem:(SUAppcastItem *)appcastItem updateAdjective:(NSString *)updateAdjective
+ - (void)showUpdateFoundWithAppcastItem:(SUAppcastItem *)appcastItem state:(SPUUserUpdateState *)state reply:(void (^)(SPUUserUpdateChoice))reply
  {
 +    fprintf(stderr, "YODA_EVENT {\"type\":\"update-found\",\"version\":\"%s\",\"delta\":%s}\n", appcastItem.displayVersionString.UTF8String, appcastItem.deltaUpdate ? "true" : "false");
-     if (_verbose) {
-         fprintf(stderr, "Found %s update! (%s)\n", updateAdjective.UTF8String, appcastItem.displayVersionString.UTF8String);
-         
+     if (appcastItem.informationOnlyUpdate) {
+         fprintf(stderr, "Found information for new update: %s\n", appcastItem.infoURL.absoluteString.UTF8String);
+         reply(SPUUserUpdateChoiceDismiss);
 @@ -172,6 +173,7 @@ - (void)showDownloadInitiatedWithCancellation:(void (^)(void))__unused cancellat
  
  - (void)showDownloadDidReceiveExpectedContentLength:(uint64_t)expectedContentLength
@@ -54,3 +54,10 @@ index 3cf85fd..cf058a9 100644
      if (_deferInstallation) {
          if (_verbose) {
              fprintf(stderr, "Deferring Installation.\n");
+@@ -237,5 +242,6 @@ - (void)showReadyToInstallAndRelaunch:(void (^)(SPUUserUpdateChoice))installUpd
+ - (void)showInstallingUpdateWithApplicationTerminated:(BOOL)__unused applicationTerminated retryTerminatingApplication:(void (^)(void))__unused retryTerminatingApplication
+ {
++    fprintf(stderr, "YODA_EVENT {\"type\":\"installing\"}\n");
+     if (_verbose) {
+         fprintf(stderr, "Installing Update...\n");
+     }

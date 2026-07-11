@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  compareReleaseVersions,
+  findAvailableSparkleUpdate,
   findRequiredSparkleDelta,
   SparkleDeltaRequiredError,
   sparkleFeedUrlForArch,
@@ -68,5 +70,27 @@ describe('findRequiredSparkleDelta', () => {
     ).toThrowError(
       new SparkleDeltaRequiredError('Delta from 0.15.3 to 0.16.0 has a non-delta URL')
     );
+  });
+});
+
+describe('findAvailableSparkleUpdate', () => {
+  it('returns null when the appcast is not newer', () => {
+    expect(findAvailableSparkleUpdate(appcast, '0.16.0')).toBeNull();
+    expect(findAvailableSparkleUpdate(appcast, '0.17.0')).toBeNull();
+  });
+
+  it('fails closed when a newer release has no exact delta', () => {
+    expect(() => findAvailableSparkleUpdate(appcast, '0.15.2')).toThrow(
+      'No signed delta from 0.15.2 to 0.16.0'
+    );
+  });
+});
+
+describe('compareReleaseVersions', () => {
+  it('uses semantic ordering for release versions', () => {
+    expect(compareReleaseVersions('0.16.0', '0.15.10')).toBeGreaterThan(0);
+    expect(compareReleaseVersions('0.16.0', '0.16.0-beta.2')).toBeGreaterThan(0);
+    expect(compareReleaseVersions('0.16.0-beta.10', '0.16.0-beta.2')).toBeGreaterThan(0);
+    expect(compareReleaseVersions('v0.16.0+build.2', '0.16.0')).toBe(0);
   });
 });

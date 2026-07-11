@@ -42,6 +42,7 @@ function isPrepared(): boolean {
   const strings = run('strings', [helperPath], { capture: true });
   return (
     strings.includes('yoda-full-update-disabled') &&
+    strings.includes('YODA_EVENT {"type":"installing"}') &&
     readFrameworkLink('Sparkle') === 'Versions/Current/Sparkle' &&
     readFrameworkLink(join('Versions', 'Current')) === 'B'
   );
@@ -83,6 +84,7 @@ function buildHelper(): void {
       'sparkle-cli',
       '-configuration',
       'Release',
+      '-quiet',
       '-derivedDataPath',
       derivedDir,
       `CONFIGURATION_BUILD_DIR=${productsDir}`,
@@ -114,6 +116,9 @@ function verifyArtifacts(): void {
   if (!strings.includes('yoda-full-update-disabled')) {
     throw new Error('Sparkle helper does not contain the delta-only guard');
   }
+  if (!strings.includes('YODA_EVENT {"type":"installing"}')) {
+    throw new Error('Sparkle helper does not contain the install handoff marker');
+  }
   const linked = run('otool', ['-L', helperPath], { capture: true });
   if (!linked.includes('@rpath/Sparkle.framework')) {
     throw new Error('Sparkle helper is not linked against Sparkle.framework');
@@ -139,13 +144,13 @@ type RunOptions = { capture?: boolean };
 function run(command: string, args: string[], options: RunOptions = {}): string {
   const result = spawnSync(command, args, {
     encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
     stdio: options.capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
   });
   if (result.status !== 0) {
     const details = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim().slice(-12_000);
-    throw new Error(
-      `${command} failed with exit code ${result.status}${details ? `:\n${details}` : ''}`
-    );
+    const reason = result.error?.message ?? result.signal ?? `exit code ${result.status}`;
+    throw new Error(`${command} failed with ${reason}${details ? `:\n${details}` : ''}`);
   }
   return result.stdout ?? '';
 }

@@ -88,7 +88,11 @@ describe('UpdateStore', () => {
   });
 
   it('surfaces a menu-triggered check when updates are unavailable in this build', async () => {
-    mocks.rpcUpdateCheck.mockResolvedValue({ success: true, result: null });
+    mocks.rpcUpdateCheck.mockResolvedValue({
+      success: true,
+      result: null,
+      serviceActive: false,
+    });
     const store = new UpdateStore();
     store.start();
 
@@ -114,7 +118,8 @@ describe('UpdateStore', () => {
   it('reports up-to-date after a successful manual check with no available update', async () => {
     mocks.rpcUpdateCheck.mockResolvedValueOnce({
       success: true,
-      result: { version: '0.3.2' },
+      result: null,
+      serviceActive: true,
     });
     mocks.rpcUpdateGetState.mockResolvedValueOnce({
       success: true,
@@ -132,6 +137,7 @@ describe('UpdateStore', () => {
     mocks.rpcUpdateCheck.mockResolvedValueOnce({
       success: true,
       result: { version: '0.3.3' },
+      serviceActive: true,
     });
     mocks.rpcUpdateGetState.mockResolvedValueOnce({
       success: true,

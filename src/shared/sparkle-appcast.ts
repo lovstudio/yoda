@@ -8,6 +8,12 @@ export type SparkleDelta = {
   edSignature: string;
 };
 
+export type SparkleAppcastUpdate = {
+  delta: SparkleDelta;
+  releaseNotes?: string;
+  releaseDate?: string;
+};
+
 export class SparkleDeltaRequiredError extends Error {
   constructor(message: string) {
     super(message);
@@ -58,6 +64,76 @@ export function findRequiredSparkleDelta(content: string, currentVersion: string
   }
 
   throw new SparkleDeltaRequiredError(`No signed delta from ${currentVersion} to ${toVersion}`);
+}
+
+export function findAvailableSparkleUpdate(
+  content: string,
+  currentVersion: string
+): SparkleAppcastUpdate | null {
+  const item = firstAppcastItem(content);
+  const toVersion = elementText(item, 'sparkle:version');
+  if (!toVersion) {
+    throw new SparkleDeltaRequiredError('Appcast update has no sparkle:version');
+  }
+  if (compareReleaseVersions(toVersion, currentVersion) <= 0) return null;
+
+  const description = elementText(item, 'description');
+  const pubDate = elementText(item, 'pubDate');
+  return {
+    delta: findRequiredSparkleDelta(content, currentVersion),
+    ...(description ? { releaseNotes: description } : {}),
+    ...(pubDate ? { releaseDate: pubDate } : {}),
+  };
+}
+
+export function compareReleaseVersions(left: string, right: string): number {
+  const leftParts = parseReleaseVersion(left);
+  const rightParts = parseReleaseVersion(right);
+  if (!leftParts || !rightParts) {
+    return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  const coreLength = Math.max(leftParts.core.length, rightParts.core.length);
+  for (let index = 0; index < coreLength; index += 1) {
+    const difference = (leftParts.core[index] ?? 0) - (rightParts.core[index] ?? 0);
+    if (difference !== 0) return Math.sign(difference);
+  }
+
+  if (!leftParts.prerelease && !rightParts.prerelease) return 0;
+  if (!leftParts.prerelease) return 1;
+  if (!rightParts.prerelease) return -1;
+
+  const prereleaseLength = Math.max(leftParts.prerelease.length, rightParts.prerelease.length);
+  for (let index = 0; index < prereleaseLength; index += 1) {
+    const leftIdentifier = leftParts.prerelease[index];
+    const rightIdentifier = rightParts.prerelease[index];
+    if (leftIdentifier === undefined) return -1;
+    if (rightIdentifier === undefined) return 1;
+    if (leftIdentifier === rightIdentifier) continue;
+
+    const leftNumber = /^\d+$/.test(leftIdentifier) ? Number(leftIdentifier) : null;
+    const rightNumber = /^\d+$/.test(rightIdentifier) ? Number(rightIdentifier) : null;
+    if (leftNumber !== null && rightNumber !== null) return Math.sign(leftNumber - rightNumber);
+    if (leftNumber !== null) return -1;
+    if (rightNumber !== null) return 1;
+    return leftIdentifier.localeCompare(rightIdentifier);
+  }
+  return 0;
+}
+
+function parseReleaseVersion(
+  value: string
+): { core: number[]; prerelease: string[] | null } | null {
+  const normalized = value.trim().replace(/^v/i, '').split('+', 1)[0];
+  const [coreValue, prereleaseValue] = normalized.split('-', 2);
+  const coreSegments = coreValue.split('.');
+  if (coreSegments.length === 0 || coreSegments.some((segment) => !/^\d+$/.test(segment))) {
+    return null;
+  }
+  return {
+    core: coreSegments.map(Number),
+    prerelease: prereleaseValue ? prereleaseValue.split('.') : null,
+  };
 }
 
 function firstAppcastItem(content: string): string {

@@ -164,7 +164,7 @@ export class UpdateStore {
       }
       if (!res.success) {
         this._setError(res.error ?? i18n.t('settings.update.checkFailed'));
-      } else if (res.result === null) {
+      } else if (!res.serviceActive) {
         this._setError(i18n.t('settings.update.unavailableInBuild'));
       } else {
         await this._syncStateAfterCheck();
