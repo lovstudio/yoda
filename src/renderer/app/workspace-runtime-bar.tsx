@@ -441,15 +441,19 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                       );
                     })}
                   </div>
-                  {accountUsage?.resetCreditsAvailable != null ? (
+                  {runtimeId === 'codex' && !connectionId ? (
                     <div className="border-t border-border px-3 py-2.5 text-xs">
                       <span className="text-foreground-passive">
                         {t('workspaceRuntime.accountResetCredits')}
                       </span>
                       <span className="float-right font-mono tabular-nums text-foreground">
-                        {t('workspaceRuntime.accountResetCreditsCount', {
-                          count: accountUsage.resetCreditsAvailable,
-                        })}
+                        {accountUsage?.resetCreditsAvailable != null
+                          ? t('workspaceRuntime.accountResetCreditsCount', {
+                              count: accountUsage.resetCreditsAvailable,
+                            })
+                          : accountUsage?.error
+                            ? t('workspaceRuntime.accountResetCreditsFailed')
+                            : t('workspaceRuntime.accountResetCreditsLoading')}
                       </span>
                     </div>
                   ) : null}

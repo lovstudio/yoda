@@ -3082,6 +3082,8 @@
     "accountQuotaProviderControlled": "额度重置由服务商控制，Yoda 无法手动重置。",
     "accountResetCredits": "可用重置机会",
     "accountResetCreditsCount": "{{count}} 次",
+    "accountResetCreditsLoading": "获取中…",
+    "accountResetCreditsFailed": "获取失败",
     "refreshAccountUsage": "刷新用量",
     "refreshingAccountUsage": "刷新中…",
     "accountUsageRefreshed": "账号用量已刷新",
