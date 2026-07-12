@@ -14,6 +14,10 @@ import {
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
+import {
+  startSparkleFeedProxy,
+  type SparkleFeedProxy,
+} from '../../src/main/core/updates/sparkle-feed-proxy.ts';
 import { findRequiredSparkleDelta } from '../../src/shared/sparkle-appcast.ts';
 import { info, step } from './lib/log.ts';
 
@@ -32,6 +36,7 @@ for (const required of [generateAppcast, helperSource, frameworkSource]) {
 const root = mkdtempSync(join(tmpdir(), 'yoda-sparkle-delta-'));
 let staticServer: ChildProcess | null = null;
 let runningApp: ChildProcess | null = null;
+let feedProxy: SparkleFeedProxy | null = null;
 try {
   step('Creating signed Sparkle smoke-test applications');
   const keys = createSigningKeys();
@@ -66,10 +71,18 @@ try {
     keys.privateKey
   );
 
-  const appcast = readFileSync(appcastPath, 'utf8');
+  const appcast = readFileSync(appcastPath, 'utf8')
+    .split(server.origin)
+    .join('https://downloads.test');
   const delta = findRequiredSparkleDelta(appcast, '1.0.0');
   const deltaPath = join(archives, decodeURIComponent(basename(new URL(delta.url).pathname)));
   if (!existsSync(deltaPath)) throw new Error(`Generated delta is missing: ${deltaPath}`);
+  feedProxy = await startSparkleFeedProxy(appcast, delta.url, {
+    fetch: (input: string, init?: RequestInit) => {
+      const upstreamUrl = new URL(input);
+      return fetch(`${server.origin}${upstreamUrl.pathname}`, init);
+    },
+  } as never);
 
   // This is the decisive assertion: the complete 1.0.1 archive is physically
   // absent while Sparkle downloads, stages, and installs the update.
@@ -80,9 +93,9 @@ try {
     stdio: 'ignore',
   });
   await new Promise((resolve) => setTimeout(resolve, 500));
-  const staged = run(
+  const staged = await runAsync(
     join(oldApp, 'Contents', 'Helpers', 'YodaSparkleUpdater'),
-    helperArgs(oldApp, `${server.origin}/appcast.xml`, true)
+    helperArgs(oldApp, feedProxy.feedUrl, true)
   );
   assertEvent(staged, '"type":"update-found","version":"1.0.1","delta":true');
   assertEvent(staged, '"type":"ready-to-install"');
@@ -95,9 +108,9 @@ try {
   spawnSync('pkill', ['-f', join(oldApp, 'Contents', 'MacOS')]);
   runningApp = null;
   if (!(await waitForVersion(oldApp, '1.0.1', 2_000))) {
-    const installed = run(
+    const installed = await runAsync(
       join(oldApp, 'Contents', 'Helpers', 'YodaSparkleUpdater'),
-      helperArgs(oldApp, `${server.origin}/appcast.xml`, false)
+      helperArgs(oldApp, feedProxy.feedUrl, false)
     );
     assertEvent(installed, '"type":"installing"');
   }
@@ -122,6 +135,7 @@ try {
 } finally {
   runningApp?.kill('SIGKILL');
   spawnSync('pkill', ['-f', join(root, 'old', 'Yoda Smoke.app', 'Contents', 'MacOS')]);
+  await feedProxy?.close();
   staticServer?.kill('SIGTERM');
   if (process.env.YODA_KEEP_SPARKLE_SMOKE !== '1') {
     rmSync(root, { recursive: true, force: true });
@@ -223,6 +237,45 @@ function run(command: string, args: string[], input?: string): string {
     );
   }
   return `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+}
+
+async function runAsync(command: string, args: string[]): Promise<string> {
+  return await new Promise<string>((resolvePromise, rejectPromise) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    const timeout = setTimeout(
+      () => {
+        child.kill('SIGKILL');
+        rejectPromise(new Error(`${basename(command)} timed out`));
+      },
+      2 * 60 * 1000
+    );
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.once('error', (error) => {
+      clearTimeout(timeout);
+      rejectPromise(error);
+    });
+    child.once('exit', (code, signal) => {
+      clearTimeout(timeout);
+      const output = `${stdout}\n${stderr}`;
+      if (code === 0) {
+        resolvePromise(output);
+        return;
+      }
+      rejectPromise(
+        new Error(
+          `${basename(command)} failed (${code ?? signal ?? 'unknown'}): ${output.trim().slice(-12_000)}`
+        )
+      );
+    });
+  });
 }
 
 function assertEvent(output: string, marker: string): void {

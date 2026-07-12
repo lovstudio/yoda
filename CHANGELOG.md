@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.10
+
+### Fixes
+
+- Run the signed Sparkle delta installation smoke test through the same closed local proxy used by the packaged application.
+
 ## 0.15.9
 
 ### Fixes

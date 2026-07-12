@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const generator = readFileSync('scripts/release/generate-sparkle-appcast.ts', 'utf8');
+const sparkleSmoke = readFileSync('scripts/release/smoke-sparkle-delta.ts', 'utf8');
 const r2Uploader = readFileSync('scripts/release/upload-r2.ts', 'utf8');
 const chinaUploader = readFileSync('scripts/release/upload-cn-mirror.ts', 'utf8');
 const productionWorkflow = readFileSync('.github/workflows/release-prod.yml', 'utf8');
@@ -14,6 +15,11 @@ describe('Sparkle release pipeline', () => {
     expect(generator).toContain("'5'");
     expect(generator).toContain('validateGeneratedSparkleAppcast');
     expect(generator).toContain('qualifySparkleDeltaArtifacts');
+  });
+
+  it('runs the native delta installation smoke through the packaged application proxy', () => {
+    expect(sparkleSmoke).toContain('startSparkleFeedProxy');
+    expect(sparkleSmoke).toContain('feedProxy.feedUrl');
   });
 
   it.each([
