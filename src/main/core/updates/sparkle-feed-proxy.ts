@@ -27,7 +27,9 @@ export function rewriteSparkleEnclosureUrls(
       }
       const token = createHash('sha256').update(upstream).digest('hex');
       artifacts.set(token, upstream);
-      return `${prefix}${quote}${localOrigin}/artifact/${token}${quote}`;
+      // Sparkle selects SUBinaryDeltaUnarchiver from the downloaded URL's path extension.
+      // Dropping `.delta` makes a valid delta download fall back to the full application.
+      return `${prefix}${quote}${localOrigin}/artifact/${token}.delta${quote}`;
     }
   );
   return { appcast: rewritten, artifacts };
@@ -94,7 +96,7 @@ async function handleRequest(
       return;
     }
 
-    const artifactMatch = /^\/artifact\/([a-f0-9]{64})$/.exec(requestUrl);
+    const artifactMatch = /^\/artifact\/([a-f0-9]{64})\.delta$/.exec(requestUrl);
     if (!artifactMatch) return sendStatus(response, 404);
     if (method !== 'GET' && method !== 'HEAD') return sendStatus(response, 405);
 

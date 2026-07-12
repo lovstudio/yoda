@@ -18,7 +18,9 @@ describe('rewriteSparkleEnclosureUrls', () => {
 
     expect(result.appcast).not.toContain('https://downloads.test');
     expect(result.appcast).toContain('http://127.0.0.1:43123/full-update-disabled');
-    expect(result.appcast.match(/http:\/\/127\.0\.0\.1:43123\/artifact\//g)).toHaveLength(1);
+    expect(
+      result.appcast.match(/http:\/\/127\.0\.0\.1:43123\/artifact\/[a-f0-9]{64}\.delta/g)
+    ).toHaveLength(1);
     expect([...result.artifacts.values()]).toEqual(['https://downloads.test/Yoda.delta']);
   });
 
@@ -53,7 +55,7 @@ describe('rewriteSparkleEnclosureUrls', () => {
     try {
       const appcast = await (await fetch(proxy.feedUrl)).text();
       const fullUrl = /url="([^"]*full-update-disabled)"/.exec(appcast)?.[1];
-      const deltaProxyUrl = /url="([^"]*\/artifact\/[a-f0-9]{64})"/.exec(appcast)?.[1];
+      const deltaProxyUrl = /url="([^"]*\/artifact\/[a-f0-9]{64}\.delta)"/.exec(appcast)?.[1];
       expect(fullUrl).toBeTruthy();
       expect(deltaProxyUrl).toBeTruthy();
       if (!fullUrl || !deltaProxyUrl) throw new Error('Proxy URLs were not generated');

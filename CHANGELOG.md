@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.9
+
+### Fixes
+
+- Preserve the `.delta` extension through the local Sparkle proxy so signed incremental updates can be extracted and installed instead of falling back to a blocked full update.
+
 ## 0.15.8
 
 ### Fixes
