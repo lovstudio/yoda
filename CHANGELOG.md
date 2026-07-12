@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.15.11
+
+### Added
+
+- Sign in to Yoda with a LovStudio account and view account, credit, Relay Pass, and device status in the desktop app.
+- Connect Yoda Mobile across different networks through Yoda Relay without requiring Tailscale or the same LAN.
+- Start a seven-day Relay trial, activate a prepaid Relay Pass with LovStudio credits, and revoke paired devices from the shared account system.
+
+### Changed
+
+- Use LovStudio as the account and billing control plane for Yoda CLI authentication and Relay authorization.
+
 ## 0.15.10
 
 ### Fixes
