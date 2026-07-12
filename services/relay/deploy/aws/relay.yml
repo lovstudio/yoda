@@ -17,10 +17,10 @@ Parameters:
     Description: CLOUDFRONT-scoped WAF web ACL ARN from us-east-1.
   InstanceType:
     Type: String
-    Default: t4g.small
+    Default: t3.small
   LatestAmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
 
 Resources:
   RelayServiceSecret:

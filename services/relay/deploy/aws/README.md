@@ -6,9 +6,10 @@ no SSH ingress; port `8787` only accepts the AWS-managed CloudFront origin-facin
 
 The three templates are intentionally split:
 
-1. `bootstrap.yml` creates the immutable ECR repository and non-root provisioning role.
+1. `bootstrap.yml` creates the encrypted source bucket, isolated CodeBuild project, immutable ECR
+   repository, and non-root provisioning role.
 2. `waf.yml` is deployed in `us-east-1`, as required for a CloudFront-scoped web ACL.
-3. `relay.yml` is deployed in `ap-southeast-1` after the image has been pushed.
+3. `relay.yml` is deployed in `ap-southeast-1` after CodeBuild has pushed the image.
 
 After the Relay stack reaches `CREATE_COMPLETE`, write
 `https://<DistributionDomainName>` to `/yoda/production/relay-public-base-url`, restart the

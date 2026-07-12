@@ -2,6 +2,31 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Bootstrap resources used to publish and provision Yoda Relay.
 
 Resources:
+  RelaySourceBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireBuildSources
+            Status: Enabled
+            ExpirationInDays: 7
+      Tags:
+        - Key: Application
+          Value: yoda-relay
+        - Key: Environment
+          Value: production
+
   RelayRepository:
     Type: AWS::ECR::Repository
     DeletionPolicy: Retain
@@ -16,6 +41,93 @@ Resources:
       LifecyclePolicy:
         LifecyclePolicyText: >-
           {"rules":[{"rulePriority":1,"description":"Keep the latest 20 Relay images","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":20},"action":{"type":"expire"}}]}
+      Tags:
+        - Key: Application
+          Value: yoda-relay
+        - Key: Environment
+          Value: production
+
+  RelayBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: YodaRelayBuildRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BuildAndPublishRelayImage
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/yoda-relay-production-build:*
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub ${RelaySourceBucket.Arn}/*
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: !GetAtt RelayRepository.Arn
+
+  RelayBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: yoda-relay-production-build
+      Description: Reproducibly build and publish the production Yoda Relay container.
+      ServiceRole: !GetAtt RelayBuildRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Source:
+        Type: S3
+        Location: !Sub ${RelaySourceBucket}/relay-source.zip
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - test -n "$IMAGE_TAG"
+                - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_URI"
+            build:
+              commands:
+                - docker build --pull -f services/relay/Dockerfile -t "$ECR_URI:$IMAGE_TAG" .
+            post_build:
+              commands:
+                - docker push "$ECR_URI:$IMAGE_TAG"
+                - aws ecr describe-images --repository-name yoda-relay --image-ids imageTag="$IMAGE_TAG" --query 'imageDetails[0].imageDigest' --output text
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
+        ImagePullCredentialsType: CODEBUILD
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_URI
+            Type: PLAINTEXT
+            Value: !GetAtt RelayRepository.RepositoryUri
+          - Name: IMAGE_TAG
+            Type: PLAINTEXT
+            Value: override-required
+      TimeoutInMinutes: 30
+      QueuedTimeoutInMinutes: 30
       Tags:
         - Key: Application
           Value: yoda-relay
@@ -77,7 +189,11 @@ Resources:
                       - spotfleet.amazonaws.com
 
 Outputs:
+  BuildProjectName:
+    Value: !Ref RelayBuildProject
   RepositoryUri:
     Value: !GetAtt RelayRepository.RepositoryUri
   ProvisionRoleArn:
     Value: !GetAtt RelayProvisionRole.Arn
+  SourceBucketName:
+    Value: !Ref RelaySourceBucket
