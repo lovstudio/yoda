@@ -45,7 +45,14 @@ export default defineConfig({
           name: 'browser',
           browser: {
             enabled: true,
-            provider: playwright(),
+            provider: playwright({
+              // Headless Chromium disables GPU WebGL by default. Use its
+              // software ANGLE backend so renderer regressions exercise the
+              // same WebGL2 code path in local tests and CI.
+              launchOptions: {
+                args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+              },
+            }),
             headless: true,
             instances: [{ browser: 'chromium' }],
           },

@@ -241,6 +241,10 @@ export class FrontendPty {
   private rendererIssue: TerminalRendererIssue | null = null;
   private webglAddon: WebglAddon | null = null;
   private webglContextLossDisposable: IDisposable | null = null;
+  /** Coalesces scroll recovery to at most one full WebGL redraw per animation frame. */
+  private webglViewportRefreshFrame: number | null = null;
+  /** Off-screen sessions defer GPU recovery until mount(), avoiding background redraw work. */
+  private isMounted = false;
 
   constructor(
     readonly sessionId: string,
@@ -294,6 +298,7 @@ export class FrontendPty {
     this.scrollDisposable = this.terminal.onScroll((viewportY) => {
       this.savedViewportY = viewportY;
       this.savedAtBottom = viewportY >= this.terminal.buffer.active.baseY;
+      this.scheduleCleanWebglViewportRefresh();
     });
     this.freezeSnapshotDisposable = this.terminal.onRender(() => this.captureFreezeSnapshot());
 
@@ -400,6 +405,8 @@ export class FrontendPty {
   }
 
   private disposeWebglRenderer(): void {
+    this.cancelScheduledWebglViewportRefresh();
+    this.invalidateFreezeSnapshot();
     this.webglContextLossDisposable?.dispose();
     this.webglContextLossDisposable = null;
     this.webglAddon?.dispose();
@@ -410,6 +417,53 @@ export class FrontendPty {
     try {
       this.terminal.refresh(0, Math.max(0, this.terminal.rows - 1));
     } catch {}
+  }
+
+  /**
+   * A snapshot captured before the viewport moves no longer represents the
+   * visible rows. Never let a later resize replay it over the current buffer.
+   */
+  private invalidateFreezeSnapshot(): void {
+    this.hasFreezeSnapshot = false;
+    if (this.unfreezePhase === 'idle' && this.freezeOverlay) {
+      this.freezeOverlay.style.display = 'none';
+    }
+  }
+
+  private cancelScheduledWebglViewportRefresh(): void {
+    if (this.webglViewportRefreshFrame === null) return;
+    cancelAnimationFrame(this.webglViewportRefreshFrame);
+    this.webglViewportRefreshFrame = null;
+  }
+
+  /**
+   * Rebuild the WebGL model and repaint every visible row from xterm's buffer.
+   * clearTextureAtlas() clears both the glyph renderer model and its textures;
+   * refreshAllRows() keeps the recovery correct across addon implementations.
+   */
+  private redrawViewportFromBuffer(): void {
+    try {
+      this.webglAddon?.clearTextureAtlas();
+    } catch {}
+    this.refreshAllRows();
+  }
+
+  /**
+   * Chromium can composite a partially updated WebGL frame while xterm scrolls
+   * the normal buffer, leaving the outgoing row visible at several positions.
+   * Coalesce all scroll notifications in one animation frame, discard the old
+   * resize snapshot immediately, then force one full redraw from the canonical
+   * xterm buffer. This keeps WebGL enabled without accumulating stale pixels.
+   */
+  private scheduleCleanWebglViewportRefresh(): void {
+    this.invalidateFreezeSnapshot();
+    if (!this.isMounted || !this.webglAddon || this.webglViewportRefreshFrame !== null) return;
+
+    this.webglViewportRefreshFrame = requestAnimationFrame(() => {
+      this.webglViewportRefreshFrame = null;
+      if (!this.isMounted || !this.webglAddon) return;
+      this.redrawViewportFromBuffer();
+    });
   }
 
   private loadWebglRenderer(): void {
@@ -629,7 +683,13 @@ export class FrontendPty {
    * the masking snapshot is never overwritten by mid-resize garbage.
    */
   private captureFreezeSnapshot(allowWhileFrozen = false): void {
-    if (!allowWhileFrozen && this.unfreezePhase !== 'idle') return;
+    if (
+      !this.isMounted ||
+      this.webglViewportRefreshFrame !== null ||
+      (!allowWhileFrozen && this.unfreezePhase !== 'idle')
+    ) {
+      return;
+    }
     const canvas = this.getWebglCanvas();
     if (!canvas || canvas.width === 0 || canvas.height === 0) return;
     const overlay = this.ensureFreezeOverlay();
@@ -655,7 +715,9 @@ export class FrontendPty {
    * arming an unfreeze that has nothing to reveal.
    */
   private freezeFrame(): boolean {
-    if (!this.hasFreezeSnapshot || !this.freezeOverlay) return false;
+    if (!this.hasFreezeSnapshot || !this.freezeOverlay || this.webglViewportRefreshFrame !== null) {
+      return false;
+    }
     this.freezeOverlay.style.display = 'block';
     return true;
   }
@@ -681,8 +743,8 @@ export class FrontendPty {
       this.unfreeze();
       // Silent/plain-shell sessions may never send a repaint. Invalidate the
       // pre-resize capture and request one fresh frame for the next transition.
-      this.hasFreezeSnapshot = false;
-      this.refreshAllRows();
+      this.invalidateFreezeSnapshot();
+      this.redrawViewportFromBuffer();
     }, UNFREEZE_FALLBACK_MS);
   }
 
@@ -716,8 +778,8 @@ export class FrontendPty {
         this.terminal.scrollToBottom();
         this.savedViewportY = this.terminal.buffer.active.viewportY;
         this.savedAtBottom = true;
-        this.webglAddon?.clearTextureAtlas();
-        this.terminal.refresh(0, this.terminal.rows - 1);
+        this.cancelScheduledWebglViewportRefresh();
+        this.redrawViewportFromBuffer();
       } catch {}
     });
   }
@@ -730,14 +792,17 @@ export class FrontendPty {
   mount(mountTarget: HTMLElement, targetDims?: { cols: number; rows: number }): void {
     // Mount dims are authoritative — drop any stale freeze overlay.
     this.unfreeze();
+    this.cancelScheduledWebglViewportRefresh();
+    this.invalidateFreezeSnapshot();
     if (
       targetDims &&
       (this.terminal.cols !== targetDims.cols || this.terminal.rows !== targetDims.rows)
     ) {
       this.terminal.resize(targetDims.cols, targetDims.rows);
     }
+    this.isMounted = true;
     mountTarget.appendChild(this.ownedContainer);
-    // Force a Canvas2D repaint after reparenting in the DOM.
+    // Force a clean renderer repaint after reparenting in the DOM.
     const t = this.terminal;
     const savedViewportY = this.savedViewportY;
     const savedAtBottom = this.savedAtBottom;
@@ -752,7 +817,8 @@ export class FrontendPty {
         } else if (savedViewportY !== null) {
           t.scrollToLine(savedViewportY);
         }
-        t.refresh(0, t.rows - 1);
+        this.cancelScheduledWebglViewportRefresh();
+        this.redrawViewportFromBuffer();
       } catch {}
     });
   }
@@ -763,6 +829,9 @@ export class FrontendPty {
    * the visible mount target have been disconnected.
    */
   unmount(): void {
+    this.isMounted = false;
+    this.cancelScheduledWebglViewportRefresh();
+    this.invalidateFreezeSnapshot();
     ensureXtermHost().appendChild(this.ownedContainer);
   }
 
@@ -774,6 +843,8 @@ export class FrontendPty {
   dispose(): void {
     FrontendPty.all.delete(this);
     notifyTerminalRendererDiagnosticsChanged();
+    this.isMounted = false;
+    this.cancelScheduledWebglViewportRefresh();
     this.unfreeze();
     this.freezeOverlay?.remove();
     this.freezeOverlay = null;

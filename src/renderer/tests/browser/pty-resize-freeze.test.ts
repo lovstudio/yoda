@@ -1,6 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FrontendPty } from '@renderer/lib/pty/pty';
 
+const webglMocks = vi.hoisted(() => ({
+  clearTextureAtlas: vi.fn(),
+}));
+
+vi.mock('@xterm/addon-webgl', () => ({
+  WebglAddon: class {
+    readonly onContextLoss = (_listener: () => void) => ({ dispose: vi.fn() });
+
+    activate() {}
+
+    clearTextureAtlas() {
+      webglMocks.clearTextureAtlas();
+    }
+
+    dispose() {}
+  },
+}));
+
 vi.mock('@renderer/lib/ipc', () => ({
   events: {
     on: vi.fn(() => vi.fn()),
@@ -62,12 +80,65 @@ function expectSnapshotVisible(overlay: HTMLCanvasElement): void {
   expect(Array.from(pixel ?? [])).toEqual([255, 0, 255, 255]);
 }
 
+function writeTerminal(pty: FrontendPty, data: string): Promise<void> {
+  return new Promise((resolve) => pty.terminal.write(data, resolve));
+}
+
 describe('FrontendPty.commitResize', () => {
   let pty: FrontendPty | null = null;
+  let mountTarget: HTMLDivElement | null = null;
 
   afterEach(() => {
     pty?.dispose();
     pty = null;
+    mountTarget?.remove();
+    mountTarget = null;
+    webglMocks.clearTextureAtlas.mockClear();
+  });
+
+  it('invalidates the resize snapshot and fully redraws WebGL after scrolling', async () => {
+    pty = new FrontendPty('session-scroll-redraw');
+    pty.setRendererPreference('webgl');
+    pty.flushPendingWrites();
+    mountTarget = document.createElement('div');
+    document.body.appendChild(mountTarget);
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
+    await writeTerminal(
+      pty,
+      Array.from({ length: 80 }, (_, index) => `unique-row-${index}\r\n`).join('')
+    );
+
+    webglMocks.clearTextureAtlas.mockClear();
+    const overlay = createOverlay(pty);
+    setFreezeState(pty, overlay, 'idle');
+
+    pty.terminal.scrollToTop();
+    pty.terminal.scrollLines(1);
+    pty.terminal.scrollLines(1);
+
+    expect((pty as unknown as PtyInternals).hasFreezeSnapshot).toBe(false);
+    await vi.waitFor(() => expect(webglMocks.clearTextureAtlas).toHaveBeenCalledTimes(1));
+  });
+
+  it('defers WebGL recovery while off-screen and redraws cleanly when mounted', async () => {
+    pty = new FrontendPty('session-background-scroll');
+    pty.setRendererPreference('webgl');
+    pty.flushPendingWrites();
+    await writeTerminal(
+      pty,
+      Array.from({ length: 80 }, (_, index) => `background-row-${index}\r\n`).join('')
+    );
+
+    webglMocks.clearTextureAtlas.mockClear();
+    pty.terminal.scrollToTop();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(webglMocks.clearTextureAtlas).not.toHaveBeenCalled();
+
+    mountTarget = document.createElement('div');
+    document.body.appendChild(mountTarget);
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
+
+    await vi.waitFor(() => expect(webglMocks.clearTextureAtlas).toHaveBeenCalledTimes(1));
   });
 
   it('keeps the previous frame visible while a wider grid renders', async () => {
