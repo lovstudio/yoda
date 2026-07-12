@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.5
+
+### Patch Changes
+
+- Keep Codex quota and reset-credit status isolated per account and visible while live usage refreshes.
+- Redeem available Codex reset credits from the account usage surfaces.
+- Prevent the Home comparison controls from disappearing when the packaged app restores a projectless or still-opening draft.
+
 ## 0.15.4
 
 ### Patch Changes
