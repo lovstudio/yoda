@@ -30,6 +30,13 @@ export function qualifySparkleDeltaArtifacts(
   return { content: qualifiedContent, artifacts };
 }
 
+export function removeSparkleDeltaEligibilityHints(content: string): string {
+  return content.replace(
+    /\s+sparkle:deltaFromSparkle(?:ExecutableSize|Locales)=(?:"[^"]*"|'[^']*')/gi,
+    ''
+  );
+}
+
 export function parseSparkleArchiveHistory(content: string): SparkleArchiveHistoryItem[] {
   const history: SparkleArchiveHistoryItem[] = [];
   for (const itemMatch of content.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {

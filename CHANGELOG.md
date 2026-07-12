@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.8
+
+### Fixes
+
+- Prevent Sparkle from rejecting a valid signed delta because of brittle executable-size or localization eligibility hints.
+
 ## 0.15.7
 
 ### Patch Changes

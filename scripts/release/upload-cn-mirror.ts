@@ -10,6 +10,7 @@ import {
   findSparkleDeltas,
   findSparkleFeeds,
 } from './lib/artifacts.ts';
+import { runWithConcurrency } from './lib/concurrency.ts';
 import { requireEnv } from './lib/config.ts';
 import { fail, info, step } from './lib/log.ts';
 
@@ -17,6 +18,7 @@ const QINIU_PART_SIZE_BYTES = 8 * 1024 * 1024;
 const QINIU_OBJECT_TIMEOUT_MS = 30 * 60 * 1000;
 const QINIU_CDN_REFRESH_TIMEOUT_MS = 2 * 60 * 1000;
 const S3_OBJECT_TIMEOUT_MS = 10 * 60 * 1000;
+const UPLOAD_CONCURRENCY = 3;
 const qiniu = resolveQiniuSdk(qiniuModule);
 
 const { values } = parseArgs({
@@ -151,13 +153,12 @@ if (dryRun) {
   process.exit(0);
 }
 
-const uploadTarget = createUploadTarget();
-
-for (const item of uploads) {
+await runWithConcurrency(uploads, UPLOAD_CONCURRENCY, async (item) => {
   const size = statSync(item.file).size;
   info(`Uploading ${item.label} (${formatMiB(size)} MB) -> ${item.key}`);
+  const uploadTarget = createUploadTarget();
   await uploadTarget.upload(item, size);
-}
+});
 
 if (isQiniuEndpoint(endpoint)) {
   await refreshQiniuCdnUrls([

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseSparkleArchiveHistory,
   qualifySparkleDeltaArtifacts,
+  removeSparkleDeltaEligibilityHints,
   sparkleHistoryFallbackUrl,
   validateGeneratedSparkleAppcast,
 } from '@root/scripts/release/lib/sparkle-feed';
@@ -70,6 +71,20 @@ describe('Sparkle release feed', () => {
     ]);
     expect(result.content).toContain('Yoda0.16.0-0.15.3-arm64.delta');
     expect(result.content).toContain('sparkle:edSignature="delta-signature"');
+  });
+
+  it('removes brittle delta eligibility hints without changing signed artifact metadata', () => {
+    const hinted = appcast.replace(
+      'sparkle:deltaFrom="0.15.3"',
+      'sparkle:deltaFrom="0.15.3" sparkle:deltaFromSparkleExecutableSize="977760" sparkle:deltaFromSparkleLocales="de,ja"'
+    );
+
+    const result = removeSparkleDeltaEligibilityHints(hinted);
+
+    expect(result).not.toContain('deltaFromSparkleExecutableSize');
+    expect(result).not.toContain('deltaFromSparkleLocales');
+    expect(result).toContain('sparkle:deltaFrom="0.15.3"');
+    expect(result).toContain('sparkle:edSignature="delta-signature"');
   });
 
   it('falls back to the matching GitHub release when a history mirror is stale', () => {

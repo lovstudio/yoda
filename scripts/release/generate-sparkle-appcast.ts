@@ -16,6 +16,7 @@ import { fail, info, step } from './lib/log.ts';
 import {
   parseSparkleArchiveHistory,
   qualifySparkleDeltaArtifacts,
+  removeSparkleDeltaEligibilityHints,
   sparkleHistoryFallbackUrl,
   validateGeneratedSparkleAppcast,
   type SparkleArchiveHistoryItem,
@@ -94,7 +95,9 @@ async function generateForArch(arch: string): Promise<void> {
     arch,
     deltaFileNames
   );
-  const generated = qualified.content;
+  // These generated size and locale hints are only heuristics. Some real DMG installs can
+  // fail them and make Sparkle select the full ZIP even when the signed delta is applicable.
+  const generated = removeSparkleDeltaEligibilityHints(qualified.content);
   writeFileSync(appcastPath, generated);
   validateGeneratedSparkleAppcast(
     generated,
