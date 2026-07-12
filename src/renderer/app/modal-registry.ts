@@ -31,6 +31,7 @@ import { RenameTaskModal } from '@renderer/features/tasks/rename-task-modal';
 import { SessionPromptsModal } from '@renderer/features/tasks/session-prompts-modal';
 import { SetParentTaskModal } from '@renderer/features/tasks/set-parent-task-modal';
 import { CreateWorkspaceModal } from '@renderer/features/workspaces/create-workspace-modal';
+import { ManageWorkspacesModal } from '@renderer/features/workspaces/manage-workspaces-modal';
 import { ProjectWorkspaceConflictModal } from '@renderer/features/workspaces/project-workspace-conflict-modal';
 import { AccountDeviceFlowModalOverlay } from '@renderer/lib/components/account-device-flow-modal';
 import { AddSshConnModal } from '@renderer/lib/components/add-ssh-conn-modal';
@@ -91,6 +92,7 @@ export const modalRegistry = {
   renameProjectModal: createModal(RenameProjectModal, { size: 'xs' }),
   moveProjectPathModal: createModal(MoveProjectPathModal, { size: 'sm' }),
   createWorkspaceModal: createModal(CreateWorkspaceModal, { size: 'xs' }),
+  manageWorkspacesModal: createModal(ManageWorkspacesModal, { size: 'sm' }),
   projectWorkspaceConflictModal: createModal(ProjectWorkspaceConflictModal, { size: 'sm' }),
   archiveTaskWithNoteModal: createModal(ArchiveTaskWithNoteModal, { size: 'sm' }),
   archivedSessionTranscriptModal: createModal(ArchivedSessionTranscriptModal, { size: 'lg' }),
