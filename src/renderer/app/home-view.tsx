@@ -845,12 +845,16 @@ export const HomeComposer = observer(function HomeComposer({
     [selectedProjectId, runtimeId, effectiveStandardStrategyKind, selectedBranch]
   );
   const addVariant = useCallback(() => {
+    // Comparison tasks need a real, mounted project. In production the persisted
+    // home draft can be projectless (or still opening), so do not replace the
+    // base toolbar with projectless variants that cannot be submitted.
+    if (!mounted) return;
     setCompareVariants((prev) => {
       if (prev.length >= MAX_COMPARE_VARIANTS) return prev;
       if (prev.length === 0) return [makeVariantFromBase(), makeVariantFromBase()];
       return [...prev, makeVariantFromBase()];
     });
-  }, [makeVariantFromBase]);
+  }, [makeVariantFromBase, mounted]);
   const targetProvisionedTask = asProvisioned(taskScopedTaskStore);
   const setAttachImagesAsPathsGlobal = useCallback(
     (next: boolean) => {
@@ -2115,7 +2119,7 @@ export const HomeComposer = observer(function HomeComposer({
       aria-label={t('home.addCompareVariant')}
       title={t('home.addCompareVariantTooltip')}
       onClick={addVariant}
-      disabled={compareVariants.length >= MAX_COMPARE_VARIANTS}
+      disabled={!mounted || compareVariants.length >= MAX_COMPARE_VARIANTS}
       className="ml-auto flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:cursor-not-allowed disabled:opacity-50"
     >
       <GitCompare className="size-3.5 text-foreground-muted" />
@@ -2147,7 +2151,7 @@ export const HomeComposer = observer(function HomeComposer({
         {/* Compare mode: the base config is migrated into this uniform, reorderable
             list, so every row is an equal config. The plain base chip row below is
             hidden while comparing. */}
-        {!taskScopedTarget && mounted && runMode === 'normal' && compareVariants.length > 0 && (
+        {!taskScopedTarget && runMode === 'normal' && compareVariants.length > 0 && (
           <div className="flex flex-col gap-2">
             {compareVariants.map((variant, index) => {
               const variantRunHostKind: RunHostKind =
