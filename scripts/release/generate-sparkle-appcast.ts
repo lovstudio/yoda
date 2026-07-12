@@ -15,6 +15,7 @@ import { R2_BASE_URL } from '../../src/shared/app-identity.ts';
 import { fail, info, step } from './lib/log.ts';
 import {
   parseSparkleArchiveHistory,
+  qualifySparkleDeltaArtifacts,
   validateGeneratedSparkleAppcast,
   type SparkleArchiveHistoryItem,
 } from './lib/sparkle-feed.ts';
@@ -86,7 +87,14 @@ async function generateForArch(arch: string): Promise<void> {
   }
 
   runGenerateAppcast(workDir, appcastPath);
-  const generated = readFileSync(appcastPath, 'utf8');
+  const deltaFileNames = readdirSync(workDir).filter((name) => name.endsWith('.delta'));
+  const qualified = qualifySparkleDeltaArtifacts(
+    readFileSync(appcastPath, 'utf8'),
+    arch,
+    deltaFileNames
+  );
+  const generated = qualified.content;
+  writeFileSync(appcastPath, generated);
   validateGeneratedSparkleAppcast(
     generated,
     currentVersion,
@@ -95,17 +103,18 @@ async function generateForArch(arch: string): Promise<void> {
 
   copyFileSync(appcastPath, join('release', appcastName));
   copyFileSync(join(workDir, versionedArchiveName), join('release', versionedArchiveName));
-  const deltas = readdirSync(workDir).filter((name) => name.endsWith('.delta'));
-  for (const delta of deltas) {
-    const source = join(workDir, delta);
-    if (statSync(source).size <= 0) fail(`Generated empty Sparkle delta: ${delta}`);
-    copyFileSync(source, join('release', delta));
+  for (const delta of qualified.artifacts) {
+    const source = join(workDir, delta.source);
+    if (statSync(source).size <= 0) fail(`Generated empty Sparkle delta: ${delta.source}`);
+    copyFileSync(source, join('release', delta.published));
   }
 
-  if (history.length > 0 && deltas.length === 0) {
+  if (history.length > 0 && qualified.artifacts.length === 0) {
     fail(`Sparkle generated no ${arch} deltas from existing release history`);
   }
-  info(`Generated ${appcastName}, ${versionedArchiveName}, and ${deltas.length} delta(s)`);
+  info(
+    `Generated ${appcastName}, ${versionedArchiveName}, and ${qualified.artifacts.length} delta(s)`
+  );
 }
 
 function runGenerateAppcast(workDir: string, outputPath: string): void {

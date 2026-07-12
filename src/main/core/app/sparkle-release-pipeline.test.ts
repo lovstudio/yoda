@@ -13,6 +13,7 @@ describe('Sparkle release pipeline', () => {
     expect(generator).toContain("'--maximum-deltas'");
     expect(generator).toContain("'5'");
     expect(generator).toContain('validateGeneratedSparkleAppcast');
+    expect(generator).toContain('qualifySparkleDeltaArtifacts');
   });
 
   it.each([

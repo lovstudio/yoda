@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.6
+
+### Patch Changes
+
+- Publish architecture-qualified Sparkle delta assets so Apple Silicon and Intel updates cannot overwrite each other.
+
 ## 0.15.5
 
 ### Patch Changes

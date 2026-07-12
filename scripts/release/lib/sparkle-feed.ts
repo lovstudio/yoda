@@ -6,6 +6,23 @@ export type SparkleArchiveHistoryItem = {
   fileName: string;
 };
 
+export function qualifySparkleDeltaArtifacts(
+  content: string,
+  arch: string,
+  deltaFileNames: string[]
+): { content: string; artifacts: Array<{ source: string; published: string }> } {
+  let qualifiedContent = content;
+  const artifacts = deltaFileNames.map((source) => {
+    const published = source.replace(/\.delta$/, `-${arch}.delta`);
+    if (published === source || !qualifiedContent.includes(source)) {
+      throw new Error(`Sparkle appcast does not reference generated delta: ${source}`);
+    }
+    qualifiedContent = qualifiedContent.split(source).join(published);
+    return { source, published };
+  });
+  return { content: qualifiedContent, artifacts };
+}
+
 export function parseSparkleArchiveHistory(content: string): SparkleArchiveHistoryItem[] {
   const history: SparkleArchiveHistoryItem[] = [];
   for (const itemMatch of content.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {

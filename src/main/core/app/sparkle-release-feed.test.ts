@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseSparkleArchiveHistory,
+  qualifySparkleDeltaArtifacts,
   validateGeneratedSparkleAppcast,
 } from '@root/scripts/release/lib/sparkle-feed';
 
@@ -49,5 +50,24 @@ describe('Sparkle release feed', () => {
         ['0.15.3']
       )
     ).toThrow('full archive is unsigned');
+  });
+
+  it('publishes architecture-qualified delta names without changing signatures', () => {
+    const collisionProneAppcast = appcast.replace(
+      'yoda-0.15.3-to-0.16.0-arm64.delta',
+      'Yoda0.16.0-0.15.3.delta'
+    );
+    const result = qualifySparkleDeltaArtifacts(collisionProneAppcast, 'arm64', [
+      'Yoda0.16.0-0.15.3.delta',
+    ]);
+
+    expect(result.artifacts).toEqual([
+      {
+        source: 'Yoda0.16.0-0.15.3.delta',
+        published: 'Yoda0.16.0-0.15.3-arm64.delta',
+      },
+    ]);
+    expect(result.content).toContain('Yoda0.16.0-0.15.3-arm64.delta');
+    expect(result.content).toContain('sparkle:edSignature="delta-signature"');
   });
 });
