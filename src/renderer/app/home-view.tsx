@@ -845,16 +845,12 @@ export const HomeComposer = observer(function HomeComposer({
     [selectedProjectId, runtimeId, effectiveStandardStrategyKind, selectedBranch]
   );
   const addVariant = useCallback(() => {
-    // Comparison tasks need a real, mounted project. In production the persisted
-    // home draft can be projectless (or still opening), so do not replace the
-    // base toolbar with projectless variants that cannot be submitted.
-    if (!mounted) return;
     setCompareVariants((prev) => {
       if (prev.length >= MAX_COMPARE_VARIANTS) return prev;
       if (prev.length === 0) return [makeVariantFromBase(), makeVariantFromBase()];
       return [...prev, makeVariantFromBase()];
     });
-  }, [makeVariantFromBase, mounted]);
+  }, [makeVariantFromBase]);
   const targetProvisionedTask = asProvisioned(taskScopedTaskStore);
   const setAttachImagesAsPathsGlobal = useCallback(
     (next: boolean) => {
@@ -2119,7 +2115,7 @@ export const HomeComposer = observer(function HomeComposer({
       aria-label={t('home.addCompareVariant')}
       title={t('home.addCompareVariantTooltip')}
       onClick={addVariant}
-      disabled={!mounted || compareVariants.length >= MAX_COMPARE_VARIANTS}
+      disabled={compareVariants.length >= MAX_COMPARE_VARIANTS}
       className="ml-auto flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:cursor-not-allowed disabled:opacity-50"
     >
       <GitCompare className="size-3.5 text-foreground-muted" />
@@ -2169,7 +2165,15 @@ export const HomeComposer = observer(function HomeComposer({
                   modelLabel={compareModelLabel}
                   renderSettings={renderComposerSettingsButton}
                   trailing={index === 0 ? renderAddCompareButton() : undefined}
-                  onChange={(patch) => updateVariant(variant.id, patch)}
+                  onChange={(patch) => {
+                    updateVariant(variant.id, patch);
+                    // The first compare row is the migrated base configuration.
+                    // Selecting its project must also restore the base selection
+                    // so the normal submit path can mount and launch the group.
+                    if (index === 0 && patch.projectId !== undefined) {
+                      setSelectedProjectId(patch.projectId ?? undefined);
+                    }
+                  }}
                   onRunHostChange={(nextKind) => {
                     if (nextKind === variantRunHostKind) return;
                     const nextProjectId = findProjectIdByRunHost(nextKind);

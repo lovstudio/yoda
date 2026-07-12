@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.7
+
+### Patch Changes
+
+- Keep the Home comparison action available while a restored project is still mounting, and allow projectless comparison rows to select their base project.
+
 ## 0.15.6
 
 ### Patch Changes
