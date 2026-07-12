@@ -80,6 +80,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - ecr:BatchCheckLayerAvailability
+                  - ecr:DescribeImages
                   - ecr:GetDownloadUrlForLayer
                   - ecr:BatchGetImage
                   - ecr:InitiateLayerUpload
