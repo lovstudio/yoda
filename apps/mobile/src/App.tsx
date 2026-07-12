@@ -43,6 +43,7 @@ import {
   type MobileTaskActivityStatus,
   type MobileTaskSummary,
 } from '../../../src/shared/mobile-api';
+import { parseMobileRelayPairingUrl } from '../../../src/shared/mobile-relay';
 import {
   createDemand,
   fetchSessionDetail,
@@ -73,6 +74,10 @@ const SESSION_LIST_POLL_INTERVAL_MS = 4_000;
 const SESSION_DETAIL_RECONCILE_INTERVAL_MS = 60_000;
 const SESSION_DETAIL_REQUEST_TIMEOUT_MS = 15_000;
 const SESSION_EVENT_REFRESH_DELAY_MS = 500;
+const RELAY_PAIR_TIMEOUT_MS = 15_000;
+const YODA_RELAY_ORIGIN = new URL(
+  process.env.EXPO_PUBLIC_YODA_RELAY_ORIGIN?.trim() || 'https://relay.yoda.lovstudio.ai'
+).origin;
 const DEV_GATEWAY_DEFAULT_PORT = '3879';
 const SWIPE_BACK_EDGE_WIDTH = 34;
 const SWIPE_BACK_ACTIVATION_DISTANCE = 12;
@@ -497,6 +502,9 @@ function redactPairingUrl(value: string): string {
     if (url.searchParams.has('token')) {
       url.searchParams.set('token', '<redacted>');
     }
+    if (url.searchParams.has('pairingCode')) {
+      url.searchParams.set('pairingCode', '<redacted>');
+    }
     return url.toString();
   } catch {
     return value;
@@ -548,7 +556,9 @@ async function getInitialPairing(): Promise<{
   }
 
   return {
-    pairingUrl: candidates.find((url) => parseMobilePairingUrl(url)) ?? initialUrl,
+    pairingUrl:
+      candidates.find((url) => parseMobilePairingUrl(url) || parseMobileRelayPairingUrl(url)) ??
+      initialUrl,
     devConnection: inferDevGatewayConnection(candidates),
   };
 }
@@ -611,7 +621,51 @@ export function App() {
 
   const applyPairingUrl = useCallback(async (url: string | null) => {
     if (!url) return false;
-    const next = parseMobilePairingUrl(url);
+    const relayPairing = parseMobileRelayPairingUrl(url);
+    let next = parseMobilePairingUrl(url);
+    if (relayPairing) {
+      if (new URL(relayPairing.relayBaseUrl).origin !== YODA_RELAY_ORIGIN) {
+        throw new Error('This pairing code does not use the official Yoda Relay service.');
+      }
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), RELAY_PAIR_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(`${relayPairing.relayBaseUrl}/v1/pair`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deviceId: relayPairing.deviceId,
+            pairingCode: relayPairing.pairingCode,
+          }),
+          signal: controller.signal,
+        });
+      } catch {
+        throw new Error('Cannot reach Yoda Relay. Check your network and try a new pairing code.');
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (!response.ok) {
+        throw new Error(
+          response.status === 402
+            ? 'Yoda Relay Pass is not active.'
+            : 'Relay pairing code is invalid or expired. Generate a new code on the desktop.'
+        );
+      }
+      const exchanged = (await response.json()) as Partial<MobileConnection>;
+      const expectedBaseUrl = `${relayPairing.relayBaseUrl}/v1/devices/${encodeURIComponent(
+        relayPairing.deviceId
+      )}`;
+      if (
+        exchanged.baseUrl !== expectedBaseUrl ||
+        typeof exchanged.token !== 'string' ||
+        !exchanged.token ||
+        exchanged.token.length > 512
+      ) {
+        throw new Error('Yoda Relay returned an invalid pairing response.');
+      }
+      next = { baseUrl: exchanged.baseUrl, token: exchanged.token };
+    }
     if (!next) return false;
 
     setConnectDraft(next);
@@ -632,7 +686,11 @@ export function App() {
     Promise.all([loadConnection(), getInitialPairing()])
       .then(async ([saved, initial]) => {
         if (!active) return;
-        if (await applyPairingUrl(initial.pairingUrl)) return;
+        try {
+          if (await applyPairingUrl(initial.pairingUrl)) return;
+        } catch (e) {
+          if (active) setError(errorMessage(e));
+        }
         if (initial.devConnection) {
           setConnection(initial.devConnection);
           setConnectDraft(initial.devConnection);
@@ -644,7 +702,9 @@ export function App() {
           setConnectDraft(saved);
         }
       })
-      .catch(() => undefined)
+      .catch((e: unknown) => {
+        if (active) setError(errorMessage(e));
+      })
       .finally(() => {
         if (active) setBooting(false);
       });

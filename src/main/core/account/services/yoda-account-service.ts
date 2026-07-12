@@ -8,7 +8,7 @@ import { events } from '@main/lib/events';
 import { HookCore, type Hookable } from '@main/lib/hookable';
 import { log } from '@main/lib/logger';
 import { ACCOUNT_CONFIG } from '../config';
-import { accountCredentialStore } from './credential-store';
+import { accountCredentialStore, accountRefreshCredentialStore } from './credential-store';
 
 export interface AccountUser {
   userId: string;
@@ -42,13 +42,22 @@ export interface SessionState {
   hasAccount: boolean;
 }
 
+export interface AccountRequestSession {
+  userId: string;
+  accessToken: string;
+  generation: number;
+  signal: AbortSignal;
+}
+
 interface AccountKVSchema extends Record<string, unknown> {
   profile: CachedProfile;
   refreshToken: string;
+  signedOut: boolean;
 }
 
 type AccountServiceHooks = {
   accountChanged: (username: string, userId: string, email: string) => void | Promise<void>;
+  accountWillClear: () => void | Promise<void>;
   accountCleared: () => void | Promise<void>;
 };
 
@@ -132,6 +141,19 @@ function accountUserFromProfile(profile: CachedProfile): AccountUser {
   };
 }
 
+function accessTokenSubject(token: string): string | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+      sub?: unknown;
+    };
+    return typeof decoded.sub === 'string' && decoded.sub ? decoded.sub : null;
+  } catch {
+    return null;
+  }
+}
+
 export class YodaAccountService implements Hookable<AccountServiceHooks> {
   private readonly _hooks = new HookCore<AccountServiceHooks>((name, e) =>
     log.error(`YodaAccountService: ${String(name)} hook error`, e)
@@ -142,20 +164,40 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
   private lastWarmUpAttemptAt = 0;
   private prefetchedStart: { start: DeviceStartResponse; fetchedAt: number } | null = null;
   private prefetchInFlight: Promise<void> | null = null;
+  private sessionGeneration = 0;
+  private sessionAbort = new AbortController();
+  private refreshAbort: AbortController | null = null;
+  private refreshOperation: { generation: number; promise: Promise<boolean> } | null = null;
+  private credentialMutationQueue: Promise<void> = Promise.resolve();
+  private sessionLoaded = false;
+  private loadOperation: Promise<void> | null = null;
+  private signingOut = false;
+  private signedOut = false;
+  private signInOperation: Promise<SignInResult> | null = null;
+  private signOutOperation: Promise<void> | null = null;
 
   on<K extends keyof AccountServiceHooks>(name: K, handler: AccountServiceHooks[K]) {
     return this._hooks.on(name, handler);
   }
 
   async getSession(): Promise<SessionState> {
-    this.cachedProfile = await accountKV.get('profile');
-    const hasAccount = this.cachedProfile?.hasAccount === true;
-    const isSignedIn = hasAccount && this.sessionToken !== null;
-    return {
-      user: isSignedIn && this.cachedProfile ? accountUserFromProfile(this.cachedProfile) : null,
-      isSignedIn,
-      hasAccount,
-    };
+    await this.loadSessionToken();
+    for (;;) {
+      const generation = this.sessionGeneration;
+      const profile = await accountKV.get('profile');
+      if (generation !== this.sessionGeneration) continue;
+      const token = this.sessionToken;
+      const hasAccount = profile?.hasAccount === true;
+      const tokenMatchesProfile =
+        !!token && !!profile && accessTokenSubject(token) === profile.userId;
+      const isSignedIn = !this.signingOut && !this.signedOut && hasAccount && tokenMatchesProfile;
+      this.cachedProfile = profile;
+      return {
+        user: isSignedIn && profile ? accountUserFromProfile(profile) : null,
+        isSignedIn,
+        hasAccount,
+      };
+    }
   }
 
   async refreshSession(): Promise<SessionState> {
@@ -164,34 +206,83 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
   }
 
   async updateNickname(nickname: string): Promise<SessionState> {
-    const profile = this.cachedProfile ?? (await accountKV.get('profile'));
-    if (!profile?.hasAccount) {
-      throw new Error('No signed-in account');
-    }
+    const requestSession = await this.getRequestSession();
+    await this.mutateCredentials(async () => {
+      if (!this.isRequestSessionCurrent(requestSession)) {
+        throw new Error('LovStudio account session changed');
+      }
+      const profile = this.cachedProfile ?? (await accountKV.get('profile'));
+      if (!profile?.hasAccount || profile.userId !== requestSession.userId) {
+        throw new Error('LovStudio account session changed');
+      }
 
-    const updated: CachedProfile = { ...profile };
-    const trimmed = nickname.trim();
-    if (trimmed) {
-      updated.nicknameOverride = trimmed;
-    } else {
-      delete updated.nicknameOverride;
-    }
+      const updated: CachedProfile = { ...profile };
+      const trimmed = nickname.trim();
+      if (trimmed) {
+        updated.nicknameOverride = trimmed;
+      } else {
+        delete updated.nicknameOverride;
+      }
 
-    this.cachedProfile = updated;
-    await accountKV.set('profile', updated);
+      await accountKV.setStrict('profile', updated);
+      if (!this.isRequestSessionCurrent(requestSession)) {
+        throw new Error('LovStudio account session changed');
+      }
+      this.cachedProfile = updated;
+    });
     return this.getSession();
   }
 
   getSessionToken(): string | null {
-    return this.sessionToken;
+    return !this.sessionLoaded || this.signingOut || this.signedOut ? null : this.sessionToken;
   }
 
-  async loadSessionToken(): Promise<void> {
-    [this.sessionToken, this.cachedProfile] = await Promise.all([
+  loadSessionToken(): Promise<void> {
+    if (this.sessionLoaded) return Promise.resolve();
+    if (this.loadOperation) return this.loadOperation;
+    const generation = this.sessionGeneration;
+    const operation = this.loadSessionTokenInternal(generation)
+      .then(() => {
+        this.sessionLoaded = true;
+      })
+      .finally(() => {
+        if (this.loadOperation === operation) this.loadOperation = null;
+      });
+    this.loadOperation = operation;
+    return operation;
+  }
+
+  private async loadSessionTokenInternal(generation: number): Promise<void> {
+    const [storedToken, profile, signedOut] = await Promise.all([
       accountCredentialStore.get(),
       accountKV.get('profile'),
+      accountKV.get('signedOut'),
     ]);
-    if (this.sessionToken && this.cachedProfile?.hasAccount) {
+    const tokenMatchesProfile =
+      !storedToken || (!!profile && accessTokenSubject(storedToken) === profile.userId);
+    const shouldStaySignedOut = signedOut || !tokenMatchesProfile;
+    let committed = false;
+    await this.mutateCredentials(async () => {
+      if (generation !== this.sessionGeneration || this.signingOut) return;
+      this.signedOut = Boolean(shouldStaySignedOut);
+      this.cachedProfile = profile;
+      this.sessionToken = shouldStaySignedOut ? null : storedToken;
+      this.rotateSessionGeneration();
+      if (shouldStaySignedOut) {
+        await this.clearCredentialsForSignedOutState('session initialization');
+      }
+      const legacyRefreshToken = await accountKV.get('refreshToken');
+      if (legacyRefreshToken && !shouldStaySignedOut) {
+        if (!(await accountRefreshCredentialStore.get())) {
+          await accountRefreshCredentialStore.set(legacyRefreshToken);
+        }
+        await accountKV.delStrict('refreshToken');
+      } else if (legacyRefreshToken) {
+        await accountKV.delStrict('refreshToken');
+      }
+      committed = true;
+    });
+    if (committed && this.sessionToken && this.cachedProfile?.hasAccount) {
       this._hooks.callHookBackground(
         'accountChanged',
         this.cachedProfile.username,
@@ -209,7 +300,11 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
    * Failures are irrelevant by design — signIn() falls back to a live call.
    */
   warmUp(): void {
-    if (this.sessionToken) return;
+    if (!this.sessionLoaded) {
+      void this.loadSessionToken().then(() => this.warmUp());
+      return;
+    }
+    if (this.sessionToken || this.signingOut) return;
     if (this.getFreshPrefetchedStart() || this.prefetchInFlight) return;
     const now = Date.now();
     if (now - this.lastWarmUpAttemptAt < 30_000) return;
@@ -243,7 +338,19 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
     return { ...this.prefetchedStart.start, expiresIn: remaining };
   }
 
-  async signIn(_provider?: string): Promise<SignInResult> {
+  signIn(provider?: string): Promise<SignInResult> {
+    if (this.signingOut) return Promise.reject(new Error('Sign-out is still in progress'));
+    if (this.signInOperation) return this.signInOperation;
+    this.signInOperation = this.loadSessionToken()
+      .then(() => this.signInInternal(provider))
+      .finally(() => {
+        this.signInOperation = null;
+      });
+    return this.signInOperation;
+  }
+
+  private async signInInternal(_provider?: string): Promise<SignInResult> {
+    if (this.sessionToken) throw new Error('Sign out before switching LovStudio accounts');
     this.cancelSignIn();
     const cancelSignal = new AbortController();
     this.cancelSignal = cancelSignal;
@@ -292,12 +399,27 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
         email: session.user.email,
         lastValidated: new Date().toISOString(),
       };
+      if (accessTokenSubject(session.accessToken) !== session.user.id) {
+        throw new Error('LovStudio sign-in returned an invalid account token');
+      }
 
-      await accountCredentialStore.set(session.accessToken);
-      await accountKV.set('refreshToken', session.refreshToken);
-      await accountKV.set('profile', profile);
-      this.sessionToken = session.accessToken;
-      this.cachedProfile = profile;
+      if (this.signingOut || cancelSignal.signal.aborted) throw new Error('Sign-in was cancelled');
+      const sessionGeneration = this.rotateSessionGeneration();
+      await this.mutateCredentials(async () => {
+        if (this.signingOut || sessionGeneration !== this.sessionGeneration) {
+          throw new Error('Sign-in was cancelled');
+        }
+        await accountCredentialStore.set(session.accessToken);
+        await accountRefreshCredentialStore.set(session.refreshToken);
+        await accountKV.setStrict('profile', profile);
+        await accountKV.delStrict('signedOut');
+        if (this.signingOut || sessionGeneration !== this.sessionGeneration) {
+          throw new Error('Sign-in was cancelled');
+        }
+        this.sessionToken = session.accessToken;
+        this.cachedProfile = profile;
+        this.signedOut = false;
+      });
 
       const user = accountUserFromProfile(profile);
 
@@ -325,16 +447,39 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
     this.cancelSignal = null;
   }
 
-  async signOut(): Promise<void> {
+  signOut(): Promise<void> {
+    if (this.signOutOperation) return this.signOutOperation;
+    this.signOutOperation = this.loadSessionToken()
+      .then(() => this.signOutInternal())
+      .finally(() => {
+        this.signOutOperation = null;
+      });
+    return this.signOutOperation;
+  }
+
+  private async signOutInternal(): Promise<void> {
+    this.signingOut = true;
+    this.signedOut = true;
     this.cancelSignIn();
-    this.sessionToken = null;
-    await accountCredentialStore.clear();
-    await accountKV.del('refreshToken');
-    if (this.cachedProfile) {
-      this.cachedProfile.hasAccount = true;
-      await accountKV.set('profile', this.cachedProfile);
+    this.rotateSessionGeneration();
+    try {
+      await this._hooks.callHook('accountWillClear');
+      await this.revokeServerSession();
+    } finally {
+      try {
+        await this.mutateCredentials(async () => {
+          await this.clearCredentialsForSignedOutState('sign-out');
+          if (this.cachedProfile) {
+            this.cachedProfile.hasAccount = true;
+            await accountKV.setStrict('profile', this.cachedProfile);
+          }
+        });
+      } finally {
+        this.rotateSessionGeneration();
+        this.signingOut = false;
+        this._hooks.callHookBackground('accountCleared');
+      }
     }
-    this._hooks.callHookBackground('accountCleared');
   }
 
   async checkServerHealth(): Promise<boolean> {
@@ -350,20 +495,81 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
     }
   }
 
-  async validateSession(options: { forceRefresh?: boolean } = {}): Promise<boolean> {
-    if (this.sessionToken && !options.forceRefresh) return true;
-    const refreshToken = await accountKV.get('refreshToken');
-    if (!refreshToken) return false;
+  private async revokeServerSession(): Promise<void> {
+    const { baseUrl } = ACCOUNT_CONFIG.authServer;
+    const accessToken = this.sessionToken;
+    let refreshToken: string | null = null;
     try {
-      await this.refreshAccessToken(refreshToken);
+      refreshToken = await accountRefreshCredentialStore.get();
+    } catch (error) {
+      log.warn('Failed to read the LovStudio refresh credential during sign-out', error);
+    }
+    if (!accessToken && !refreshToken) return;
+    try {
+      const response = await fetch(`${baseUrl}/api/cli/auth/signout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ refreshToken }),
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!response.ok) log.warn(`LovStudio session sign-out failed (${response.status})`);
+    } catch (error) {
+      // Local sign-out must always complete even if LovStudio is temporarily unreachable.
+      log.warn('LovStudio session sign-out request failed', error);
+    }
+  }
+
+  async validateSession(
+    options: { forceRefresh?: boolean; expectedGeneration?: number } = {}
+  ): Promise<boolean> {
+    await this.loadSessionToken();
+    if (this.signingOut || this.signedOut) return false;
+    if (
+      options.expectedGeneration !== undefined &&
+      options.expectedGeneration !== this.sessionGeneration
+    ) {
+      return false;
+    }
+    if (this.sessionToken && !options.forceRefresh) return true;
+    if (this.refreshOperation?.generation === this.sessionGeneration) {
+      return this.refreshOperation.promise;
+    }
+    const generation = this.sessionGeneration;
+    const promise = this.validateSessionInternal(generation).finally(() => {
+      if (this.refreshOperation?.generation === generation) this.refreshOperation = null;
+    });
+    this.refreshOperation = { generation, promise };
+    return promise;
+  }
+
+  private async validateSessionInternal(generation: number): Promise<boolean> {
+    const refreshToken =
+      (await accountRefreshCredentialStore.get()) ?? (await accountKV.get('refreshToken'));
+    if (!refreshToken || this.signingOut || this.signedOut) return false;
+    if (generation !== this.sessionGeneration) return false;
+    const controller = new AbortController();
+    this.refreshAbort = controller;
+    try {
+      await this.refreshAccessToken(refreshToken, generation, controller.signal);
       return true;
     } catch (err) {
+      if (generation !== this.sessionGeneration || this.signingOut || this.signedOut) return false;
       log.warn('Session refresh failed; clearing local credentials', err);
-      this.sessionToken = null;
-      await accountCredentialStore.clear();
-      await accountKV.del('refreshToken');
-      this._hooks.callHookBackground('accountCleared');
+      this.signedOut = true;
+      try {
+        await this.mutateCredentials(async () => {
+          if (generation !== this.sessionGeneration || this.signingOut) return;
+          await this.clearCredentialsForSignedOutState('expired session');
+        });
+      } finally {
+        this._hooks.callHookBackground('accountCleared');
+      }
       return false;
+    } finally {
+      if (this.refreshAbort === controller) this.refreshAbort = null;
     }
   }
 
@@ -432,13 +638,17 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
     throw new Error('Sign-in timed out. Please try again.');
   }
 
-  private async refreshAccessToken(refreshToken: string): Promise<void> {
+  private async refreshAccessToken(
+    refreshToken: string,
+    generation: number,
+    signal: AbortSignal
+  ): Promise<void> {
     const { baseUrl } = ACCOUNT_CONFIG.authServer;
     const response = await fetch(`${baseUrl}/api/cli/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
     });
     if (!response.ok) {
       throw new Error(`Refresh failed (${response.status})`);
@@ -448,23 +658,173 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
       refreshToken: string;
       user?: AccountProfilePayload;
     };
-    await accountCredentialStore.set(json.accessToken);
-    await accountKV.set('refreshToken', json.refreshToken);
-    this.sessionToken = json.accessToken;
+    const profile = this.cachedProfile ?? (await accountKV.get('profile'));
+    if (!profile?.hasAccount) throw new Error('LovStudio account profile is unavailable');
+    if (accessTokenSubject(json.accessToken) !== profile.userId) {
+      throw new Error('LovStudio refresh returned an invalid account token');
+    }
+    if (json.user?.id && json.user.id !== profile.userId) {
+      throw new Error('LovStudio refresh returned a different account');
+    }
+    const updatedProfile = json.user
+      ? (() => {
+          const names = normalizeAccountNames(json.user, profile);
+          return {
+            ...profile,
+            nickname: names.nickname,
+            name: names.name,
+            avatarUrl: json.user.avatarUrl?.trim() || profile.avatarUrl || '',
+            email: json.user.email || profile.email,
+            lastValidated: new Date().toISOString(),
+          } satisfies CachedProfile;
+        })()
+      : profile;
 
-    if (json.user && this.cachedProfile) {
-      const names = normalizeAccountNames(json.user, this.cachedProfile);
-      const updated: CachedProfile = {
-        ...this.cachedProfile,
-        userId: json.user.id || this.cachedProfile.userId,
-        nickname: names.nickname,
-        name: names.name,
-        avatarUrl: json.user.avatarUrl?.trim() || this.cachedProfile.avatarUrl || '',
-        email: json.user.email || this.cachedProfile.email,
-        lastValidated: new Date().toISOString(),
-      };
-      this.cachedProfile = updated;
-      await accountKV.set('profile', updated);
+    await this.mutateCredentials(async () => {
+      if (generation !== this.sessionGeneration || this.signingOut || this.signedOut) {
+        throw new Error('Session refresh was cancelled');
+      }
+      await accountCredentialStore.set(json.accessToken);
+      await accountRefreshCredentialStore.set(json.refreshToken);
+      await accountKV.delStrict('refreshToken');
+      await accountKV.setStrict('profile', updatedProfile);
+      if (generation !== this.sessionGeneration || this.signingOut || this.signedOut) {
+        throw new Error('Session refresh was cancelled');
+      }
+      this.sessionToken = json.accessToken;
+      this.cachedProfile = updatedProfile;
+    });
+  }
+
+  async getRequestSession(
+    options: {
+      allowDuringSignOut?: boolean;
+      expectedUserId?: string;
+      expectedGeneration?: number;
+    } = {}
+  ): Promise<AccountRequestSession> {
+    await this.loadSessionToken();
+    const allowedSignOutRequest = options.allowDuringSignOut && this.signingOut;
+    if ((this.signingOut || this.signedOut) && !allowedSignOutRequest) {
+      throw new Error(
+        this.signingOut
+          ? 'LovStudio account is signing out'
+          : 'LovStudio account session is unavailable'
+      );
+    }
+    const generation = this.sessionGeneration;
+    if (options.expectedGeneration !== undefined && options.expectedGeneration !== generation) {
+      throw new Error('LovStudio account session changed');
+    }
+    if (!this.sessionToken) {
+      if (allowedSignOutRequest) {
+        throw new Error('LovStudio account session is unavailable');
+      }
+      const valid = await this.validateSession({ expectedGeneration: generation });
+      if (!valid) throw new Error('LovStudio account session is unavailable');
+    }
+    const profile = this.cachedProfile ?? (await accountKV.get('profile'));
+    if (
+      generation !== this.sessionGeneration ||
+      ((this.signingOut || this.signedOut) && !allowedSignOutRequest) ||
+      !this.sessionToken ||
+      !profile?.hasAccount ||
+      accessTokenSubject(this.sessionToken) !== profile.userId ||
+      (options.expectedUserId !== undefined && options.expectedUserId !== profile.userId)
+    ) {
+      throw new Error('LovStudio account session changed');
+    }
+    this.cachedProfile = profile;
+    return {
+      userId: profile.userId,
+      accessToken: this.sessionToken,
+      generation,
+      signal: this.sessionAbort.signal,
+    };
+  }
+
+  async refreshRequestSession(expected: AccountRequestSession): Promise<AccountRequestSession> {
+    if (!this.isRequestSessionCurrent(expected) || this.signingOut || this.signedOut) {
+      throw new Error('LovStudio account session changed');
+    }
+    const valid = await this.validateSession({
+      forceRefresh: true,
+      expectedGeneration: expected.generation,
+    });
+    if (!valid || !this.isRequestSessionCurrent(expected)) {
+      throw new Error('LovStudio account session changed');
+    }
+    const refreshed = await this.getRequestSession();
+    if (refreshed.userId !== expected.userId || refreshed.generation !== expected.generation) {
+      throw new Error('LovStudio account session changed');
+    }
+    return refreshed;
+  }
+
+  isRequestSessionCurrent(session: AccountRequestSession): boolean {
+    return (
+      !this.signingOut &&
+      !this.signedOut &&
+      session.generation === this.sessionGeneration &&
+      session.userId === this.cachedProfile?.userId &&
+      accessTokenSubject(session.accessToken) === session.userId &&
+      !session.signal.aborted
+    );
+  }
+
+  async getValidSessionToken(forceRefresh = false): Promise<string> {
+    await this.loadSessionToken();
+    if (this.signingOut || this.signedOut) {
+      throw new Error('LovStudio account session is unavailable');
+    }
+    if (forceRefresh || !this.sessionToken) {
+      const valid = await this.validateSession({ forceRefresh: true });
+      if (!valid || !this.sessionToken) throw new Error('LovStudio account session is unavailable');
+    }
+    const profile = this.cachedProfile ?? (await accountKV.get('profile'));
+    if (!profile || accessTokenSubject(this.sessionToken) !== profile.userId) {
+      throw new Error('LovStudio account session changed');
+    }
+    return this.sessionToken;
+  }
+
+  private rotateSessionGeneration(): number {
+    this.sessionAbort.abort();
+    this.refreshAbort?.abort();
+    this.sessionGeneration += 1;
+    this.sessionAbort = new AbortController();
+    return this.sessionGeneration;
+  }
+
+  private mutateCredentials<T>(mutation: () => Promise<T>): Promise<T> {
+    const result = this.credentialMutationQueue.then(mutation, mutation);
+    this.credentialMutationQueue = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  }
+
+  private async clearCredentialsForSignedOutState(context: string): Promise<void> {
+    this.signedOut = true;
+    this.sessionToken = null;
+    const results = await Promise.allSettled([
+      accountKV.setStrict('signedOut', true),
+      accountCredentialStore.clear(),
+      accountRefreshCredentialStore.clear(),
+      accountKV.delStrict('refreshToken'),
+    ]);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        log.warn(`Failed to clear a LovStudio credential during ${context}`, result.reason);
+      }
+    }
+    const tombstoneFailed = results[0]?.status === 'rejected';
+    const recoverableCredentialClearFailed = results
+      .slice(1)
+      .some((result) => result?.status === 'rejected');
+    if (tombstoneFailed && recoverableCredentialClearFailed) {
+      throw new Error('Failed to persist LovStudio sign-out state');
     }
   }
 }

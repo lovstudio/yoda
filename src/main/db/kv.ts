@@ -29,24 +29,32 @@ export class KV<TSchema extends Record<string, unknown>> {
 
   async set<K extends keyof TSchema & string>(key: K, value: TSchema[K]): Promise<void> {
     try {
-      const serialised = JSON.stringify(value);
-      const now = Date.now();
-
-      await db
-        .insert(kv)
-        .values({ key: this.prefixed(key), value: serialised, updatedAt: now })
-        .onConflictDoUpdate({ target: kv.key, set: { value: serialised, updatedAt: now } });
+      await this.setStrict(key, value);
     } catch (e) {
       log.error('Failed to set KV', { key, value, error: e });
     }
   }
 
+  async setStrict<K extends keyof TSchema & string>(key: K, value: TSchema[K]): Promise<void> {
+    const serialised = JSON.stringify(value);
+    const now = Date.now();
+
+    await db
+      .insert(kv)
+      .values({ key: this.prefixed(key), value: serialised, updatedAt: now })
+      .onConflictDoUpdate({ target: kv.key, set: { value: serialised, updatedAt: now } });
+  }
+
   async del<K extends keyof TSchema & string>(key: K): Promise<void> {
     try {
-      await db.delete(kv).where(eq(kv.key, this.prefixed(key)));
+      await this.delStrict(key);
     } catch (e) {
       log.error('Failed to delete KV', { key, error: e });
     }
+  }
+
+  async delStrict<K extends keyof TSchema & string>(key: K): Promise<void> {
+    await db.delete(kv).where(eq(kv.key, this.prefixed(key)));
   }
 
   async clear(): Promise<void> {

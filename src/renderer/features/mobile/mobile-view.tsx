@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Cloud,
   Copy,
   ExternalLink,
   FlaskConical,
@@ -148,6 +149,13 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
     // panel is open refreshes it (and lets the gateway restart Metro).
     refetchInterval: 5000,
   });
+  const relay = useQuery({
+    queryKey: ['mobileGateway', 'relayStatus'],
+    queryFn: () => rpc.mobileGateway.getRelayStatus(),
+    refetchInterval: 3000,
+  });
+  const [relayBusy, setRelayBusy] = useState(false);
+  const [relayError, setRelayError] = useState<string | null>(null);
 
   // The Dev/Prod view is a manual switch; it defaults to the host's real runtime
   // mode once the connection info loads, but the user can flip it to inspect the
@@ -161,6 +169,7 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
   const localExpoUrl = data?.localExpoUrl ?? null;
   const installUrl = data?.installUrl ?? '';
   const pairingUrl = data?.pairingUrl ?? null;
+  const effectivePairingUrl = relay.data?.pairingUrl ?? pairingUrl;
   const isReady = Boolean(data?.running && data.token && primaryUrl && pairingUrl);
   const isDevView = mode === 'development';
   // Dev connection methods only exist in a dev build of the host app.
@@ -174,10 +183,37 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
     lines.push(
       `${t('sidebar.mobileConnection.gatewayUrl')}: ${primaryUrl}`,
       `${t('sidebar.mobileConnection.token')}: ${data.token ?? ''}`,
-      `${t('sidebar.mobileConnection.pairingUrl')}: ${pairingUrl ?? ''}`
+      `${t('sidebar.mobileConnection.pairingUrl')}: ${effectivePairingUrl ?? ''}`
     );
     return lines.join('\n');
-  }, [data, isDevView, installUrl, localExpoUrl, pairingUrl, primaryUrl, t]);
+  }, [data, effectivePairingUrl, isDevView, installUrl, localExpoUrl, primaryUrl, t]);
+
+  const enableRelay = async () => {
+    setRelayBusy(true);
+    setRelayError(null);
+    try {
+      await rpc.mobileGateway.enableRelay();
+      await relay.refetch();
+    } catch (nextError) {
+      setRelayError(nextError instanceof Error ? nextError.message : String(nextError));
+    } finally {
+      setRelayBusy(false);
+    }
+  };
+
+  const createRelayPairing = async () => {
+    setRelayBusy(true);
+    setRelayError(null);
+    try {
+      await rpc.mobileGateway.createRelayPairing();
+      await relay.refetch();
+      setStepIndex(1);
+    } catch (nextError) {
+      setRelayError(nextError instanceof Error ? nextError.message : String(nextError));
+    } finally {
+      setRelayBusy(false);
+    }
+  };
 
   return (
     <div
@@ -295,6 +331,76 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
                     {t('sidebar.mobileConnection.tailscaleReady')}
                   </span>
                 ) : null}
+              </div>
+
+              <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Cloud className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-medium">
+                        {t('sidebar.mobileConnection.relayTitle')}
+                      </div>
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        {t('sidebar.mobileConnection.recommended')}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-foreground-muted">
+                      {t('sidebar.mobileConnection.relayDescription')}
+                    </p>
+                    <div className="mt-2 flex items-center gap-2 text-xs">
+                      <span
+                        className={cn(
+                          'size-2 rounded-full',
+                          relay.data?.connected
+                            ? 'bg-emerald-500'
+                            : relay.data?.connecting
+                              ? 'animate-pulse bg-amber-500'
+                              : 'bg-foreground-tertiary-passive'
+                        )}
+                      />
+                      <span className="text-foreground-muted">
+                        {relay.data?.connected
+                          ? t('sidebar.mobileConnection.relayConnected')
+                          : relay.data?.connecting
+                            ? t('sidebar.mobileConnection.relayConnecting')
+                            : t('sidebar.mobileConnection.relayDisconnected')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {relayError || relay.data?.lastError ? (
+                  <p className="mt-3 text-xs text-foreground-destructive">
+                    {relayError ?? relay.data?.lastError}
+                  </p>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {!relay.data?.configured ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void enableRelay()}
+                      disabled={relayBusy}
+                    >
+                      <Cloud className="size-3.5" />
+                      {relayBusy
+                        ? t('sidebar.mobileConnection.relayEnabling')
+                        : t('sidebar.mobileConnection.enableRelay')}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void createRelayPairing()}
+                      disabled={relayBusy || !relay.data.connected}
+                    >
+                      <Smartphone className="size-3.5" />
+                      {t('sidebar.mobileConnection.generateRelayPairing')}
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div className="rounded-lg border border-border bg-background p-4">
@@ -431,17 +537,25 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
                   ) : (
                     <>
                       <p className="max-w-sm text-center text-xs leading-5 text-foreground-muted">
-                        {data?.connectionKind === 'tailscale'
-                          ? t('sidebar.mobileConnection.tailscaleConnectDescription')
-                          : t('sidebar.mobileConnection.connectDescription')}
+                        {relay.data?.pairingUrl
+                          ? t('sidebar.mobileConnection.relayConnectDescription')
+                          : data?.connectionKind === 'tailscale'
+                            ? t('sidebar.mobileConnection.tailscaleConnectDescription')
+                            : t('sidebar.mobileConnection.connectDescription')}
                       </p>
                       <QRBox
-                        value={isReady ? pairingUrl : null}
+                        value={relay.data?.pairingUrl ?? (isReady ? pairingUrl : null)}
                         disabledLabel={t('sidebar.mobileConnection.connectUnavailable')}
                       />
                       <div className="flex w-full items-start gap-2 rounded-lg border border-border bg-background-quaternary-1 px-3 py-2 text-xs leading-5 text-foreground-muted">
                         <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-                        <span>{t('sidebar.mobileConnection.securityNote')}</span>
+                        <span>
+                          {t(
+                            relay.data?.pairingUrl
+                              ? 'sidebar.mobileConnection.relaySecurityNote'
+                              : 'sidebar.mobileConnection.securityNote'
+                          )}
+                        </span>
                       </div>
                       <Collapsible className="w-full">
                         <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-xs text-foreground-muted hover:text-foreground">

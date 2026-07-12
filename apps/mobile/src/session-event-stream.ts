@@ -68,7 +68,14 @@ export function subscribeSessionEvents(
       connectionTimer = null;
       if (response.status === 401 || response.status === 403) {
         throw new TerminalSessionEventError(
-          'Desktop rejected the mobile gateway token. Rescan the desktop mobile QR.'
+          connection.baseUrl.startsWith('https://')
+            ? 'Yoda Relay credential is no longer valid. Pair this phone again.'
+            : 'Desktop rejected the mobile gateway token. Rescan the desktop mobile QR.'
+        );
+      }
+      if (response.status === 402) {
+        throw new TerminalSessionEventError(
+          'Yoda Relay Pass is not active. Renew it from the desktop account settings.'
         );
       }
       if (response.status === 404) {

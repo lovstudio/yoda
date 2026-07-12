@@ -4,6 +4,7 @@ import { rpc } from '@renderer/lib/ipc';
 
 export const ACCOUNT_SESSION_KEY = ['account:session'] as const;
 const ACCOUNT_HEALTH_KEY = ['account:health'] as const;
+export const ACCOUNT_COMMERCE_KEY = ['account:commerce'] as const;
 
 export function useAccountSession() {
   return useQuery({
@@ -19,6 +20,7 @@ export function useAccountSignIn() {
   return useMutation({
     mutationFn: (provider: string | undefined) => rpc.account.signIn(provider),
     onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ACCOUNT_COMMERCE_KEY });
       void queryClient.invalidateQueries({ queryKey: [...ACCOUNT_SESSION_KEY] });
       void queryClient.invalidateQueries({ queryKey: ['github:status'] });
       void queryClient.invalidateQueries({ queryKey: ['feature-flags'] });
@@ -66,9 +68,17 @@ export function useAccountAuthWarmUp(enabled: boolean) {
 export function useAccountSignOut() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => rpc.account.signOut(),
+    mutationFn: async () => {
+      const result = await rpc.account.signOut();
+      if (!result.success) throw new Error(result.error || 'Sign-out failed');
+      return result;
+    },
     onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ACCOUNT_COMMERCE_KEY });
       void queryClient.invalidateQueries({ queryKey: [...ACCOUNT_SESSION_KEY] });
+      void queryClient.invalidateQueries({ queryKey: ['github:status'] });
+      void queryClient.invalidateQueries({ queryKey: ['feature-flags'] });
+      void queryClient.invalidateQueries({ queryKey: ['mobileGateway', 'relayStatus'] });
     },
   });
 }
@@ -78,6 +88,47 @@ export function useAccountHealth() {
     queryKey: ACCOUNT_HEALTH_KEY,
     queryFn: () => rpc.account.checkHealth(),
     staleTime: 60_000,
+  });
+}
+
+export function useAccountCommerce(accountUserId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: [...ACCOUNT_COMMERCE_KEY, accountUserId],
+    queryFn: () => rpc.account.getCommerceSnapshot(),
+    enabled: enabled && Boolean(accountUserId),
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useActivateRelayPass() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => rpc.account.activateRelayPass(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ACCOUNT_COMMERCE_KEY });
+    },
+  });
+}
+
+export function useStartRelayTrial() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => rpc.account.startRelayTrial(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ACCOUNT_COMMERCE_KEY });
+    },
+  });
+}
+
+export function useRevokeRelayDevice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (deviceId: string) => rpc.account.revokeRelayDevice(deviceId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ACCOUNT_COMMERCE_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['mobileGateway', 'relayStatus'] });
+    },
   });
 }
 

@@ -11,7 +11,7 @@
       "bundleIdentifier": "ai.lovstudio.yoda.mobile",
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocalNetworkUsageDescription": "Yoda Mobile connects to the Yoda desktop app on your local network.",
+        "NSLocalNetworkUsageDescription": "Yoda Mobile connects directly to the Yoda desktop app when both devices are on the same local network.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }

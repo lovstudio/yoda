@@ -57,15 +57,21 @@ async function request<T>(
     });
   } catch {
     throw new Error(
-      `Cannot reach desktop gateway at ${baseUrl}. Check that iPhone Local Network permission is enabled for Expo Go, both devices are on the same Wi-Fi, and the gateway URL opens in iPhone Safari.`
+      `Cannot reach the Yoda gateway at ${baseUrl}. For a local address, check Local Network permission and Wi-Fi. For Relay, check that the desktop is online and Relay Pass is active.`
     );
   }
 
   if (!response.ok) {
     if (response.status === 401) {
+      if (baseUrl.startsWith('https://')) {
+        throw new Error('Yoda Relay credential is no longer valid. Pair this phone again.');
+      }
       throw new Error(
         'Desktop rejected the mobile gateway token. Rescan the desktop mobile QR, or restart the desktop app so the development token is active.'
       );
+    }
+    if (response.status === 402) {
+      throw new Error('Yoda Relay Pass is not active. Renew it from the desktop account settings.');
     }
     throw new Error(await readError(response));
   }

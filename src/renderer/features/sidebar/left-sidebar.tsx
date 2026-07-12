@@ -46,6 +46,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/toolti
 import { cn } from '@renderer/utils/utils';
 import { SidebarPinnedTaskList } from './pinned-task-list';
 import { ProjectsGroupLabel } from './projects-group-label';
+import { SidebarAccountAnchor } from './sidebar-account-anchor';
 import {
   SidebarContainer,
   SidebarContent,
@@ -278,8 +279,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
           </SidebarGroup>
         </SidebarContent>
         <div ref={footerRef} className="flex flex-col">
-          {/* Single separator for the footer block: sits above the nav section
-              when expanded, and directly above the account row when collapsed. */}
+          {/* Single separator for the footer block. */}
           <div className="mx-2 my-1 border-t border-border" />
           {!sidebarStore.navSectionHidden && (
             <SidebarMenu className="px-2">
@@ -329,6 +329,9 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               </SidebarMenuButton>
             </SidebarMenu>
           )}
+          <div className="px-2 pb-0.5">
+            <SidebarAccountAnchor />
+          </div>
           <div className="flex items-center gap-0.5 pr-2">
             <div className="min-w-0 flex-1">
               <SidebarVersionAnchor />

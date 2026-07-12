@@ -631,7 +631,7 @@ export class MobileGatewayService {
       host: this.host,
       port: this.port,
       urls: lanUrls(this.port),
-      token: process.env.YODA_MOBILE_GATEWAY_TOKEN ? '<env>' : this.token,
+      token: '<redacted>',
     });
 
     // Reap any Metro orphaned by a crashed previous run at startup, even though
@@ -798,6 +798,11 @@ export class MobileGatewayService {
           ? createMobilePairingUrl({ baseUrl: primaryUrl, token: this.token })
           : null,
     };
+  }
+
+  getRelayLoopbackConnection(): { baseUrl: string; token: string } | null {
+    if (!this.server || !this.token) return null;
+    return { baseUrl: `http://127.0.0.1:${this.port}`, token: this.token };
   }
 
   private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

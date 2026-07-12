@@ -43,6 +43,19 @@ YODA_MOBILE_GATEWAY_ENABLED=0 pnpm run dev
 
 Use a LAN address from the desktop log, for example `http://192.168.1.10:3879`. The phone and desktop must be on the same network.
 
+## Yoda Relay
+
+Production builds accept one-time Relay pairing links only from
+`https://relay.yoda.lovstudio.ai`. A self-hosted or staging build must pin its own origin at build
+time so a scanned QR cannot redirect project data or commands to another service:
+
+```bash
+EXPO_PUBLIC_YODA_RELAY_ORIGIN=https://relay-staging.example.com pnpm mobile
+```
+
+Relay credentials are stored with Expo SecureStore on native iOS and Android builds. Web previews
+fall back to AsyncStorage and should not be used for production Relay access.
+
 ## Local iOS Test First
 
 The fastest path is Expo Go on a physical iPhone. This does not install a Yoda-branded

@@ -21,6 +21,7 @@ import { knownBinDirs } from './core/dependencies/probe';
 import { editorBufferService } from './core/editor/editor-buffer-service';
 import { gitWatcherRegistry } from './core/git/git-watcher-registry';
 import { mobileGatewayService } from './core/mobile-gateway/mobile-gateway-service';
+import { mobileRelayService } from './core/mobile-gateway/mobile-relay-service';
 import { ensureInternalProject } from './core/projects/operations/ensureInternalProject';
 import { projectManager } from './core/projects/project-manager';
 import { ptySessionRegistry } from './core/pty/pty-session-registry';
@@ -200,9 +201,20 @@ void app.whenReady().then(async () => {
 
   yodaAccountService.on('accountChanged', (username, userId, email) => {
     void telemetryService.identify(username, userId, email);
+    void mobileRelayService.initialize().catch((error) => {
+      log.warn('Failed to initialize mobile Relay after sign-in', error);
+    });
+  });
+  yodaAccountService.on('accountWillClear', async () => {
+    try {
+      await mobileRelayService.revoke(AbortSignal.timeout(5_000), true);
+    } catch (error) {
+      log.warn('Failed to revoke mobile Relay while signing out', error);
+    }
   });
   yodaAccountService.on('accountCleared', () => {
     telemetryService.clearIdentity();
+    mobileRelayService.disconnect();
   });
 
   gitWatcherRegistry.initialize();
@@ -239,9 +251,12 @@ void app.whenReady().then(async () => {
     log.error('Failed to start automation scheduler:', e);
   });
 
-  yodaAccountService.loadSessionToken().catch((e) => {
-    log.warn('Failed to load account session token:', e);
-  });
+  yodaAccountService
+    .loadSessionToken()
+    .then(() => mobileRelayService.initialize())
+    .catch((e) => {
+      log.warn('Failed to load account session token or initialize Relay:', e);
+    });
 
   // Dependency probe shells out to user tools, so wait for the login-shell
   // PATH to land before probing — otherwise nvm/mise-managed binaries miss.
@@ -287,6 +302,7 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
       agentHookService.dispose();
       agentSessionRuntimeStore.dispose();
       mobileGatewayService.dispose();
+      mobileRelayService.dispose();
       updateService.dispose();
       prSyncScheduler.dispose();
       const [gitWatcherResult, projectManagerResult] = await Promise.allSettled([

@@ -7,6 +7,7 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   globalIgnores([
     'dist/**',
+    'services/*/dist/**',
     'docs/dist/**',
     'out/**',
     'build/**',

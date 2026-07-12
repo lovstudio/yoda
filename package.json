@@ -23,7 +23,7 @@
     "db:reset": "pnpm run db:reset:3 && pnpm run db:reset:4",
     "db:reset:3": "rm -f \"$HOME/Library/Application Support/yoda/yoda3.db\" \"$HOME/Library/Application Support/yoda/yoda3.db-wal\" \"$HOME/Library/Application Support/yoda/yoda3.db-shm\" \"$HOME/.config/yoda/yoda3.db\" \"$HOME/.config/yoda/yoda3.db-wal\" \"$HOME/.config/yoda/yoda3.db-shm\"",
     "db:reset:4": "rm -f \"$HOME/Library/Application Support/yoda/yoda4.db\" \"$HOME/Library/Application Support/yoda/yoda4.db-wal\" \"$HOME/Library/Application Support/yoda/yoda4.db-shm\" \"$HOME/.config/yoda/yoda4.db\" \"$HOME/.config/yoda/yoda4.db-wal\" \"$HOME/.config/yoda/yoda4.db-shm\"",
-    "test": "vitest run",
+    "test": "vitest run && pnpm --filter @yoda/relay test",
     "build": "electron-vite build",
     "build:main": "electron-vite build --filter main",
     "build:renderer": "electron-vite build --filter renderer",
@@ -42,7 +42,7 @@
     "lint": "eslint . --cache --cache-strategy content --cache-location node_modules/.cache/eslint/.eslintcache",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts/release/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts/release/tsconfig.json && pnpm --filter @yoda/relay typecheck && pnpm --filter @yoda/mobile typecheck",
     "docs": "cd docs && pnpm run dev",
     "docs:build": "cd docs && pnpm run build",
     "prepare": "husky"
@@ -112,6 +112,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/react-window": "^1.8.8",
     "@types/ssh2": "^1.15.5",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/browser": "^4.1.0",
     "@vitest/browser-playwright": "^4.1.0",
@@ -199,6 +200,7 @@
     "better-sqlite3": "^12.11.1",
     "node-pty": "1.1.0",
     "ssh2": "^1.17.0",
+    "ws": "^8.19.0",
     "zod": "^4.3.6"
   },
   "pnpm": {

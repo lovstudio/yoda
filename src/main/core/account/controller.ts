@@ -1,7 +1,9 @@
 import { createRPCController } from '@shared/ipc/rpc';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
+import { mobileRelayService } from '../mobile-gateway/mobile-relay-service';
 import { yodaAccountService } from './services/yoda-account-service';
+import { yodaCommerceService } from './services/yoda-commerce-service';
 
 export const accountController = createRPCController({
   getSession: async () => {
@@ -85,5 +87,14 @@ export const accountController = createRPCController({
     } catch {
       return false;
     }
+  },
+
+  getCommerceSnapshot: async () => yodaCommerceService.getSnapshot(),
+  startRelayTrial: async () => yodaCommerceService.startRelayTrial(),
+  activateRelayPass: async () => yodaCommerceService.activateRelayPass(),
+  registerRelayDevice: async (name: string) => yodaCommerceService.registerRelayDevice(name),
+  revokeRelayDevice: async (deviceId: string) => {
+    await mobileRelayService.revokeDevice(deviceId);
+    return { success: true };
   },
 });
