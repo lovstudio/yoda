@@ -6,7 +6,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  ExternalLink,
   FlaskConical,
+  Network,
   RefreshCw,
   Rocket,
   ShieldCheck,
@@ -24,6 +26,9 @@ import { Button } from '@renderer/lib/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
+
+const TAILSCALE_DOWNLOAD_URL = 'https://tailscale.com/download';
+const TAILSCALE_SETUP_URL = 'https://tailscale.com/kb/1017/install';
 
 async function copyToClipboard(value: string): Promise<void> {
   if (!navigator.clipboard?.writeText) throw new Error('Clipboard is not available');
@@ -139,7 +144,7 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['mobileGateway', 'connectionInfo'],
     queryFn: () => rpc.mobileGateway.getConnectionInfo(),
-    // The QR encodes the current LAN IP; poll so a network change while the
+    // The QR encodes the current Tailscale or LAN IP; poll so a network change while the
     // panel is open refreshes it (and lets the gateway restart Metro).
     refetchInterval: 5000,
   });
@@ -290,6 +295,85 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
                     {t('sidebar.mobileConnection.tailscaleReady')}
                   </span>
                 ) : null}
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={cn(
+                      'flex size-9 shrink-0 items-center justify-center rounded-lg',
+                      data?.connectionKind === 'tailscale'
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-background-quaternary-1 text-foreground-muted'
+                    )}
+                  >
+                    <Network className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-medium">
+                        {t('sidebar.mobileConnection.tailscaleTitle')}
+                      </div>
+                      <span
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                          data?.connectionKind === 'tailscale'
+                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-background-quaternary-1 text-foreground-muted'
+                        )}
+                      >
+                        {data?.connectionKind === 'tailscale'
+                          ? t('sidebar.mobileConnection.tailscaleDetected')
+                          : t('sidebar.mobileConnection.tailscaleNotDetected')}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-foreground-muted">
+                      {data?.connectionKind === 'tailscale'
+                        ? t('sidebar.mobileConnection.tailscaleDetectedDescription', {
+                            url: primaryUrl,
+                          })
+                        : t('sidebar.mobileConnection.tailscaleDescription')}
+                    </p>
+                  </div>
+                </div>
+
+                {data?.connectionKind !== 'tailscale' ? (
+                  <ol className="mt-3 grid gap-2 text-xs leading-5 text-foreground-muted">
+                    {[
+                      'sidebar.mobileConnection.tailscaleStep1',
+                      'sidebar.mobileConnection.tailscaleStep2',
+                      'sidebar.mobileConnection.tailscaleStep3',
+                    ].map((key, index) => (
+                      <li key={key} className="flex gap-2">
+                        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-background-quaternary-1 font-mono text-[10px] text-foreground">
+                          {index + 1}
+                        </span>
+                        <span>{t(key)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void rpc.app.openExternal(TAILSCALE_DOWNLOAD_URL)}
+                  >
+                    <ExternalLink className="size-3.5" />
+                    {t('sidebar.mobileConnection.downloadTailscale')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void rpc.app.openExternal(TAILSCALE_SETUP_URL)}
+                  >
+                    <ExternalLink className="size-3.5" />
+                    {t('sidebar.mobileConnection.tailscaleSetupGuide')}
+                  </Button>
+                </div>
               </div>
 
               <div className="rounded-lg border border-border bg-background p-4">

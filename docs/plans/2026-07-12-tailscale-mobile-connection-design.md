@@ -10,6 +10,11 @@ encoded in the existing pairing QR code. Ordinary LAN addresses remain available
 Tailscale is absent, behavior is unchanged. The connection view identifies when the remote path is
 active and tells the user that the phone must join the same tailnet.
 
+The connection view always renders a Tailscale setup card. Before detection it gives installation,
+same-tailnet login, and rescan instructions with links to the official download and setup pages.
+After detection it becomes a success state and displays the selected remote gateway URL. This keeps
+first-run configuration discoverable instead of only confirming users who already finished setup.
+
 This version deliberately does not run `tailscale serve`, change tailnet configuration, or expose a
 Funnel endpoint. Those operations persist outside Yoda and can conflict with an existing Serve
 route. A future HTTPS/MagicDNS integration can be added as an explicit opt-in flow. Unit tests cover
