@@ -272,8 +272,11 @@ Resources:
           - !Ref RelayDomainName
         Comment: Production Yoda Relay HTTPS, SSE, and WebSocket edge
         Enabled: true
-        HttpVersion: http2and3
-        IPV6Enabled: true
+        # Mainland cellular networks can advertise IPv6/QUIC while dropping the
+        # corresponding CloudFront path. Prefer the broadly compatible HTTPS
+        # transport until Relay has a dedicated mainland edge deployment.
+        HttpVersion: http2
+        IPV6Enabled: false
         PriceClass: PriceClass_200
         WebACLId: !Ref WebAclArn
         Origins:
