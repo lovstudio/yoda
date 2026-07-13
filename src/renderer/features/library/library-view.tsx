@@ -1,5 +1,6 @@
 import {
   Bot,
+  Boxes,
   Check,
   FileText,
   Menu,
@@ -15,6 +16,7 @@ import { AgentTeamsMainPanel } from '@renderer/features/agent-teams/agent-teams-
 import { AgentManagerMainPanel } from '@renderer/features/agents-config/agent-manager-view';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
 import { McpMainPanel } from '@renderer/features/mcp/mcp-view';
+import PluginsView from '@renderer/features/plugins/PluginsView';
 import { PromptLibraryPanel } from '@renderer/features/prompt-library/prompt-library-panel';
 import { SkillsMainPanel } from '@renderer/features/skills/skills-view';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
@@ -28,7 +30,14 @@ import {
 import { cn } from '@renderer/utils/utils';
 
 /** The Library groups the user's reusable resources behind one nav entry. */
-export type LibrarySection = 'prompts' | 'agents' | 'agentTeams' | 'skills' | 'mcp' | 'automation';
+export type LibrarySection =
+  | 'prompts'
+  | 'agents'
+  | 'agentTeams'
+  | 'skills'
+  | 'plugins'
+  | 'mcp'
+  | 'automation';
 
 const SECTIONS: {
   id: LibrarySection;
@@ -38,7 +47,8 @@ const SECTIONS: {
   { id: 'prompts', icon: FileText, labelKey: 'library.sections.prompts' },
   { id: 'agents', icon: Bot, labelKey: 'library.sections.agents' },
   { id: 'agentTeams', icon: Users, labelKey: 'library.sections.agentTeams' },
-  { id: 'skills', icon: Puzzle, labelKey: 'library.sections.skills' },
+  { id: 'skills', icon: Boxes, labelKey: 'library.sections.skills' },
+  { id: 'plugins', icon: Puzzle, labelKey: 'library.sections.plugins' },
   { id: 'mcp', icon: Plug, labelKey: 'library.sections.mcp' },
   { id: 'automation', icon: Workflow, labelKey: 'library.sections.automation' },
 ];
@@ -85,6 +95,8 @@ function LibrarySectionContent({ section }: { section: LibrarySection }) {
       return <AgentTeamsMainPanel />;
     case 'skills':
       return <SkillsMainPanel />;
+    case 'plugins':
+      return <PluginsView />;
     case 'mcp':
       return <McpMainPanel />;
     case 'automation':

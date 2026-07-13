@@ -114,6 +114,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
   const { conversations } = provisioned;
   const isActive = useIsActiveTask(taskId);
   const mountedProject = asMounted(getProjectStore(projectId));
+  const projectRoot = mountedProject?.data.path;
   const remoteConnectionId =
     mountedProject?.data.type === 'ssh' ? mountedProject.data.connectionId : undefined;
 
@@ -153,6 +154,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
   const fileLinks = useMemo<TerminalFileLinkOptions>(
     () => ({
       workspaceRoot: provisioned.path,
+      workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
       isRemote: Boolean(remoteConnectionId),
       onOpen: ({ filePath, absolutePath, line, column }) => {
@@ -168,7 +170,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
         }
       },
     }),
-    [provisioned.path, provisioned.taskView, remoteConnectionId, homeDir]
+    [provisioned.path, provisioned.taskView, projectRoot, remoteConnectionId, homeDir]
   );
   // URLs open as a sibling sidebar browser pin — switching chips is cheap.
   const webLinks = useWorkspaceWebLinks();

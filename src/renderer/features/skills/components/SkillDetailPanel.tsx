@@ -48,6 +48,7 @@ import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { cn } from '@renderer/utils/utils';
 import { skillFilePath } from '../skill-file-path';
 import { getSkillUsageStats, skillUsageStatsChangedEvent } from '../skill-usage-stats';
+import SkillDetailSidebar from './SkillDetailSidebar';
 import SkillIconRenderer from './SkillIconRenderer';
 import { SkillTriggerTest } from './SkillTriggerTest';
 import { SkillUsageTrend } from './SkillUsageTrend';
@@ -94,7 +95,10 @@ function formatLastUsedAt(value: string | null, formatter: Intl.DateTimeFormat):
 }
 
 /** Full-page skill detail — rendered by the `skill` view as its own app tab. */
-const SkillDetailPanel: React.FC<{ skillId: string }> = ({ skillId }) => {
+const SkillDetailPanel: React.FC<{
+  skillId: string;
+  catalogSection?: 'installed' | 'recommended';
+}> = ({ skillId, catalogSection }) => {
   const { t } = useTranslation();
   const { catalog, isLoading: isCatalogLoading, install, uninstall, setDisabled } = useSkills();
 
@@ -125,13 +129,23 @@ const SkillDetailPanel: React.FC<{ skillId: string }> = ({ skillId }) => {
   }
 
   return (
-    <SkillDetailContent
-      skill={skill}
-      isLoadingDetail={isDetailLoading}
-      onInstall={install}
-      onUninstall={uninstall}
-      onSetDisabled={setDisabled}
-    />
+    <div className="@container flex h-full min-w-0 overflow-hidden bg-background text-foreground">
+      <SkillDetailSidebar
+        activeSkillId={skill.id}
+        catalogSection={catalogSection ?? (skill.installed ? 'installed' : 'recommended')}
+        skills={catalog?.skills ?? [skill]}
+      />
+      <div className="min-w-0 flex-1">
+        <SkillDetailContent
+          key={skill.id}
+          skill={skill}
+          isLoadingDetail={isDetailLoading}
+          onInstall={install}
+          onUninstall={uninstall}
+          onSetDisabled={setDisabled}
+        />
+      </div>
+    </div>
   );
 };
 

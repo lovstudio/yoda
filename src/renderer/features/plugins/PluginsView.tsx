@@ -103,7 +103,7 @@ const PluginCard: React.FC<{
   );
 };
 
-const PluginsView: React.FC<{ surfaceControl?: React.ReactNode }> = ({ surfaceControl }) => {
+const PluginsView: React.FC = () => {
   const { t } = useTranslation();
   const {
     plugins,
@@ -128,7 +128,7 @@ const PluginsView: React.FC<{ surfaceControl?: React.ReactNode }> = ({ surfaceCo
     <div className="@container flex h-full flex-col overflow-y-auto bg-background text-foreground">
       <div className="mx-auto w-full max-w-3xl px-8 py-8">
         <div className="mb-6">
-          {surfaceControl ?? <h1 className="text-lg font-semibold">{t('plugins.title')}</h1>}
+          <h1 className="text-lg font-semibold">{t('plugins.title')}</h1>
           <p className="mt-1 text-xs text-muted-foreground">{t('plugins.subtitle')}</p>
         </div>
 

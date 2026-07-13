@@ -1,9 +1,10 @@
-import { Layers, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Layers, Plus, Settings2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { ALL_WORKSPACES_ID, DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
 import { toast } from '@renderer/lib/hooks/use-toast';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { workspaceStore } from '@renderer/lib/stores/app-state';
 import {
   DropdownMenu,
@@ -35,6 +36,7 @@ export const WorkspaceSwitcher = observer(function WorkspaceSwitcher() {
   const activeId = workspaceStore.activeWorkspaceId;
   const activeWorkspace = workspaceStore.activeWorkspace;
   const [renaming, setRenaming] = React.useState(false);
+  const showManageWorkspaces = useShowModal('manageWorkspacesModal');
 
   const currentName =
     activeWorkspace?.name ??
@@ -63,19 +65,6 @@ export const WorkspaceSwitcher = observer(function WorkspaceSwitcher() {
     } catch (error) {
       toast({
         title: t('workspaces.renameFailed'),
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive',
-      });
-    }
-  }
-
-  async function handleDelete() {
-    if (!activeWorkspace) return;
-    try {
-      await workspaceStore.deleteWorkspace(activeWorkspace.id);
-    } catch (error) {
-      toast({
-        title: t('workspaces.removeFailed'),
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
       });
@@ -131,20 +120,10 @@ export const WorkspaceSwitcher = observer(function WorkspaceSwitcher() {
           <Plus className="size-4" />
           {t('workspaces.create')}
         </DropdownMenuItem>
-        {activeWorkspace && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setRenaming(true)}>
-              <Pencil className="size-4" />
-              {t('workspaces.rename')}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={() => void handleDelete()}>
-              <Trash2 className="size-4" />
-              {t('workspaces.remove')}
-            </DropdownMenuItem>
-          </>
-        )}
+        <DropdownMenuItem onClick={() => showManageWorkspaces({})}>
+          <Settings2 className="size-4" />
+          {t('workspaces.manage')}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -70,6 +70,7 @@ export const ConversationSession = observer(function ConversationSession({
   const provisioned = useProvisionedTask();
   const { conversations } = provisioned;
   const mountedProject = asMounted(getProjectStore(projectId));
+  const projectRoot = mountedProject?.data.path;
   const remoteConnectionId =
     mountedProject?.data.type === 'ssh' ? mountedProject.data.connectionId : undefined;
 
@@ -201,6 +202,7 @@ export const ConversationSession = observer(function ConversationSession({
   const fileLinks = useMemo<TerminalFileLinkOptions>(
     () => ({
       workspaceRoot: provisioned.path,
+      workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
       isRemote: Boolean(remoteConnectionId),
       onOpen: ({ filePath, absolutePath, line, column }) => {
@@ -214,7 +216,7 @@ export const ConversationSession = observer(function ConversationSession({
         }
       },
     }),
-    [provisioned.path, provisioned.taskView, remoteConnectionId, homeDir]
+    [provisioned.path, provisioned.taskView, projectRoot, remoteConnectionId, homeDir]
   );
   const webLinks = useWorkspaceWebLinks();
 

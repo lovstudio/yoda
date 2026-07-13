@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@renderer/lib/ui/select';
+import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@renderer/lib/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
 import { SKILL_SORT_MODES, sortSkills, type SkillSortMode } from '../skill-sort';
@@ -31,6 +32,7 @@ import { useSkills } from './useSkills';
 import { useSkillUsage } from './useSkillUsage';
 
 type SkillsLayout = 'grid' | 'tree';
+type SkillsSection = 'installed' | 'recommended';
 
 const LAYOUT_STORAGE_KEY = 'yoda.skillsLayout';
 
@@ -62,6 +64,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   const { usage, lookupUsage } = useSkillUsage();
   const [sortMode, setSortMode] = React.useState<SkillSortMode>('name');
   const [layout, setLayout] = React.useState<SkillsLayout>(loadStoredLayout);
+  const [section, setSection] = React.useState<SkillsSection>('installed');
   const usageAvailable = usage !== null && Object.keys(usage.bySkill).length > 0;
 
   const switchLayout = React.useCallback((value: SkillsLayout) => {
@@ -117,19 +120,29 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   // a side-pane pin when this view is pin-hosted, a top-level app tab otherwise.
   const { openViewTab } = useOpenViewTab();
   const openDetail = (skill: CatalogSkill) => {
-    openViewTab('skill', { skillId: skill.id, displayName: skill.displayName });
+    openViewTab('skill', {
+      skillId: skill.id,
+      displayName: skill.displayName,
+      catalogSection: section,
+    });
   };
 
   React.useEffect(() => {
     if (!focusedSkillId || isLoading) return;
 
-    const isVisible =
-      installedSkills.some((skill) => skill.id === focusedSkillId) ||
-      recommendedSkills.some((skill) => skill.id === focusedSkillId);
+    const isInstalled = installedSkills.some((skill) => skill.id === focusedSkillId);
+    const isRecommended = recommendedSkills.some((skill) => skill.id === focusedSkillId);
+    const isVisible = isInstalled || isRecommended;
     const existsInCatalog = catalog?.skills.some((skill) => skill.id === focusedSkillId) ?? false;
 
     if (!isVisible && existsInCatalog && searchQuery) {
       setSearchQuery('');
+      return;
+    }
+
+    const focusedSection: SkillsSection = isInstalled ? 'installed' : 'recommended';
+    if (isVisible && section !== focusedSection) {
+      setSection(focusedSection);
       return;
     }
 
@@ -156,9 +169,59 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     isLoading,
     recommendedSkills,
     searchQuery,
+    section,
     setSearchQuery,
     setSkillsParams,
   ]);
+
+  const renderSkills = (skills: CatalogSkill[]) => {
+    if (skills.length === 0) {
+      return (
+        <div className="py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            {searchQuery ? t('skills.noMatches') : t('skills.noSkills')}
+          </p>
+        </div>
+      );
+    }
+
+    if (layout === 'tree') {
+      return (
+        <SkillsTreeSection
+          skills={skills}
+          orderBy={sortMode === 'count' ? 'count' : 'position'}
+          lookupUsage={lookupUsage}
+          onSelect={openDetail}
+          onInstall={install}
+          setSkillRef={setSkillCardRef}
+          highlightedSkillId={highlightedSkillId}
+        />
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
+        {skills.map((skill) => (
+          <div
+            key={skill.id}
+            ref={setSkillCardRef(skill.id)}
+            className={cn(
+              'scroll-mt-20 rounded-lg transition-shadow duration-300',
+              highlightedSkillId === skill.id &&
+                'ring-2 ring-amber-400 ring-offset-2 ring-offset-background'
+            )}
+          >
+            <SkillCard
+              skill={skill}
+              usage={lookupUsage(skill.id)}
+              onSelect={openDetail}
+              onInstall={install}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -269,61 +332,25 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
           </Button>
         </div>
 
-        {(
-          [
-            ['skills.installed', sortedInstalledSkills],
-            ['skills.recommended', sortedRecommendedSkills],
-          ] as const
-        ).map(
-          ([titleKey, skills]) =>
-            skills.length > 0 && (
-              <div key={titleKey} className="mb-6">
-                <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground">
-                  {t(titleKey)}
-                </h2>
-                {layout === 'tree' ? (
-                  <SkillsTreeSection
-                    skills={skills}
-                    orderBy={sortMode === 'count' ? 'count' : 'position'}
-                    lookupUsage={lookupUsage}
-                    onSelect={openDetail}
-                    onInstall={install}
-                    setSkillRef={setSkillCardRef}
-                    highlightedSkillId={highlightedSkillId}
-                  />
-                ) : (
-                  <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
-                    {skills.map((skill) => (
-                      <div
-                        key={skill.id}
-                        ref={setSkillCardRef(skill.id)}
-                        className={cn(
-                          'scroll-mt-20 rounded-lg transition-shadow duration-300',
-                          highlightedSkillId === skill.id &&
-                            'ring-2 ring-amber-400 ring-offset-2 ring-offset-background'
-                        )}
-                      >
-                        <SkillCard
-                          skill={skill}
-                          usage={lookupUsage(skill.id)}
-                          onSelect={openDetail}
-                          onInstall={install}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-        )}
-
-        {installedSkills.length === 0 && recommendedSkills.length === 0 && (
-          <div className="py-12 text-center">
-            <p className="text-sm text-muted-foreground">
-              {searchQuery ? t('skills.noMatches') : t('skills.noSkills')}
-            </p>
-          </div>
-        )}
+        <Tabs
+          value={section}
+          onValueChange={(value) => setSection(value as SkillsSection)}
+          className="gap-4"
+        >
+          <TabsList>
+            <TabsIndicator />
+            <TabsTab value="installed">
+              {t('skills.installed')}
+              <span className="text-foreground-muted">{sortedInstalledSkills.length}</span>
+            </TabsTab>
+            <TabsTab value="recommended">
+              {t('skills.recommended')}
+              <span className="text-foreground-muted">{sortedRecommendedSkills.length}</span>
+            </TabsTab>
+          </TabsList>
+          <TabsPanel value="installed">{renderSkills(sortedInstalledSkills)}</TabsPanel>
+          <TabsPanel value="recommended">{renderSkills(sortedRecommendedSkills)}</TabsPanel>
+        </Tabs>
       </div>
     </div>
   );

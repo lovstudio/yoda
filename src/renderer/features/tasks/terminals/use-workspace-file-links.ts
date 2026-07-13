@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { rpc } from '@renderer/lib/ipc';
 import type { TerminalFileLinkOptions } from '@renderer/lib/pty/terminal-file-links';
@@ -12,6 +13,7 @@ export function useWorkspaceFileLinks(
   remoteConnectionId: string | undefined
 ): TerminalFileLinkOptions {
   const provisionedTask = useProvisionedTask();
+  const projectRoot = asMounted(getProjectStore(provisionedTask.projectId))?.data.path;
   const { data: homeDir } = useQuery({
     queryKey: ['homeDir'],
     queryFn: () => rpc.app.getHomeDir(),
@@ -22,6 +24,7 @@ export function useWorkspaceFileLinks(
   return useMemo<TerminalFileLinkOptions>(
     () => ({
       workspaceRoot: provisionedTask.path,
+      workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
       isRemote: Boolean(remoteConnectionId),
       onOpen: ({ filePath, absolutePath, line, column }) => {
@@ -36,6 +39,6 @@ export function useWorkspaceFileLinks(
         }
       },
     }),
-    [provisionedTask.path, provisionedTask.taskView, remoteConnectionId, homeDir]
+    [provisionedTask.path, provisionedTask.taskView, projectRoot, remoteConnectionId, homeDir]
   );
 }

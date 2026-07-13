@@ -2262,13 +2262,19 @@ export const HomeComposer = observer(function HomeComposer({
               selectedTeamId={selectedTeamId}
               onChange={setRunMode}
               onSelectTeam={setSelectedTeamId}
-              renderConfiguration={(configurationMode, configurationTeamId) => (
+              renderConfiguration={(configurationMode, configurationTeamId, onRuntimeChange) => (
                 <ModeConfigurationPanel
                   mode={configurationMode}
                   runtimeId={runtimeId}
-                  onRuntimeChange={setRuntimeOverride}
+                  onRuntimeChange={(agent) => {
+                    setRuntimeOverride(agent);
+                    onRuntimeChange();
+                  }}
                   reviewerRuntime={reviewerRuntime}
-                  onReviewerProviderChange={setReviewerProvider}
+                  onReviewerProviderChange={(provider) => {
+                    setReviewerProvider(provider);
+                    onRuntimeChange();
+                  }}
                   teams={teams}
                   selectedTeamId={configurationTeamId ?? selectedTeamId}
                   agents={userAgents}
@@ -2822,7 +2828,11 @@ interface RunModeSelectorProps {
   selectedTeamId: string;
   onChange: (mode: HomeRunMode) => void;
   onSelectTeam: (teamId: string) => void;
-  renderConfiguration: (mode: HomeRunMode, teamId: string | undefined) => ReactNode;
+  renderConfiguration: (
+    mode: HomeRunMode,
+    teamId: string | undefined,
+    onRuntimeChange: () => void
+  ) => ReactNode;
 }
 
 function RunModeSelector({
@@ -2844,6 +2854,7 @@ function RunModeSelector({
   const [pendingId, setPendingId] = useState<string>(() =>
     entryIdForState(options, mode, selectedTeamId)
   );
+  const [runtimeDirty, setRuntimeDirty] = useState(false);
   const labelOf = (option: RunModeOption) =>
     option.label ?? (option.labelKey ? t(option.labelKey) : '');
   const current =
@@ -2853,17 +2864,23 @@ function RunModeSelector({
   const CurrentIcon = current.icon;
   const PendingIcon = pending.icon;
   const dirty =
-    pending.mode !== mode || (pending.mode === 'team' && pending.teamId !== selectedTeamId);
+    runtimeDirty ||
+    pending.mode !== mode ||
+    (pending.mode === 'team' && pending.teamId !== selectedTeamId);
   const isNonStandardMode = mode !== 'normal';
 
   const handleOpenChange = (next: boolean) => {
-    if (next) setPendingId(entryIdForState(options, mode, selectedTeamId));
+    if (next) {
+      setPendingId(entryIdForState(options, mode, selectedTeamId));
+      setRuntimeDirty(false);
+    }
     setOpen(next);
   };
 
   const handleConfirm = () => {
     if (pending.teamId) onSelectTeam(pending.teamId);
     if (pending.mode !== mode) onChange(pending.mode);
+    setRuntimeDirty(false);
     setOpen(false);
   };
 
@@ -3001,7 +3018,7 @@ function RunModeSelector({
               )}
             </div>
             <p className="text-xs text-foreground-muted">{t(pending.descKey)}</p>
-            {renderConfiguration(pending.mode, pending.teamId)}
+            {renderConfiguration(pending.mode, pending.teamId, () => setRuntimeDirty(true))}
           </div>
         </div>
         <DialogFooter className="px-3 py-2.5">

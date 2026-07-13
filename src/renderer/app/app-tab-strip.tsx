@@ -441,6 +441,18 @@ export function describeTab(
       const { skillId, displayName } = tab.params as { skillId?: string; displayName?: string };
       return { label: displayName ?? skillId ?? t('sidebar.skills'), icon: lucideIcon(Puzzle) };
     }
+    case 'skillCompare': {
+      const { baseDisplayName, targetDisplayName, baseSkillId, targetSkillId } = tab.params as {
+        baseDisplayName?: string;
+        targetDisplayName?: string;
+        baseSkillId?: string;
+        targetSkillId?: string;
+      };
+      return {
+        label: `${baseDisplayName ?? baseSkillId ?? '?'} ↔ ${targetDisplayName ?? targetSkillId ?? '?'}`,
+        icon: lucideIcon(GitCompare),
+      };
+    }
     default:
       // Global views reuse the sidebar nav labels so the tab always matches
       // the nav item that opened it.
