@@ -12,6 +12,13 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  HARNESS_RUNTIMES,
+  type HarnessMdEntry,
+  type HarnessMemoryFile,
+  type HarnessRuntimeData,
+  type HarnessRuntimeId,
+} from '@shared/harness';
 import { openProjectFileTab } from '@renderer/features/project-file/project-file-session';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import {
@@ -30,13 +37,7 @@ import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { Spinner } from '@renderer/lib/ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
-import { HARNESS_RUNTIMES, type HarnessRuntimeId } from './harness-spec';
-import {
-  useHarnessData,
-  type HarnessMdEntry,
-  type HarnessMemoryFile,
-  type HarnessRuntimeData,
-} from './use-harness-data';
+import { useHarnessData } from './use-harness-data';
 
 type MakeTarget = (relativePath: string, kind: 'file' | 'directory') => FilePathTarget;
 
@@ -178,7 +179,7 @@ export const HarnessPanel = observer(function HarnessPanel() {
                             ) : null}
                           </>
                         }
-                        sources={skill.sources}
+                        sources={skill.locations.map((location) => location.path)}
                         sourceKind="directory"
                         makeTarget={makeTarget}
                       />

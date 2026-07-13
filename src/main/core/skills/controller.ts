@@ -2,6 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRPCController } from '@/shared/ipc/rpc';
 import type { SkillEvaluationCase, SkillTriggerQuery } from '@shared/skills/types';
+import { getResolvedHarnessSnapshot } from '@main/core/skills/get-resolved-harness-snapshot';
 import { getSkillUsageStats } from '@main/core/skills/getUsageStats';
 import { SkillEvaluationStore } from '@main/core/skills/skill-evaluation-store';
 import { routeSkills } from '@main/core/skills/skill-router';
@@ -39,6 +40,15 @@ export const skillsController = createRPCController({
       return { success: true, data: catalog };
     } catch (error) {
       log.error('Failed to get skills catalog:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  getHarnessSnapshot: async (args: { projectId: string }) => {
+    try {
+      return { success: true, data: await getResolvedHarnessSnapshot(args.projectId) };
+    } catch (error) {
+      log.error('Failed to resolve project harness snapshot:', error);
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   },
