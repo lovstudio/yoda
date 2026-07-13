@@ -330,5 +330,65 @@ describe('WorktreeService', () => {
         fs.rmSync(remoteDir, { recursive: true, force: true });
       }
     });
+
+    it('fast-forwards a checked out branch when only untracked files are present', async () => {
+      const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-ff-untracked-'));
+      try {
+        await git(['init', '--bare'], { cwd: remoteDir });
+        await git(['remote', 'add', 'origin', remoteDir], { cwd: repoDir });
+        await git(['push', '-u', 'origin', 'main'], { cwd: repoDir });
+        await git(['commit', '--allow-empty', '-m', 'remote update'], { cwd: repoDir });
+        await git(['push', 'origin', 'main'], { cwd: repoDir });
+        const remoteHead = await git(['rev-parse', 'HEAD'], { cwd: repoDir });
+        await git(['reset', '--hard', 'HEAD~1'], { cwd: repoDir });
+        fs.mkdirSync(path.join(repoDir, '.worktrees'), { recursive: true });
+        fs.writeFileSync(path.join(repoDir, '.worktrees', 'local-task'), 'local metadata');
+
+        const svc = makeService();
+        const result = await svc.checkoutExistingBranch('main', {
+          type: 'remote',
+          branch: 'main',
+          remote: originRemote(remoteDir),
+        });
+
+        expect(result.success).toBe(true);
+        if (!result.success) throw new Error('expected success');
+        expect(result.data).toBe(fs.realpathSync(repoDir));
+        const localHead = await git(['rev-parse', 'main'], { cwd: repoDir });
+        expect(localHead.stdout.trim()).toBe(remoteHead.stdout.trim());
+        expect(fs.existsSync(path.join(repoDir, '.worktrees', 'local-task'))).toBe(true);
+      } finally {
+        fs.rmSync(remoteDir, { recursive: true, force: true });
+      }
+    });
+
+    it('does not fast-forward a checked out branch with tracked changes', async () => {
+      const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-ff-tracked-'));
+      try {
+        await git(['init', '--bare'], { cwd: remoteDir });
+        await git(['remote', 'add', 'origin', remoteDir], { cwd: repoDir });
+        fs.writeFileSync(path.join(repoDir, 'tracked.txt'), 'base');
+        await git(['add', 'tracked.txt'], { cwd: repoDir });
+        await git(['commit', '-m', 'add tracked file'], { cwd: repoDir });
+        await git(['push', '-u', 'origin', 'main'], { cwd: repoDir });
+        await git(['commit', '--allow-empty', '-m', 'remote update'], { cwd: repoDir });
+        await git(['push', 'origin', 'main'], { cwd: repoDir });
+        await git(['reset', '--hard', 'HEAD~1'], { cwd: repoDir });
+        fs.writeFileSync(path.join(repoDir, 'tracked.txt'), 'local edit');
+
+        const svc = makeService();
+        const result = await svc.checkoutExistingBranch('main', {
+          type: 'remote',
+          branch: 'main',
+          remote: originRemote(remoteDir),
+        });
+
+        expect(result.success).toBe(false);
+        if (result.success) throw new Error('expected failure');
+        expect(result.error.type).toBe('worktree-setup-failed');
+      } finally {
+        fs.rmSync(remoteDir, { recursive: true, force: true });
+      }
+    });
   });
 });
