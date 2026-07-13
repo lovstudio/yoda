@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.16.0
+
+### Added
+
+- Manage larger skill libraries with catalog tabs, a detail navigation sidebar, full-content diffs, logical variant grouping, install-location visibility, and reusable project harness snapshots.
+- Manage workspaces and archived tasks from their dedicated dialogs and project menus.
+- Automatically persist and reuse delivery summaries so resumed work keeps the latest handoff context.
+
+### Changed
+
+- Simplify Yoda Mobile Relay setup around the canonical LovStudio pairing domain, with clearer retry, reconnect, account-recovery, and copyable error flows.
+- Keep terminal file links anchored to their original source locations across wrapped, indented, hyphenated, spaced, and list-separated paths.
+
+### Fixed
+
+- Retry GitHub pull-request branch fetches over authenticated HTTPS when an SSH connection on port 443 closes unexpectedly.
+- Allow untracked files during worktree provisioning while continuing to block tracked local changes.
+- Preserve native Windows worktree containment checks and POSIX paths for SSH projects, while returning renderer-facing relative paths with consistent forward slashes.
+- Pass Claude settings through a protected temporary file only for local Windows sessions, retain inline settings for SSH, preserve theme and skill overrides, and clean temporary artifacts on every session exit path.
+- Keep Codex notification hooks connected to the current Yoda endpoint after a main-process restart on Windows.
+- Preserve Relay responses under backpressure and recover cleanly from offline reconnects and mobile connection failures.
+
 ## 0.15.11
 
 ### Added
