@@ -120,7 +120,11 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   // a side-pane pin when this view is pin-hosted, a top-level app tab otherwise.
   const { openViewTab } = useOpenViewTab();
   const openDetail = (skill: CatalogSkill) => {
-    openViewTab('skill', { skillId: skill.id, displayName: skill.displayName });
+    openViewTab('skill', {
+      skillId: skill.id,
+      displayName: skill.displayName,
+      catalogSection: section,
+    });
   };
 
   React.useEffect(() => {

@@ -16,15 +16,20 @@ function sortSkills(skills: CatalogSkill[]): CatalogSkill[] {
 
 const SkillDetailSidebar: React.FC<{
   activeSkillId: string;
+  catalogSection: 'installed' | 'recommended';
   skills: CatalogSkill[];
-}> = ({ activeSkillId, skills }) => {
+}> = ({ activeSkillId, catalogSection, skills }) => {
   const { t } = useTranslation();
   const { openViewTab } = useOpenViewTab();
   const [query, setQuery] = useState('');
 
   const visibleSkills = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
-    const sorted = sortSkills(skills);
+    const sorted = sortSkills(
+      skills.filter((skill) =>
+        catalogSection === 'installed' ? skill.installed : !skill.installed
+      )
+    );
     if (!normalizedQuery) return sorted;
     return sorted.filter(
       (skill) =>
@@ -32,7 +37,7 @@ const SkillDetailSidebar: React.FC<{
         skill.id.toLocaleLowerCase().includes(normalizedQuery) ||
         skill.description.toLocaleLowerCase().includes(normalizedQuery)
     );
-  }, [query, skills]);
+  }, [catalogSection, query, skills]);
 
   return (
     <aside className="hidden h-full w-60 shrink-0 flex-col border-r border-border bg-background-secondary @2xl:flex">
@@ -58,7 +63,11 @@ const SkillDetailSidebar: React.FC<{
               type="button"
               aria-current={active ? 'page' : undefined}
               onClick={() =>
-                openViewTab('skill', { skillId: skill.id, displayName: skill.displayName })
+                openViewTab('skill', {
+                  skillId: skill.id,
+                  displayName: skill.displayName,
+                  catalogSection,
+                })
               }
               className={cn(
                 'relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
