@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -1089,6 +1090,14 @@ function ConnectionScreen({
 
 function Notice({ message, tone }: { message: string; tone: 'error' | 'info' }) {
   const color = tone === 'error' ? COLORS.red : COLORS.blue;
+  const [copied, setCopied] = useState(false);
+
+  const copyError = useCallback(async () => {
+    await Clipboard.setStringAsync(message);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1_500);
+  }, [message]);
+
   return (
     <View style={[styles.notice, { borderColor: color }]}>
       <Ionicons
@@ -1096,7 +1105,24 @@ function Notice({ message, tone }: { message: string; tone: 'error' | 'info' }) 
         name={tone === 'error' ? 'alert-circle-outline' : 'information-circle-outline'}
         size={18}
       />
-      <Text style={styles.noticeText}>{message}</Text>
+      <Text selectable style={styles.noticeText}>
+        {message}
+      </Text>
+      {tone === 'error' ? (
+        <Pressable
+          accessibilityLabel="Copy error message"
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.noticeCopyButton, pressed ? styles.buttonPressed : null]}
+          onPress={() => void copyError()}
+        >
+          <Ionicons
+            color={COLORS.muted}
+            name={copied ? 'checkmark-outline' : 'copy-outline'}
+            size={17}
+          />
+          <Text style={styles.noticeCopyText}>{copied ? 'Copied' : 'Copy'}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -3179,6 +3205,22 @@ const styles = StyleSheet.create({
     color: COLORS.ink,
     fontSize: 14,
     lineHeight: 20,
+  },
+  noticeCopyButton: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    backgroundColor: COLORS.page,
+  },
+  noticeCopyText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
   },
   formGroup: {
     gap: 8,
