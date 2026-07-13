@@ -110,6 +110,30 @@ describe('resolveLocalPtySpawn - Windows', () => {
     });
   });
 
+  it('quotes a Windows Claude settings file path that contains spaces', () => {
+    const result = resolveLocalPtySpawn({
+      platform: 'win32',
+      env: windowsPathEnv,
+      fileExists: () => false,
+      intent: {
+        kind: 'run-command',
+        cwd: 'C:\\repo',
+        command: {
+          kind: 'argv',
+          command: 'claude',
+          args: ['--settings', 'C:\\Temp Root\\yoda-claude-settings-a\\settings.json'],
+        },
+      },
+    });
+
+    expect(result.args).toEqual([
+      '/d',
+      '/s',
+      '/c',
+      'claude --settings "C:\\Temp Root\\yoda-claude-settings-a\\settings.json"',
+    ]);
+  });
+
   it('wraps cmd and bat argv commands through cmd.exe', () => {
     const result = resolveLocalPtySpawn({
       platform: 'win32',
