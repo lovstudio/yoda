@@ -327,6 +327,7 @@
       "relayDisconnected": "Relay 尚未启用或已离线",
       "enableRelay": "启用 Relay",
       "relayEnabling": "启用中…",
+      "reconnectRelay": "重新连接 Relay",
       "generateRelayPairing": "生成一次性配对码",
       "relayConnectDescription": "这是 10 分钟内有效的一次性 Relay 配对码。扫码兑换后，手机凭据会保存到系统安全存储。",
       "connectUnavailable": "连接二维码暂不可用",

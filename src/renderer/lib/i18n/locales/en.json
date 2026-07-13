@@ -329,6 +329,7 @@
       "relayDisconnected": "Relay is not enabled or is offline",
       "enableRelay": "Enable Relay",
       "relayEnabling": "Enabling…",
+      "reconnectRelay": "Reconnect Relay",
       "generateRelayPairing": "Generate one-time pairing code",
       "relayConnectDescription": "This one-time Relay pairing code expires in 10 minutes. After exchange, the phone credential is kept in platform secure storage.",
       "connectUnavailable": "Connection code is unavailable",

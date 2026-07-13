@@ -389,12 +389,29 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
                         ? t('sidebar.mobileConnection.relayEnabling')
                         : t('sidebar.mobileConnection.enableRelay')}
                     </Button>
+                  ) : !relay.data.connected ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void enableRelay()}
+                      disabled={relayBusy || relay.data.connecting}
+                    >
+                      <RefreshCw
+                        className={cn(
+                          'size-3.5',
+                          (relayBusy || relay.data.connecting) && 'animate-spin'
+                        )}
+                      />
+                      {relayBusy || relay.data.connecting
+                        ? t('sidebar.mobileConnection.relayConnecting')
+                        : t('sidebar.mobileConnection.reconnectRelay')}
+                    </Button>
                   ) : (
                     <Button
                       type="button"
                       size="sm"
                       onClick={() => void createRelayPairing()}
-                      disabled={relayBusy || !relay.data.connected}
+                      disabled={relayBusy}
                     >
                       <Smartphone className="size-3.5" />
                       {t('sidebar.mobileConnection.generateRelayPairing')}

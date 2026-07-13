@@ -309,6 +309,15 @@ describe('MobileRelayService account lifecycle', () => {
       lastError: 'Yoda Relay was connected by another Yoda instance',
     });
     expect(mocks.sockets).toHaveLength(2);
+
+    await service.enable();
+
+    expect(mocks.sockets).toHaveLength(3);
+    expect(service.getStatus()).toMatchObject({
+      configured: true,
+      connecting: true,
+      lastError: null,
+    });
   });
 
   it('tombstones a credential rejected after WebSocket connection', async () => {
