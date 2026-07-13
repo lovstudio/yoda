@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     user: { userId: string } | null;
   },
   getSession: vi.fn(),
+  getRequestSession: vi.fn(),
   registerRelayDevice: vi.fn(),
   confirmRelayDeviceRegistration: vi.fn(async () => undefined),
   createRelayPairing: vi.fn(),
@@ -60,7 +61,10 @@ vi.mock('ws', () => ({
 }));
 
 vi.mock('@main/core/account/services/yoda-account-service', () => ({
-  yodaAccountService: { getSession: mocks.getSession },
+  yodaAccountService: {
+    getSession: mocks.getSession,
+    getRequestSession: mocks.getRequestSession,
+  },
 }));
 
 vi.mock('@main/core/account/services/yoda-commerce-service', () => ({
@@ -119,12 +123,43 @@ describe('MobileRelayService account lifecycle', () => {
       user: { userId: 'account-1' },
     };
     mocks.getSession.mockImplementation(async () => mocks.session);
+    mocks.getRequestSession.mockResolvedValue({
+      userId: 'account-1',
+      accessToken: 'access-token',
+      generation: 1,
+      signal: new AbortController().signal,
+    });
     mocks.credentialGet.mockResolvedValue(null);
     mocks.getPendingRevocations.mockResolvedValue([]);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('uses the refresh-capable request session before registering Relay', async () => {
+    mocks.session = {
+      isSignedIn: true,
+      hasAccount: true,
+      user: { userId: 'account-1' },
+    };
+    mocks.registerRelayDevice.mockResolvedValue({
+      device: { id: 'device-1', name: 'Test Desktop', created_at: '2026-07-13T00:00:00Z' },
+      registrationId: '11111111-1111-4111-8111-111111111111',
+      hostToken: `yrh_${'a'.repeat(43)}`,
+      pairingCode: `yrp_${'b'.repeat(43)}`,
+      pairingExpiresAt: '2026-07-13T00:10:00Z',
+      relayBaseUrl: MOBILE_RELAY_BASE_URL,
+    });
+    const service = new MobileRelayService();
+
+    await service.enable('Test Desktop');
+
+    expect(mocks.getRequestSession).toHaveBeenCalledTimes(1);
+    expect(mocks.registerRelayDevice).toHaveBeenCalledWith('Test Desktop', expect.any(AbortSignal));
+    expect(mocks.credentialSet).toHaveBeenCalledWith(
+      expect.objectContaining({ accountUserId: 'account-1', deviceId: 'device-1' })
+    );
   });
 
   it('does not persist or reconnect a registration that finishes after revoke', async () => {

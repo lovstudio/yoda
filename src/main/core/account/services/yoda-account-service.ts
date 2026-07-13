@@ -2,6 +2,7 @@ import {
   accountAuthDeviceCodeChannel,
   accountAuthErrorChannel,
   accountAuthSuccessChannel,
+  accountSessionChangedChannel,
 } from '@shared/events/accountEvents';
 import { KV } from '@main/db/kv';
 import { events } from '@main/lib/events';
@@ -424,6 +425,7 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
       const user = accountUserFromProfile(profile);
 
       events.emit(accountAuthSuccessChannel, { user });
+      events.emit(accountSessionChangedChannel, undefined);
       this._hooks.callHookBackground('accountChanged', user.username, user.userId, user.email);
 
       return { user };
@@ -477,6 +479,7 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
       } finally {
         this.rotateSessionGeneration();
         this.signingOut = false;
+        events.emit(accountSessionChangedChannel, undefined);
         this._hooks.callHookBackground('accountCleared');
       }
     }
@@ -565,6 +568,7 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
           await this.clearCredentialsForSignedOutState('expired session');
         });
       } finally {
+        events.emit(accountSessionChangedChannel, undefined);
         this._hooks.callHookBackground('accountCleared');
       }
       return false;

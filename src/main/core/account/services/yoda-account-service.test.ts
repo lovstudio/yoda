@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { accountSessionChangedChannel } from '@shared/events/accountEvents';
 import { YodaAccountService } from './yoda-account-service';
 
 const mocks = vi.hoisted(() => ({
@@ -148,6 +149,7 @@ describe('YodaAccountService lifecycle', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/cli/auth/signout');
     await expect(service.getSession()).resolves.toMatchObject({ isSignedIn: false });
     expect(mocks.kv.get('signedOut')).toBe(true);
+    expect(mocks.emit).toHaveBeenCalledWith(accountSessionChangedChannel, undefined);
   });
 
   it('rejects a stored access token whose subject does not match the cached profile', async () => {
@@ -298,6 +300,7 @@ describe('YodaAccountService lifecycle', () => {
     );
 
     await vi.waitFor(() => expect(accountCleared).toHaveBeenCalledTimes(1));
+    expect(mocks.emit).toHaveBeenCalledWith(accountSessionChangedChannel, undefined);
     await expect(service.getSession()).resolves.toMatchObject({ isSignedIn: false });
   });
 

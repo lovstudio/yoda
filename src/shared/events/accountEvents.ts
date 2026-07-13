@@ -25,3 +25,10 @@ export const accountAuthErrorChannel = defineEvent<{
 }>('account:auth:error');
 
 export const accountAuthCancelledChannel = defineEvent<void>('account:auth:cancelled');
+
+/**
+ * Invalidates renderer account snapshots when the main-process session changes
+ * outside the renderer mutation that initiated it (for example, a 401 refresh
+ * failure discovered by a background commerce request).
+ */
+export const accountSessionChangedChannel = defineEvent<void>('account:session-changed');

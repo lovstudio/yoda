@@ -9,6 +9,7 @@ import {
   Copy,
   ExternalLink,
   FlaskConical,
+  LogIn,
   Network,
   RefreshCw,
   Rocket,
@@ -22,7 +23,13 @@ import { useTranslation } from 'react-i18next';
 import type { MobileGatewayMode } from '@shared/mobile-api';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
+import {
+  useAccountAuthWarmUp,
+  useAccountSession,
+  useAccountSignIn,
+} from '@renderer/lib/hooks/useAccount';
 import { rpc } from '@renderer/lib/ipc';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
@@ -30,6 +37,11 @@ import { cn } from '@renderer/utils/utils';
 
 const TAILSCALE_DOWNLOAD_URL = 'https://tailscale.com/download';
 const TAILSCALE_SETUP_URL = 'https://tailscale.com/kb/1017/install';
+
+function userFacingError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, '');
+}
 
 async function copyToClipboard(value: string): Promise<void> {
   if (!navigator.clipboard?.writeText) throw new Error('Clipboard is not available');
@@ -142,6 +154,9 @@ function InfoRow({
 
 export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useTranslation();
+  const account = useAccountSession();
+  const signIn = useAccountSignIn();
+  const showAccountDeviceFlow = useShowModal('accountDeviceFlowModal');
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['mobileGateway', 'connectionInfo'],
     queryFn: () => rpc.mobileGateway.getConnectionInfo(),
@@ -156,6 +171,9 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
   });
   const [relayBusy, setRelayBusy] = useState(false);
   const [relayError, setRelayError] = useState<string | null>(null);
+  const isAccountSignedIn = account.data?.isSignedIn === true;
+
+  useAccountAuthWarmUp(!account.isLoading && !isAccountSignedIn);
 
   // The Dev/Prod view is a manual switch; it defaults to the host's real runtime
   // mode once the connection info loads, but the user can flip it to inspect the
@@ -192,10 +210,25 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
     setRelayBusy(true);
     setRelayError(null);
     try {
+      if (!isAccountSignedIn) {
+        showAccountDeviceFlow({
+          onError: (message: string) => setRelayError(message),
+        });
+        const result = await signIn.mutateAsync(undefined);
+        if (!result.success) {
+          throw new Error(result.error || t('sidebar.mobileConnection.relaySignInRequired'));
+        }
+      }
       await rpc.mobileGateway.enableRelay();
       await relay.refetch();
     } catch (nextError) {
-      setRelayError(nextError instanceof Error ? nextError.message : String(nextError));
+      const message = userFacingError(nextError);
+      if (message.includes('Sign in to your LovStudio account')) {
+        await account.refetch();
+        setRelayError(t('sidebar.mobileConnection.relaySignInRequired'));
+      } else {
+        setRelayError(message);
+      }
     } finally {
       setRelayBusy(false);
     }
@@ -209,7 +242,7 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
       await relay.refetch();
       setStepIndex(1);
     } catch (nextError) {
-      setRelayError(nextError instanceof Error ? nextError.message : String(nextError));
+      setRelayError(userFacingError(nextError));
     } finally {
       setRelayBusy(false);
     }
@@ -377,17 +410,25 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
                   </p>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {!relay.data?.configured ? (
+                  {!isAccountSignedIn || !relay.data?.configured ? (
                     <Button
                       type="button"
                       size="sm"
                       onClick={() => void enableRelay()}
-                      disabled={relayBusy}
+                      disabled={relayBusy || account.isLoading}
                     >
-                      <Cloud className="size-3.5" />
+                      {isAccountSignedIn ? (
+                        <Cloud className="size-3.5" />
+                      ) : (
+                        <LogIn className="size-3.5" />
+                      )}
                       {relayBusy
-                        ? t('sidebar.mobileConnection.relayEnabling')
-                        : t('sidebar.mobileConnection.enableRelay')}
+                        ? signIn.isPending
+                          ? t('sidebar.mobileConnection.relaySigningIn')
+                          : t('sidebar.mobileConnection.relayEnabling')
+                        : isAccountSignedIn
+                          ? t('sidebar.mobileConnection.enableRelay')
+                          : t('sidebar.mobileConnection.signInToEnableRelay')}
                     </Button>
                   ) : !relay.data.connected ? (
                     <Button

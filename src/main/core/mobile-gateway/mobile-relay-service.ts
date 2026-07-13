@@ -118,11 +118,15 @@ export class MobileRelayService {
     const controller = this.startAbortableOperation(generation);
     try {
       if (!this.credentials) {
-        const session = await yodaAccountService.getSession();
-        if (!session.isSignedIn || !session.user) {
+        let accountUserId: string;
+        try {
+          // A valid refresh credential can recover a missing access token here.
+          // getSession() only reports the current snapshot and would incorrectly
+          // force a fresh sign-in before the commerce client gets that chance.
+          accountUserId = (await yodaAccountService.getRequestSession()).userId;
+        } catch {
           throw new Error('Sign in to your LovStudio account before enabling Yoda Relay');
         }
-        const accountUserId = session.user.userId;
         await this.retryPendingRevocations(accountUserId, controller.signal);
         this.assertCurrent(generation);
         const registration = await yodaCommerceService.registerRelayDevice(
@@ -131,7 +135,7 @@ export class MobileRelayService {
         );
         await this.assertCurrentAccount(generation, accountUserId);
         const credentials: MobileRelayCredentials = {
-          accountUserId: session.user.userId,
+          accountUserId,
           deviceId: registration.device.id,
           deviceName: registration.device.name,
           hostToken: registration.hostToken,
