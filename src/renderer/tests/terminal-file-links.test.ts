@@ -28,6 +28,52 @@ describe('terminal file links', () => {
     ]);
   });
 
+  it('extracts every absolute path separated by Chinese ideographic commas', () => {
+    const paths = [
+      '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/App.tsx:1130',
+      '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/api-client.ts:59',
+      '/Users/mark/lovstudio/coding/yoda/src/shared/mobile-retry-interaction.test.ts:1',
+    ];
+    const line = `「相关实现：${paths.join('、')}。」`;
+    const candidates = extractTerminalFileLinkCandidates(line);
+
+    expect(candidates).toEqual(paths.map((text) => ({ text, index: line.indexOf(text) })));
+    expect(
+      candidates.map(({ text }) =>
+        resolveTerminalFileLinkTarget(
+          text,
+          '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln',
+          undefined,
+          ['/Users/mark/lovstudio/coding/yoda']
+        )
+      )
+    ).toEqual([
+      {
+        originalText: paths[0],
+        filePath: 'apps/mobile/src/App.tsx',
+        absolutePath: '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/apps/mobile/src/App.tsx',
+        line: 1130,
+        column: undefined,
+      },
+      {
+        originalText: paths[1],
+        filePath: 'apps/mobile/src/api-client.ts',
+        absolutePath:
+          '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/apps/mobile/src/api-client.ts',
+        line: 59,
+        column: undefined,
+      },
+      {
+        originalText: paths[2],
+        filePath: 'src/shared/mobile-retry-interaction.test.ts',
+        absolutePath:
+          '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/src/shared/mobile-retry-interaction.test.ts',
+        line: 1,
+        column: undefined,
+      },
+    ]);
+  });
+
   it('extracts a rooted path whose directory segment contains a space', () => {
     const line =
       '- /Users/mark/Library/Application Support/com.lovstudio.ymux/logs/web-1779785445.log:14331 已记录重新编译成功';
@@ -295,6 +341,52 @@ describe('terminal file links', () => {
 
   it('returns null for ~/ paths when no home dir is provided', () => {
     expect(resolveTerminalFileLinkTarget('~/Documents/foo.md')).toBeNull();
+  });
+
+  it('recognizes every ideographic-comma separated path across hard-wrapped rows', () => {
+    const paths = [
+      '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/App.tsx:1130',
+      '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/api-client.ts:59',
+      '/Users/mark/lovstudio/coding/yoda/src/shared/mobile-retry-interaction.test.ts:1',
+    ];
+    const line = `「相关实现：${paths.join('、')}。」`;
+    const terminal = makeTerminal([line.slice(0, 80), line.slice(80, 160), line.slice(160)]);
+    const options = {
+      workspaceRoot: '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln',
+      workspaceRootAliases: ['/Users/mark/lovstudio/coding/yoda'],
+      onOpen: (): void => undefined,
+    };
+    const expected = [
+      {
+        text: paths[0],
+        range: { start: { x: 7, y: 1 }, end: { x: 68, y: 1 } },
+        filePath: 'apps/mobile/src/App.tsx',
+        line: 1130,
+      },
+      {
+        text: paths[1],
+        range: { start: { x: 70, y: 1 }, end: { x: 55, y: 2 } },
+        filePath: 'apps/mobile/src/api-client.ts',
+        line: 59,
+      },
+      {
+        text: paths[2],
+        range: { start: { x: 57, y: 2 }, end: { x: 55, y: 3 } },
+        filePath: 'src/shared/mobile-retry-interaction.test.ts',
+        line: 1,
+      },
+    ];
+
+    for (const row of [1, 2, 3]) {
+      expect(
+        getTerminalFileLinkMatches(terminal, row, options).map(({ text, range, target }) => ({
+          text,
+          range,
+          filePath: target.filePath,
+          line: target.line,
+        }))
+      ).toEqual(expected);
+    }
   });
 
   it('recognizes the complete hard-wrapped path with a spaced directory from either row', () => {

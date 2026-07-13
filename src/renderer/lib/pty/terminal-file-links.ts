@@ -10,9 +10,9 @@ const MAX_WRAPPED_LINE_LENGTH = 2048;
 // below). Includes ASCII whitespace/quotes/shell metas/parens plus CJK
 // punctuation and brackets so paths like `bar.txt。` or `foo.md(…)` /
 // `foo.md（…）` terminate cleanly instead of swallowing trailing prose.
-const PATH_SEG_EXCLUDED = `\\s"'\`$<>|\\\\:：()（）「」『』【】〈〉《》，。；！？`;
-const PATH_LEADING = `\\s"'([{<:：（「『【〈《`;
-const PATH_TRAILING = `\\s"')\\]}>,，。；;!?！？.(（）「」『』【】〈〉《》`;
+const PATH_SEG_EXCLUDED = `\\s"'\`$<>|\\\\:：()（）「」『』【】〈〉《》，、。；！？`;
+const PATH_LEADING = `\\s"'([{<:：（「『【〈《、`;
+const PATH_TRAILING = `\\s"')\\]}>,，、。；;!?！？.(（）「」『』【】〈〉《》`;
 // File extension: 1–32 path chars after a dot, but the final char may not be a
 // dot so a trailing sentence period (`foo.md.`) is left out of the link.
 const PATH_EXT = `[^${PATH_SEG_EXCLUDED}\\/]{0,31}[^${PATH_SEG_EXCLUDED}\\/.]`;
