@@ -1,5 +1,5 @@
 import { GitCompare, PanelRightOpen, Search } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CatalogSkill } from '@shared/skills/types';
 import { useOpenViewTab } from '@renderer/lib/layout/navigation-provider';
@@ -29,6 +29,8 @@ const SkillDetailSidebar: React.FC<{
   const { t } = useTranslation();
   const { openViewTab } = useOpenViewTab();
   const [query, setQuery] = useState('');
+  const activeItemRef = useRef<HTMLButtonElement>(null);
+  const [emphasizedSkillId, setEmphasizedSkillId] = useState<string | null>(null);
 
   const visibleSkills = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -45,6 +47,23 @@ const SkillDetailSidebar: React.FC<{
         skill.description.toLocaleLowerCase().includes(normalizedQuery)
     );
   }, [catalogSection, query, skills]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const node = activeItemRef.current;
+      if (!node || node.getClientRects().length === 0) return;
+      node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setEmphasizedSkillId(activeSkillId);
+    });
+    const timeout = window.setTimeout(() => {
+      setEmphasizedSkillId((current) => (current === activeSkillId ? null : current));
+    }, 2400);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [activeSkillId, visibleSkills]);
 
   return (
     <aside className="hidden h-full w-60 shrink-0 flex-col border-r border-border bg-background-secondary @2xl:flex">
@@ -69,6 +88,7 @@ const SkillDetailSidebar: React.FC<{
               <ContextMenuTrigger
                 render={
                   <button
+                    ref={active ? activeItemRef : undefined}
                     type="button"
                     aria-current={active ? 'page' : undefined}
                     onClick={() =>
@@ -82,7 +102,9 @@ const SkillDetailSidebar: React.FC<{
                       'relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
                       active
                         ? 'bg-background-1 text-foreground'
-                        : 'text-foreground-muted hover:bg-background-2 hover:text-foreground'
+                        : 'text-foreground-muted hover:bg-background-2 hover:text-foreground',
+                      emphasizedSkillId === skill.id &&
+                        'ring-2 ring-amber-400 ring-offset-1 ring-offset-background-secondary'
                     )}
                   >
                     {active && (
