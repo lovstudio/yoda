@@ -199,6 +199,7 @@ interface RunModeInputChrome {
 const MAX_COMPARE_VARIANTS = 5;
 const DEFAULT_REVIEWER_RUNTIME: RuntimeId = 'claude';
 const DEFAULT_TASK_OUTPUT_LANGUAGE: TaskOutputLanguage = 'skip';
+const DEFAULT_SUMMARY_OUTPUT_LANGUAGE: TaskOutputLanguage = 'app';
 const DEFAULT_INPUT_PROMPT_LANGUAGE: TaskOutputLanguage = 'skip';
 const TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'prompt', 'zh-CN', 'en'];
 const INPUT_PROMPT_ENABLED_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'zh-CN', 'en'];
@@ -939,7 +940,7 @@ export const HomeComposer = observer(function HomeComposer({
   });
   const summaryLanguageField = dualField<TaskOutputLanguage>({
     override: composerDefaults?.summaryLanguage,
-    globalValue: taskSettings?.summaryLanguage ?? DEFAULT_TASK_OUTPUT_LANGUAGE,
+    globalValue: taskSettings?.summaryLanguage ?? DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
     setGlobal: (value) => updateTaskSettings({ summaryLanguage: value }),
     setOverride: (value) => setComposerDefault('summaryLanguage', value),
     hasProject: hasProjectOverrideTarget,

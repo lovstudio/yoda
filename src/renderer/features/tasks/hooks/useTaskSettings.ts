@@ -81,7 +81,7 @@ export function useTaskSettings(): TaskSettingsModel {
     namingAgentId: tasks?.namingAgentId ?? '',
     summaryAgentId: tasks?.summaryAgentId ?? '',
     inputPromptLanguage: tasks?.inputPromptLanguage ?? 'skip',
-    summaryLanguage: tasks?.summaryLanguage ?? 'skip',
+    summaryLanguage: tasks?.summaryLanguage ?? 'app',
     summaryContextRecent: tasks?.summaryContextRecent ?? DEFAULT_SUMMARY_CONTEXT_RECENT,
     summaryContextGlobal: tasks?.summaryContextGlobal ?? DEFAULT_SUMMARY_CONTEXT_GLOBAL,
     namingModel: tasks?.namingModel ?? '',

@@ -50,7 +50,7 @@ export const SETTINGS_DEFAULTS = {
     namingAgentId: '',
     summaryAgentId: '',
     inputPromptLanguage: 'skip' as const,
-    summaryLanguage: 'skip' as const,
+    summaryLanguage: 'app' as const,
     summaryContextRecent: DEFAULT_SUMMARY_CONTEXT_RECENT,
     summaryContextGlobal: DEFAULT_SUMMARY_CONTEXT_GLOBAL,
     namingModel: DEFAULT_TASK_NAMING_MODEL,

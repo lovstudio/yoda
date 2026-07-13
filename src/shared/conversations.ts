@@ -175,7 +175,7 @@ export type SessionTranscriptMessage = {
 
 /**
  * Which slice of the session a summary covers.
- * - `global`: the whole session (prefers the runtime compaction summary)
+ * - `global`: concise whole-session delivery summary, updated incrementally
  * - `recent`: only the last few transcript messages (short, refreshed each turn)
  */
 export type SessionSummaryScope = 'global' | 'recent';
@@ -205,6 +205,15 @@ export type SessionSummaryStatus =
 export type SessionSummaryResult = {
   summary: SessionSummary | null;
   status: SessionSummaryStatus;
+};
+
+export type SessionDeliverySummary = {
+  conversationId: string;
+  taskId: string;
+  taskName: string | null;
+  conversationTitle: string | null;
+  text: string;
+  timestamp: string | null;
 };
 
 /**

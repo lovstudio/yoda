@@ -1,4 +1,9 @@
 import {
+  appendDeliverySummaryContext,
+  inferDeliverySummaryContextPurpose,
+  shouldAttachDeliverySummaryContext,
+} from '@shared/agent-command-context';
+import {
   applyAgentCommandPrefix,
   buildPromptInjectionPayload,
   getAgentCommandSubmitDelayMs,
@@ -15,6 +20,7 @@ import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
+import { getConversationDeliverySummary } from './session-summary-context';
 
 const COMPLETION_TIMEOUT_MS = 10 * 60_000;
 const COMPLETION_POLL_MS = 2_000;
@@ -47,11 +53,12 @@ export async function injectAgentCommand(
   if (!pty) return false;
 
   const normalizedCommand = applyAgentCommandPrefix(target.runtimeId, trimmed);
-  const payload = buildPromptInjectionPayload(normalizedCommand);
+  const contextualCommand = await attachDeliverySummaryContext(target, normalizedCommand, source);
+  const payload = buildPromptInjectionPayload(contextualCommand);
   if (!payload) return false;
 
   pty.write(payload);
-  const submitSuffix = getAgentCommandSubmitSuffix(target.runtimeId, normalizedCommand);
+  const submitSuffix = getAgentCommandSubmitSuffix(target.runtimeId, contextualCommand);
   if (submitSuffix) pty.write(submitSuffix);
   await sleep(getAgentCommandSubmitDelayMs(target.runtimeId));
   pty.write(getAgentCommandSubmitInput(target.runtimeId));
@@ -62,6 +69,30 @@ export async function injectAgentCommand(
     source
   );
   return true;
+}
+
+async function attachDeliverySummaryContext(
+  target: AgentCommandTarget,
+  command: string,
+  source: string
+): Promise<string> {
+  if (!shouldAttachDeliverySummaryContext(command)) return command;
+
+  try {
+    const summary = await getConversationDeliverySummary(target, { refresh: true });
+    return appendDeliverySummaryContext(
+      command,
+      summary ? [summary] : [],
+      inferDeliverySummaryContextPurpose(command)
+    );
+  } catch (error) {
+    log.warn('injectAgentCommand: failed to attach delivery summary', {
+      conversationId: target.conversationId,
+      source,
+      error: String(error),
+    });
+    return command;
+  }
 }
 
 /**

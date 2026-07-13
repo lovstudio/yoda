@@ -6,9 +6,11 @@ import { KV } from '@main/db/kv';
  * was generated from, so we can skip re-spawning the CLI when nothing relevant
  * changed (content-based throttle).
  */
-type StoredSummary = {
+export type StoredSummary = {
   summary: SessionSummary;
   fingerprint: string;
+  /** Number of included transcript messages covered by this summary. */
+  messageCount?: number;
 };
 
 type SessionSummaryKVSchema = Record<string, StoredSummary>;
