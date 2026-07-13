@@ -2,6 +2,7 @@ import { hostname } from 'node:os';
 import WebSocket from 'ws';
 import {
   createMobileRelayPairingUrl,
+  MOBILE_RELAY_BASE_URL,
   MOBILE_RELAY_HOST_CLOSE_CODE,
   parseMobileRelayHostFrame,
   relayWebSocketUrl,
@@ -86,6 +87,11 @@ export class MobileRelayService {
       credentials = null;
     }
     if (!this.isCurrent(generation)) return;
+    if (credentials && credentials.relayBaseUrl !== MOBILE_RELAY_BASE_URL) {
+      credentials = { ...credentials, relayBaseUrl: MOBILE_RELAY_BASE_URL };
+      await mobileRelayCredentialStore.set(credentials);
+    }
+    if (!this.isCurrent(generation)) return;
     this.credentials = credentials;
     if (credentials) this.connect();
   }
@@ -129,7 +135,7 @@ export class MobileRelayService {
           deviceId: registration.device.id,
           deviceName: registration.device.name,
           hostToken: registration.hostToken,
-          relayBaseUrl: registration.relayBaseUrl,
+          relayBaseUrl: MOBILE_RELAY_BASE_URL,
         };
         await mobileRelayCredentialStore.set(credentials);
         this.assertCurrent(generation);
@@ -142,7 +148,7 @@ export class MobileRelayService {
         this.setPairing(
           registration.pairingCode,
           registration.pairingExpiresAt,
-          registration.relayBaseUrl,
+          MOBILE_RELAY_BASE_URL,
           registration.device.id
         );
       } else {
