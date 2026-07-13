@@ -2,9 +2,15 @@
 
 ## Unreleased
 
+## 0.16.1
+
 ### Added
 
 - Develop features through one governed delivery spine that links the project Feature workbench to a six-step multi-agent execution Room, ingests worktree evidence as reviewable drafts, and preserves explicit gates from product/UX design through PR, release, and SEO documentation.
+
+### Fixed
+
+- Stop update checks from spinning indefinitely when proxy setup or release-feed requests stall, and make retries wait until stale updater requests are fully released.
 
 ## 0.16.0
 
