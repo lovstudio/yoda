@@ -455,14 +455,14 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       existing.params = normalizedParams;
       if (!activate) return;
       this._activate(existing);
-      this.navigation._applyNavigation(viewId, normalizedParams as WrapParams<T>);
+      this.navigation.navigate(viewId, normalizedParams as WrapParams<T>);
       return;
     }
 
     const tab: AppTabEntry = { id: createTabId(), viewId, params: normalizedParams };
     this.tabs.splice(this._insertIndex(viewId, normalizedParams), 0, tab);
     if (activate) this._activate(tab);
-    if (activate) this.navigation._applyNavigation(tab.viewId, tab.params as WrapParams<T>);
+    if (activate) this.navigation.navigate(tab.viewId, tab.params as WrapParams<T>);
   }
 
   /** Insert after the last same-scope tab, else after the active tab. */
@@ -513,7 +513,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
     this.activateTab(next.id);
   }
 
-  /** Switches tabs without pushing navigation history. */
+  /** Switches tabs and records the user-visible route change in navigation history. */
   activateTab(tabId: string): void {
     if (tabId === this.activeTabId) return;
     const tab =
@@ -521,7 +521,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       // Synthesized fixed tabs live only in visibleTabs until first activated.
       this.visibleTabs.find((entry) => entry.id === tabId);
     if (!tab) return;
-    this._activateVisible(tab);
+    this._activateVisible(tab, true);
   }
 
   /**
@@ -530,7 +530,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
    * Order matters: set activeTabId before _applyNavigation so the route-sync
    * reaction writes into the NEW tab (a no-op) instead of clobbering the old one.
    */
-  private _activateVisible(tab: AppTabEntry): void {
+  private _activateVisible(tab: AppTabEntry, recordHistory: boolean): void {
     let stored = this.tabs.find((entry) => entry.id === tab.id);
     if (!stored) {
       this.tabs.splice(this._insertIndex(tab.viewId, tab.params), 0, tab);
@@ -539,7 +539,11 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       stored = this.tabs.find((entry) => entry.id === tab.id) ?? tab;
     }
     this._activate(stored);
-    this.navigation._applyNavigation(stored.viewId, stored.params as WrapParams<ViewId>);
+    if (recordHistory) {
+      this.navigation.navigate(stored.viewId, stored.params as WrapParams<ViewId>);
+    } else {
+      this.navigation._applyNavigation(stored.viewId, stored.params as WrapParams<ViewId>);
+    }
   }
 
   closeTab(tabId: string): void {
@@ -566,7 +570,9 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
 
     const next = successor ?? this.tabs[index] ?? this.tabs[index - 1];
     if (next) {
-      this._activateVisible(next);
+      // Closing a tab is not a new page visit. Move to the surviving neighbour
+      // without adding a synthetic back/forward step.
+      this._activateVisible(next, false);
       return;
     }
 
