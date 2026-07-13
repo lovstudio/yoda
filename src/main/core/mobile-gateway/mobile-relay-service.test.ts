@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MOBILE_RELAY_HOST_CLOSE_CODE } from '@shared/mobile-relay';
+import { MOBILE_RELAY_BASE_URL, MOBILE_RELAY_HOST_CLOSE_CODE } from '@shared/mobile-relay';
 import type {
   MobileRelayCredentials,
   PendingRelayRevocation,
@@ -254,6 +254,31 @@ describe('MobileRelayService account lifecycle', () => {
     expect(mocks.credentialRevoke).toHaveBeenCalledWith(storedCredentials);
     expect(mocks.credentialClear).not.toHaveBeenCalled();
     expect(mocks.webSocketConstructor).not.toHaveBeenCalled();
+  });
+
+  it('migrates persisted Relay credentials to the official stable domain', async () => {
+    const storedCredentials = {
+      accountUserId: 'account-1',
+      deviceId: 'device-1',
+      deviceName: 'Desktop',
+      hostToken: `yrh_${'a'.repeat(43)}`,
+      relayBaseUrl: 'https://legacy-relay.example.com',
+    };
+    mocks.credentialGet.mockResolvedValue(storedCredentials);
+    const service = new MobileRelayService();
+
+    await service.initialize();
+
+    const migratedCredentials = {
+      ...storedCredentials,
+      relayBaseUrl: MOBILE_RELAY_BASE_URL,
+    };
+    expect(mocks.credentialSet).toHaveBeenCalledWith(migratedCredentials);
+    expect(mocks.webSocketConstructor).toHaveBeenCalledWith(
+      'wss://relay.yoda.lovstudio.ai/v1/host/device-1',
+      { headers: { Authorization: `Bearer ${storedCredentials.hostToken}` } }
+    );
+    expect(service.getStatus().relayBaseUrl).toBe(MOBILE_RELAY_BASE_URL);
   });
 
   it('revokes persisted credentials when sign-out overtakes initialization', async () => {

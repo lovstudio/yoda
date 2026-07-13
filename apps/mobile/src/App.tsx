@@ -44,7 +44,10 @@ import {
   type MobileTaskActivityStatus,
   type MobileTaskSummary,
 } from '../../../src/shared/mobile-api';
-import { parseMobileRelayPairingUrl } from '../../../src/shared/mobile-relay';
+import {
+  canonicalizeMobileRelayPairing,
+  parseMobileRelayPairingUrl,
+} from '../../../src/shared/mobile-relay';
 import {
   createDemand,
   fetchSessionDetail,
@@ -76,9 +79,6 @@ const SESSION_DETAIL_RECONCILE_INTERVAL_MS = 60_000;
 const SESSION_DETAIL_REQUEST_TIMEOUT_MS = 15_000;
 const SESSION_EVENT_REFRESH_DELAY_MS = 500;
 const RELAY_PAIR_TIMEOUT_MS = 15_000;
-const YODA_RELAY_ORIGIN = new URL(
-  process.env.EXPO_PUBLIC_YODA_RELAY_ORIGIN?.trim() || 'https://relay.yoda.lovstudio.ai'
-).origin;
 const DEV_GATEWAY_DEFAULT_PORT = '3879';
 const SWIPE_BACK_EDGE_WIDTH = 34;
 const SWIPE_BACK_ACTIVATION_DISTANCE = 12;
@@ -622,12 +622,12 @@ export function App() {
 
   const applyPairingUrl = useCallback(async (url: string | null) => {
     if (!url) return false;
-    const relayPairing = parseMobileRelayPairingUrl(url);
+    const parsedRelayPairing = parseMobileRelayPairingUrl(url);
+    const relayPairing = parsedRelayPairing
+      ? canonicalizeMobileRelayPairing(parsedRelayPairing)
+      : null;
     let next = parseMobilePairingUrl(url);
     if (relayPairing) {
-      if (new URL(relayPairing.relayBaseUrl).origin !== YODA_RELAY_ORIGIN) {
-        throw new Error('This pairing code does not use the official Yoda Relay service.');
-      }
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), RELAY_PAIR_TIMEOUT_MS);
       let response: Response;

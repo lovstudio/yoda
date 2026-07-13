@@ -1,5 +1,6 @@
 export const MOBILE_RELAY_PROTOCOL_VERSION = 1 as const;
 export const MOBILE_RELAY_PAIR_HOST = 'relay-pair';
+export const MOBILE_RELAY_BASE_URL = 'https://relay.yoda.lovstudio.ai';
 export const MOBILE_RELAY_HOST_CLOSE_CODE = {
   credentialRejected: 4001,
   passInactive: 4002,
@@ -52,6 +53,10 @@ export function parseMobileRelayPairingUrl(rawUrl: string): MobileRelayPairing |
   } catch {
     return null;
   }
+}
+
+export function canonicalizeMobileRelayPairing(pairing: MobileRelayPairing): MobileRelayPairing {
+  return { ...pairing, relayBaseUrl: MOBILE_RELAY_BASE_URL };
 }
 
 export type MobileRelayRequestFrame = {

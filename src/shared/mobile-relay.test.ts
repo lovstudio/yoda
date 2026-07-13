@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canonicalizeMobileRelayPairing,
   createMobileRelayPairingUrl,
   isAllowedMobileRelayRequest,
+  MOBILE_RELAY_BASE_URL,
   parseMobileRelayHostFrame,
   parseMobileRelayPairingUrl,
   relayWebSocketUrl,
@@ -12,7 +14,7 @@ describe('mobile relay contract', () => {
     const pairing = {
       deviceId: 'device-1',
       pairingCode: 'yrp_secret',
-      relayBaseUrl: 'https://relay.yoda.lovstudio.ai',
+      relayBaseUrl: MOBILE_RELAY_BASE_URL,
     };
     expect(parseMobileRelayPairingUrl(createMobileRelayPairingUrl(pairing))).toEqual(pairing);
   });
@@ -46,6 +48,20 @@ describe('mobile relay contract', () => {
         'yodamobile://relay-pair?deviceId=d1&pairingCode=p1&relayBaseUrl=https%3A%2F%2Fuser%3Apass%40relay.example'
       )
     ).toBeNull();
+  });
+
+  it('routes legacy pairing links through the official Relay service', () => {
+    expect(
+      canonicalizeMobileRelayPairing({
+        deviceId: 'device-1',
+        pairingCode: 'yrp_secret',
+        relayBaseUrl: 'https://legacy-relay.example.com',
+      })
+    ).toEqual({
+      deviceId: 'device-1',
+      pairingCode: 'yrp_secret',
+      relayBaseUrl: MOBILE_RELAY_BASE_URL,
+    });
   });
 
   it('converts an HTTPS Relay base URL to its host WebSocket endpoint', () => {
