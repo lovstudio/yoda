@@ -22,6 +22,7 @@ import {
   STATUS_TEXT,
 } from './accent';
 import { agentRoomStore } from './agent-room-store';
+import { FeatureWorkflowRail } from './feature-workflow-rail';
 
 /** Opens an agent's detail / a session as a normal task tab (defaulting to the sidebar). */
 type OpenTab = (id: string) => void;
@@ -66,6 +67,12 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
   };
 
   const agents = snapshot.members.filter((m) => m.role !== 'lead');
+  const presetLabel =
+    snapshot.room.preset === 'review-loop'
+      ? t('agentRoom.preset.review')
+      : snapshot.room.preset === 'feature-workflow'
+        ? t('agentRoom.preset.feature')
+        : t('agentRoom.preset.freeform');
 
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -73,10 +80,7 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
         <div className="min-w-0">
           <h2 className="truncate text-base font-semibold">{snapshot.room.name}</h2>
           <p className="text-xs text-foreground-muted">
-            {snapshot.room.preset === 'review-loop'
-              ? t('agentRoom.preset.review')
-              : t('agentRoom.preset.freeform')}{' '}
-            · {t('agentRoom.agentCount', { count: agents.length })}
+            {presetLabel} · {t('agentRoom.agentCount', { count: agents.length })}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -87,7 +91,12 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
             updatedAt={snapshot.room.updatedAt}
             onOpenMember={openMember}
           />
-          <div className="flex items-center gap-1.5">
+          <div
+            className={cn(
+              'items-center gap-1.5',
+              snapshot.room.preset === 'feature-workflow' ? 'hidden 2xl:flex' : 'flex'
+            )}
+          >
             {agents.map((m) => (
               <button
                 key={m.id}
@@ -123,6 +132,10 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
           </div>
         </div>
       </header>
+
+      {snapshot.room.preset === 'feature-workflow' && (
+        <FeatureWorkflowRail snapshot={snapshot} onOpenMember={openMember} />
+      )}
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {snapshot.messages.map((msg) => (
@@ -281,7 +294,8 @@ const TeamIntroPanel = observer(function TeamIntroPanel({
   onOpenMember: OpenTab;
 }) {
   const { t } = useTranslation();
-  const key = preset === 'review-loop' ? 'review' : 'freeform';
+  const key =
+    preset === 'review-loop' ? 'review' : preset === 'feature-workflow' ? 'feature' : 'freeform';
   const impl = agents.find((m) => m.role === 'leader')?.displayName ?? 'Implementer';
   const rev = agents.find((m) => m.role === 'worker')?.displayName ?? 'Reviewer';
   const steps = t(`agentRoom.intro.${key}.steps`, { returnObjects: true, impl, rev }) as string[];

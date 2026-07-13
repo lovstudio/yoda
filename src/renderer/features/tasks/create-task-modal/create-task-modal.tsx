@@ -1,7 +1,9 @@
-import { ChevronRight, FolderOpen } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Bot, ChevronRight, FolderOpen, ListChecks } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { BUILTIN_FEATURE_TEAM_ID } from '@shared/feature-workflow';
 import {
   formatPullRequestReviewPrompt,
   getPrNumber,
@@ -9,6 +11,7 @@ import {
   type PullRequest,
 } from '@shared/pull-requests';
 import { formatIssueFixPrompt, type CreateTaskParams, type Issue } from '@shared/tasks';
+import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
 import {
   getProjectManagerStore,
   getRepositoryStore,
@@ -16,7 +19,10 @@ import {
 } from '@renderer/features/projects/stores/project-selectors';
 import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
+import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import { toast } from '@renderer/lib/hooks/use-toast';
 import { useFeatureFlag } from '@renderer/lib/hooks/useFeatureFlag';
+import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -45,6 +51,7 @@ import { useFromIssueMode } from './use-from-issue-mode';
 import { useFromPullRequestMode } from './use-from-pull-request-mode';
 
 type CreateTaskStrategy = 'from-branch' | 'from-issue' | 'from-pull-request';
+type TaskExecutionMode = 'agent' | 'feature-workflow';
 
 function issuePromptKey(issue: Issue): string {
   return issue.url || `${issue.provider}:${issue.identifier}`;
@@ -67,6 +74,7 @@ export const CreateTaskModal = observer(function CreateTaskModal({
   initialPR?: PullRequest;
 }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(() => {
     if (projectId) return projectId;
     const nav = appState.navigation;
@@ -86,6 +94,9 @@ export const CreateTaskModal = observer(function CreateTaskModal({
   const [selectedStrategy, setSelectedStrategy] = useState<CreateTaskStrategy>(strategy);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [useBYOI, setUseBYOI] = useState(false);
+  const [executionMode, setExecutionMode] = useState<TaskExecutionMode>('agent');
+  const effectiveExecutionMode: TaskExecutionMode =
+    selectedStrategy === 'from-pull-request' ? 'agent' : executionMode;
 
   const projectData = selectedProjectId
     ? mountedProjectData(getProjectManagerStore().projects.get(selectedProjectId))
@@ -98,6 +109,9 @@ export const CreateTaskModal = observer(function CreateTaskModal({
   const [promptedPrKey, setPromptedPrKey] = useState<string | null>(null);
 
   useEffect(() => setUseBYOI(false), [selectedProjectId]);
+  useEffect(() => {
+    if (selectedStrategy === 'from-pull-request') setExecutionMode('agent');
+  }, [selectedStrategy]);
   useEffect(() => {
     initialConversation.setRuntime(null);
     initialConversation.setPrompt('');
@@ -183,7 +197,11 @@ export const CreateTaskModal = observer(function CreateTaskModal({
     'from-issue': fromIssue,
     'from-pull-request': fromPR,
   }[selectedStrategy];
-  const canCreate = !!selectedProjectId && activeMode.isValid && !fromPrUnavailable;
+  const canCreate =
+    !!selectedProjectId &&
+    activeMode.isValid &&
+    !fromPrUnavailable &&
+    (effectiveExecutionMode !== 'feature-workflow' || initialConversation.prompt.trim().length > 0);
 
   const handleCreateTask = useCallback(() => {
     if (!selectedProjectId) return;
@@ -191,28 +209,57 @@ export const CreateTaskModal = observer(function CreateTaskModal({
     const projectStore = getProjectManagerStore().projects.get(selectedProjectId);
     if (projectStore?.state !== 'mounted') return;
 
-    const builtInitialConversation = initialConversation.runtime
-      ? {
-          id: crypto.randomUUID(),
-          projectId: selectedProjectId,
-          taskId: id,
-          runtime: initialConversation.runtime,
-          title: initialConversationTitle(
-            initialConversation.runtime,
-            initialConversation.prompt,
-            []
-          ),
-          initialPrompt: initialConversation.prompt.trim() || undefined,
-        }
-      : undefined;
+    const builtInitialConversation =
+      effectiveExecutionMode === 'agent' && initialConversation.runtime
+        ? {
+            id: crypto.randomUUID(),
+            projectId: selectedProjectId,
+            taskId: id,
+            runtime: initialConversation.runtime,
+            title: initialConversationTitle(
+              initialConversation.runtime,
+              initialConversation.prompt,
+              []
+            ),
+            initialPrompt: initialConversation.prompt.trim() || undefined,
+          }
+        : undefined;
     const taskManager = projectStore.mountedProject!.taskManager;
     const startCreateTask = (params: CreateTaskParams) => {
-      void taskManager.createTask(params).catch((error: unknown) => {
-        log.warn('CreateTaskModal: task creation failed after modal close', {
-          taskId: params.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
+      void (async () => {
+        try {
+          await taskManager.createTask(params);
+        } catch (error) {
+          log.warn('CreateTaskModal: task creation failed after modal close', {
+            taskId: params.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return;
+        }
+        if (effectiveExecutionMode !== 'feature-workflow') return;
+        if (!asProvisioned(getTaskStore(params.projectId, params.id))) {
+          log.warn('CreateTaskModal: Feature workflow skipped because task setup is incomplete', {
+            taskId: params.id,
+          });
+          toast.error(t('tasks.create.featureWorkflowTaskNotReady'));
+          return;
+        }
+        try {
+          await rpc.teamRooms.createRoomFromTeam({
+            projectId: params.projectId,
+            taskId: params.id,
+            teamId: BUILTIN_FEATURE_TEAM_ID,
+            requirement: initialConversation.prompt.trim(),
+          });
+          await invalidateTeamRoomQueries(queryClient, params.projectId, params.id);
+        } catch (error) {
+          log.warn('CreateTaskModal: Feature workflow failed to start after task creation', {
+            taskId: params.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          toast.error(t('tasks.create.featureWorkflowStartFailed'));
+        }
+      })();
     };
 
     switch (selectedStrategy) {
@@ -292,9 +339,12 @@ export const CreateTaskModal = observer(function CreateTaskModal({
     fromPR,
     isUnborn,
     useBYOI,
+    effectiveExecutionMode,
     initialConversation,
+    queryClient,
     navigate,
     onClose,
+    t,
   ]);
 
   return (
@@ -319,7 +369,9 @@ export const CreateTaskModal = observer(function CreateTaskModal({
           value={[selectedStrategy]}
           onValueChange={([value]) => {
             if (value) {
-              setSelectedStrategy(value as CreateTaskStrategy);
+              const nextStrategy = value as CreateTaskStrategy;
+              setSelectedStrategy(nextStrategy);
+              if (nextStrategy === 'from-pull-request') setExecutionMode('agent');
             }
           }}
         >
@@ -339,6 +391,53 @@ export const CreateTaskModal = observer(function CreateTaskModal({
             <span className="text-sm text-muted-foreground">{t('tasks.create.useByoi')}</span>
           </div>
         )}
+        {selectedStrategy !== 'from-pull-request' && (
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="text-xs font-medium text-foreground-muted">
+              {t('tasks.create.executionMode')}
+            </legend>
+            <div className="grid grid-cols-2 border border-border">
+              <label className="flex cursor-pointer items-start gap-2 border-r border-border bg-background px-3 py-2 text-left text-foreground-muted transition-colors has-[:checked]:bg-primary/10 has-[:checked]:text-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring hover:bg-background-1">
+                <input
+                  type="radio"
+                  name="task-execution-mode"
+                  value="agent"
+                  checked={executionMode === 'agent'}
+                  onChange={() => setExecutionMode('agent')}
+                  className="sr-only"
+                />
+                <Bot className="mt-0.5 size-4 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block text-xs font-medium">
+                    {t('tasks.create.executionAgent')}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] leading-4 opacity-75">
+                    {t('tasks.create.executionAgentDescription')}
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2 bg-background px-3 py-2 text-left text-foreground-muted transition-colors has-[:checked]:bg-primary/10 has-[:checked]:text-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring hover:bg-background-1">
+                <input
+                  type="radio"
+                  name="task-execution-mode"
+                  value="feature-workflow"
+                  checked={executionMode === 'feature-workflow'}
+                  onChange={() => setExecutionMode('feature-workflow')}
+                  className="sr-only"
+                />
+                <ListChecks className="mt-0.5 size-4 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block text-xs font-medium">
+                    {t('tasks.create.executionFeature')}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] leading-4 opacity-75">
+                    {t('tasks.create.executionFeatureDescription')}
+                  </span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+        )}
         <AnimatedHeight onAnimatingChange={setIsTransitioning}>
           {selectedStrategy === 'from-branch' && (
             <FromBranchContent
@@ -348,6 +447,7 @@ export const CreateTaskModal = observer(function CreateTaskModal({
               isUnborn={isUnborn}
               initialConversation={initialConversation}
               connectionId={connectionId}
+              featureWorkflow={effectiveExecutionMode === 'feature-workflow'}
             />
           )}
           {selectedStrategy === 'from-issue' && (
@@ -361,6 +461,7 @@ export const CreateTaskModal = observer(function CreateTaskModal({
               isUnborn={isUnborn}
               initialConversation={initialConversation}
               connectionId={connectionId}
+              featureWorkflow={effectiveExecutionMode === 'feature-workflow'}
             />
           )}
           {selectedStrategy === 'from-pull-request' && (

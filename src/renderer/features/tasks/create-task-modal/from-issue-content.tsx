@@ -20,6 +20,7 @@ interface FromIssueContentProps {
   isUnborn?: boolean;
   initialConversation: InitialConversationState;
   connectionId?: string;
+  featureWorkflow?: boolean;
 }
 
 export function FromIssueContent({
@@ -32,6 +33,7 @@ export function FromIssueContent({
   isUnborn,
   initialConversation,
   connectionId,
+  featureWorkflow,
 }: FromIssueContentProps) {
   const { t } = useTranslation();
   const [isSelecting, setIsSelecting] = useState(!state.linkedIssue);
@@ -69,7 +71,11 @@ export function FromIssueContent({
       )}
 
       <TaskNameField state={state} />
-      <InitialConversationField state={initialConversation} connectionId={connectionId} />
+      <InitialConversationField
+        state={initialConversation}
+        connectionId={connectionId}
+        featureWorkflow={featureWorkflow}
+      />
       <BranchPickerField
         state={state}
         projectId={projectId}

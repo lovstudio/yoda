@@ -3,7 +3,7 @@ import type { SkillSelectionInput } from './skills/types';
 import type { RoutingHopLimit } from './team-routing-limit';
 
 /** Preset that seeded a room. `review-loop` wires implementer↔reviewer routing. */
-export type RoomPreset = 'freeform' | 'review-loop';
+export type RoomPreset = 'freeform' | 'review-loop' | 'feature-workflow';
 
 /**
  * Member lifecycle state shown as the roster dot, game-loop style:

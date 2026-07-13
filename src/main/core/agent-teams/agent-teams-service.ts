@@ -13,7 +13,7 @@ import { normalizeRoutingHopLimit } from '@shared/team-routing-limit';
 import { db } from '@main/db/client';
 import { agentTeams, type AgentTeamRow } from '@main/db/schema';
 
-const ROUTINGS: TeamRouting[] = ['review-loop', 'fan-out', 'freeform'];
+const ROUTINGS: TeamRouting[] = ['review-loop', 'fan-out', 'sequential', 'freeform'];
 
 function rowToTeam(row: AgentTeamRow): AgentTeam {
   return {
@@ -43,6 +43,7 @@ function sanitizeMembers(members: AgentTeamMember[]): AgentTeamMember[] {
       return {
         handle,
         displayName: m.displayName.trim() || handle,
+        icon: m.icon?.trim() || undefined,
         role: m.role === 'leader' ? 'leader' : 'worker',
         runtime: isValidRuntimeId(m.runtime) ? m.runtime : 'claude',
         agentRef: m.agentRef,

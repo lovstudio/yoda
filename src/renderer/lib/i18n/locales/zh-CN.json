@@ -1104,12 +1104,15 @@
     "modeReviewDesc": "一个 AI 实现、一个 AI 评审，反复打磨直到通过。",
     "modeTeamReview": "Review",
     "modeTeamReviewDesc": "一个 AI 小组以群聊协作，实现与评审来回打磨。",
+    "modeTeamFeature": "Feature 闭环",
+    "modeTeamFeatureDesc": "从问题与产品设计开始，依次完成代码、验证、功能文档和 PR/SEO 文案，每一步都有门禁。",
     "modeTeamStartup": "创业团队",
     "modeTeamStartupDesc": "一支 AI 团队（CEO、产品、工程、设计、运营）分工协作。",
     "modeTeamDesc": "一支自定义 AI 团队协作完成任务。",
     "teamMemberCount": "{{count}} 名成员",
     "teamLeader": "leader",
     "teamManageHint": "在 资源库 → 智能体团队 中管理团队。",
+    "teamTaskSetupIncomplete": "任务 worktree 尚未就绪。请先修复任务设置，再启动团队。",
     "modelDefault": "默认",
     "runHostAria": "选择运行宿主机",
     "runHostLocal": "本机",
@@ -1531,6 +1534,15 @@
       "dangerouslySkipPermissions": "跳过权限检查（危险）",
       "permissionMode": "权限模式",
       "initialPromptPlaceholder": "描述你希望代理完成的工作。",
+      "executionMode": "执行方式",
+      "executionAgent": "标准任务",
+      "executionAgentDescription": "由一个选定 Agent 从当前 Prompt 开始。",
+      "executionFeature": "Feature 闭环",
+      "executionFeatureDescription": "从问题到 PR 与 SEO，依次经过 6 道门禁。",
+      "featureBrief": "问题简报",
+      "featureBriefPlaceholder": "描述用户问题、期望结果、约束和已知的成功信号。",
+      "featureWorkflowTaskNotReady": "任务已创建，但 worktree 尚未就绪。请先修复任务设置，再启动 Feature 闭环。",
+      "featureWorkflowStartFailed": "任务已创建，但 Feature 闭环未能启动。请在 Home 选中该任务后，用 Feature 闭环重试。",
       "pushBranchToRemote": "将分支 push 到远端",
       "selectAnotherIssue": "选择其他 Issue",
       "selectAnotherPr": "选择其他 Pull Request"
@@ -1860,6 +1872,14 @@
       "automation": "自动化"
     }
   },
+  "agentTeams": {
+    "routing": {
+      "reviewLoop": "评审循环（迭代直到通过）",
+      "fanOut": "并行分发（负责人规划，团队执行一次）",
+      "sequential": "分阶段交接（每次只推进一道门禁）",
+      "freeform": "自由协作（通过 @ 提及沟通）"
+    }
+  },
   "agentRoom": {
     "rooms": "房间",
     "newRoom": "新建智能体房间",
@@ -1883,6 +1903,18 @@
         ],
         "note": "你不需要 @ 任何人——由系统来 @。你仍可随时 @ 某人插话。"
       },
+      "feature": {
+        "lead": "一个问题沿 6 次可验证交接推进，由 Feature Lead 守住每一道门禁：",
+        "steps": [
+          "锁定问题、目标、约束与成功信号。",
+          "产出并确认产品、UI/UX 与验收决策。",
+          "按已批准设计实现代码与聚焦测试。",
+          "独立验证；失败则退回工程阶段修复。",
+          "记录已经验证的用户可见功能。",
+          "准备 PR、Changelog、发布与 SEO 文案。"
+        ],
+        "note": "每次通过或阻塞都会写入房间交接，应用重启后仍能恢复阶段轨。"
+      },
       "freeform": {
         "lead": "自由协作——由你来调度：",
         "steps": [
@@ -1905,7 +1937,11 @@
       "updateFailed": "更新 Agent 失败"
     },
     "settings": { "title": "房间设置" },
-    "preset": { "review": "评审循环", "freeform": "自由" },
+    "preset": {
+      "review": "评审循环",
+      "feature": "Feature 闭环",
+      "freeform": "自由"
+    },
     "mode": { "review": "评审循环", "freeform": "自由" },
     "taskExisting": "已有任务",
     "taskNew": "新建 worktree",
@@ -1933,6 +1969,45 @@
       "localOnly": "新建 worktree 仅支持本地项目。",
       "taskCreate": "创建任务失败。",
       "taskSetup": "任务的 worktree 没设置完成——请到任务视图修复后再建房间。"
+    }
+  },
+  "featureWorkflow": {
+    "title": "Feature 交接轨",
+    "subtitle": "每个阶段都把证据与产物交给下一阶段。",
+    "progress": "{{completed}} / {{total}} 道门禁",
+    "latestEvidence": "最近证据",
+    "currentDeliverable": "当前交付物",
+    "status": {
+      "pending": "等待中",
+      "active": "进行中",
+      "completed": "已通过",
+      "blocked": "已阻塞"
+    },
+    "stages": {
+      "problem": {
+        "title": "问题定义",
+        "deliverable": "用户、目标、非目标、约束与成功信号"
+      },
+      "product-design": {
+        "title": "产品设计",
+        "deliverable": "PRD、UX 流程、UI 状态与可测试验收标准"
+      },
+      "implementation": {
+        "title": "代码实现",
+        "deliverable": "生产代码、聚焦测试与技术决策"
+      },
+      "validation": {
+        "title": "测试验证",
+        "deliverable": "独立评审与精确的验证证据"
+      },
+      "feature-docs": {
+        "title": "功能文档",
+        "deliverable": "用户指南、示例、限制与故障排查"
+      },
+      "launch-docs": {
+        "title": "PR 与 SEO",
+        "deliverable": "PR 正文、Changelog、发布说明与传播文案"
+      }
     }
   },
   "promptLibrary": {

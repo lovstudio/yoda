@@ -7,6 +7,7 @@ import {
   type TeamRouting,
 } from '@shared/agent-team';
 import { DEFAULT_AGENT_ICON } from '@shared/agents';
+import { FEATURE_WORKFLOW_ROOM_PRESET, hasFeatureWorkflowContract } from '@shared/feature-workflow';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { SkillSelectionInput } from '@shared/skills/types';
 import type { MemberAccent } from '@shared/team-room';
@@ -142,7 +143,7 @@ async function resolveMemberSeedProfile(member: AgentTeamMember): Promise<Member
   }
   return {
     systemPrompt: member.systemPrompt ?? '',
-    icon: DEFAULT_AGENT_ICON,
+    icon: member.icon ?? DEFAULT_AGENT_ICON,
     skillSelection: null,
   };
 }
@@ -156,7 +157,7 @@ async function resolveMemberSeedProfile(member: AgentTeamMember): Promise<Member
  * needs are: how to delegate (leader) / how to report (worker).
  */
 function routingAddendum(
-  _routing: TeamRouting,
+  routing: TeamRouting,
   kind: 'leader' | 'worker',
   ctx: { leaderHandle: string; workerHandles: string[] }
 ): string {
@@ -164,9 +165,18 @@ function routingAddendum(
     const roster = ctx.workerHandles.length
       ? ctx.workerHandles.map((h) => `@${h}`).join(', ')
       : '(no teammates yet)';
+    const sequencing =
+      routing === 'sequential'
+        ? [
+            `This is a staged hand-off: assign only one teammate at a time, wait for its evidence,`,
+            `and verify the current gate before advancing. If a later gate fails, route the concrete`,
+            `fix back to the responsible earlier teammate and re-run every affected gate.`,
+          ]
+        : [];
     return [
       `# How you run the team`,
       `You are the lead — you direct the work, you do NOT do it yourself. Your teammates: ${roster}.`,
+      ...sequencing,
       `Delegate one step at a time by addressing a teammate:`,
       `  ${TEAM_AT_SCRIPT} <handle> "<the concrete task for them>"`,
       `Each teammate works in this shared worktree and reports back to you when their turn ends — so after`,
@@ -199,14 +209,19 @@ export async function seedRoomFromTeam(args: {
   const leader = teamLeader(team);
   if (!leader) throw new Error('Team has no members.');
   const workers = teamWorkers(team);
+  const isFeatureWorkflow = hasFeatureWorkflowContract(team);
+  const requirement = args.requirement.trim();
+  if (isFeatureWorkflow && !requirement) {
+    throw new Error('Feature workflow requires a non-empty problem brief.');
+  }
 
   const room = await createRoom({
     projectId: args.projectId,
     taskId: args.taskId,
     name: team.name,
-    // One generic engine: the routing addendum in each member's prompt encodes
-    // the collaboration; the conductor adds no per-preset control logic.
-    preset: 'freeform',
+    // Feature teams keep their gate-aware room behavior when duplicated for
+    // editing; other teams continue to use the generic freeform conductor.
+    preset: isFeatureWorkflow ? FEATURE_WORKFLOW_ROOM_PRESET : 'freeform',
     routingHopLimit: team.routingHopLimit,
   });
 
@@ -218,6 +233,18 @@ export async function seedRoomFromTeam(args: {
     runtime: null,
     accent: 'terra',
   });
+
+  // Persist the Feature brief before member sessions are provisioned. If a
+  // later seed step fails, the created room still retains the user's original
+  // contract instead of forcing them to reconstruct it from memory.
+  if (isFeatureWorkflow) {
+    await postMessage({
+      roomId: room.id,
+      kind: 'system',
+      body: `Feature brief — ${requirement}`,
+      mentions: [],
+    });
+  }
 
   // Assign unique handles (reserve 'you' for the lead).
   const used = new Set<string>(['you']);
@@ -235,10 +262,15 @@ export async function seedRoomFromTeam(args: {
     const member = ordered[i];
     const isLeader = i === 0;
     const base = await resolveMemberSeedProfile(member);
-    const addendum = routingAddendum(team.routing, isLeader ? 'leader' : 'worker', {
-      leaderHandle,
-      workerHandles,
-    });
+    // Feature members already carry a stricter marker-aware protocol. Appending
+    // the generic examples would put conflicting, marker-free instructions at
+    // the end of their prompts and could stall the gate reducer.
+    const addendum = isFeatureWorkflow
+      ? undefined
+      : routingAddendum(team.routing, isLeader ? 'leader' : 'worker', {
+          leaderHandle,
+          workerHandles,
+        });
     await addMember({
       roomId: room.id,
       handle: handles[i],
@@ -259,7 +291,7 @@ export async function seedRoomFromTeam(args: {
     roomId: room.id,
     authorMemberId: lead.id,
     kind: 'text',
-    body: `@${leaderHandle} ${args.requirement}`,
+    body: `@${leaderHandle} ${requirement}`,
   });
 
   return room.id;

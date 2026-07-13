@@ -33,6 +33,7 @@ import { useTranslation } from 'react-i18next';
 import yodaLogoWhite from '@/assets/images/yoda/yoda_logo_white.svg';
 import yodaLogo from '@/assets/images/yoda/yoda_logo.svg';
 import {
+  BUILTIN_FEATURE_TEAM_ID,
   BUILTIN_REVIEW_TEAM_ID,
   BUILTIN_STARTUP_TEAM_ID,
   type AgentTeam,
@@ -40,6 +41,7 @@ import {
 import { agentToDraft, type Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
 import type { RuntimeInstructionFile } from '@shared/conversations';
+import { FEATURE_WORKFLOW_STAGES, hasFeatureWorkflowContract } from '@shared/feature-workflow';
 import type { Branch } from '@shared/git';
 import type {
   ComposerDefaults,
@@ -53,6 +55,7 @@ import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registr
 import type { SkillSelectionInput } from '@shared/skills/types';
 import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
 import { resolveHomeProjectId } from '@renderer/app/home-project-selection';
+import { FeatureWorkflowPreview } from '@renderer/features/agent-room/feature-workflow-rail';
 import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import {
@@ -1006,6 +1009,10 @@ export const HomeComposer = observer(function HomeComposer({
   const compareVariantsReady =
     !compareActive ||
     (Boolean(selectedProjectId) && compareVariants.every((variant) => Boolean(variant.projectId)));
+  const featureWorkflowNeedsBrief =
+    runMode === 'team' &&
+    Boolean(activeTeam && hasFeatureWorkflowContract(activeTeam)) &&
+    trimmed.length === 0;
   // A worktree-requiring mode on a repo without a base commit can't fork until
   // one exists. This covers both an unborn repo (git init, no commit) and a
   // plain folder that was never `git init`-ed — both surface as `isUnborn` with
@@ -1016,6 +1023,7 @@ export const HomeComposer = observer(function HomeComposer({
   const canSubmit =
     !submitting &&
     modeHasAgents &&
+    !featureWorkflowNeedsBrief &&
     compareVariantsReady &&
     (taskScopedTarget
       ? !!targetProvisionedTask
@@ -1138,18 +1146,6 @@ export const HomeComposer = observer(function HomeComposer({
           .then(() => injectDeferredPrompt(args))
           .catch(() => {
             // Creation failures are reported by the caller that owns the launch promise.
-          });
-      };
-      const runWithResolvedRequirement = (
-        cb: (resolvedRequirement: string) => Promise<void>
-      ): void => {
-        void requirementPromise
-          .then((resolvedRequirement) => {
-            if (resolvedRequirement === null) return undefined;
-            return cb(resolvedRequirement);
-          })
-          .catch(() => {
-            // The promise is already normalized, but keep this chain non-throwing.
           });
       };
       // Resolve a slot to its Agent's prompt + runtime (per-slot runtime
@@ -1321,24 +1317,16 @@ export const HomeComposer = observer(function HomeComposer({
           // Instantiate a chat room from the team template on this task; the
           // conductor drives the iterative @-routing (members appear as the
           // task's conversations).
-          if (deferInitialPrompt) {
-            runWithResolvedRequirement(async (resolvedRequirement) => {
-              try {
-                await createRoom(resolvedRequirement);
-              } catch (error) {
-                toast.error(
-                  error instanceof Error ? error.message : 'Agent team orchestration failed.'
-                );
-              }
-            });
-          } else {
-            void createRoom(requirement).catch((error: unknown) => {
-              toast.error(
-                error instanceof Error ? error.message : 'Agent team orchestration failed.'
-              );
-            });
+          try {
+            const resolvedRequirement = deferInitialPrompt ? await requirementPromise : requirement;
+            if (resolvedRequirement === null) return;
+            await createRoom(resolvedRequirement);
+            finishTaskConversationSubmit();
+          } catch (error) {
+            toast.error(
+              error instanceof Error ? error.message : 'Agent team orchestration failed.'
+            );
           }
-          finishTaskConversationSubmit();
           return;
         }
 
@@ -1777,26 +1765,38 @@ export const HomeComposer = observer(function HomeComposer({
           parentTaskId: parentTarget?.taskId,
         });
         goToTask(mounted.data.id, taskId);
-        const createRoom = (resolvedRequirement: string) =>
-          rpc.teamRooms
-            .createRoomFromTeam({
-              projectId: mounted.data.id,
-              taskId,
-              teamId,
-              requirement: resolvedRequirement,
-            })
-            .then(() => invalidateTeamRoomQueries(queryClient, mounted.data.id, taskId));
+        const createRoom = async (resolvedRequirement: string) => {
+          const roomId = await rpc.teamRooms.createRoomFromTeam({
+            projectId: mounted.data.id,
+            taskId,
+            teamId,
+            requirement: resolvedRequirement,
+          });
+          await invalidateTeamRoomQueries(queryClient, mounted.data.id, taskId);
+          return roomId;
+        };
+        const assertTaskReady = () => {
+          if (!asProvisioned(getTaskStore(mounted.data.id, taskId))) {
+            throw new Error(t('home.teamTaskSetupIncomplete'));
+          }
+        };
         const roomPromise = deferInitialPrompt
           ? createPromise.then(async () => {
+              assertTaskReady();
               const resolvedRequirement = await requirementPromise;
               if (resolvedRequirement === null) return undefined;
               return createRoom(resolvedRequirement);
             })
-          : createPromise.then(() => createRoom(requirement));
-        void roomPromise.catch((error: unknown) => {
+          : createPromise.then(() => {
+              assertTaskReady();
+              return createRoom(requirement);
+            });
+        try {
+          const roomId = await roomPromise;
+          if (roomId !== undefined) resetComposer();
+        } catch (error) {
           toast.error(error instanceof Error ? error.message : 'Agent team orchestration failed.');
-        });
-        resetComposer();
+        }
         return;
       }
 
@@ -2801,6 +2801,10 @@ const WORKFLOW_RUN_MODE_OPTIONS: RunModeOption[] = [
 // Localized copy for the built-in teams so the zh/en picker reads naturally
 // rather than echoing the raw template name. User teams fall back to their name.
 const BUILTIN_TEAM_COPY: Record<string, { labelKey: string; descKey: string }> = {
+  [BUILTIN_FEATURE_TEAM_ID]: {
+    labelKey: 'home.modeTeamFeature',
+    descKey: 'home.modeTeamFeatureDesc',
+  },
   [BUILTIN_REVIEW_TEAM_ID]: {
     labelKey: 'home.modeTeamReview',
     descKey: 'home.modeTeamReviewDesc',
@@ -2833,7 +2837,8 @@ function teamDisplayName(team: AgentTeam, t: (key: string) => string): string {
 }
 
 // Multi-agent teams in a stable order: the review-loop team leads, the startup
-// company team follows, then any user-defined teams in list order.
+// company team follows, then any user-defined teams in list order. Feature is a
+// team under the hood but is intentionally surfaced in the Workflow group.
 function orderMultiAgentTeams(teams: AgentTeam[]): AgentTeam[] {
   const pinned = [BUILTIN_REVIEW_TEAM_ID, BUILTIN_STARTUP_TEAM_ID];
   const lead = pinned
@@ -2846,11 +2851,21 @@ function orderMultiAgentTeams(teams: AgentTeam[]): AgentTeam[] {
 function buildRunModeGroups(
   teams: AgentTeam[]
 ): Array<{ labelKey: string; options: RunModeOption[] }> {
+  const feature = teams.find((team) => team.id === BUILTIN_FEATURE_TEAM_ID);
+  const workflowOptions = feature
+    ? [
+        WORKFLOW_RUN_MODE_OPTIONS[0],
+        teamToRunModeOption(feature),
+        ...WORKFLOW_RUN_MODE_OPTIONS.slice(1),
+      ]
+    : WORKFLOW_RUN_MODE_OPTIONS;
   return [
-    { labelKey: 'home.modeGroupWorkflow', options: WORKFLOW_RUN_MODE_OPTIONS },
+    { labelKey: 'home.modeGroupWorkflow', options: workflowOptions },
     {
       labelKey: 'home.modeGroupMultiAgent',
-      options: orderMultiAgentTeams(teams).map(teamToRunModeOption),
+      options: orderMultiAgentTeams(
+        teams.filter((team) => team.id !== BUILTIN_FEATURE_TEAM_ID)
+      ).map(teamToRunModeOption),
     },
   ];
 }
@@ -3196,26 +3211,37 @@ function ModeConfigurationPanel({
         (() => {
           // The team is chosen in the sidebar now; the panel just shows its roster.
           const team = teams.find((tm) => tm.id === selectedTeamId) ?? teams[0];
+          const isFeatureWorkflow = Boolean(team && hasFeatureWorkflowContract(team));
           return (
             <div className="flex flex-col gap-2">
               {team && (
-                <div className="flex flex-col gap-0.5 rounded-md border border-border/60 bg-background-1/40 p-2">
-                  {team.members.map((m) => (
-                    <div key={m.handle} className="flex items-center gap-2 px-1 py-1 text-xs">
-                      <span className="min-w-0 flex-1 truncate text-foreground">
-                        {m.displayName}
-                      </span>
-                      {m.role === 'leader' && (
-                        <span className="shrink-0 rounded bg-primary/15 px-1.5 py-px text-[10px] text-primary">
-                          {t('home.teamLeader')}
-                        </span>
-                      )}
-                      <span className="shrink-0 font-mono text-[10px] text-foreground-muted">
-                        {getRuntime(m.runtime)?.name ?? m.runtime}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  {isFeatureWorkflow && <FeatureWorkflowPreview />}
+                  <div className="flex flex-col gap-0.5 border border-border/60 bg-background-1/40 p-2">
+                    {team.members.map((m) => {
+                      const featureStage = isFeatureWorkflow
+                        ? FEATURE_WORKFLOW_STAGES.find((stage) => stage.handle === m.handle)
+                        : undefined;
+                      return (
+                        <div key={m.handle} className="flex items-center gap-2 px-1 py-1 text-xs">
+                          <span className="min-w-0 flex-1 truncate text-foreground">
+                            {featureStage
+                              ? t(`featureWorkflow.stages.${featureStage.id}.title`)
+                              : m.displayName}
+                          </span>
+                          {m.role === 'leader' && (
+                            <span className="shrink-0 bg-primary/15 px-1.5 py-px text-[10px] text-primary">
+                              {t('home.teamLeader')}
+                            </span>
+                          )}
+                          <span className="shrink-0 font-mono text-[10px] text-foreground-muted">
+                            {getRuntime(m.runtime)?.name ?? m.runtime}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
               <button
                 type="button"

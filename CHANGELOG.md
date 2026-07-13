@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Develop features through a durable six-stage Feature loop that hands one problem through product/UI design, implementation, independent validation, feature documentation, and PR/SEO copy with visible evidence-backed gates.
+
 ## 0.16.0
 
 ### Added

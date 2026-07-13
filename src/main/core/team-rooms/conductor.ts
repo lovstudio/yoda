@@ -7,6 +7,10 @@ import {
 } from '@shared/agent-communication-protocol';
 import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import { teamRoomUpdatedChannel } from '@shared/events/teamRoomEvents';
+import {
+  FEATURE_WORKFLOW_ROOM_PRESET,
+  featureWorkflowAllowedTargetHandles,
+} from '@shared/feature-workflow';
 import { makePtySessionId } from '@shared/ptySessionId';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { MemberStatus, RoomMember, RoomMessage } from '@shared/team-room';
@@ -114,13 +118,40 @@ class RoomConductor {
     if (author?.runtime && message.mentions.length > 0) this.handedOff.add(author.id);
 
     const wantsAll = message.mentions.includes(ALL_HANDLE);
+    const isFeatureWorkflow = room.preset === FEATURE_WORKFLOW_ROOM_PRESET;
+    let requestedHandles = wantsAll
+      ? [ALL_HANDLE]
+      : message.mentions.map((handle) => handle.toLowerCase());
+    let handsToHuman = false;
+    if (isFeatureWorkflow && requestedHandles.length > 0) {
+      const allowed = new Set(
+        featureWorkflowAllowedTargetHandles(members, snapshot.messages, message)
+      );
+      const rejected = requestedHandles.filter((handle) => !allowed.has(handle));
+      requestedHandles = requestedHandles.filter((handle) => allowed.has(handle));
+      handsToHuman = requestedHandles.includes('you');
+      if (rejected.length > 0) {
+        if (author?.runtime && requestedHandles.length === 0) this.handedOff.delete(author.id);
+        await postMessage({
+          roomId,
+          kind: 'system',
+          body: `Feature gate kept ${rejected.map((handle) => `@${handle}`).join(', ')} waiting. Pass the current gate or return to an unlocked stage first.`,
+          mentions: [],
+        });
+      }
+    }
     const targets = members.filter(
-      (m) =>
-        m.runtime &&
-        m.id !== message.authorMemberId &&
-        (wantsAll || message.mentions.includes(m.handle.toLowerCase()))
+      (member) =>
+        member.runtime &&
+        member.id !== message.authorMemberId &&
+        ((!isFeatureWorkflow && wantsAll) || requestedHandles.includes(member.handle.toLowerCase()))
     );
-    if (targets.length === 0) return;
+    if (targets.length === 0) {
+      if (isFeatureWorkflow && author?.runtime && !handsToHuman && message.mentions.length > 0) {
+        this.handedOff.delete(author.id);
+      }
+      return;
+    }
 
     const roster: RosterEntry[] = members.map((m) => ({
       handle: m.handle,

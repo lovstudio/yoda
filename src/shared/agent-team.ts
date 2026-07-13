@@ -1,4 +1,13 @@
 import { BUILTIN_AGENT_KEYS } from './builtin-agents';
+import {
+  BUILTIN_FEATURE_TEAM_ID,
+  FEATURE_DOCS_PROMPT,
+  FEATURE_ENGINEERING_PROMPT,
+  FEATURE_LAUNCH_DOCS_PROMPT,
+  FEATURE_LEAD_PROMPT,
+  FEATURE_PRODUCT_DESIGN_PROMPT,
+  FEATURE_QUALITY_PROMPT,
+} from './feature-workflow';
 import type { RuntimeId } from './runtime-registry';
 import { DEFAULT_ROUTING_HOP_LIMIT, type RoutingHopLimit } from './team-routing-limit';
 
@@ -15,14 +24,17 @@ export type TeamMemberRole = 'leader' | 'worker';
  * prompts seeded into members):
  * - `review-loop`: leader hands to workers, workers loop fixes back until they pass.
  * - `fan-out`: leader plans, @mentions every worker once, workers report back.
+ * - `sequential`: leader advances one evidence-backed stage at a time.
  * - `freeform`: no scripted routing — just the generic teammate etiquette.
  */
-export type TeamRouting = 'review-loop' | 'fan-out' | 'freeform';
+export type TeamRouting = 'review-loop' | 'fan-out' | 'sequential' | 'freeform';
 
 export interface AgentTeamMember {
   /** Stable id within the team; also the slot key suffix at launch. */
   handle: string;
   displayName: string;
+  /** Optional member-specific avatar, primarily used by inline team roles. */
+  icon?: string;
   role: TeamMemberRole;
   /** Runtime the member's conversation spawns on. */
   runtime: RuntimeId;
@@ -60,6 +72,7 @@ export interface AgentTeamDraft {
 
 export const BUILTIN_STARTUP_TEAM_ID = 'builtin:startup';
 export const BUILTIN_REVIEW_TEAM_ID = 'builtin:review';
+export { BUILTIN_FEATURE_TEAM_ID } from './feature-workflow';
 
 /**
  * The built-in "startup company" team — the former hard-coded 5-role `team`
@@ -68,6 +81,66 @@ export const BUILTIN_REVIEW_TEAM_ID = 'builtin:review';
  * agent keys so behavior is unchanged when this template is selected.
  */
 export const BUILTIN_TEAMS: AgentTeam[] = [
+  {
+    id: BUILTIN_FEATURE_TEAM_ID,
+    name: 'Feature',
+    icon: '🧭',
+    routing: 'sequential',
+    builtin: true,
+    routingHopLimit: DEFAULT_ROUTING_HOP_LIMIT,
+    members: [
+      {
+        handle: 'orchestrator',
+        displayName: 'Feature Lead',
+        icon: '🧭',
+        role: 'leader',
+        runtime: 'claude',
+        systemPrompt: FEATURE_LEAD_PROMPT,
+      },
+      {
+        handle: 'product-design',
+        displayName: 'Product Design',
+        icon: '✦',
+        role: 'worker',
+        runtime: 'claude',
+        systemPrompt: FEATURE_PRODUCT_DESIGN_PROMPT,
+      },
+      {
+        handle: 'engineering',
+        displayName: 'Engineering',
+        icon: '⌘',
+        role: 'worker',
+        runtime: 'codex',
+        systemPrompt: FEATURE_ENGINEERING_PROMPT,
+      },
+      {
+        handle: 'quality',
+        displayName: 'Quality',
+        icon: '✓',
+        role: 'worker',
+        runtime: 'codex',
+        systemPrompt: FEATURE_QUALITY_PROMPT,
+      },
+      {
+        handle: 'feature-docs',
+        displayName: 'Feature Docs',
+        icon: '▤',
+        role: 'worker',
+        runtime: 'claude',
+        systemPrompt: FEATURE_DOCS_PROMPT,
+      },
+      {
+        handle: 'launch-docs',
+        displayName: 'PR & SEO',
+        icon: '↗',
+        role: 'worker',
+        runtime: 'codex',
+        systemPrompt: FEATURE_LAUNCH_DOCS_PROMPT,
+      },
+    ],
+    createdAt: '',
+    updatedAt: '',
+  },
   {
     id: BUILTIN_STARTUP_TEAM_ID,
     name: 'Startup',

@@ -302,6 +302,14 @@ export type PostMessageParams = {
   verdict?: RoomVerdict | null;
 };
 
+let lastMessageCreatedAtMs = 0;
+
+function nextMessageCreatedAt(): string {
+  const now = Date.now();
+  lastMessageCreatedAtMs = Math.max(now, lastMessageCreatedAtMs + 1);
+  return new Date(lastMessageCreatedAtMs).toISOString();
+}
+
 export async function postMessage(params: PostMessageParams): Promise<RoomMessage> {
   const id = randomUUID();
   const mentions = params.mentions ?? parseMentions(params.body);
@@ -316,7 +324,7 @@ export async function postMessage(params: PostMessageParams): Promise<RoomMessag
       mentions: JSON.stringify(mentions),
       sessionRef: params.sessionRef ?? null,
       verdict: params.verdict ?? null,
-      createdAt: sql`CURRENT_TIMESTAMP`,
+      createdAt: nextMessageCreatedAt(),
     })
     .returning();
   // Bump room activity so the room list can sort by recency.
@@ -337,6 +345,6 @@ export async function getMessages(roomId: string): Promise<RoomMessage[]> {
     .select()
     .from(roomMessages)
     .where(eq(roomMessages.roomId, roomId))
-    .orderBy(asc(roomMessages.createdAt));
+    .orderBy(asc(roomMessages.createdAt), asc(roomMessages.id));
   return rows.map(mapMessage);
 }

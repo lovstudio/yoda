@@ -63,7 +63,7 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
     base = {
       name: member.displayName,
       description: '',
-      icon: '🤖',
+      icon: member.icon ?? '🤖',
       systemPrompt: member.systemPrompt,
       enabledSkillIds: [],
       manualSkillIds: [],
@@ -143,10 +143,11 @@ type Editing = {
   members: AgentTeamMember[];
 } | null;
 
-const ROUTING_LABELS: Record<TeamRouting, string> = {
-  'review-loop': 'Review loop (iterate until pass)',
-  'fan-out': 'Fan-out (lead plans, team executes once)',
-  freeform: 'Freeform (open @-mention chat)',
+const ROUTING_LABEL_KEYS: Record<TeamRouting, string> = {
+  'review-loop': 'agentTeams.routing.reviewLoop',
+  'fan-out': 'agentTeams.routing.fanOut',
+  sequential: 'agentTeams.routing.sequential',
+  freeform: 'agentTeams.routing.freeform',
 };
 
 function formatRoutingHopLimit(limit: RoutingHopLimit): string {
@@ -154,6 +155,7 @@ function formatRoutingHopLimit(limit: RoutingHopLimit): string {
 }
 
 export function AgentTeamsMainPanel() {
+  const { t } = useTranslation();
   const { teams, create, update, remove, duplicate } = useAgentTeams();
   const { agents } = useAgents();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -296,7 +298,9 @@ export function AgentTeamsMainPanel() {
                 </>
               )}
             </div>
-            <p className="mb-1 text-xs text-foreground-muted">{ROUTING_LABELS[selected.routing]}</p>
+            <p className="mb-1 text-xs text-foreground-muted">
+              {t(ROUTING_LABEL_KEYS[selected.routing])}
+            </p>
             <p className="mb-2 text-xs text-foreground-passive">
               {formatRoutingHopLimit(selected.routingHopLimit)}
             </p>
@@ -411,9 +415,9 @@ function TeamEditor({
             onChange={(e) => onChange({ ...draft, routing: e.target.value as TeamRouting })}
             className="rounded-md border border-border bg-background-1 px-3 py-2 text-sm outline-none focus:border-primary/60"
           >
-            {(Object.keys(ROUTING_LABELS) as TeamRouting[]).map((r) => (
+            {(Object.keys(ROUTING_LABEL_KEYS) as TeamRouting[]).map((r) => (
               <option key={r} value={r}>
-                {ROUTING_LABELS[r]}
+                {t(ROUTING_LABEL_KEYS[r])}
               </option>
             ))}
           </select>

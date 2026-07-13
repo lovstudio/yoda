@@ -1104,12 +1104,15 @@
     "modeReviewDesc": "One AI implements, another reviews — looping until it passes.",
     "modeTeamReview": "Review",
     "modeTeamReviewDesc": "A small AI crew collaborates in a chat, looping implementation and review.",
+    "modeTeamFeature": "Feature loop",
+    "modeTeamFeatureDesc": "A gated delivery chain from problem and product design through code, validation, feature docs, and PR/SEO copy.",
     "modeTeamStartup": "Startup",
     "modeTeamStartupDesc": "An AI team (CEO, product, engineering, design, ops) divides the work.",
     "modeTeamDesc": "A custom AI team collaborates on the task.",
     "teamMemberCount": "{{count}} members",
     "teamLeader": "leader",
     "teamManageHint": "Manage teams in Library → Agent Teams.",
+    "teamTaskSetupIncomplete": "The task worktree is not ready. Repair task setup before starting the team.",
     "modelDefault": "Default",
     "runHostAria": "Choose run host",
     "runHostLocal": "Local host",
@@ -1531,6 +1534,15 @@
       "dangerouslySkipPermissions": "Dangerously skip permissions",
       "permissionMode": "Permission mode",
       "initialPromptPlaceholder": "Describe what you want the agent to do.",
+      "executionMode": "Execution mode",
+      "executionAgent": "Standard task",
+      "executionAgentDescription": "One selected agent starts from this prompt.",
+      "executionFeature": "Feature loop",
+      "executionFeatureDescription": "Six gated hand-offs from problem to PR and SEO.",
+      "featureBrief": "Problem brief",
+      "featureBriefPlaceholder": "Describe the user problem, desired outcome, constraints, and any known success signal.",
+      "featureWorkflowTaskNotReady": "The task was created, but its worktree is not ready. Repair task setup before starting the Feature loop.",
+      "featureWorkflowStartFailed": "The task was created, but its Feature workflow could not start. Select that task on Home and retry with Feature loop.",
       "pushBranchToRemote": "Push branch to remote",
       "selectAnotherIssue": "Select another issue",
       "selectAnotherPr": "Select another pull request"
@@ -1860,6 +1872,14 @@
       "automation": "Automation"
     }
   },
+  "agentTeams": {
+    "routing": {
+      "reviewLoop": "Review loop (iterate until pass)",
+      "fanOut": "Fan-out (lead plans, team executes once)",
+      "sequential": "Staged hand-off (one gate at a time)",
+      "freeform": "Freeform (open @-mention chat)"
+    }
+  },
   "agentRoom": {
     "rooms": "Rooms",
     "newRoom": "New Agent Room",
@@ -1883,6 +1903,18 @@
         ],
         "note": "You don't @ anyone — the System does. You can still @mention someone to chime in."
       },
+      "feature": {
+        "lead": "One problem moves through six evidence-backed hand-offs, with the Feature Lead guarding every gate:",
+        "steps": [
+          "Frame the problem, outcome, constraints, and success signal.",
+          "Write and approve product, UI/UX, and acceptance decisions.",
+          "Implement the approved design with focused tests.",
+          "Validate independently; failed checks return to engineering.",
+          "Document verified user-facing behavior.",
+          "Prepare PR, changelog, release, and SEO copy."
+        ],
+        "note": "Each pass or blocker is stored in the room hand-off, so the rail rebuilds after a restart."
+      },
       "freeform": {
         "lead": "Open collaboration — you direct the team:",
         "steps": [
@@ -1905,7 +1937,11 @@
       "updateFailed": "Failed to update agent"
     },
     "settings": { "title": "Room settings" },
-    "preset": { "review": "Review loop", "freeform": "Freeform" },
+    "preset": {
+      "review": "Review loop",
+      "feature": "Feature workflow",
+      "freeform": "Freeform"
+    },
     "mode": { "review": "Review loop", "freeform": "Freeform" },
     "taskExisting": "Existing task",
     "taskNew": "New worktree",
@@ -1933,6 +1969,45 @@
       "localOnly": "New worktrees are only supported for local projects.",
       "taskCreate": "Failed to create the task.",
       "taskSetup": "The task's worktree setup didn't finish — fix it in the task view, then create the room."
+    }
+  },
+  "featureWorkflow": {
+    "title": "Feature hand-off rail",
+    "subtitle": "Every stage passes evidence and artifacts into the next.",
+    "progress": "{{completed}} / {{total}} gates",
+    "latestEvidence": "Latest evidence",
+    "currentDeliverable": "Current deliverable",
+    "status": {
+      "pending": "Waiting",
+      "active": "In progress",
+      "completed": "Gate passed",
+      "blocked": "Blocked"
+    },
+    "stages": {
+      "problem": {
+        "title": "Problem",
+        "deliverable": "User, outcome, non-goals, constraints, and success signal"
+      },
+      "product-design": {
+        "title": "Product design",
+        "deliverable": "PRD, UX flow, UI states, and testable acceptance criteria"
+      },
+      "implementation": {
+        "title": "Implementation",
+        "deliverable": "Production code, focused tests, and technical decisions"
+      },
+      "validation": {
+        "title": "Validation",
+        "deliverable": "Independent review and exact verification evidence"
+      },
+      "feature-docs": {
+        "title": "Feature docs",
+        "deliverable": "User guide, examples, limitations, and troubleshooting"
+      },
+      "launch-docs": {
+        "title": "PR & SEO",
+        "deliverable": "PR body, changelog, release notes, and discovery copy"
+      }
     }
   },
   "promptLibrary": {
