@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import type { ComparisonWindowTarget } from '@shared/comparison-window';
 import type { TaskWindowReturnPayload } from '@shared/events/appEvents';
 import { createRPCController } from '@shared/ipc/rpc';
-import type { OpenInAppId } from '@shared/openInApps';
+import type { OpenInRequest } from '@shared/openInApps';
 import type { TaskWindowTarget } from '@shared/task-window';
 import { deepLinkService } from '@main/app/deep-link';
 import type { TaskStripDropZone } from '@main/app/task-window-dock';
@@ -95,13 +95,7 @@ export const appController = createRPCController({
     appService.setLeftSidebarMenuChecked(checked);
     return { success: true };
   },
-  openIn: async (args: {
-    app: OpenInAppId;
-    path: string;
-    isRemote?: boolean;
-    sshConnectionId?: string | null;
-    reveal?: boolean;
-  }) => {
+  openIn: async (args: OpenInRequest) => {
     try {
       await appService.openIn(args);
       telemetryService.capture('open_in_external', { app: args.app });

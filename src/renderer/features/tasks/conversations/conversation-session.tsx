@@ -7,6 +7,7 @@ import { asMounted, getProjectStore } from '@renderer/features/projects/stores/p
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { useWorkspaceWebLinks } from '@renderer/features/tasks/terminals/use-workspace-web-links';
+import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
 import { rpc } from '@renderer/lib/ipc';
 import type { FrontendPty } from '@renderer/lib/pty/pty';
 import {
@@ -204,7 +205,7 @@ export const ConversationSession = observer(function ConversationSession({
       workspaceRoot: provisioned.path,
       workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
-      isRemote: Boolean(remoteConnectionId),
+      sshConnectionId: remoteConnectionId,
       onOpen: ({ filePath, absolutePath, line, column }) => {
         if (filePath) {
           provisioned.taskView.tabManager.openFileInSidebar(filePath, { line, column });
@@ -212,7 +213,14 @@ export const ConversationSession = observer(function ConversationSession({
           return;
         }
         if (absolutePath) {
-          void rpc.app.openIn({ app: 'finder', path: absolutePath });
+          void rpc.app.openIn(
+            buildFilePathDefaultOpenRequest({
+              absolutePath,
+              sshConnectionId: remoteConnectionId,
+              line,
+              column,
+            })
+          );
         }
       },
     }),

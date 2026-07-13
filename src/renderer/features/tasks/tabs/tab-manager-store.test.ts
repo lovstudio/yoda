@@ -146,6 +146,21 @@ describe('TabManagerStore overview tab', () => {
   });
 });
 
+describe('TabManagerStore sidebar file locations', () => {
+  it('keeps the requested line and column on the pinned file entry', () => {
+    const store = new TabManagerStore(makeConversationManager([]), 'workspace-1');
+
+    store.openFileInSidebar('src/main.ts', { line: 31, column: 4 });
+
+    const entry = store.activeSidebarTabId
+      ? store.entries.get(store.activeSidebarTabId)
+      : undefined;
+    expect(entry?.kind).toBe('file');
+    if (entry?.kind !== 'file') throw new Error('Expected a sidebar file entry');
+    expect(entry.pendingReveal).toEqual({ requestId: 1, lineNumber: 31, column: 4 });
+  });
+});
+
 function makeConversation(id: string, lastInteractedAt: string, isInitialConversation: boolean) {
   const data: Conversation = {
     id,

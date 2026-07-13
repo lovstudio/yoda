@@ -934,7 +934,14 @@ export function App() {
               }}
             />
 
-            {error ? <Notice message={error} tone="error" /> : null}
+            {error ? (
+              <Notice
+                message={error}
+                retrying={loading || refreshing}
+                tone="error"
+                onRetry={handleRefresh}
+              />
+            ) : null}
             {loading && !snapshot ? <ActivityIndicator color={COLORS.charcoal} /> : null}
 
             {snapshot ? (
@@ -1088,7 +1095,17 @@ function ConnectionScreen({
   );
 }
 
-function Notice({ message, tone }: { message: string; tone: 'error' | 'info' }) {
+function Notice({
+  message,
+  retrying = false,
+  tone,
+  onRetry,
+}: {
+  message: string;
+  retrying?: boolean;
+  tone: 'error' | 'info';
+  onRetry?: () => void | Promise<void>;
+}) {
   const color = tone === 'error' ? COLORS.red : COLORS.blue;
   const [copied, setCopied] = useState(false);
 
@@ -1109,19 +1126,44 @@ function Notice({ message, tone }: { message: string; tone: 'error' | 'info' }) 
         {message}
       </Text>
       {tone === 'error' ? (
-        <Pressable
-          accessibilityLabel="Copy error message"
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.noticeCopyButton, pressed ? styles.buttonPressed : null]}
-          onPress={() => void copyError()}
-        >
-          <Ionicons
-            color={COLORS.muted}
-            name={copied ? 'checkmark-outline' : 'copy-outline'}
-            size={17}
-          />
-          <Text style={styles.noticeCopyText}>{copied ? 'Copied' : 'Copy'}</Text>
-        </Pressable>
+        <View style={styles.noticeActions}>
+          {onRetry ? (
+            <Pressable
+              accessibilityLabel="Retry loading Yoda gateway"
+              accessibilityRole="button"
+              disabled={retrying}
+              style={({ pressed }) => [
+                styles.noticeRetryButton,
+                pressed ? styles.buttonPressed : null,
+                retrying ? styles.buttonDisabled : null,
+              ]}
+              onPress={() => void onRetry()}
+            >
+              {retrying ? (
+                <ActivityIndicator color={COLORS.surface} size="small" />
+              ) : (
+                <Ionicons color={COLORS.surface} name="refresh-outline" size={17} />
+              )}
+              <Text style={styles.noticeRetryText}>{retrying ? 'Retrying' : 'Retry'}</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityLabel="Copy error message"
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.noticeCopyButton,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => void copyError()}
+          >
+            <Ionicons
+              color={COLORS.muted}
+              name={copied ? 'checkmark-outline' : 'copy-outline'}
+              size={17}
+            />
+            <Text style={styles.noticeCopyText}>{copied ? 'Copied' : 'Copy'}</Text>
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );
@@ -3205,6 +3247,25 @@ const styles = StyleSheet.create({
     color: COLORS.ink,
     fontSize: 14,
     lineHeight: 20,
+  },
+  noticeActions: {
+    alignItems: 'stretch',
+    gap: 6,
+  },
+  noticeRetryButton: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    backgroundColor: COLORS.charcoal,
+  },
+  noticeRetryText: {
+    color: COLORS.surface,
+    fontSize: 12,
+    fontWeight: '700',
   },
   noticeCopyButton: {
     minHeight: 32,

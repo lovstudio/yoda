@@ -55,7 +55,11 @@ async function request<T>(
       ...init,
       headers: mobileApiHeaders(connection, init.headers),
     });
-  } catch {
+  } catch (error) {
+    console.warn('[Yoda Mobile] Gateway request failed', {
+      error: error instanceof Error ? error.message : String(error),
+      url: mobileApiUrl(connection, path),
+    });
     throw new Error(
       `Cannot reach the Yoda gateway at ${baseUrl}. For a local address, check Local Network permission and Wi-Fi. For Relay, check that the desktop is online and Relay Pass is active.`
     );

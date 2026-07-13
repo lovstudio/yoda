@@ -17,6 +17,7 @@ import {
   getResolvedLabel,
   OPEN_IN_APPS,
   type OpenInAppId,
+  type OpenInRequest,
   type PlatformConfig,
   type PlatformKey,
 } from '@shared/openInApps';
@@ -36,6 +37,11 @@ import { events } from '@main/lib/events';
 import type { IDisposable, IInitializable } from '@main/lib/lifecycle';
 import { log } from '@main/lib/logger';
 import { buildExternalToolEnv } from '@main/utils/childProcessEnv';
+import {
+  buildLocalOpenCommand,
+  normalizeOpenFileLocation,
+  type OpenFileLocation,
+} from '@main/utils/localOpenIn';
 import {
   buildRemoteEditorUrl,
   buildRemoteSshCommand,
@@ -253,18 +259,21 @@ class AppService implements IInitializable, IDisposable {
     setLeftSidebarMenuChecked(checked);
   }
 
-  async openIn(args: {
-    app: OpenInAppId;
-    path: string;
-    isRemote?: boolean;
-    sshConnectionId?: string | null;
-    reveal?: boolean;
-  }): Promise<void> {
-    const { path: target, app: appId, isRemote = false, sshConnectionId, reveal = false } = args;
+  async openIn(args: OpenInRequest): Promise<void> {
+    const {
+      path: target,
+      app: appId,
+      isRemote = false,
+      sshConnectionId,
+      reveal = false,
+      line,
+      column,
+    } = args;
 
     if (!target || typeof target !== 'string' || !appId) {
       throw new Error('Invalid arguments');
     }
+    const location = normalizeOpenFileLocation(line, column);
 
     if (reveal) {
       if (isRemote) throw new Error('Reveal is not available for remote paths.');
@@ -284,7 +293,14 @@ class AppService implements IInitializable, IDisposable {
     }
 
     if (isRemote && sshConnectionId) {
-      await this.openInRemote({ appId, appConfig, label, target, platform, sshConnectionId });
+      await this.openInRemote({
+        appId,
+        appConfig,
+        label,
+        target,
+        platform,
+        sshConnectionId,
+      });
       return;
     }
 
@@ -302,7 +318,7 @@ class AppService implements IInitializable, IDisposable {
       return;
     }
 
-    await this.openInLocal({ label, target, platformConfig });
+    await this.openInLocal({ label, target, platformConfig, location });
   }
 
   private async openInRemote(args: {
@@ -425,8 +441,9 @@ class AppService implements IInitializable, IDisposable {
     label: string;
     target: string;
     platformConfig: PlatformConfig | undefined;
+    location: OpenFileLocation | null;
   }): Promise<void> {
-    const { label, target, platformConfig } = args;
+    const { label, target, platformConfig, location } = args;
 
     if (platformConfig?.openUrls) {
       for (const urlTemplate of platformConfig.openUrls) {
@@ -445,11 +462,7 @@ class AppService implements IInitializable, IDisposable {
       );
     }
 
-    const quoted = (p: string) => `'${p.replace(/'/g, "'\\''")}'`;
-    const commands: string[] = platformConfig?.openCommands ?? [];
-    const command = commands
-      .map((cmd) => cmd.replace('{{path}}', quoted(target)).replace('{{path_raw}}', target))
-      .join(' || ');
+    const command = buildLocalOpenCommand(platformConfig, target, location);
 
     if (!command) throw new Error('Unsupported platform or app');
     const cwd = await resolveOpenCommandCwd(target);
