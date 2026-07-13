@@ -82,7 +82,9 @@ describe('CodexSessionTitleSource helpers', () => {
   });
 
   it('resolves the state db inside Codex home', () => {
-    expect(resolveCodexStatePath('/tmp/codex-home')).toBe('/tmp/codex-home/state_5.sqlite');
+    expect(resolveCodexStatePath('/tmp/codex-home')).toBe(
+      join('/tmp/codex-home', 'state_5.sqlite')
+    );
   });
 
   it('finds the newest active Codex thread for the current cwd', () => {
