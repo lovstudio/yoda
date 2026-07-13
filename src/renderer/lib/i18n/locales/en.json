@@ -2046,7 +2046,7 @@
       "callFrequency": "Shortcut calls",
       "characters": "Characters",
       "compatibility": "Compatibility",
-      "compareWithCurrent": "Compare with current skill",
+      "openInSidePane": "Open in side pane",
       "copyDescription": "Copy description",
       "copyPrompt": "Copy prompt",
       "copySkillMd": "Copy SKILL.md",
@@ -2076,6 +2076,12 @@
       "usageTrendEmpty": "No calls in the last 30 days",
       "unavailable": "Unavailable",
       "validation": "Validation"
+    },
+    "compare": {
+      "action": "Compare SKILL.md",
+      "lines": "lines",
+      "loadFailed": "Could not load skill comparison",
+      "loadFailedHint": "Refresh the skill catalog and try again."
     },
     "uninstall": "Uninstall",
     "disable": "Disable",

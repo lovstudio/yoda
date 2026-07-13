@@ -47,6 +47,13 @@ export function routeKey(viewId: ViewId | string, params: Record<string, unknown
     // displayName is display-only — it must not fork tab identity.
     return JSON.stringify(['skill', skillId]);
   }
+  if (viewId === 'skillCompare') {
+    const { baseSkillId, targetSkillId } = params as {
+      baseSkillId?: string;
+      targetSkillId?: string;
+    };
+    return JSON.stringify(['skillCompare', baseSkillId, targetSkillId]);
+  }
   // Global views (home, settings, skills, …) are singletons — their params
   // (e.g. home's projectId preselect, settings' inner tab) are transient
   // address-bar state and must not fork tab identity, otherwise
@@ -121,7 +128,7 @@ export function tabScopeKey(viewId: ViewId | string, params: Record<string, unkn
     const { projectId } = params as { projectId?: string };
     if (projectId) return `project:${projectId}`;
   }
-  if (viewId === 'skill') return 'view:skills';
+  if (viewId === 'skill' || viewId === 'skillCompare') return 'view:skills';
   return `view:${viewId}`;
 }
 
@@ -140,7 +147,7 @@ export function isIndexTab(tab: AppTabEntry): boolean {
   if (tab.viewId === 'project') {
     return ((tab.params.view as string | undefined) ?? 'overview') === 'overview';
   }
-  return tab.viewId !== 'file' && tab.viewId !== 'skill';
+  return tab.viewId !== 'file' && tab.viewId !== 'skill' && tab.viewId !== 'skillCompare';
 }
 
 /**
@@ -296,6 +303,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
           viewId !== 'task' &&
           viewId !== 'project' &&
           viewId !== 'skill' &&
+          viewId !== 'skillCompare' &&
           tabScopeKey(viewId, nextParams) === tabScopeKey(tab.viewId, tab.params)
         ) {
           tab.viewId = viewId;
@@ -421,7 +429,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
     // Skill detail tabs share the skills scope — the Skills catalog is the
     // scope's index tab, synthesized when a detail tab was opened from
     // elsewhere (e.g. the settings hub) before the catalog tab existed.
-    if (active.viewId === 'skill') {
+    if (active.viewId === 'skill' || active.viewId === 'skillCompare') {
       if (stored.length > 0) return stored;
       return [{ id: syntheticTabId('skills', {}), viewId: 'skills' as ViewId, params: {} }];
     }

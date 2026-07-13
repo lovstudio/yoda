@@ -2046,7 +2046,7 @@
       "callFrequency": "快捷调用",
       "characters": "字符数",
       "compatibility": "兼容性",
-      "compareWithCurrent": "与当前技能对比",
+      "openInSidePane": "在侧边栏打开",
       "copyDescription": "复制描述",
       "copyPrompt": "复制 prompt",
       "copySkillMd": "复制 SKILL.md",
@@ -2076,6 +2076,12 @@
       "usageTrendEmpty": "近 30 天暂无调用",
       "unavailable": "不可用",
       "validation": "校验"
+    },
+    "compare": {
+      "action": "对比 SKILL.md",
+      "lines": "行",
+      "loadFailed": "无法加载技能对比",
+      "loadFailedHint": "请刷新技能目录后重试。"
     },
     "uninstall": "卸载",
     "disable": "禁用",

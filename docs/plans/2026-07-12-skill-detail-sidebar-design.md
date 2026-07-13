@@ -10,7 +10,7 @@ Use a master-detail layout at wide container sizes. A compact 240px navigation r
 
 Selecting a skill uses the existing skill-tab navigation. An already-open detail is focused and a new skill opens as a deduplicated detail tab, preserving Yoda's established comparison model. Installation, disablement, editing, and other entity actions remain in the shared detail components.
 
-Right-clicking another skill offers a focused comparison action. It pins that skill detail into Yoda's existing shell side pane while leaving the current detail in the main area, producing a real side-by-side view without introducing a second comparison state model.
+Right-clicking another skill offers two distinct actions. “Compare SKILL.md” opens a deduplicated skill-scope tab backed by the same Monaco side-by-side diff configuration used for Git files, including line and word changes, synchronized scrolling, and collapsed unchanged regions. “Open in side pane” remains a quick way to inspect two complete detail pages at once.
 
 At narrow container widths the rail is hidden and the existing detail layout remains unchanged. The app tab strip continues to provide navigation in that constrained host.
 

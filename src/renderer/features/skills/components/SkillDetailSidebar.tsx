@@ -1,4 +1,4 @@
-import { PanelRightOpen, Search } from 'lucide-react';
+import { GitCompare, PanelRightOpen, Search } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CatalogSkill } from '@shared/skills/types';
@@ -107,6 +107,22 @@ const SkillDetailSidebar: React.FC<{
                 <ContextMenuItem
                   disabled={active}
                   onClick={() =>
+                    openViewTab('skillCompare', {
+                      baseSkillId: activeSkillId,
+                      targetSkillId: skill.id,
+                      baseDisplayName:
+                        skills.find((candidate) => candidate.id === activeSkillId)?.displayName ??
+                        activeSkillId,
+                      targetDisplayName: skill.displayName,
+                    })
+                  }
+                >
+                  <GitCompare />
+                  {t('skills.compare.action')}
+                </ContextMenuItem>
+                <ContextMenuItem
+                  disabled={active}
+                  onClick={() =>
                     appState.sidePane.pinView('skill', {
                       skillId: skill.id,
                       displayName: skill.displayName,
@@ -115,7 +131,7 @@ const SkillDetailSidebar: React.FC<{
                   }
                 >
                   <PanelRightOpen />
-                  {t('skills.detail.compareWithCurrent')}
+                  {t('skills.detail.openInSidePane')}
                 </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
