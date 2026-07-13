@@ -97,16 +97,6 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
       onSelect: actions.onOpenDetails,
     });
   }
-  if (actions.onOpenArchivedTasks) {
-    items.push({
-      key: 'open-archived-tasks',
-      group: 0,
-      icon: ArchiveRestore,
-      label: t('sidebar.openArchivedTasks'),
-      onSelect: actions.onOpenArchivedTasks,
-    });
-  }
-
   // Keep "Open in..." in the first group with primary project actions.
   if (actions.projectPath) {
     const path = actions.projectPath;
@@ -214,6 +204,15 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
     onSelect: actions.onArchiveProjectTasks,
     disabled: !actions.canArchiveProjectTasks,
   });
+  if (actions.onOpenArchivedTasks) {
+    items.push({
+      key: 'open-archived-tasks',
+      group: 4,
+      icon: ArchiveRestore,
+      label: t('sidebar.openArchivedTasks'),
+      onSelect: actions.onOpenArchivedTasks,
+    });
+  }
   items.push({
     key: 'remove-project',
     group: 4,
