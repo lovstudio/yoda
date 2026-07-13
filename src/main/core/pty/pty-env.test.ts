@@ -47,9 +47,7 @@ describe('pty env Windows shell handling', () => {
     const env = buildAgentEnv({ includeShellVar: true, agentApiVars: false });
 
     expect(env.SHELL).toBeUndefined();
-    // Windows stores env vars with arbitrary casing (typically COMSPEC); Object
-    // entries preserve that casing, so accept either form.
-    expect(env.ComSpec ?? env.COMSPEC).toBe('C:\\Windows\\System32\\cmd.exe');
+    expect(env.ComSpec).toBe('C:\\Windows\\System32\\cmd.exe');
   });
 
   it('keeps POSIX shell fallback for non-Windows terminal envs', async () => {

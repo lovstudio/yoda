@@ -24,6 +24,28 @@ export type ServeWorktreeError =
 const FETCH_TIMEOUT_MS = 20_000;
 const STALE_WORKTREE_CLEANUP_TIMEOUT_MS = 3_000;
 
+type WorktreePathApi = Pick<
+  typeof path,
+  'dirname' | 'isAbsolute' | 'join' | 'normalize' | 'relative' | 'sep'
+>;
+
+export function normalizePoolResidentPath(
+  pathApi: WorktreePathApi,
+  poolPath: string,
+  targetPath: string
+): string | undefined {
+  const normalizedPool = pathApi.normalize(poolPath);
+  const normalizedTarget = pathApi.normalize(targetPath);
+  const relativeTarget = pathApi.relative(normalizedPool, normalizedTarget);
+  const isInsidePool =
+    relativeTarget === '' ||
+    (relativeTarget !== '..' &&
+      !relativeTarget.startsWith(`..${pathApi.sep}`) &&
+      !pathApi.isAbsolute(relativeTarget));
+
+  return isInsidePool ? normalizedTarget : undefined;
+}
+
 export class WorktreeService {
   private gitOpQueue: Promise<unknown> = Promise.resolve();
   private readonly worktreePoolPath: string;
@@ -31,7 +53,7 @@ export class WorktreeService {
   private readonly ctx: IExecutionContext;
   private readonly host: WorktreeHost;
   private readonly projectSettings: ProjectSettingsProvider;
-  private readonly pathApi: Pick<typeof path, 'dirname' | 'join'>;
+  private readonly pathApi: WorktreePathApi;
 
   constructor(args: {
     worktreePoolPath: string;
@@ -352,17 +374,7 @@ export class WorktreeService {
     if (!checkedOutPath) return undefined;
     try {
       const realPoolPath = await this.host.realPathAbsolute(this.worktreePoolPath);
-      // git reports forward-slash paths even on Windows while realpath uses the
-      // native separator; normalize both before the prefix compare, and require a
-      // directory boundary so the pool prefix can't match an unrelated sibling.
-      const normalizedTarget = path.normalize(checkedOutPath);
-      const normalizedPool = path.normalize(realPoolPath);
-      if (
-        normalizedTarget === normalizedPool ||
-        normalizedTarget.startsWith(normalizedPool + path.sep)
-      ) {
-        return normalizedTarget;
-      }
+      return normalizePoolResidentPath(this.pathApi, realPoolPath, checkedOutPath);
     } catch {}
     return undefined;
   }

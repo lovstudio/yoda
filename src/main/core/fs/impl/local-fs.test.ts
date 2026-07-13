@@ -70,7 +70,7 @@ describe('LocalFileSystem', () => {
       const result = await fsService.list('subdir');
 
       expect(result.entries).toHaveLength(1);
-      expect(result.entries[0].path).toBe(path.join('subdir', 'nested.txt'));
+      expect(result.entries[0].path).toBe('subdir/nested.txt');
     });
 
     it('should list recursively', async () => {
@@ -308,7 +308,7 @@ describe('LocalFileSystem', () => {
       expect(result.total).toBeGreaterThan(0);
       expect(result.matches.some((m) => m.filePath === 'file1.ts')).toBe(true);
       expect(result.matches.some((m) => m.filePath === 'file2.ts')).toBe(true);
-      expect(result.matches.some((m) => m.filePath === path.join('src', 'main.ts'))).toBe(true);
+      expect(result.matches.some((m) => m.filePath === 'src/main.ts')).toBe(true);
     });
 
     it('should return match details', async () => {

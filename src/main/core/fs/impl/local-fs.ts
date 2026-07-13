@@ -202,7 +202,7 @@ export class LocalFileSystem implements FileSystemProvider {
    * Get relative path from absolute path
    */
   private relPath(fullPath: string): string {
-    return relative(this.projectPath, fullPath);
+    return relative(this.projectPath, fullPath).replace(/\\/g, '/');
   }
 
   /**
@@ -664,7 +664,7 @@ export class LocalFileSystem implements FileSystemProvider {
       }
 
       await fs.copyFile(srcPath, destAbs);
-      const relPath = relative(this.projectPath, destAbs);
+      const relPath = this.relPath(destAbs);
       return { success: true, absPath: destAbs, relPath, fileName: destName };
     } catch (err: unknown) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };

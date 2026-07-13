@@ -8,7 +8,7 @@ import { LocalExecutionContext } from '@main/core/execution-context/local-execut
 import type { ProjectSettingsProvider } from '../settings/provider';
 import { LocalWorktreeHost } from './hosts/local-worktree-host';
 import type { WorktreeHost } from './hosts/worktree-host';
-import { WorktreeService } from './worktree-service';
+import { normalizePoolResidentPath, WorktreeService } from './worktree-service';
 
 async function git(
   args: string[],
@@ -71,25 +71,11 @@ describe('WorktreeService', () => {
     });
   });
 
-  // Windows briefly locks git worktree/index files on teardown; retry rmSync so
-  // afterEach cleanup does not fail with EPERM. The first attempt succeeds on POSIX.
-  function rmSyncRetry(target: string): void {
-    for (let attempt = 0; attempt < 10; attempt++) {
-      try {
-        fs.rmSync(target, { recursive: true, force: true });
-        return;
-      } catch {
-        const end = Date.now() + 25 * (attempt + 1);
-        while (Date.now() < end) {
-          /* backoff before retrying */
-        }
-      }
-    }
-  }
-
-  afterEach(() => {
-    rmSyncRetry(repoDir);
-    rmSyncRetry(poolDir);
+  afterEach(async () => {
+    await Promise.all([
+      fs.promises.rm(repoDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 25 }),
+      fs.promises.rm(poolDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 25 }),
+    ]);
   });
 
   function makeService(
@@ -410,5 +396,51 @@ describe('WorktreeService', () => {
         fs.rmSync(remoteDir, { recursive: true, force: true });
       }
     });
+  });
+});
+
+describe('normalizePoolResidentPath', () => {
+  it('normalizes mixed Windows separators inside the worktree pool', () => {
+    expect(
+      normalizePoolResidentPath(
+        path.win32,
+        'C:\\Users\\mark\\.yoda\\worktrees',
+        'C:/Users/mark/.yoda/worktrees/task'
+      )
+    ).toBe('C:\\Users\\mark\\.yoda\\worktrees\\task');
+  });
+
+  it('accepts Windows paths whose drive and directory casing differs', () => {
+    expect(
+      normalizePoolResidentPath(
+        path.win32,
+        'C:\\Users\\Mark\\Worktrees',
+        'c:\\users\\mark\\worktrees\\task'
+      )
+    ).toBe('c:\\users\\mark\\worktrees\\task');
+  });
+
+  it('rejects Windows sibling prefixes and other drives', () => {
+    expect(
+      normalizePoolResidentPath(path.win32, 'C:\\pool', 'C:\\pool-other\\task')
+    ).toBeUndefined();
+    expect(normalizePoolResidentPath(path.win32, 'C:\\pool', 'D:\\pool\\task')).toBeUndefined();
+  });
+
+  it('keeps POSIX paths unchanged for SSH worktrees', () => {
+    expect(
+      normalizePoolResidentPath(
+        path.posix,
+        '/home/dev/.yoda/worktrees',
+        '/home/dev/.yoda/worktrees/task'
+      )
+    ).toBe('/home/dev/.yoda/worktrees/task');
+    expect(
+      normalizePoolResidentPath(
+        path.posix,
+        '/home/dev/.yoda/worktrees',
+        '/home/dev/.yoda/worktrees-old/task'
+      )
+    ).toBeUndefined();
   });
 });
