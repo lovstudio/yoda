@@ -20,6 +20,14 @@ Parameters:
     Default: https://pending.invalid
     AllowedPattern: ^https://[a-z0-9.-]+$
     Description: CloudFront HTTPS origin returned by Relay pairing responses.
+  RelayDomainName:
+    Type: String
+    Default: relay.yoda.lovstudio.ai
+    AllowedPattern: ^[a-z0-9.-]+$
+    Description: Stable public DNS name attached to the CloudFront distribution.
+  RelayCertificateArn:
+    Type: String
+    Description: ACM certificate ARN in us-east-1 covering RelayDomainName.
   InstanceType:
     Type: String
     Default: t3.small
@@ -260,6 +268,8 @@ Resources:
     DependsOn: RelayElasticIpAssociation
     Properties:
       DistributionConfig:
+        Aliases:
+          - !Ref RelayDomainName
         Comment: Production Yoda Relay HTTPS, SSE, and WebSocket edge
         Enabled: true
         HttpVersion: http2and3
@@ -298,7 +308,8 @@ Resources:
           OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
           Compress: false
         ViewerCertificate:
-          CloudFrontDefaultCertificate: true
+          AcmCertificateArn: !Ref RelayCertificateArn
+          SslSupportMethod: sni-only
           MinimumProtocolVersion: TLSv1.2_2021
         Restrictions:
           GeoRestriction:

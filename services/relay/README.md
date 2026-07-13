@@ -138,5 +138,6 @@ Terminate TLS at the container platform or load balancer and set
   and no request buffering for SSE responses.
 - Keep `LOVSTUDIO_RELAY_SERVICE_TOKEN` and LovStudio Web's `YODA_RELAY_SERVICE_SECRET` identical,
   secret, and outside the image. Rotate both together.
-- Point the Yoda mobile build's `EXPO_PUBLIC_YODA_RELAY_ORIGIN` to the same origin. The mobile app
-  rejects pairing responses from any other origin.
+- Point the Yoda mobile build's `EXPO_PUBLIC_YODA_RELAY_ORIGIN` to the same origin. Production EAS
+  builds pin `https://relay.yoda.lovstudio.ai`; the mobile app rejects pairing responses from any
+  other origin.
