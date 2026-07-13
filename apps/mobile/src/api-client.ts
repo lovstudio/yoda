@@ -8,6 +8,9 @@ import type {
   MobileSessionInputResponse,
   MobileTaskSessionsResponse,
 } from '../../../src/shared/mobile-api';
+import { MOBILE_RELAY_BASE_URL } from '../../../src/shared/mobile-relay';
+
+const RELAY_HEALTH_TIMEOUT_MS = 8_000;
 
 export type MobileConnection = {
   baseUrl: string;
@@ -43,6 +46,66 @@ async function readError(response: Response): Promise<string> {
   }
 }
 
+type RelayHealthProbe =
+  | { reachedEdge: true; healthy: boolean; status: number }
+  | { reachedEdge: false; error: string };
+
+function isOfficialRelayConnection(baseUrl: string): boolean {
+  try {
+    const connectionUrl = new URL(baseUrl);
+    const relayUrl = new URL(MOBILE_RELAY_BASE_URL);
+    return (
+      connectionUrl.origin === relayUrl.origin &&
+      /^\/v1\/devices\/[^/]+\/?$/.test(connectionUrl.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function probeRelayHealth(): Promise<RelayHealthProbe> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), RELAY_HEALTH_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${MOBILE_RELAY_BASE_URL}/health`, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    return { reachedEdge: true, healthy: response.ok, status: response.status };
+  } catch (error) {
+    return {
+      reachedEdge: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function gatewayNetworkError(baseUrl: string, error: unknown): Promise<Error> {
+  const detail = error instanceof Error ? error.message : String(error);
+  if (!isOfficialRelayConnection(baseUrl)) {
+    return new Error(
+      `Cannot reach the local Yoda gateway at ${baseUrl}. Check Local Network permission, Wi-Fi, and that the desktop gateway is running. Diagnostic: ${detail}`
+    );
+  }
+
+  const health = await probeRelayHealth();
+  if (!health.reachedEdge) {
+    return new Error(
+      `Cannot reach Yoda Relay from this phone's current network. No HTTP response was received from ${MOBILE_RELAY_BASE_URL}. On iPhone, enable Settings > Cellular > Yoda Mobile, then retry. If it is already enabled, switch between cellular and Wi-Fi. Diagnostic: gateway=${detail}; health=${health.error}`
+    );
+  }
+  if (!health.healthy) {
+    return new Error(
+      `Yoda Relay is reachable, but its health check returned HTTP ${health.status}. Wait a moment and retry. Diagnostic: gateway=${detail}`
+    );
+  }
+  return new Error(
+    `Yoda Relay is reachable, but this desktop device route did not return an HTTP response: ${baseUrl}. Keep Yoda open on the desktop, confirm Relay shows connected, then retry or generate a new pairing code. Diagnostic: ${detail}`
+  );
+}
+
 async function request<T>(
   connection: MobileConnection,
   path: string,
@@ -60,9 +123,7 @@ async function request<T>(
       error: error instanceof Error ? error.message : String(error),
       url: mobileApiUrl(connection, path),
     });
-    throw new Error(
-      `Cannot reach the Yoda gateway at ${baseUrl}. For a local address, check Local Network permission and Wi-Fi. For Relay, check that the desktop is online and Relay Pass is active.`
-    );
+    throw await gatewayNetworkError(baseUrl, error);
   }
 
   if (!response.ok) {
