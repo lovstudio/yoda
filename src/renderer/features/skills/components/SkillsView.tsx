@@ -9,6 +9,11 @@ import {
 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  aggregateSkillFamilyUsage,
+  groupSkillFamilies,
+  type SkillFamily,
+} from '@shared/skills/grouping';
 import type { CatalogSkill } from '@shared/skills/types';
 import { useOpenViewTab, useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -21,8 +26,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@renderer/lib/ui/select';
+import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@renderer/lib/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
+import { skillNeedsAttention } from '../skill-health';
 import { SKILL_SORT_MODES, sortSkills, type SkillSortMode } from '../skill-sort';
 import SkillCard from './SkillCard';
 import SkillsCatalogHint from './SkillsCatalogHint';
@@ -31,6 +38,7 @@ import { useSkills } from './useSkills';
 import { useSkillUsage } from './useSkillUsage';
 
 type SkillsLayout = 'grid' | 'tree';
+type SkillsSection = 'installed' | 'recommended' | 'attention';
 
 const LAYOUT_STORAGE_KEY = 'yoda.skillsLayout';
 
@@ -62,7 +70,10 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   const { usage, lookupUsage } = useSkillUsage();
   const [sortMode, setSortMode] = React.useState<SkillSortMode>('name');
   const [layout, setLayout] = React.useState<SkillsLayout>(loadStoredLayout);
+  const [section, setSection] = React.useState<SkillsSection>('installed');
   const usageAvailable = usage !== null && Object.keys(usage.bySkill).length > 0;
+  const focusedSkillId =
+    typeof skillsParams.focusSkillId === 'string' ? skillsParams.focusSkillId : undefined;
 
   const switchLayout = React.useCallback((value: SkillsLayout) => {
     setLayout(value);
@@ -87,27 +98,70 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     [layout, usageAvailable]
   );
 
+  const installedFamilies = React.useMemo(
+    () => groupSkillFamilies(installedSkills),
+    [installedSkills]
+  );
+  const recommendedFamilies = React.useMemo(
+    () => groupSkillFamilies(recommendedSkills),
+    [recommendedSkills]
+  );
+  const attentionFamilies = React.useMemo(
+    () => groupSkillFamilies(installedSkills.filter(skillNeedsAttention)),
+    [installedSkills]
+  );
+  const familiesByPrimaryKey = React.useMemo(() => {
+    const result = new Map<string, SkillFamily>();
+    for (const family of [...installedFamilies, ...recommendedFamilies, ...attentionFamilies]) {
+      if (!result.has(family.primary.key)) result.set(family.primary.key, family);
+    }
+    return result;
+  }, [attentionFamilies, installedFamilies, recommendedFamilies]);
+  const lookupBrowseUsage = React.useCallback(
+    (skill: CatalogSkill) => {
+      const family = familiesByPrimaryKey.get(skill.key);
+      return family ? aggregateSkillFamilyUsage(family, lookupUsage) : lookupUsage(skill.id);
+    },
+    [familiesByPrimaryKey, lookupUsage]
+  );
   const sortedInstalledSkills = React.useMemo(
-    () => sortSkills(installedSkills, sortMode, lookupUsage),
-    [installedSkills, sortMode, lookupUsage]
+    () =>
+      sortSkills(
+        installedFamilies.map((family) => family.primary),
+        sortMode,
+        lookupBrowseUsage
+      ),
+    [installedFamilies, sortMode, lookupBrowseUsage]
   );
   const sortedRecommendedSkills = React.useMemo(
-    () => sortSkills(recommendedSkills, sortMode, lookupUsage),
-    [recommendedSkills, sortMode, lookupUsage]
+    () =>
+      sortSkills(
+        recommendedFamilies.map((family) => family.primary),
+        sortMode,
+        lookupBrowseUsage
+      ),
+    [recommendedFamilies, sortMode, lookupBrowseUsage]
+  );
+  const attentionSkills = React.useMemo(
+    () =>
+      sortSkills(
+        attentionFamilies.map((family) => family.primary),
+        sortMode,
+        lookupBrowseUsage
+      ),
+    [attentionFamilies, sortMode, lookupBrowseUsage]
   );
 
   const showCreateSkillModal = useShowModal('createSkillModal');
-  const focusedSkillId =
-    typeof skillsParams.focusSkillId === 'string' ? skillsParams.focusSkillId : undefined;
   const skillCardRefs = React.useRef(new Map<string, HTMLDivElement>());
   const [highlightedSkillId, setHighlightedSkillId] = React.useState<string | null>(null);
 
   const setSkillCardRef = React.useCallback(
-    (skillId: string) => (node: HTMLDivElement | null) => {
+    (skillKey: string) => (node: HTMLDivElement | null) => {
       if (node) {
-        skillCardRefs.current.set(skillId, node);
+        skillCardRefs.current.set(skillKey, node);
       } else {
-        skillCardRefs.current.delete(skillId);
+        skillCardRefs.current.delete(skillKey);
       }
     },
     []
@@ -117,32 +171,64 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   // a side-pane pin when this view is pin-hosted, a top-level app tab otherwise.
   const { openViewTab } = useOpenViewTab();
   const openDetail = (skill: CatalogSkill) => {
-    openViewTab('skill', { skillId: skill.id, displayName: skill.displayName });
+    openViewTab('skill', {
+      skillId: skill.key,
+      displayName: skill.displayName,
+      catalogSection: section,
+    });
   };
 
   React.useEffect(() => {
     if (!focusedSkillId || isLoading) return;
 
-    const isVisible =
-      installedSkills.some((skill) => skill.id === focusedSkillId) ||
-      recommendedSkills.some((skill) => skill.id === focusedSkillId);
-    const existsInCatalog = catalog?.skills.some((skill) => skill.id === focusedSkillId) ?? false;
+    const installedFamily = installedFamilies.find((family) =>
+      family.members.some((skill) => skill.key === focusedSkillId)
+    );
+    const attentionFamily = attentionFamilies.find((family) =>
+      family.members.some((skill) => skill.key === focusedSkillId)
+    );
+    const recommendedFamily = recommendedFamilies.find((family) =>
+      family.members.some((skill) => skill.key === focusedSkillId)
+    );
+    const isInstalled = Boolean(installedFamily);
+    const isAttention = Boolean(attentionFamily);
+    const isRecommended = Boolean(recommendedFamily);
+    const isVisible = isInstalled || isRecommended;
+    const existsInCatalog = catalog?.skills.some((skill) => skill.key === focusedSkillId) ?? false;
 
     if (!isVisible && existsInCatalog && searchQuery) {
       setSearchQuery('');
       return;
     }
 
-    const node = skillCardRefs.current.get(focusedSkillId);
+    const focusedSection: SkillsSection =
+      section === 'attention' && isAttention
+        ? 'attention'
+        : isInstalled
+          ? 'installed'
+          : 'recommended';
+    if (isVisible && section !== focusedSection) {
+      setSection(focusedSection);
+      return;
+    }
+
+    const visibleFamily =
+      focusedSection === 'attention'
+        ? attentionFamily
+        : focusedSection === 'installed'
+          ? installedFamily
+          : recommendedFamily;
+    const visibleSkillKey = visibleFamily?.primary.key ?? focusedSkillId;
+    const node = skillCardRefs.current.get(visibleSkillKey);
     if (!node) return;
 
     const frame = window.requestAnimationFrame(() => {
       node.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      setHighlightedSkillId(focusedSkillId);
+      setHighlightedSkillId(visibleSkillKey);
       setSkillsParams(() => ({}));
     });
     const timeout = window.setTimeout(() => {
-      setHighlightedSkillId((current) => (current === focusedSkillId ? null : current));
+      setHighlightedSkillId((current) => (current === visibleSkillKey ? null : current));
     }, 2400);
 
     return () => {
@@ -151,14 +237,70 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     };
   }, [
     catalog?.skills,
+    attentionFamilies,
+    attentionSkills,
     focusedSkillId,
+    installedFamilies,
     installedSkills,
     isLoading,
+    recommendedFamilies,
     recommendedSkills,
     searchQuery,
+    section,
     setSearchQuery,
     setSkillsParams,
   ]);
+
+  const renderSkills = (skills: CatalogSkill[]) => {
+    if (skills.length === 0) {
+      return (
+        <div className="py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            {searchQuery ? t('skills.noMatches') : t('skills.noSkills')}
+          </p>
+        </div>
+      );
+    }
+
+    if (layout === 'tree') {
+      return (
+        <SkillsTreeSection
+          skills={skills}
+          orderBy={sortMode === 'count' ? 'count' : 'position'}
+          lookupUsage={lookupBrowseUsage}
+          familiesByPrimaryKey={familiesByPrimaryKey}
+          onSelect={openDetail}
+          onInstall={install}
+          setSkillRef={setSkillCardRef}
+          highlightedSkillId={highlightedSkillId}
+        />
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
+        {skills.map((skill) => (
+          <div
+            key={skill.key}
+            ref={setSkillCardRef(skill.key)}
+            className={cn(
+              'scroll-mt-20 rounded-lg transition-shadow duration-300',
+              highlightedSkillId === skill.key &&
+                'ring-2 ring-amber-400 ring-offset-2 ring-offset-background'
+            )}
+          >
+            <SkillCard
+              skill={skill}
+              family={familiesByPrimaryKey.get(skill.key)}
+              usage={lookupBrowseUsage(skill)}
+              onSelect={openDetail}
+              onInstall={install}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -269,61 +411,30 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
           </Button>
         </div>
 
-        {(
-          [
-            ['skills.installed', sortedInstalledSkills],
-            ['skills.recommended', sortedRecommendedSkills],
-          ] as const
-        ).map(
-          ([titleKey, skills]) =>
-            skills.length > 0 && (
-              <div key={titleKey} className="mb-6">
-                <h2 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground">
-                  {t(titleKey)}
-                </h2>
-                {layout === 'tree' ? (
-                  <SkillsTreeSection
-                    skills={skills}
-                    orderBy={sortMode === 'count' ? 'count' : 'position'}
-                    lookupUsage={lookupUsage}
-                    onSelect={openDetail}
-                    onInstall={install}
-                    setSkillRef={setSkillCardRef}
-                    highlightedSkillId={highlightedSkillId}
-                  />
-                ) : (
-                  <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
-                    {skills.map((skill) => (
-                      <div
-                        key={skill.id}
-                        ref={setSkillCardRef(skill.id)}
-                        className={cn(
-                          'scroll-mt-20 rounded-lg transition-shadow duration-300',
-                          highlightedSkillId === skill.id &&
-                            'ring-2 ring-amber-400 ring-offset-2 ring-offset-background'
-                        )}
-                      >
-                        <SkillCard
-                          skill={skill}
-                          usage={lookupUsage(skill.id)}
-                          onSelect={openDetail}
-                          onInstall={install}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-        )}
-
-        {installedSkills.length === 0 && recommendedSkills.length === 0 && (
-          <div className="py-12 text-center">
-            <p className="text-sm text-muted-foreground">
-              {searchQuery ? t('skills.noMatches') : t('skills.noSkills')}
-            </p>
-          </div>
-        )}
+        <Tabs
+          value={section}
+          onValueChange={(value) => setSection(value as SkillsSection)}
+          className="gap-4"
+        >
+          <TabsList>
+            <TabsIndicator />
+            <TabsTab value="installed">
+              {t('skills.installed')}
+              <span className="text-foreground-muted">{sortedInstalledSkills.length}</span>
+            </TabsTab>
+            <TabsTab value="recommended">
+              {t('skills.recommended')}
+              <span className="text-foreground-muted">{sortedRecommendedSkills.length}</span>
+            </TabsTab>
+            <TabsTab value="attention">
+              {t('skills.attention')}
+              <span className="text-foreground-muted">{attentionSkills.length}</span>
+            </TabsTab>
+          </TabsList>
+          <TabsPanel value="installed">{renderSkills(sortedInstalledSkills)}</TabsPanel>
+          <TabsPanel value="recommended">{renderSkills(sortedRecommendedSkills)}</TabsPanel>
+          <TabsPanel value="attention">{renderSkills(attentionSkills)}</TabsPanel>
+        </Tabs>
       </div>
     </div>
   );

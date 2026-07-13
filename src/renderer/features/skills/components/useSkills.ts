@@ -39,10 +39,10 @@ export function useSkills() {
   const refresh = useCallback(() => refreshMutation.mutate(), [refreshMutation]);
 
   const installMutation = useMutation({
-    mutationFn: async (skillId: string) => {
-      const result = await rpc.skills.install({ skillId });
+    mutationFn: async (skillKey: string) => {
+      const result = await rpc.skills.install({ skillKey });
       if (!result.success) throw new Error(result.error ?? 'Could not install skill');
-      return skillId;
+      return skillKey;
     },
     onError: (error) => {
       toast({
@@ -51,15 +51,15 @@ export function useSkills() {
         variant: 'destructive',
       });
     },
-    onSuccess: (skillId) => {
+    onSuccess: (skillKey) => {
       const skill = queryClient
         .getQueryData<CatalogIndex>(CATALOG_QUERY_KEY)
-        ?.skills.find((s) => s.id === skillId);
+        ?.skills.find((s) => s.key === skillKey);
 
       captureTelemetry('skill_installed', { source: skill?.source });
       toast({
         title: 'Skill installed',
-        description: `${skillId} is now available across your agents`,
+        description: `${skill?.displayName ?? skillKey} is now available across your agents`,
       });
       // Broad key: refreshes the catalog and any open skill-detail tabs.
       void queryClient.invalidateQueries({ queryKey: ['skills'] });
@@ -67,9 +67,9 @@ export function useSkills() {
   });
 
   const install = useCallback(
-    async (skillId: string): Promise<boolean> => {
+    async (skillKey: string): Promise<boolean> => {
       try {
-        await installMutation.mutateAsync(skillId);
+        await installMutation.mutateAsync(skillKey);
         return true;
       } catch {
         return false;
@@ -79,10 +79,10 @@ export function useSkills() {
   );
 
   const uninstallMutation = useMutation({
-    mutationFn: async (skillId: string) => {
-      const result = await rpc.skills.uninstall({ skillId });
+    mutationFn: async (skillKey: string) => {
+      const result = await rpc.skills.uninstall({ skillKey });
       if (!result.success) throw new Error(result.error ?? 'Could not uninstall skill');
-      return skillId;
+      return skillKey;
     },
     onError: (error) => {
       toast({
@@ -100,9 +100,9 @@ export function useSkills() {
   });
 
   const uninstall = useCallback(
-    async (skillId: string): Promise<boolean> => {
+    async (skillKey: string): Promise<boolean> => {
       try {
-        await uninstallMutation.mutateAsync(skillId);
+        await uninstallMutation.mutateAsync(skillKey);
         return true;
       } catch {
         return false;
@@ -112,10 +112,10 @@ export function useSkills() {
   );
 
   const setDisabledMutation = useMutation({
-    mutationFn: async ({ skillId, disabled }: { skillId: string; disabled: boolean }) => {
-      const result = await rpc.skills.setDisabled({ skillId, disabled });
+    mutationFn: async ({ skillKey, disabled }: { skillKey: string; disabled: boolean }) => {
+      const result = await rpc.skills.setDisabled({ skillKey, disabled });
       if (!result.success) throw new Error(result.error ?? 'Could not update skill');
-      return { skillId, disabled };
+      return { skillKey, disabled };
     },
     onError: (error, variables) => {
       toast({
@@ -124,22 +124,26 @@ export function useSkills() {
         variant: 'destructive',
       });
     },
-    onSuccess: ({ skillId, disabled }) => {
+    onSuccess: ({ skillKey, disabled }) => {
+      const skill = queryClient
+        .getQueryData<CatalogIndex>(CATALOG_QUERY_KEY)
+        ?.skills.find((candidate) => candidate.key === skillKey);
+      const label = skill?.displayName ?? skillKey;
       captureTelemetry(disabled ? 'skill_disabled' : 'skill_enabled');
       toast({
         title: disabled ? 'Skill disabled' : 'Skill enabled',
         description: disabled
-          ? `${skillId} is no longer available to agents`
-          : `${skillId} is available to agents again`,
+          ? `${label} is no longer available to agents`
+          : `${label} is available to agents again`,
       });
       void queryClient.invalidateQueries({ queryKey: ['skills'] });
     },
   });
 
   const setDisabled = useCallback(
-    async (skillId: string, disabled: boolean): Promise<boolean> => {
+    async (skillKey: string, disabled: boolean): Promise<boolean> => {
       try {
-        await setDisabledMutation.mutateAsync({ skillId, disabled });
+        await setDisabledMutation.mutateAsync({ skillKey, disabled });
         return true;
       } catch {
         return false;

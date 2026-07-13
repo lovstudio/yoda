@@ -1,20 +1,23 @@
 import { ChartNoAxesColumn, ChevronRight, Pencil, Plus, PowerOff } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import type { SkillFamily } from '@shared/skills/grouping';
 import type { CatalogSkill, SkillUsageStat } from '@shared/skills/types';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import { cn } from '@renderer/utils/utils';
 import { buildSkillTree } from '../skill-tree';
+import SkillFamilyCount from './SkillFamilyCount';
 
 interface SkillsTreeSectionProps {
   /** Pre-sorted skills; tree grouping preserves this order. */
   skills: CatalogSkill[];
   /** 'count' reorders entries by group member count descending. */
   orderBy: 'position' | 'count';
-  lookupUsage: (skillId: string) => SkillUsageStat | undefined;
+  lookupUsage: (skill: CatalogSkill) => SkillUsageStat | undefined;
+  familiesByPrimaryKey: ReadonlyMap<string, SkillFamily>;
   onSelect: (skill: CatalogSkill) => void;
-  onInstall: (skillId: string) => void;
-  setSkillRef: (skillId: string) => (node: HTMLDivElement | null) => void;
+  onInstall: (skillKey: string) => void;
+  setSkillRef: (skillKey: string) => (node: HTMLDivElement | null) => void;
   highlightedSkillId: string | null;
 }
 
@@ -23,6 +26,7 @@ const SkillsTreeSection: React.FC<SkillsTreeSectionProps> = ({
   skills,
   orderBy,
   lookupUsage,
+  familiesByPrimaryKey,
   onSelect,
   onInstall,
   setSkillRef,
@@ -35,13 +39,14 @@ const SkillsTreeSection: React.FC<SkillsTreeSectionProps> = ({
       {entries.map((entry) =>
         entry.kind === 'leaf' ? (
           <SkillTreeRow
-            key={entry.skill.id}
+            key={entry.skill.key}
             skill={entry.skill}
-            usage={lookupUsage(entry.skill.id)}
+            family={familiesByPrimaryKey.get(entry.skill.key)}
+            usage={lookupUsage(entry.skill)}
             onSelect={onSelect}
             onInstall={onInstall}
             setSkillRef={setSkillRef}
-            highlighted={highlightedSkillId === entry.skill.id}
+            highlighted={highlightedSkillId === entry.skill.key}
           />
         ) : (
           <SkillTreeGroup
@@ -49,6 +54,7 @@ const SkillsTreeSection: React.FC<SkillsTreeSectionProps> = ({
             prefix={entry.prefix}
             skills={entry.skills}
             lookupUsage={lookupUsage}
+            familiesByPrimaryKey={familiesByPrimaryKey}
             onSelect={onSelect}
             onInstall={onInstall}
             setSkillRef={setSkillRef}
@@ -69,13 +75,14 @@ const SkillTreeGroup: React.FC<SkillTreeGroupProps> = ({
   prefix,
   skills,
   lookupUsage,
+  familiesByPrimaryKey,
   onSelect,
   onInstall,
   setSkillRef,
   highlightedSkillId,
 }) => {
   const [open, setOpen] = React.useState(true);
-  const groupTotal = skills.reduce((sum, skill) => sum + (lookupUsage(skill.id)?.total ?? 0), 0);
+  const groupTotal = skills.reduce((sum, skill) => sum + (lookupUsage(skill)?.total ?? 0), 0);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -101,13 +108,14 @@ const SkillTreeGroup: React.FC<SkillTreeGroupProps> = ({
         <div className="ml-[1.0625rem] flex flex-col gap-0.5 border-l border-border/60 pl-2">
           {skills.map((skill) => (
             <SkillTreeRow
-              key={skill.id}
+              key={skill.key}
               skill={skill}
-              usage={lookupUsage(skill.id)}
+              family={familiesByPrimaryKey.get(skill.key)}
+              usage={lookupUsage(skill)}
               onSelect={onSelect}
               onInstall={onInstall}
               setSkillRef={setSkillRef}
-              highlighted={highlightedSkillId === skill.id}
+              highlighted={highlightedSkillId === skill.key}
             />
           ))}
         </div>
@@ -118,15 +126,17 @@ const SkillTreeGroup: React.FC<SkillTreeGroupProps> = ({
 
 interface SkillTreeRowProps {
   skill: CatalogSkill;
+  family?: SkillFamily;
   usage: SkillUsageStat | undefined;
   onSelect: (skill: CatalogSkill) => void;
-  onInstall: (skillId: string) => void;
-  setSkillRef: (skillId: string) => (node: HTMLDivElement | null) => void;
+  onInstall: (skillKey: string) => void;
+  setSkillRef: (skillKey: string) => (node: HTMLDivElement | null) => void;
   highlighted: boolean;
 }
 
 const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
   skill,
+  family,
   usage,
   onSelect,
   onInstall,
@@ -138,7 +148,7 @@ const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
 
   return (
     <div
-      ref={setSkillRef(skill.id)}
+      ref={setSkillRef(skill.key)}
       role="button"
       tabIndex={0}
       onClick={() => onSelect(skill)}
@@ -162,6 +172,7 @@ const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
       >
         {skill.displayName}
       </span>
+      {family && <SkillFamilyCount family={family} />}
       {skill.disabled && <PowerOff className="h-3 w-3 shrink-0 text-muted-foreground" />}
       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{description}</span>
       {/* Usage / edit affordance — for installed skills the hover pen swaps
@@ -191,7 +202,7 @@ const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onInstall(skill.id);
+              onInstall(skill.key);
             }}
             className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label={`Install ${skill.displayName}`}

@@ -1,6 +1,7 @@
 packages:
   - '.'
   - 'apps/*'
+  - 'services/*'
 
 onlyBuiltDependencies:
   - better-sqlite3

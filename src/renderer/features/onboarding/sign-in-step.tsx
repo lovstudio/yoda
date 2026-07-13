@@ -100,7 +100,7 @@ export function SignInStep({ onComplete }: { onComplete: () => void }) {
           {signInMutation.isPending ? t('onboarding.signingIn') : t('onboarding.signInToLovstudio')}
         </Button>
         <Button variant="ghost" onClick={onComplete} disabled={signInMutation.isPending}>
-          {t('onboarding.skip')}
+          {t('onboarding.continueLocal')}
         </Button>
       </div>
     </div>

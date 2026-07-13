@@ -49,6 +49,10 @@ import {
 } from '@renderer/features/tasks/components/task-menu-session-info';
 import { displaySessionPromptText } from '@renderer/features/tasks/context-panel-prompt-display';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
+import {
+  resolveSessionPrompts,
+  SESSION_PROMPTS_REFRESH_MS,
+} from '@renderer/features/tasks/session-prompts';
 import { buildPromptPreviewItems } from '@renderer/features/tasks/session-prompts-preview';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { syncNoteToSessionInput } from '@renderer/features/tasks/use-session-note-sync';
@@ -66,9 +70,6 @@ import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@renderer/lib
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
-
-/** Poll interval for the live prompt count in the 对话 blind header. */
-const PROMPTS_REFRESH_MS = 3_000;
 
 /**
  * Shared loader for the 基础/状态 blinds: the active conversation, its live
@@ -469,7 +470,7 @@ export function useSessionPrompts(active: boolean): {
     void load();
     // Poll while open so the header count stays live as prompts stream in
     // mid-reply, not just on each session-status transition.
-    const interval = setInterval(() => void load(), PROMPTS_REFRESH_MS);
+    const interval = setInterval(() => void load(), SESSION_PROMPTS_REFRESH_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -876,36 +877,6 @@ async function resolveSessionSummary(
   } catch {
     return { summary: null, status: 'failed' };
   }
-}
-
-async function resolveSessionPrompts(
-  conversation: Conversation,
-  cwd: string,
-  sessionId?: string
-): Promise<ClaudeSessionPrompt[]> {
-  try {
-    if (conversation.runtimeId === 'claude') {
-      const context = await rpc.conversations.getClaudeSessionContext(
-        cwd,
-        sessionId || conversation.id
-      );
-      return context?.prompts ?? [];
-    }
-
-    if (conversation.runtimeId === 'codex') {
-      const context = await rpc.conversations.getCodexSessionContext(
-        cwd,
-        conversation.id,
-        conversation.title,
-        conversation.createdAt ?? null
-      );
-      return context?.prompts ?? [];
-    }
-  } catch {
-    return [];
-  }
-
-  return [];
 }
 
 function SessionPromptsPreview({

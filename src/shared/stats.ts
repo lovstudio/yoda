@@ -16,6 +16,27 @@ export type TokenBuckets = {
   total: number;
 };
 
+/** A provider-reported rolling usage window, such as a subscription quota. */
+export type SessionRateLimit = {
+  windowMinutes: number;
+  usedPercent: number;
+  resetsAt: string | null;
+};
+
+/**
+ * Live context-window state from a provider transcript. Unlike
+ * `TokenBuckets`, this measures the active prompt context rather than
+ * cumulative session burn.
+ */
+export type SessionContextUsage = {
+  usedTokens: number;
+  limitTokens: number;
+  /** Number of observed drops in the rolling context counter. */
+  resetCount: number;
+  lastResetAt: string | null;
+  rateLimits: SessionRateLimit[];
+};
+
 /** `date` is a local-timezone YYYY-MM-DD key. */
 export type DailyTokenUsage = {
   date: string;
@@ -91,6 +112,8 @@ export type ConversationUsageSummary = {
   authProvider: AgentAccountProviderId | null;
   /** Null when the provider has no transcript reader or nothing parsed. */
   tokens: TokenBuckets | null;
+  /** Null when the provider transcript does not expose a live context window. */
+  context: SessionContextUsage | null;
 };
 
 export type TaskStats = {

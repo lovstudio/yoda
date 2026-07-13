@@ -68,6 +68,7 @@ export async function markInitialConversationWorkingAfterProvision(
   task: TaskStore | undefined,
   initialConversation: CreateTaskParams['initialConversation']
 ): Promise<void> {
+  if (initialConversation?.deferInitialPrompt) return;
   if (!initialConversation?.initialPrompt?.trim() && !initialConversation?.imagePaths?.length)
     return;
   if (!task || !isProvisioned(task)) return;

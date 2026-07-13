@@ -3,7 +3,8 @@ import { ChevronRight, GitBranch, MessageSquarePlus } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import type { ConversationUsageSummary } from '@shared/stats';
-import { TaskRoomChat, taskRoomQueryKey } from '@renderer/features/agent-room/task-room-chat';
+import { TaskRoomChat } from '@renderer/features/agent-room/task-room-chat';
+import { taskRoomQueryKey } from '@renderer/features/agent-room/team-room-queries';
 import {
   getProjectStore,
   projectDisplayName,

@@ -1,5 +1,9 @@
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
+import {
+  teamRoomTaskKey,
+  useTeamRoomTaskKeys,
+} from '@renderer/features/agent-room/team-room-queries';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { SidebarProjectItem } from './project-item';
 import { SidebarGroup, SidebarMenu, SidebarSectionHeader } from './sidebar-primitives';
@@ -8,6 +12,7 @@ import { SidebarTaskItem } from './task-item';
 export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
   const { t } = useTranslation();
   const entries = sidebarStore.pinnedSidebarEntries;
+  const teamRoomTaskKeys = useTeamRoomTaskKeys();
   const collapsed = sidebarStore.pinnedCollapsed;
   const showList = !collapsed && entries.length > 0;
 
@@ -41,6 +46,7 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
                 projectId={entry.projectId}
                 taskId={entry.taskId}
                 rowVariant={entry.kind === 'project-task' ? 'underProject' : 'pinned'}
+                isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(entry.projectId, entry.taskId))}
               />
             );
           })}

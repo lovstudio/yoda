@@ -1,7 +1,7 @@
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, RefreshCw } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DependencyState } from '@shared/dependencies';
 import { isValidRuntimeId, RUNTIMES, type RuntimeId } from '@shared/runtime-registry';
@@ -9,6 +9,8 @@ import { getAgentInstallErrorMessage } from '@renderer/lib/components/agent-sele
 import { AgentInstallButton } from '@renderer/lib/components/agent-selector/agent-install-button';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { appState } from '@renderer/lib/stores/app-state';
+import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
+import { Button } from '@renderer/lib/ui/button';
 import { cn } from '@renderer/utils/utils';
 import { AgentDetailPanel } from './AgentDetailPanel';
 import { RuntimeLogo } from './RuntimeLogo';
@@ -19,6 +21,7 @@ type RuntimeRow = {
   detected: boolean;
   version: string | null;
   installCommand: string | null;
+  canUpdate: boolean;
 };
 
 /**
@@ -37,6 +40,7 @@ function buildRows(statuses: Record<string, DependencyState>): RuntimeRow[] {
         detected: dep?.status === 'available',
         version: dep?.version ?? null,
         installCommand: runtime.installCommand ?? null,
+        canUpdate: Boolean(runtime.updateCommand),
       };
     })
     .sort((a, b) => {
@@ -45,52 +49,72 @@ function buildRows(statuses: Record<string, DependencyState>): RuntimeRow[] {
     });
 }
 
-export const RuntimeAccordion: React.FC = observer(function RuntimeAccordion() {
-  const { t } = useTranslation();
-  const { toast } = useToast();
-  const statuses = appState.dependencies.agentStatuses;
-  const rows = useMemo(() => buildRows(statuses), [statuses]);
-  const defaultOpen = useMemo(() => rows.find((row) => row.detected)?.id ?? rows[0]?.id, [rows]);
+export const RuntimeAccordion: React.FC<{ focusRuntimeId?: RuntimeId }> = observer(
+  function RuntimeAccordion({ focusRuntimeId }) {
+    const { t } = useTranslation();
+    const { toast } = useToast();
+    const statuses = appState.dependencies.agentStatuses;
+    const rows = useMemo(() => buildRows(statuses), [statuses]);
+    const defaultOpen = useMemo(() => rows.find((row) => row.detected)?.id ?? rows[0]?.id, [rows]);
+    const [openRuntimeId, setOpenRuntimeId] = useState<RuntimeId | null>(
+      () => focusRuntimeId ?? defaultOpen ?? null
+    );
 
-  const handleInstall = useCallback(
-    async (row: RuntimeRow) => {
-      if (!isValidRuntimeId(row.id) || appState.dependencies.isInstalling(row.id)) return;
+    useEffect(() => {
+      if (focusRuntimeId) setOpenRuntimeId(focusRuntimeId);
+    }, [focusRuntimeId]);
 
-      const result = await appState.dependencies.install(row.id);
-      if (result.success) {
+    const handleInstall = useCallback(
+      async (row: RuntimeRow) => {
+        if (!isValidRuntimeId(row.id) || appState.dependencies.isInstalling(row.id)) return;
+
+        const result = await appState.dependencies.install(row.id);
+        if (result.success) {
+          toast({
+            title: t('settings.agentsTab.agentInstalled'),
+            description: t('settings.agentsTab.agentInstalledDescription', { name: row.name }),
+          });
+          return;
+        }
         toast({
-          title: t('settings.agentsTab.agentInstalled'),
-          description: t('settings.agentsTab.agentInstalledDescription', { name: row.name }),
+          title: t('settings.agentsTab.installFailed'),
+          description: getAgentInstallErrorMessage(result.error),
+          variant: 'destructive',
         });
-        return;
-      }
-      toast({
-        title: t('settings.agentsTab.installFailed'),
-        description: getAgentInstallErrorMessage(result.error),
-        variant: 'destructive',
-      });
-    },
-    [toast, t]
-  );
+      },
+      [toast, t]
+    );
 
-  return (
-    <AccordionPrimitive.Root
-      type="single"
-      collapsible
-      defaultValue={defaultOpen}
-      className="overflow-hidden rounded-xl border border-border/60 bg-muted/10"
-    >
-      {rows.map((row) => (
-        <RuntimeAccordionItem key={row.id} row={row} onInstall={handleInstall} />
-      ))}
-    </AccordionPrimitive.Root>
-  );
-});
+    const handleUpdate = useCallback(async (row: RuntimeRow) => {
+      await workspaceShellStore.runRuntimeAction(row.id, 'update').catch(() => {});
+    }, []);
+
+    return (
+      <AccordionPrimitive.Root
+        type="single"
+        collapsible
+        value={openRuntimeId ?? ''}
+        onValueChange={(value) => setOpenRuntimeId(isValidRuntimeId(value) ? value : null)}
+        className="overflow-hidden rounded-xl border border-border/60 bg-muted/10"
+      >
+        {rows.map((row) => (
+          <RuntimeAccordionItem
+            key={row.id}
+            row={row}
+            onInstall={handleInstall}
+            onUpdate={handleUpdate}
+          />
+        ))}
+      </AccordionPrimitive.Root>
+    );
+  }
+);
 
 const RuntimeAccordionItem: React.FC<{
   row: RuntimeRow;
   onInstall: (row: RuntimeRow) => void;
-}> = observer(function RuntimeAccordionItem({ row, onInstall }) {
+  onUpdate: (row: RuntimeRow) => void;
+}> = observer(function RuntimeAccordionItem({ row, onInstall, onUpdate }) {
   const { t } = useTranslation();
   const installing = appState.dependencies.isInstalling(row.id);
   const statusLabel = row.detected
@@ -130,6 +154,16 @@ const RuntimeAccordionItem: React.FC<{
             tooltipSide="top"
             onInstall={() => onInstall(row)}
           />
+        ) : row.detected && row.canUpdate ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            title={t('agents.runtimeInfo.update')}
+            onClick={() => void onUpdate(row)}
+          >
+            <RefreshCw className="size-3.5" />
+          </Button>
         ) : null}
       </AccordionPrimitive.Header>
       <AccordionPrimitive.Content

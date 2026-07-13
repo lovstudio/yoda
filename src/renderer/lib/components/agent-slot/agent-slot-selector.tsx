@@ -163,12 +163,12 @@ export function AgentSlotSelector({
                           />
                         ) : null}
                         <span className="truncate">{runtimeName}</span>
-                        {agent.enabledSkillIds.length > 0 && (
+                        {agent.enabledSkillIds.length + agent.manualSkillIds.length > 0 && (
                           <>
                             <span className="text-foreground-passive">·</span>
                             <span className="shrink-0">
                               {t('agentManager.skillsCount', {
-                                count: agent.enabledSkillIds.length,
+                                count: agent.enabledSkillIds.length + agent.manualSkillIds.length,
                               })}
                             </span>
                           </>

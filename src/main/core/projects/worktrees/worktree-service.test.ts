@@ -41,6 +41,22 @@ function makeSettings(preservePatterns: string[] = []): ProjectSettingsProvider 
 
 const originRemote = (url = 'ssh://example.com/repo.git'): Remote => ({ name: 'origin', url });
 
+function overrideRemoveAbsolute(
+  base: WorktreeHost,
+  removeAbsolute: WorktreeHost['removeAbsolute']
+): WorktreeHost {
+  return {
+    existsAbsolute: base.existsAbsolute.bind(base),
+    mkdirAbsolute: base.mkdirAbsolute.bind(base),
+    removeAbsolute,
+    realPathAbsolute: base.realPathAbsolute.bind(base),
+    globAbsolute: base.globAbsolute.bind(base),
+    readFileAbsolute: base.readFileAbsolute.bind(base),
+    copyFileAbsolute: base.copyFileAbsolute.bind(base),
+    statAbsolute: base.statAbsolute.bind(base),
+  };
+}
+
 describe('WorktreeService', () => {
   let repoDir: string;
   let poolDir: string;
@@ -55,9 +71,25 @@ describe('WorktreeService', () => {
     });
   });
 
+  // Windows briefly locks git worktree/index files on teardown; retry rmSync so
+  // afterEach cleanup does not fail with EPERM. The first attempt succeeds on POSIX.
+  function rmSyncRetry(target: string): void {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        fs.rmSync(target, { recursive: true, force: true });
+        return;
+      } catch {
+        const end = Date.now() + 25 * (attempt + 1);
+        while (Date.now() < end) {
+          /* backoff before retrying */
+        }
+      }
+    }
+  }
+
   afterEach(() => {
-    fs.rmSync(repoDir, { recursive: true, force: true });
-    fs.rmSync(poolDir, { recursive: true, force: true });
+    rmSyncRetry(repoDir);
+    rmSyncRetry(poolDir);
   });
 
   function makeService(
@@ -119,6 +151,29 @@ describe('WorktreeService', () => {
       expect(await svc.getWorktree('task-b/same-leaf')).toBe(fs.realpathSync(second.data));
     });
 
+    it('uses the flattened branch path when a stale leaf directory cannot be removed', async () => {
+      await git(['branch', 'task/stale-leaf'], { cwd: repoDir });
+      const stalePath = path.join(poolDir, 'stale-leaf');
+      fs.mkdirSync(path.join(stalePath, 'node_modules', 'electron'), { recursive: true });
+      const realHost = host;
+      host = overrideRemoveAbsolute(realHost, async () => ({
+        success: false,
+        error: 'busy',
+      }));
+      const svc = makeService();
+
+      const result = await svc.checkoutBranchWorktree(
+        { type: 'local', branch: 'main' },
+        'task/stale-leaf'
+      );
+
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error('expected success');
+      expect(result.data).toBe(path.join(poolDir, 'task-stale-leaf'));
+      expect(fs.existsSync(path.join(result.data, '.git'))).toBe(true);
+      expect(fs.existsSync(stalePath)).toBe(true);
+    });
+
     it('creates a worktree from a remote source branch when branch is not local', async () => {
       const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-remote-'));
       try {
@@ -163,7 +218,9 @@ describe('WorktreeService', () => {
 
       expect(result.success).toBe(true);
       if (!result.success) throw new Error('expected success');
-      expect(result.data).toBe(fs.realpathSync(externalPath));
+      // Yoda may return forward-slash worktree paths even on Windows; normalize
+      // both sides before comparing so the assert is separator-agnostic.
+      expect(path.normalize(result.data)).toBe(path.normalize(fs.realpathSync(externalPath)));
 
       fs.rmSync(externalDir, { recursive: true, force: true });
     });
@@ -211,7 +268,9 @@ describe('WorktreeService', () => {
 
       expect(result.success).toBe(true);
       if (!result.success) throw new Error('expected success');
-      expect(result.data).toBe(fs.realpathSync(externalPath));
+      // Yoda may return forward-slash worktree paths even on Windows; normalize
+      // both sides before comparing so the assert is separator-agnostic.
+      expect(path.normalize(result.data)).toBe(path.normalize(fs.realpathSync(externalPath)));
 
       fs.rmSync(externalDir, { recursive: true, force: true });
     });
@@ -287,6 +346,66 @@ describe('WorktreeService', () => {
         expect(localHead.stdout.trim()).toBe(remoteHead.stdout.trim());
         const worktreeHead = await git(['rev-parse', 'HEAD'], { cwd: result.data });
         expect(worktreeHead.stdout.trim()).toBe(remoteHead.stdout.trim());
+      } finally {
+        fs.rmSync(remoteDir, { recursive: true, force: true });
+      }
+    });
+
+    it('fast-forwards a checked out branch when only untracked files are present', async () => {
+      const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-ff-untracked-'));
+      try {
+        await git(['init', '--bare'], { cwd: remoteDir });
+        await git(['remote', 'add', 'origin', remoteDir], { cwd: repoDir });
+        await git(['push', '-u', 'origin', 'main'], { cwd: repoDir });
+        await git(['commit', '--allow-empty', '-m', 'remote update'], { cwd: repoDir });
+        await git(['push', 'origin', 'main'], { cwd: repoDir });
+        const remoteHead = await git(['rev-parse', 'HEAD'], { cwd: repoDir });
+        await git(['reset', '--hard', 'HEAD~1'], { cwd: repoDir });
+        fs.mkdirSync(path.join(repoDir, '.worktrees'), { recursive: true });
+        fs.writeFileSync(path.join(repoDir, '.worktrees', 'local-task'), 'local metadata');
+
+        const svc = makeService();
+        const result = await svc.checkoutExistingBranch('main', {
+          type: 'remote',
+          branch: 'main',
+          remote: originRemote(remoteDir),
+        });
+
+        expect(result.success).toBe(true);
+        if (!result.success) throw new Error('expected success');
+        expect(result.data).toBe(fs.realpathSync(repoDir));
+        const localHead = await git(['rev-parse', 'main'], { cwd: repoDir });
+        expect(localHead.stdout.trim()).toBe(remoteHead.stdout.trim());
+        expect(fs.existsSync(path.join(repoDir, '.worktrees', 'local-task'))).toBe(true);
+      } finally {
+        fs.rmSync(remoteDir, { recursive: true, force: true });
+      }
+    });
+
+    it('does not fast-forward a checked out branch with tracked changes', async () => {
+      const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-ff-tracked-'));
+      try {
+        await git(['init', '--bare'], { cwd: remoteDir });
+        await git(['remote', 'add', 'origin', remoteDir], { cwd: repoDir });
+        fs.writeFileSync(path.join(repoDir, 'tracked.txt'), 'base');
+        await git(['add', 'tracked.txt'], { cwd: repoDir });
+        await git(['commit', '-m', 'add tracked file'], { cwd: repoDir });
+        await git(['push', '-u', 'origin', 'main'], { cwd: repoDir });
+        await git(['commit', '--allow-empty', '-m', 'remote update'], { cwd: repoDir });
+        await git(['push', 'origin', 'main'], { cwd: repoDir });
+        await git(['reset', '--hard', 'HEAD~1'], { cwd: repoDir });
+        fs.writeFileSync(path.join(repoDir, 'tracked.txt'), 'local edit');
+
+        const svc = makeService();
+        const result = await svc.checkoutExistingBranch('main', {
+          type: 'remote',
+          branch: 'main',
+          remote: originRemote(remoteDir),
+        });
+
+        expect(result.success).toBe(false);
+        if (result.success) throw new Error('expected failure');
+        expect(result.error.type).toBe('worktree-setup-failed');
       } finally {
         fs.rmSync(remoteDir, { recursive: true, force: true });
       }

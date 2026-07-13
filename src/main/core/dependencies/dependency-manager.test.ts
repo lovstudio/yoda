@@ -31,11 +31,15 @@ const missingCtx = makeCtx(async () => {
   throw new Error('missing');
 });
 
+// The dependency probe uses `where` on Windows and `which` on POSIX, and the
+// resolved executable path is platform-specific. Mock both so the install/probe
+// flow works on every platform.
+const resolvedCodex = process.platform === 'win32' ? 'C:\\bin\\codex.exe' : '/bin/codex';
 const availableCtx = makeCtx(async (command, args = []) => {
-  if (command === 'which' && args[0] === 'codex') {
-    return { stdout: '/bin/codex\n', stderr: '' };
+  if ((command === 'which' || command === 'where') && args[0] === 'codex') {
+    return { stdout: `${resolvedCodex}\n`, stderr: '' };
   }
-  if (command === '/bin/codex' && args[0] === '--version') {
+  if (command === resolvedCodex && args[0] === '--version') {
     return { stdout: 'codex-cli 1.2.3\n', stderr: '' };
   }
   throw new Error('missing');
@@ -134,6 +138,36 @@ describe('DependencyManager install', () => {
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.status).toBe('available');
+  });
+
+  it('uses the runtime-native update command before re-probing', async () => {
+    const runInstallCommand = vi.fn(async () => ok<void>());
+    const manager = new DependencyManager(availableCtx, {
+      emitEvents: false,
+      runInstallCommand,
+    });
+
+    const result = await manager.update('codex');
+
+    expect(runInstallCommand).toHaveBeenCalledWith('codex update');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.version).toBe('1.2.3');
+  });
+
+  it('does not treat an install command as an in-place update command', async () => {
+    const runInstallCommand = vi.fn(async () => ok<void>());
+    const manager = new DependencyManager(availableCtx, {
+      emitEvents: false,
+      runInstallCommand,
+    });
+
+    const result = await manager.update('claude');
+
+    expect(runInstallCommand).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      success: false,
+      error: { type: 'no-install-command', id: 'claude' },
+    });
   });
 
   it('emits dependency updates with the SSH connection id', async () => {

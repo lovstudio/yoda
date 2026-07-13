@@ -1,14 +1,20 @@
+import { randomUUID } from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { eq, sql } from 'drizzle-orm';
+import type { LocalProject, SshProject } from '@shared/projects';
 import { err, ok, type Result } from '@shared/result';
 import type { MoveTaskToProjectError, Task } from '@shared/tasks';
+import { getProjectById } from '@main/core/projects/operations/getProjects';
 import { projectManager } from '@main/core/projects/project-manager';
+import type { ProjectProvider } from '@main/core/projects/project-provider';
 import { taskEvents } from '@main/core/tasks/task-events';
 import { taskManager } from '@main/core/tasks/task-manager';
 import { mapTaskRowToTask } from '@main/core/tasks/utils/utils';
 import { db } from '@main/db/client';
 import {
   conversations,
-  projects,
   reviewOrchestrations,
   taskNamingSnapshots,
   tasks,
@@ -39,10 +45,9 @@ function gitErrorDetail(e: unknown): string {
  *   destination.
  * - Worktree task: a full migration. The task's branch (with all commits, plus
  *   any uncommitted work committed first) is transferred into the destination
- *   repo via `git push <sourceRepo> <targetRepoPath>`, the source worktree/branch
- *   are torn down, and the task re-points its base at the destination's default
- *   branch so it re-provisions a fresh worktree on the migrated branch there.
- *   Limited to local↔local projects for now.
+ *   repo via a temporary git bundle, the source worktree/branch are torn down,
+ *   and the task re-points its base at the destination's default branch so it
+ *   re-provisions a fresh worktree on the migrated branch there.
  *
  * Subtrees are never split — tasks with subtasks are rejected. The task's prior
  * on-disk agent transcript (keyed by working directory) does not follow; the
@@ -56,11 +61,7 @@ export async function moveTaskToProject(
   if (!task) return err({ type: 'task-not-found' });
   if (task.projectId === targetProjectId) return err({ type: 'same-project' });
 
-  const [targetProject] = await db
-    .select({ path: projects.path, workspaceProvider: projects.workspaceProvider })
-    .from(projects)
-    .where(eq(projects.id, targetProjectId))
-    .limit(1);
+  const targetProject = await getProjectById(targetProjectId);
   if (!targetProject) return err({ type: 'project-not-found' });
 
   // A subtree would straddle two projects — that's the heavier "split" not
@@ -76,10 +77,12 @@ export async function moveTaskToProject(
   // the rows move; no-worktree tasks just re-home.
   let sourceBranchReset: string | undefined;
   if (task.taskBranch) {
-    const migrate = await migrateWorktreeBranch(taskId, task.taskBranch, task.projectId, {
-      path: targetProject.path,
-      workspaceProvider: targetProject.workspaceProvider,
-    });
+    const migrate = await migrateWorktreeBranch(
+      taskId,
+      task.taskBranch,
+      task.projectId,
+      targetProject
+    );
     if (!migrate.success) {
       log.warn('moveTaskToProject: worktree migration failed', {
         taskId,
@@ -169,21 +172,21 @@ async function migrateWorktreeBranch(
   taskId: string,
   taskBranch: string,
   sourceProjectId: string,
-  targetProject: { path: string; workspaceProvider: string }
+  targetProject: LocalProject | SshProject
 ): Promise<Result<{ targetBaseBranch: string | undefined }, MoveTaskToProjectError>> {
   const source = projectManager.getProject(sourceProjectId);
   if (!source) return err({ type: 'source-project-not-open' });
-  // Cross-repo git surgery is local-only for now; SSH transports differ enough
-  // to defer.
-  if (!source.ctx.supportsLocalSpawn || targetProject.workspaceProvider !== 'local') {
-    return err({ type: 'unsupported-transport' });
-  }
 
-  const git = (args: string[]) => source.ctx.exec('git', args);
+  const targetResult = await getOpenTargetProject(targetProject);
+  if (!targetResult.success) return targetResult;
+  const target = targetResult.data;
+
+  const sourceGit = (args: string[]) => source.ctx.exec('git', args);
+  const targetGit = (args: string[]) => target.ctx.exec('git', args);
 
   // The destination must be a git repo to receive the branch — several
   // registered projects (incl. the internal Default) have no git.
-  const targetIsRepo = await git(['-C', targetProject.path, 'rev-parse', '--git-dir'])
+  const targetIsRepo = await targetGit(['-C', target.repoPath, 'rev-parse', '--git-dir'])
     .then(() => true)
     .catch(() => false);
   if (!targetIsRepo) return err({ type: 'target-not-git' });
@@ -192,13 +195,13 @@ async function migrateWorktreeBranch(
     // 1) Commit any uncommitted work in the worktree so the push carries it.
     const worktreePath = await source.getWorktreeForBranch(taskBranch);
     if (worktreePath) {
-      const { stdout } = await git(['-C', worktreePath, 'status', '--porcelain']);
+      const { stdout } = await sourceGit(['-C', worktreePath, 'status', '--porcelain']);
       if (stdout.trim()) {
-        await git(['-C', worktreePath, 'add', '-A']);
-        await git([
+        await sourceGit(['-C', worktreePath, 'add', '-A']);
+        await sourceGit([
           '-C',
           worktreePath,
-          ...(await commitIdentityArgs(git, worktreePath)),
+          ...(await commitIdentityArgs(sourceGit, worktreePath)),
           'commit',
           // Skip the repo's pre-commit hooks: this is an internal WIP snapshot
           // for migration, not a user commit — lint/format hooks must not be
@@ -211,7 +214,7 @@ async function migrateWorktreeBranch(
     }
 
     // 2) Only push if the branch actually exists in the source repo.
-    const branchExists = await git([
+    const branchExists = await sourceGit([
       '-C',
       source.repoPath,
       'rev-parse',
@@ -221,25 +224,17 @@ async function migrateWorktreeBranch(
       .then(() => true)
       .catch(() => false);
     if (branchExists) {
-      // Force so a re-run after a partial move still converges. taskBranch is
-      // hash-unique, so this won't clobber an unrelated branch in the target.
-      await git([
-        '-C',
-        source.repoPath,
-        'push',
-        targetProject.path,
-        `+refs/heads/${taskBranch}:refs/heads/${taskBranch}`,
-      ]);
+      await transferBranchBundle(source, target, taskBranch);
     }
 
     // 3) Resolve the destination's default branch (best-effort) so the task can
     //    repoint its base there.
-    const targetBaseBranch = await resolveDefaultBranch(git, targetProject.path);
+    const targetBaseBranch = await resolveDefaultBranch(targetGit, target.repoPath);
 
     // 4) Tear down the source session/worktree, then drop the source branch.
     await teardownSourceTask(taskId);
     if (branchExists) {
-      await git(['-C', source.repoPath, 'branch', '-D', taskBranch]).catch((e: unknown) => {
+      await sourceGit(['-C', source.repoPath, 'branch', '-D', taskBranch]).catch((e: unknown) => {
         log.warn('moveTaskToProject: failed to delete source branch', {
           taskBranch,
           error: String(e),
@@ -251,6 +246,88 @@ async function migrateWorktreeBranch(
   } catch (e) {
     return err({ type: 'git-error', detail: gitErrorDetail(e) });
   }
+}
+
+async function getOpenTargetProject(
+  project: LocalProject | SshProject
+): Promise<Result<ProjectProvider, MoveTaskToProjectError>> {
+  const existing = projectManager.getProject(project.id);
+  if (existing) return ok(existing);
+
+  const opened = await projectManager.openProject(project);
+  if (opened.success) return ok(opened.data);
+
+  return err({
+    type: 'git-error',
+    detail: `Target project could not be opened: ${opened.error.message}`,
+  });
+}
+
+async function transferBranchBundle(
+  source: ProjectProvider,
+  target: ProjectProvider,
+  taskBranch: string
+): Promise<void> {
+  const transferId = randomUUID();
+  const sourceTempDir = `.yoda/tmp/move-${transferId}-source`;
+  const targetTempDir = `.yoda/tmp/move-${transferId}-target`;
+  const sourceBundlePath = `${sourceTempDir}/branch.bundle`;
+  const targetBundlePath = `${targetTempDir}/branch.bundle`;
+  const localTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'yoda-move-'));
+  const localBundlePath = path.join(localTempDir, 'branch.bundle');
+
+  try {
+    await source.fs.mkdir(sourceTempDir, { recursive: true });
+    await source.ctx.exec('git', [
+      '-C',
+      source.repoPath,
+      'bundle',
+      'create',
+      sourceBundlePath,
+      `refs/heads/${taskBranch}`,
+    ]);
+    await copyProviderFileToLocal(source, sourceBundlePath, localBundlePath);
+
+    await target.fs.mkdir(targetTempDir, { recursive: true });
+    await copyLocalFileToProvider(target, localBundlePath, targetBundlePath);
+    await target.ctx.exec('git', [
+      '-C',
+      target.repoPath,
+      'fetch',
+      targetBundlePath,
+      `+refs/heads/${taskBranch}:refs/heads/${taskBranch}`,
+    ]);
+  } finally {
+    await Promise.allSettled([
+      source.fs.remove(sourceTempDir, { recursive: true }),
+      target.fs.remove(targetTempDir, { recursive: true }),
+      fs.rm(localTempDir, { recursive: true, force: true }),
+    ]);
+  }
+}
+
+async function copyProviderFileToLocal(
+  provider: ProjectProvider,
+  srcRelPath: string,
+  localAbsPath: string
+): Promise<void> {
+  if (!provider.fs.copyToLocalFile) {
+    throw new Error(
+      `Project transport "${provider.type}" cannot copy files to local temp storage.`
+    );
+  }
+  await provider.fs.copyToLocalFile(srcRelPath, localAbsPath);
+}
+
+async function copyLocalFileToProvider(
+  provider: ProjectProvider,
+  localAbsPath: string,
+  destRelPath: string
+): Promise<void> {
+  if (!provider.fs.copyLocalFile) {
+    throw new Error(`Project transport "${provider.type}" cannot copy local temp files.`);
+  }
+  await provider.fs.copyLocalFile(localAbsPath, destRelPath);
 }
 
 /** `git -c user.name=… -c user.email=…` only when the worktree has no identity. */

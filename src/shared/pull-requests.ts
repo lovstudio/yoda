@@ -172,3 +172,34 @@ export function getPrNumber(pr: { identifier: string | null }): number | null {
   const n = parseInt(pr.identifier.replace('#', ''), 10);
   return isNaN(n) ? null : n;
 }
+
+export function formatPullRequestAsPrompt(pr: PullRequest, initialPrompt?: string): string {
+  const title = pr.identifier ? `[${pr.identifier}] ${pr.title}` : pr.title;
+  const diffSummary =
+    pr.additions !== null || pr.deletions !== null
+      ? `Diff: +${pr.additions ?? 0}/-${pr.deletions ?? 0}`
+      : null;
+  const parts = [
+    title,
+    pr.url,
+    `Branch: ${pr.headRefName} -> ${pr.baseRefName}`,
+    pr.changedFiles !== null ? `Changed files: ${pr.changedFiles}` : null,
+    diffSummary,
+    pr.description,
+  ].filter(Boolean);
+
+  if (initialPrompt?.trim()) parts.push('', initialPrompt.trim());
+  return parts.join('\n');
+}
+
+export function formatPullRequestReviewPrompt(pr: PullRequest): string {
+  return formatPullRequestAsPrompt(
+    pr,
+    [
+      'Review the linked pull request.',
+      'Use the PR title, URL, description, branch information, and available diff as context. Inspect the changes for correctness, regressions, missing tests, and user-facing risks.',
+      'Do not merge the pull request unless explicitly asked.',
+      'When finished, summarize findings first, then list which checks were run.',
+    ].join('\n')
+  );
+}

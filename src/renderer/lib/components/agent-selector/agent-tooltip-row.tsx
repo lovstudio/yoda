@@ -1,4 +1,5 @@
 import React from 'react';
+import type { DependencyState } from '@shared/dependencies';
 import { type UiAgent } from '@renderer/lib/providers/meta';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { AgentInfoCard } from './agent-info-card';
@@ -8,6 +9,9 @@ interface AgentTooltipRowProps {
   children: React.ReactElement;
   side?: 'top' | 'bottom' | 'left' | 'right';
   align?: 'start' | 'center' | 'end';
+  dependency?: DependencyState;
+  model?: string | null;
+  connectionId?: string;
 }
 
 export const AgentTooltipRow: React.FC<AgentTooltipRowProps> = ({
@@ -15,6 +19,9 @@ export const AgentTooltipRow: React.FC<AgentTooltipRowProps> = ({
   children,
   side = 'right',
   align = 'start',
+  dependency,
+  model,
+  connectionId,
 }) => {
   return (
     <Popover>
@@ -25,7 +32,12 @@ export const AgentTooltipRow: React.FC<AgentTooltipRowProps> = ({
         sideOffset={8}
         className="w-auto border border-border bg-background p-0 text-foreground shadow-lg"
       >
-        <AgentInfoCard id={id} />
+        <AgentInfoCard
+          id={id}
+          dependency={dependency}
+          selectedModel={model}
+          connectionId={connectionId}
+        />
       </PopoverContent>
     </Popover>
   );

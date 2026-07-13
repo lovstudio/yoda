@@ -16,6 +16,7 @@ import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
 import { resolveAgentResumeSessionId } from './codex-session-id';
 import { ensureCodexThreadUnarchived } from './codex-unarchive';
+import { conversationEvents } from './conversation-events';
 import { mapConversationRowToConversation } from './utils';
 
 export async function unarchiveConversation(
@@ -68,6 +69,7 @@ export async function unarchiveConversation(
     });
   });
 
+  conversationEvents._emit('conversation:unarchived', conversationId, projectId, taskId);
   events.emit(conversationUnarchivedChannel, { conversationId, projectId, taskId });
   telemetryService.capture('conversation_unarchived', {
     project_id: projectId,

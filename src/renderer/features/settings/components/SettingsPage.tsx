@@ -1,6 +1,7 @@
 import { Check, Menu } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import type { RuntimeId } from '@shared/runtime-registry';
 import { AgentManagerView } from '@renderer/features/agents-config/agent-manager-view';
 import { RuntimeAccordion } from '@renderer/features/agents/components/RuntimeAccordion';
 import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
@@ -200,9 +201,11 @@ export function SettingsTabsDropdown({
 
 export function SettingsPage({
   tab: activeTab,
+  focusRuntimeId,
   onTabChange,
 }: {
   tab: SettingsPageTab;
+  focusRuntimeId?: RuntimeId;
   onTabChange: (tab: SettingsPageTab) => void;
 }) {
   const { t } = useTranslation();
@@ -312,7 +315,7 @@ export function SettingsPage({
           title: t('settings.agentsTab.cliAgents'),
           action: <CliAgentsRescanButton />,
           surface: 'plain',
-          component: <RuntimeAccordion />,
+          component: <RuntimeAccordion focusRuntimeId={focusRuntimeId} />,
         },
       ],
     },

@@ -22,3 +22,11 @@
 - macOS and Linux release jobs rebuild native modules for the target Electron version
 - Windows beta builds intentionally use Node 20 in CI for native module stability
 - changelog and auto-update behavior are separate but related surfaces in the app
+- macOS uses the pinned `YodaSparkleUpdater` helper and architecture-specific Sparkle appcasts;
+  the in-app path is delta-only and must never fall back to a complete ZIP
+- the closed local Sparkle proxy URL must retain the `.delta` extension because Sparkle chooses
+  `SUBinaryDeltaUnarchiver` from the downloaded URL path, not only from appcast metadata
+- Sparkle release signing uses `src/shared/sparkle-signing.ts` for the public key and the
+  `SPARKLE_ED_PRIVATE_KEY` Actions secret; rotate them only as one coordinated change
+- run `pnpm run test:sparkle-delta` after changing the macOS helper, appcast generation, signing,
+  staging, or install handoff

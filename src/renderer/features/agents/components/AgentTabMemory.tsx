@@ -2,10 +2,10 @@ import { FolderOpen } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { expandRuntimeHome, resolveRuntimePaths } from '@shared/runtime-paths';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
-import { expandHome, resolveAgentPaths } from './agent-paths';
 import { AgentSection } from './AgentSection';
 
 export const AgentTabMemory: React.FC<{ agentId: RuntimeId }> = observer(function AgentTabMemory({
@@ -13,7 +13,7 @@ export const AgentTabMemory: React.FC<{ agentId: RuntimeId }> = observer(functio
 }) {
   const { t } = useTranslation();
   const provider = getRuntime(agentId);
-  const paths = resolveAgentPaths(agentId);
+  const paths = resolveRuntimePaths(agentId);
 
   if (!provider) return null;
 
@@ -37,7 +37,7 @@ const PathRow: React.FC<{ path: string }> = ({ path }) => {
   const { t } = useTranslation();
   const handleOpen = async () => {
     const home = await rpc.app.getHomeDir();
-    await rpc.app.openIn({ app: 'finder', path: expandHome(path, home) });
+    await rpc.app.openIn({ app: 'finder', path: expandRuntimeHome(path, home) });
   };
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">

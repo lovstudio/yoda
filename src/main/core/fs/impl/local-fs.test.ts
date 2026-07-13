@@ -1,9 +1,25 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FileWatchEvent } from '@shared/fs';
 import { FileSystemError } from '../types';
 import { LocalFileSystem } from './local-fs';
+
+const parcelWatcherMock = vi.hoisted(() => ({
+  subscribe: vi.fn(),
+}));
+
+vi.mock('@parcel/watcher', () => ({
+  default: parcelWatcherMock,
+}));
+
+type MockWatcherEvent = {
+  type: 'create' | 'update' | 'delete';
+  path: string;
+};
+
+type MockWatcherCallback = (err: Error | null, events: MockWatcherEvent[]) => void;
 
 describe('LocalFileSystem', () => {
   let tempDir: string;
@@ -15,6 +31,7 @@ describe('LocalFileSystem', () => {
   });
 
   afterEach(() => {
+    parcelWatcherMock.subscribe.mockReset();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -53,7 +70,7 @@ describe('LocalFileSystem', () => {
       const result = await fsService.list('subdir');
 
       expect(result.entries).toHaveLength(1);
-      expect(result.entries[0].path).toBe('subdir/nested.txt');
+      expect(result.entries[0].path).toBe(path.join('subdir', 'nested.txt'));
     });
 
     it('should list recursively', async () => {
@@ -65,9 +82,11 @@ describe('LocalFileSystem', () => {
       const result = await fsService.list('', { recursive: true });
 
       expect(result.entries.some((e) => e.path === 'level1')).toBe(true);
-      expect(result.entries.some((e) => e.path === 'level1/file1.txt')).toBe(true);
-      expect(result.entries.some((e) => e.path === 'level1/level2')).toBe(true);
-      expect(result.entries.some((e) => e.path === 'level1/level2/file2.txt')).toBe(true);
+      expect(result.entries.some((e) => e.path === path.join('level1', 'file1.txt'))).toBe(true);
+      expect(result.entries.some((e) => e.path === path.join('level1', 'level2'))).toBe(true);
+      expect(
+        result.entries.some((e) => e.path === path.join('level1', 'level2', 'file2.txt'))
+      ).toBe(true);
     });
 
     it('should exclude hidden files by default', async () => {
@@ -289,7 +308,7 @@ describe('LocalFileSystem', () => {
       expect(result.total).toBeGreaterThan(0);
       expect(result.matches.some((m) => m.filePath === 'file1.ts')).toBe(true);
       expect(result.matches.some((m) => m.filePath === 'file2.ts')).toBe(true);
-      expect(result.matches.some((m) => m.filePath === 'src/main.ts')).toBe(true);
+      expect(result.matches.some((m) => m.filePath === path.join('src', 'main.ts'))).toBe(true);
     });
 
     it('should return match details', async () => {
@@ -407,6 +426,37 @@ describe('LocalFileSystem', () => {
     });
   });
 
+  describe('local file copies', () => {
+    it('copies a local absolute file into the project root', async () => {
+      const sourcePath = path.join(tempDir, '..', `source-${Date.now()}.bin`);
+      fs.writeFileSync(sourcePath, Buffer.from([0, 1, 2, 3]));
+
+      try {
+        await fsService.copyLocalFile(sourcePath, 'nested/copied.bin');
+
+        expect(fs.readFileSync(path.join(tempDir, 'nested/copied.bin'))).toEqual(
+          Buffer.from([0, 1, 2, 3])
+        );
+      } finally {
+        fs.rmSync(sourcePath, { force: true });
+      }
+    });
+
+    it('copies a project file out to a local absolute path', async () => {
+      fs.mkdirSync(path.join(tempDir, 'artifacts'));
+      fs.writeFileSync(path.join(tempDir, 'artifacts/bundle.bin'), Buffer.from([4, 5, 6, 7]));
+      const destPath = path.join(tempDir, '..', `dest-${Date.now()}`, 'bundle.bin');
+
+      try {
+        await fsService.copyToLocalFile('artifacts/bundle.bin', destPath);
+
+        expect(fs.readFileSync(destPath)).toEqual(Buffer.from([4, 5, 6, 7]));
+      } finally {
+        fs.rmSync(path.dirname(destPath), { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('readImage', () => {
     it('should read image as data URL', async () => {
       // Create a minimal valid PNG file (1x1 transparent pixel)
@@ -518,6 +568,54 @@ describe('LocalFileSystem', () => {
 
       expect(result.truncated).toBe(true);
       expect(result.content.length).toBe(50);
+    });
+  });
+
+  describe('watch', () => {
+    it('filters ignored directories in JS without passing native ignore options', async () => {
+      let onNativeEvents: MockWatcherCallback | undefined;
+      const unsubscribe = vi.fn();
+
+      parcelWatcherMock.subscribe.mockImplementation(
+        (_root: string, callback: MockWatcherCallback) => {
+          onNativeEvents = callback;
+          return Promise.resolve({ unsubscribe });
+        }
+      );
+
+      const received: FileWatchEvent[] = [];
+      const watcher = fsService.watch((events) => received.push(...events), { debounceMs: 1 });
+
+      await vi.waitFor(() => {
+        expect(parcelWatcherMock.subscribe).toHaveBeenCalledTimes(1);
+      });
+
+      const subscribeCall = parcelWatcherMock.subscribe.mock.calls[0];
+      expect(subscribeCall).toHaveLength(2);
+      expect(subscribeCall[0]).toBe(tempDir);
+
+      const visibleDir = path.join(tempDir, 'src');
+      fs.mkdirSync(visibleDir);
+      const visibleFile = path.join(visibleDir, 'visible.ts');
+      fs.writeFileSync(visibleFile, 'const visible = true;');
+
+      const ignoredDir = path.join(tempDir, 'node_modules', 'pkg');
+      fs.mkdirSync(ignoredDir, { recursive: true });
+      const ignoredFile = path.join(ignoredDir, 'index.ts');
+      fs.writeFileSync(ignoredFile, 'const ignored = true;');
+
+      onNativeEvents?.(null, [
+        { type: 'create', path: ignoredFile },
+        { type: 'create', path: visibleFile },
+      ]);
+
+      await vi.waitFor(() => {
+        expect(received).toHaveLength(1);
+      });
+
+      expect(received).toEqual([{ type: 'create', entryType: 'file', path: 'src/visible.ts' }]);
+
+      watcher.close();
     });
   });
 });

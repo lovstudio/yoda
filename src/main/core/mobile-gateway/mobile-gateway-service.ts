@@ -21,6 +21,7 @@ import {
   MOBILE_GATEWAY_DEFAULT_PORT,
   MOBILE_SESSION_CONTENT_MAX_CHARS,
   MOBILE_SESSION_INPUT_MAX_CHARS,
+  MOBILE_SESSION_TRANSCRIPT_MAX_CHARS,
   type MobileApiError,
   type MobileCreateDemandRequest,
   type MobileCreateDemandResponse,
@@ -38,6 +39,10 @@ import {
   type MobileTaskSummary,
 } from '@shared/mobile-api';
 import {
+  MOBILE_SESSION_EVENT_VERSION,
+  type MobileSessionInvalidationReason,
+} from '@shared/mobile-session-events';
+import {
   INTERNAL_PROJECT_ID,
   projectDisplayName,
   type OpenProjectError,
@@ -47,14 +52,16 @@ import { makePtySessionId } from '@shared/ptySessionId';
 import { RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import { ensureUniqueTaskSlug, taskNameFromPrompt } from '@shared/task-name';
 import type { CreateTaskError, CreateTaskWarning, Task } from '@shared/tasks';
+import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { loadClaudeTranscript } from '@main/core/conversations/claude-transcript';
 import {
-  loadCodexRolloutTerminalHistoryForConversation,
-  loadCodexRolloutTranscriptForConversation,
+  loadCodexRolloutTerminalHistoryTailForConversation,
+  loadCodexRolloutTranscriptTailForConversation,
 } from '@main/core/conversations/codex-rollout-terminal-history';
 import { getConversationRuntimeStatuses } from '@main/core/conversations/getConversationRuntimeStatuses';
 import { getConversationSessionInfo } from '@main/core/conversations/getConversationSessionInfo';
 import { getConversationsForTask } from '@main/core/conversations/getConversationsForTask';
+import { subscribeConversationTranscriptChanges } from '@main/core/conversations/transcript-feed';
 import { getProjectById, getProjects } from '@main/core/projects/operations/getProjects';
 import { openProject } from '@main/core/projects/operations/openProject';
 import { projectManager } from '@main/core/projects/project-manager';
@@ -66,6 +73,11 @@ import { getTasks } from '@main/core/tasks/operations/getTasks';
 import { taskManager } from '@main/core/tasks/task-manager';
 import { workspaceRegistry } from '@main/core/workspaces/workspace-registry';
 import { log } from '@main/lib/logger';
+import {
+  MOBILE_SESSION_RECONNECT_RETRY_MS,
+  MobileSessionEventStream,
+} from './mobile-session-event-stream';
+import { mobileGatewayNetworkUrls } from './network-addresses';
 
 const MAX_BODY_BYTES = 128 * 1024;
 const MOBILE_METRO_DEFAULT_PORT = 8081;
@@ -191,7 +203,8 @@ function parsePort(value: string | undefined): number {
 function writeJson(res: http.ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Yoda-Mobile-Token',
+    'Access-Control-Allow-Headers':
+      'Authorization, Content-Type, Last-Event-ID, X-Yoda-Mobile-Token',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Content-Type': 'application/json',
   });
@@ -290,6 +303,39 @@ function tailSessionContent(value: string): {
   };
 }
 
+function tailSessionTranscript(blocks: MobileSessionTranscriptBlock[]): {
+  transcript: MobileSessionTranscriptBlock[];
+  truncated: boolean;
+} {
+  let remaining = MOBILE_SESSION_TRANSCRIPT_MAX_CHARS;
+  const transcript: MobileSessionTranscriptBlock[] = [];
+
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if (!block) continue;
+    if (block.content.length <= remaining) {
+      transcript.unshift(block);
+      remaining -= block.content.length;
+      continue;
+    }
+
+    if (remaining > 0) {
+      const marker = '[Earlier activity truncated]\n';
+      const available = Math.max(0, remaining - marker.length);
+      transcript.unshift({
+        ...block,
+        content:
+          remaining <= marker.length
+            ? marker.slice(0, remaining)
+            : `${marker}${block.content.slice(-available)}`,
+      });
+    }
+    return { transcript, truncated: true };
+  }
+
+  return { transcript, truncated: false };
+}
+
 function compareConversations(a: Conversation, b: Conversation): number {
   if (a.isInitialConversation === true && b.isInitialConversation !== true) return -1;
   if (a.isInitialConversation !== true && b.isInitialConversation === true) return 1;
@@ -298,32 +344,8 @@ function compareConversations(a: Conversation, b: Conversation): number {
   return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
 }
 
-// 198.18.0.0/15 (RFC 2544 benchmark block) is used by proxy TUN interfaces
-// (ClashX/Surge fake-IP) and is unreachable from other devices on the LAN.
-function isUsableLanAddress(address: string): boolean {
-  return !/^198\.(?:18|19)\./.test(address);
-}
-
-// Physical interfaces (en0/eth0/wlan0) are reachable from phones on the same
-// network; VPN/tunnel interfaces (utun/wg/tun) usually are not. Rank instead of
-// filter — a tunnel address can still be right (e.g. both devices on Tailscale).
-function lanInterfaceRank(name: string): number {
-  if (/^(en|eth|wlan|wl)/i.test(name)) return 0;
-  if (/^(utun|tun|tap|wg|zt|ipsec|ppp)/i.test(name)) return 2;
-  return 1;
-}
-
 function lanUrls(port: number): string[] {
-  const candidates: { name: string; address: string }[] = [];
-  for (const [name, entries] of Object.entries(networkInterfaces())) {
-    for (const entry of entries ?? []) {
-      if (entry.family === 'IPv4' && !entry.internal && isUsableLanAddress(entry.address)) {
-        candidates.push({ name, address: entry.address });
-      }
-    }
-  }
-  candidates.sort((a, b) => lanInterfaceRank(a.name) - lanInterfaceRank(b.name));
-  return candidates.map((c) => `http://${c.address}:${port}`);
+  return mobileGatewayNetworkUrls(networkInterfaces(), port).map(({ url }) => url);
 }
 
 function mobileInstallUrl(): string {
@@ -561,6 +583,10 @@ function resolveTaskActivityStatus(
 
 export class MobileGatewayService {
   private server: http.Server | null = null;
+  private readonly sessionEventStreams = new Set<MobileSessionEventStream>();
+  private readonly sessionEventEpoch = randomUUID();
+  private sessionEventSequence = 0;
+  private lifecycleGeneration = 0;
   private metroProcess: ChildProcess | null = null;
   private metroHost: string | null = null;
   private metroEnsureInFlight: Promise<void> | null = null;
@@ -569,6 +595,7 @@ export class MobileGatewayService {
   private port = MOBILE_GATEWAY_DEFAULT_PORT;
 
   async initialize(): Promise<void> {
+    this.lifecycleGeneration += 1;
     if (!shouldStartGateway()) return;
 
     this.host = process.env.YODA_MOBILE_GATEWAY_HOST?.trim() || '0.0.0.0';
@@ -604,7 +631,7 @@ export class MobileGatewayService {
       host: this.host,
       port: this.port,
       urls: lanUrls(this.port),
-      token: process.env.YODA_MOBILE_GATEWAY_TOKEN ? '<env>' : this.token,
+      token: '<redacted>',
     });
 
     // Reap any Metro orphaned by a crashed previous run at startup, even though
@@ -613,7 +640,9 @@ export class MobileGatewayService {
   }
 
   dispose(): void {
+    this.lifecycleGeneration += 1;
     this.disposeMetroProcess();
+    for (const stream of [...this.sessionEventStreams]) stream.close();
     if (!this.server) return;
     this.server.close();
     this.server = null;
@@ -750,7 +779,8 @@ export class MobileGatewayService {
 
   getConnectionInfo(): MobileGatewayConnectionInfo {
     this.ensureLocalMetroLazy();
-    const urls = lanUrls(this.port);
+    const networkUrls = mobileGatewayNetworkUrls(networkInterfaces(), this.port);
+    const urls = networkUrls.map(({ url }) => url);
     const primaryUrl = urls[0] ?? `http://localhost:${this.port}`;
     return {
       enabled: shouldStartGateway(),
@@ -760,6 +790,7 @@ export class MobileGatewayService {
       port: this.port,
       token: this.token || null,
       urls,
+      connectionKind: networkUrls[0]?.kind ?? 'local',
       localExpoUrl: this.token ? localExpoUrl(primaryUrl, this.token) : null,
       installUrl: mobileInstallUrl(),
       pairingUrl:
@@ -767,6 +798,11 @@ export class MobileGatewayService {
           ? createMobilePairingUrl({ baseUrl: primaryUrl, token: this.token })
           : null,
     };
+  }
+
+  getRelayLoopbackConnection(): { baseUrl: string; token: string } | null {
+    if (!this.server || !this.token) return null;
+    return { baseUrl: `http://127.0.0.1:${this.port}`, token: this.token };
   }
 
   private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -810,6 +846,17 @@ export class MobileGatewayService {
 
     if (req.method === 'GET' && isTaskSessionsRoute && segments.length === 7 && segments[6]) {
       writeJson(res, 200, await this.getSessionDetail(segments[2]!, segments[4]!, segments[6]));
+      return;
+    }
+
+    if (
+      req.method === 'GET' &&
+      isTaskSessionsRoute &&
+      segments.length === 8 &&
+      segments[6] &&
+      segments[7] === 'events'
+    ) {
+      await this.openSessionEvents(req, res, segments[2]!, segments[4]!, segments[6]);
       return;
     }
 
@@ -980,6 +1027,7 @@ export class MobileGatewayService {
       this.readConversationTranscript(conversation, data.cwd, session.sessionId),
     ]);
     const tailed = tailSessionContent(output.content);
+    const tailedTranscript = tailSessionTranscript(transcript);
 
     return {
       generatedAt: new Date().toISOString(),
@@ -988,8 +1036,99 @@ export class MobileGatewayService {
       contentLength: tailed.contentLength,
       truncated: tailed.truncated,
       source: output.source,
-      transcript,
+      transcript: tailedTranscript.transcript,
+      transcriptTruncated: tailedTranscript.truncated,
     };
+  }
+
+  private async openSessionEvents(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    projectId: string,
+    taskId: string,
+    conversationId: string
+  ): Promise<void> {
+    const lifecycleGeneration = this.lifecycleGeneration;
+    const activeServer = this.server;
+    const conversations = await getConversationsForTask(projectId, taskId);
+    if (!this.isActiveLifecycle(lifecycleGeneration, activeServer)) {
+      if (!res.destroyed && !res.writableEnded) res.end();
+      return;
+    }
+    if (!conversations.some((conversation) => conversation.id === conversationId)) {
+      throw new MobileGatewayError(404, 'session_not_found', 'Mobile session was not found.');
+    }
+
+    let cleaned = false;
+    let unsubscribeRuntime: (() => void) | null = null;
+    let unsubscribeTranscript: (() => void) | null = null;
+    const streamHolder: { current: MobileSessionEventStream | null } = { current: null };
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      unsubscribeRuntime?.();
+      unsubscribeTranscript?.();
+      if (streamHolder.current) this.sessionEventStreams.delete(streamHolder.current);
+    };
+
+    const stream = new MobileSessionEventStream(req, res, () => this.nextSessionEventId(), cleanup);
+    streamHolder.current = stream;
+    this.sessionEventStreams.add(stream);
+    const sendInvalidation = (
+      reason: MobileSessionInvalidationReason,
+      runtimeStatus?: AgentSessionRuntimeStatus,
+      retry?: number
+    ) => {
+      stream.send(
+        {
+          version: MOBILE_SESSION_EVENT_VERSION,
+          conversationId,
+          reason,
+          emittedAt: new Date().toISOString(),
+          ...(runtimeStatus === undefined ? {} : { runtimeStatus }),
+        },
+        retry
+      );
+    };
+
+    unsubscribeRuntime = agentSessionRuntimeStore.subscribe(
+      { projectId, taskId, conversationId },
+      (state) => sendInvalidation('status-changed', state.status)
+    );
+
+    try {
+      const transcriptSubscription = await subscribeConversationTranscriptChanges(
+        projectId,
+        taskId,
+        conversationId,
+        () => sendInvalidation('transcript-changed')
+      );
+      if (stream.isClosed || !this.isActiveLifecycle(lifecycleGeneration, activeServer)) {
+        transcriptSubscription();
+        stream.close();
+        return;
+      }
+      unsubscribeTranscript = transcriptSubscription;
+      if (!stream.start()) {
+        stream.close();
+        return;
+      }
+      sendInvalidation('connected', undefined, MOBILE_SESSION_RECONNECT_RETRY_MS);
+    } catch (error) {
+      const connectionClosed = stream.isClosed || res.destroyed || res.writableEnded;
+      stream.close(false);
+      if (connectionClosed) return;
+      throw error;
+    }
+  }
+
+  private nextSessionEventId(): string {
+    this.sessionEventSequence += 1;
+    return `${this.sessionEventEpoch}:${this.sessionEventSequence}`;
+  }
+
+  private isActiveLifecycle(generation: number, server: http.Server | null): boolean {
+    return server !== null && this.server === server && this.lifecycleGeneration === generation;
   }
 
   private async sendSessionInput(
@@ -1146,7 +1285,7 @@ export class MobileGatewayService {
     }
 
     if (conversation.runtimeId === 'codex') {
-      const history = await loadCodexRolloutTerminalHistoryForConversation({
+      const history = await loadCodexRolloutTerminalHistoryTailForConversation({
         conversation,
         cwd,
       }).catch((error: unknown) => {
@@ -1183,7 +1322,7 @@ export class MobileGatewayService {
 
     if (conversation.runtimeId !== 'codex') return [];
 
-    const transcript = await loadCodexRolloutTranscriptForConversation({
+    const transcript = await loadCodexRolloutTranscriptTailForConversation({
       conversation,
       cwd,
     }).catch((error: unknown) => {

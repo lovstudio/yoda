@@ -263,6 +263,14 @@ export interface FileSystemProvider {
   copyLocalFile?(localAbsPath: string, destRelPath: string): Promise<void>;
 
   /**
+   * Copy a file from this filesystem into an absolute local path.
+   * For SSH: transfers via SFTP fastGet. For local: delegates to fs.copyFile.
+   * @param srcRelPath - Source path relative to this filesystem's root
+   * @param localAbsPath - Absolute local destination path
+   */
+  copyToLocalFile?(srcRelPath: string, localAbsPath: string): Promise<void>;
+
+  /**
    * Watch the worktree for filesystem changes. Returns a FileWatcher handle;
    * call update() to hint which paths matter (SSH uses this for polling),
    * call close() to stop. Batches events and delivers them via callback.

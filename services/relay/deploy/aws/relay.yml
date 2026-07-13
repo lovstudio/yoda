@@ -1,0 +1,338 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Single-replica Yoda Relay behind CloudFront HTTPS/WebSocket and AWS WAF.
+
+Parameters:
+  ImageUri:
+    Type: String
+    Description: Immutable ECR image URI including the commit tag.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  CloudFrontPrefixListId:
+    Type: String
+    Description: Region-local com.amazonaws.global.cloudfront.origin-facing prefix list ID.
+  WebAclArn:
+    Type: String
+    Description: CLOUDFRONT-scoped WAF web ACL ARN from us-east-1.
+  RelayPublicBaseUrlValue:
+    Type: String
+    Default: https://pending.invalid
+    AllowedPattern: ^https://[a-z0-9.-]+$
+    Description: CloudFront HTTPS origin returned by Relay pairing responses.
+  RelayDomainName:
+    Type: String
+    Default: relay.yoda.lovstudio.ai
+    AllowedPattern: ^[a-z0-9.-]+$
+    Description: Stable public DNS name attached to the CloudFront distribution.
+  RelayCertificateArn:
+    Type: String
+    Description: ACM certificate ARN in us-east-1 covering RelayDomainName.
+  InstanceType:
+    Type: String
+    Default: t3.small
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  RelayServiceSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: yoda/production/relay-service-token
+      Description: Shared secret used only between LovStudio Web and Yoda Relay.
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+      Tags:
+        - Key: Application
+          Value: yoda-relay
+        - Key: Environment
+          Value: production
+
+  RelayPublicBaseUrl:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /yoda/production/relay-public-base-url
+      Description: CloudFront HTTPS origin returned by Relay pairing responses.
+      Type: String
+      Value: !Ref RelayPublicBaseUrlValue
+      Tags:
+        Application: yoda-relay
+        Environment: production
+
+  RelayRuntimeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: YodaRelayRuntimeRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: PullRelayImageAndConfiguration
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: !Sub arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/yoda-relay
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref RelayServiceSecret
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/yoda/production/relay-public-base-url
+      Tags:
+        - Key: Application
+          Value: yoda-relay
+
+  RelayRuntimeProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: YodaRelayRuntimeProfile
+      Roles:
+        - !Ref RelayRuntimeRole
+
+  RelaySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Relay traffic only from CloudFront origin-facing servers.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - Description: CloudFront origin HTTP to Yoda Relay
+          IpProtocol: tcp
+          FromPort: 8787
+          ToPort: 8787
+          SourcePrefixListId: !Ref CloudFrontPrefixListId
+      SecurityGroupEgress:
+        - Description: HTTPS control plane, ECR, Secrets Manager, and SSM
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - Description: DNS over UDP
+          IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 0.0.0.0/0
+        - Description: DNS over TCP
+          IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: yoda-relay-production
+        - Key: Application
+          Value: yoda-relay
+
+  RelayInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref RelayRuntimeProfile
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref RelaySecurityGroup
+      SourceDestCheck: true
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: 16
+            VolumeType: gp3
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          dnf install -y docker
+          systemctl enable --now docker
+          mkdir -p /opt/yoda-relay
+          cat >/opt/yoda-relay/run.sh <<'SCRIPT'
+          #!/bin/bash
+          set -euo pipefail
+          REGION='${AWS::Region}'
+          IMAGE_URI='${ImageUri}'
+          SECRET_ID='${RelayServiceSecret}'
+          PUBLIC_URL_PARAMETER='${RelayPublicBaseUrl}'
+          TOKEN=$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$SECRET_ID" --query SecretString --output text)
+          PUBLIC_URL=$(aws ssm get-parameter --region "$REGION" --name "$PUBLIC_URL_PARAMETER" --query Parameter.Value --output text)
+          aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com"
+          docker pull "$IMAGE_URI"
+          docker rm -f yoda-relay >/dev/null 2>&1 || true
+          exec docker run --rm --name yoda-relay \
+            --health-cmd="node -e \"fetch('http://127.0.0.1:8787/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" \
+            --health-interval=30s --health-timeout=5s --health-start-period=20s --health-retries=3 \
+            -p 8787:8787 \
+            -e NODE_ENV=production \
+            -e YODA_RELAY_PUBLIC_BASE_URL="$PUBLIC_URL" \
+            -e LOVSTUDIO_BASE_URL=https://lovstudio.ai \
+            -e LOVSTUDIO_RELAY_SERVICE_TOKEN="$TOKEN" \
+            "$IMAGE_URI"
+          SCRIPT
+          chmod 0750 /opt/yoda-relay/run.sh
+          cat >/etc/systemd/system/yoda-relay.service <<'UNIT'
+          [Unit]
+          Description=Yoda Relay
+          After=docker.service network-online.target
+          Wants=network-online.target
+          Requires=docker.service
+
+          [Service]
+          Type=simple
+          ExecStart=/opt/yoda-relay/run.sh
+          ExecStop=/usr/bin/docker stop --time 20 yoda-relay
+          Restart=always
+          RestartSec=5
+          TimeoutStopSec=30
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          cat >/usr/local/sbin/yoda-relay-healthcheck <<'SCRIPT'
+          #!/bin/bash
+          set -euo pipefail
+          if ! curl --fail --silent --max-time 5 http://127.0.0.1:8787/health >/dev/null; then
+            systemctl restart yoda-relay.service
+          fi
+          SCRIPT
+          chmod 0750 /usr/local/sbin/yoda-relay-healthcheck
+          cat >/etc/systemd/system/yoda-relay-healthcheck.service <<'UNIT'
+          [Unit]
+          Description=Restart an unhealthy Yoda Relay container
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/yoda-relay-healthcheck
+          UNIT
+          cat >/etc/systemd/system/yoda-relay-healthcheck.timer <<'UNIT'
+          [Unit]
+          Description=Check Yoda Relay health every minute
+
+          [Timer]
+          OnBootSec=2min
+          OnUnitActiveSec=1min
+          Unit=yoda-relay-healthcheck.service
+
+          [Install]
+          WantedBy=timers.target
+          UNIT
+          systemctl daemon-reload
+          systemctl enable --now yoda-relay.service yoda-relay-healthcheck.timer
+      Tags:
+        - Key: Name
+          Value: yoda-relay-production
+        - Key: Application
+          Value: yoda-relay
+        - Key: Environment
+          Value: production
+
+  RelayElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: yoda-relay-production
+
+  RelayElasticIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt RelayElasticIp.AllocationId
+      InstanceId: !Ref RelayInstance
+
+  RelayDistribution:
+    Type: AWS::CloudFront::Distribution
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    DependsOn: RelayElasticIpAssociation
+    Properties:
+      DistributionConfig:
+        Aliases:
+          - !Ref RelayDomainName
+        Comment: Production Yoda Relay HTTPS, SSE, and WebSocket edge
+        Enabled: true
+        # Mainland cellular networks can advertise IPv6/QUIC while dropping the
+        # corresponding CloudFront path. Prefer the broadly compatible HTTPS
+        # transport until Relay has a dedicated mainland edge deployment.
+        HttpVersion: http2
+        IPV6Enabled: false
+        PriceClass: PriceClass_200
+        WebACLId: !Ref WebAclArn
+        Origins:
+          - Id: relay-ec2
+            DomainName: !GetAtt RelayInstance.PublicDnsName
+            ConnectionAttempts: 1
+            ConnectionTimeout: 3
+            CustomOriginConfig:
+              HTTPPort: 8787
+              HTTPSPort: 443
+              OriginKeepaliveTimeout: 60
+              OriginProtocolPolicy: http-only
+              OriginReadTimeout: 60
+              OriginSSLProtocols:
+                - TLSv1.2
+        DefaultCacheBehavior:
+          TargetOriginId: relay-ec2
+          ViewerProtocolPolicy: https-only
+          AllowedMethods:
+            - DELETE
+            - GET
+            - HEAD
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+          Compress: false
+        ViewerCertificate:
+          AcmCertificateArn: !Ref RelayCertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Restrictions:
+          GeoRestriction:
+            RestrictionType: none
+      Tags:
+        - Key: Application
+          Value: yoda-relay
+        - Key: Environment
+          Value: production
+
+Outputs:
+  DistributionId:
+    Value: !Ref RelayDistribution
+  DistributionDomainName:
+    Value: !GetAtt RelayDistribution.DomainName
+  InstanceId:
+    Value: !Ref RelayInstance
+  PublicBaseUrlParameterName:
+    Value: !Ref RelayPublicBaseUrl
+  RelayServiceSecretArn:
+    Value: !Ref RelayServiceSecret
+  SecurityGroupId:
+    Value: !Ref RelaySecurityGroup

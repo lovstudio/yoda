@@ -7,6 +7,8 @@ import {
 import type { RoomSnapshot, TeamRoom } from '@shared/team-room';
 import type { RoutingHopLimit } from '@shared/team-routing-limit';
 import { events, rpc } from '@renderer/lib/ipc';
+import { queryClient } from '@renderer/lib/query-client';
+import { invalidateTeamRoomQueries } from './team-room-queries';
 
 /**
  * Renderer state for the Agent Room (Team Room) chat. Module singleton — the
@@ -102,6 +104,7 @@ class AgentRoomStore {
       routingHopLimit: params.routingHopLimit,
     });
     await this.loadRooms();
+    await invalidateTeamRoomQueries(queryClient, params.projectId, params.taskId);
     await this.selectRoom(roomId);
   }
 
@@ -132,6 +135,7 @@ class AgentRoomStore {
       })),
     });
     await this.loadRooms();
+    await invalidateTeamRoomQueries(queryClient, params.projectId, params.taskId);
     await this.selectRoom(roomId);
   }
 

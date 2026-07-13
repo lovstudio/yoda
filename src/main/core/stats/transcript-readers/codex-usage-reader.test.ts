@@ -5,11 +5,39 @@ import { parseCodexUsage } from './codex-usage-reader';
 const DAY_ONE = '2026-03-01T12:00:00.000Z';
 const DAY_TWO = '2026-03-03T12:00:00.000Z';
 
-function tokenCountRow(total: Record<string, number> | null, timestamp: string = DAY_ONE): string {
+function tokenCountRow(
+  total: Record<string, number> | null,
+  timestamp: string = DAY_ONE,
+  context?: { lastTokens: number; limit: number; primaryPercent?: number; resetAt?: number }
+): string {
   return JSON.stringify({
     type: 'event_msg',
     timestamp,
-    payload: { type: 'token_count', info: total ? { total_token_usage: total } : null },
+    payload: {
+      type: 'token_count',
+      info: total
+        ? {
+            total_token_usage: total,
+            ...(context
+              ? {
+                  last_token_usage: { total_tokens: context.lastTokens },
+                  model_context_window: context.limit,
+                }
+              : {}),
+          }
+        : null,
+      ...(context
+        ? {
+            rate_limits: {
+              primary: {
+                window_minutes: 300,
+                used_percent: context.primaryPercent ?? 0,
+                resets_at: context.resetAt ?? 0,
+              },
+            },
+          }
+        : {}),
+    },
   });
 }
 
@@ -78,6 +106,45 @@ describe('parseCodexUsage', () => {
 
     expect(usage?.total.input).toBe(1200);
     expect(usage?.total.output).toBe(120);
+  });
+
+  it('returns live context usage, quota reset time, and observed context resets', () => {
+    const raw = [
+      tokenCountRow({ input_tokens: 1000, output_tokens: 100 }, DAY_ONE, {
+        lastTokens: 120_000,
+        limit: 258_400,
+        primaryPercent: 42,
+        resetAt: 1_800_000_000,
+      }),
+      tokenCountRow({ input_tokens: 1200, output_tokens: 120 }, DAY_TWO, {
+        lastTokens: 24_000,
+        limit: 258_400,
+        primaryPercent: 43,
+        resetAt: 1_800_000_000,
+      }),
+      tokenCountRow({ input_tokens: 1250, output_tokens: 125 }, DAY_TWO, {
+        lastTokens: 25_000,
+        limit: 258_400,
+        primaryPercent: 43,
+        resetAt: 1_800_000_000,
+      }),
+    ].join('\n');
+
+    const usage = parseCodexUsage(raw);
+
+    expect(usage?.context).toEqual({
+      usedTokens: 25_000,
+      limitTokens: 258_400,
+      resetCount: 1,
+      lastResetAt: DAY_TWO,
+      rateLimits: [
+        {
+          windowMinutes: 300,
+          usedPercent: 43,
+          resetsAt: '2027-01-15T08:00:00.000Z',
+        },
+      ],
+    });
   });
 
   it('attributes deltas to the active turn_context model', () => {

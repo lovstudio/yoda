@@ -22,6 +22,7 @@ export type ServeWorktreeError =
  * on timeout we fall through to the local branch.
  */
 const FETCH_TIMEOUT_MS = 20_000;
+const STALE_WORKTREE_CLEANUP_TIMEOUT_MS = 3_000;
 
 export class WorktreeService {
   private gitOpQueue: Promise<unknown> = Promise.resolve();
@@ -30,6 +31,7 @@ export class WorktreeService {
   private readonly ctx: IExecutionContext;
   private readonly host: WorktreeHost;
   private readonly projectSettings: ProjectSettingsProvider;
+  private readonly pathApi: Pick<typeof path, 'dirname' | 'join'>;
 
   constructor(args: {
     worktreePoolPath: string;
@@ -43,6 +45,7 @@ export class WorktreeService {
     this.projectSettings = args.projectSettings;
     this.ctx = args.ctx;
     this.host = args.host;
+    this.pathApi = this.ctx.supportsLocalSpawn ? path : path.posix;
 
     this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
   }
@@ -66,7 +69,7 @@ export class WorktreeService {
         return false;
       }
     }
-    return this.host.existsAbsolute(path.join(worktreePath, '.git'));
+    return this.host.existsAbsolute(this.pathApi.join(worktreePath, '.git'));
   }
 
   private async ensureWorktreePoolDirExists(): Promise<void> {
@@ -82,7 +85,45 @@ export class WorktreeService {
   private async removeStaleWorktreeDir(
     targetPath: string
   ): Promise<Result<void, ServeWorktreeError>> {
-    const removal = await this.host.removeAbsolute(targetPath, { recursive: true });
+    const timedOut = Symbol('stale-worktree-cleanup-timeout');
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const removalPromise = this.host
+      .removeAbsolute(targetPath, { recursive: true })
+      .catch((error: unknown) => ({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    const timeoutPromise = new Promise<typeof timedOut>((resolve) => {
+      timeout = setTimeout(() => resolve(timedOut), STALE_WORKTREE_CLEANUP_TIMEOUT_MS);
+    });
+    const removal = await Promise.race([removalPromise, timeoutPromise]);
+    if (timeout) clearTimeout(timeout);
+
+    if (removal === timedOut) {
+      void removalPromise
+        .then(async (finished) => {
+          await this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
+          if (!finished.success && (await this.host.existsAbsolute(targetPath))) {
+            log.warn('WorktreeService: stale worktree directory cleanup failed after timeout', {
+              targetPath,
+              error: finished.error,
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          log.warn('WorktreeService: stale worktree directory cleanup rejected after timeout', {
+            targetPath,
+            error: String(error),
+          });
+        });
+      return err({
+        type: 'worktree-setup-failed',
+        cause: new Error(
+          `Timed out after ${STALE_WORKTREE_CLEANUP_TIMEOUT_MS}ms removing stale worktree directory at ${targetPath}`
+        ),
+      });
+    }
+
     await this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
     if (!removal.success && (await this.host.existsAbsolute(targetPath))) {
       return err({
@@ -179,6 +220,7 @@ export class WorktreeService {
           checkedOutPath,
           'status',
           '--porcelain',
+          '--untracked-files=no',
         ]);
         if (stdout.trim()) {
           return err({
@@ -228,14 +270,26 @@ export class WorktreeService {
   private async resolveWorktreeTargetPath(
     branchName: string
   ): Promise<Result<string, ServeWorktreeError>> {
+    let staleCleanupFailure: ServeWorktreeError | undefined;
     for (const dirName of this.worktreeDirCandidates(branchName)) {
-      const targetPath = path.join(this.worktreePoolPath, dirName);
+      const targetPath = this.pathApi.join(this.worktreePoolPath, dirName);
       if (!(await this.host.existsAbsolute(targetPath))) return ok(targetPath);
       if (await this.isValidWorktree(targetPath)) continue;
       const cleanup = await this.removeStaleWorktreeDir(targetPath);
-      if (!cleanup.success) return cleanup;
-      return ok(targetPath);
+      if (cleanup.success) return ok(targetPath);
+      staleCleanupFailure = cleanup.error;
+      log.warn('WorktreeService: stale worktree directory cleanup failed; trying next candidate', {
+        branchName,
+        targetPath,
+        error:
+          cleanup.error.type === 'worktree-setup-failed'
+            ? cleanup.error.cause instanceof Error
+              ? cleanup.error.cause.message
+              : String(cleanup.error.cause)
+            : cleanup.error.type,
+      });
     }
+    if (staleCleanupFailure) return err(staleCleanupFailure);
     return err({
       type: 'worktree-setup-failed',
       cause: new Error(`All worktree directory candidates for "${branchName}" are occupied`),
@@ -298,7 +352,17 @@ export class WorktreeService {
     if (!checkedOutPath) return undefined;
     try {
       const realPoolPath = await this.host.realPathAbsolute(this.worktreePoolPath);
-      if (checkedOutPath.startsWith(realPoolPath)) return checkedOutPath;
+      // git reports forward-slash paths even on Windows while realpath uses the
+      // native separator; normalize both before the prefix compare, and require a
+      // directory boundary so the pool prefix can't match an unrelated sibling.
+      const normalizedTarget = path.normalize(checkedOutPath);
+      const normalizedPool = path.normalize(realPoolPath);
+      if (
+        normalizedTarget === normalizedPool ||
+        normalizedTarget.startsWith(normalizedPool + path.sep)
+      ) {
+        return normalizedTarget;
+      }
     } catch {}
     return undefined;
   }
@@ -339,7 +403,7 @@ export class WorktreeService {
         await this.ctx.exec('git', ['branch', '--no-track', branchName, sourceRef]);
       }
 
-      await this.host.mkdirAbsolute(path.dirname(targetPath), { recursive: true });
+      await this.host.mkdirAbsolute(this.pathApi.dirname(targetPath), { recursive: true });
       await this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
       await this.ctx.exec('git', ['worktree', 'add', targetPath, branchName]);
     } catch (cause) {
@@ -386,7 +450,7 @@ export class WorktreeService {
     const targetPath = target.data;
 
     try {
-      await this.host.mkdirAbsolute(path.dirname(targetPath), { recursive: true });
+      await this.host.mkdirAbsolute(this.pathApi.dirname(targetPath), { recursive: true });
       let localExists = false;
       try {
         await this.ctx.exec('git', ['rev-parse', '--verify', `refs/heads/${branchName}`]);
@@ -456,9 +520,9 @@ export class WorktreeService {
 
   private taskConfigFs(targetPath: string): Pick<FileSystemProvider, 'exists' | 'read'> {
     return {
-      exists: (filePath) => this.host.existsAbsolute(path.join(targetPath, filePath)),
+      exists: (filePath) => this.host.existsAbsolute(this.pathApi.join(targetPath, filePath)),
       read: async (filePath) => {
-        const content = await this.host.readFileAbsolute(path.join(targetPath, filePath));
+        const content = await this.host.readFileAbsolute(this.pathApi.join(targetPath, filePath));
         return {
           content,
           truncated: false,
@@ -490,11 +554,11 @@ export class WorktreeService {
       });
       for (const relPath of matches) {
         if (relPath === '.yoda.json' || (await this.isTrackedSourcePath(relPath))) continue;
-        const src = path.join(this.repoPath, relPath);
+        const src = this.pathApi.join(this.repoPath, relPath);
         const stat = await this.host.statAbsolute(src).catch(() => null);
         if (!stat || stat.type !== 'file') continue;
-        const dest = path.join(targetPath, relPath);
-        await this.host.mkdirAbsolute(path.dirname(dest), { recursive: true });
+        const dest = this.pathApi.join(targetPath, relPath);
+        await this.host.mkdirAbsolute(this.pathApi.dirname(dest), { recursive: true });
         await this.host.copyFileAbsolute(src, dest);
       }
     }

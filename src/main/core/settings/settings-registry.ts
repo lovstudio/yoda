@@ -173,6 +173,7 @@ export const SETTINGS_DEFAULTS = {
     items: [],
   },
   updates: {
+    source: 'official' as const,
     proxyMode: 'auto' as const,
     proxyUrl: '',
   },

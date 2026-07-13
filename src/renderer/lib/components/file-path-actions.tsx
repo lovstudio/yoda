@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getAppById, type OpenInAppId } from '@shared/openInApps';
+import { getAppById, type OpenInRequest } from '@shared/openInApps';
 import { openProjectFileTab } from '@renderer/features/project-file/project-file-session';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -27,6 +27,11 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { cn } from '@renderer/utils/utils';
+import {
+  buildFilePathDefaultOpenRequest,
+  buildFilePathOpenInRequest,
+  type FilePathOpenTarget,
+} from './file-path-open';
 
 /**
  * Context-free file actions for any UI that references a path on disk:
@@ -35,13 +40,9 @@ import { cn } from '@renderer/utils/utils';
  * reveal-in-file-tree) compose on top of this — see
  * features/tasks/components/file-actions.tsx.
  */
-export type FilePathTarget = {
-  absolutePath: string;
+export type FilePathTarget = FilePathOpenTarget & {
   /** Path relative to the project/workspace root, when one applies. */
   relativePath?: string | null;
-  kind?: 'file' | 'directory';
-  /** Set for SSH projects: disables Finder actions, enables terminal open. */
-  sshConnectionId?: string | null;
 };
 
 export function useFilePathActions(target: FilePathTarget) {
@@ -70,7 +71,7 @@ export function useFilePathActions(target: FilePathTarget) {
             },
             t
           )
-      : () => void openIn({ app: 'finder', path: target.absolutePath }, t),
+      : () => void openIn(buildFilePathDefaultOpenRequest(target), t),
   };
 }
 
@@ -118,34 +119,39 @@ type MenuPrimitives = {
 export function FilePathMenuItems({
   target,
   components: { Item, Separator },
+  onAfterAction,
 }: {
   target: FilePathTarget;
   components: MenuPrimitives;
+  onAfterAction?: () => void;
 }) {
   const { t } = useTranslation();
   const actions = useFilePathActions(target);
   const openInTargets = useOpenInTargets(actions.isRemote);
-  const isDirectory = target.kind === 'directory';
 
   return (
     <>
+      {!actions.isRemote && target.kind !== 'directory' ? (
+        <Item
+          className="whitespace-nowrap"
+          onClick={(event) => {
+            event.stopPropagation();
+            actions.openFile();
+            onAfterAction?.();
+          }}
+        >
+          <ExternalLink className="size-4" />
+          {t('tasks.panel.openFile')}
+        </Item>
+      ) : null}
       {openInTargets.map((app) => (
         <Item
           key={app.id}
           className="whitespace-nowrap"
           onClick={(event) => {
             event.stopPropagation();
-            void openIn(
-              {
-                app: app.id,
-                path: target.absolutePath,
-                // Finder "opens" a file by revealing it; opening a directory is literal.
-                reveal: app.id === 'finder' && !isDirectory,
-                isRemote: actions.isRemote,
-                sshConnectionId: target.sshConnectionId ?? null,
-              },
-              t
-            );
+            void openIn(buildFilePathOpenInRequest(app.id, target), t);
+            onAfterAction?.();
           }}
         >
           {app.icon ? (
@@ -166,6 +172,7 @@ export function FilePathMenuItems({
           onClick={(event) => {
             event.stopPropagation();
             actions.openFile();
+            onAfterAction?.();
           }}
         >
           <TerminalSquare className="size-4" />
@@ -179,6 +186,7 @@ export function FilePathMenuItems({
           onClick={(event) => {
             event.stopPropagation();
             actions.copyRelativePath?.();
+            onAfterAction?.();
           }}
         >
           <Copy className="size-4" />
@@ -190,6 +198,7 @@ export function FilePathMenuItems({
         onClick={(event) => {
           event.stopPropagation();
           actions.copyAbsolutePath();
+          onAfterAction?.();
         }}
       >
         <Copy className="size-4" />
@@ -201,6 +210,7 @@ export function FilePathMenuItems({
           onClick={(event) => {
             event.stopPropagation();
             actions.copyFileContent?.();
+            onAfterAction?.();
           }}
         >
           <ClipboardCopy className="size-4" />
@@ -437,16 +447,7 @@ function resultErrorMessage(error: unknown): string | undefined {
   return undefined;
 }
 
-async function openIn(
-  args: {
-    app: OpenInAppId;
-    path: string;
-    reveal?: boolean;
-    isRemote?: boolean;
-    sshConnectionId?: string | null;
-  },
-  t: (key: string) => string
-): Promise<void> {
+async function openIn(args: OpenInRequest, t: (key: string) => string): Promise<void> {
   try {
     const res = await rpc.app.openIn(args);
     if (!res?.success) {

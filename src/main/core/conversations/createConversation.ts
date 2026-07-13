@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { type Conversation, type CreateConversationParams } from '@shared/conversations';
 import { isDangerPermissionMode, resolveRuntimePermissionModeId } from '@shared/runtime-registry';
 import { appSettingsService } from '@main/core/settings/settings-service';
+import { skillsService } from '@main/core/skills/SkillsService';
 import { db } from '@main/db/client';
 import { conversations, tasks } from '@main/db/schema';
 import { telemetryService } from '@main/lib/telemetry';
@@ -47,6 +48,8 @@ async function resolveConversationPermission(
 
 export async function createConversation(params: CreateConversationParams): Promise<Conversation> {
   const id = params.id ?? randomUUID();
+  const task = resolveTask(params.projectId, params.taskId);
+  if (!task) throw new Error('Task not found');
   const [existingConversation] = await db
     .select({ id: conversations.id })
     .from(conversations)
@@ -54,10 +57,17 @@ export async function createConversation(params: CreateConversationParams): Prom
     .limit(1);
 
   const { permissionMode, autoApprove } = await resolveConversationPermission(params);
+  const skillPolicy = params.skillSelection
+    ? await skillsService.resolveSessionPolicy(
+        params.skillSelection,
+        task.conversations.taskPath,
+        params.runtime
+      )
+    : undefined;
   const config =
-    autoApprove === undefined && permissionMode === undefined
+    autoApprove === undefined && permissionMode === undefined && skillPolicy === undefined
       ? undefined
-      : JSON.stringify({ autoApprove, permissionMode });
+      : JSON.stringify({ autoApprove, permissionMode, skillPolicy });
   const lastInteractedAt = new Date().toISOString();
 
   const [row] = await db
@@ -78,22 +88,19 @@ export async function createConversation(params: CreateConversationParams): Prom
 
   await db.update(tasks).set({ lastInteractedAt }).where(eq(tasks.id, params.taskId));
 
-  const task = resolveTask(params.projectId, params.taskId);
-  if (!task) {
-    throw new Error('Task not found');
-  }
-
   const conversation = mapConversationRowToConversation(row);
 
   conversationEvents._emit('conversation:created', conversation);
 
+  const sessionInitialPrompt = params.deferInitialPrompt ? undefined : params.initialPrompt;
+  const sessionImagePaths = params.deferInitialPrompt ? undefined : params.imagePaths;
   await task.conversations.startSession(
     conversation,
     params.initialSize,
     false,
-    params.initialPrompt,
+    sessionInitialPrompt,
     undefined,
-    params.imagePaths,
+    sessionImagePaths,
     params.model
   );
   telemetryService.capture('conversation_created', {

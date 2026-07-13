@@ -23,7 +23,7 @@ import { mapConversationRowToConversation } from './utils';
 
 const DEBOUNCE_MS = 250;
 const READY_POLL_INTERVAL_MS = 1_000;
-const READY_POLL_MAX_MS = 5 * 60_000;
+const READY_POLL_MAX_INTERVAL_MS = 10_000;
 /** The sidebar panel tails this many lines; the file tab shows the rest. */
 const MAX_TAIL_LINES = 500;
 
@@ -37,6 +37,11 @@ export interface ConversationTranscript {
 }
 
 const EMPTY_TRANSCRIPT: ConversationTranscript = { filePath: null, totalLines: 0, lines: [] };
+type TranscriptChangeListener = () => void;
+
+function transcriptWatchKey(projectId: string, taskId: string, conversationId: string): string {
+  return `${projectId}\0${taskId}\0${conversationId}`;
+}
 
 export async function getConversationTranscript(
   projectId: string,
@@ -68,17 +73,19 @@ export async function getConversationTranscript(
 
 class TranscriptWatch {
   refs = 0;
+  readonly listeners = new Set<TranscriptChangeListener>();
   private watcher: FSWatcher | undefined;
   private readyTimer: NodeJS.Timeout | undefined;
   private debounceTimer: NodeJS.Timeout | undefined;
-  private readonly readyDeadline = Date.now() + READY_POLL_MAX_MS;
+  private readyPollInterval = READY_POLL_INTERVAL_MS;
   private stopped = false;
 
   constructor(
-    private readonly filePath: string,
+    private readonly projectId: string,
+    private readonly taskId: string,
     private readonly conversationId: string
   ) {
-    this.waitForFile();
+    this.waitForTranscript();
   }
 
   stop(): void {
@@ -89,32 +96,70 @@ class TranscriptWatch {
       this.watcher?.close();
     } catch {}
     this.watcher = undefined;
+    this.listeners.clear();
   }
 
-  private waitForFile(): void {
+  private waitForTranscript(): void {
     if (this.stopped) return;
-    stat(this.filePath)
-      .then(() => this.attach())
+    resolveTranscriptPath(this.projectId, this.taskId, this.conversationId)
+      .then(async (filePath) => {
+        if (!filePath) throw new Error('Transcript path is not ready.');
+        await stat(filePath);
+        if (this.stopped) return;
+        this.attach(filePath);
+      })
       .catch(() => {
-        if (this.stopped || Date.now() > this.readyDeadline) return;
-        this.readyTimer = setTimeout(() => this.waitForFile(), READY_POLL_INTERVAL_MS);
+        if (this.stopped) return;
+        this.scheduleReadyRetry();
       });
   }
 
-  private attach(): void {
+  private attach(filePath: string): void {
     if (this.stopped) return;
     try {
-      this.watcher = watch(this.filePath, () => this.scheduleEmit());
-      this.watcher.on('error', () => {});
+      const watcher = watch(filePath, (eventType) => {
+        this.scheduleEmit();
+        if (eventType === 'rename') this.restart(watcher);
+      });
+      this.watcher = watcher;
+      this.readyPollInterval = READY_POLL_INTERVAL_MS;
+      watcher.on('error', (error) => {
+        log.warn('TranscriptFeed: watcher failed; retrying', {
+          filePath,
+          error: String(error),
+        });
+        this.restart(watcher);
+      });
     } catch (err) {
       log.warn('TranscriptFeed: failed to attach watcher', {
-        filePath: this.filePath,
+        filePath,
         error: String(err),
       });
+      this.scheduleReadyRetry();
       return;
     }
     // The file may have grown between getConversationTranscript and attach.
     this.scheduleEmit();
+  }
+
+  private restart(watcher: FSWatcher): void {
+    if (this.stopped || this.watcher !== watcher) return;
+    try {
+      watcher.close();
+    } catch {}
+    this.watcher = undefined;
+    this.readyPollInterval = READY_POLL_INTERVAL_MS;
+    this.scheduleReadyRetry();
+  }
+
+  private scheduleReadyRetry(): void {
+    if (this.stopped || this.readyTimer) return;
+    this.readyTimer = setTimeout(() => {
+      this.readyTimer = undefined;
+      this.waitForTranscript();
+    }, this.readyPollInterval);
+    this.readyPollInterval = Math.min(READY_POLL_MAX_INTERVAL_MS, this.readyPollInterval * 2);
+    this.readyTimer.unref?.();
   }
 
   private scheduleEmit(): void {
@@ -122,6 +167,16 @@ class TranscriptWatch {
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = undefined;
       if (this.stopped) return;
+      for (const listener of this.listeners) {
+        try {
+          listener();
+        } catch (error) {
+          log.warn('TranscriptFeed: local listener failed', {
+            conversationId: this.conversationId,
+            error: String(error),
+          });
+        }
+      }
       events.emit(
         conversationTranscriptChangedChannel,
         { conversationId: this.conversationId },
@@ -138,28 +193,63 @@ export async function subscribeConversationTranscript(
   taskId: string,
   conversationId: string
 ): Promise<void> {
-  const existing = watches.get(conversationId);
+  await acquireConversationTranscript(projectId, taskId, conversationId);
+}
+
+/** Main-process-only transcript subscription used by the mobile SSE gateway. */
+export async function subscribeConversationTranscriptChanges(
+  projectId: string,
+  taskId: string,
+  conversationId: string,
+  listener: TranscriptChangeListener
+): Promise<() => void> {
+  const key = transcriptWatchKey(projectId, taskId, conversationId);
+  const entry = await acquireConversationTranscript(projectId, taskId, conversationId, listener);
+  if (!entry) return () => {};
+
+  let active = true;
+  return () => {
+    if (!active) return;
+    active = false;
+    releaseConversationTranscript(key, listener);
+  };
+}
+
+async function acquireConversationTranscript(
+  projectId: string,
+  taskId: string,
+  conversationId: string,
+  listener?: TranscriptChangeListener
+): Promise<TranscriptWatch | null> {
+  const key = transcriptWatchKey(projectId, taskId, conversationId);
+  const existing = watches.get(key);
   if (existing) {
     existing.refs += 1;
-    return;
+    if (listener) existing.listeners.add(listener);
+    return existing;
   }
-  const filePath = await resolveTranscriptPath(projectId, taskId, conversationId);
-  if (!filePath) return;
-  const watchEntry = new TranscriptWatch(filePath, conversationId);
+  const watchEntry = new TranscriptWatch(projectId, taskId, conversationId);
   watchEntry.refs = 1;
-  watches.set(conversationId, watchEntry);
+  if (listener) watchEntry.listeners.add(listener);
+  watches.set(key, watchEntry);
+  return watchEntry;
 }
 
 export async function unsubscribeConversationTranscript(
-  _projectId: string,
-  _taskId: string,
+  projectId: string,
+  taskId: string,
   conversationId: string
 ): Promise<void> {
-  const entry = watches.get(conversationId);
+  releaseConversationTranscript(transcriptWatchKey(projectId, taskId, conversationId));
+}
+
+function releaseConversationTranscript(key: string, listener?: TranscriptChangeListener): void {
+  const entry = watches.get(key);
   if (!entry) return;
+  if (listener) entry.listeners.delete(listener);
   entry.refs -= 1;
   if (entry.refs > 0) return;
-  watches.delete(conversationId);
+  watches.delete(key);
   entry.stop();
 }
 
@@ -171,6 +261,7 @@ async function resolveTranscriptPath(
   const conversation = await loadConversation(conversationId);
   const cwd = resolveTask(projectId, taskId)?.conversations.taskPath;
   if (!conversation) return null;
+  if (conversation.projectId !== projectId || conversation.taskId !== taskId) return null;
 
   if (conversation.runtimeId === 'claude') {
     if (cwd) return resolveClaudeTranscriptPath(cwd, conversationId);

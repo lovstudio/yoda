@@ -5,8 +5,10 @@ import SkillDetailPanel from './components/SkillDetailPanel';
 
 type SkillDetailViewParams = {
   skillId: string;
-  /** Display-only tab label; tab identity keys on skillId (see routeKey). */
+  /** Display-only tab label; `skillId` carries the opaque stable skill key. */
   displayName?: string;
+  /** Catalog tab that opened this detail; keeps the adjacent list in context. */
+  catalogSection?: 'installed' | 'recommended' | 'attention';
 };
 
 export function SkillDetailTitlebar() {
@@ -19,10 +21,10 @@ export function SkillDetailWrapView({ children }: PropsWithChildren<SkillDetailV
 
 export function SkillDetailMainPanel() {
   const {
-    params: { skillId },
+    params: { skillId, catalogSection },
   } = useParams('skill');
   if (!skillId) return null;
-  return <SkillDetailPanel key={skillId} skillId={skillId} />;
+  return <SkillDetailPanel skillKey={skillId} catalogSection={catalogSection} />;
 }
 
 export const skillDetailView = {

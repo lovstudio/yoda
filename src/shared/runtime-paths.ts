@@ -1,6 +1,6 @@
-import type { RuntimeId } from '@shared/runtime-registry';
+import type { RuntimeId } from './runtime-registry';
 
-export type AgentPaths = {
+export type RuntimePaths = {
   config?: string;
   memory?: string;
   hooks?: string;
@@ -8,12 +8,8 @@ export type AgentPaths = {
   settings?: string;
 };
 
-/**
- * Best-effort mapping from a provider id to the canonical local config locations.
- * Paths are returned with the literal `~` prefix — call `expandHome` before passing
- * them to `rpc.app.openIn` so the shell can resolve them.
- */
-export function resolveAgentPaths(id: RuntimeId): AgentPaths {
+/** Canonical per-runtime paths. Tilde expansion is intentionally left to the caller. */
+export function resolveRuntimePaths(id: RuntimeId): RuntimePaths {
   switch (id) {
     // GLM and Step run through the Claude Code CLI, so they share ~/.claude.
     case 'glm':
@@ -70,7 +66,7 @@ export function resolveAgentPaths(id: RuntimeId): AgentPaths {
     case 'droid':
       return { config: '~/.factory', settings: '~/.factory/config.json' };
     case 'amp':
-      return { config: '~/.amp', settings: '~/.amp/config.json' };
+      return { config: '~/.amp', settings: '~/.amp/settings.json' };
     case 'copilot':
       return {
         config: '~/.config/github-copilot',
@@ -115,7 +111,7 @@ export function resolveAgentPaths(id: RuntimeId): AgentPaths {
   }
 }
 
-export function expandHome(path: string, home: string): string {
+export function expandRuntimeHome(path: string, home: string): string {
   if (path.startsWith('~/')) return `${home}/${path.slice(2)}`;
   if (path === '~') return home;
   return path;

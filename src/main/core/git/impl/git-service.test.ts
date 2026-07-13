@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { FileSystemProvider } from '@main/core/fs/types';
 import { GitService } from './git-service';
@@ -59,6 +59,10 @@ function makeContext(exec: MockExec, root = '/repo'): IExecutionContext {
 function makeService(exec: MockExec): GitService {
   const ctx = makeContext(exec);
   return new GitService(ctx, ctx, stubFs);
+}
+
+function makeServiceWithContexts(ctxExec: MockExec, authExec: MockExec): GitService {
+  return new GitService(makeContext(ctxExec), makeContext(authExec), stubFs);
 }
 
 // ---------------------------------------------------------------------------
@@ -276,6 +280,121 @@ describe('GitService.getDefaultBranch', () => {
       throw Object.assign(new Error('nothing works'), { code: 128 });
     };
     expect(await makeService(failingExec).getDefaultBranch()).toBe('main');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchPrForReview()
+// ---------------------------------------------------------------------------
+
+describe('GitService.fetchPrForReview', () => {
+  it('retries a same-repository PR over canonical HTTPS when the configured remote fails', async () => {
+    const ctxExec = vi.fn<MockExec>(async () => ({ stdout: '', stderr: '' }));
+    const authExec = vi.fn<MockExec>(async (_cmd, args = []) => {
+      if (args[1] === 'origin') {
+        throw Object.assign(new Error('SSH connection closed'), {
+          stderr: 'Connection closed by 20.205.243.160 port 443',
+        });
+      }
+      return { stdout: '', stderr: '' };
+    });
+    const svc = makeServiceWithContexts(ctxExec, authExec);
+
+    const result = await svc.fetchPrForReview(
+      42,
+      'fix/pr-branch',
+      'https://github.com/acme/repo',
+      'fix/pr-branch',
+      false,
+      'origin'
+    );
+
+    expect(result).toEqual({ success: true, data: undefined });
+    expect(authExec).toHaveBeenNthCalledWith(1, 'git', [
+      'fetch',
+      'origin',
+      'refs/pull/42/head:refs/heads/fix/pr-branch',
+      '--force',
+    ]);
+    expect(authExec).toHaveBeenNthCalledWith(2, 'git', [
+      'fetch',
+      'https://github.com:443/acme/repo.git',
+      'refs/pull/42/head:refs/heads/fix/pr-branch',
+      '--force',
+    ]);
+    expect(ctxExec).toHaveBeenCalledWith('git', [
+      'branch',
+      '--set-upstream-to=origin/fix/pr-branch',
+      'fix/pr-branch',
+    ]);
+  });
+
+  it('retries a fork PR over the contributor repository HTTPS URL', async () => {
+    const ctxExec = vi.fn<MockExec>(async (_cmd, args = []) => ({
+      stdout: args.join(' ') === 'remote' ? 'origin\n' : '',
+      stderr: '',
+    }));
+    const authExec = vi.fn<MockExec>(async (_cmd, args = []) => {
+      if (args[1] === 'contributor') {
+        throw Object.assign(new Error('SSH connection closed'), {
+          stderr: 'Connection closed by 20.205.243.160 port 443',
+        });
+      }
+      return { stdout: '', stderr: '' };
+    });
+    const svc = makeServiceWithContexts(ctxExec, authExec);
+
+    const result = await svc.fetchPrForReview(
+      13,
+      'fix/windows-settings',
+      'git@github.com:contributor/repo.git',
+      'fix/windows-settings',
+      true
+    );
+
+    expect(result).toEqual({ success: true, data: undefined });
+    expect(ctxExec).toHaveBeenCalledWith('git', [
+      'remote',
+      'add',
+      'contributor',
+      'git@github.com:contributor/repo.git',
+    ]);
+    expect(authExec).toHaveBeenNthCalledWith(1, 'git', [
+      'fetch',
+      'contributor',
+      'fix/windows-settings:refs/heads/fix/windows-settings',
+      '--force',
+    ]);
+    expect(authExec).toHaveBeenNthCalledWith(2, 'git', [
+      'fetch',
+      'https://github.com:443/contributor/repo.git',
+      'fix/windows-settings:refs/heads/fix/windows-settings',
+      '--force',
+    ]);
+  });
+
+  it('does not retry a non-GitHub repository through an unrelated host', async () => {
+    const ctxExec = vi.fn<MockExec>(async () => ({ stdout: '', stderr: '' }));
+    const authExec = vi.fn<MockExec>(async () => {
+      throw Object.assign(new Error('remote failed'), { stderr: 'remote failed' });
+    });
+    const svc = makeServiceWithContexts(ctxExec, authExec);
+
+    const result = await svc.fetchPrForReview(
+      42,
+      'fix/pr-branch',
+      'https://git.example.com/acme/repo',
+      'fix/pr-branch',
+      false,
+      'origin'
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: { type: 'error', message: 'remote failed' },
+    });
+    expect(authExec).toHaveBeenCalledTimes(1);
+    expect(ctxExec).not.toHaveBeenCalled();
   });
 });
 

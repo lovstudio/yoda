@@ -2,7 +2,13 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { parseArgs } from 'node:util';
 import { S3mini } from 's3mini';
-import { findBlockmaps, findInstallers, findManifests } from './lib/artifacts.ts';
+import {
+  findBlockmaps,
+  findInstallers,
+  findManifests,
+  findSparkleDeltas,
+  findSparkleFeeds,
+} from './lib/artifacts.ts';
 import { r2Endpoint, requireEnv } from './lib/config.ts';
 import { fail, info, step } from './lib/log.ts';
 
@@ -25,6 +31,8 @@ const files = [
   ...findManifests(values.channel),
   ...findInstallers(values.prefix),
   ...findBlockmaps(),
+  ...findSparkleFeeds(),
+  ...findSparkleDeltas(),
 ];
 
 if (files.length === 0) {
@@ -35,7 +43,11 @@ step(`Uploading ${files.length} artifact(s) to R2`);
 
 for (const file of files) {
   const key = basename(file);
-  const contentType = key.endsWith('.yml') ? 'application/yaml' : 'application/octet-stream';
+  const contentType = key.endsWith('.yml')
+    ? 'application/yaml'
+    : key.endsWith('.xml')
+      ? 'application/rss+xml; charset=utf-8'
+      : 'application/octet-stream';
   const data = readFileSync(file);
   info(`Uploading ${key} (${(data.length / 1024 / 1024).toFixed(1)} MB)`);
   await s3.putObject(key, new Uint8Array(data), contentType);

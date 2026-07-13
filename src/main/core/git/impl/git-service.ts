@@ -80,6 +80,16 @@ function looksLikeLfsPointer(buffer: Buffer): boolean {
   return buffer.slice(0, LFS_POINTER_PREFIX.length).equals(LFS_POINTER_PREFIX);
 }
 
+function githubHttpsFallbackUrl(repositoryUrl: string): string | null {
+  const repository = parseGitHubRepository(repositoryUrl);
+  if (!repository) return null;
+
+  // An explicit default port keeps this URL from being rewritten by a user's
+  // global `url.*.insteadOf=https://github.com/` rule. This path is only used
+  // after the configured remote transport has already failed.
+  return `https://github.com:443/${repository.nameWithOwner}.git`;
+}
+
 export class GitService implements GitProvider, IDisposable {
   private _statusInFlight: Promise<FullGitStatus> | null = null;
   private _catFile: CatFileBatch | null = null;
@@ -1422,6 +1432,17 @@ export class GitService implements GitProvider, IDisposable {
     configuredRemote = 'origin'
   ): Promise<Result<void, FetchPrForReviewError>> {
     try {
+      const fetchWithHttpsFallback = async (remote: string, refspec: string): Promise<void> => {
+        try {
+          await this.authCtx.exec('git', ['fetch', remote, refspec, '--force']);
+        } catch (remoteError) {
+          const fallbackUrl = githubHttpsFallbackUrl(headRepositoryUrl);
+          if (!fallbackUrl) throw remoteError;
+
+          await this.authCtx.exec('git', ['fetch', fallbackUrl, refspec, '--force']);
+        }
+      };
+
       if (isFork) {
         const forkRemote = parseGitHubRepository(headRepositoryUrl)?.owner ?? 'fork';
         // Idempotently ensure remote exists with the correct URL
@@ -1437,24 +1458,17 @@ export class GitService implements GitProvider, IDisposable {
             .exec('git', ['remote', 'set-url', forkRemote, headRepositoryUrl])
             .catch(() => {});
         }
-        await this.authCtx.exec('git', [
-          'fetch',
-          forkRemote,
-          `${headRefName}:refs/heads/${localBranch}`,
-          '--force',
-        ]);
+        await fetchWithHttpsFallback(forkRemote, `${headRefName}:refs/heads/${localBranch}`);
         // Set tracking so `git push` targets the contributor's fork branch
         await this.ctx
           .exec('git', ['branch', `--set-upstream-to=${forkRemote}/${headRefName}`, localBranch])
           .catch(() => {});
       } else {
         // Same-repo: GitHub always exposes refs/pull/{N}/head on origin
-        await this.authCtx.exec('git', [
-          'fetch',
+        await fetchWithHttpsFallback(
           configuredRemote,
-          `refs/pull/${prNumber}/head:refs/heads/${localBranch}`,
-          '--force',
-        ]);
+          `refs/pull/${prNumber}/head:refs/heads/${localBranch}`
+        );
         await this.ctx
           .exec('git', [
             'branch',

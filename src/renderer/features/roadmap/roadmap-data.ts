@@ -1,4 +1,5 @@
 import type { RuntimeId } from '@shared/runtime-registry';
+import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
 
 /**
  * Roadmap content — single source of truth for the runtime capability matrix.
@@ -341,7 +342,7 @@ export const ROADMAP_CATEGORIES: readonly RoadmapCategory[] = [
         },
         report: {
           status: 'published',
-          url: 'https://yoda.lovstudio.ai/docs/reference/learn-agent-design/account/usage-sync',
+          url: YODA_ACCOUNT_USAGE_DOC_URL,
         },
       },
       {

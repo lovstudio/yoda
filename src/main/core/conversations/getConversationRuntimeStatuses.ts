@@ -13,6 +13,7 @@ import { agentSessionRuntimeStore } from './agent-session-runtime';
 import { readClaudeTurnVerdictFile } from './claude-run-state-source';
 import { findClaudeTranscriptPathBySessionId } from './claude-transcript-locator';
 import { readCodexTurnVerdict } from './codex-run-state-source';
+import { resolveCodexThreadIdForConversation } from './codex-session-id';
 import { isInterruptedSinceLastPrompt } from './interrupt-marker';
 
 /**
@@ -47,6 +48,7 @@ export async function getConversationRuntimeStatuses(
       conversationId,
       provider: row?.runtime ?? undefined,
       createdAt: row?.createdAt,
+      title: row?.title,
       cwd,
     });
   }
@@ -66,6 +68,7 @@ export async function getConversationRunStatus(args: {
   provider: string;
   cwd: string;
   createdAt?: string | null;
+  title?: string | null;
 }): Promise<AgentSessionRuntimeStatus> {
   return deriveStatus(args);
 }
@@ -76,9 +79,10 @@ async function deriveStatus(args: {
   conversationId: string;
   provider: string | undefined;
   createdAt?: string | null;
+  title?: string | null;
   cwd: string | undefined;
 }): Promise<AgentSessionRuntimeStatus> {
-  const { projectId, taskId, conversationId, provider, createdAt, cwd } = args;
+  const { projectId, taskId, conversationId, provider, createdAt, title, cwd } = args;
   const mountedTask = resolveTask(projectId, taskId);
 
   // Live in-memory state (set this session via hooks/tailers). Used as the base
@@ -113,9 +117,15 @@ async function deriveStatus(args: {
     }
   } else if (provider === 'codex') {
     const startedAtMs = parseTimestampMs(createdAt);
+    const threadId = resolveCodexThreadIdForConversation({
+      conversationId,
+      cwd,
+      title: title ?? undefined,
+      createdAt,
+    });
     const verdict = await readCodexTurnVerdict(
       conversationId,
-      cwd && startedAtMs !== undefined ? { cwd, startedAtMs } : {}
+      cwd && startedAtMs !== undefined ? { cwd, startedAtMs, threadId } : { threadId }
     ).catch(() => null);
     if (verdict?.state === 'working' || verdict?.state === 'awaiting-input') truth = verdict.state;
     else if (verdict?.state === 'error') truth = 'error';
@@ -132,7 +142,12 @@ async function deriveStatus(args: {
   // verdict is stale (e.g. Esc killed the turn before Claude wrote an interrupt
   // sentinel). Cold-load/unmounted tasks stay transcript-authoritative so tmux
   // sessions can still be shown as running without a connected PTY.
-  let derived = truth ?? memory;
+  // Transcript classifiers intentionally collapse a cleanly finished turn to
+  // `idle`. Do not let that less-specific durable verdict erase a precise
+  // terminal status already observed by the live run-state reducer. A later
+  // `working`/`awaiting-input` truth still wins when the next turn starts.
+  let derived =
+    truth === 'idle' && (memory === 'completed' || memory === 'error') ? memory : (truth ?? memory);
   if (isAgentSessionRunningStatus(derived)) {
     const livePty = hasLivePty(projectId, taskId, conversationId);
     if (truth === undefined) {
@@ -171,12 +186,15 @@ function parseTimestampMs(value: string | null | undefined): number | undefined 
 
 async function loadConversationRows(
   conversationIds: string[]
-): Promise<Map<string, { runtime: string | null; createdAt: string | null }>> {
+): Promise<
+  Map<string, { runtime: string | null; createdAt: string | null; title: string | null }>
+> {
   const rows = await db
     .select({
       id: conversations.id,
       runtime: conversations.runtime,
       createdAt: conversations.createdAt,
+      title: conversations.title,
     })
     .from(conversations)
     .where(
@@ -184,5 +202,7 @@ async function loadConversationRows(
         ? eq(conversations.id, conversationIds[0])
         : inArray(conversations.id, conversationIds)
     );
-  return new Map(rows.map((r) => [r.id, { runtime: r.runtime, createdAt: r.createdAt }]));
+  return new Map(
+    rows.map((r) => [r.id, { runtime: r.runtime, createdAt: r.createdAt, title: r.title }])
+  );
 }

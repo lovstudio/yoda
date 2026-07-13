@@ -2,11 +2,23 @@ import { ArrowRight, ExternalLink, GitPullRequest, Loader2, ScanSearch } from 'l
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getPrNumber, isForkPr, type PullRequest } from '@shared/pull-requests';
+import {
+  formatPullRequestReviewPrompt,
+  getPrNumber,
+  isForkPr,
+  type PullRequest,
+} from '@shared/pull-requests';
+import type { RuntimeId } from '@shared/runtime-registry';
 import { ensureUniqueTaskDisplayName, normalizeTaskDisplayName } from '@shared/task-name';
 import type { CreateTaskParams } from '@shared/tasks';
 import { usePullRequests } from '@renderer/features/projects/components/pr-view/usePullRequests';
-import { getRepositoryStore } from '@renderer/features/projects/stores/project-selectors';
+import {
+  getProjectManagerStore,
+  getRepositoryStore,
+  mountedProjectData,
+} from '@renderer/features/projects/stores/project-selectors';
+import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
+import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { resolvePullRequestTaskStrategy } from '@renderer/features/tasks/create-task-modal/create-task-strategy';
 import { isRegistered } from '@renderer/features/tasks/stores/task';
 import { getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -41,13 +53,16 @@ function buildPullRequestReviewTaskParams({
   projectId,
   pr,
   name,
+  runtimeId,
 }: {
   id: string;
   projectId: string;
   pr: PullRequest;
   name: string;
+  runtimeId: RuntimeId | null;
 }): CreateTaskParams {
   const reviewBranch = pr.headRefName;
+  const initialPrompt = formatPullRequestReviewPrompt(pr);
   return {
     id,
     projectId,
@@ -63,6 +78,16 @@ function buildPullRequestReviewTaskParams({
       taskBranch: name,
       pushBranch: false,
     }),
+    initialConversation: runtimeId
+      ? {
+          id: crypto.randomUUID(),
+          projectId,
+          taskId: id,
+          runtime: runtimeId,
+          title: initialConversationTitle(runtimeId, initialPrompt, []),
+          initialPrompt,
+        }
+      : undefined,
   };
 }
 
@@ -157,6 +182,9 @@ export const PullRequestsOverviewCard = observer(function PullRequestsOverviewCa
   const { t } = useTranslation();
   const repo = getRepositoryStore(projectId);
   const taskManager = getTaskManagerStore(projectId);
+  const projectData = mountedProjectData(getProjectManagerStore().projects.get(projectId));
+  const connectionId = projectData?.type === 'ssh' ? projectData.connectionId : undefined;
+  const { runtimeId } = useEffectiveRuntime(connectionId);
   const repositoryUrl = repo?.repositoryUrl ?? null;
   const { authenticated, isInitialized } = useGithubContext();
   const showConfirm = useShowModal('confirmActionModal');
@@ -203,7 +231,7 @@ export const PullRequestsOverviewCard = observer(function PullRequestsOverviewCa
       const id = crypto.randomUUID();
       const name = ensureUniqueTaskDisplayName(reviewTaskDisplayName(pr, t), existingNames);
       existingNames.add(name);
-      const params = buildPullRequestReviewTaskParams({ id, projectId, pr, name });
+      const params = buildPullRequestReviewTaskParams({ id, projectId, pr, name, runtimeId });
 
       try {
         await manager.createTask(params);

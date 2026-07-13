@@ -4,5 +4,10 @@
     "strict": true,
     "noEmit": true
   },
-  "include": ["index.ts", "src/**/*", "../../src/shared/mobile-api.ts"]
+  "include": [
+    "index.ts",
+    "src/**/*",
+    "../../src/shared/mobile-api.ts",
+    "../../src/shared/mobile-session-events.ts"
+  ]
 }

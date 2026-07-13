@@ -3,6 +3,8 @@
  * Uses SFTP over SSH for remote filesystem operations
  */
 
+import { promises as localFs } from 'node:fs';
+import { dirname } from 'node:path';
 import type { SFTPWrapper } from 'ssh2';
 import type { FileWatchEvent } from '@shared/fs';
 import { buildRemoteShellCommand } from '@main/core/ssh/remote-shell-profile';
@@ -500,8 +502,21 @@ export class SshFileSystem implements FileSystemProvider {
   async copyLocalFile(localAbsPath: string, destRelPath: string): Promise<void> {
     const sftp = await this.getSftp();
     const remoteFull = this.resolveRemotePath(destRelPath);
+    const lastSlash = remoteFull.lastIndexOf('/');
+    if (lastSlash > 0) {
+      await this.ensureRemoteDir(sftp, remoteFull.substring(0, lastSlash));
+    }
     await new Promise<void>((resolve, reject) => {
       sftp.fastPut(localAbsPath, remoteFull, (e) => (e ? reject(e) : resolve()));
+    });
+  }
+
+  async copyToLocalFile(srcRelPath: string, localAbsPath: string): Promise<void> {
+    const sftp = await this.getSftp();
+    const remoteFull = this.resolveRemotePath(srcRelPath);
+    await localFs.mkdir(dirname(localAbsPath), { recursive: true });
+    await new Promise<void>((resolve, reject) => {
+      sftp.fastGet(remoteFull, localAbsPath, (e) => (e ? reject(e) : resolve()));
     });
   }
 

@@ -21,9 +21,15 @@ export const AgentInfoCard: React.FC<{ agent: Agent }> = ({ agent }) => {
     ? (getRuntime(agent.preferredRuntime)?.name ?? agent.preferredRuntime)
     : t('agentManager.anyRuntime');
 
-  const skillNames = agent.enabledSkillIds.map(
-    (id) => installedSkills.find((s) => s.id === id)?.displayName ?? id
-  );
+  const resolveSkillName = (identifier: string) =>
+    installedSkills.find((skill) => skill.key === identifier || skill.id === identifier)
+      ?.displayName ?? identifier;
+  const skillNames = [
+    ...agent.enabledSkillIds.map((identifier) => resolveSkillName(identifier)),
+    ...agent.manualSkillIds.map(
+      (identifier) => `${resolveSkillName(identifier)} · ${t('agentManager.skillModeManual')}`
+    ),
+  ];
 
   return (
     <div className="w-80 max-w-[20rem] rounded-lg border border-border bg-background p-3 text-foreground shadow-md">

@@ -1,9 +1,182 @@
 # Changelog
 
+## 0.15.11
+
+### Added
+
+- Sign in to Yoda with a LovStudio account and view account, credit, Relay Pass, and device status in the desktop app.
+- Connect Yoda Mobile across different networks through Yoda Relay without requiring Tailscale or the same LAN.
+- Start a seven-day Relay trial, activate a prepaid Relay Pass with LovStudio credits, and revoke paired devices from the shared account system.
+
+### Changed
+
+- Use LovStudio as the account and billing control plane for Yoda CLI authentication and Relay authorization.
+
+## 0.15.10
+
+### Fixes
+
+- Run the signed Sparkle delta installation smoke test through the same closed local proxy used by the packaged application.
+
+## 0.15.9
+
+### Fixes
+
+- Preserve the `.delta` extension through the local Sparkle proxy so signed incremental updates can be extracted and installed instead of falling back to a blocked full update.
+
+## 0.15.8
+
+### Fixes
+
+- Prevent Sparkle from rejecting a valid signed delta because of brittle executable-size or localization eligibility hints.
+
+## 0.15.7
+
+### Patch Changes
+
+- Keep the Home comparison action available while a restored project is still mounting, and allow projectless comparison rows to select their base project.
+
+## 0.15.6
+
+### Patch Changes
+
+- Publish architecture-qualified Sparkle delta assets so Apple Silicon and Intel updates cannot overwrite each other.
+
+## 0.15.5
+
+### Patch Changes
+
+- Keep Codex quota and reset-credit status isolated per account and visible while live usage refreshes.
+- Redeem available Codex reset credits from the account usage surfaces.
+- Prevent the Home comparison controls from disappearing when the packaged app restores a projectless or still-opening draft.
+
+## 0.15.4
+
+### Patch Changes
+
+- Keep default tasks projectless and preserve the correct projectless icon option when creating a task.
+- Refresh live Codex account usage in the workspace runtime bar and account settings panel.
+
+## 0.15.3
+
+### Patch Changes
+
+- Regenerate macOS DMG blockmaps and update metadata after notarization so published checksums and sizes match the final stapled artifacts.
+
+## 0.15.2
+
+### Patch Changes
+
+- Start development reliably after a clean Electron 42 install by resolving its lazy-downloaded runtime before electron-vite launches.
+- Keep project merge and workspace reorder updates inside synchronous database transactions to avoid partial state changes.
+
+## 0.15.1
+
+### Patch Changes
+
+- Fix the Electron runtime crash on macOS 26 by upgrading Electron and the native rebuild chain.
+
 All notable changes to Yoda will be documented in this file.
 
 The public Yoda changelog starts at **0.1.0**. Earlier non-Yoda release history
 is preserved in git tags only.
+
+## 0.15.0 — 2026-07-10
+
+### Added
+
+- Runtime chrome now surfaces prompt count, live context usage, and session
+  history access directly in the workspace bar.
+- Workspace shell and runtime snapshot plumbing add first-class in-app runtime
+  management and dependency visibility.
+- Task and conversation flows now track richer session prompt context for
+  resumed runs.
+
+### Changed
+
+- Agent selector and runtime settings tighten the display for current
+  runtime/account usage and related controls.
+- Sidebar and task surfaces were reorganized around the new runtime history and
+  prompt context affordances.
+
+### Fixed
+
+- Conversations resume reliably after PTY restarts and duplicate resume
+  requests are coalesced.
+- Task sidebar click targets and overlap issues were cleaned up, along with PTY
+  resize freeze regressions.
+
+## 0.14.5 — 2026-07-09
+
+### Fixed
+
+- Releases: refresh the China CDN root update manifests after uploading mirror
+  assets so macOS and Linux update feeds move to the new version immediately.
+
+## 0.14.4 — 2026-07-09
+
+### Added
+
+- Tasks: support moving SSH-backed task worktrees between projects through a
+  git-bundle shuttle, keeping remote tasks first-class across project moves.
+- Skills: add search to the skill shortcut menu so large local skill catalogs
+  are easier to filter from the composer.
+
+### Changed
+
+- Home: make the run-host selector interactive and show SSH-backed projects as
+  available instead of a disabled coming-soon state.
+- Sidebar: simplify the multi-agent task marker while keeping team-room tasks
+  visually distinct from normal task rows.
+
+### Fixed
+
+- Conversations: deferred prompt injection now waits for the live PTY to be
+  ready before sending the queued prompt.
+- Skills: fix shortcut menu clipping so filtered results remain usable in the
+  popup.
+
+## 0.14.3 — 2026-07-06
+
+### Added
+
+- Releases: mirror production installers, blockmaps, and updater manifests to
+  the China CDN at `cdn.cs-magic.cn/yoda`.
+- Settings: add an update source selector so packaged builds can check and
+  download updates from the China mirror when GitHub is unreliable.
+- Website: add China mirror download links for macOS, Windows, and Linux.
+
+### Changed
+
+- Release CI now embeds the configured China mirror feed URL into production
+  builds and uploads mirror artifacts when the `release` environment secrets are
+  available.
+
+## 0.14.2 — 2026-07-06
+
+### Added
+
+- Agent runtime: add a login/re-login action in the account panel for switching
+  official runtime subscriptions.
+- Pull requests: seed review tasks with richer fix context so spawned agent work
+  starts with PR title, URL, branch, description, and changed-file metadata.
+- Sessions: add regressions for archived task session recovery.
+
+### Changed
+
+- Prompt rewrite now fails open during task submission so agent startup can
+  continue with the original prompt when rewrite preprocessing fails.
+- Session recovery now resolves moved Codex resume sessions and keeps archived
+  task sessions findable after project path changes.
+- Worktree provisioning no longer stalls on stale worktree directories.
+
+### Fixed
+
+- File watcher: move ignored-directory filtering out of `@parcel/watcher` native
+  glob handling and into JavaScript to avoid Windows native crashes on long
+  paths.
+- Packaging: include `zod` as a runtime dependency so packaged builds can load
+  `@ai-sdk/provider-utils` from `app.asar`.
 
 ## 0.14.1 — 2026-07-02
 

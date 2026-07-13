@@ -8,6 +8,7 @@ import {
 } from '@shared/agent-team';
 import { DEFAULT_AGENT_ICON } from '@shared/agents';
 import type { RuntimeId } from '@shared/runtime-registry';
+import type { SkillSelectionInput } from '@shared/skills/types';
 import type { MemberAccent } from '@shared/team-room';
 import type { RoutingHopLimit } from '@shared/team-routing-limit';
 import { agentTeamsService } from '@main/core/agent-teams/agent-teams-service';
@@ -41,8 +42,18 @@ export type SeedReviewRoomParams = {
   name: string;
   /** The lead's opening ask; posted as "@implementer <requirement>" to kick the loop. */
   requirement: string;
-  implementer: { runtime: RuntimeId; systemPrompt?: string; autoApprove?: boolean };
-  reviewer: { runtime: RuntimeId; systemPrompt?: string; autoApprove?: boolean };
+  implementer: {
+    runtime: RuntimeId;
+    systemPrompt?: string;
+    skillSelection?: SkillSelectionInput;
+    autoApprove?: boolean;
+  };
+  reviewer: {
+    runtime: RuntimeId;
+    systemPrompt?: string;
+    skillSelection?: SkillSelectionInput;
+    autoApprove?: boolean;
+  };
   routingHopLimit?: RoutingHopLimit;
 };
 
@@ -71,6 +82,7 @@ export async function seedReviewRoom(params: SeedReviewRoomParams): Promise<stri
     role: 'implementer',
     runtime: params.implementer.runtime,
     systemPrompt: joinRolePrompt(IMPLEMENTER_ROLE_PROMPT, params.implementer.systemPrompt),
+    skillSelection: params.implementer.skillSelection,
     autoApprove: params.implementer.autoApprove ?? false,
     accent: 'amber',
   });
@@ -81,6 +93,7 @@ export async function seedReviewRoom(params: SeedReviewRoomParams): Promise<stri
     role: 'reviewer',
     runtime: params.reviewer.runtime,
     systemPrompt: joinRolePrompt(REVIEWER_ROLE_PROMPT, params.reviewer.systemPrompt),
+    skillSelection: params.reviewer.skillSelection,
     autoApprove: params.reviewer.autoApprove ?? false,
     accent: 'teal',
   });
@@ -107,6 +120,7 @@ const TEAM_ACCENTS: MemberAccent[] = ['amber', 'teal', 'violet', 'slate'];
 type MemberSeedProfile = {
   systemPrompt: string;
   icon: string;
+  skillSelection: SkillSelectionInput | null;
 };
 
 /** Resolve a team member's base profile from its agentRef or inline text. */
@@ -115,9 +129,22 @@ async function resolveMemberSeedProfile(member: AgentTeamMember): Promise<Member
     const agent = member.agentRef.startsWith('builtin:')
       ? await agentsConfigService.getBySlug(member.agentRef)
       : await agentsConfigService.get(member.agentRef);
-    if (agent) return { systemPrompt: agent.systemPrompt, icon: agent.icon };
+    if (agent) {
+      return {
+        systemPrompt: agent.systemPrompt,
+        icon: agent.icon,
+        skillSelection: {
+          autoSkillKeys: agent.enabledSkillIds,
+          manualSkillKeys: agent.manualSkillIds,
+        },
+      };
+    }
   }
-  return { systemPrompt: member.systemPrompt ?? '', icon: DEFAULT_AGENT_ICON };
+  return {
+    systemPrompt: member.systemPrompt ?? '',
+    icon: DEFAULT_AGENT_ICON,
+    skillSelection: null,
+  };
 }
 
 /**
@@ -220,6 +247,7 @@ export async function seedRoomFromTeam(args: {
       role: isLeader ? 'leader' : 'worker',
       runtime: member.runtime,
       systemPrompt: joinRolePrompt(base.systemPrompt, addendum),
+      skillSelection: base.skillSelection,
       accent: TEAM_ACCENTS[i % TEAM_ACCENTS.length],
     });
   }

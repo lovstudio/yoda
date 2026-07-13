@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS WAF protection for the production Yoda Relay CloudFront distribution.
+
+Resources:
+  RelayWebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: yoda-relay-production
+      Description: Managed reputation protection and route-aware rate limits for Yoda Relay.
+      Scope: CLOUDFRONT
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: yoda-relay-production
+        SampledRequestsEnabled: false
+      Rules:
+        - Name: AwsIpReputation
+          Priority: 0
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: yoda-relay-ip-reputation
+            SampledRequestsEnabled: false
+        - Name: PairRateLimit
+          Priority: 10
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              AggregateKeyType: IP
+              EvaluationWindowSec: 300
+              Limit: 60
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  FieldToMatch:
+                    UriPath: {}
+                  PositionalConstraint: EXACTLY
+                  SearchString: /v1/pair
+                  TextTransformations:
+                    - Priority: 0
+                      Type: NONE
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: yoda-relay-pair-rate
+            SampledRequestsEnabled: false
+        - Name: HostRateLimit
+          Priority: 20
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              AggregateKeyType: IP
+              EvaluationWindowSec: 300
+              Limit: 120
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  FieldToMatch:
+                    UriPath: {}
+                  PositionalConstraint: STARTS_WITH
+                  SearchString: /v1/host/
+                  TextTransformations:
+                    - Priority: 0
+                      Type: NONE
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: yoda-relay-host-rate
+            SampledRequestsEnabled: false
+        - Name: DeviceRateLimit
+          Priority: 30
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              AggregateKeyType: IP
+              EvaluationWindowSec: 300
+              Limit: 1200
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  FieldToMatch:
+                    UriPath: {}
+                  PositionalConstraint: STARTS_WITH
+                  SearchString: /v1/devices/
+                  TextTransformations:
+                    - Priority: 0
+                      Type: NONE
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: yoda-relay-device-rate
+            SampledRequestsEnabled: false
+
+Outputs:
+  WebAclArn:
+    Value: !GetAtt RelayWebAcl.Arn
+  WebAclId:
+    Value: !GetAtt RelayWebAcl.Id

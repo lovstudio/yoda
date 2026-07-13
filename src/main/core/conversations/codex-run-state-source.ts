@@ -53,6 +53,8 @@ export interface CodexRunStateContext {
   cwd: string;
   startedAtMs: number;
   isResuming?: boolean;
+  /** Persisted/resolved Codex thread id. Avoids cwd-based fallback collisions. */
+  threadId?: string;
 }
 
 export type RunStateDispatch = (event: RunStateEvent) => void;
@@ -219,8 +221,14 @@ export function resolveCodexRolloutPathForConversation({
   cwd,
   startedAtMs,
   isResuming,
+  threadId,
   statePath = resolveCodexStatePath(),
 }: CodexRunStateContext & { statePath?: string }): string | undefined {
+  if (threadId) {
+    const explicit = readCodexThreadRolloutPath(statePath, threadId);
+    if (explicit) return explicit;
+  }
+
   const claimedThreadId = getClaimedCodexThreadId(conversationId);
   if (claimedThreadId) {
     const claimed = readCodexThreadRolloutPath(statePath, claimedThreadId);

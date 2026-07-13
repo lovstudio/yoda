@@ -117,40 +117,33 @@ async function mergeProjectIntoExisting(source: ProjectRow, target: ProjectRow):
 
   await prSyncEngine.deleteProjectData(source.id);
 
-  const [updatedTarget] = await db.transaction(async (tx) => {
-    await tx
-      .update(tasks)
+  const [updatedTarget] = await db.transaction((tx) => {
+    tx.update(tasks)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(tasks.projectId, source.id));
-    await tx
-      .update(conversations)
+    tx.update(conversations)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(conversations.projectId, source.id));
-    await tx
-      .update(terminals)
+    tx.update(terminals)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(terminals.projectId, source.id));
-    await tx
-      .update(taskNamingSnapshots)
+    tx.update(taskNamingSnapshots)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(taskNamingSnapshots.projectId, source.id));
-    await tx
-      .update(reviewOrchestrations)
+    tx.update(reviewOrchestrations)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(reviewOrchestrations.projectId, source.id));
-    await tx
-      .update(teamRooms)
+    tx.update(teamRooms)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(teamRooms.projectId, source.id));
-    await tx
-      .update(automations)
+    tx.update(automations)
       .set({ projectId: target.id, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(automations.projectId, source.id));
 
-    await tx.delete(editorBuffers).where(eq(editorBuffers.projectId, source.id));
-    await tx.delete(projectSettings).where(eq(projectSettings.projectId, source.id));
-    await tx.delete(projectRemotes).where(eq(projectRemotes.projectId, source.id));
-    await tx.delete(projects).where(eq(projects.id, source.id));
+    tx.delete(editorBuffers).where(eq(editorBuffers.projectId, source.id));
+    tx.delete(projectSettings).where(eq(projectSettings.projectId, source.id));
+    tx.delete(projectRemotes).where(eq(projectRemotes.projectId, source.id));
+    tx.delete(projects).where(eq(projects.id, source.id));
 
     return tx
       .update(projects)

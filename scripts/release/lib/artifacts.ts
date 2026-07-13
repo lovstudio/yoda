@@ -24,6 +24,14 @@ export function findBlockmaps(): string[] {
   return matchFiles(/\.blockmap$/);
 }
 
+export function findSparkleFeeds(): string[] {
+  return matchFiles(/^appcast-(?:arm64|x64)\.xml$/);
+}
+
+export function findSparkleDeltas(): string[] {
+  return matchFiles(/\.delta$/);
+}
+
 export function findArtifacts(patterns: string[]): string[] {
   const combined = new RegExp(patterns.map((p) => `(?:${p})`).join('|'));
   return matchFiles(combined);

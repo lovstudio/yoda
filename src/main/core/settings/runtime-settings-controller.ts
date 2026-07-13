@@ -8,11 +8,14 @@ import {
   type RuntimeAccountStatus,
   type RuntimeId,
 } from '@shared/runtime-registry';
+import { getAccountUsage, resetAccountUsage } from './codex-account-usage-service';
 import { getLocalUsage } from './local-usage-service';
 import { probeOfficialApi } from './official-api-probe-service';
 import { runtimeModelCandidatesService } from './runtime-model-candidates-service';
 import { runtimeOverrideSettings } from './runtime-settings-service';
+import { getRuntimeSnapshot } from './runtime-snapshot-service';
 import { getSubscriptionAccount } from './subscription-account-service';
+import { startSubscriptionLogin } from './subscription-login-service';
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
@@ -42,6 +45,11 @@ export const runtimeSettingsController = createRPCController({
   inferNamingModelCandidates: (id: RuntimeId, args?: { forceRefresh?: boolean }) =>
     runtimeModelCandidatesService.inferNamingModelCandidates(id, args),
 
+  getRuntimeSnapshot: (
+    id: RuntimeId,
+    options?: { connectionId?: string; forceRefresh?: boolean }
+  ) => getRuntimeSnapshot(id, options),
+
   updateModelCandidatePreferences: (
     id: RuntimeId,
     args: {
@@ -52,6 +60,12 @@ export const runtimeSettingsController = createRPCController({
 
   getSubscriptionAccount: (id: RuntimeId): Promise<AgentSubscriptionAccount> =>
     getSubscriptionAccount(id),
+
+  getAccountUsage,
+
+  resetAccountUsage,
+
+  startSubscriptionLogin: (id: RuntimeId) => startSubscriptionLogin(id),
 
   getLocalUsage: (id: RuntimeId, args?: { forceRefresh?: boolean }): Promise<AgentLocalUsage> =>
     getLocalUsage(id, args),

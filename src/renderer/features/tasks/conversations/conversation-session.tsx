@@ -7,6 +7,7 @@ import { asMounted, getProjectStore } from '@renderer/features/projects/stores/p
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { useWorkspaceWebLinks } from '@renderer/features/tasks/terminals/use-workspace-web-links';
+import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
 import { rpc } from '@renderer/lib/ipc';
 import type { FrontendPty } from '@renderer/lib/pty/pty';
 import {
@@ -24,6 +25,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import type { ConversationStore } from './conversation-manager';
+import { shouldAutoResumeConversation } from './conversation-session-utils';
 
 export function getResumeInitialSize(
   pty: FrontendPty,
@@ -69,18 +71,20 @@ export const ConversationSession = observer(function ConversationSession({
   const provisioned = useProvisionedTask();
   const { conversations } = provisioned;
   const mountedProject = asMounted(getProjectStore(projectId));
+  const projectRoot = mountedProject?.data.path;
   const remoteConnectionId =
     mountedProject?.data.type === 'ssh' ? mountedProject.data.connectionId : undefined;
 
   const session = conversation.session;
   const sessionId = session?.sessionId ?? null;
   const sessionStatus = session?.status;
+  const sessionPty = session?.pty ?? null;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<{ focus: () => void }>(null);
   const focusPendingRef = useRef(false);
-  const lastAutoResumeSessionRef = useRef<string | null>(null);
+  const lastAutoResumePtyRef = useRef<FrontendPty | null>(null);
 
   const {
     isSearchOpen,
@@ -119,15 +123,25 @@ export const ConversationSession = observer(function ConversationSession({
   // Resume the PTY when visible + ready (once per session id).
   useEffect(() => {
     if (!isVisible) {
-      lastAutoResumeSessionRef.current = null;
+      lastAutoResumePtyRef.current = null;
       return;
     }
-    if (!sessionId || session?.status !== 'ready' || !session.pty) return;
-    if (lastAutoResumeSessionRef.current === sessionId) return;
-    lastAutoResumeSessionRef.current = sessionId;
-    const initialSize = getResumeInitialSize(session.pty, terminalContainerRef.current);
+    if (
+      !sessionPty ||
+      !shouldAutoResumeConversation({
+        isVisible,
+        sessionId,
+        sessionStatus,
+        sessionPty,
+        lastAutoResumePty: lastAutoResumePtyRef.current,
+      })
+    ) {
+      return;
+    }
+    lastAutoResumePtyRef.current = sessionPty;
+    const initialSize = getResumeInitialSize(sessionPty, terminalContainerRef.current);
     void conversations.resumeConversation(conversation.data.id, initialSize);
-  }, [conversation, session, sessionId, sessionStatus, conversations, isVisible]);
+  }, [conversation, conversations, isVisible, sessionId, sessionPty, sessionStatus]);
 
   const markConversationSubmitted = (forceWorking = false) => {
     conversation.setWorking({ force: forceWorking });
@@ -189,8 +203,9 @@ export const ConversationSession = observer(function ConversationSession({
   const fileLinks = useMemo<TerminalFileLinkOptions>(
     () => ({
       workspaceRoot: provisioned.path,
+      workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
-      isRemote: Boolean(remoteConnectionId),
+      sshConnectionId: remoteConnectionId,
       onOpen: ({ filePath, absolutePath, line, column }) => {
         if (filePath) {
           provisioned.taskView.tabManager.openFileInSidebar(filePath, { line, column });
@@ -198,11 +213,18 @@ export const ConversationSession = observer(function ConversationSession({
           return;
         }
         if (absolutePath) {
-          void rpc.app.openIn({ app: 'finder', path: absolutePath });
+          void rpc.app.openIn(
+            buildFilePathDefaultOpenRequest({
+              absolutePath,
+              sshConnectionId: remoteConnectionId,
+              line,
+              column,
+            })
+          );
         }
       },
     }),
-    [provisioned.path, provisioned.taskView, remoteConnectionId, homeDir]
+    [provisioned.path, provisioned.taskView, projectRoot, remoteConnectionId, homeDir]
   );
   const webLinks = useWorkspaceWebLinks();
 

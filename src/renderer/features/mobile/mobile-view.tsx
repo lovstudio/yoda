@@ -5,8 +5,12 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Cloud,
   Copy,
+  ExternalLink,
   FlaskConical,
+  LogIn,
+  Network,
   RefreshCw,
   Rocket,
   ShieldCheck,
@@ -19,11 +23,25 @@ import { useTranslation } from 'react-i18next';
 import type { MobileGatewayMode } from '@shared/mobile-api';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
+import {
+  useAccountAuthWarmUp,
+  useAccountSession,
+  useAccountSignIn,
+} from '@renderer/lib/hooks/useAccount';
 import { rpc } from '@renderer/lib/ipc';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
+
+const TAILSCALE_DOWNLOAD_URL = 'https://tailscale.com/download';
+const TAILSCALE_SETUP_URL = 'https://tailscale.com/kb/1017/install';
+
+function userFacingError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, '');
+}
 
 async function copyToClipboard(value: string): Promise<void> {
   if (!navigator.clipboard?.writeText) throw new Error('Clipboard is not available');
@@ -136,13 +154,26 @@ function InfoRow({
 
 export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useTranslation();
+  const account = useAccountSession();
+  const signIn = useAccountSignIn();
+  const showAccountDeviceFlow = useShowModal('accountDeviceFlowModal');
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['mobileGateway', 'connectionInfo'],
     queryFn: () => rpc.mobileGateway.getConnectionInfo(),
-    // The QR encodes the current LAN IP; poll so a network change while the
+    // The QR encodes the current Tailscale or LAN IP; poll so a network change while the
     // panel is open refreshes it (and lets the gateway restart Metro).
     refetchInterval: 5000,
   });
+  const relay = useQuery({
+    queryKey: ['mobileGateway', 'relayStatus'],
+    queryFn: () => rpc.mobileGateway.getRelayStatus(),
+    refetchInterval: 3000,
+  });
+  const [relayBusy, setRelayBusy] = useState(false);
+  const [relayError, setRelayError] = useState<string | null>(null);
+  const isAccountSignedIn = account.data?.isSignedIn === true;
+
+  useAccountAuthWarmUp(!account.isLoading && !isAccountSignedIn);
 
   // The Dev/Prod view is a manual switch; it defaults to the host's real runtime
   // mode once the connection info loads, but the user can flip it to inspect the
@@ -156,6 +187,7 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
   const localExpoUrl = data?.localExpoUrl ?? null;
   const installUrl = data?.installUrl ?? '';
   const pairingUrl = data?.pairingUrl ?? null;
+  const effectivePairingUrl = relay.data?.pairingUrl ?? pairingUrl;
   const isReady = Boolean(data?.running && data.token && primaryUrl && pairingUrl);
   const isDevView = mode === 'development';
   // Dev connection methods only exist in a dev build of the host app.
@@ -169,10 +201,52 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
     lines.push(
       `${t('sidebar.mobileConnection.gatewayUrl')}: ${primaryUrl}`,
       `${t('sidebar.mobileConnection.token')}: ${data.token ?? ''}`,
-      `${t('sidebar.mobileConnection.pairingUrl')}: ${pairingUrl ?? ''}`
+      `${t('sidebar.mobileConnection.pairingUrl')}: ${effectivePairingUrl ?? ''}`
     );
     return lines.join('\n');
-  }, [data, isDevView, installUrl, localExpoUrl, pairingUrl, primaryUrl, t]);
+  }, [data, effectivePairingUrl, isDevView, installUrl, localExpoUrl, primaryUrl, t]);
+
+  const enableRelay = async () => {
+    setRelayBusy(true);
+    setRelayError(null);
+    try {
+      if (!isAccountSignedIn) {
+        showAccountDeviceFlow({
+          onError: (message: string) => setRelayError(message),
+        });
+        const result = await signIn.mutateAsync(undefined);
+        if (!result.success) {
+          throw new Error(result.error || t('sidebar.mobileConnection.relaySignInRequired'));
+        }
+      }
+      await rpc.mobileGateway.enableRelay();
+      await relay.refetch();
+    } catch (nextError) {
+      const message = userFacingError(nextError);
+      if (message.includes('Sign in to your LovStudio account')) {
+        await account.refetch();
+        setRelayError(t('sidebar.mobileConnection.relaySignInRequired'));
+      } else {
+        setRelayError(message);
+      }
+    } finally {
+      setRelayBusy(false);
+    }
+  };
+
+  const createRelayPairing = async () => {
+    setRelayBusy(true);
+    setRelayError(null);
+    try {
+      await rpc.mobileGateway.createRelayPairing();
+      await relay.refetch();
+      setStepIndex(1);
+    } catch (nextError) {
+      setRelayError(userFacingError(nextError));
+    } finally {
+      setRelayBusy(false);
+    }
+  };
 
   return (
     <div
@@ -285,6 +359,185 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
                         ? t('sidebar.mobileConnection.notReady')
                         : t('sidebar.mobileConnection.disabled')}
                 </span>
+                {isReady && data?.connectionKind === 'tailscale' ? (
+                  <span className="ml-auto rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium">
+                    {t('sidebar.mobileConnection.tailscaleReady')}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Cloud className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-medium">
+                        {t('sidebar.mobileConnection.relayTitle')}
+                      </div>
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        {t('sidebar.mobileConnection.recommended')}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-foreground-muted">
+                      {t('sidebar.mobileConnection.relayDescription')}
+                    </p>
+                    <div className="mt-2 flex items-center gap-2 text-xs">
+                      <span
+                        className={cn(
+                          'size-2 rounded-full',
+                          relay.data?.connected
+                            ? 'bg-emerald-500'
+                            : relay.data?.connecting
+                              ? 'animate-pulse bg-amber-500'
+                              : 'bg-foreground-tertiary-passive'
+                        )}
+                      />
+                      <span className="text-foreground-muted">
+                        {relay.data?.connected
+                          ? t('sidebar.mobileConnection.relayConnected')
+                          : relay.data?.connecting
+                            ? t('sidebar.mobileConnection.relayConnecting')
+                            : t('sidebar.mobileConnection.relayDisconnected')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {relayError || relay.data?.lastError ? (
+                  <p className="mt-3 text-xs text-foreground-destructive">
+                    {relayError ?? relay.data?.lastError}
+                  </p>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {!isAccountSignedIn || !relay.data?.configured ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void enableRelay()}
+                      disabled={relayBusy || account.isLoading}
+                    >
+                      {isAccountSignedIn ? (
+                        <Cloud className="size-3.5" />
+                      ) : (
+                        <LogIn className="size-3.5" />
+                      )}
+                      {relayBusy
+                        ? signIn.isPending
+                          ? t('sidebar.mobileConnection.relaySigningIn')
+                          : t('sidebar.mobileConnection.relayEnabling')
+                        : isAccountSignedIn
+                          ? t('sidebar.mobileConnection.enableRelay')
+                          : t('sidebar.mobileConnection.signInToEnableRelay')}
+                    </Button>
+                  ) : !relay.data.connected ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void enableRelay()}
+                      disabled={relayBusy || relay.data.connecting}
+                    >
+                      <RefreshCw
+                        className={cn(
+                          'size-3.5',
+                          (relayBusy || relay.data.connecting) && 'animate-spin'
+                        )}
+                      />
+                      {relayBusy || relay.data.connecting
+                        ? t('sidebar.mobileConnection.relayConnecting')
+                        : t('sidebar.mobileConnection.reconnectRelay')}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void createRelayPairing()}
+                      disabled={relayBusy}
+                    >
+                      <Smartphone className="size-3.5" />
+                      {t('sidebar.mobileConnection.generateRelayPairing')}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={cn(
+                      'flex size-9 shrink-0 items-center justify-center rounded-lg',
+                      data?.connectionKind === 'tailscale'
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-background-quaternary-1 text-foreground-muted'
+                    )}
+                  >
+                    <Network className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-medium">
+                        {t('sidebar.mobileConnection.tailscaleTitle')}
+                      </div>
+                      <span
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                          data?.connectionKind === 'tailscale'
+                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-background-quaternary-1 text-foreground-muted'
+                        )}
+                      >
+                        {data?.connectionKind === 'tailscale'
+                          ? t('sidebar.mobileConnection.tailscaleDetected')
+                          : t('sidebar.mobileConnection.tailscaleNotDetected')}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-foreground-muted">
+                      {data?.connectionKind === 'tailscale'
+                        ? t('sidebar.mobileConnection.tailscaleDetectedDescription', {
+                            url: primaryUrl,
+                          })
+                        : t('sidebar.mobileConnection.tailscaleDescription')}
+                    </p>
+                  </div>
+                </div>
+
+                {data?.connectionKind !== 'tailscale' ? (
+                  <ol className="mt-3 grid gap-2 text-xs leading-5 text-foreground-muted">
+                    {[
+                      'sidebar.mobileConnection.tailscaleStep1',
+                      'sidebar.mobileConnection.tailscaleStep2',
+                      'sidebar.mobileConnection.tailscaleStep3',
+                    ].map((key, index) => (
+                      <li key={key} className="flex gap-2">
+                        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-background-quaternary-1 font-mono text-[10px] text-foreground">
+                          {index + 1}
+                        </span>
+                        <span>{t(key)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void rpc.app.openExternal(TAILSCALE_DOWNLOAD_URL)}
+                  >
+                    <ExternalLink className="size-3.5" />
+                    {t('sidebar.mobileConnection.downloadTailscale')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void rpc.app.openExternal(TAILSCALE_SETUP_URL)}
+                  >
+                    <ExternalLink className="size-3.5" />
+                    {t('sidebar.mobileConnection.tailscaleSetupGuide')}
+                  </Button>
+                </div>
               </div>
 
               <div className="rounded-lg border border-border bg-background p-4">
@@ -342,15 +595,25 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
                   ) : (
                     <>
                       <p className="max-w-sm text-center text-xs leading-5 text-foreground-muted">
-                        {t('sidebar.mobileConnection.connectDescription')}
+                        {relay.data?.pairingUrl
+                          ? t('sidebar.mobileConnection.relayConnectDescription')
+                          : data?.connectionKind === 'tailscale'
+                            ? t('sidebar.mobileConnection.tailscaleConnectDescription')
+                            : t('sidebar.mobileConnection.connectDescription')}
                       </p>
                       <QRBox
-                        value={isReady ? pairingUrl : null}
+                        value={relay.data?.pairingUrl ?? (isReady ? pairingUrl : null)}
                         disabledLabel={t('sidebar.mobileConnection.connectUnavailable')}
                       />
                       <div className="flex w-full items-start gap-2 rounded-lg border border-border bg-background-quaternary-1 px-3 py-2 text-xs leading-5 text-foreground-muted">
                         <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-                        <span>{t('sidebar.mobileConnection.securityNote')}</span>
+                        <span>
+                          {t(
+                            relay.data?.pairingUrl
+                              ? 'sidebar.mobileConnection.relaySecurityNote'
+                              : 'sidebar.mobileConnection.securityNote'
+                          )}
+                        </span>
                       </div>
                       <Collapsible className="w-full">
                         <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-xs text-foreground-muted hover:text-foreground">

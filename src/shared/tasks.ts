@@ -121,7 +121,7 @@ export type MoveTaskToProjectError =
   | { type: 'same-project' }
   /** The task has subtasks — moving would split a cross-project parent/child tree. */
   | { type: 'has-subtasks' }
-  /** A worktree task can only migrate between two local projects (no SSH yet). */
+  /** A worktree task cannot be migrated across the selected project transports. */
   | { type: 'unsupported-transport' }
   /** The source project must be open to migrate its worktree. */
   | { type: 'source-project-not-open' }

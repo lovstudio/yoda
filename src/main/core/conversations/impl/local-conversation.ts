@@ -155,6 +155,13 @@ export class LocalConversationProvider implements ConversationProvider {
 
     const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
     recordConversationAuthProvider(conversation.id, providerConfig);
+    if (conversation.skillPolicy?.warnings.length) {
+      log.warn('Agent skill profile has runtime limitations', {
+        conversationId: conversation.id,
+        runtimeId: conversation.runtimeId,
+        warnings: conversation.skillPolicy.warnings,
+      });
+    }
     const agentSessionId = isResuming
       ? resolveAgentResumeSessionId(conversation, this.taskPath)
       : conversation.id;
@@ -193,6 +200,7 @@ export class LocalConversationProvider implements ConversationProvider {
       ),
       model,
       terminalThemeMode: await resolveTerminalThemeMode(),
+      skillPolicy: conversation.skillPolicy,
     });
     const args = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 
@@ -369,7 +377,7 @@ export class LocalConversationProvider implements ConversationProvider {
       startedAtMs: sessionStartedAtMs,
       isResuming,
     });
-    this.startRunStateWatcher(conversation, sessionStartedAtMs, isResuming);
+    this.startRunStateWatcher(conversation, sessionStartedAtMs, isResuming, agentSessionId);
     telemetryService.capture('agent_run_started', {
       provider: conversation.runtimeId,
       project_id: conversation.projectId,
@@ -388,7 +396,8 @@ export class LocalConversationProvider implements ConversationProvider {
   private startRunStateWatcher(
     conversation: Conversation,
     startedAtMs: number,
-    isResuming: boolean
+    isResuming: boolean,
+    agentSessionId: string
   ): void {
     this.stopRunStateWatcher(conversation.id);
     const session = {
@@ -398,7 +407,13 @@ export class LocalConversationProvider implements ConversationProvider {
     };
     if (conversation.runtimeId === 'codex') {
       const watcher = watchCodexRunState(
-        { conversationId: conversation.id, cwd: this.taskPath, startedAtMs, isResuming },
+        {
+          conversationId: conversation.id,
+          cwd: this.taskPath,
+          startedAtMs,
+          isResuming,
+          threadId: agentSessionId,
+        },
         (event) => agentSessionRuntimeStore.dispatch(session, event, 'codex-rollout')
       );
       this.runStateWatchers.set(conversation.id, [watcher]);

@@ -7,6 +7,7 @@ import {
   UPDATE_CHANNEL,
   UPDATE_FEED_BASE_URL,
 } from './src/shared/app-identity.canary';
+import { SPARKLE_PUBLIC_ED_KEY } from './src/shared/sparkle-signing';
 
 const config: Configuration = {
   appId: APP_ID,
@@ -23,6 +24,19 @@ const config: Configuration = {
   ],
   generateUpdatesFilesForAllChannels: false,
   extraResources: ['LICENSE.md'],
+  extraFiles:
+    process.platform === 'darwin'
+      ? [
+          {
+            from: 'build/sparkle/YodaSparkleUpdater',
+            to: 'Helpers/YodaSparkleUpdater',
+          },
+          {
+            from: 'build/sparkle/Sparkle.framework',
+            to: 'Frameworks/Sparkle.framework',
+          },
+        ]
+      : [],
   // node_modules 不写进 files：electron-builder 自动收集 production dependencies
   // （仅 native 模块 + ssh2，其余依赖已由 electron-vite 打进 out/）
   files: ['out/**/*', 'drizzle/**/*'],
@@ -43,6 +57,10 @@ const config: Configuration = {
     ],
     icon: 'src/assets/images/yoda/yoda-canary.icns',
     notarize: false,
+    extendInfo: {
+      SUPublicEDKey: SPARKLE_PUBLIC_ED_KEY,
+      NSAppTransportSecurity: { NSAllowsLocalNetworking: true },
+    },
   },
   dmg: {
     icon: 'src/assets/images/yoda/yoda-canary.icns',

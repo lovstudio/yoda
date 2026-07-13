@@ -37,6 +37,7 @@ export const viewEvents: Record<
   settings: 'settings_viewed',
   skills: 'skills_viewed',
   skill: 'skills_viewed',
+  skillCompare: 'skills_viewed',
   mcp: 'mcp_viewed',
   agentManager: 'agents_viewed',
   agents: 'agents_viewed',

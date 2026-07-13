@@ -1,0 +1,12 @@
+.git
+.github
+.worktrees
+node_modules
+**/node_modules
+out
+dist
+release
+apps/mobile/.expo
+apps/mobile/dist
+services/relay/dist
+test-results

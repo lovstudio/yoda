@@ -39,6 +39,12 @@ type RecentConversationRow = {
   task_id: string;
 };
 
+type ConversationSearchMeta = {
+  ts: string | null;
+  conversationArchived: boolean;
+  taskArchived: boolean;
+};
+
 /**
  * Effective sidebar workspace of a task: its own assignment (projectless Drafts)
  * falls back to the owning project's. Mirrors the renderer's sidebar filtering.
@@ -76,13 +82,19 @@ function toSearchItem(r: FtsRow): SearchItem {
   };
 }
 
-class SearchService {
+export class SearchService {
   initialize(): void {
     taskEvents.on('task:created', (task) => this.upsertTask(task));
-    taskEvents.on('task:updated', (task) => this.upsertTask(task));
+    taskEvents.on('task:updated', (task) => {
+      this.upsertTask(task);
+      this.refreshConversationArchiveFlagsForTask(task.id);
+    });
     // Archived tasks stay indexed (marked archived) so search can still surface
     // them; restore emits task:updated, which re-upserts with archived cleared.
-    taskEvents.on('task:archived', (taskId) => this.markTaskArchived(taskId));
+    taskEvents.on('task:archived', (taskId) => {
+      this.markTaskArchived(taskId);
+      this.markConversationsForTaskArchived(taskId);
+    });
     taskEvents.on('task:deleted', (taskId) => this.removeByType('task', taskId));
 
     projectEvents.on('project:created', (project) => this.upsertProject(project));
@@ -96,8 +108,11 @@ class SearchService {
     conversationEvents.on('conversation:renamed', (conversationId, projectId, taskId, newTitle) => {
       this.upsertConversationById(conversationId, projectId, taskId, newTitle);
     });
-    conversationEvents.on('conversation:archived', (conversationId) =>
-      this.removeByType('conversation', conversationId)
+    conversationEvents.on('conversation:archived', (conversationId, projectId, taskId) =>
+      this.upsertConversationById(conversationId, projectId, taskId)
+    );
+    conversationEvents.on('conversation:unarchived', (conversationId, projectId, taskId) =>
+      this.upsertConversationById(conversationId, projectId, taskId)
     );
     conversationEvents.on('conversation:deleted', (conversationId) =>
       this.removeByType('conversation', conversationId)
@@ -132,6 +147,7 @@ class SearchService {
     for (const it of items) ids[it.kind].push(it.id);
 
     const ts = new Map<string, string | null>();
+    const conversationMeta = new Map<string, ConversationSearchMeta>();
     const load = (kind: SearchItemKind, sql: string, idList: string[]) => {
       if (idList.length === 0) return;
       const placeholders = idList.map(() => '?').join(',');
@@ -149,11 +165,50 @@ class SearchService {
         `SELECT id, last_interacted_at AS ts FROM conversations WHERE id IN (@ids)`,
         ids.conversation
       );
+      if (ids.conversation.length > 0) {
+        const placeholders = ids.conversation.map(() => '?').join(',');
+        const rows = sqlite
+          .prepare(
+            `SELECT c.id,
+                    c.last_interacted_at AS ts,
+                    c.archived_at AS conversation_archived_at,
+                    t.archived_at AS task_archived_at
+             FROM conversations c
+             LEFT JOIN tasks t ON c.task_id = t.id
+             WHERE c.id IN (${placeholders})`
+          )
+          .all(...ids.conversation) as {
+          id: string;
+          ts: string | null;
+          conversation_archived_at: string | null;
+          task_archived_at: string | null;
+        }[];
+        for (const r of rows) {
+          conversationMeta.set(r.id, {
+            ts: r.ts,
+            conversationArchived: r.conversation_archived_at != null,
+            taskArchived: r.task_archived_at != null,
+          });
+        }
+      }
     } catch (e) {
       log.warn('SearchService: attachTimestamps failed', { error: String(e) });
     }
 
-    return items.map((it) => ({ ...it, timestamp: ts.get(`${it.kind}:${it.id}`) ?? null }));
+    return items.map((it) => {
+      if (it.kind !== 'conversation') {
+        return { ...it, timestamp: ts.get(`${it.kind}:${it.id}`) ?? null };
+      }
+      const meta = conversationMeta.get(it.id);
+      if (!meta) return { ...it, timestamp: ts.get(`${it.kind}:${it.id}`) ?? null };
+      return {
+        ...it,
+        archived: it.archived || meta.conversationArchived || meta.taskArchived,
+        conversationArchived: meta.conversationArchived,
+        taskArchived: meta.taskArchived,
+        timestamp: meta.ts,
+      };
+    });
   }
 
   /**
@@ -412,42 +467,45 @@ class SearchService {
 
   /**
    * Recent conversations. Scoped to the current task when one is open, otherwise
-   * the most recent conversations across all active tasks.
+   * the most recent conversations across all tasks. Archived conversations stay
+   * visible and sort after active ones so completed work remains findable.
    */
   private recentConversations(
     context?: CommandPaletteQuery['context'],
     limit = 10,
     offset = 0
   ): SearchItem[] {
-    // Conversations under archived tasks are still surfaced (the conversation
-    // itself isn't archived); they sort after those under active tasks. The JOIN
-    // also drops orphans whose task row no longer exists.
+    // The JOIN drops orphans whose task row no longer exists.
     const rows = (
       context?.taskId
         ? sqlite
             .prepare(
               `SELECT c.id, c.title, c.project_id, c.task_id, c.last_interacted_at,
+                      c.archived_at AS conversation_archived_at,
                       t.archived_at AS task_archived_at
                FROM conversations c
                INNER JOIN tasks t ON c.task_id = t.id
-               WHERE c.task_id = ? AND c.archived_at IS NULL
-               ORDER BY c.last_interacted_at DESC
+               WHERE c.task_id = ?
+               ORDER BY (c.archived_at IS NOT NULL OR t.archived_at IS NOT NULL),
+                        c.last_interacted_at DESC
                LIMIT ? OFFSET ?`
             )
             .all(context.taskId, limit, offset)
         : sqlite
             .prepare(
               `SELECT c.id, c.title, c.project_id, c.task_id, c.last_interacted_at,
+                      c.archived_at AS conversation_archived_at,
                       t.archived_at AS task_archived_at
                FROM conversations c
                INNER JOIN tasks t ON c.task_id = t.id
-               WHERE c.archived_at IS NULL
-               ORDER BY (t.archived_at IS NOT NULL), c.last_interacted_at DESC
+               ORDER BY (c.archived_at IS NOT NULL OR t.archived_at IS NOT NULL),
+                        c.last_interacted_at DESC
                LIMIT ? OFFSET ?`
             )
             .all(limit, offset)
     ) as (RecentConversationRow & {
       last_interacted_at: string | null;
+      conversation_archived_at: string | null;
       task_archived_at: string | null;
     })[];
 
@@ -460,7 +518,9 @@ class SearchService {
       subtitle: '',
       score: 0,
       timestamp: r.last_interacted_at,
-      archived: r.task_archived_at != null,
+      archived: r.conversation_archived_at != null || r.task_archived_at != null,
+      conversationArchived: r.conversation_archived_at != null,
+      taskArchived: r.task_archived_at != null,
     }));
   }
 
@@ -511,12 +571,23 @@ class SearchService {
 
   private upsertConversation(conversation: Conversation): void {
     try {
+      const taskRow = sqlite
+        .prepare(`SELECT archived_at FROM tasks WHERE id = ? LIMIT 1`)
+        .get(conversation.taskId) as { archived_at: string | null } | undefined;
+      const archived = conversation.archivedAt || taskRow?.archived_at ? '1' : '';
+      this.removeByType('conversation', conversation.id);
       sqlite
         .prepare(
           `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, archived, title, keywords)
-           VALUES ('conversation', ?, ?, ?, '', ?, '')`
+           VALUES ('conversation', ?, ?, ?, ?, ?, '')`
         )
-        .run(conversation.id, conversation.projectId, conversation.taskId, conversation.title);
+        .run(
+          conversation.id,
+          conversation.projectId,
+          conversation.taskId,
+          archived,
+          conversation.title
+        );
     } catch (e) {
       log.warn('SearchService: upsertConversation failed', {
         conversationId: conversation.id,
@@ -529,31 +600,39 @@ class SearchService {
     conversationId: string,
     projectId: string,
     taskId: string,
-    title: string
+    title?: string
   ): void {
     try {
-      const active = sqlite
+      const row = sqlite
         .prepare(
-          `SELECT 1
+          `SELECT c.title,
+                  c.archived_at AS conversation_archived_at,
+                  t.archived_at AS task_archived_at
            FROM conversations c
            INNER JOIN tasks t ON c.task_id = t.id
            WHERE c.id = ?
-             AND c.archived_at IS NULL
-             AND t.archived_at IS NULL
            LIMIT 1`
         )
-        .get(conversationId);
-      if (!active) {
+        .get(conversationId) as
+        | {
+            title: string;
+            conversation_archived_at: string | null;
+            task_archived_at: string | null;
+          }
+        | undefined;
+      if (!row) {
         this.removeByType('conversation', conversationId);
         return;
       }
 
+      const archived = row.conversation_archived_at || row.task_archived_at ? '1' : '';
+      this.removeByType('conversation', conversationId);
       sqlite
         .prepare(
           `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, archived, title, keywords)
-           VALUES ('conversation', ?, ?, ?, '', ?, '')`
+           VALUES ('conversation', ?, ?, ?, ?, ?, '')`
         )
-        .run(conversationId, projectId, taskId, title);
+        .run(conversationId, projectId, taskId, archived, title || row.title);
     } catch (e) {
       log.warn('SearchService: upsertConversationById failed', {
         conversationId,
@@ -572,6 +651,61 @@ class SearchService {
     }
   }
 
+  private markConversationsForTaskArchived(taskId: string): void {
+    try {
+      sqlite
+        .prepare(
+          `UPDATE search_index SET archived = '1' WHERE item_type = 'conversation' AND task_id = ?`
+        )
+        .run(taskId);
+    } catch (e) {
+      log.warn('SearchService: markConversationsForTaskArchived failed', {
+        taskId,
+        error: String(e),
+      });
+    }
+  }
+
+  private refreshConversationArchiveFlagsForTask(taskId: string): void {
+    try {
+      const rows = sqlite
+        .prepare(
+          `SELECT c.id,
+                  c.project_id,
+                  c.task_id,
+                  c.title,
+                  c.archived_at AS conversation_archived_at,
+                  t.archived_at AS task_archived_at
+           FROM conversations c
+           INNER JOIN tasks t ON c.task_id = t.id
+           WHERE c.task_id = ?`
+        )
+        .all(taskId) as (RecentConversationRow & {
+        conversation_archived_at: string | null;
+        task_archived_at: string | null;
+      })[];
+
+      const upsertStmt = sqlite.prepare(
+        `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, archived, title, keywords)
+         VALUES ('conversation', ?, ?, ?, ?, ?, '')`
+      );
+      sqlite.transaction(() => {
+        sqlite
+          .prepare(`DELETE FROM search_index WHERE item_type = 'conversation' AND task_id = ?`)
+          .run(taskId);
+        for (const row of rows) {
+          const archived = row.conversation_archived_at || row.task_archived_at ? '1' : '';
+          upsertStmt.run(row.id, row.project_id, row.task_id, archived, row.title);
+        }
+      })();
+    } catch (e) {
+      log.warn('SearchService: refreshConversationArchiveFlagsForTask failed', {
+        taskId,
+        error: String(e),
+      });
+    }
+  }
+
   private backfill(): void {
     try {
       const count = (
@@ -584,12 +718,19 @@ class SearchService {
       const allProjects = db.select().from(projects).all();
       const allConversations = sqlite
         .prepare(
-          `SELECT c.id, c.project_id, c.task_id, c.title
+          `SELECT c.id,
+                  c.project_id,
+                  c.task_id,
+                  c.title,
+                  c.archived_at AS conversation_archived_at,
+                  t.archived_at AS task_archived_at
            FROM conversations c
-           INNER JOIN tasks t ON c.task_id = t.id
-           WHERE c.archived_at IS NULL AND t.archived_at IS NULL`
+           INNER JOIN tasks t ON c.task_id = t.id`
         )
-        .all() as RecentConversationRow[];
+        .all() as (RecentConversationRow & {
+        conversation_archived_at: string | null;
+        task_archived_at: string | null;
+      })[];
 
       const upsertStmt = sqlite.prepare(
         `INSERT OR REPLACE INTO search_index(item_type, item_id, project_id, task_id, archived, title, keywords)
@@ -614,7 +755,8 @@ class SearchService {
           upsertStmt.run('project', p.id, null, null, '', p.name, p.path);
         }
         for (const c of allConversations) {
-          upsertStmt.run('conversation', c.id, c.project_id, c.task_id, '', c.title, '');
+          const archived = c.conversation_archived_at || c.task_archived_at ? '1' : '';
+          upsertStmt.run('conversation', c.id, c.project_id, c.task_id, archived, c.title, '');
         }
       })();
 

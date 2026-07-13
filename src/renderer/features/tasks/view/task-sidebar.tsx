@@ -282,11 +282,15 @@ export const TaskSidebar = observer(function TaskSidebar() {
         {/* Header row aligned with the main column's titlebar (the split divides
             the top bar): an operable strip — added feature cards plus tabs
             pinned out of the top-level strip. */}
-        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-background-secondary px-2 [-webkit-app-region:drag] dark:bg-background">
+        <div className="pointer-events-none relative z-20 flex h-10 shrink-0 items-center gap-1 border-b border-border bg-background-secondary px-2 dark:bg-background">
+          <div
+            aria-hidden
+            className="pointer-events-auto absolute inset-0 z-0 [-webkit-app-region:drag]"
+          />
           <div
             ref={dropZone.dropRef}
             className={cn(
-              'flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-md',
+              'pointer-events-auto relative z-10 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-md',
               dropZone.isOver && 'bg-background-tertiary-1'
             )}
             style={{ scrollbarWidth: 'none' }}
@@ -371,14 +375,14 @@ export const TaskSidebar = observer(function TaskSidebar() {
                 </ChipContextMenu>
               );
             })}
+          </div>
+          <div className="pointer-events-auto relative z-10 ml-auto flex shrink-0 items-center gap-1">
             {availableGroups.length > 0 ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
                   aria-label={t('tasks.sidePane.addCard')}
                   title={t('tasks.sidePane.addCard')}
-                  // Follows the chips normally; once the strip overflows it pins
-                  // to the scrollport's right edge and chips scroll beneath it.
-                  className="sticky right-0 z-10 flex size-7 shrink-0 items-center justify-center rounded-md bg-background-secondary text-foreground-muted hover:bg-background-2 hover:text-foreground dark:bg-background [-webkit-app-region:no-drag]"
+                  className="flex size-7 shrink-0 items-center justify-center rounded-md bg-background-secondary text-foreground-muted hover:bg-background-2 hover:text-foreground dark:bg-background [-webkit-app-region:no-drag]"
                 >
                   <Plus className="size-3.5" />
                 </DropdownMenuTrigger>
@@ -392,45 +396,45 @@ export const TaskSidebar = observer(function TaskSidebar() {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
+            <button
+              type="button"
+              aria-label={t(
+                taskView.isSidebarMaximized ? 'tasks.sidePane.restore' : 'tasks.sidePane.maximize'
+              )}
+              title={t(
+                taskView.isSidebarMaximized ? 'tasks.sidePane.restore' : 'tasks.sidePane.maximize'
+              )}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground [-webkit-app-region:no-drag]"
+              onClick={() => taskView.setSidebarMaximized(!taskView.isSidebarMaximized)}
+            >
+              {taskView.isSidebarMaximized ? (
+                <Minimize2 className="size-3.5" />
+              ) : (
+                <Maximize2 className="size-3.5" />
+              )}
+            </button>
+            <button
+              type="button"
+              aria-label={t('tasks.toggleTerminal')}
+              title={t('tasks.toggleTerminal')}
+              className={cn(
+                'flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-background-2 hover:text-foreground [-webkit-app-region:no-drag]',
+                taskView.isTerminalDrawerOpen ? 'text-foreground' : 'text-foreground-muted'
+              )}
+              onClick={() => taskView.setTerminalDrawerOpen(!taskView.isTerminalDrawerOpen)}
+            >
+              <PanelBottom className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label={t('tasks.toggleSidebar')}
+              title={t('tasks.toggleSidebar')}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground [-webkit-app-region:no-drag]"
+              onClick={() => taskView.setSidebarCollapsed(true)}
+            >
+              <PanelRight className="size-3.5" />
+            </button>
           </div>
-          <button
-            type="button"
-            aria-label={t(
-              taskView.isSidebarMaximized ? 'tasks.sidePane.restore' : 'tasks.sidePane.maximize'
-            )}
-            title={t(
-              taskView.isSidebarMaximized ? 'tasks.sidePane.restore' : 'tasks.sidePane.maximize'
-            )}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground [-webkit-app-region:no-drag]"
-            onClick={() => taskView.setSidebarMaximized(!taskView.isSidebarMaximized)}
-          >
-            {taskView.isSidebarMaximized ? (
-              <Minimize2 className="size-3.5" />
-            ) : (
-              <Maximize2 className="size-3.5" />
-            )}
-          </button>
-          <button
-            type="button"
-            aria-label={t('tasks.toggleTerminal')}
-            title={t('tasks.toggleTerminal')}
-            className={cn(
-              'flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-background-2 hover:text-foreground [-webkit-app-region:no-drag]',
-              taskView.isTerminalDrawerOpen ? 'text-foreground' : 'text-foreground-muted'
-            )}
-            onClick={() => taskView.setTerminalDrawerOpen(!taskView.isTerminalDrawerOpen)}
-          >
-            <PanelBottom className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            aria-label={t('tasks.toggleSidebar')}
-            title={t('tasks.toggleSidebar')}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted hover:bg-background-2 hover:text-foreground [-webkit-app-region:no-drag]"
-            onClick={() => taskView.setSidebarCollapsed(true)}
-          >
-            <PanelRight className="size-3.5" />
-          </button>
         </div>
         <div className="min-h-0 flex-1 overflow-hidden">
           <Activity mode={sessionActive ? 'visible' : 'hidden'}>

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, type ReactNode } from 'react';
+import type { RuntimeId } from '@shared/runtime-registry';
 import {
   SettingsPage,
   SettingsTabsDropdown,
@@ -9,6 +10,7 @@ import { useParams } from '@renderer/lib/layout/navigation-provider';
 
 const SettingsTabContext = createContext<{
   tab: SettingsPageTab;
+  runtimeId?: RuntimeId;
   onTabChange: (tab: SettingsPageTab) => void;
 }>({ tab: 'general', onTabChange: () => {} });
 
@@ -16,9 +18,11 @@ const SettingsTabContext = createContext<{
 export function SettingsViewWrapper({
   children,
   tab = 'general',
+  runtimeId,
 }: {
   children: ReactNode;
   tab?: SettingsPageTab;
+  runtimeId?: RuntimeId;
 }) {
   const { setParams } = useParams('settings');
   const handleTabChange = useCallback(
@@ -28,7 +32,7 @@ export function SettingsViewWrapper({
     [setParams]
   );
   return (
-    <SettingsTabContext.Provider value={{ tab, onTabChange: handleTabChange }}>
+    <SettingsTabContext.Provider value={{ tab, runtimeId, onTabChange: handleTabChange }}>
       {children}
     </SettingsTabContext.Provider>
   );
@@ -52,12 +56,12 @@ export function SettingsPaneHeaderSlot() {
 }
 
 export function SettingsMainPanel() {
-  const { tab, onTabChange } = useSettingsTab();
+  const { tab, runtimeId, onTabChange } = useSettingsTab();
   return (
     // @container so SettingsPage adapts to its host's width (full window,
     // shell side pane, …) instead of the viewport.
     <div className="@container relative z-10 flex min-h-0 flex-1 overflow-hidden bg-background">
-      <SettingsPage tab={tab} onTabChange={onTabChange} />
+      <SettingsPage tab={tab} focusRuntimeId={runtimeId} onTabChange={onTabChange} />
     </div>
   );
 }

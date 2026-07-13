@@ -3,6 +3,7 @@
     "name": "Yoda Mobile",
     "slug": "yoda-mobile",
     "scheme": "yodamobile",
+    "icon": "../../src/assets/images/yoda/yoda-beta.iconset/icon_512x512@2x.png",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -11,7 +12,8 @@
       "bundleIdentifier": "ai.lovstudio.yoda.mobile",
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocalNetworkUsageDescription": "Yoda Mobile connects to the Yoda desktop app on your local network.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocalNetworkUsageDescription": "Yoda Mobile connects directly to the Yoda desktop app when both devices are on the same local network.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }

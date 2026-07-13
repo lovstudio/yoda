@@ -3,9 +3,10 @@ import type { CatalogSkill } from '@shared/skills/types';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { resolveSkillIcon } from './skillIcons';
 
-type SkillIconSize = 'sm' | 'md';
+type SkillIconSize = 'xs' | 'sm' | 'md';
 
 const sizeClasses: Record<SkillIconSize, { container: string; padding: string; text: string }> = {
+  xs: { container: 'h-7 w-7', padding: 'p-1.5', text: 'text-[10px]' },
   sm: { container: 'h-10 w-10', padding: 'p-2', text: 'text-sm' },
   md: { container: 'h-12 w-12', padding: 'p-2.5', text: 'text-base' },
 };

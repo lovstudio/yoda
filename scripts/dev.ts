@@ -10,16 +10,20 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareDevElectronBundle } from './lib/dev-electron-bundle.ts';
+import { resolveDevElectronExecutable } from './lib/electron-runtime.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const electronVite = path.join(repoRoot, 'node_modules', '.bin', 'electron-vite');
 
 const verbose = process.env.YODA_DEV_VERBOSE === '1';
-const devElectronExecutable = prepareDevElectronBundle(repoRoot);
+const electronExecutable = await resolveDevElectronExecutable({
+  configuredExecutable: process.env.ELECTRON_EXEC_PATH,
+  prepareElectronBundle: () => prepareDevElectronBundle(repoRoot),
+});
 const env = {
   ...process.env,
-  ...(devElectronExecutable ? { ELECTRON_EXEC_PATH: devElectronExecutable } : {}),
+  ELECTRON_EXEC_PATH: electronExecutable,
 };
 
 // Lines we drop unless YODA_DEV_VERBOSE=1. These come from Electron / macOS

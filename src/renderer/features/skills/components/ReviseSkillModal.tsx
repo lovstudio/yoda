@@ -18,7 +18,9 @@ import { cn } from '@renderer/utils/utils';
 import { collapseContext, diffLines, type DiffHunkLine } from '../line-diff';
 
 type Props = BaseModalProps<void> & {
+  /** Opaque stable skill key (the historical prop name is kept for modal compatibility). */
   skillId: string;
+  skillName?: string;
   /** Pre-filled instruction, e.g. built from trigger-test failures. */
   presetInstruction?: string;
 };
@@ -27,7 +29,13 @@ type Props = BaseModalProps<void> & {
  * AI-revise a skill's SKILL.md: free-form instruction -> proposed revision ->
  * line-diff preview -> explicit apply. Nothing is written without confirmation.
  */
-export function ReviseSkillModal({ skillId, presetInstruction, onSuccess, onClose }: Props) {
+export function ReviseSkillModal({
+  skillId,
+  skillName,
+  presetInstruction,
+  onSuccess,
+  onClose,
+}: Props) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -44,7 +52,10 @@ export function ReviseSkillModal({ skillId, presetInstruction, onSuccess, onClos
     setError(null);
     setIsGenerating(true);
     try {
-      const result = await rpc.skills.revise({ skillId, instruction: instruction.trim() });
+      const result = await rpc.skills.revise({
+        skillKey: skillId,
+        instruction: instruction.trim(),
+      });
       if (!result.success || !result.data) {
         setError(
           result.success ? t('skills.revise.failed') : (result.error ?? t('skills.revise.failed'))
@@ -62,7 +73,10 @@ export function ReviseSkillModal({ skillId, presetInstruction, onSuccess, onClos
     setError(null);
     setIsApplying(true);
     try {
-      const result = await rpc.skills.updateContent({ skillId, content: proposal.revised });
+      const result = await rpc.skills.updateContent({
+        skillKey: skillId,
+        content: proposal.revised,
+      });
       if (!result.success) {
         setError(result.error ?? t('skills.revise.applyFailed'));
         return;
@@ -78,7 +92,7 @@ export function ReviseSkillModal({ skillId, presetInstruction, onSuccess, onClos
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{t('skills.revise.title', { skill: skillId })}</DialogTitle>
+        <DialogTitle>{t('skills.revise.title', { skill: skillName ?? skillId })}</DialogTitle>
       </DialogHeader>
       <DialogContentArea className="space-y-3">
         {proposal === null ? (

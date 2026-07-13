@@ -18,18 +18,21 @@ import { Input } from '@renderer/lib/ui/input';
 import { Label } from '@renderer/lib/ui/label';
 import { Textarea } from '@renderer/lib/ui/textarea';
 
-type Props = BaseModalProps<{ skillId: string }> & { skillId: string };
+type Props = BaseModalProps<{ skillId: string; displayName: string }> & {
+  skillId: string;
+  skillName?: string;
+};
 
 /**
  * Fork an installed skill into a new one. Optionally hands the copy to the
  * utility agent with a transformation instruction; the original is untouched,
  * so the AI result is applied to the fork directly without a diff step.
  */
-export function ForkSkillModal({ skillId, onSuccess, onClose }: Props) {
+export function ForkSkillModal({ skillId, skillName, onSuccess, onClose }: Props) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [name, setName] = useState(`${skillId}-fork`);
+  const [name, setName] = useState(`${skillName ?? 'skill'}-fork`);
   const [instruction, setInstruction] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
@@ -46,18 +49,19 @@ export function ForkSkillModal({ skillId, onSuccess, onClose }: Props) {
 
     setIsWorking(true);
     try {
-      const created = await rpc.skills.duplicate({ skillId, newName });
-      if (!created.success) {
+      const created = await rpc.skills.duplicate({ skillKey: skillId, newName });
+      if (!created.success || !created.data) {
         setError(created.error ?? t('skills.fork.failed'));
         return;
       }
+      const forkKey = created.data.key;
 
       const transform = instruction.trim();
       if (transform) {
-        const revised = await rpc.skills.revise({ skillId: newName, instruction: transform });
+        const revised = await rpc.skills.revise({ skillKey: forkKey, instruction: transform });
         if (revised.success && revised.data) {
           const applied = await rpc.skills.updateContent({
-            skillId: newName,
+            skillKey: forkKey,
             content: revised.data.revised,
           });
           if (!applied.success) {
@@ -71,7 +75,7 @@ export function ForkSkillModal({ skillId, onSuccess, onClose }: Props) {
 
       void queryClient.invalidateQueries({ queryKey: ['skills'] });
       toast({ title: t('skills.fork.created', { skill: newName }) });
-      onSuccess({ skillId: newName });
+      onSuccess({ skillId: forkKey, displayName: newName });
     } finally {
       setIsWorking(false);
     }
@@ -80,7 +84,7 @@ export function ForkSkillModal({ skillId, onSuccess, onClose }: Props) {
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{t('skills.fork.title', { skill: skillId })}</DialogTitle>
+        <DialogTitle>{t('skills.fork.title', { skill: skillName ?? skillId })}</DialogTitle>
       </DialogHeader>
       <DialogContentArea className="space-y-3">
         <div className="space-y-1.5">

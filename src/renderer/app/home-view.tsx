@@ -50,7 +50,10 @@ import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { withSystemPrompt } from '@shared/prompt-format';
 import { REVIEW_MAX_ROUNDS } from '@shared/review-protocol';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
+import type { SkillSelectionInput } from '@shared/skills/types';
 import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
+import { resolveHomeProjectId } from '@renderer/app/home-project-selection';
+import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import {
   effectiveGlobalEnabled,
@@ -124,6 +127,7 @@ import {
 } from './composer-project-overrides';
 import { ComposerPromptInput } from './composer-prompt-input';
 import { serializePromptWithTokens, type PromptToken } from './prompt-attachment-tokens';
+import { promptRewriteFailureDescription } from './submit-prompt-rewrite';
 
 type TaskStrategyKind = 'new-branch' | 'no-worktree';
 /** Strategy actually submitted to createTask — adds checkout-existing, which is
@@ -275,6 +279,14 @@ function resolveAgentSlot(args: {
   };
 }
 
+function agentSkillSelection(agent: Agent | null): SkillSelectionInput | undefined {
+  if (!agent) return undefined;
+  return {
+    autoSkillKeys: agent.enabledSkillIds,
+    manualSkillKeys: agent.manualSkillIds,
+  };
+}
+
 function buildRequirementPrompt(args: { requirement: string; systemPrompt: string }): string {
   return withSystemPrompt(
     args.systemPrompt,
@@ -371,9 +383,11 @@ export const HomeComposer = observer(function HomeComposer({
   const parentTarget = submitTarget.kind === 'new-task' ? (submitTarget.parentTask ?? null) : null;
 
   const projectManager = getProjectManagerStore();
+  const showAddProjectModal = useShowModal('addProjectModal');
 
   const { params: homeParams, setParams: setHomeParams } = useParams('home');
   const homeProjectId = homeParams.projectId;
+  const homeRouteProject = homeProjectId ? projectManager.projects.get(homeProjectId) : undefined;
 
   const navProjectId = (() => {
     const nav = appState.navigation;
@@ -390,12 +404,12 @@ export const HomeComposer = observer(function HomeComposer({
   const { value: taskSettings, update: updateTaskSettings } = useAppSettingsKey('tasks');
 
   const isProjectLocked = !!(taskScopedTarget || parentTarget);
-  const selectedProjectId =
-    taskScopedTarget?.projectId ??
-    parentTarget?.projectId ??
-    homeProjectId ??
-    navProjectId ??
-    (draft === undefined ? undefined : (draft.selectedProjectId ?? undefined));
+  const selectedProjectId = resolveHomeProjectId({
+    lockedProjectId: taskScopedTarget?.projectId ?? parentTarget?.projectId,
+    homeProjectId,
+    navigationProjectId: navProjectId,
+    draftProjectId: draft?.selectedProjectId,
+  });
   const setSelectedProjectId = useCallback(
     (next: string | undefined) => {
       if (isProjectLocked) return;
@@ -407,14 +421,36 @@ export const HomeComposer = observer(function HomeComposer({
 
   const draftProjectId = draft?.selectedProjectId ?? null;
   useEffect(() => {
-    if (!homeProjectId || isProjectLocked) return;
-    updateDraft(
-      homeProjectId === draftProjectId
-        ? { selectedProjectId: homeProjectId }
-        : { selectedProjectId: homeProjectId, baseBranch: null }
-    );
+    if (isProjectLocked) return;
+    if (homeProjectId === INTERNAL_PROJECT_ID) {
+      if (draftProjectId !== null) {
+        updateDraft({ selectedProjectId: null, baseBranch: null });
+        return;
+      }
+      setHomeParams({ projectId: undefined });
+      return;
+    }
+    if (!homeProjectId) return;
+    if (!homeRouteProject?.data) return;
+    void projectManager.mountProject(homeProjectId).catch(() => {});
+    if (homeProjectId !== draftProjectId) {
+      updateDraft({ selectedProjectId: homeProjectId, baseBranch: null });
+      return;
+    }
+    // Keep the navigation-scoped project until the optimistic settings update
+    // has reached the draft. Clearing it first leaves a render with neither
+    // source, so the composer briefly becomes projectless and disables modes
+    // that require a project.
     setHomeParams({ projectId: undefined });
-  }, [homeProjectId, setHomeParams, isProjectLocked, updateDraft, draftProjectId]);
+  }, [
+    homeProjectId,
+    homeRouteProject?.data,
+    projectManager,
+    setHomeParams,
+    isProjectLocked,
+    updateDraft,
+    draftProjectId,
+  ]);
 
   const projectStore = selectedProjectId
     ? projectManager.projects.get(selectedProjectId)
@@ -507,6 +543,35 @@ export const HomeComposer = observer(function HomeComposer({
       : 'no-worktree';
   const selectedBranchRunsInPlace = selectedBranchSubmitKind === 'no-worktree';
   const runHostKind: RunHostKind = projectData?.type === 'ssh' ? 'ssh' : 'local';
+  const findProjectIdByRunHost = useCallback(
+    (nextKind: RunHostKind): string | null => {
+      for (const [id, store] of projectManager.projects) {
+        const candidate = asMounted(store);
+        if (!candidate || candidate.data.isInternal) continue;
+        if ((nextKind === 'ssh') === (candidate.data.type === 'ssh')) return id;
+      }
+      return null;
+    },
+    [projectManager.projects]
+  );
+  const openAddProjectForRunHost = useCallback(
+    (nextKind: RunHostKind) => {
+      showAddProjectModal({ strategy: nextKind, mode: 'pick' });
+    },
+    [showAddProjectModal]
+  );
+  const selectRunHostProject = useCallback(
+    (nextKind: RunHostKind) => {
+      if (nextKind === runHostKind) return;
+      const nextProjectId = findProjectIdByRunHost(nextKind);
+      if (nextProjectId) {
+        setSelectedProjectId(nextProjectId);
+        return;
+      }
+      openAddProjectForRunHost(nextKind);
+    },
+    [findProjectIdByRunHost, openAddProjectForRunHost, runHostKind, setSelectedProjectId]
+  );
   const strategyLabels = useMemo(
     () => ({
       newBranchTitle: t('home.strategyNewBranchTitle', { branch: selectedBranchLabel }),
@@ -647,6 +712,27 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [selectedAgentIdsByMode, updateDraft]
   );
+  const composerAgent = useMemo<Agent | null>(() => {
+    if (runMode === 'team') {
+      const leader =
+        activeTeam?.members.find((member) => member.role === 'leader') ?? activeTeam?.members[0];
+      if (!leader?.agentRef) return null;
+      return (
+        userAgents.find(
+          (agent) => agent.id === leader.agentRef || agent.slug === leader.agentRef
+        ) ?? null
+      );
+    }
+    const slotKey =
+      runMode === 'brainstorm'
+        ? SPEC_PROMPT_KEY
+        : runMode === 'review'
+          ? REVIEW_IMPLEMENTER_PROMPT_KEY
+          : NORMAL_PROMPT_KEY;
+    const agentId = slotAgentId(slotKey);
+    return agentId ? (userAgents.find((agent) => agent.id === agentId) ?? null) : null;
+  }, [activeTeam, runMode, slotAgentId, userAgents]);
+  const composerSkillSelection = useMemo(() => agentSkillSelection(composerAgent), [composerAgent]);
   const permissionModes = useRuntimePermissionModes();
   const runModeSummary = useMemo(() => {
     const runtimeName = (id: RuntimeId | null) => (id ? (getRuntime(id)?.name ?? id) : null);
@@ -963,14 +1049,24 @@ export const HomeComposer = observer(function HomeComposer({
         imagesAsPaths: attachImagesAsPaths,
       });
       const rawRequirement = serialized.text.trim();
-      let requirement: string;
-      try {
-        requirement = await rewriteInputRequirement(rawRequirement);
-      } catch {
-        toast.error(t('home.promptRewriteFailed'));
-        return;
-      }
+      const deferInitialPrompt =
+        rawRequirement.length > 0 &&
+        inputPromptLanguage !== 'skip' &&
+        inputPromptLanguage !== 'prompt';
+      const requirement = rawRequirement;
+      const requirementPromise = deferInitialPrompt
+        ? rewriteInputRequirement(rawRequirement).catch((error: unknown) => {
+            toast({
+              title: t('home.promptRewriteFailed'),
+              description: promptRewriteFailureDescription(error, t('common.unknownError')),
+              variant: 'destructive',
+              debugInfo: error,
+            });
+            return null;
+          })
+        : Promise.resolve(rawRequirement);
       const imagePaths = serialized.imagePaths.length > 0 ? serialized.imagePaths : undefined;
+      const sessionImagePaths = deferInitialPrompt ? undefined : imagePaths;
       const resetComposer = () => {
         setPrompt('');
         updateDraft({ prompt: '', promptTokens: [] });
@@ -987,6 +1083,74 @@ export const HomeComposer = observer(function HomeComposer({
               : `${failures.length} agent ${targetName}s failed to start.`
           );
         }
+      };
+      const showDeferredPromptWaitToast = () => {
+        let toastId: ReturnType<typeof toast.loading> | undefined;
+        const timer = setTimeout(() => {
+          toastId = toast.loading(t('home.promptTranslationWaiting'), {
+            description: t('home.promptTranslationWaitingDescription'),
+          });
+        }, 350);
+        return () => {
+          clearTimeout(timer);
+          if (toastId !== undefined) toast.dismiss(toastId);
+        };
+      };
+      const injectDeferredPrompt = async (args: {
+        projectId: string;
+        taskId: string;
+        conversationId: string;
+        runtime: RuntimeId;
+        buildPrompt: (rewrittenRequirement: string) => string | undefined;
+      }): Promise<string | null> => {
+        const dismissWaitToast = showDeferredPromptWaitToast();
+        try {
+          const rewrittenRequirement = await requirementPromise;
+          if (rewrittenRequirement === null) return null;
+          const sent = await rpc.conversations.injectConversationPrompt({
+            projectId: args.projectId,
+            taskId: args.taskId,
+            conversationId: args.conversationId,
+            runtime: args.runtime,
+            prompt: args.buildPrompt(rewrittenRequirement),
+            imagePaths,
+          });
+          if (sent) return rewrittenRequirement;
+          toast.error(t('home.promptSendFailed'));
+          return null;
+        } catch {
+          toast.error(t('home.promptSendFailed'));
+          return null;
+        } finally {
+          dismissWaitToast();
+        }
+      };
+      const scheduleDeferredPrompt = (args: {
+        projectId: string;
+        taskId: string;
+        conversationId: string;
+        runtime: RuntimeId;
+        promise: Promise<unknown>;
+        buildPrompt: (rewrittenRequirement: string) => string | undefined;
+      }) => {
+        if (!deferInitialPrompt) return;
+        void args.promise
+          .then(() => injectDeferredPrompt(args))
+          .catch(() => {
+            // Creation failures are reported by the caller that owns the launch promise.
+          });
+      };
+      const runWithResolvedRequirement = (
+        cb: (resolvedRequirement: string) => Promise<void>
+      ): void => {
+        void requirementPromise
+          .then((resolvedRequirement) => {
+            if (resolvedRequirement === null) return undefined;
+            return cb(resolvedRequirement);
+          })
+          .catch(() => {
+            // The promise is already normalized, but keep this chain non-throwing.
+          });
       };
       // Resolve a slot to its Agent's prompt + runtime (per-slot runtime
       // override wins over the Agent's preferred runtime).
@@ -1012,6 +1176,7 @@ export const HomeComposer = observer(function HomeComposer({
           initialPrompt: string | undefined;
           titlePrompt?: string;
           model?: string | null;
+          skillSelection?: SkillSelectionInput;
         }) => {
           const conversationId = crypto.randomUUID();
           const title = initialConversationTitle(
@@ -1028,8 +1193,10 @@ export const HomeComposer = observer(function HomeComposer({
             runtime: args.provider,
             title,
             initialPrompt: args.initialPrompt,
-            imagePaths,
+            deferInitialPrompt,
+            imagePaths: sessionImagePaths,
             model: args.model,
+            skillSelection: args.skillSelection,
           });
           return { conversationId, runtime: args.provider, promise };
         };
@@ -1057,8 +1224,21 @@ export const HomeComposer = observer(function HomeComposer({
             }),
             titlePrompt: trimmed || undefined,
             model: slot.agent?.model,
+            skillSelection: agentSkillSelection(slot.agent),
           });
           finishTaskConversationSubmit();
+          scheduleDeferredPrompt({
+            projectId: taskScopedTarget.projectId,
+            taskId: taskScopedTarget.taskId,
+            conversationId: launch.conversationId,
+            runtime: launch.runtime,
+            promise: launch.promise,
+            buildPrompt: (rewrittenRequirement) =>
+              buildSpecPrompt({
+                requirement: rewrittenRequirement,
+                systemPrompt: slot.systemPrompt,
+              }),
+          });
           void launch.promise.catch(() => {
             toast.error('Agent conversation failed to start.');
           });
@@ -1077,52 +1257,87 @@ export const HomeComposer = observer(function HomeComposer({
             }),
             titlePrompt: trimmed || undefined,
             model: implementerSlot.agent?.model,
+            skillSelection: agentSkillSelection(implementerSlot.agent),
           });
           finishTaskConversationSubmit();
           const reviewerProvider = reviewerSlot.provider;
           const reviewerSystemPrompt = reviewerSlot.systemPrompt;
-          void implementation.promise
-            .then(() =>
-              rpc.reviewOrchestration.start({
-                projectId: taskScopedTarget.projectId,
-                taskId: taskScopedTarget.taskId,
-                implementerConversationId: implementation.conversationId,
-                requirement,
-                reviewerRuntime: reviewerProvider,
-                reviewerSystemPrompt,
-                reviewerAutoApprove: permissionModes.isDanger(reviewerProvider),
-              })
-            )
-            .catch((error: unknown) => {
-              toast.error(
-                error instanceof Error ? error.message : 'Review mode orchestration failed.'
-              );
+          const startReviewOrchestration = (resolvedRequirement: string) =>
+            rpc.reviewOrchestration.start({
+              projectId: taskScopedTarget.projectId,
+              taskId: taskScopedTarget.taskId,
+              implementerConversationId: implementation.conversationId,
+              requirement: resolvedRequirement,
+              reviewerRuntime: reviewerProvider,
+              reviewerSystemPrompt,
+              reviewerSkillSelection: agentSkillSelection(reviewerSlot.agent),
+              reviewerAutoApprove: permissionModes.isDanger(reviewerProvider),
             });
+          const reviewPromise = deferInitialPrompt
+            ? implementation.promise
+                .then(() =>
+                  injectDeferredPrompt({
+                    projectId: taskScopedTarget.projectId,
+                    taskId: taskScopedTarget.taskId,
+                    conversationId: implementation.conversationId,
+                    runtime: implementation.runtime,
+                    buildPrompt: (rewrittenRequirement) =>
+                      buildRequirementPrompt({
+                        requirement: rewrittenRequirement,
+                        systemPrompt: implementerSlot.systemPrompt,
+                      }),
+                  })
+                )
+                .then((resolvedRequirement) => {
+                  if (resolvedRequirement === null) return undefined;
+                  return startReviewOrchestration(resolvedRequirement);
+                })
+            : implementation.promise.then(() => startReviewOrchestration(requirement));
+          void reviewPromise.catch((error: unknown) => {
+            toast.error(
+              error instanceof Error ? error.message : 'Review mode orchestration failed.'
+            );
+          });
           return;
         }
 
         if (runMode === 'team') {
           if (!activeTeam) return;
+          const createRoom = (resolvedRequirement: string) =>
+            rpc.teamRooms
+              .createRoomFromTeam({
+                projectId: taskScopedTarget.projectId,
+                taskId: taskScopedTarget.taskId,
+                teamId: activeTeam.id,
+                requirement: resolvedRequirement,
+              })
+              .then(() =>
+                invalidateTeamRoomQueries(
+                  queryClient,
+                  taskScopedTarget.projectId,
+                  taskScopedTarget.taskId
+                )
+              );
           // Instantiate a chat room from the team template on this task; the
           // conductor drives the iterative @-routing (members appear as the
           // task's conversations).
-          void rpc.teamRooms
-            .createRoomFromTeam({
-              projectId: taskScopedTarget.projectId,
-              taskId: taskScopedTarget.taskId,
-              teamId: activeTeam.id,
-              requirement,
-            })
-            .then(() =>
-              queryClient.invalidateQueries({
-                queryKey: ['roomForTask', taskScopedTarget.projectId, taskScopedTarget.taskId],
-              })
-            )
-            .catch((error: unknown) => {
+          if (deferInitialPrompt) {
+            runWithResolvedRequirement(async (resolvedRequirement) => {
+              try {
+                await createRoom(resolvedRequirement);
+              } catch (error) {
+                toast.error(
+                  error instanceof Error ? error.message : 'Agent team orchestration failed.'
+                );
+              }
+            });
+          } else {
+            void createRoom(requirement).catch((error: unknown) => {
               toast.error(
                 error instanceof Error ? error.message : 'Agent team orchestration failed.'
               );
             });
+          }
           finishTaskConversationSubmit();
           return;
         }
@@ -1137,8 +1352,23 @@ export const HomeComposer = observer(function HomeComposer({
             : requirement || undefined,
           titlePrompt: trimmed || undefined,
           model: normalSlot.agent?.model,
+          skillSelection: agentSkillSelection(normalSlot.agent),
         });
         finishTaskConversationSubmit();
+        scheduleDeferredPrompt({
+          projectId: taskScopedTarget.projectId,
+          taskId: taskScopedTarget.taskId,
+          conversationId: launch.conversationId,
+          runtime: launch.runtime,
+          promise: launch.promise,
+          buildPrompt: (rewrittenRequirement) =>
+            normalSystemPrompt
+              ? buildRequirementPrompt({
+                  requirement: rewrittenRequirement,
+                  systemPrompt: normalSystemPrompt,
+                })
+              : rewrittenRequirement || undefined,
+        });
         void launch.promise.catch(() => {
           toast.error('Agent conversation failed to start.');
         });
@@ -1176,27 +1406,47 @@ export const HomeComposer = observer(function HomeComposer({
             : draftSystemPrompt
               ? buildRequirementPrompt({ requirement, systemPrompt: draftSystemPrompt })
               : requirement || undefined;
-        void internalProject.taskManager
-          .createTask({
-            id: taskId,
+        const createPromise = internalProject.taskManager.createTask({
+          id: taskId,
+          projectId: INTERNAL_PROJECT_ID,
+          name: taskName,
+          sourceBranch: { type: 'local', branch: 'main' },
+          strategy: { kind: 'no-worktree' },
+          initialConversation: {
+            id: conversationId,
             projectId: INTERNAL_PROJECT_ID,
-            name: taskName,
-            sourceBranch: { type: 'local', branch: 'main' },
-            strategy: { kind: 'no-worktree' },
-            initialConversation: {
-              id: conversationId,
-              projectId: INTERNAL_PROJECT_ID,
-              taskId,
-              runtime: draftRuntime,
-              title: initialConversationTitle(draftRuntime, trimmed || undefined, []),
-              initialPrompt,
-              imagePaths,
-              model: draftSlot.agent?.model,
-            },
-          })
-          .catch(() => {
-            toast.error('Agent task failed to start.');
-          });
+            taskId,
+            runtime: draftRuntime,
+            title: initialConversationTitle(draftRuntime, trimmed || undefined, []),
+            initialPrompt,
+            deferInitialPrompt,
+            imagePaths: sessionImagePaths,
+            model: draftSlot.agent?.model,
+            skillSelection: agentSkillSelection(draftSlot.agent),
+          },
+        });
+        scheduleDeferredPrompt({
+          projectId: INTERNAL_PROJECT_ID,
+          taskId,
+          conversationId,
+          runtime: draftRuntime,
+          promise: createPromise,
+          buildPrompt: (rewrittenRequirement) =>
+            runMode === 'brainstorm'
+              ? buildSpecPrompt({
+                  requirement: rewrittenRequirement,
+                  systemPrompt: draftSlot.systemPrompt,
+                })
+              : draftSystemPrompt
+                ? buildRequirementPrompt({
+                    requirement: rewrittenRequirement,
+                    systemPrompt: draftSystemPrompt,
+                  })
+                : rewrittenRequirement || undefined,
+        });
+        void createPromise.catch(() => {
+          toast.error('Agent task failed to start.');
+        });
         goToTask(INTERNAL_PROJECT_ID, taskId);
         resetComposer();
         return;
@@ -1231,6 +1481,7 @@ export const HomeComposer = observer(function HomeComposer({
         strategyKind: TaskSubmitStrategyKind;
         parentTaskId?: string;
         model?: string | null;
+        skillSelection?: SkillSelectionInput;
       }) => {
         const taskId = crypto.randomUUID();
         const conversationId = crypto.randomUUID();
@@ -1266,8 +1517,10 @@ export const HomeComposer = observer(function HomeComposer({
               []
             ),
             initialPrompt: args.initialPrompt,
-            imagePaths,
+            deferInitialPrompt,
+            imagePaths: sessionImagePaths,
             model: args.model,
+            skillSelection: args.skillSelection,
           },
         });
         return { taskId, taskName, conversationId, runtime: args.provider, promise };
@@ -1286,8 +1539,21 @@ export const HomeComposer = observer(function HomeComposer({
           titlePrompt: trimmed || undefined,
           strategyKind: 'no-worktree',
           model: slot.agent?.model,
+          skillSelection: agentSkillSelection(slot.agent),
         });
         goToTask(mounted.data.id, task.taskId);
+        scheduleDeferredPrompt({
+          projectId: mounted.data.id,
+          taskId: task.taskId,
+          conversationId: task.conversationId,
+          runtime: task.runtime,
+          promise: task.promise,
+          buildPrompt: (rewrittenRequirement) =>
+            buildSpecPrompt({
+              requirement: rewrittenRequirement,
+              systemPrompt: slot.systemPrompt,
+            }),
+        });
         void task.promise.catch(() => {
           toast.error('Agent task failed to start.');
         });
@@ -1304,15 +1570,22 @@ export const HomeComposer = observer(function HomeComposer({
           projectId: string;
           provider: RuntimeId;
           model: string | null | undefined;
+          skillSelection?: SkillSelectionInput;
           systemPrompt: string;
           strategyKind: TaskStrategyKind;
           baseBranch: Branch | null;
           nameSeed: string;
         };
+        type CompareLaunch = {
+          projectId: string;
+          taskId: string;
+          conversationId: string;
+          runtime: RuntimeId;
+          systemPrompt: string;
+          promise: Promise<unknown>;
+        };
 
-        const createForSpec = async (
-          spec: CompareSpec
-        ): Promise<{ projectId: string; taskId: string; promise: Promise<unknown> } | null> => {
+        const createForSpec = async (spec: CompareSpec): Promise<CompareLaunch | null> => {
           await projectManager.mountProject(spec.projectId).catch(() => {});
           const target = asMounted(projectManager.projects.get(spec.projectId));
           if (!target) return null;
@@ -1363,11 +1636,20 @@ export const HomeComposer = observer(function HomeComposer({
               initialPrompt: systemPrompt
                 ? buildRequirementPrompt({ requirement, systemPrompt })
                 : requirement || undefined,
-              imagePaths,
+              deferInitialPrompt,
+              imagePaths: sessionImagePaths,
               model: spec.model,
+              skillSelection: spec.skillSelection,
             },
           });
-          return { projectId: spec.projectId, taskId, promise };
+          return {
+            projectId: spec.projectId,
+            taskId,
+            conversationId,
+            runtime: spec.provider,
+            systemPrompt,
+            promise,
+          };
         };
 
         // Every config is an equal row in the list (the base was migrated in when
@@ -1381,6 +1663,7 @@ export const HomeComposer = observer(function HomeComposer({
               projectId: variant.projectId,
               provider: slot.provider,
               model: slot.agent?.model,
+              skillSelection: agentSkillSelection(slot.agent),
               systemPrompt: slot.systemPrompt,
               strategyKind: variant.strategyKind,
               baseBranch: variant.baseBranch,
@@ -1390,13 +1673,29 @@ export const HomeComposer = observer(function HomeComposer({
         });
 
         const results = (await Promise.all(specs.map(createForSpec))).filter(
-          (r): r is { projectId: string; taskId: string; promise: Promise<unknown> } => r !== null
+          (r): r is CompareLaunch => r !== null
         );
         if (results.length === 0) return;
 
         resetComposer();
         const base = results[0];
         if (base) goToTask(base.projectId, base.taskId);
+        for (const result of results) {
+          scheduleDeferredPrompt({
+            projectId: result.projectId,
+            taskId: result.taskId,
+            conversationId: result.conversationId,
+            runtime: result.runtime,
+            promise: result.promise,
+            buildPrompt: (rewrittenRequirement) =>
+              result.systemPrompt
+                ? buildRequirementPrompt({
+                    requirement: rewrittenRequirement,
+                    systemPrompt: result.systemPrompt,
+                  })
+                : rewrittenRequirement || undefined,
+          });
+        }
         void rpc.app.openComparisonWindow({
           panes: results.map((r) => ({ projectId: r.projectId, taskId: r.taskId })),
           layout: { kind: 'columns', count: results.length },
@@ -1419,27 +1718,45 @@ export const HomeComposer = observer(function HomeComposer({
           titlePrompt: trimmed || undefined,
           strategyKind: reviewSubmitKind,
           model: implementerSlot.agent?.model,
+          skillSelection: agentSkillSelection(implementerSlot.agent),
         });
         goToTask(mounted.data.id, implementation.taskId);
         const reviewerProvider = reviewerSlot.provider;
         const reviewerSystemPrompt = reviewerSlot.systemPrompt;
-        void implementation.promise
-          .then(() =>
-            rpc.reviewOrchestration.start({
-              projectId: mounted.data.id,
-              taskId: implementation.taskId,
-              implementerConversationId: implementation.conversationId,
-              requirement,
-              reviewerRuntime: reviewerProvider,
-              reviewerSystemPrompt,
-              reviewerAutoApprove: permissionModes.isDanger(reviewerProvider),
-            })
-          )
-          .catch((error: unknown) => {
-            toast.error(
-              error instanceof Error ? error.message : 'Review mode orchestration failed.'
-            );
+        const startReviewOrchestration = (resolvedRequirement: string) =>
+          rpc.reviewOrchestration.start({
+            projectId: mounted.data.id,
+            taskId: implementation.taskId,
+            implementerConversationId: implementation.conversationId,
+            requirement: resolvedRequirement,
+            reviewerRuntime: reviewerProvider,
+            reviewerSystemPrompt,
+            reviewerSkillSelection: agentSkillSelection(reviewerSlot.agent),
+            reviewerAutoApprove: permissionModes.isDanger(reviewerProvider),
           });
+        const reviewPromise = deferInitialPrompt
+          ? implementation.promise
+              .then(() =>
+                injectDeferredPrompt({
+                  projectId: mounted.data.id,
+                  taskId: implementation.taskId,
+                  conversationId: implementation.conversationId,
+                  runtime: implementation.runtime,
+                  buildPrompt: (rewrittenRequirement) =>
+                    buildRequirementPrompt({
+                      requirement: rewrittenRequirement,
+                      systemPrompt: implementerSlot.systemPrompt,
+                    }),
+                })
+              )
+              .then((resolvedRequirement) => {
+                if (resolvedRequirement === null) return undefined;
+                return startReviewOrchestration(resolvedRequirement);
+              })
+          : implementation.promise.then(() => startReviewOrchestration(requirement));
+        void reviewPromise.catch((error: unknown) => {
+          toast.error(error instanceof Error ? error.message : 'Review mode orchestration failed.');
+        });
         resetComposer();
         return;
       }
@@ -1447,7 +1764,6 @@ export const HomeComposer = observer(function HomeComposer({
       if (runMode === 'team') {
         if (!activeTeam) return;
         const teamId = activeTeam.id;
-        const teamRequirement = requirement;
         // Bare task (no initial conversation) — the room conductor instantiates
         // the team and populates the task's conversations via iterative @-routing.
         const taskId = crypto.randomUUID();
@@ -1461,25 +1777,25 @@ export const HomeComposer = observer(function HomeComposer({
           parentTaskId: parentTarget?.taskId,
         });
         goToTask(mounted.data.id, taskId);
-        void createPromise
-          .then(() =>
-            rpc.teamRooms.createRoomFromTeam({
+        const createRoom = (resolvedRequirement: string) =>
+          rpc.teamRooms
+            .createRoomFromTeam({
               projectId: mounted.data.id,
               taskId,
               teamId,
-              requirement: teamRequirement,
+              requirement: resolvedRequirement,
             })
-          )
-          .then(() =>
-            queryClient.invalidateQueries({
-              queryKey: ['roomForTask', mounted.data.id, taskId],
+            .then(() => invalidateTeamRoomQueries(queryClient, mounted.data.id, taskId));
+        const roomPromise = deferInitialPrompt
+          ? createPromise.then(async () => {
+              const resolvedRequirement = await requirementPromise;
+              if (resolvedRequirement === null) return undefined;
+              return createRoom(resolvedRequirement);
             })
-          )
-          .catch((error: unknown) => {
-            toast.error(
-              error instanceof Error ? error.message : 'Agent team orchestration failed.'
-            );
-          });
+          : createPromise.then(() => createRoom(requirement));
+        void roomPromise.catch((error: unknown) => {
+          toast.error(error instanceof Error ? error.message : 'Agent team orchestration failed.');
+        });
         resetComposer();
         return;
       }
@@ -1496,8 +1812,23 @@ export const HomeComposer = observer(function HomeComposer({
         titlePrompt: trimmed || undefined,
         strategyKind: standardSubmitKind,
         model: normalSlot.agent?.model,
+        skillSelection: agentSkillSelection(normalSlot.agent),
       });
       goToTask(mounted.data.id, task.taskId);
+      scheduleDeferredPrompt({
+        projectId: mounted.data.id,
+        taskId: task.taskId,
+        conversationId: task.conversationId,
+        runtime: task.runtime,
+        promise: task.promise,
+        buildPrompt: (rewrittenRequirement) =>
+          normalSystemPrompt
+            ? buildRequirementPrompt({
+                requirement: rewrittenRequirement,
+                systemPrompt: normalSystemPrompt,
+              })
+            : rewrittenRequirement || undefined,
+      });
       void task.promise.catch(() => {
         toast.error('Agent task failed to start.');
       });
@@ -1518,6 +1849,7 @@ export const HomeComposer = observer(function HomeComposer({
     selectedBranch,
     promptTokens,
     attachImagesAsPaths,
+    inputPromptLanguage,
     rewriteInputRequirement,
     clearPromptTokens,
     reviewSubmitKind,
@@ -1848,6 +2180,7 @@ export const HomeComposer = observer(function HomeComposer({
         runtimeId={runtimeId}
         projectId={projectData?.id ?? null}
         projectPath={skillProjectPath}
+        skillSelection={composerSkillSelection}
         runHostKind={runHostKind}
         containerClassName={promptInputChrome.containerClassName}
         canSubmit={canSubmit}
@@ -1862,28 +2195,45 @@ export const HomeComposer = observer(function HomeComposer({
         {/* Compare mode: the base config is migrated into this uniform, reorderable
             list, so every row is an equal config. The plain base chip row below is
             hidden while comparing. */}
-        {!taskScopedTarget && mounted && runMode === 'normal' && compareVariants.length > 0 && (
+        {!taskScopedTarget && runMode === 'normal' && compareVariants.length > 0 && (
           <div className="flex flex-col gap-2">
-            {compareVariants.map((variant, index) => (
-              <CompareVariantRow
-                key={variant.id}
-                variant={variant}
-                strategyLabels={strategyLabels}
-                runHostKind={
-                  asMounted(
-                    variant.projectId ? projectManager.projects.get(variant.projectId) : undefined
-                  )?.data.type === 'ssh'
-                    ? 'ssh'
-                    : 'local'
-                }
-                modelLabel={compareModelLabel}
-                renderSettings={renderComposerSettingsButton}
-                trailing={index === 0 ? renderAddCompareButton() : undefined}
-                onChange={(patch) => updateVariant(variant.id, patch)}
-                onRemove={() => removeVariant(variant.id)}
-                onReorder={reorderVariant}
-              />
-            ))}
+            {compareVariants.map((variant, index) => {
+              const variantRunHostKind: RunHostKind =
+                asMounted(
+                  variant.projectId ? projectManager.projects.get(variant.projectId) : undefined
+                )?.data.type === 'ssh'
+                  ? 'ssh'
+                  : 'local';
+              return (
+                <CompareVariantRow
+                  key={variant.id}
+                  variant={variant}
+                  strategyLabels={strategyLabels}
+                  runHostKind={variantRunHostKind}
+                  modelLabel={compareModelLabel}
+                  renderSettings={renderComposerSettingsButton}
+                  trailing={index === 0 ? renderAddCompareButton() : undefined}
+                  onChange={(patch) => {
+                    updateVariant(variant.id, patch);
+                    // The first compare row is the migrated base configuration.
+                    // Selecting its project must also restore the base selection
+                    // so the normal submit path can mount and launch the group.
+                    if (index === 0 && patch.projectId !== undefined) {
+                      setSelectedProjectId(patch.projectId ?? undefined);
+                    }
+                  }}
+                  onRunHostChange={(nextKind) => {
+                    if (nextKind === variantRunHostKind) return;
+                    const nextProjectId = findProjectIdByRunHost(nextKind);
+                    if (nextProjectId)
+                      updateVariant(variant.id, { projectId: nextProjectId, baseBranch: null });
+                    else openAddProjectForRunHost(nextKind);
+                  }}
+                  onRemove={() => removeVariant(variant.id)}
+                  onReorder={reorderVariant}
+                />
+              );
+            })}
           </div>
         )}
         {compareVariants.length === 0 && (
@@ -1911,7 +2261,10 @@ export const HomeComposer = observer(function HomeComposer({
                 }
               />
             )}
-            <RunHostSelector kind={runHostKind} />
+            <RunHostSelector
+              kind={runHostKind}
+              onSelectKind={isProjectLocked ? undefined : selectRunHostProject}
+            />
             {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
             {!taskScopedTarget && mounted && runMode === 'team' && (
               <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
@@ -1957,13 +2310,19 @@ export const HomeComposer = observer(function HomeComposer({
               selectedTeamId={selectedTeamId}
               onChange={setRunMode}
               onSelectTeam={setSelectedTeamId}
-              renderConfiguration={(configurationMode, configurationTeamId) => (
+              renderConfiguration={(configurationMode, configurationTeamId, onRuntimeChange) => (
                 <ModeConfigurationPanel
                   mode={configurationMode}
                   runtimeId={runtimeId}
-                  onRuntimeChange={setRuntimeOverride}
+                  onRuntimeChange={(agent) => {
+                    setRuntimeOverride(agent);
+                    onRuntimeChange();
+                  }}
                   reviewerRuntime={reviewerRuntime}
-                  onReviewerProviderChange={setReviewerProvider}
+                  onReviewerProviderChange={(provider) => {
+                    setReviewerProvider(provider);
+                    onRuntimeChange();
+                  }}
                   teams={teams}
                   selectedTeamId={configurationTeamId ?? selectedTeamId}
                   agents={userAgents}
@@ -2000,6 +2359,7 @@ function CompareVariantRow({
   renderSettings,
   trailing,
   onChange,
+  onRunHostChange,
   onRemove,
   onReorder,
 }: {
@@ -2010,6 +2370,7 @@ function CompareVariantRow({
   renderSettings: () => ReactNode;
   trailing?: ReactNode;
   onChange: (patch: Partial<CompareVariant>) => void;
+  onRunHostChange?: (kind: RunHostKind) => void;
   onRemove: () => void;
   onReorder: (fromId: string, toId: string) => void;
 }) {
@@ -2058,7 +2419,7 @@ function CompareVariantRow({
           </ComboboxTrigger>
         }
       />
-      {variant.projectId && <RunHostSelector kind={runHostKind} />}
+      {variant.projectId && <RunHostSelector kind={runHostKind} onSelectKind={onRunHostChange} />}
       {variant.projectId && (
         <BaseBranchChip
           projectId={variant.projectId}
@@ -2385,6 +2746,7 @@ interface TaskScopedProjectButtonProps {
 
 interface RunHostSelectorProps {
   kind: RunHostKind;
+  onSelectKind?: (kind: RunHostKind) => void;
 }
 
 interface RunModeOption {
@@ -2514,7 +2876,11 @@ interface RunModeSelectorProps {
   selectedTeamId: string;
   onChange: (mode: HomeRunMode) => void;
   onSelectTeam: (teamId: string) => void;
-  renderConfiguration: (mode: HomeRunMode, teamId: string | undefined) => ReactNode;
+  renderConfiguration: (
+    mode: HomeRunMode,
+    teamId: string | undefined,
+    onRuntimeChange: () => void
+  ) => ReactNode;
 }
 
 function RunModeSelector({
@@ -2536,6 +2902,7 @@ function RunModeSelector({
   const [pendingId, setPendingId] = useState<string>(() =>
     entryIdForState(options, mode, selectedTeamId)
   );
+  const [runtimeDirty, setRuntimeDirty] = useState(false);
   const labelOf = (option: RunModeOption) =>
     option.label ?? (option.labelKey ? t(option.labelKey) : '');
   const current =
@@ -2545,17 +2912,23 @@ function RunModeSelector({
   const CurrentIcon = current.icon;
   const PendingIcon = pending.icon;
   const dirty =
-    pending.mode !== mode || (pending.mode === 'team' && pending.teamId !== selectedTeamId);
+    runtimeDirty ||
+    pending.mode !== mode ||
+    (pending.mode === 'team' && pending.teamId !== selectedTeamId);
   const isNonStandardMode = mode !== 'normal';
 
   const handleOpenChange = (next: boolean) => {
-    if (next) setPendingId(entryIdForState(options, mode, selectedTeamId));
+    if (next) {
+      setPendingId(entryIdForState(options, mode, selectedTeamId));
+      setRuntimeDirty(false);
+    }
     setOpen(next);
   };
 
   const handleConfirm = () => {
     if (pending.teamId) onSelectTeam(pending.teamId);
     if (pending.mode !== mode) onChange(pending.mode);
+    setRuntimeDirty(false);
     setOpen(false);
   };
 
@@ -2693,7 +3066,7 @@ function RunModeSelector({
               )}
             </div>
             <p className="text-xs text-foreground-muted">{t(pending.descKey)}</p>
-            {renderConfiguration(pending.mode, pending.teamId)}
+            {renderConfiguration(pending.mode, pending.teamId, () => setRuntimeDirty(true))}
           </div>
         </div>
         <DialogFooter className="px-3 py-2.5">
@@ -2897,10 +3270,16 @@ function Agent({
   // preferred runtime. Editing it here sets the per-slot override (loose
   // coupling — it does not mutate the Agent).
   const runtime = value ?? selectedAgent?.preferredRuntime ?? null;
+  const resolveSkillName = (identifier: string) =>
+    installedSkills.find((skill) => skill.key === identifier || skill.id === identifier)
+      ?.displayName ?? identifier;
   const skillNames = selectedAgent
-    ? selectedAgent.enabledSkillIds.map(
-        (id) => installedSkills.find((s) => s.id === id)?.displayName ?? id
-      )
+    ? [
+        ...selectedAgent.enabledSkillIds.map((identifier) => resolveSkillName(identifier)),
+        ...selectedAgent.manualSkillIds.map(
+          (identifier) => `${resolveSkillName(identifier)} · ${t('agentManager.skillModeManual')}`
+        ),
+      ]
     : [];
   const editAgent = () =>
     selectedAgent && showAgentModal({ agent: selectedAgent, onSuccess: () => undefined });
@@ -2957,6 +3336,7 @@ function Agent({
           <div className="flex min-w-0 items-center gap-1">
             <AgentSelector
               value={runtime}
+              model={selectedAgent.model}
               onChange={onChange}
               connectionId={connectionId}
               className="h-7 min-w-0 flex-1 rounded-md border-transparent bg-transparent text-sm transition-colors hover:bg-background-2"
@@ -3043,7 +3423,7 @@ function Chip({ icon: Icon, children }: ChipProps) {
   );
 }
 
-function RunHostSelector({ kind }: RunHostSelectorProps) {
+function RunHostSelector({ kind, onSelectKind }: RunHostSelectorProps) {
   const { t } = useTranslation();
   const options: Array<{
     kind: RunHostKind;
@@ -3071,27 +3451,22 @@ function RunHostSelector({ kind }: RunHostSelectorProps) {
           </button>
         }
       />
-      <DropdownMenuContent align="start" className="w-56 p-1.5">
+      <DropdownMenuContent align="start" className="w-48 p-1.5">
         {options.map((option) => {
           const Icon = option.icon;
           const active = option.kind === kind;
           return (
             <DropdownMenuItem
               key={option.kind}
-              disabled={!active}
+              disabled={!onSelectKind || active}
+              onClick={() => onSelectKind?.(option.kind)}
               className="gap-2 rounded-md px-2.5 py-2"
             >
               <Icon className="size-4 shrink-0 text-foreground-muted" />
               <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                 {option.label}
               </span>
-              {active ? (
-                <Check className="size-3.5 shrink-0 text-foreground-muted" />
-              ) : option.kind === 'ssh' ? (
-                <span className="shrink-0 rounded-sm bg-background-2 px-1.5 py-0.5 text-[10px] text-foreground-muted">
-                  {t('common.comingSoon')}
-                </span>
-              ) : null}
+              {active && <Check className="size-3.5 shrink-0 text-foreground-muted" />}
             </DropdownMenuItem>
           );
         })}

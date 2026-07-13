@@ -2,7 +2,12 @@ import { ChevronRight, FolderOpen } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getPrNumber, isForkPr, type PullRequest } from '@shared/pull-requests';
+import {
+  formatPullRequestReviewPrompt,
+  getPrNumber,
+  isForkPr,
+  type PullRequest,
+} from '@shared/pull-requests';
 import { formatIssueFixPrompt, type CreateTaskParams, type Issue } from '@shared/tasks';
 import {
   getProjectManagerStore,
@@ -45,6 +50,10 @@ function issuePromptKey(issue: Issue): string {
   return issue.url || `${issue.provider}:${issue.identifier}`;
 }
 
+function prPromptKey(pr: PullRequest): string {
+  return pr.url || `${pr.repositoryUrl}:${pr.identifier ?? pr.headRefName}:${pr.headRefOid}`;
+}
+
 export const CreateTaskModal = observer(function CreateTaskModal({
   projectId,
   strategy = 'from-branch',
@@ -84,13 +93,17 @@ export const CreateTaskModal = observer(function CreateTaskModal({
   const connectionId = projectData?.type === 'ssh' ? projectData.connectionId : undefined;
 
   const initialConversation = useInitialConversationState(connectionId);
-  const lastAutoIssuePromptRef = useRef<string | null>(null);
+  const lastAutoPromptRef = useRef<string | null>(null);
   const [promptedIssueKey, setPromptedIssueKey] = useState<string | null>(null);
+  const [promptedPrKey, setPromptedPrKey] = useState<string | null>(null);
 
   useEffect(() => setUseBYOI(false), [selectedProjectId]);
   useEffect(() => {
     initialConversation.setRuntime(null);
     initialConversation.setPrompt('');
+    lastAutoPromptRef.current = null;
+    setPromptedIssueKey(null);
+    setPromptedPrKey(null);
     // setRuntime and setPrompt are stable useState setters
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId]);
@@ -139,12 +152,31 @@ export const CreateTaskModal = observer(function CreateTaskModal({
 
     const nextPrompt = formatIssueFixPrompt(issue);
     const currentPrompt = initialConversation.prompt;
-    if (currentPrompt.trim().length === 0 || currentPrompt === lastAutoIssuePromptRef.current) {
+    if (currentPrompt.trim().length === 0 || currentPrompt === lastAutoPromptRef.current) {
       initialConversation.setPrompt(nextPrompt);
-      lastAutoIssuePromptRef.current = nextPrompt;
+      lastAutoPromptRef.current = nextPrompt;
     }
     setPromptedIssueKey(key);
   }, [fromIssue.linkedIssue, initialConversation, promptedIssueKey, selectedStrategy]);
+
+  useEffect(() => {
+    const pr = selectedStrategy === 'from-pull-request' ? fromPR.linkedPR : null;
+    const key = pr ? prPromptKey(pr) : null;
+    if (!pr || !key) {
+      if (promptedPrKey !== null) setPromptedPrKey(null);
+      return;
+    }
+
+    if (key === promptedPrKey) return;
+
+    const nextPrompt = formatPullRequestReviewPrompt(pr);
+    const currentPrompt = initialConversation.prompt;
+    if (currentPrompt.trim().length === 0 || currentPrompt === lastAutoPromptRef.current) {
+      initialConversation.setPrompt(nextPrompt);
+      lastAutoPromptRef.current = nextPrompt;
+    }
+    setPromptedPrKey(key);
+  }, [fromPR.linkedPR, initialConversation, promptedPrKey, selectedStrategy]);
 
   const activeMode = {
     'from-branch': fromBranch,

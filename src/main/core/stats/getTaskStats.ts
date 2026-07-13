@@ -44,6 +44,7 @@ export async function getTaskStats(projectId: string, taskId: string): Promise<T
         runtimeId: conversation.runtime,
         authProvider: conversation.authProvider ?? null,
         tokens: usage?.total ?? null,
+        context: usage?.context ?? null,
       };
     })
   );

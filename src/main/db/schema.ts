@@ -10,6 +10,7 @@ import {
 } from 'drizzle-orm/sqlite-core';
 import type { AgentTeamMember } from '@shared/agent-team';
 import type { AgentAccountProviderId } from '@shared/runtime-registry';
+import type { SkillSelectionInput } from '@shared/skills/types';
 import type { TaskNamingContextSnapshot, TaskNamingStatus } from '@shared/task-naming';
 import type { StoredBranch } from '@main/core/tasks/stored-branch';
 
@@ -220,6 +221,9 @@ export const reviewOrchestrations = sqliteTable(
     requirement: text('requirement').notNull().default(''),
     reviewerRuntime: text('reviewer_runtime').notNull(),
     reviewerSystemPrompt: text('reviewer_system_prompt').notNull().default(''),
+    reviewerSkillSelection: text('reviewer_skill_selection', {
+      mode: 'json',
+    }).$type<SkillSelectionInput | null>(),
     reviewerAutoApprove: integer('reviewer_auto_approve', { mode: 'boolean' })
       .notNull()
       .default(false),
@@ -628,6 +632,8 @@ export const roomMembers = sqliteTable(
     runtime: text('runtime'),
     /** Role system prompt, captured at member creation (mirrors reviewer_system_prompt). */
     systemPrompt: text('system_prompt').notNull().default(''),
+    /** Skill profile captured when the member is created, so every new session is reproducible. */
+    skillSelection: text('skill_selection', { mode: 'json' }).$type<SkillSelectionInput | null>(),
     autoApprove: integer('auto_approve', { mode: 'boolean' }).notNull().default(false),
     /** Identity accent key, resolved to a theme color in the renderer. */
     accent: text('accent').notNull().default('slate'),

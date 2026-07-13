@@ -25,6 +25,7 @@ export function useRuntimeSettings(runtimeId: string) {
         queryKey: ['runtimeSettings', runtimeId, 'runtimeAccountStatus'],
       });
       void queryClient.invalidateQueries({ queryKey: ['runtimeSettings', 'all'] });
+      void queryClient.invalidateQueries({ queryKey: ['runtimeSnapshot', runtimeId] });
     },
   });
 
@@ -36,6 +37,7 @@ export function useRuntimeSettings(runtimeId: string) {
         queryKey: ['runtimeSettings', runtimeId, 'runtimeAccountStatus'],
       });
       void queryClient.invalidateQueries({ queryKey: ['runtimeSettings', 'all'] });
+      void queryClient.invalidateQueries({ queryKey: ['runtimeSnapshot', runtimeId] });
     },
   });
 

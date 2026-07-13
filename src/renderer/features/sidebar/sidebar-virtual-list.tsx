@@ -21,6 +21,10 @@ import { ChevronDown } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  teamRoomTaskKey,
+  useTeamRoomTaskKeys,
+} from '@renderer/features/agent-room/team-room-queries';
 import { type SidebarGroupKey, type SidebarRow } from '@renderer/features/sidebar/sidebar-store';
 import { useMoveTaskToProject } from '@renderer/features/tasks/components/use-move-task-to-project';
 import {
@@ -46,6 +50,7 @@ const TASK_GROUP_VISIBLE_LIMIT = 5;
 export const SidebarVirtualList = observer(function SidebarVirtualList() {
   const { t } = useTranslation();
   const rows = sidebarStore.sidebarRows;
+  const teamRoomTaskKeys = useTeamRoomTaskKeys();
   const { currentView } = useWorkspaceSlots();
   const { params: taskParams } = useParams('task');
   const { params: projectParams } = useParams('project');
@@ -126,6 +131,12 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     if (!activeSidebarDndId) {
       autoExpandedActiveIdRef.current = null;
       return;
+    }
+    if (currentView === 'task' && taskParams.projectId && taskParams.taskId) {
+      const activeTask = getRegisteredTaskData(taskParams.projectId, taskParams.taskId);
+      if (activeTask?.archivedAt || activeTask?.archiveRequestedAt) {
+        return;
+      }
     }
     if (autoExpandedActiveIdRef.current === activeSidebarDndId) return;
 
@@ -294,7 +305,13 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     }
     if (id.startsWith('task::')) {
       const [, projId, taskId] = id.split('::');
-      return <SidebarTaskItem projectId={projId} taskId={taskId} />;
+      return (
+        <SidebarTaskItem
+          projectId={projId}
+          taskId={taskId}
+          isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(projId, taskId))}
+        />
+      );
     }
     return null;
   }
@@ -363,6 +380,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
                 depth={isDragGhost ? taskProjection.depth : row.depth}
                 childCount={row.childCount}
                 treeTrail={isDragGhost ? undefined : row.treeTrail}
+                isMultiAgent={teamRoomTaskKeys.has(teamRoomTaskKey(row.projectId, row.taskId))}
               />
             );
             if (!dndEnabled) {

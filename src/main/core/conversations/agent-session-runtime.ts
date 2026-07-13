@@ -15,13 +15,15 @@ import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { clearInterruptMarker } from './interrupt-marker';
 
-type SessionKey = {
+export type AgentSessionKey = {
   projectId: string;
   taskId: string;
   conversationId: string;
 };
 
-function keyFor({ projectId, taskId, conversationId }: SessionKey): string {
+type RuntimeStateListener = (state: RunState) => void;
+
+function keyFor({ projectId, taskId, conversationId }: AgentSessionKey): string {
   return `${projectId}\0${taskId}\0${conversationId}`;
 }
 
@@ -108,10 +110,11 @@ function eventForRendererStatus(
 const WATCHDOG_STALE_MS = 30 * 60_000;
 const WATCHDOG_SWEEP_INTERVAL_MS = 60_000;
 
-type Entry = { session: SessionKey; state: RunState };
+type Entry = { session: AgentSessionKey; state: RunState };
 
 class AgentSessionRuntimeStore {
   private entries = new Map<string, Entry>();
+  private listeners = new Map<string, Set<RuntimeStateListener>>();
   private offRendererStatusChanged: (() => void) | null = null;
   private watchdogTimer: NodeJS.Timeout | null = null;
 
@@ -134,6 +137,7 @@ class AgentSessionRuntimeStore {
       this.watchdogTimer = null;
     }
     this.entries.clear();
+    this.listeners.clear();
   }
 
   private sweepStale(): void {
@@ -150,7 +154,7 @@ class AgentSessionRuntimeStore {
    * reducer and is logged here, so there is exactly one place to reason about
    * transitions and exactly one place to debug them.
    */
-  dispatch(session: SessionKey, event: RunStateEvent, source: string): RunState {
+  dispatch(session: AgentSessionKey, event: RunStateEvent, source: string): RunState {
     const key = keyFor(session);
     const prev = this.entries.get(key)?.state ?? initialRunState();
     const next = reduceRunState(prev, event);
@@ -180,12 +184,13 @@ class AgentSessionRuntimeStore {
           pendingAction: next.pendingAction,
         });
       }
+      this.notifyListeners(session, next);
     }
     return next;
   }
 
   /** Directly seed a status (used at session spawn). */
-  setStatus(session: SessionKey, status: AgentSessionRuntimeStatus): void {
+  setStatus(session: AgentSessionKey, status: AgentSessionRuntimeStatus): void {
     const at = Date.now();
     const event = eventForRendererStatus(status, at);
     if (event) {
@@ -193,7 +198,11 @@ class AgentSessionRuntimeStore {
       return;
     }
     // idle/awaiting-input seed: set baseline directly via initial state.
-    this.entries.set(keyFor(session), { session, state: initialRunState(status, at) });
+    const key = keyFor(session);
+    const previous = this.entries.get(key)?.state;
+    const state = initialRunState(status, at);
+    this.entries.set(key, { session, state });
+    if (!previous || previous.status !== state.status) this.notifyListeners(session, state);
   }
 
   setFromAgentEvent(event: AgentEvent): void {
@@ -205,29 +214,60 @@ class AgentSessionRuntimeStore {
     this.dispatch(event, reducerEvent, `${event.source ?? 'agent'}:${event.type}`);
   }
 
-  remove(session: SessionKey): void {
-    this.entries.delete(keyFor(session));
+  remove(session: AgentSessionKey): void {
+    const key = keyFor(session);
+    const previous = this.entries.get(key)?.state;
+    this.entries.delete(key);
+    if (previous && isAgentSessionRunningStatus(previous.status)) {
+      this.notifyListeners(session, initialRunState('idle', Date.now()));
+    }
   }
 
-  isRunning(session: SessionKey): boolean {
+  isRunning(session: AgentSessionKey): boolean {
     return isAgentSessionRunningStatus(this.getStatus(session));
   }
 
-  getStatus(session: SessionKey): AgentSessionRuntimeStatus {
+  getStatus(session: AgentSessionKey): AgentSessionRuntimeStatus {
     return this.entries.get(keyFor(session))?.state.status ?? 'idle';
   }
 
-  getState(session: SessionKey): RunState {
+  getState(session: AgentSessionKey): RunState {
     return this.entries.get(keyFor(session))?.state ?? initialRunState();
   }
 
   /** Snapshot of every tracked session's current status, for renderer cold-load. */
-  getAllStatuses(): Array<SessionKey & { status: AgentSessionRuntimeStatus }> {
-    const result: Array<SessionKey & { status: AgentSessionRuntimeStatus }> = [];
+  getAllStatuses(): Array<AgentSessionKey & { status: AgentSessionRuntimeStatus }> {
+    const result: Array<AgentSessionKey & { status: AgentSessionRuntimeStatus }> = [];
     for (const { session, state } of this.entries.values()) {
       result.push({ ...session, status: state.status });
     }
     return result;
+  }
+
+  /** Main-process-only status subscription for services such as the mobile SSE gateway. */
+  subscribe(session: AgentSessionKey, listener: RuntimeStateListener): () => void {
+    const key = keyFor(session);
+    const listeners = this.listeners.get(key) ?? new Set<RuntimeStateListener>();
+    listeners.add(listener);
+    this.listeners.set(key, listeners);
+
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) this.listeners.delete(key);
+    };
+  }
+
+  private notifyListeners(session: AgentSessionKey, state: RunState): void {
+    for (const listener of this.listeners.get(keyFor(session)) ?? []) {
+      try {
+        listener(state);
+      } catch (error) {
+        log.warn('AgentRunState listener failed', {
+          conversationId: session.conversationId,
+          error: String(error),
+        });
+      }
+    }
   }
 }
 

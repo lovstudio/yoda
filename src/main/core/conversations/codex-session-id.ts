@@ -3,6 +3,7 @@ import {
   findClosestCodexThreadRefByCreatedAt,
   findClosestCodexThreadRefByTitleAndCreatedAt,
   findCodexThreadTitleByTitle,
+  findUniqueCodexThreadRefByCreatedAt,
   findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt,
   getClaimedCodexThreadId,
   readCodexThreadRef,
@@ -12,6 +13,7 @@ import {
 
 const SQLITE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 const CODEX_CREATED_AT_MATCH_MAX_DISTANCE_MS = 2 * 60_000;
+const CODEX_MOVED_CWD_CREATED_AT_MATCH_MAX_DISTANCE_MS = 10_000;
 
 export type AgentResumeSession = {
   sessionId: string;
@@ -125,6 +127,14 @@ export function resolveCodexThreadForConversation({
     });
     if (byMovedPathTitle) return toResolvedThread(byMovedPathTitle);
   }
+
+  const byMovedPathCreatedAt = findUniqueCodexThreadRefByCreatedAt({
+    statePath,
+    targetCreatedAtMs: createdAtMs,
+    maxDistanceMs: CODEX_MOVED_CWD_CREATED_AT_MATCH_MAX_DISTANCE_MS,
+    includeArchived: true,
+  });
+  if (byMovedPathCreatedAt) return toResolvedThread(byMovedPathCreatedAt);
 
   const uniqueLaterThread = findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt({
     statePath,

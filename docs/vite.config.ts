@@ -3,6 +3,11 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   root: __dirname,
+  resolve: {
+    alias: {
+      '@shared': resolve(__dirname, '../src/shared'),
+    },
+  },
   build: {
     rollupOptions: {
       input: {

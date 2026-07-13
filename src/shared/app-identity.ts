@@ -1,6 +1,16 @@
-type ImportMetaWithEnv = ImportMeta & { env?: { VITE_BUILD?: string } };
+type ImportMetaWithEnv = ImportMeta & {
+  env?: {
+    VITE_BUILD?: string;
+    VITE_CN_UPDATE_FEED_BASE_URL?: string;
+  };
+};
 
-const isCanary = (import.meta as ImportMetaWithEnv).env?.VITE_BUILD === 'canary';
+const env = (import.meta as ImportMetaWithEnv).env;
+const isCanary = env?.VITE_BUILD === 'canary';
+
+function trimTrailingSlash(value: string): string {
+  return value.trim().replace(/\/+$/, '');
+}
 
 export const APP_ID = isCanary ? 'ai.lovstudio.yoda.canary' : 'ai.lovstudio.yoda.stable';
 export const PRODUCT_NAME = isCanary ? 'Yoda Canary' : 'Yoda';
@@ -11,3 +21,4 @@ export const R2_BASE_URL = 'https://releases.lovstudio.ai/yoda';
 export const GITHUB_RELEASE_DOWNLOAD_URL =
   'https://github.com/lovstudio/yoda/releases/latest/download';
 export const UPDATE_FEED_BASE_URL = isCanary ? R2_BASE_URL : GITHUB_RELEASE_DOWNLOAD_URL;
+export const CN_UPDATE_FEED_BASE_URL = trimTrailingSlash(env?.VITE_CN_UPDATE_FEED_BASE_URL ?? '');

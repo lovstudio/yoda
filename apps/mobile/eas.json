@@ -15,7 +15,10 @@
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_YODA_RELAY_ORIGIN": "https://relay.yoda.lovstudio.ai"
+      }
     }
   },
   "submit": {

@@ -1,4 +1,4 @@
-import { Archive, ChevronRight, GitBranch, Loader2, MoreHorizontal } from 'lucide-react';
+import { Archive, ChevronRight, GitBranch, Loader2, MoreHorizontal, Users } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -42,6 +42,8 @@ interface SidebarTaskItemProps {
   childCount?: number;
   /** Terminal-tree guide state per indent slot — see SidebarRow.treeTrail. */
   treeTrail?: boolean[];
+  /** True when this task is backed by an Agent Room / team workflow. */
+  isMultiAgent?: boolean;
 }
 
 /** Indent per subtask level; depth is visually capped so deep trees stay readable. */
@@ -55,6 +57,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   depth = 0,
   childCount = 0,
   treeTrail,
+  isMultiAgent = false,
 }: SidebarTaskItemProps) {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
@@ -112,6 +115,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const branchDisplay = sidebarStore.taskBranchDisplay;
   const taskIndentClass =
     rowVariant === 'underProject' ? (hasRootToggle ? undefined : 'pl-8') : 'pl-2';
+  const multiAgentLabel = t('sidebar.multiAgentTask');
+  const showMultiAgentIconInReservedSlot =
+    isMultiAgent && rowVariant === 'underProject' && treeDepth === 0 && !hasRootToggle;
+  const showMultiAgentIconInline = isMultiAgent && !showMultiAgentIconInReservedSlot;
 
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
@@ -273,6 +280,13 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                     )}
                   />
                 )}
+                {showMultiAgentIconInReservedSlot && (
+                  <MultiAgentTaskIcon
+                    label={multiAgentLabel}
+                    className="absolute left-1 top-1/2 -translate-y-1/2"
+                  />
+                )}
+                {showMultiAgentIconInline && <MultiAgentTaskIcon label={multiAgentLabel} />}
                 <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
                   <div className="flex min-w-0 items-center gap-1">
                     <span
@@ -404,6 +418,22 @@ const RenderPrBadge = observer(function RenderPrBadge({ task }: { task: TaskStor
   const pr = selectCurrentPr(task.data.prs);
   return pr ? <PrBadge variant="compact" pr={pr} /> : null;
 });
+
+function MultiAgentTaskIcon({ label, className }: { label: string; className?: string }) {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={cn(
+        'inline-flex size-6 shrink-0 items-center justify-center text-amber-700 dark:text-amber-300',
+        className
+      )}
+    >
+      <Users className="size-4" />
+    </span>
+  );
+}
 
 /**
  * One indent slot of the terminal-style tree guide. Non-elbow slots draw a

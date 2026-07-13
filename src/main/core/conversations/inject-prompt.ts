@@ -2,6 +2,7 @@ import {
   buildPromptInjectionPayload,
   getAgentCommandSubmitDelayMs,
   getAgentCommandSubmitInput,
+  getAgentCommandSubmitSuffix,
 } from '@shared/agent-command-prefix';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
@@ -33,6 +34,8 @@ export async function injectPrompt(
   const payload = buildPromptInjectionPayload(prompt);
   if (!payload) return true;
   pty.write(payload);
+  const submitSuffix = getAgentCommandSubmitSuffix(runtime, prompt);
+  if (submitSuffix) pty.write(submitSuffix);
   agentSessionRuntimeStore.setStatus(session, 'working');
   const submitDelay = Math.max(getAgentCommandSubmitDelayMs(runtime), SUBMIT_DELAY_FLOOR_MS);
   await new Promise((resolve) => setTimeout(resolve, submitDelay));

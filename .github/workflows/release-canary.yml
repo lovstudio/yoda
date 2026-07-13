@@ -150,12 +150,25 @@ jobs:
           node --experimental-strip-types scripts/release/verify-mac.ts
           --expected-team-id ${{ secrets.APPLE_TEAM_ID }}
 
+      - name: Prove delta-only Sparkle install
+        run: pnpm run test:sparkle-delta
+
       - name: Notarize and staple
         env:
           APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: node --experimental-strip-types scripts/release/notarize-mac.ts --app-bundle "Yoda Canary.app"
+
+      - name: Refresh macOS DMG blockmaps and update metadata
+        run: node --experimental-strip-types scripts/release/refresh-mac-update-metadata.ts
+
+      - name: Generate signed Sparkle appcasts and deltas
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: >
+          node --experimental-strip-types scripts/release/generate-sparkle-appcast.ts
+          --variant canary
 
       - name: Upload to R2
         uses: ./.github/actions/upload-r2

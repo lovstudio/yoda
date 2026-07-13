@@ -113,6 +113,25 @@ describe('formatCodexRolloutTerminalHistory', () => {
     expect(history).toContain('[Codex 2026-06-04T01:00:02.000Z]\nImplemented.');
     expect(history).not.toContain('Developer instructions');
   });
+
+  it('keeps response tool activity when event messages provide the conversation text', () => {
+    const raw = mixedModernRollout();
+
+    const history = formatCodexRolloutTerminalHistory(raw, {
+      threadId: 'thread-1',
+      title: 'Test thread',
+      rolloutPath: '/tmp/rollout.jsonl',
+    });
+
+    expect(history).toContain('[User 2026-06-04T01:00:01.000Z]\nBuild the feature');
+    expect(history).toContain('[Codex 2026-06-04T01:00:02.000Z]\nI will update it.');
+    expect(history).toContain('[Run command 2026-06-04T01:00:03.000Z]');
+    expect(history).toContain('Script completed');
+    expect(history).toContain('[Image output omitted]');
+    expect(history).toContain('[Start sub-agent 2026-06-04T01:00:05.000Z]');
+    expect(history).not.toContain('Duplicate response text');
+    expect(history).not.toContain('Patch fallback should be hidden');
+  });
 });
 
 describe('parseCodexRolloutTranscript', () => {
@@ -233,4 +252,119 @@ describe('parseCodexRolloutTranscript', () => {
       ['2026-06-04T01:00:05.000Z-assistant-4', 'assistant', 'After command.'],
     ]);
   });
+
+  it('merges modern tool calls into the event transcript in stable source order', () => {
+    const blocks = parseCodexRolloutTranscript(mixedModernRollout());
+
+    expect(blocks.map((block) => [block.id, block.role, block.title])).toEqual([
+      ['2026-06-04T01:00:01.000Z-user-0', 'user', 'You'],
+      ['2026-06-04T01:00:02.000Z-assistant-2', 'assistant', 'Codex'],
+      ['2026-06-04T01:00:03.000Z-tool-3', 'tool', 'Run command'],
+      ['2026-06-04T01:00:05.000Z-tool-5', 'tool', 'Start sub-agent'],
+      ['2026-06-04T01:00:08.000Z-assistant-8', 'assistant', 'Codex'],
+    ]);
+    expect(blocks[2]?.content).toContain('tools.exec_command');
+    expect(blocks[2]?.content).toContain('Output:\nScript completed');
+    expect(blocks[2]?.content).toContain('[Image output omitted]');
+    expect(blocks[3]?.content).toContain('Output:\nSub-agent started');
+    expect(blocks.some((block) => block.content.includes('Duplicate response text'))).toBe(false);
+    expect(blocks.some((block) => block.content.includes('Patch fallback should be hidden'))).toBe(
+      false
+    );
+  });
+
+  it('keeps a pending tool call visible before its output arrives', () => {
+    const prefix = mixedModernRollout().split('\n').slice(0, 4).join('\n');
+    const [user, assistant, tool] = parseCodexRolloutTranscript(prefix);
+
+    expect(user?.role).toBe('user');
+    expect(assistant?.role).toBe('assistant');
+    expect(tool).toMatchObject({
+      id: '2026-06-04T01:00:03.000Z-tool-3',
+      role: 'tool',
+      title: 'Run command',
+    });
+    expect(tool?.content).not.toContain('Output:');
+  });
 });
+
+function mixedModernRollout(): string {
+  return [
+    {
+      timestamp: '2026-06-04T01:00:01.000Z',
+      type: 'event_msg',
+      payload: { type: 'user_message', message: 'Build the feature' },
+    },
+    {
+      timestamp: '2026-06-04T01:00:01.100Z',
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'Duplicate response text' }],
+      },
+    },
+    {
+      timestamp: '2026-06-04T01:00:02.000Z',
+      type: 'event_msg',
+      payload: { type: 'agent_message', message: 'I will update it.' },
+    },
+    {
+      timestamp: '2026-06-04T01:00:03.000Z',
+      type: 'response_item',
+      payload: {
+        type: 'custom_tool_call',
+        name: 'exec',
+        call_id: 'call-command',
+        input: 'const r = await tools.exec_command({"cmd":"pnpm test"});',
+      },
+    },
+    {
+      timestamp: '2026-06-04T01:00:04.000Z',
+      type: 'response_item',
+      payload: {
+        type: 'custom_tool_call_output',
+        call_id: 'call-command',
+        output: [
+          { type: 'input_text', text: 'Script completed\nTests passed' },
+          { type: 'input_image', image_url: 'data:image/png;base64,omitted' },
+        ],
+      },
+    },
+    {
+      timestamp: '2026-06-04T01:00:05.000Z',
+      type: 'response_item',
+      payload: {
+        type: 'function_call',
+        name: 'spawn_agent',
+        call_id: 'call-agent',
+        arguments: '{"task_name":"review"}',
+      },
+    },
+    {
+      timestamp: '2026-06-04T01:00:06.000Z',
+      type: 'response_item',
+      payload: {
+        type: 'function_call_output',
+        call_id: 'call-agent',
+        output: 'Sub-agent started',
+      },
+    },
+    {
+      timestamp: '2026-06-04T01:00:07.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'patch_apply_end',
+        stdout: 'Patch fallback should be hidden',
+        success: true,
+      },
+    },
+    {
+      timestamp: '2026-06-04T01:00:08.000Z',
+      type: 'event_msg',
+      payload: { type: 'agent_message', message: 'Done.' },
+    },
+  ]
+    .map((row) => JSON.stringify(row))
+    .join('\n');
+}

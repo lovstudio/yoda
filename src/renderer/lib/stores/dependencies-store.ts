@@ -24,6 +24,7 @@ export class DependenciesStore {
       agentStatuses: computed,
       localInstalledAgents: computed,
       install: action,
+      update: action,
       probeAll: action,
     });
 
@@ -117,6 +118,16 @@ export class DependenciesStore {
     return install;
   }
 
+  async update(id: DependencyId, connectionId?: string): Promise<DependencyInstallResult> {
+    const key = this.installKey(id, connectionId);
+    const existing = this._inFlightInstalls.get(key);
+    if (existing) return existing;
+
+    const update = this.runUpdate(id, connectionId, key);
+    this._inFlightInstalls.set(key, update);
+    return update;
+  }
+
   private async runInstall(
     id: DependencyId,
     connectionId: string | undefined,
@@ -128,6 +139,29 @@ export class DependenciesStore {
 
     try {
       const result = (await rpc.dependencies.install(id, connectionId)) as DependencyInstallResult;
+      if (!result.success) return result;
+
+      await this.refreshAgents(connectionId);
+      return result;
+    } finally {
+      this._inFlightInstalls.delete(key);
+      runInAction(() => {
+        this._installingDependencyKeys.delete(key);
+      });
+    }
+  }
+
+  private async runUpdate(
+    id: DependencyId,
+    connectionId: string | undefined,
+    key: string
+  ): Promise<DependencyInstallResult> {
+    runInAction(() => {
+      this._installingDependencyKeys.add(key);
+    });
+
+    try {
+      const result = (await rpc.dependencies.update(id, connectionId)) as DependencyInstallResult;
       if (!result.success) return result;
 
       await this.refreshAgents(connectionId);

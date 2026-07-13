@@ -174,4 +174,16 @@ describe('getConversationRunStatus', () => {
       'awaiting-input'
     );
   });
+
+  it('does not downgrade a live completed status when the rollout classifier reports idle', async () => {
+    mocks.getRuntimeStatus.mockReturnValue('completed');
+    mocks.resolveTask.mockReturnValue(mountedTask());
+    mocks.readCodexTurnVerdict.mockResolvedValue({
+      state: 'idle',
+      lastStartedAt: Date.parse('2026-06-10T00:00:05.000Z'),
+    });
+
+    await expect(readCodexStatus()).resolves.toBe('completed');
+    expect(mocks.setRuntimeStatus).not.toHaveBeenCalled();
+  });
 });

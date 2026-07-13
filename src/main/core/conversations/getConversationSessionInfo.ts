@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import type { ConversationSessionInfo } from '@shared/conversations';
+import type { Conversation, ConversationSessionInfo } from '@shared/conversations';
 import type { RuntimeId } from '@shared/runtime-registry';
 import {
   readCodexThreadArchiveStatus,
@@ -77,6 +77,7 @@ export async function getConversationSessionInfo(
       runtimeId: conversation.runtimeId,
       sessionId: session.sessionId,
       cwd: workingDirectory,
+      skillPolicy: conversation.skillPolicy,
       includeUnarchive:
         conversation.runtimeId === 'codex' &&
         readCodexThreadArchiveStatus(resolveCodexStatePath(), session.sessionId) === true,
@@ -89,11 +90,13 @@ async function buildResumeCommand({
   sessionId,
   cwd,
   includeUnarchive,
+  skillPolicy,
 }: {
   runtimeId: RuntimeId;
   sessionId: string;
   cwd?: string;
   includeUnarchive?: boolean;
+  skillPolicy?: Conversation['skillPolicy'];
 }): Promise<string | undefined> {
   const providerConfig = await runtimeOverrideSettings.getItem(runtimeId);
   if (!providerConfig?.cli) return undefined;
@@ -105,6 +108,7 @@ async function buildResumeCommand({
     sessionId,
     isResuming: true,
     workingDirectory: cwd,
+    skillPolicy,
   });
   const commands: string[] = [];
   if (includeUnarchive) {

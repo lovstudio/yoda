@@ -9,6 +9,7 @@ import {
   Loader2,
   Mic,
   Paperclip,
+  Search,
   Sparkles,
 } from 'lucide-react';
 import {
@@ -19,14 +20,18 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
+  type CSSProperties,
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type RefObject,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import type { RuntimeId } from '@shared/runtime-registry';
-import type { CatalogIndex } from '@shared/skills/types';
+import { selectSkillFamilyRepresentatives } from '@shared/skills/grouping';
+import type { CatalogIndex, SkillSelectionInput } from '@shared/skills/types';
 import { recordSkillInvocation } from '@renderer/features/skills/skill-usage-stats';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -75,6 +80,7 @@ import {
 type SkillShortcutPrefix = '/' | '$';
 
 interface SkillShortcutOption {
+  skillKey: string;
   value: string;
   label: string;
   description: string;
@@ -88,6 +94,14 @@ interface ActiveSkillShortcut {
   query: string;
 }
 
+interface ComposerMenuPosition {
+  left: number;
+  width: number;
+  maxHeight: number;
+  side: 'top' | 'bottom';
+  offset: number;
+}
+
 export type ComposerPromptInputRunHostKind = 'local' | 'ssh';
 
 export interface ComposerPromptInputProps {
@@ -98,6 +112,8 @@ export interface ComposerPromptInputProps {
   runtimeId: RuntimeId | null;
   projectId?: string | null;
   projectPath?: string;
+  /** Agent profile for this session: auto skills may be suggested; manual skills remain explicit. */
+  skillSelection?: SkillSelectionInput;
   runHostKind?: ComposerPromptInputRunHostKind;
   className?: string;
   containerClassName?: string;
@@ -111,6 +127,11 @@ export interface ComposerPromptInputProps {
 }
 
 const IMAGE_ATTACHMENT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+const MENU_VIEWPORT_GUTTER = 8;
+const MENU_ANCHOR_INSET = 12;
+const MENU_SIDE_OFFSET = 4;
+const SKILL_SHORTCUT_MENU_MAX_HEIGHT = 288;
+const SKILL_SHORTCUT_MENU_MIN_HEIGHT = 96;
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -208,6 +229,46 @@ function applySkillShortcut(
   };
 }
 
+function measureComposerMenuPosition(anchor: HTMLElement): ComposerMenuPosition {
+  const rect = anchor.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const desiredLeft = rect.left + MENU_ANCHOR_INSET;
+  const desiredWidth = Math.max(160, rect.width - MENU_ANCHOR_INSET * 2);
+  const maxWidth = Math.max(160, viewportWidth - MENU_VIEWPORT_GUTTER * 2);
+  const width = Math.min(desiredWidth, maxWidth);
+  const left = Math.min(
+    Math.max(MENU_VIEWPORT_GUTTER, desiredLeft),
+    viewportWidth - width - MENU_VIEWPORT_GUTTER
+  );
+  const availableBelow = viewportHeight - rect.bottom - MENU_VIEWPORT_GUTTER - MENU_SIDE_OFFSET;
+  const availableAbove = rect.top - MENU_VIEWPORT_GUTTER - MENU_SIDE_OFFSET;
+  const side =
+    availableBelow < SKILL_SHORTCUT_MENU_MIN_HEIGHT && availableAbove > availableBelow
+      ? 'top'
+      : 'bottom';
+  const availableHeight = side === 'top' ? availableAbove : availableBelow;
+  const maxHeight = Math.max(
+    SKILL_SHORTCUT_MENU_MIN_HEIGHT,
+    Math.min(SKILL_SHORTCUT_MENU_MAX_HEIGHT, availableHeight)
+  );
+
+  return {
+    left,
+    width,
+    maxHeight,
+    side,
+    offset:
+      side === 'top'
+        ? viewportHeight - rect.top + MENU_SIDE_OFFSET
+        : rect.bottom + MENU_SIDE_OFFSET,
+  };
+}
+
+function isTargetInSkillShortcutMenu(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[data-skill-shortcut-menu]') !== null;
+}
+
 function fuzzyMatchScore(text: string, query: string): number | null {
   if (text === query) return 1000;
   if (text.startsWith(query)) return 900 - text.length;
@@ -252,6 +313,7 @@ export function ComposerPromptInput({
   runtimeId,
   projectId = null,
   projectPath,
+  skillSelection,
   runHostKind = 'local',
   className,
   containerClassName = 'border-border bg-background-1',
@@ -264,6 +326,7 @@ export function ComposerPromptInput({
   onSubmit,
 }: ComposerPromptInputProps) {
   const { t } = useTranslation();
+  const inputAnchorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
@@ -299,17 +362,29 @@ export function ComposerPromptInput({
     },
   });
   const skillShortcutOptions = useMemo<SkillShortcutOption[]>(() => {
-    const installed = (skillCatalog?.skills ?? [])
-      .filter((skill) => skill.installed)
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+    const configuredKeys = skillSelection
+      ? new Set([...skillSelection.autoSkillKeys, ...skillSelection.manualSkillKeys])
+      : null;
+    const installed = selectSkillFamilyRepresentatives(
+      (skillCatalog?.skills ?? []).filter(
+        (skill) =>
+          skill.installed &&
+          (!configuredKeys ||
+            skill.scope === 'plugin' ||
+            configuredKeys.has(skill.key) ||
+            configuredKeys.has(skill.id))
+      ),
+      { preferredKeys: configuredKeys ?? undefined }
+    ).sort((a, b) => a.displayName.localeCompare(b.displayName));
 
     return installed.map((skill) => ({
+      skillKey: skill.key,
       value: skill.id,
       label: skill.displayName,
       description: skill.description,
       command: runtimeId ? applyAgentCommandPrefix(runtimeId, skill.id) : skill.id,
     }));
-  }, [runtimeId, skillCatalog?.skills]);
+  }, [runtimeId, skillCatalog?.skills, skillSelection]);
   const skillIdByShortcutCommand = useMemo(
     () => new Map(skillShortcutOptions.map((skill) => [skill.command, skill.value])),
     [skillShortcutOptions]
@@ -380,6 +455,7 @@ export function ComposerPromptInput({
   const [pathCompletionError, setPathCompletionError] = useState(false);
   const [activePathCompletionIndex, setActivePathCompletionIndex] = useState(0);
   const [activeSkillShortcutIndex, setActiveSkillShortcutIndex] = useState(0);
+  const [skillShortcutSearchQuery, setSkillShortcutSearchQuery] = useState('');
   const [dismissedSkillShortcutKey, setDismissedSkillShortcutKey] = useState<string | null>(null);
   const pathCompletionRequestRef = useRef(0);
 
@@ -396,9 +472,62 @@ export function ComposerPromptInput({
   const activeSkillShortcutKey = activeSkillShortcut
     ? `${activeSkillShortcut.start}:${activeSkillShortcut.end}:${activeSkillShortcut.prefix}:${activeSkillShortcut.query}`
     : null;
+  const automaticSkillKeys = useMemo(
+    () => skillSelection?.autoSkillKeys ?? [],
+    [skillSelection?.autoSkillKeys]
+  );
+  const automaticSkillKeysKey = automaticSkillKeys.join('\0');
+  const [routingQuery, setRoutingQuery] = useState('');
+  useEffect(() => {
+    const intent = value.trim();
+    const containsExplicitSkill = skillShortcutOptions.some((option) =>
+      intent.includes(option.command)
+    );
+    if (
+      !focused ||
+      disabled ||
+      activeSkillShortcut ||
+      automaticSkillKeys.length === 0 ||
+      intent.length < 8 ||
+      containsExplicitSkill
+    ) {
+      setRoutingQuery('');
+      return;
+    }
+    const timer = window.setTimeout(() => setRoutingQuery(intent), 320);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeSkillShortcut,
+    automaticSkillKeys.length,
+    disabled,
+    focused,
+    skillShortcutOptions,
+    value,
+  ]);
+  const { data: routedSkills = [] } = useQuery({
+    queryKey: ['skills', 'route', routingQuery, projectPath ?? null, automaticSkillKeysKey],
+    queryFn: async () => {
+      const result = await rpc.skills.route({
+        query: routingQuery,
+        projectPath,
+        allowedSkillKeys: automaticSkillKeys,
+        limit: 3,
+      });
+      if (result.success && result.data) return result.data;
+      throw new Error(result.error ?? 'Failed to route skills');
+    },
+    enabled: Boolean(routingQuery),
+    staleTime: 30_000,
+  });
+  const visibleRoutedSkills = routedSkills.filter(
+    (suggestion) =>
+      suggestion.confidence !== 'low' &&
+      skillShortcutOptions.some((option) => option.skillKey === suggestion.skillKey)
+  );
   const filteredSkillShortcutOptions = useMemo(() => {
     if (!activeSkillShortcut) return [];
-    const query = activeSkillShortcut.query.trim();
+    const searchQuery = skillShortcutSearchQuery.trim();
+    const query = searchQuery || activeSkillShortcut.query.trim();
     if (!query) return skillShortcutOptions.slice(0, 50);
     const scored = skillShortcutOptions
       .map((item) => ({ item, score: skillShortcutOptionScore(item, query) }))
@@ -407,7 +536,7 @@ export function ComposerPromptInput({
       )
       .sort((a, b) => b.score - a.score);
     return scored.slice(0, 50).map((entry) => entry.item);
-  }, [activeSkillShortcut, skillShortcutOptions]);
+  }, [activeSkillShortcut, skillShortcutOptions, skillShortcutSearchQuery]);
   const effectiveSkillShortcutIndex =
     filteredSkillShortcutOptions.length === 0
       ? 0
@@ -420,7 +549,18 @@ export function ComposerPromptInput({
     !skillsError &&
     (skillsLoading ||
       filteredSkillShortcutOptions.length > 0 ||
-      activeSkillShortcut.query.length > 0);
+      activeSkillShortcut.query.length > 0 ||
+      skillShortcutSearchQuery.trim().length > 0);
+
+  useEffect(() => {
+    setActiveSkillShortcutIndex(0);
+  }, [activeSkillShortcutKey, skillShortcutSearchQuery]);
+
+  useEffect(() => {
+    if (!skillShortcutMenuOpen && skillShortcutSearchQuery) {
+      setSkillShortcutSearchQuery('');
+    }
+  }, [skillShortcutMenuOpen, skillShortcutSearchQuery]);
 
   useEffect(() => {
     if (!activePathMention || disabled) {
@@ -883,7 +1023,7 @@ export function ComposerPromptInput({
         )}
       >
         <div className="flex flex-col">
-          <div className="relative">
+          <div ref={inputAnchorRef} className="relative">
             <Textarea
               ref={textareaRef}
               placeholder={placeholder ?? t('home.promptPlaceholder')}
@@ -901,7 +1041,8 @@ export function ComposerPromptInput({
                 if (activePathMention) setPathCompletionOpen(true);
               }}
               onKeyUp={(event) => updateSelection(event.currentTarget)}
-              onBlur={() => {
+              onBlur={(event) => {
+                if (isTargetInSkillShortcutMenu(event.relatedTarget)) return;
                 setFocused(false);
                 setPathCompletionOpen(false);
               }}
@@ -1003,15 +1144,33 @@ export function ComposerPromptInput({
             )}
             {skillShortcutMenuOpen && activeSkillShortcut && (
               <SkillShortcutMenu
+                anchorRef={inputAnchorRef}
                 items={filteredSkillShortcutOptions}
                 activeIndex={effectiveSkillShortcutIndex}
                 loading={skillsLoading}
-                showEmpty={activeSkillShortcut.query.length > 0}
+                searchValue={skillShortcutSearchQuery}
+                showEmpty={
+                  activeSkillShortcut.query.length > 0 || skillShortcutSearchQuery.trim().length > 0
+                }
                 labels={{
                   loading: t('common.loading'),
                   noResults: t('skills.noMatches'),
+                  search: t('common.search'),
+                  searchPlaceholder: t('home.searchSkills'),
                 }}
                 onActiveIndexChange={setActiveSkillShortcutIndex}
+                onDismiss={() => {
+                  setDismissedSkillShortcutKey(activeSkillShortcutKey);
+                  setSkillShortcutSearchQuery('');
+                  requestAnimationFrame(() => {
+                    textareaRef.current?.focus({ preventScroll: true });
+                  });
+                }}
+                onFocusExit={() => {
+                  setFocused(false);
+                  setSkillShortcutSearchQuery('');
+                }}
+                onSearchValueChange={setSkillShortcutSearchQuery}
                 onSelect={(item) => commitSkillShortcut(item.command, activeSkillShortcut)}
               />
             )}
@@ -1108,6 +1267,31 @@ export function ComposerPromptInput({
                 );
               })()}
           </div>
+          {visibleRoutedSkills.length > 0 && routingQuery === value.trim() && (
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-border/50 px-3 py-2">
+              <span className="mr-0.5 flex items-center gap-1 text-[10px] font-medium text-foreground-muted">
+                <Sparkles className="size-3" />
+                {t('home.suggestedSkills')}
+              </span>
+              {visibleRoutedSkills.map((suggestion) => {
+                const option = skillShortcutOptions.find(
+                  (candidate) => candidate.skillKey === suggestion.skillKey
+                );
+                if (!option) return null;
+                return (
+                  <button
+                    key={suggestion.skillKey}
+                    type="button"
+                    title={suggestion.reason}
+                    onClick={() => commitSkillShortcut(option.command)}
+                    className="rounded-full border border-border bg-background-2/70 px-2 py-0.5 text-[11px] text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10"
+                  >
+                    {suggestion.displayName}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="flex items-center justify-between gap-2 px-2.5 py-2">
             <div className="flex items-center gap-1">
               <input
@@ -1261,40 +1445,138 @@ function PathCompletionMenu({
 }
 
 interface SkillShortcutMenuProps {
+  anchorRef: RefObject<HTMLDivElement | null>;
   items: SkillShortcutOption[];
   activeIndex: number;
   loading: boolean;
+  searchValue: string;
   showEmpty: boolean;
   labels: {
     loading: string;
     noResults: string;
+    search: string;
+    searchPlaceholder: string;
   };
   onActiveIndexChange: (index: number) => void;
+  onDismiss: () => void;
+  onFocusExit: () => void;
+  onSearchValueChange: (value: string) => void;
   onSelect: (item: SkillShortcutOption) => void;
 }
 
 function SkillShortcutMenu({
+  anchorRef,
   items,
   activeIndex,
   loading,
+  searchValue,
   showEmpty,
   labels,
   onActiveIndexChange,
+  onDismiss,
+  onFocusExit,
+  onSearchValueChange,
   onSelect,
 }: SkillShortcutMenuProps) {
   const activeItemRef = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState<ComposerMenuPosition | null>(null);
+
+  const updatePosition = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    setPosition(measureComposerMenuPosition(anchor));
+  }, [anchorRef]);
 
   useEffect(() => {
     activeItemRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [activeIndex]);
+  }, [activeIndex, position]);
+
+  useLayoutEffect(() => {
+    updatePosition();
+    const anchor = anchorRef.current;
+    if (!anchor) return undefined;
+
+    const observer = new ResizeObserver(updatePosition);
+    observer.observe(anchor);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [anchorRef, updatePosition, items.length, loading, showEmpty]);
 
   if (!loading && items.length === 0 && !showEmpty) return null;
+  if (!position || typeof document === 'undefined') return null;
 
-  return (
+  const style: CSSProperties = {
+    left: position.left,
+    width: position.width,
+    maxHeight: position.maxHeight,
+  };
+  if (position.side === 'top') {
+    style.bottom = position.offset;
+  } else {
+    style.top = position.offset;
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      onActiveIndexChange(items.length === 0 ? 0 : (activeIndex + 1) % items.length);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      onActiveIndexChange(items.length === 0 ? 0 : (activeIndex - 1 + items.length) % items.length);
+      return;
+    }
+    if (
+      (event.key === 'Enter' && !isImeComposing(event)) ||
+      (event.key === 'Tab' && items.length > 0)
+    ) {
+      event.preventDefault();
+      const item = items[activeIndex];
+      if (item) onSelect(item);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onDismiss();
+    }
+  };
+
+  return createPortal(
     <div
-      role="listbox"
-      className="absolute left-3 right-3 top-full z-40 mt-1 max-h-72 overflow-hidden rounded-lg border border-border bg-background-quaternary py-1 text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
+      data-skill-shortcut-menu
+      className="fixed z-[60] flex flex-col overflow-hidden rounded-lg border border-border bg-background-quaternary text-sm text-foreground shadow-lg ring-1 ring-foreground/5"
+      style={style}
+      onBlurCapture={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (isTargetInSkillShortcutMenu(nextTarget)) return;
+        if (nextTarget instanceof Node && anchorRef.current?.contains(nextTarget)) return;
+        onFocusExit();
+      }}
+      onKeyDown={handleKeyDown}
+      onMouseDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
     >
+      <div className="border-b border-border px-2 py-1.5">
+        <label className="flex h-8 items-center gap-2 rounded-md border border-border bg-background px-2 text-foreground-muted focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/40">
+          <Search className="size-3.5 shrink-0" />
+          <span className="sr-only">{labels.search}</span>
+          <input
+            type="search"
+            value={searchValue}
+            aria-label={labels.search}
+            placeholder={labels.searchPlaceholder}
+            onChange={(event) => onSearchValueChange(event.target.value)}
+            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-foreground-muted"
+          />
+        </label>
+      </div>
       {loading && items.length === 0 ? (
         <div className="flex items-center gap-2 px-3 py-2 text-foreground-muted">
           <Loader2 className="size-3.5 animate-spin" />
@@ -1303,7 +1585,7 @@ function SkillShortcutMenu({
       ) : items.length === 0 && showEmpty ? (
         <div className="px-3 py-2 text-foreground-muted">{labels.noResults}</div>
       ) : items.length === 0 ? null : (
-        <div className="max-h-72 overflow-y-auto">
+        <div role="listbox" className="min-h-0 overflow-y-auto py-1">
           {items.map((item, index) => {
             const active = index === activeIndex;
             return (
@@ -1342,7 +1624,8 @@ function SkillShortcutMenu({
           })}
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
 

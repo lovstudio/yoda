@@ -10,12 +10,17 @@ const MAX_WRAPPED_LINE_LENGTH = 2048;
 // below). Includes ASCII whitespace/quotes/shell metas/parens plus CJK
 // punctuation and brackets so paths like `bar.txt。` or `foo.md(…)` /
 // `foo.md（…）` terminate cleanly instead of swallowing trailing prose.
-const PATH_SEG_EXCLUDED = `\\s"'\`$<>|\\\\:：()（）「」『』【】〈〉《》，。；！？`;
-const PATH_LEADING = `\\s"'([{<:：（「『【〈《`;
-const PATH_TRAILING = `\\s"')\\]}>,，。；;!?！？.(（）「」『』【】〈〉《》`;
+const PATH_SEG_EXCLUDED = `\\s"'\`$<>|\\\\:：()（）「」『』【】〈〉《》，、。；！？`;
+const PATH_LEADING = `\\s"'([{<:：（「『【〈《、`;
+const PATH_TRAILING = `\\s"')\\]}>,，、。；;!?！？.(（）「」『』【】〈〉《》`;
 // File extension: 1–32 path chars after a dot, but the final char may not be a
 // dot so a trailing sentence period (`foo.md.`) is left out of the link.
 const PATH_EXT = `[^${PATH_SEG_EXCLUDED}\\/]{0,31}[^${PATH_SEG_EXCLUDED}\\/.]`;
+const PATH_SEG_TOKEN = `[^${PATH_SEG_EXCLUDED}\\/]+`;
+// Unquoted absolute paths may contain one internal ASCII-space boundary per
+// directory component (`Application Support/`). Keeping the allowance local
+// prevents prose such as `/project and src/main.ts` from becoming one link.
+const ABSOLUTE_PATH_SEGMENT = `${PATH_SEG_TOKEN}(?: +${PATH_SEG_TOKEN})?`;
 // A path is either a file (one or more `dir/` segments + a `name.ext`, optional
 // `:line:col`) OR a directory (one or more `dir/` segments ending in a slash,
 // no filename). Making the filename tail optional lets a trailing-slash run
@@ -26,6 +31,14 @@ const FILE_PATH_CANDIDATE_REGEX = new RegExp(
   `(^|[${PATH_LEADING}])(@?(?:(?:~|\\.{1,2})\\/|\\/)?(?:[^${PATH_SEG_EXCLUDED}]+\\/)+(?:[^${PATH_SEG_EXCLUDED}\\/]*\\.${PATH_EXT}(?::\\d+(?::\\d+)?)?)?)(?=$|[${PATH_TRAILING}])`,
   'gu'
 );
+const ROOTED_FILE_PATH_CANDIDATE_REGEX = new RegExp(
+  `(^|[${PATH_LEADING}])(@?\\/(?:${ABSOLUTE_PATH_SEGMENT}\\/)+?[^${PATH_SEG_EXCLUDED}\\/]*\\.${PATH_EXT}(?::\\d+(?::\\d+)?)?)(?!(?:\\.| +)${PATH_SEG_TOKEN}\\/)(?=$|[${PATH_TRAILING}])`,
+  'gu'
+);
+const FILE_PATH_CANDIDATE_REGEXES = [
+  { regex: ROOTED_FILE_PATH_CANDIDATE_REGEX, requiresSpace: true },
+  { regex: FILE_PATH_CANDIDATE_REGEX, requiresSpace: false },
+];
 
 export interface TerminalFileLinkTarget {
   originalText: string;
@@ -54,10 +67,15 @@ export interface TerminalFileLinkTarget {
 
 export interface TerminalFileLinkOptions {
   workspaceRoot?: string;
+  /**
+   * Equivalent checkout roots whose absolute paths should resolve inside the
+   * active workspace (for example, the main checkout while viewing a worktree).
+   */
+  workspaceRootAliases?: readonly string[];
   /** Home directory used to expand `~/...` paths. */
   homeDir?: string;
-  /** Disable menu items that require local filesystem access. */
-  isRemote?: boolean;
+  /** SSH connection used by shared remote file actions. */
+  sshConnectionId?: string;
   onOpen: (target: TerminalFileLinkTarget) => void;
 }
 
@@ -75,19 +93,26 @@ export interface TerminalFileLinkMatch {
 export function extractTerminalFileLinkCandidates(line: string): TerminalFileLinkCandidate[] {
   const candidates: TerminalFileLinkCandidate[] = [];
 
-  for (const match of line.matchAll(FILE_PATH_CANDIDATE_REGEX)) {
-    const text = match[2];
-    if (!text) continue;
-    if (text.includes('://') || text.startsWith('//')) continue;
+  for (const { regex, requiresSpace } of FILE_PATH_CANDIDATE_REGEXES) {
+    for (const match of line.matchAll(regex)) {
+      const text = match[2];
+      if (!text) continue;
+      if (requiresSpace && !text.includes(' ')) continue;
+      if (text.includes('://') || text.startsWith('//')) continue;
 
-    const leading = match[1] ?? '';
-    candidates.push({
-      text,
-      index: match.index + leading.length,
-    });
+      const leading = match[1] ?? '';
+      const index = match.index + leading.length;
+      const end = index + text.length;
+      const overlapsExisting = candidates.some(
+        (candidate) => index < candidate.index + candidate.text.length && candidate.index < end
+      );
+      if (overlapsExisting) continue;
+
+      candidates.push({ text, index });
+    }
   }
 
-  return candidates;
+  return candidates.sort((left, right) => left.index - right.index);
 }
 
 export function getTerminalFileLinkMatches(
@@ -104,7 +129,8 @@ export function getTerminalFileLinkMatches(
     const target = resolveTerminalFileLinkTarget(
       candidate.text,
       options.workspaceRoot,
-      options.homeDir
+      options.homeDir,
+      options.workspaceRootAliases
     );
     if (!target) continue;
 
@@ -142,6 +168,7 @@ const COMPLETE_EXT_RE = /\.[A-Za-z0-9]{1,8}$/;
 const URL_IN_PROGRESS_RE = /(?:https?|ftp|file):\/\/\S+$/i;
 const URL_CONTINUATION_START_RE = /[A-Za-z0-9._~:/?#@!$&'*+,;=%-]/;
 const URL_CONTINUATION_HINT_RE = /[/:?#&=%]/;
+const HARD_WRAP_LOCATION_RE = new RegExp(`^:\\d+(?::\\d+)?(?=$|[${PATH_TRAILING}])`, 'u');
 
 export interface ScanChunk {
   /** Buffer row index of the chunk's first row. */
@@ -177,8 +204,9 @@ export function buildScanChunks(lineIndex: number, terminal: Terminal): ScanChun
     const [upperLines, upperStart] = getWindowedLineStrings(upperBottom, terminal);
     const upperText = upperLines.join('');
     const stripped = first.text.replace(/^ +/, '');
-    if (!canHardJoin(terminal, upperBottom, upperText, stripped)) break;
-    first.startCellOffset += first.text.length - stripped.length;
+    const continuationIndent = first.text.length - stripped.length;
+    if (!canHardJoin(terminal, upperBottom, upperText, stripped, continuationIndent)) break;
+    first.startCellOffset += continuationIndent;
     first.text = stripped;
     chunks.unshift({
       startLineIndex: upperStart,
@@ -199,10 +227,11 @@ export function buildScanChunks(lineIndex: number, terminal: Terminal): ScanChun
     const [nextLines, nextStart] = getWindowedLineStrings(lastBottom + 1, terminal);
     const nextText = nextLines.join('');
     const stripped = nextText.replace(/^ +/, '');
-    if (!canHardJoin(terminal, lastBottom, last.text, stripped)) break;
+    const continuationIndent = nextText.length - stripped.length;
+    if (!canHardJoin(terminal, lastBottom, last.text, stripped, continuationIndent)) break;
     chunks.push({
       startLineIndex: nextStart,
-      startCellOffset: nextText.length - stripped.length,
+      startCellOffset: continuationIndent,
       rowCount: nextLines.length,
       text: stripped,
       charOffset: 0,
@@ -221,9 +250,12 @@ function canHardJoin(
   terminal: Terminal,
   upperBottomRowIndex: number,
   upperText: string,
-  lowerStripped: string
+  lowerStripped: string,
+  continuationIndent: number
 ): boolean {
+  if (hasIndentedPathContinuation(upperText, lowerStripped, continuationIndent)) return true;
   if (!isRowFull(terminal, upperBottomRowIndex)) return false;
+  if (hasHardWrappedLocationCandidate(upperText, lowerStripped)) return true;
   const tail = TRAILING_PATH_RUN_RE.exec(upperText)?.[0];
   if (!tail || !tail.includes('/')) return false;
   if (!lowerStripped || PATH_SEG_EXCLUDED_RE.test(lowerStripped[0])) return false;
@@ -241,6 +273,63 @@ function canHardJoin(
     return false;
   }
   return true;
+}
+
+/**
+ * Ink-style renderers may insert a real newline and indentation while wrapping
+ * a path before the terminal's last column. Keep this exception narrower than
+ * the general hard-wrap rule: the upper fragment must end at a visible path
+ * break (`/` between segments or `-` inside a filename), the lower row must be
+ * indented, and joining them must produce a complete file candidate that
+ * crosses the row boundary.
+ */
+function hasIndentedPathContinuation(
+  upperText: string,
+  lowerStripped: string,
+  continuationIndent: number
+): boolean {
+  if (continuationIndent < 2 || !lowerStripped || URL_IN_PROGRESS_RE.test(upperText)) return false;
+
+  const tail = TRAILING_PATH_RUN_RE.exec(upperText)?.[0];
+  if (!tail || tail === '/' || !tail.includes('/')) return false;
+
+  const joinedCandidate = extractTerminalFileLinkCandidates(`${tail}${lowerStripped}`).find(
+    (candidate) => candidate.index === 0 && candidate.text.length > tail.length
+  );
+  if (!joinedCandidate || joinedCandidate.text.endsWith('/')) return false;
+  if (tail.endsWith('/')) return true;
+
+  // A trailing hyphen is a word-wrap opportunity used by Ink renderers inside
+  // long basenames (`terminal-file-` + `links.ts`). Keep this filename case
+  // distinct from directory continuation: the next row may only contribute
+  // the rest of that basename, never another path with its own `/`.
+  if (!tail.endsWith('-')) return false;
+  const continuation = joinedCandidate.text.slice(tail.length);
+  if (!/^[\p{L}\p{N}]/u.test(continuation) || continuation.includes('/')) return false;
+
+  return !extractTerminalFileLinkCandidates(lowerStripped).some(
+    (candidate) => candidate.index === 0
+  );
+}
+
+/**
+ * A `file:line:column` target may be hard-wrapped anywhere in its location
+ * suffix, including immediately before the first colon. Validate the joined
+ * candidate as a complete path with a line number before overriding the
+ * conservative path-continuation rules.
+ */
+function hasHardWrappedLocationCandidate(upperText: string, lowerStripped: string): boolean {
+  if (!lowerStripped || URL_IN_PROGRESS_RE.test(upperText)) return false;
+  const partialLocation = /:(?:\d*)(?::\d*)?$/.exec(upperText)?.[0] ?? '';
+  const pathText = upperText.slice(0, upperText.length - partialLocation.length);
+  const pathEndsAtBoundary = extractTerminalFileLinkCandidates(pathText).some(
+    (candidate) =>
+      !candidate.text.endsWith('/') && candidate.index + candidate.text.length === pathText.length
+  );
+  if (!pathEndsAtBoundary) return false;
+
+  const locationContinuation = `${partialLocation}${lowerStripped}`;
+  return HARD_WRAP_LOCATION_RE.test(locationContinuation);
 }
 
 function canHardJoinUrl(upperText: string, lowerStripped: string): boolean {
@@ -309,7 +398,8 @@ function mapScanIndexToCell(
     terminal,
     chunk.startLineIndex,
     chunk.startCellOffset,
-    scanIndex - chunk.charOffset
+    scanIndex - chunk.charOffset,
+    isEnd
   );
 }
 
@@ -329,7 +419,8 @@ export function getTerminalFileLinkAtCell(
 export function resolveTerminalFileLinkTarget(
   text: string,
   workspaceRoot?: string,
-  homeDir?: string
+  homeDir?: string,
+  workspaceRootAliases?: readonly string[]
 ): TerminalFileLinkTarget | null {
   const parsed = parsePathLocation(text);
   if (!parsed) return null;
@@ -338,6 +429,9 @@ export function resolveTerminalFileLinkTarget(
   if (rawPath.startsWith('@')) rawPath = rawPath.slice(1);
   const isDirectory = rawPath.endsWith('/');
   const normalizedRoot = workspaceRoot?.replace(/\\/g, '/').replace(/\/+$/g, '');
+  const normalizedRootAliases = workspaceRootAliases
+    ?.map((root) => root.replace(/\\/g, '/').replace(/\/+$/g, ''))
+    .filter((root) => root && root !== normalizedRoot);
   const normalizedHome = homeDir?.replace(/\\/g, '/').replace(/\/+$/g, '');
 
   // Expand `~/...` against the home dir when provided.
@@ -346,7 +440,7 @@ export function resolveTerminalFileLinkTarget(
     rawPath = `${normalizedHome}/${rawPath.slice(2)}`;
   }
 
-  const base = resolveFileTarget(text, rawPath, parsed, normalizedRoot);
+  const base = resolveFileTarget(text, rawPath, parsed, normalizedRoot, normalizedRootAliases);
   if (!base) return null;
   if (!isDirectory) return base;
 
@@ -363,7 +457,8 @@ function resolveFileTarget(
   text: string,
   rawPath: string,
   parsed: { line?: number; column?: number },
-  normalizedRoot?: string
+  normalizedRoot?: string,
+  normalizedRootAliases?: readonly string[]
 ): TerminalFileLinkTarget | null {
   // Absolute path: try to slot into the workspace; otherwise keep as absolute.
   if (rawPath.startsWith('/')) {
@@ -380,6 +475,23 @@ function resolveFileTarget(
         line: parsed.line,
         column: parsed.column,
       };
+    }
+    if (normalizedRoot) {
+      for (const alias of normalizedRootAliases ?? []) {
+        const inAlias = rawPath === alias || rawPath.startsWith(`${alias}/`);
+        if (!inAlias) continue;
+        const relative = rawPath === alias ? '' : rawPath.slice(alias.length + 1);
+        const normalizedRelative = normalizeWorkspaceRelativePath(relative);
+        if (!normalizedRelative) return null;
+        if (isCheckoutMetadataPath(normalizedRelative, alias, normalizedRoot)) continue;
+        return {
+          originalText: text,
+          filePath: normalizedRelative,
+          absolutePath: `${normalizedRoot}/${normalizedRelative}`,
+          line: parsed.line,
+          column: parsed.column,
+        };
+      }
     }
     return {
       originalText: text,
@@ -400,6 +512,22 @@ function resolveFileTarget(
     line: parsed.line,
     column: parsed.column,
   };
+}
+
+function isCheckoutMetadataPath(
+  relativePath: string,
+  aliasRoot: string,
+  workspaceRoot: string
+): boolean {
+  const firstSegment = relativePath.split('/', 1)[0];
+  if (firstSegment === '.git' || firstSegment === '.worktrees') return true;
+
+  if (!workspaceRoot.startsWith(`${aliasRoot}/`)) return false;
+  const workspaceRelative = workspaceRoot.slice(aliasRoot.length + 1);
+  const lastSeparator = workspaceRelative.lastIndexOf('/');
+  if (lastSeparator <= 0) return false;
+  const poolRelative = workspaceRelative.slice(0, lastSeparator);
+  return relativePath === poolRelative || relativePath.startsWith(`${poolRelative}/`);
 }
 
 export function registerTerminalFileLinkProvider(
@@ -494,7 +622,7 @@ function getWindowedLineStrings(lineIndex: number, terminal: Terminal): [string[
   if (!line) return [lines, topIndex];
 
   const currentContent = line.translateToString(true);
-  if (line.isWrapped && currentContent[0] !== ' ') {
+  if (line.isWrapped) {
     length = 0;
     while (
       (line = terminal.buffer.active.getLine(--topIndex)) &&
@@ -503,7 +631,7 @@ function getWindowedLineStrings(lineIndex: number, terminal: Terminal): [string[
       content = line.translateToString(true);
       length += content.length;
       lines.push(content);
-      if (!line.isWrapped || content.includes(' ')) break;
+      if (!line.isWrapped) break;
     }
     lines.reverse();
   }
@@ -519,7 +647,6 @@ function getWindowedLineStrings(lineIndex: number, terminal: Terminal): [string[
     content = line.translateToString(true);
     length += content.length;
     lines.push(content);
-    if (content.includes(' ')) break;
   }
 
   return [lines, topIndex];
@@ -529,7 +656,8 @@ function mapStringIndexToBufferCell(
   terminal: Terminal,
   lineIndex: number,
   rowIndex: number,
-  stringIndex: number
+  stringIndex: number,
+  isEnd: boolean
 ): [number, number] {
   const buffer = terminal.buffer.active;
   const cell = buffer.getNullCell();
@@ -556,6 +684,11 @@ function mapStringIndexToBufferCell(
 
       if (stringIndex < 0) return [lineIndex, i];
     }
+
+    // The requested index may be exactly one cell past a full row. Keep that
+    // endpoint on the current row (`x = cols`) instead of leaking to `x = 0`
+    // on the next row, which is not a valid xterm link coordinate.
+    if (isEnd && stringIndex === 0) return [lineIndex, line.length];
 
     lineIndex += 1;
     start = 0;

@@ -14,6 +14,7 @@ export type FocusView =
   | 'settings'
   | 'skills'
   | 'skill'
+  | 'skillCompare'
   | 'mcp'
   | 'agentManager'
   | 'agents'

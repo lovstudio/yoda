@@ -5,15 +5,23 @@
 - `apps/mobile/`: Expo app for iOS, Android, and web preview.
 - `src/main/core/mobile-gateway/`: desktop HTTP gateway for mobile clients.
 - `src/shared/mobile-api.ts`: shared JSON API contract for the gateway and Expo app.
+- `src/shared/mobile-session-events.ts`: shared SSE framing and session invalidation contract.
 
 ## Architecture Rules
 
 - Keep mobile independent from Electron renderer code. Do not import MobX stores, renderer components, preload IPC, or `window.electronAPI` into `apps/mobile/`.
 - Mobile talks to desktop through the gateway only.
+- When Tailscale is active, connection info prefers its `100.64.0.0/10` address so a paired phone
+  on the same tailnet can connect outside the physical LAN. LAN addresses remain fallbacks.
 - The gateway starts by default and must require a token for non-health endpoints.
 - Allow explicit disablement through `YODA_MOBILE_GATEWAY_DISABLED=1`, `YODA_MOBILE_GATEWAY_ENABLED=0`, or `YODA_MOBILE_GATEWAY=0`.
 - The desktop sidebar mobile modal must support QR-based install and connection. `YODA_MOBILE_INSTALL_URL` can override the install QR target.
 - Prefer polling snapshots for first-pass mobile workflows. Add server-sent events or WebSocket only when realtime behavior is required.
+- Session detail realtime updates use authenticated server-sent events. The stream sends scoped
+  invalidations only; clients refetch the existing detail endpoint, reconnect with backoff, and keep
+  a low-frequency foreground reconciliation rather than polling every few seconds.
+- Mobile Codex detail reads a bounded rollout tail; do not reintroduce full-file parsing for every
+  live invalidation.
 - Mobile request creation should use narrow desktop operations. Avoid exposing raw RPC or terminal controls over the gateway.
 
 ## Development

@@ -6,6 +6,7 @@ import {
   teamRoomUpdatedChannel,
 } from '@shared/events/teamRoomEvents';
 import type { RuntimeId } from '@shared/runtime-registry';
+import type { SkillSelectionInput } from '@shared/skills/types';
 import {
   parseMentions,
   type MemberAccent,
@@ -58,6 +59,7 @@ function mapMember(row: RoomMemberRow): RoomMember {
     role: row.role,
     runtime: (row.runtime as RuntimeId | null) ?? null,
     systemPrompt: row.systemPrompt,
+    skillSelection: row.skillSelection,
     autoApprove: row.autoApprove,
     accent: row.accent as MemberAccent,
     status: row.status as MemberStatus,
@@ -186,6 +188,7 @@ export type AddMemberParams = {
   role: string;
   runtime?: RuntimeId | null;
   systemPrompt?: string;
+  skillSelection?: SkillSelectionInput | null;
   autoApprove?: boolean;
   accent?: MemberAccent;
 };
@@ -203,6 +206,7 @@ export async function addMember(params: AddMemberParams): Promise<RoomMember> {
       role: params.role,
       runtime: params.runtime ?? null,
       systemPrompt: params.systemPrompt ?? '',
+      skillSelection: params.skillSelection ?? null,
       autoApprove: params.autoApprove ?? false,
       accent: params.accent ?? 'slate',
       status: 'idle',

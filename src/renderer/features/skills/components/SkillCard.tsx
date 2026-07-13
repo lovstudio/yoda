@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, ChartNoAxesColumn, Pencil, Plus, PowerOff } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import type { SkillFamily } from '@shared/skills/grouping';
 import type { CatalogSkill, SkillUsageStat, SkillValidationIssue } from '@shared/skills/types';
 import { parseFrontmatter, skillIssueAgentLabel } from '@shared/skills/validation';
 import { GlobalFileMenuItems } from '@renderer/lib/components/file-path-actions';
@@ -14,21 +15,27 @@ import {
 } from '@renderer/lib/ui/context-menu';
 import { cn } from '@renderer/utils/utils';
 import { skillFilePath } from '../skill-file-path';
+import { primarySkillHealthIssue } from '../skill-health';
+import SkillFamilyCount from './SkillFamilyCount';
 import SkillIconRenderer from './SkillIconRenderer';
 
 interface SkillCardProps {
   skill: CatalogSkill;
+  family?: SkillFamily;
   /** Real invocation stats from skillusage; undefined when unavailable/unused */
   usage?: SkillUsageStat;
   onSelect: (skill: CatalogSkill) => void;
-  onInstall: (skillId: string) => void;
+  onInstall: (skillKey: string) => void;
 }
 
-const SkillCard: React.FC<SkillCardProps> = ({ skill, usage, onSelect, onInstall }) => {
+const SkillCard: React.FC<SkillCardProps> = ({ skill, family, usage, onSelect, onInstall }) => {
   const { t } = useTranslation();
   const description = React.useMemo(() => getDisplayDescription(skill), [skill]);
   const primaryIssue = skill.validationIssues?.[0];
-  const hasValidationIssues = Boolean(primaryIssue);
+  const healthIssue = primarySkillHealthIssue(skill);
+  const hasValidationIssues = Boolean(
+    primaryIssue || healthIssue?.severity === 'error' || healthIssue?.severity === 'warning'
+  );
 
   const card = (
     <motion.div
@@ -53,7 +60,13 @@ const SkillCard: React.FC<SkillCardProps> = ({ skill, usage, onSelect, onInstall
 
       {/* Content */}
       <div className="min-w-0 flex-1">
-        <h3 className="truncate text-sm font-semibold">{skill.displayName}</h3>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{skill.displayName}</h3>
+          {family && <SkillFamilyCount family={family} />}
+          <span className="shrink-0 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t(`skills.source.${skill.source}`)}
+          </span>
+        </div>
         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground" title={description}>
           {description}
         </p>
@@ -70,6 +83,26 @@ const SkillCard: React.FC<SkillCardProps> = ({ skill, usage, onSelect, onInstall
           >
             <AlertTriangle className="h-3 w-3 shrink-0" />
             <span className="truncate">{formatValidationIssueSummary(primaryIssue)}</span>
+          </p>
+        )}
+        {!primaryIssue && healthIssue && (
+          <p
+            className={cn(
+              'mt-1 flex min-w-0 items-center gap-1 text-[11px] leading-tight',
+              healthIssue.severity === 'info'
+                ? 'text-muted-foreground'
+                : 'text-amber-600 dark:text-amber-400'
+            )}
+            title={t(`skills.health.issue.${healthIssue.code}`, {
+              defaultValue: healthIssue.message,
+            })}
+          >
+            <AlertTriangle className="h-3 w-3 shrink-0" />
+            <span className="truncate">
+              {t(`skills.health.issue.${healthIssue.code}`, {
+                defaultValue: healthIssue.message,
+              })}
+            </span>
           </p>
         )}
       </div>
@@ -101,7 +134,7 @@ const SkillCard: React.FC<SkillCardProps> = ({ skill, usage, onSelect, onInstall
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onInstall(skill.id);
+              onInstall(skill.key);
             }}
             className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label={`Install ${skill.displayName}`}

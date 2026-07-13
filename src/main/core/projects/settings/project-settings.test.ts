@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_PRESERVE_PATTERNS } from '@shared/project-settings';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { SshFileSystem } from '@main/core/fs/impl/ssh-fs';
+import { getDefaultLocalWorktreeDirectory } from '@main/core/settings/worktree-defaults';
 import type { ProjectSettingsStorage } from './project-settings-storage';
 import { LocalProjectSettingsProvider } from './providers/local-project-settings-provider';
 import { SshProjectSettingsProvider } from './providers/ssh-project-settings-provider';
@@ -20,6 +21,12 @@ vi.mock('@main/core/settings/settings-service', () => ({
     }),
   },
 }));
+
+// The mocked POSIX default (/tmp/yoda/worktrees) cannot be validated on Windows,
+// so the provider falls back to the home-based default there. Match the
+// platform-specific result instead of asserting the literal POSIX path.
+const expectedDefaultWorktreeDirectory =
+  process.platform === 'win32' ? getDefaultLocalWorktreeDirectory() : '/tmp/yoda/worktrees';
 
 vi.mock('@main/db/client', () => ({
   db: {},
@@ -107,8 +114,10 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
     const provider = new LocalProjectSettingsProvider(projectId(), projectPath, 'main', storage());
 
     await expect(provider.get()).resolves.not.toHaveProperty('worktreeDirectory');
-    await expect(provider.getDefaultWorktreeDirectory()).resolves.toBe('/tmp/yoda/worktrees');
-    await expect(provider.getWorktreeDirectory()).resolves.toBe('/tmp/yoda/worktrees');
+    await expect(provider.getDefaultWorktreeDirectory()).resolves.toBe(
+      expectedDefaultWorktreeDirectory
+    );
+    await expect(provider.getWorktreeDirectory()).resolves.toBe(expectedDefaultWorktreeDirectory);
   });
 
   it('ignores legacy tmux values stored in project settings', async () => {
@@ -152,7 +161,9 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
 
     const expectedOverride = fs.realpathSync(expectedOverridePath);
     await expect(provider.get()).resolves.toMatchObject({ worktreeDirectory: expectedOverride });
-    await expect(provider.getDefaultWorktreeDirectory()).resolves.toBe('/tmp/yoda/worktrees');
+    await expect(provider.getDefaultWorktreeDirectory()).resolves.toBe(
+      expectedDefaultWorktreeDirectory
+    );
     await expect(provider.getWorktreeDirectory()).resolves.toBe(expectedOverride);
   });
 

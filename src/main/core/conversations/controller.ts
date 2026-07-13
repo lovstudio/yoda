@@ -22,6 +22,7 @@ import {
   getSessionSummaryPreview,
   setManualSessionSummary,
 } from './getSessionSummary';
+import { injectConversationPrompt } from './injectConversationPrompt';
 import { getInstructionFiles, getRuntimeInstructionFiles } from './instruction-files';
 import { interruptConversation } from './interruptConversation';
 import { renameConversation } from './renameConversation';
@@ -49,6 +50,7 @@ export const conversationController = createRPCController({
   getConversationNamingSnapshot,
   renameConversation,
   restartConversation,
+  injectConversationPrompt,
   rewritePrompt,
   resumeConversation,
   interruptConversation,

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -12,6 +13,7 @@ import {
 } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   KeyboardAvoidingView,
   Linking,
   PanResponder,
@@ -24,6 +26,7 @@ import {
   Text,
   TextInput,
   View,
+  type AppStateStatus,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type StyleProp,
@@ -42,6 +45,10 @@ import {
   type MobileTaskSummary,
 } from '../../../src/shared/mobile-api';
 import {
+  canonicalizeMobileRelayPairing,
+  parseMobileRelayPairingUrl,
+} from '../../../src/shared/mobile-relay';
+import {
   createDemand,
   fetchSessionDetail,
   fetchSnapshot,
@@ -50,6 +57,7 @@ import {
   type MobileConnection,
 } from './api-client';
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
+import { subscribeSessionEvents } from './session-event-stream';
 
 const COLORS = {
   page: '#F7F7F2',
@@ -67,7 +75,10 @@ const COLORS = {
 
 const POLL_INTERVAL_MS = 8_000;
 const SESSION_LIST_POLL_INTERVAL_MS = 4_000;
-const SESSION_DETAIL_POLL_INTERVAL_MS = 2_000;
+const SESSION_DETAIL_RECONCILE_INTERVAL_MS = 60_000;
+const SESSION_DETAIL_REQUEST_TIMEOUT_MS = 15_000;
+const SESSION_EVENT_REFRESH_DELAY_MS = 500;
+const RELAY_PAIR_TIMEOUT_MS = 15_000;
 const DEV_GATEWAY_DEFAULT_PORT = '3879';
 const SWIPE_BACK_EDGE_WIDTH = 34;
 const SWIPE_BACK_ACTIVATION_DISTANCE = 12;
@@ -492,6 +503,9 @@ function redactPairingUrl(value: string): string {
     if (url.searchParams.has('token')) {
       url.searchParams.set('token', '<redacted>');
     }
+    if (url.searchParams.has('pairingCode')) {
+      url.searchParams.set('pairingCode', '<redacted>');
+    }
     return url.toString();
   } catch {
     return value;
@@ -543,7 +557,9 @@ async function getInitialPairing(): Promise<{
   }
 
   return {
-    pairingUrl: candidates.find((url) => parseMobilePairingUrl(url)) ?? initialUrl,
+    pairingUrl:
+      candidates.find((url) => parseMobilePairingUrl(url) || parseMobileRelayPairingUrl(url)) ??
+      initialUrl,
     devConnection: inferDevGatewayConnection(candidates),
   };
 }
@@ -606,7 +622,51 @@ export function App() {
 
   const applyPairingUrl = useCallback(async (url: string | null) => {
     if (!url) return false;
-    const next = parseMobilePairingUrl(url);
+    const parsedRelayPairing = parseMobileRelayPairingUrl(url);
+    const relayPairing = parsedRelayPairing
+      ? canonicalizeMobileRelayPairing(parsedRelayPairing)
+      : null;
+    let next = parseMobilePairingUrl(url);
+    if (relayPairing) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), RELAY_PAIR_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(`${relayPairing.relayBaseUrl}/v1/pair`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deviceId: relayPairing.deviceId,
+            pairingCode: relayPairing.pairingCode,
+          }),
+          signal: controller.signal,
+        });
+      } catch {
+        throw new Error('Cannot reach Yoda Relay. Check your network and try a new pairing code.');
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (!response.ok) {
+        throw new Error(
+          response.status === 402
+            ? 'Yoda Relay Pass is not active.'
+            : 'Relay pairing code is invalid or expired. Generate a new code on the desktop.'
+        );
+      }
+      const exchanged = (await response.json()) as Partial<MobileConnection>;
+      const expectedBaseUrl = `${relayPairing.relayBaseUrl}/v1/devices/${encodeURIComponent(
+        relayPairing.deviceId
+      )}`;
+      if (
+        exchanged.baseUrl !== expectedBaseUrl ||
+        typeof exchanged.token !== 'string' ||
+        !exchanged.token ||
+        exchanged.token.length > 512
+      ) {
+        throw new Error('Yoda Relay returned an invalid pairing response.');
+      }
+      next = { baseUrl: exchanged.baseUrl, token: exchanged.token };
+    }
     if (!next) return false;
 
     setConnectDraft(next);
@@ -627,7 +687,11 @@ export function App() {
     Promise.all([loadConnection(), getInitialPairing()])
       .then(async ([saved, initial]) => {
         if (!active) return;
-        if (await applyPairingUrl(initial.pairingUrl)) return;
+        try {
+          if (await applyPairingUrl(initial.pairingUrl)) return;
+        } catch (e) {
+          if (active) setError(errorMessage(e));
+        }
         if (initial.devConnection) {
           setConnection(initial.devConnection);
           setConnectDraft(initial.devConnection);
@@ -639,7 +703,9 @@ export function App() {
           setConnectDraft(saved);
         }
       })
-      .catch(() => undefined)
+      .catch((e: unknown) => {
+        if (active) setError(errorMessage(e));
+      })
       .finally(() => {
         if (active) setBooting(false);
       });
@@ -813,6 +879,7 @@ export function App() {
   if (selectedTask && selectedSessionId) {
     return (
       <SessionDetailScreen
+        key={`${connection.baseUrl}\0${connection.token}\0${selectedTask.id}\0${selectedSessionId}`}
         connection={connection}
         projects={snapshot?.projects ?? []}
         sessionId={selectedSessionId}
@@ -867,7 +934,14 @@ export function App() {
               }}
             />
 
-            {error ? <Notice message={error} tone="error" /> : null}
+            {error ? (
+              <Notice
+                message={error}
+                retrying={loading || refreshing}
+                tone="error"
+                onRetry={handleRefresh}
+              />
+            ) : null}
             {loading && !snapshot ? <ActivityIndicator color={COLORS.charcoal} /> : null}
 
             {snapshot ? (
@@ -1021,8 +1095,26 @@ function ConnectionScreen({
   );
 }
 
-function Notice({ message, tone }: { message: string; tone: 'error' | 'info' }) {
+function Notice({
+  message,
+  retrying = false,
+  tone,
+  onRetry,
+}: {
+  message: string;
+  retrying?: boolean;
+  tone: 'error' | 'info';
+  onRetry?: () => void | Promise<void>;
+}) {
   const color = tone === 'error' ? COLORS.red : COLORS.blue;
+  const [copied, setCopied] = useState(false);
+
+  const copyError = useCallback(async () => {
+    await Clipboard.setStringAsync(message);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1_500);
+  }, [message]);
+
   return (
     <View style={[styles.notice, { borderColor: color }]}>
       <Ionicons
@@ -1030,7 +1122,49 @@ function Notice({ message, tone }: { message: string; tone: 'error' | 'info' }) 
         name={tone === 'error' ? 'alert-circle-outline' : 'information-circle-outline'}
         size={18}
       />
-      <Text style={styles.noticeText}>{message}</Text>
+      <Text selectable style={styles.noticeText}>
+        {message}
+      </Text>
+      {tone === 'error' ? (
+        <View style={styles.noticeActions}>
+          {onRetry ? (
+            <Pressable
+              accessibilityLabel="Retry loading Yoda gateway"
+              accessibilityRole="button"
+              disabled={retrying}
+              style={({ pressed }) => [
+                styles.noticeRetryButton,
+                pressed ? styles.buttonPressed : null,
+                retrying ? styles.buttonDisabled : null,
+              ]}
+              onPress={() => void onRetry()}
+            >
+              {retrying ? (
+                <ActivityIndicator color={COLORS.surface} size="small" />
+              ) : (
+                <Ionicons color={COLORS.surface} name="refresh-outline" size={17} />
+              )}
+              <Text style={styles.noticeRetryText}>{retrying ? 'Retrying' : 'Retry'}</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityLabel="Copy error message"
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.noticeCopyButton,
+              pressed ? styles.buttonPressed : null,
+            ]}
+            onPress={() => void copyError()}
+          >
+            <Ionicons
+              color={COLORS.muted}
+              name={copied ? 'checkmark-outline' : 'copy-outline'}
+              size={17}
+            />
+            <Text style={styles.noticeCopyText}>{copied ? 'Copied' : 'Copy'}</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1751,6 +1885,14 @@ function SessionDetailScreen({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
+  const mountedRef = useRef(true);
+  const detailRefreshQueueRef = useRef<{
+    dirty: boolean;
+    showLoading: boolean;
+    inFlight: Promise<void> | null;
+    controller: AbortController | null;
+  }>({ dirty: false, showLoading: false, inFlight: null, controller: null });
 
   const setBottomState = useCallback((next: boolean) => {
     isAtBottomRef.current = next;
@@ -1780,34 +1922,120 @@ function SessionDetailScreen({
   }, [scrollToBottom, setBottomState]);
 
   const loadDetail = useCallback(
-    async (quiet = false) => {
-      if (!quiet) setLoading(true);
-      try {
-        const next = await fetchSessionDetail(connection, task.projectId, task.id, sessionId);
-        setDetail(next);
-        setError(null);
-      } catch (e) {
-        setError(errorMessage(e));
-      } finally {
-        if (!quiet) setLoading(false);
-      }
+    function requestDetail(quiet = false): Promise<void> {
+      const queue = detailRefreshQueueRef.current;
+      if (!mountedRef.current) return Promise.resolve();
+      queue.dirty = true;
+      if (!quiet) queue.showLoading = true;
+      if (queue.inFlight) return queue.inFlight;
+
+      const run = async () => {
+        while (queue.dirty) {
+          queue.dirty = false;
+          const showLoading = queue.showLoading;
+          queue.showLoading = false;
+          if (showLoading && mountedRef.current) setLoading(true);
+          const controller = new AbortController();
+          let timedOut = false;
+          queue.controller = controller;
+          const timeout = setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+          }, SESSION_DETAIL_REQUEST_TIMEOUT_MS);
+          try {
+            const next = await fetchSessionDetail(
+              connection,
+              task.projectId,
+              task.id,
+              sessionId,
+              controller.signal
+            );
+            if (!mountedRef.current) continue;
+            setDetail(next);
+            setError(null);
+          } catch (e) {
+            if (!controller.signal.aborted && mountedRef.current) setError(errorMessage(e));
+            if (timedOut && mountedRef.current) setError('Session refresh timed out. Retrying…');
+          } finally {
+            clearTimeout(timeout);
+            if (queue.controller === controller) queue.controller = null;
+            if (showLoading && mountedRef.current) setLoading(false);
+          }
+        }
+      };
+      const promise = run().finally(() => {
+        if (queue.inFlight !== promise) return;
+        queue.inFlight = null;
+        if (queue.dirty && mountedRef.current) void requestDetail(true);
+      });
+      queue.inFlight = promise;
+      return promise;
     },
     [connection, sessionId, task.id, task.projectId]
   );
 
   useEffect(() => {
-    let active = true;
-    const run = async (quiet = false) => {
-      if (!active) return;
-      await loadDetail(quiet);
-    };
-    void run(false);
-    const timer = setInterval(() => void run(true), SESSION_DETAIL_POLL_INTERVAL_MS);
+    mountedRef.current = true;
+    const queue = detailRefreshQueueRef.current;
     return () => {
-      active = false;
-      clearInterval(timer);
+      mountedRef.current = false;
+      queue.dirty = false;
+      queue.controller?.abort();
+      queue.controller = null;
     };
+  }, []);
+
+  useEffect(() => {
+    void loadDetail(false);
   }, [loadDetail]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', setAppState);
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (appState !== 'active') {
+      const queue = detailRefreshQueueRef.current;
+      queue.dirty = false;
+      queue.controller?.abort();
+      queue.controller = null;
+      return;
+    }
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (refreshTimer) return;
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        void loadDetail(true);
+      }, SESSION_EVENT_REFRESH_DELAY_MS);
+    };
+    const unsubscribe = subscribeSessionEvents(connection, task.projectId, task.id, sessionId, {
+      onInvalidated: (event) => {
+        const runtimeStatus = event.runtimeStatus;
+        if (runtimeStatus) {
+          setDetail((current) =>
+            current?.session.id === event.conversationId
+              ? {
+                  ...current,
+                  session: { ...current.session, runtimeStatus },
+                }
+              : current
+          );
+        }
+        scheduleRefresh();
+      },
+    });
+    const reconcileTimer = setInterval(
+      () => void loadDetail(true),
+      SESSION_DETAIL_RECONCILE_INTERVAL_MS
+    );
+    return () => {
+      unsubscribe();
+      if (refreshTimer) clearTimeout(refreshTimer);
+      clearInterval(reconcileTimer);
+    };
+  }, [appState, connection, loadDetail, sessionId, task.id, task.projectId]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -1871,7 +2099,6 @@ function SessionDetailScreen({
         <View style={styles.sessionDetailShell}>
           <SessionNavigationBar
             projectLabel={projectName(projects, task.projectId)}
-            runtimeStatus={detail?.session.runtimeStatus ?? null}
             title={session?.title ?? task.name}
             onBack={onBack}
           />
@@ -1899,8 +2126,8 @@ function SessionDetailScreen({
             {detail ? (
               <>
                 <View style={styles.summaryPanel}>
-                  <DetailItem label="Runtime" value={detail.session.runtimeId} />
-                  <DetailItem label="Runtime" value={runtimeLabel(detail.session.runtimeStatus)} />
+                  <DetailItem label="Agent" value={detail.session.runtimeId} />
+                  <DetailItem label="Status" value={runtimeLabel(detail.session.runtimeStatus)} />
                   <DetailItem label="Source" value={contentSourceLabel(detail.source)} />
                   <DetailItem
                     label="Updated"
@@ -1910,9 +2137,8 @@ function SessionDetailScreen({
                 <View style={styles.outputHeader}>
                   <Text style={styles.sectionTitle}>Transcript</Text>
                   <Text style={styles.sectionMeta}>
-                    {detail.truncated
-                      ? `Tail ${detail.content.length}/${detail.contentLength}`
-                      : detail.contentLength}
+                    {detail.transcriptTruncated ? 'Recent ' : ''}
+                    {detail.transcript.length} updates
                   </Text>
                 </View>
                 <OutputModeToggle mode={outputMode} onChange={setOutputMode} />
@@ -1941,6 +2167,7 @@ function SessionDetailScreen({
           <SessionInputComposer
             live={detail?.session.running ?? false}
             acceptsInput={detail?.session.acceptsInput ?? false}
+            runtimeStatus={detail?.session.runtimeStatus ?? null}
             sending={sendingInput}
             value={sessionInput}
             onChange={setSessionInput}
@@ -1954,17 +2181,13 @@ function SessionDetailScreen({
 
 function SessionNavigationBar({
   projectLabel,
-  runtimeStatus,
   title,
   onBack,
 }: {
   projectLabel: string;
-  runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   title: string;
   onBack: () => void;
 }) {
-  const status = runtimeStatus ? runtimeLabel(runtimeStatus) : 'Loading';
-  const color = runtimeStatus ? runtimeColor(runtimeStatus) : COLORS.muted;
   return (
     <View style={styles.sessionNavBar}>
       <Pressable
@@ -1986,11 +2209,6 @@ function SessionNavigationBar({
           {title}
         </Text>
       </View>
-      <View style={[styles.sessionNavStatus, { borderColor: color }]}>
-        <Text style={[styles.sessionNavStatusText, { color }]} numberOfLines={1}>
-          {status}
-        </Text>
-      </View>
     </View>
   );
 }
@@ -1998,6 +2216,7 @@ function SessionNavigationBar({
 function SessionInputComposer({
   live,
   acceptsInput,
+  runtimeStatus,
   sending,
   value,
   onChange,
@@ -2005,6 +2224,7 @@ function SessionInputComposer({
 }: {
   live: boolean;
   acceptsInput: boolean;
+  runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   sending: boolean;
   value: string;
   onChange: (value: string) => void;
@@ -2013,20 +2233,12 @@ function SessionInputComposer({
   const canSend = acceptsInput && value.trim().length > 0 && !sending;
   return (
     <View style={styles.sessionInputBar}>
-      <View style={styles.sessionInputTopLine}>
-        <View
-          style={[
-            styles.sessionInputStatusDot,
-            acceptsInput ? styles.sessionInputStatusDotLive : null,
-          ]}
-        />
-        <Text style={styles.sessionInputStatus}>
-          {acceptsInput ? 'Live input' : live ? 'Session detached' : 'Session offline'}
-        </Text>
-        <Text style={styles.sessionInputCount}>
-          {value.length}/{MOBILE_SESSION_INPUT_MAX_CHARS}
-        </Text>
-      </View>
+      <SessionRuntimeStatus
+        acceptsInput={acceptsInput}
+        live={live}
+        runtimeStatus={runtimeStatus}
+        valueLength={value.length}
+      />
       <View style={styles.sessionInputRow}>
         <TextInput
           autoCapitalize="sentences"
@@ -2061,6 +2273,116 @@ function SessionInputComposer({
       </View>
     </View>
   );
+}
+
+function SessionRuntimeStatus({
+  acceptsInput,
+  live,
+  runtimeStatus,
+  valueLength,
+}: {
+  acceptsInput: boolean;
+  live: boolean;
+  runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
+  valueLength: number;
+}) {
+  const presentation = sessionRuntimePresentation(runtimeStatus);
+  const detail = acceptsInput
+    ? runtimeStatus === 'completed'
+      ? 'This turn is complete. You can send a follow-up.'
+      : 'Live input is available.'
+    : live
+      ? 'The session is connected but not accepting input.'
+      : 'The session is offline.';
+
+  return (
+    <View
+      accessibilityLabel={`${presentation.label}. ${detail}`}
+      accessibilityLiveRegion="polite"
+      style={[
+        styles.sessionRunStatus,
+        { borderColor: presentation.color, backgroundColor: presentation.backgroundColor },
+      ]}
+    >
+      <View style={styles.sessionRunStatusIcon}>
+        {presentation.animated ? (
+          <ActivityIndicator color={presentation.color} size="small" />
+        ) : (
+          <Ionicons color={presentation.color} name={presentation.icon} size={20} />
+        )}
+      </View>
+      <View style={styles.sessionRunStatusBody}>
+        <Text style={[styles.sessionRunStatusLabel, { color: presentation.color }]}>
+          {presentation.label}
+        </Text>
+        <Text style={styles.sessionRunStatusDetail} numberOfLines={1}>
+          {detail}
+        </Text>
+      </View>
+      <Text style={styles.sessionInputCount}>
+        {valueLength}/{MOBILE_SESSION_INPUT_MAX_CHARS}
+      </Text>
+    </View>
+  );
+}
+
+function sessionRuntimePresentation(status: MobileSessionSummary['runtimeStatus'] | null): {
+  animated: boolean;
+  backgroundColor: string;
+  color: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+} {
+  switch (status) {
+    case 'working':
+      return {
+        animated: true,
+        backgroundColor: '#EEF3FF',
+        color: COLORS.blue,
+        icon: 'sync-outline',
+        label: 'Running',
+      };
+    case 'awaiting-input':
+      return {
+        animated: false,
+        backgroundColor: '#FFF7E6',
+        color: COLORS.amber,
+        icon: 'alert-circle-outline',
+        label: 'Waiting for input',
+      };
+    case 'completed':
+      return {
+        animated: false,
+        backgroundColor: '#EAF7F2',
+        color: COLORS.green,
+        icon: 'checkmark-circle-outline',
+        label: 'Completed',
+      };
+    case 'error':
+      return {
+        animated: false,
+        backgroundColor: '#FFF0EE',
+        color: COLORS.red,
+        icon: 'close-circle-outline',
+        label: 'Run failed',
+      };
+    case 'idle':
+      return {
+        animated: false,
+        backgroundColor: '#F1F0EA',
+        color: COLORS.muted,
+        icon: 'pause-circle-outline',
+        label: 'Idle',
+      };
+    case null:
+      return {
+        animated: false,
+        backgroundColor: '#F1F0EA',
+        color: COLORS.muted,
+        icon: 'ellipsis-horizontal-circle-outline',
+        label: 'Loading status',
+      };
+  }
 }
 
 function OutputModeToggle({
@@ -2607,22 +2929,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '800',
   },
-  sessionNavStatus: {
-    maxWidth: 92,
-    minHeight: 30,
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-  },
-  sessionNavStatusText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
   scrollToBottomButton: {
     position: 'absolute',
     right: 18,
-    bottom: Platform.OS === 'ios' ? 116 : 108,
+    bottom: Platform.OS === 'ios' ? 150 : 142,
     minHeight: 42,
     flexDirection: 'row',
     alignItems: 'center',
@@ -2645,27 +2955,34 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 10 : 12,
     gap: 7,
   },
-  sessionInputTopLine: {
-    minHeight: 18,
+  sessionRunStatus: {
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 9,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
   },
-  sessionInputStatusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: COLORS.muted,
+  sessionRunStatusIcon: {
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  sessionInputStatusDotLive: {
-    backgroundColor: COLORS.green,
-  },
-  sessionInputStatus: {
+  sessionRunStatusBody: {
+    minWidth: 0,
     flex: 1,
+    gap: 1,
+  },
+  sessionRunStatusLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  sessionRunStatusDetail: {
     color: COLORS.muted,
     fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
+    fontWeight: '600',
   },
   sessionInputCount: {
     color: COLORS.muted,
@@ -2930,6 +3247,41 @@ const styles = StyleSheet.create({
     color: COLORS.ink,
     fontSize: 14,
     lineHeight: 20,
+  },
+  noticeActions: {
+    alignItems: 'stretch',
+    gap: 6,
+  },
+  noticeRetryButton: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    backgroundColor: COLORS.charcoal,
+  },
+  noticeRetryText: {
+    color: COLORS.surface,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  noticeCopyButton: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    backgroundColor: COLORS.page,
+  },
+  noticeCopyText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
   },
   formGroup: {
     gap: 8,

@@ -1,0 +1,50 @@
+name: Upload to China mirror
+description: Upload release artifacts to the configured China CDN mirror
+
+inputs:
+  endpoint:
+    required: true
+    description: S3-compatible endpoint including bucket
+  access-key-id:
+    required: true
+    description: Mirror access key ID
+  secret-access-key:
+    required: true
+    description: Mirror secret access key
+  public-base-url:
+    required: true
+    description: Public CDN base URL used by update manifests
+  region:
+    required: false
+    default: auto
+    description: S3 signing region
+  key-prefix:
+    required: false
+    default: ''
+    description: Optional object key prefix
+  channel:
+    description: Override update channel for manifest discovery
+    required: false
+    default: ''
+  prefix:
+    description: Override artifact prefix for installer discovery
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Upload to China mirror
+      shell: bash
+      env:
+        YODA_CN_MIRROR_ENDPOINT: ${{ inputs.endpoint }}
+        YODA_CN_MIRROR_ACCESS_KEY_ID: ${{ inputs.access-key-id }}
+        YODA_CN_MIRROR_SECRET_ACCESS_KEY: ${{ inputs.secret-access-key }}
+        YODA_CN_MIRROR_PUBLIC_BASE_URL: ${{ inputs.public-base-url }}
+        YODA_CN_MIRROR_REGION: ${{ inputs.region }}
+        YODA_CN_MIRROR_KEY_PREFIX: ${{ inputs.key-prefix }}
+      run: |
+        ARGS=""
+        if [ -n "${{ inputs.channel }}" ]; then ARGS="$ARGS --channel ${{ inputs.channel }}"; fi
+        if [ -n "${{ inputs.prefix }}" ]; then ARGS="$ARGS --prefix ${{ inputs.prefix }}"; fi
+        node --experimental-strip-types scripts/release/upload-cn-mirror.ts $ARGS

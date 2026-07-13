@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle2,
   Loader2,
@@ -9,9 +10,13 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { SkillTriggerRunResult } from '@shared/skills/types';
+import type {
+  SkillEvaluationCase,
+  SkillEvaluationResult,
+  SkillTriggerRunResult,
+} from '@shared/skills/types';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -23,23 +28,40 @@ import { cn } from '@renderer/utils/utils';
 const RUN_CONCURRENCY = 2;
 
 interface QueryRow {
-  id: number;
+  id: string;
   text: string;
-  shouldTrigger: boolean;
+  expectation: SkillEvaluationCase['expectation'];
   running: boolean;
   result: SkillTriggerRunResult | null;
+  resultContentHash?: string;
 }
 
-let nextRowId = 1;
+function createCaseId(): string {
+  return (
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+}
 
-function makeRow(text: string, shouldTrigger: boolean): QueryRow {
-  return { id: nextRowId++, text, shouldTrigger, running: false, result: null };
+function makeRow(
+  text: string,
+  expectation: SkillEvaluationCase['expectation'],
+  id = createCaseId(),
+  previous?: SkillEvaluationResult
+): QueryRow {
+  return {
+    id,
+    text,
+    expectation,
+    running: false,
+    result: previous?.result ?? null,
+    resultContentHash: previous?.contentHash,
+  };
 }
 
 function rowPassed(row: QueryRow): boolean | null {
   if (!row.result) return null;
   if (row.result.status === 'error' || row.result.status === 'timeout') return false;
-  return (row.result.status === 'triggered') === row.shouldTrigger;
+  return (row.result.status === 'triggered') === (row.expectation === 'trigger');
 }
 
 /**
@@ -48,32 +70,85 @@ function rowPassed(row: QueryRow): boolean | null {
  * (editable) or manual entry; every run costs real model usage, so runs are
  * always user-initiated.
  */
-export const SkillTriggerTest: React.FC<{ skillId: string }> = ({ skillId }) => {
+export const SkillTriggerTest: React.FC<{
+  skillKey: string;
+  skillName?: string;
+  contentHash?: string;
+}> = ({ skillKey, skillName, contentHash }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [rows, setRows] = useState<QueryRow[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const cancelRequested = useRef(false);
+  const hydratedSkillKey = useRef<string | null>(null);
 
-  const updateRow = useCallback((id: number, patch: Partial<QueryRow>) => {
+  const evaluation = useQuery({
+    queryKey: ['skills', 'evaluation', skillKey],
+    queryFn: async () => {
+      const result = await rpc.skills.getEvaluation({ skillKey });
+      if (result.success && result.data) return result.data;
+      throw new Error(result.error ?? 'Failed to load evaluation');
+    },
+  });
+
+  useEffect(() => {
+    if (!evaluation.data || hydratedSkillKey.current === skillKey) return;
+    const latestByCase = new Map<string, SkillEvaluationResult>();
+    for (const result of evaluation.data.results) latestByCase.set(result.caseId, result);
+    setRows(
+      evaluation.data.cases.map((testCase) =>
+        makeRow(testCase.text, testCase.expectation, testCase.id, latestByCase.get(testCase.id))
+      )
+    );
+    hydratedSkillKey.current = skillKey;
+  }, [evaluation.data, skillKey]);
+
+  const persistedCases = useMemo<SkillEvaluationCase[]>(
+    () =>
+      rows.map((row) => ({
+        id: row.id,
+        text: row.text,
+        expectation: row.expectation,
+        expectedSkillKey: row.expectation === 'trigger' ? skillKey : undefined,
+      })),
+    [rows, skillKey]
+  );
+  const persistedCasesJson = JSON.stringify(persistedCases);
+
+  useEffect(() => {
+    if (hydratedSkillKey.current !== skillKey) return;
+    const timer = window.setTimeout(() => {
+      void rpc.skills.saveEvaluationCases({
+        skillKey,
+        cases: JSON.parse(persistedCasesJson) as SkillEvaluationCase[],
+      });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [persistedCasesJson, skillKey]);
+
+  const updateRow = useCallback((id: string, patch: Partial<QueryRow>) => {
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   }, []);
 
   const handleGenerate = useCallback(async () => {
     setIsGenerating(true);
     try {
-      const result = await rpc.skills.generateTriggerQueries({ skillId });
+      const result = await rpc.skills.generateTriggerQueries({ skillKey });
       if (!result.success || !result.data) {
         throw new Error(result.success ? 'empty' : (result.error ?? 'unknown'));
       }
-      setRows(result.data.map((query) => makeRow(query.text, query.shouldTrigger)));
+      setRows(
+        result.data.map((query) =>
+          makeRow(query.text, query.shouldTrigger ? 'trigger' : 'neighbor')
+        )
+      );
     } catch {
       toast({ title: t('skills.triggerTest.generateFailed'), variant: 'destructive' });
     } finally {
       setIsGenerating(false);
     }
-  }, [skillId, t, toast]);
+  }, [skillKey, t, toast]);
 
   const handleRun = useCallback(async () => {
     const runnable = rows.filter((row) => row.text.trim());
@@ -91,7 +166,12 @@ export const SkillTriggerTest: React.FC<{ skillId: string }> = ({ skillId }) => 
         const row = pending.shift();
         if (!row) break;
         try {
-          const result = await rpc.skills.tryTriggerQuery({ skillId, query: row.text.trim() });
+          const result = await rpc.skills.tryTriggerQuery({
+            skillKey,
+            caseId: row.id,
+            query: row.text.trim(),
+            shouldTrigger: row.expectation === 'trigger',
+          });
           updateRow(row.id, {
             running: false,
             result:
@@ -102,6 +182,7 @@ export const SkillTriggerTest: React.FC<{ skillId: string }> = ({ skillId }) => 
                     durationMs: 0,
                     error: result.success ? 'empty' : (result.error ?? 'unknown'),
                   },
+            resultContentHash: contentHash,
           });
         } catch (error) {
           updateRow(row.id, {
@@ -115,7 +196,7 @@ export const SkillTriggerTest: React.FC<{ skillId: string }> = ({ skillId }) => 
 
     setRows((current) => current.map((row) => ({ ...row, running: false })));
     setIsRunning(false);
-  }, [rows, skillId, updateRow]);
+  }, [contentHash, rows, skillKey, updateRow]);
 
   const handleStop = useCallback(() => {
     cancelRequested.current = true;
@@ -143,14 +224,18 @@ export const SkillTriggerTest: React.FC<{ skillId: string }> = ({ skillId }) => 
       ...mismatches.map(
         (row) =>
           `- "${row.text.trim()}" — ${
-            row.shouldTrigger
+            row.expectation === 'trigger'
               ? t('skills.triggerTest.failExpectedTrigger')
               : t('skills.triggerTest.failExpectedNoTrigger')
           }`
       ),
     ].join('\n');
-    showReviseModal({ skillId, presetInstruction: instruction });
-  }, [mismatches, showReviseModal, skillId, t]);
+    showReviseModal({
+      skillId: skillKey,
+      skillName,
+      presetInstruction: instruction,
+    });
+  }, [mismatches, showReviseModal, skillKey, skillName, t]);
 
   return (
     <div className="space-y-2">
@@ -170,8 +255,14 @@ export const SkillTriggerTest: React.FC<{ skillId: string }> = ({ skillId }) => 
               row={row}
               disabled={isRunning || isGenerating}
               onChangeText={(text) => updateRow(row.id, { text, result: null })}
+              stale={Boolean(
+                row.result && row.resultContentHash && contentHash !== row.resultContentHash
+              )}
               onToggleExpected={() =>
-                updateRow(row.id, { shouldTrigger: !row.shouldTrigger, result: null })
+                updateRow(row.id, {
+                  expectation: row.expectation === 'trigger' ? 'no-trigger' : 'trigger',
+                  result: null,
+                })
               }
               onRemove={() => setRows((current) => current.filter((r) => r.id !== row.id))}
             />
@@ -197,7 +288,7 @@ export const SkillTriggerTest: React.FC<{ skillId: string }> = ({ skillId }) => 
           variant="outline"
           size="sm"
           disabled={isGenerating || isRunning}
-          onClick={() => setRows((current) => [...current, makeRow('', true)])}
+          onClick={() => setRows((current) => [...current, makeRow('', 'trigger')])}
         >
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           {t('skills.triggerTest.addQuery')}
@@ -236,10 +327,11 @@ export const SkillTriggerTest: React.FC<{ skillId: string }> = ({ skillId }) => 
 const TriggerQueryRow: React.FC<{
   row: QueryRow;
   disabled: boolean;
+  stale: boolean;
   onChangeText: (text: string) => void;
   onToggleExpected: () => void;
   onRemove: () => void;
-}> = ({ row, disabled, onChangeText, onToggleExpected, onRemove }) => {
+}> = ({ row, disabled, stale, onChangeText, onToggleExpected, onRemove }) => {
   const { t } = useTranslation();
   const passedState = rowPassed(row);
 
@@ -252,12 +344,12 @@ const TriggerQueryRow: React.FC<{
         title={t('skills.triggerTest.toggleExpected')}
         className={cn(
           'shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium transition-colors',
-          row.shouldTrigger
+          row.expectation === 'trigger'
             ? 'border-primary/40 bg-primary/10 text-primary'
             : 'border-border bg-muted/40 text-muted-foreground'
         )}
       >
-        {row.shouldTrigger
+        {row.expectation === 'trigger'
           ? t('skills.triggerTest.expectTrigger')
           : t('skills.triggerTest.expectNoTrigger')}
       </button>
@@ -269,6 +361,11 @@ const TriggerQueryRow: React.FC<{
         className="h-7 min-w-0 flex-1 border-none bg-transparent px-1 text-xs shadow-none focus-visible:ring-0"
       />
       <TriggerResultChip row={row} passedState={passedState} />
+      {stale && (
+        <span className="shrink-0 text-[10px] text-amber-600 dark:text-amber-400">
+          {t('skills.triggerTest.stale')}
+        </span>
+      )}
       <Button
         variant="ghost"
         size="icon-xs"

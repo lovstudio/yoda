@@ -47,6 +47,10 @@ const defaultTargets: Record<string, string> = {
 };
 const targets = values.targets ? values.targets.split(',').join(' ') : defaultTargets[platform];
 
+if (platform === 'mac') {
+  exec('node --experimental-strip-types scripts/release/prepare-sparkle.ts', { echo: true });
+}
+
 for (const arch of archs) {
   step(`Building ${platform} ${targets} for ${arch}`);
 
