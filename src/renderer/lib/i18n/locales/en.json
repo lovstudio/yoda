@@ -2031,7 +2031,35 @@
     },
     "family": {
       "variants": "{{count}} variants",
-      "locations": "{{count}} locations"
+      "locations": "{{count}} install locations",
+      "contentVersion": "Version {{hash}}",
+      "contentVersionUnknown": "Content version"
+    },
+    "location": {
+      "show": "Show {{count}} install locations",
+      "hide": "Collapse install locations",
+      "navigate": "Switch to {{label}}",
+      "kind": {
+        "yoda": "Yoda managed directory",
+        "project": "Project skill directory",
+        "claude": "Claude skills directory",
+        "claudeCommand": "Claude commands directory",
+        "claudePluginCache": "Claude plugin cache",
+        "claudePluginMarketplace": "Claude plugin marketplace",
+        "claudePlugin": "Claude plugin directory",
+        "codex": "Codex skills directory",
+        "codexPluginCache": "Codex plugin cache",
+        "codexPluginMarketplace": "Codex plugin marketplace",
+        "codexPlugin": "Codex plugin directory",
+        "agents": "Agents shared directory",
+        "opencode": "OpenCode skills directory",
+        "cursor": "Cursor skills directory",
+        "gemini": "Gemini skills directory",
+        "roo": "Roo Code skills directory",
+        "mistral": "Mistral skills directory",
+        "plugin": "Plugin directory",
+        "user": "User skills directory"
+      }
     },
     "sort": {
       "ariaLabel": "Sort skills",

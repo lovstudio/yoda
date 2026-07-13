@@ -2031,7 +2031,35 @@
     },
     "family": {
       "variants": "{{count}} 个版本",
-      "locations": "{{count}} 个位置"
+      "locations": "{{count}} 个安装位置",
+      "contentVersion": "版本 {{hash}}",
+      "contentVersionUnknown": "内容版本"
+    },
+    "location": {
+      "show": "查看 {{count}} 个安装位置",
+      "hide": "收起安装位置",
+      "navigate": "切换到 {{label}}",
+      "kind": {
+        "yoda": "Yoda 管理目录",
+        "project": "项目技能目录",
+        "claude": "Claude 技能目录",
+        "claudeCommand": "Claude 命令目录",
+        "claudePluginCache": "Claude 插件缓存",
+        "claudePluginMarketplace": "Claude 插件市场",
+        "claudePlugin": "Claude 插件目录",
+        "codex": "Codex 技能目录",
+        "codexPluginCache": "Codex 插件缓存",
+        "codexPluginMarketplace": "Codex 插件市场",
+        "codexPlugin": "Codex 插件目录",
+        "agents": "Agents 共享目录",
+        "opencode": "OpenCode 技能目录",
+        "cursor": "Cursor 技能目录",
+        "gemini": "Gemini 技能目录",
+        "roo": "Roo Code 技能目录",
+        "mistral": "Mistral 技能目录",
+        "plugin": "插件目录",
+        "user": "用户技能目录"
+      }
     },
     "sort": {
       "ariaLabel": "技能排序",
