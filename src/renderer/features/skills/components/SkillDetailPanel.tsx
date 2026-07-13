@@ -48,6 +48,7 @@ import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
 import { cn } from '@renderer/utils/utils';
 import { skillFilePath } from '../skill-file-path';
 import { getSkillUsageStats, skillUsageStatsChangedEvent } from '../skill-usage-stats';
+import SkillDetailSidebar from './SkillDetailSidebar';
 import SkillIconRenderer from './SkillIconRenderer';
 import { SkillTriggerTest } from './SkillTriggerTest';
 import { SkillUsageTrend } from './SkillUsageTrend';
@@ -125,13 +126,18 @@ const SkillDetailPanel: React.FC<{ skillId: string }> = ({ skillId }) => {
   }
 
   return (
-    <SkillDetailContent
-      skill={skill}
-      isLoadingDetail={isDetailLoading}
-      onInstall={install}
-      onUninstall={uninstall}
-      onSetDisabled={setDisabled}
-    />
+    <div className="@container flex h-full min-w-0 overflow-hidden bg-background text-foreground">
+      <SkillDetailSidebar activeSkillId={skill.id} skills={catalog?.skills ?? [skill]} />
+      <div className="min-w-0 flex-1">
+        <SkillDetailContent
+          skill={skill}
+          isLoadingDetail={isDetailLoading}
+          onInstall={install}
+          onUninstall={uninstall}
+          onSetDisabled={setDisabled}
+        />
+      </div>
+    </div>
   );
 };
 
