@@ -193,6 +193,7 @@
     "reconnect": "Reconnect",
     "changeSshConnection": "Change SSH connection",
     "openProjectDetails": "Open project details",
+    "openArchivedTasks": "View archived tasks",
     "openSessionDetails": "Open session details",
     "openTaskDetails": "Open task details",
     "archiveProject": "Archive project",

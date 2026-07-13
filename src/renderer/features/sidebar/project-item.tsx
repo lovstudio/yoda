@@ -91,6 +91,13 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     navigate('project', { projectId });
   }, [navigate, prefetchRepository, projectId]);
 
+  const handleOpenArchivedTasks = useCallback(async () => {
+    prefetchRepository();
+    await getProjectManagerStore().mountProject(projectId);
+    asMounted(getProjectStore(projectId))?.view.taskView.setTab('archived');
+    navigate('project', { projectId, view: 'tasks' });
+  }, [navigate, prefetchRepository, projectId]);
+
   const handleToggleExpanded = useCallback(() => {
     sidebarStore.toggleProjectExpanded(projectId);
   }, [projectId]);
@@ -256,6 +263,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         ? undefined
         : () => void copyTaskLink(buildProjectDeepLink({ projectId }), t),
     onOpenDetails: handleOpenDetails,
+    onOpenArchivedTasks:
+      project.state === 'unregistered' ? undefined : () => void handleOpenArchivedTasks(),
     onPin: () => sidebarStore.setProjectPinned(projectId, true),
     onUnpin: () => sidebarStore.setProjectPinned(projectId, false),
     onReconnect: sshConnectionId

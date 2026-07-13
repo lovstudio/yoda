@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 import {
   Archive,
+  ArchiveRestore,
   ArchiveX,
   CableIcon,
   Copy,
@@ -52,6 +53,7 @@ interface ProjectMenuActions {
   onPin: () => void;
   onUnpin: () => void;
   onOpenDetails?: () => void;
+  onOpenArchivedTasks?: () => void;
   onReconnect?: () => void;
   onChangeSshConnection?: () => void;
   onConfigureScripts?: () => void;
@@ -93,6 +95,15 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
       icon: Info,
       label: t('sidebar.openProjectDetails'),
       onSelect: actions.onOpenDetails,
+    });
+  }
+  if (actions.onOpenArchivedTasks) {
+    items.push({
+      key: 'open-archived-tasks',
+      group: 0,
+      icon: ArchiveRestore,
+      label: t('sidebar.openArchivedTasks'),
+      onSelect: actions.onOpenArchivedTasks,
     });
   }
 
