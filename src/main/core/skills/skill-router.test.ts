@@ -48,4 +48,26 @@ describe('skill router', () => {
   it('returns no suggestion for unrelated intent', () => {
     expect(routeSkills({ query: 'hello there', skills })).toEqual([]);
   });
+
+  it('lets one logical skill occupy only one candidate slot', () => {
+    const duplicate = {
+      ...skills[0],
+      key: 'skill:deploy:plugin-copy',
+      ref: {
+        ...skills[0].ref,
+        key: 'skill:deploy:plugin-copy',
+        locator: '/plugins/cloudflare-deploy',
+      },
+      localPath: '/plugins/cloudflare-deploy',
+      scope: 'plugin' as const,
+    };
+    const result = routeSkills({
+      query: 'Deploy this Worker to Cloudflare',
+      skills: [skills[0], duplicate],
+      limit: 8,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].skillKey).toBe('skill:deploy');
+  });
 });

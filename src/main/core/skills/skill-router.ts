@@ -1,3 +1,4 @@
+import { selectSkillFamilyRepresentatives } from '@shared/skills/grouping';
 import type { CatalogSkill, SkillRouteSuggestion } from '@shared/skills/types';
 
 const LATIN_TOKEN_RE = /[a-z0-9][a-z0-9+_.-]*/g;
@@ -99,7 +100,10 @@ export function routeSkills(args: {
   allowedSkillKeys?: ReadonlySet<string>;
   limit?: number;
 }): SkillRouteSuggestion[] {
-  const candidates = args.skills.filter(
+  const logicalSkills = selectSkillFamilyRepresentatives(args.skills, {
+    preferredKeys: args.allowedSkillKeys,
+  });
+  const candidates = logicalSkills.filter(
     (skill) =>
       skill.installed &&
       !skill.disabled &&

@@ -2026,6 +2026,10 @@
       "grid": "卡片视图",
       "tree": "树状视图"
     },
+    "family": {
+      "variants": "{{count}} 个版本",
+      "locations": "{{count}} 个位置"
+    },
     "sort": {
       "ariaLabel": "技能排序",
       "name": "名称字母序",
@@ -2065,6 +2069,7 @@
       "estimatedTokens": "估算 tokens",
       "instructions": "正文",
       "installPath": "安装路径",
+      "identicalInstallPath": "相同内容位置 {{index}}",
       "invocation": "调用方式",
       "lastUsedAt": "最近 {{time}}",
       "license": "许可证",
@@ -2128,6 +2133,7 @@
       "issue": {
         "identity-conflict": "目录中存在同名技能变体",
         "runtime-name-conflict": "另一个已安装技能使用相同运行时名称",
+        "duplicate-installation": "相同内容安装在多个位置",
         "external-install": "此安装由 Yoda 之外管理，不能在这里卸载",
         "validation": "技能格式存在校验问题",
         "scripted": "技能包含可执行脚本或 hooks，启用前应审查",

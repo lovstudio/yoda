@@ -20,6 +20,12 @@ import {
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
+import {
+  groupSkillFamilies,
+  skillFamilyLocationCount,
+  type SkillContentVariant,
+  type SkillFamily,
+} from '@shared/skills/grouping';
 import type { CatalogSkill, SkillHealthIssue, SkillValidationIssue } from '@shared/skills/types';
 import { parseFrontmatter, skillIssueAgentLabel } from '@shared/skills/validation';
 import {
@@ -51,6 +57,7 @@ import { cn } from '@renderer/utils/utils';
 import { skillFilePath } from '../skill-file-path';
 import { getSkillUsageStats, skillUsageStatsChangedEvent } from '../skill-usage-stats';
 import SkillDetailSidebar from './SkillDetailSidebar';
+import SkillFamilyCount from './SkillFamilyCount';
 import SkillIconRenderer from './SkillIconRenderer';
 import { SkillTriggerTest } from './SkillTriggerTest';
 import { SkillUsageTrend } from './SkillUsageTrend';
@@ -109,6 +116,20 @@ const SkillDetailPanel: React.FC<{
 
   const skill =
     detailData ?? catalog?.skills.find((candidate) => candidate.key === skillKey) ?? null;
+  const comparableSkills = skill
+    ? [
+        ...(catalog?.skills.filter((candidate) => candidate.installed === skill.installed) ?? []),
+        ...(catalog?.skills.some((candidate) => candidate.key === skill.key) ? [] : [skill]),
+      ]
+    : [];
+  const family = skill
+    ? groupSkillFamilies(comparableSkills, { preferredKeys: new Set([skill.key]) }).find(
+        (candidate) => candidate.members.some((member) => member.key === skill.key)
+      )
+    : undefined;
+  const activeVariant = family?.variants.find((variant) =>
+    variant.members.some((member) => member.key === skill?.key)
+  );
 
   if (!skill) {
     if (isCatalogLoading || isDetailLoading) {
@@ -136,6 +157,8 @@ const SkillDetailPanel: React.FC<{
         <SkillDetailContent
           key={skill.key}
           skill={skill}
+          family={family}
+          activeVariant={activeVariant}
           isLoadingDetail={isDetailLoading}
           onInstall={install}
           onUninstall={uninstall}
@@ -148,11 +171,13 @@ const SkillDetailPanel: React.FC<{
 
 const SkillDetailContent: React.FC<{
   skill: CatalogSkill;
+  family?: SkillFamily;
+  activeVariant?: SkillContentVariant;
   isLoadingDetail: boolean;
   onInstall: (skillKey: string) => Promise<boolean>;
   onUninstall: (skillKey: string) => Promise<boolean>;
   onSetDisabled: (skillKey: string, disabled: boolean) => Promise<boolean>;
-}> = ({ skill, isLoadingDetail, onInstall, onUninstall, onSetDisabled }) => {
+}> = ({ skill, family, activeVariant, isLoadingDetail, onInstall, onUninstall, onSetDisabled }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -173,6 +198,16 @@ const SkillDetailContent: React.FC<{
   const localSkillFilePath = skill.localPath
     ? skillFilePath(skill.localPath, skill.disabled)
     : null;
+  const installationLocations = (activeVariant?.members ?? [skill])
+    .filter(
+      (candidate): candidate is CatalogSkill & { localPath: string } =>
+        candidate.installed && Boolean(candidate.localPath)
+    )
+    .sort((left, right) => {
+      if (left.key === skill.key) return -1;
+      if (right.key === skill.key) return 1;
+      return left.localPath.localeCompare(right.localPath);
+    });
   const codexCommand = useMemo(() => applyAgentCommandPrefix('codex', skill.id), [skill.id]);
   const claudeCommand = useMemo(() => applyAgentCommandPrefix('claude', skill.id), [skill.id]);
   const numberFormatter = useMemo(() => new Intl.NumberFormat(), []);
@@ -324,6 +359,11 @@ const SkillDetailContent: React.FC<{
                 </Badge>
                 <Badge variant="outline">{t(`skills.source.${skill.source}`)}</Badge>
                 <Badge variant="outline">{t(`skills.scope.${skill.scope}`)}</Badge>
+                {family && (family.variants.length > 1 || skillFamilyLocationCount(family) > 1) && (
+                  <Badge variant="outline">
+                    <SkillFamilyCount family={family} className="text-inherit" />
+                  </Badge>
+                )}
                 {skill.riskLevel && skill.riskLevel !== 'low' && (
                   <Badge variant={skill.riskLevel === 'high' ? 'destructive' : 'secondary'}>
                     {t(`skills.risk.${skill.riskLevel}`)}
@@ -608,17 +648,24 @@ const SkillDetailContent: React.FC<{
           </DetailSection>
 
           <DetailSection title={t('skills.detail.paths')}>
-            {skill.localPath ? (
+            {installationLocations.length > 0 ? (
               <>
-                <ValueRow
-                  label={t('skills.detail.installPath')}
-                  value={skill.localPath}
-                  extraAction={
-                    <FilePathActionsDropdown
-                      target={{ absolutePath: skill.localPath, kind: 'directory' }}
-                    />
-                  }
-                />
+                {installationLocations.map((location, index) => (
+                  <ValueRow
+                    key={location.key}
+                    label={
+                      index === 0
+                        ? t('skills.detail.installPath')
+                        : t('skills.detail.identicalInstallPath', { index: index + 1 })
+                    }
+                    value={location.localPath}
+                    extraAction={
+                      <FilePathActionsDropdown
+                        target={{ absolutePath: location.localPath, kind: 'directory' }}
+                      />
+                    }
+                  />
+                ))}
                 {localSkillFilePath && (
                   <ValueRow
                     label={t('skills.detail.skillFile')}

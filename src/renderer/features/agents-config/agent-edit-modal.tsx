@@ -2,6 +2,8 @@ import { AlertTriangle, MousePointer2, Sparkles, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { agentToDraft, emptyAgentDraft, type Agent, type AgentDraft } from '@shared/agents';
+import { groupSkillFamilies } from '@shared/skills/grouping';
+import SkillFamilyCount from '@renderer/features/skills/components/SkillFamilyCount';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { AvatarInput, type AvatarFileError } from '@renderer/lib/components/avatar-input';
@@ -38,17 +40,17 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
   const { installedSkills, isLoading: skillsLoading } = useSkills();
   const [draft, setDraft] = useState<AgentDraft>(agent ? agentToDraft(agent) : emptyAgentDraft());
   const [saving, setSaving] = useState(false);
-  const legacySkillKeyById = useMemo(() => {
-    const preferred = [...installedSkills].sort((left, right) => {
-      if (left.managed !== right.managed) return left.managed ? -1 : 1;
-      return left.key.localeCompare(right.key);
-    });
-    const result = new Map<string, string>();
-    for (const skill of preferred) {
-      if (!result.has(skill.id)) result.set(skill.id, skill.key);
-    }
-    return result;
-  }, [installedSkills]);
+  const installedSkillFamilies = useMemo(() => {
+    const configuredIdentifiers = new Set([...draft.enabledSkillIds, ...draft.manualSkillIds]);
+    const preferredKeys = new Set(
+      installedSkills
+        .filter(
+          (skill) => configuredIdentifiers.has(skill.key) || configuredIdentifiers.has(skill.id)
+        )
+        .map((skill) => skill.key)
+    );
+    return groupSkillFamilies(installedSkills, { preferredKeys });
+  }, [draft.enabledSkillIds, draft.manualSkillIds, installedSkills]);
 
   useCloseGuard(saving);
 
@@ -65,35 +67,45 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
     toast({ title: t(key), variant: 'destructive' });
   };
 
-  const skillMode = (key: string, legacyId: string): 'auto' | 'manual' | 'off' => {
-    const resolvesLegacyId = legacySkillKeyById.get(legacyId) === key;
-    if (
-      draft.enabledSkillIds.includes(key) ||
-      (resolvesLegacyId && draft.enabledSkillIds.includes(legacyId))
-    )
-      return 'auto';
-    if (
-      draft.manualSkillIds.includes(key) ||
-      (resolvesLegacyId && draft.manualSkillIds.includes(legacyId))
-    )
-      return 'manual';
+  const skillMode = (
+    family: (typeof installedSkillFamilies)[number]
+  ): 'auto' | 'manual' | 'off' => {
+    const identifiers = new Set(family.members.flatMap((skill) => [skill.key, skill.id]));
+    if (draft.enabledSkillIds.some((identifier) => identifiers.has(identifier))) return 'auto';
+    if (draft.manualSkillIds.some((identifier) => identifiers.has(identifier))) return 'manual';
     return 'off';
   };
 
-  const setSkillMode = (key: string, legacyId: string, mode: 'auto' | 'manual' | 'off') =>
+  const setSkillMode = (
+    family: (typeof installedSkillFamilies)[number],
+    mode: 'auto' | 'manual' | 'off'
+  ) => {
+    const identifiers = new Set(family.members.flatMap((skill) => [skill.key, skill.id]));
     setDraft((prev) => ({
       ...prev,
       enabledSkillIds: [
-        ...prev.enabledSkillIds.filter((skillId) => skillId !== key && skillId !== legacyId),
-        ...(mode === 'auto' ? [key] : []),
+        ...prev.enabledSkillIds.filter((identifier) => !identifiers.has(identifier)),
+        ...(mode === 'auto' ? [family.primary.key] : []),
       ],
       manualSkillIds: [
-        ...prev.manualSkillIds.filter((skillId) => skillId !== key && skillId !== legacyId),
-        ...(mode === 'manual' ? [key] : []),
+        ...prev.manualSkillIds.filter((identifier) => !identifiers.has(identifier)),
+        ...(mode === 'manual' ? [family.primary.key] : []),
       ],
     }));
+  };
 
-  const configuredSkillCount = draft.enabledSkillIds.length + draft.manualSkillIds.length;
+  const knownSkillIdentifiers = new Set(
+    installedSkillFamilies.flatMap((family) =>
+      family.members.flatMap((skill) => [skill.key, skill.id])
+    )
+  );
+  const enabledSkillCount =
+    installedSkillFamilies.filter((family) => skillMode(family) === 'auto').length +
+    draft.enabledSkillIds.filter((identifier) => !knownSkillIdentifiers.has(identifier)).length;
+  const manualSkillCount =
+    installedSkillFamilies.filter((family) => skillMode(family) === 'manual').length +
+    draft.manualSkillIds.filter((identifier) => !knownSkillIdentifiers.has(identifier)).length;
+  const configuredSkillCount = enabledSkillCount + manualSkillCount;
 
   const handleSave = async () => {
     if (!draft.name.trim()) {
@@ -224,15 +236,15 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
               <span
                 className={cn(
                   'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium',
-                  draft.enabledSkillIds.length > 8
+                  enabledSkillCount > 8
                     ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
                     : 'border-border bg-background text-muted-foreground'
                 )}
               >
-                {draft.enabledSkillIds.length}/8 {t('agentManager.skillBudget')}
+                {enabledSkillCount}/8 {t('agentManager.skillBudget')}
               </span>
             </div>
-            {draft.enabledSkillIds.length > 8 && (
+            {enabledSkillCount > 8 && (
               <p className="flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400">
                 <AlertTriangle className="size-3 shrink-0" />
                 {t('agentManager.skillBudgetWarning')}
@@ -240,12 +252,13 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
             )}
             {skillsLoading ? (
               <p className="text-xs text-muted-foreground">{t('common.loading')}</p>
-            ) : installedSkills.length === 0 ? (
+            ) : installedSkillFamilies.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t('agentManager.noSkills')}</p>
             ) : (
               <div className="max-h-56 divide-y divide-border overflow-y-auto rounded-md border border-border">
-                {installedSkills.map((skill) => {
-                  const mode = skillMode(skill.key, skill.id);
+                {installedSkillFamilies.map((family) => {
+                  const skill = family.primary;
+                  const mode = skillMode(family);
                   return (
                     <div key={skill.key} className="flex items-center gap-2 px-2.5 py-2">
                       <div className="min-w-0 flex-1" title={skill.description}>
@@ -258,6 +271,7 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
                             : skill.managed
                               ? t('agentManager.skillScopeManaged')
                               : t('agentManager.skillScopeExternal')}
+                          <SkillFamilyCount family={family} className="ml-1" />
                         </p>
                       </div>
                       {skill.scope === 'plugin' ? (
@@ -268,7 +282,7 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
                         <Select
                           value={mode}
                           onValueChange={(value) =>
-                            setSkillMode(skill.key, skill.id, value as 'auto' | 'manual' | 'off')
+                            setSkillMode(family, value as 'auto' | 'manual' | 'off')
                           }
                         >
                           <SelectTrigger className="h-7 w-28 shrink-0 text-[11px]">

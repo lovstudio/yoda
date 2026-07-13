@@ -2026,6 +2026,10 @@
       "grid": "Card view",
       "tree": "Tree view"
     },
+    "family": {
+      "variants": "{{count}} variants",
+      "locations": "{{count}} locations"
+    },
     "sort": {
       "ariaLabel": "Sort skills",
       "name": "Name (A-Z)",
@@ -2065,6 +2069,7 @@
       "estimatedTokens": "Est. tokens",
       "instructions": "Instructions",
       "installPath": "Install path",
+      "identicalInstallPath": "Identical-content location {{index}}",
       "invocation": "Invocation",
       "lastUsedAt": "Last {{time}}",
       "license": "License",
@@ -2128,6 +2133,7 @@
       "issue": {
         "identity-conflict": "The catalog contains same-name skill variants",
         "runtime-name-conflict": "Another installed skill uses the same runtime name",
+        "duplicate-installation": "Identical content is installed in multiple locations",
         "external-install": "This installation is managed outside Yoda and cannot be removed here",
         "validation": "The skill has format validation issues",
         "scripted": "The skill includes executable scripts or hooks; review before enabling",

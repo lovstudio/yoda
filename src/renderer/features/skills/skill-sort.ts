@@ -42,7 +42,7 @@ function bodyLength(skill: CatalogSkill): number {
 export function sortSkills(
   skills: CatalogSkill[],
   mode: SkillSortMode,
-  lookupUsage: (skillId: string) => SkillUsageStat | undefined
+  lookupUsage: (skill: CatalogSkill) => SkillUsageStat | undefined
 ): CatalogSkill[] {
   if (mode === 'trigger' || mode === 'body') {
     // Decorate-sort: measuring inside the comparator would re-parse per compare.
@@ -55,8 +55,8 @@ export function sortSkills(
     if (mode === 'name' || mode === 'count') {
       return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
     }
-    const ua = lookupUsage(a.id);
-    const ub = lookupUsage(b.id);
+    const ua = lookupUsage(a);
+    const ub = lookupUsage(b);
     switch (mode) {
       case 'total':
         return (ub?.total ?? 0) - (ua?.total ?? 0);

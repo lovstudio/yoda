@@ -30,6 +30,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import type { RuntimeId } from '@shared/runtime-registry';
+import { selectSkillFamilyRepresentatives } from '@shared/skills/grouping';
 import type { CatalogIndex, SkillSelectionInput } from '@shared/skills/types';
 import { recordSkillInvocation } from '@renderer/features/skills/skill-usage-stats';
 import { toast } from '@renderer/lib/hooks/use-toast';
@@ -364,16 +365,17 @@ export function ComposerPromptInput({
     const configuredKeys = skillSelection
       ? new Set([...skillSelection.autoSkillKeys, ...skillSelection.manualSkillKeys])
       : null;
-    const installed = (skillCatalog?.skills ?? [])
-      .filter(
+    const installed = selectSkillFamilyRepresentatives(
+      (skillCatalog?.skills ?? []).filter(
         (skill) =>
           skill.installed &&
           (!configuredKeys ||
             skill.scope === 'plugin' ||
             configuredKeys.has(skill.key) ||
             configuredKeys.has(skill.id))
-      )
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+      ),
+      { preferredKeys: configuredKeys ?? undefined }
+    ).sort((a, b) => a.displayName.localeCompare(b.displayName));
 
     return installed.map((skill) => ({
       skillKey: skill.key,

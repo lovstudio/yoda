@@ -9,6 +9,11 @@ import {
 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  aggregateSkillFamilyUsage,
+  groupSkillFamilies,
+  type SkillFamily,
+} from '@shared/skills/grouping';
 import type { CatalogSkill } from '@shared/skills/types';
 import { useOpenViewTab, useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -67,6 +72,8 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   const [layout, setLayout] = React.useState<SkillsLayout>(loadStoredLayout);
   const [section, setSection] = React.useState<SkillsSection>('installed');
   const usageAvailable = usage !== null && Object.keys(usage.bySkill).length > 0;
+  const focusedSkillId =
+    typeof skillsParams.focusSkillId === 'string' ? skillsParams.focusSkillId : undefined;
 
   const switchLayout = React.useCallback((value: SkillsLayout) => {
     setLayout(value);
@@ -91,22 +98,61 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     [layout, usageAvailable]
   );
 
+  const installedFamilies = React.useMemo(
+    () => groupSkillFamilies(installedSkills),
+    [installedSkills]
+  );
+  const recommendedFamilies = React.useMemo(
+    () => groupSkillFamilies(recommendedSkills),
+    [recommendedSkills]
+  );
+  const attentionFamilies = React.useMemo(
+    () => groupSkillFamilies(installedSkills.filter(skillNeedsAttention)),
+    [installedSkills]
+  );
+  const familiesByPrimaryKey = React.useMemo(() => {
+    const result = new Map<string, SkillFamily>();
+    for (const family of [...installedFamilies, ...recommendedFamilies, ...attentionFamilies]) {
+      if (!result.has(family.primary.key)) result.set(family.primary.key, family);
+    }
+    return result;
+  }, [attentionFamilies, installedFamilies, recommendedFamilies]);
+  const lookupBrowseUsage = React.useCallback(
+    (skill: CatalogSkill) => {
+      const family = familiesByPrimaryKey.get(skill.key);
+      return family ? aggregateSkillFamilyUsage(family, lookupUsage) : lookupUsage(skill.id);
+    },
+    [familiesByPrimaryKey, lookupUsage]
+  );
   const sortedInstalledSkills = React.useMemo(
-    () => sortSkills(installedSkills, sortMode, lookupUsage),
-    [installedSkills, sortMode, lookupUsage]
+    () =>
+      sortSkills(
+        installedFamilies.map((family) => family.primary),
+        sortMode,
+        lookupBrowseUsage
+      ),
+    [installedFamilies, sortMode, lookupBrowseUsage]
   );
   const sortedRecommendedSkills = React.useMemo(
-    () => sortSkills(recommendedSkills, sortMode, lookupUsage),
-    [recommendedSkills, sortMode, lookupUsage]
+    () =>
+      sortSkills(
+        recommendedFamilies.map((family) => family.primary),
+        sortMode,
+        lookupBrowseUsage
+      ),
+    [recommendedFamilies, sortMode, lookupBrowseUsage]
   );
   const attentionSkills = React.useMemo(
-    () => sortedInstalledSkills.filter(skillNeedsAttention),
-    [sortedInstalledSkills]
+    () =>
+      sortSkills(
+        attentionFamilies.map((family) => family.primary),
+        sortMode,
+        lookupBrowseUsage
+      ),
+    [attentionFamilies, sortMode, lookupBrowseUsage]
   );
 
   const showCreateSkillModal = useShowModal('createSkillModal');
-  const focusedSkillId =
-    typeof skillsParams.focusSkillId === 'string' ? skillsParams.focusSkillId : undefined;
   const skillCardRefs = React.useRef(new Map<string, HTMLDivElement>());
   const [highlightedSkillId, setHighlightedSkillId] = React.useState<string | null>(null);
 
@@ -135,9 +181,18 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   React.useEffect(() => {
     if (!focusedSkillId || isLoading) return;
 
-    const isInstalled = installedSkills.some((skill) => skill.key === focusedSkillId);
-    const isAttention = attentionSkills.some((skill) => skill.key === focusedSkillId);
-    const isRecommended = recommendedSkills.some((skill) => skill.key === focusedSkillId);
+    const installedFamily = installedFamilies.find((family) =>
+      family.members.some((skill) => skill.key === focusedSkillId)
+    );
+    const attentionFamily = attentionFamilies.find((family) =>
+      family.members.some((skill) => skill.key === focusedSkillId)
+    );
+    const recommendedFamily = recommendedFamilies.find((family) =>
+      family.members.some((skill) => skill.key === focusedSkillId)
+    );
+    const isInstalled = Boolean(installedFamily);
+    const isAttention = Boolean(attentionFamily);
+    const isRecommended = Boolean(recommendedFamily);
     const isVisible = isInstalled || isRecommended;
     const existsInCatalog = catalog?.skills.some((skill) => skill.key === focusedSkillId) ?? false;
 
@@ -157,16 +212,23 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
       return;
     }
 
-    const node = skillCardRefs.current.get(focusedSkillId);
+    const visibleFamily =
+      focusedSection === 'attention'
+        ? attentionFamily
+        : focusedSection === 'installed'
+          ? installedFamily
+          : recommendedFamily;
+    const visibleSkillKey = visibleFamily?.primary.key ?? focusedSkillId;
+    const node = skillCardRefs.current.get(visibleSkillKey);
     if (!node) return;
 
     const frame = window.requestAnimationFrame(() => {
       node.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      setHighlightedSkillId(focusedSkillId);
+      setHighlightedSkillId(visibleSkillKey);
       setSkillsParams(() => ({}));
     });
     const timeout = window.setTimeout(() => {
-      setHighlightedSkillId((current) => (current === focusedSkillId ? null : current));
+      setHighlightedSkillId((current) => (current === visibleSkillKey ? null : current));
     }, 2400);
 
     return () => {
@@ -175,10 +237,13 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     };
   }, [
     catalog?.skills,
+    attentionFamilies,
     attentionSkills,
     focusedSkillId,
+    installedFamilies,
     installedSkills,
     isLoading,
+    recommendedFamilies,
     recommendedSkills,
     searchQuery,
     section,
@@ -202,7 +267,8 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
         <SkillsTreeSection
           skills={skills}
           orderBy={sortMode === 'count' ? 'count' : 'position'}
-          lookupUsage={lookupUsage}
+          lookupUsage={lookupBrowseUsage}
+          familiesByPrimaryKey={familiesByPrimaryKey}
           onSelect={openDetail}
           onInstall={install}
           setSkillRef={setSkillCardRef}
@@ -225,7 +291,8 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
           >
             <SkillCard
               skill={skill}
-              usage={lookupUsage(skill.id)}
+              family={familiesByPrimaryKey.get(skill.key)}
+              usage={lookupBrowseUsage(skill)}
               onSelect={openDetail}
               onInstall={install}
             />

@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { agentTargets, skillScanPaths } from '@shared/skills/agentTargets';
+import { skillFamilyKey } from '@shared/skills/grouping';
 import type {
   CatalogIndex,
   CatalogSkill,
@@ -860,12 +861,16 @@ export class SkillsService {
 
     const duplicateNames = new Set<string>();
     for (const entry of entries) {
+      const selectedSkill = availableSkills.find((candidate) => candidate.key === entry.key);
+      if (!selectedSkill) continue;
       if (
         availableSkills.some(
-          (candidate) => candidate.key !== entry.key && candidate.id === entry.id
+          (candidate) =>
+            candidate.key !== entry.key &&
+            skillFamilyKey(candidate) === skillFamilyKey(selectedSkill)
         )
       ) {
-        duplicateNames.add(entry.id);
+        duplicateNames.add(selectedSkill.frontmatter.name || entry.id);
       }
     }
     if (runtimeId !== 'codex') {
@@ -1198,26 +1203,36 @@ export class SkillsService {
   private annotateConflicts(skills: CatalogSkill[]): CatalogSkill[] {
     const byName = new Map<string, CatalogSkill[]>();
     for (const skill of skills) {
-      const group = byName.get(skill.id) ?? [];
+      const familyKey = skillFamilyKey(skill);
+      const group = byName.get(familyKey) ?? [];
       group.push(skill);
-      byName.set(skill.id, group);
+      byName.set(familyKey, group);
     }
     return skills.map((skill) => {
-      const conflicts = (byName.get(skill.id) ?? []).filter(
+      const runtimeName = skill.frontmatter.name || skill.id;
+      const conflicts = (byName.get(skillFamilyKey(skill)) ?? []).filter(
         (candidate) => candidate.key !== skill.key
       );
       if (conflicts.length === 0) return skill;
       const installedConflicts = conflicts.filter((candidate) => candidate.installed);
+      const hasDifferentInstalledContent = installedConflicts.some(
+        (candidate) =>
+          !skill.contentHash ||
+          !candidate.contentHash ||
+          candidate.contentHash !== skill.contentHash
+      );
       const issue = {
-        severity: installedConflicts.length > 0 ? ('warning' as const) : ('info' as const),
-        code:
-          installedConflicts.length > 0
-            ? ('runtime-name-conflict' as const)
+        severity: hasDifferentInstalledContent ? ('warning' as const) : ('info' as const),
+        code: hasDifferentInstalledContent
+          ? ('runtime-name-conflict' as const)
+          : installedConflicts.length > 0
+            ? ('duplicate-installation' as const)
             : ('identity-conflict' as const),
-        message:
-          installedConflicts.length > 0
-            ? `Another installed skill uses the runtime name "${skill.id}".`
-            : `${conflicts.length + 1} catalog or local variants share the name "${skill.id}".`,
+        message: hasDifferentInstalledContent
+          ? `Another installed skill uses the runtime name "${runtimeName}".`
+          : installedConflicts.length > 0
+            ? `The same skill content is installed in ${installedConflicts.length + 1} locations.`
+            : `${conflicts.length + 1} catalog or local variants share the name "${runtimeName}".`,
         relatedSkillKeys: conflicts.map((candidate) => candidate.key),
       };
       return {
@@ -1227,7 +1242,8 @@ export class SkillsService {
           ...(skill.healthIssues ?? []).filter(
             (healthIssue) =>
               healthIssue.code !== 'identity-conflict' &&
-              healthIssue.code !== 'runtime-name-conflict'
+              healthIssue.code !== 'runtime-name-conflict' &&
+              healthIssue.code !== 'duplicate-installation'
           ),
           issue,
         ],

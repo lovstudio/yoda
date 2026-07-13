@@ -50,6 +50,7 @@ export interface SkillHealthIssue {
   code:
     | 'identity-conflict'
     | 'runtime-name-conflict'
+    | 'duplicate-installation'
     | 'external-install'
     | 'validation'
     | 'scripted'

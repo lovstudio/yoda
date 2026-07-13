@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, ChartNoAxesColumn, Pencil, Plus, PowerOff } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import type { SkillFamily } from '@shared/skills/grouping';
 import type { CatalogSkill, SkillUsageStat, SkillValidationIssue } from '@shared/skills/types';
 import { parseFrontmatter, skillIssueAgentLabel } from '@shared/skills/validation';
 import { GlobalFileMenuItems } from '@renderer/lib/components/file-path-actions';
@@ -15,17 +16,19 @@ import {
 import { cn } from '@renderer/utils/utils';
 import { skillFilePath } from '../skill-file-path';
 import { primarySkillHealthIssue } from '../skill-health';
+import SkillFamilyCount from './SkillFamilyCount';
 import SkillIconRenderer from './SkillIconRenderer';
 
 interface SkillCardProps {
   skill: CatalogSkill;
+  family?: SkillFamily;
   /** Real invocation stats from skillusage; undefined when unavailable/unused */
   usage?: SkillUsageStat;
   onSelect: (skill: CatalogSkill) => void;
   onInstall: (skillKey: string) => void;
 }
 
-const SkillCard: React.FC<SkillCardProps> = ({ skill, usage, onSelect, onInstall }) => {
+const SkillCard: React.FC<SkillCardProps> = ({ skill, family, usage, onSelect, onInstall }) => {
   const { t } = useTranslation();
   const description = React.useMemo(() => getDisplayDescription(skill), [skill]);
   const primaryIssue = skill.validationIssues?.[0];
@@ -59,6 +62,7 @@ const SkillCard: React.FC<SkillCardProps> = ({ skill, usage, onSelect, onInstall
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
           <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{skill.displayName}</h3>
+          {family && <SkillFamilyCount family={family} />}
           <span className="shrink-0 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
             {t(`skills.source.${skill.source}`)}
           </span>
