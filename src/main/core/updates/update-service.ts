@@ -27,6 +27,8 @@ import type { IDisposable, IInitializable } from '@main/lib/lifecycle';
 import { log } from '@main/lib/logger';
 import { handoffInstallRestart } from './install-restart';
 import { MacSparkleUpdater, type SparkleDownloadProgress } from './mac-sparkle-updater';
+import { UpdateCheckCoordinator, UpdateCheckTimeoutError } from './update-check-coordinator';
+import { UpdateCheckRecoveryGate } from './update-check-recovery-gate';
 import { formatUpdaterError, sanitizeUpdaterLogArgs } from './utils';
 
 const { autoUpdater } = _electronUpdater;
@@ -34,6 +36,7 @@ const { autoUpdater } = _electronUpdater;
 const ALLOW_PRERELEASE = false;
 const ALLOW_DOWNGRADE = false;
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const CHECK_TIMEOUT_MS = 30 * 1000; // 30 seconds
 const STARTUP_DELAY_MS = 30 * 1000; // 30 seconds
 const INSTALL_RESTART_GUARD_TIMEOUT_MS = 2 * 60 * 1000;
 const USE_SPARKLE = process.platform === 'darwin';
@@ -61,11 +64,15 @@ export interface UpdateState {
 class UpdateService implements IInitializable, IDisposable {
   private updateState: UpdateState;
   private checkTimer?: NodeJS.Timeout;
-  private currentCheckPromise: Promise<UpdateInfo | null> | null = null;
+  private readonly checkCoordinator = new UpdateCheckCoordinator<UpdateInfo | null>(
+    CHECK_TIMEOUT_MS
+  );
   private initialized = false;
   private active = false;
   private installRequested = false;
   private installRestartGuardTimer?: NodeJS.Timeout;
+  private readonly checkRecovery = new UpdateCheckRecoveryGate<UpdateInfo | null>();
+  private suppressAutoUpdaterCheckEvents = false;
   private prepareInstallRestart: PrepareInstallRestart = async () => {};
   private appliedFeedUrl: string | null = null;
   private appliedFeedSource: UpdatesSettings['source'] | null = null;
@@ -120,12 +127,15 @@ class UpdateService implements IInitializable, IDisposable {
 
   private setupEventListeners(): void {
     autoUpdater.on('checking-for-update', () => {
+      if (this.suppressAutoUpdaterCheckEvents) return;
+      const shouldEmit = this.updateState.status !== 'checking';
       this.updateState.status = 'checking';
       this.updateState.lastCheck = new Date();
-      events.emit(updateCheckingEvent, undefined);
+      if (shouldEmit) events.emit(updateCheckingEvent, undefined);
     });
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
+      if (this.suppressAutoUpdaterCheckEvents) return;
       this.updateState.status = 'available';
       this.updateState.availableVersion = info.version;
       this.updateState.updateInfo = info;
@@ -133,11 +143,16 @@ class UpdateService implements IInitializable, IDisposable {
     });
 
     autoUpdater.on('update-not-available', () => {
+      if (this.suppressAutoUpdaterCheckEvents) return;
       this.updateState.status = 'idle';
       events.emit(updateNotAvailableEvent, undefined);
     });
 
     autoUpdater.on('error', (err: Error) => {
+      if (this.suppressAutoUpdaterCheckEvents) {
+        log.warn('Ignoring auto-updater error while resetting a timed-out check');
+        return;
+      }
       this.handleUpdaterError(err);
     });
 
@@ -178,24 +193,48 @@ class UpdateService implements IInitializable, IDisposable {
 
   async checkForUpdates(): Promise<UpdateInfo | null> {
     if (!this.active) return null;
-    if (this.currentCheckPromise) return this.currentCheckPromise;
 
-    this.currentCheckPromise = this._performCheck().finally(() => {
-      this.currentCheckPromise = null;
-      this.scheduleNextCheck();
-    });
+    if (
+      this.updateState.status === 'downloading' ||
+      this.updateState.status === 'downloaded' ||
+      this.updateState.status === 'installing'
+    ) {
+      log.info('Skipping update check while an update is already in progress', {
+        status: this.updateState.status,
+      });
+      return this.updateState.updateInfo ?? null;
+    }
 
-    return this.currentCheckPromise;
+    return this.checkCoordinator.run(
+      (signal) => this.checkRecovery.track(this._performCheck(signal)),
+      (error) => {
+        if (!USE_SPARKLE && error instanceof UpdateCheckTimeoutError) {
+          this.beginNonMacCheckRecovery();
+        }
+        if (this.updateState.status !== 'error') this.handleUpdaterError(error);
+      },
+      () => {
+        if (this.active) this.scheduleNextCheck();
+      }
+    );
   }
 
-  private async _performCheck(): Promise<UpdateInfo | null> {
+  private async _performCheck(signal: AbortSignal): Promise<UpdateInfo | null> {
     if (this.updateState.status === 'error') {
       this.updateState.status = 'idle';
       this.updateState.error = undefined;
     }
 
+    this.beginUpdateCheck();
+
+    await this.checkRecovery.wait();
+    this.suppressAutoUpdaterCheckEvents = false;
+    throwIfUpdateCheckAborted(signal);
+
     const feed = await this.applyUpdateSourceConfig();
+    throwIfUpdateCheckAborted(signal);
     await this.applyProxyConfig(feed.url);
+    throwIfUpdateCheckAborted(signal);
 
     log.info('Checking for updates...', {
       channel: UPDATE_CHANNEL,
@@ -205,10 +244,11 @@ class UpdateService implements IInitializable, IDisposable {
     });
 
     if (USE_SPARKLE) {
-      return await this.performSparkleCheck(feed.url);
+      return await this.performSparkleCheck(feed.url, signal);
     }
 
     const result = await autoUpdater.checkForUpdatesAndNotify();
+    throwIfUpdateCheckAborted(signal);
     return result?.updateInfo ?? null;
   }
 
@@ -251,7 +291,9 @@ class UpdateService implements IInitializable, IDisposable {
    * and does NOT inherit a shell/CLI proxy. Behind ClashX-style proxies the feed
    * read may succeed via a CDN while the GitHub binary download fails — so we
    * explicitly route the updater session: `custom` uses the user's proxy URL,
-   * `auto` follows the OS proxy (and logs what it resolved for diagnostics).
+   * `auto` follows the OS proxy. Proxy resolution itself is intentionally not
+   * awaited here: PAC scripts can hang, and resolving a diagnostic must never
+   * block the actual update request.
    */
   private async applyProxyConfig(proxyProbeUrl: string): Promise<void> {
     try {
@@ -268,8 +310,7 @@ class UpdateService implements IInitializable, IDisposable {
       }
 
       await sess.setProxy({ mode: 'system' });
-      const resolved = await sess.resolveProxy(proxyProbeUrl);
-      log.info('Updater proxy: auto (system)', { resolved });
+      log.info('Updater proxy: auto (system)', { probeUrl: proxyProbeUrl });
     } catch (error) {
       log.warn('Failed to apply updater proxy config:', formatUpdaterError(error));
     }
@@ -441,6 +482,7 @@ class UpdateService implements IInitializable, IDisposable {
   }
 
   dispose(): void {
+    this.active = false;
     if (this.checkTimer) {
       clearTimeout(this.checkTimer);
       this.checkTimer = undefined;
@@ -449,20 +491,22 @@ class UpdateService implements IInitializable, IDisposable {
       clearTimeout(this.installRestartGuardTimer);
       this.installRestartGuardTimer = undefined;
     }
+    this.checkCoordinator.dispose();
     this.macUpdater?.dispose();
   }
 
-  private async performSparkleCheck(feedBaseUrl: string): Promise<UpdateInfo | null> {
-    this.updateState.status = 'checking';
-    this.updateState.lastCheck = new Date();
-    events.emit(updateCheckingEvent, undefined);
-
+  private async performSparkleCheck(
+    feedBaseUrl: string,
+    signal: AbortSignal
+  ): Promise<UpdateInfo | null> {
     try {
       const info = await this.requireMacUpdater().check(
         feedBaseUrl,
         this.updateState.currentVersion,
-        this.requireUpdateSession()
+        this.requireUpdateSession(),
+        signal
       );
+      throwIfUpdateCheckAborted(signal);
       if (!info) {
         this.updateState.status = 'idle';
         this.updateState.availableVersion = undefined;
@@ -477,7 +521,7 @@ class UpdateService implements IInitializable, IDisposable {
       events.emit(updateAvailableEvent, { version: info.version, updateInfo: info });
       return info;
     } catch (error) {
-      this.handleUpdaterError(error);
+      if (!signal.aborted) this.handleUpdaterError(error);
       throw error;
     }
   }
@@ -486,6 +530,23 @@ class UpdateService implements IInitializable, IDisposable {
     this.updateState.status = 'downloading';
     this.updateState.downloadProgress = progress;
     events.emit(updateProgressEvent, progress);
+  }
+
+  private beginUpdateCheck(): void {
+    this.updateState.status = 'checking';
+    this.updateState.lastCheck = new Date();
+    events.emit(updateCheckingEvent, undefined);
+  }
+
+  private beginNonMacCheckRecovery(): void {
+    this.suppressAutoUpdaterCheckEvents = true;
+    const updateSession = this.getUpdateSession();
+    this.checkRecovery.begin(
+      () => updateSession?.closeAllConnections() ?? Promise.resolve(),
+      (error) => {
+        log.warn('Failed to reset timed-out updater connections:', formatUpdaterError(error));
+      }
+    );
   }
 
   private handleUpdaterError(error: unknown): void {
@@ -525,3 +586,8 @@ class UpdateService implements IInitializable, IDisposable {
 }
 
 export const updateService = new UpdateService();
+
+function throwIfUpdateCheckAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return;
+  throw signal.reason instanceof Error ? signal.reason : new Error('Update check was cancelled');
+}

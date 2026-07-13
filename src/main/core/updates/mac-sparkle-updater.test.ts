@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { Session } from 'electron';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildSparkleHelperArgs,
+  MacSparkleUpdater,
   parseSparkleHelperEvent,
   resolveSparkleRuntimePaths,
 } from './mac-sparkle-updater';
@@ -62,5 +67,40 @@ describe('parseSparkleHelperEvent', () => {
     expect(
       parseSparkleHelperEvent('YODA_EVENT {"type":"update-found","version":1,"delta":true}')
     ).toBeNull();
+  });
+});
+
+describe('MacSparkleUpdater.check', () => {
+  it('passes the update check abort signal to the Electron session fetch', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'yoda-sparkle-check-'));
+    const appBundlePath = join(root, 'Yoda.app');
+    const executablePath = join(appBundlePath, 'Contents', 'MacOS', 'Yoda');
+    const helperPath = join(appBundlePath, 'Contents', 'Helpers', 'YodaSparkleUpdater');
+    mkdirSync(join(appBundlePath, 'Contents', 'MacOS'), { recursive: true });
+    mkdirSync(join(appBundlePath, 'Contents', 'Helpers'), { recursive: true });
+    writeFileSync(executablePath, '');
+    writeFileSync(helperPath, '');
+
+    try {
+      const updater = new MacSparkleUpdater({ arch: 'arm64', executablePath });
+      const controller = new AbortController();
+      const fetch = vi.fn(() =>
+        Promise.resolve(
+          new Response('<item><sparkle:version>0.16.0</sparkle:version></item>', { status: 200 })
+        )
+      );
+      const updateSession = { fetch } as unknown as Session;
+
+      await expect(
+        updater.check('https://updates.test', '0.16.0', updateSession, controller.signal)
+      ).resolves.toBeNull();
+
+      expect(fetch).toHaveBeenCalledWith(
+        'https://updates.test/appcast-arm64.xml',
+        expect.objectContaining({ signal: controller.signal })
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

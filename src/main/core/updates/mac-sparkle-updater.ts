@@ -70,12 +70,14 @@ export class MacSparkleUpdater {
   async check(
     feedBaseUrl: string,
     currentVersion: string,
-    updateSession: Session
+    updateSession: Session,
+    signal?: AbortSignal
   ): Promise<UpdateInfo | null> {
     this.assertRuntimeAvailable();
     const feedUrl = sparkleFeedUrlForArch(feedBaseUrl, this.arch);
     const response = await updateSession.fetch(feedUrl, {
       headers: { 'Cache-Control': 'no-cache', Accept: 'application/rss+xml, application/xml' },
+      signal,
     });
     if (!response.ok) {
       throw new Error(`Sparkle appcast request failed with HTTP ${response.status}`);
