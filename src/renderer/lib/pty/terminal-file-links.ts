@@ -278,9 +278,10 @@ function canHardJoin(
 /**
  * Ink-style renderers may insert a real newline and indentation while wrapping
  * a path before the terminal's last column. Keep this exception narrower than
- * the general hard-wrap rule: the upper fragment must end in `/`, the lower
- * row must be visibly indented, and joining them must produce a complete file
- * candidate that crosses the row boundary.
+ * the general hard-wrap rule: the upper fragment must end at a visible path
+ * break (`/` between segments or `-` inside a filename), the lower row must be
+ * indented, and joining them must produce a complete file candidate that
+ * crosses the row boundary.
  */
 function hasIndentedPathContinuation(
   upperText: string,
@@ -290,11 +291,24 @@ function hasIndentedPathContinuation(
   if (continuationIndent < 2 || !lowerStripped || URL_IN_PROGRESS_RE.test(upperText)) return false;
 
   const tail = TRAILING_PATH_RUN_RE.exec(upperText)?.[0];
-  if (!tail || tail === '/' || !tail.endsWith('/')) return false;
+  if (!tail || tail === '/' || !tail.includes('/')) return false;
 
-  return extractTerminalFileLinkCandidates(`${tail}${lowerStripped}`).some(
-    (candidate) =>
-      candidate.index === 0 && candidate.text.length > tail.length && !candidate.text.endsWith('/')
+  const joinedCandidate = extractTerminalFileLinkCandidates(`${tail}${lowerStripped}`).find(
+    (candidate) => candidate.index === 0 && candidate.text.length > tail.length
+  );
+  if (!joinedCandidate || joinedCandidate.text.endsWith('/')) return false;
+  if (tail.endsWith('/')) return true;
+
+  // A trailing hyphen is a word-wrap opportunity used by Ink renderers inside
+  // long basenames (`terminal-file-` + `links.ts`). Keep this filename case
+  // distinct from directory continuation: the next row may only contribute
+  // the rest of that basename, never another path with its own `/`.
+  if (!tail.endsWith('-')) return false;
+  const continuation = joinedCandidate.text.slice(tail.length);
+  if (!/^[\p{L}\p{N}]/u.test(continuation) || continuation.includes('/')) return false;
+
+  return !extractTerminalFileLinkCandidates(lowerStripped).some(
+    (candidate) => candidate.index === 0
   );
 }
 

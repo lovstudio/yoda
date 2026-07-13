@@ -468,6 +468,82 @@ describe('terminal file links', () => {
     ]);
   });
 
+  it.each([
+    {
+      label: 'implementation',
+      lines: [
+        '- 实现： /Users/mark/lovstudio/coding/yoda/src/renderer/lib/pty/terminal-file-',
+        '  links.ts:256',
+      ],
+      text: '/Users/mark/lovstudio/coding/yoda/src/renderer/lib/pty/terminal-file-links.ts:256',
+      filePath: 'src/renderer/lib/pty/terminal-file-links.ts',
+      line: 256,
+    },
+    {
+      label: 'regression test',
+      lines: [
+        '- 精确回归： /Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-',
+        '  links.test.ts:412',
+      ],
+      text: '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts:412',
+      filePath: 'src/renderer/tests/terminal-file-links.test.ts',
+      line: 412,
+    },
+  ])(
+    'keeps the screenshot $label path whole across a hyphenated filename wrap',
+    ({ lines, text, filePath, line }) => {
+      const terminal = makeTerminal(lines, { cols: 120 });
+      const options = {
+        workspaceRoot: '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln',
+        workspaceRootAliases: ['/Users/mark/lovstudio/coding/yoda'],
+        onOpen: (): void => undefined,
+      };
+      const expected = { text, filePath, line };
+
+      for (const row of [1, 2]) {
+        expect(
+          getTerminalFileLinkMatches(terminal, row, options).map((match) => ({
+            text: match.text,
+            filePath: match.target.filePath,
+            line: match.target.line,
+          }))
+        ).toEqual([expected]);
+      }
+    }
+  );
+
+  it('does not join an indented path after an unmarked filename fragment', () => {
+    const terminal = makeTerminal(
+      ['说明 src/renderer/component', '  components/SkillDetailSidebar.tsx'],
+      { cols: 80 }
+    );
+    const options = {
+      workspaceRoot: '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln',
+      onOpen: (): void => undefined,
+    };
+
+    expect(getTerminalFileLinkMatches(terminal, 1, options)).toEqual([]);
+    expect(getTerminalFileLinkMatches(terminal, 2, options).map(({ text }) => text)).toEqual([
+      'components/SkillDetailSidebar.tsx',
+    ]);
+  });
+
+  it('does not join a hyphenated filename fragment to an independent indented path', () => {
+    const terminal = makeTerminal(
+      ['说明 src/renderer/generated-', '  components/SkillDetailSidebar.tsx'],
+      { cols: 80 }
+    );
+    const options = {
+      workspaceRoot: '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln',
+      onOpen: (): void => undefined,
+    };
+
+    expect(getTerminalFileLinkMatches(terminal, 1, options)).toEqual([]);
+    expect(getTerminalFileLinkMatches(terminal, 2, options).map(({ text }) => text)).toEqual([
+      'components/SkillDetailSidebar.tsx',
+    ]);
+  });
+
   it('recognizes the complete hard-wrapped path with a spaced directory from either row', () => {
     const terminal = makeTerminal([
       '- /Users/mark/Library/Application Support/com.lovstudio.ymux/logs/web-',
