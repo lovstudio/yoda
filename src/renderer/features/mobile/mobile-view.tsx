@@ -1,10 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import {
-  Check,
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Cloud,
   Copy,
   ExternalLink,
@@ -12,15 +9,13 @@ import {
   LogIn,
   Network,
   RefreshCw,
-  Rocket,
   ShieldCheck,
   Smartphone,
   WifiOff,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { MobileGatewayMode } from '@shared/mobile-api';
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import {
@@ -32,8 +27,12 @@ import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
-import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
+import {
+  deriveRelayConnectionUiState,
+  hasReachableLocalGateway,
+  type RelayConnectionPhase,
+} from './mobile-connection-state';
 
 const TAILSCALE_DOWNLOAD_URL = 'https://tailscale.com/download';
 const TAILSCALE_SETUP_URL = 'https://tailscale.com/kb/1017/install';
@@ -54,65 +53,33 @@ function copy(value: string, successMessage: string, failureMessage: string): vo
     .catch(() => toast.error(failureMessage));
 }
 
-function QRBox({ value, disabledLabel }: { value: string | null; disabledLabel: string }) {
+function QRBox({
+  value,
+  label,
+  disabledLabel,
+}: {
+  value: string | null;
+  label: string;
+  disabledLabel: string;
+}) {
   return (
-    <div className="flex aspect-square w-[204px] items-center justify-center rounded-lg border border-border bg-white p-3">
+    <div className="flex aspect-square w-[204px] max-w-full items-center justify-center rounded-xl border border-border bg-white p-3 shadow-xs">
       {value ? (
-        <QRCodeSVG value={value} size={180} marginSize={2} bgColor="#ffffff" fgColor="#171717" />
+        <QRCodeSVG
+          value={value}
+          size={180}
+          marginSize={2}
+          bgColor="#ffffff"
+          fgColor="#171717"
+          title={label}
+          className="h-auto max-w-full"
+        />
       ) : (
-        <div className="flex flex-col items-center gap-2 text-center text-xs text-foreground-muted">
-          <WifiOff className="size-5" />
+        <div className="flex max-w-36 flex-col items-center gap-3 text-center text-xs leading-5 text-foreground-muted">
+          <Smartphone className="size-6" />
           <span>{disabledLabel}</span>
         </div>
       )}
-    </div>
-  );
-}
-
-function StepIndicator({
-  steps,
-  current,
-  onSelect,
-}: {
-  steps: { title: string; label: string }[];
-  current: number;
-  onSelect: (index: number) => void;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      {steps.map((step, index) => (
-        <Fragment key={step.title}>
-          {index > 0 ? <div aria-hidden className="h-px flex-1 bg-border" /> : null}
-          <button
-            type="button"
-            aria-label={step.label}
-            aria-current={index === current ? 'step' : undefined}
-            onClick={() => onSelect(index)}
-            className="flex items-center gap-2"
-          >
-            <span
-              className={cn(
-                'flex size-6 items-center justify-center rounded-full border font-mono text-xs',
-                index === current
-                  ? 'border-foreground bg-foreground text-background'
-                  : index < current
-                    ? 'border-border bg-background-quaternary-1 text-foreground'
-                    : 'border-border text-foreground-muted'
-              )}
-            >
-              {index < current ? <Check className="size-3.5" /> : index + 1}
-            </span>
-            <span
-              className={cn(
-                'text-sm',
-                index === current ? 'font-medium text-foreground' : 'text-foreground-muted'
-              )}
-            >
-              {step.title}
-            </span>
-          </button>
-        </Fragment>
-      ))}
     </div>
   );
 }
@@ -152,16 +119,58 @@ function InfoRow({
   );
 }
 
+function relayStatusLabel(phase: RelayConnectionPhase, t: (key: string) => string): string {
+  switch (phase) {
+    case 'loading':
+      return t('sidebar.mobileConnection.relayChecking');
+    case 'gateway-unavailable':
+      return t('sidebar.mobileConnection.gatewayUnavailableForRelay');
+    case 'account-unavailable':
+      return t('sidebar.mobileConnection.accountStatusLoadFailed');
+    case 'load-error':
+      return t('sidebar.mobileConnection.relayStatusLoadFailed');
+    case 'needs-sign-in':
+      return t('sidebar.mobileConnection.relayNeedsSignIn');
+    case 'needs-enable':
+      return t('sidebar.mobileConnection.relayNotEnabled');
+    case 'connecting':
+      return t('sidebar.mobileConnection.relayConnecting');
+    case 'offline':
+      return t('sidebar.mobileConnection.relayDisconnected');
+    case 'pairing-ready':
+      return t('sidebar.mobileConnection.relayPairingReady');
+    case 'pairing-expired':
+      return t('sidebar.mobileConnection.relayPairingExpired');
+    case 'ready':
+      return t('sidebar.mobileConnection.relayConnected');
+  }
+}
+
+function localizedConnectionError(error: unknown, t: (key: string) => string): string {
+  const message = userFacingError(error);
+  if (message.includes('Yoda Relay credential was rejected')) {
+    return t('sidebar.mobileConnection.relayCredentialRejected');
+  }
+  if (message.includes('Yoda Relay Pass is not active')) {
+    return t('sidebar.mobileConnection.relayPassInactive');
+  }
+  if (message.includes('Yoda Relay was connected by another Yoda instance')) {
+    return t('sidebar.mobileConnection.relayReplaced');
+  }
+  if (message.includes('Relay device is unavailable')) {
+    return t('sidebar.mobileConnection.relayDeviceUnavailable');
+  }
+  return message;
+}
+
 export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useTranslation();
   const account = useAccountSession();
   const signIn = useAccountSignIn();
   const showAccountDeviceFlow = useShowModal('accountDeviceFlowModal');
-  const { data, isLoading, isFetching, error, refetch } = useQuery({
+  const gateway = useQuery({
     queryKey: ['mobileGateway', 'connectionInfo'],
     queryFn: () => rpc.mobileGateway.getConnectionInfo(),
-    // The QR encodes the current Tailscale or LAN IP; poll so a network change while the
-    // panel is open refreshes it (and lets the gateway restart Metro).
     refetchInterval: 5000,
   });
   const relay = useQuery({
@@ -171,40 +180,58 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
   });
   const [relayBusy, setRelayBusy] = useState(false);
   const [relayError, setRelayError] = useState<string | null>(null);
+  const [showFallbackQr, setShowFallbackQr] = useState(false);
+  const [showDeveloperQr, setShowDeveloperQr] = useState(false);
   const isAccountSignedIn = account.data?.isSignedIn === true;
 
-  useAccountAuthWarmUp(!account.isLoading && !isAccountSignedIn);
+  useAccountAuthWarmUp(!account.isLoading && !account.error && !isAccountSignedIn);
 
-  // The Dev/Prod view is a manual switch; it defaults to the host's real runtime
-  // mode once the connection info loads, but the user can flip it to inspect the
-  // other mode's connection methods.
-  const runtimeMode = data?.mode;
-  const [selectedMode, setSelectedMode] = useState<MobileGatewayMode | null>(null);
-  const mode = selectedMode ?? runtimeMode ?? 'production';
-  const [stepIndex, setStepIndex] = useState(0);
-
+  const data = gateway.data;
   const primaryUrl = data?.urls[0] ?? (data ? `http://localhost:${data.port}` : '');
   const localExpoUrl = data?.localExpoUrl ?? null;
   const installUrl = data?.installUrl ?? '';
-  const pairingUrl = data?.pairingUrl ?? null;
-  const effectivePairingUrl = relay.data?.pairingUrl ?? pairingUrl;
-  const isReady = Boolean(data?.running && data.token && primaryUrl && pairingUrl);
-  const isDevView = mode === 'development';
-  // Dev connection methods only exist in a dev build of the host app.
-  const devUnavailable = Boolean(data) && runtimeMode !== 'development';
+  const localPairingUrl = data?.pairingUrl ?? null;
+  const isLocalReady = hasReachableLocalGateway(data);
+  const reachableLocalPairingUrl = isLocalReady ? localPairingUrl : null;
+  const isDevelopmentBuild = data?.mode === 'development';
+  const relayState = deriveRelayConnectionUiState({
+    gatewayLoading: gateway.isLoading,
+    gatewayReady: Boolean(data?.running && data.token),
+    accountLoading: account.isLoading,
+    accountUnavailable: Boolean(!account.data && account.error),
+    isSignedIn: isAccountSignedIn,
+    relayLoading: relay.isLoading,
+    relayUnavailable: Boolean(!relay.data && relay.error),
+    relay: relay.data,
+  });
+  const relayIsHealthy = relayState.phase === 'ready' || relayState.phase === 'pairing-ready';
+  const relayIsPending = relayState.phase === 'loading' || relayState.phase === 'connecting';
+  const rawConnectionError =
+    relayError ?? relay.error ?? account.error ?? relay.data?.lastError ?? null;
+  const relayErrorText = rawConnectionError
+    ? account.error === rawConnectionError
+      ? t('sidebar.mobileConnection.accountStatusLoadFailed')
+      : localizedConnectionError(rawConnectionError, t)
+    : null;
+  const relayErrorCopyText = rawConnectionError ? userFacingError(rawConnectionError) : null;
 
-  const details = useMemo(() => {
+  const localDetails = useMemo(() => {
     if (!data) return '';
-    const lines = isDevView
-      ? [`${t('sidebar.mobileConnection.localExpoUrl')}: ${localExpoUrl ?? ''}`]
-      : [`${t('sidebar.mobileConnection.installUrl')}: ${installUrl}`];
-    lines.push(
+    const lines = [
       `${t('sidebar.mobileConnection.gatewayUrl')}: ${primaryUrl}`,
       `${t('sidebar.mobileConnection.token')}: ${data.token ?? ''}`,
-      `${t('sidebar.mobileConnection.pairingUrl')}: ${effectivePairingUrl ?? ''}`
-    );
+      `${t('sidebar.mobileConnection.pairingUrl')}: ${localPairingUrl ?? ''}`,
+    ];
+    if (isDevelopmentBuild) {
+      lines.unshift(`${t('sidebar.mobileConnection.localExpoUrl')}: ${localExpoUrl ?? ''}`);
+    }
     return lines.join('\n');
-  }, [data, effectivePairingUrl, isDevView, installUrl, localExpoUrl, primaryUrl, t]);
+  }, [data, isDevelopmentBuild, localExpoUrl, localPairingUrl, primaryUrl, t]);
+
+  const retryAll = async () => {
+    setRelayError(null);
+    await Promise.all([gateway.refetch(), relay.refetch(), account.refetch()]);
+  };
 
   const enableRelay = async () => {
     setRelayBusy(true);
@@ -240,7 +267,6 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
     try {
       await rpc.mobileGateway.createRelayPairing();
       await relay.refetch();
-      setStepIndex(1);
     } catch (nextError) {
       setRelayError(userFacingError(nextError));
     } finally {
@@ -248,437 +274,544 @@ export function MobileView({ embedded = false }: { embedded?: boolean } = {}) {
     }
   };
 
+  const relayAction = (() => {
+    if (
+      relayState.phase === 'load-error' ||
+      relayState.phase === 'gateway-unavailable' ||
+      relayState.phase === 'account-unavailable'
+    ) {
+      return (
+        <Button type="button" onClick={() => void retryAll()} disabled={relay.isFetching}>
+          <RefreshCw className={cn('size-4', relay.isFetching && 'animate-spin')} />
+          {t('common.retry')}
+        </Button>
+      );
+    }
+    if (relayState.phase === 'loading' || relayState.phase === 'connecting') {
+      return null;
+    }
+    if (relayState.phase === 'needs-sign-in' || relayState.phase === 'needs-enable') {
+      return (
+        <Button
+          type="button"
+          onClick={() => void enableRelay()}
+          disabled={relayBusy || account.isLoading}
+        >
+          {relayState.phase === 'needs-sign-in' ? (
+            <LogIn className="size-4" />
+          ) : (
+            <Cloud className="size-4" />
+          )}
+          {relayBusy
+            ? signIn.isPending
+              ? t('sidebar.mobileConnection.relaySigningIn')
+              : t('sidebar.mobileConnection.relayEnabling')
+            : relayState.phase === 'needs-sign-in'
+              ? t('sidebar.mobileConnection.signInToEnableRelay')
+              : t('sidebar.mobileConnection.enableRelay')}
+        </Button>
+      );
+    }
+    if (relayState.phase === 'offline') {
+      return (
+        <Button type="button" onClick={() => void enableRelay()} disabled={relayBusy}>
+          <RefreshCw className={cn('size-4', relayBusy && 'animate-spin')} />
+          {relayBusy
+            ? t('sidebar.mobileConnection.relayConnecting')
+            : t('sidebar.mobileConnection.reconnectRelay')}
+        </Button>
+      );
+    }
+    if (relayState.phase === 'pairing-ready') return null;
+    return (
+      <Button type="button" onClick={() => void createRelayPairing()} disabled={relayBusy}>
+        {relayBusy ? (
+          <RefreshCw className="size-4 animate-spin" />
+        ) : (
+          <Smartphone className="size-4" />
+        )}
+        {relayBusy
+          ? t('sidebar.mobileConnection.relayPairingGenerating')
+          : relayState.phase === 'ready'
+            ? t('sidebar.mobileConnection.generateRelayPairing')
+            : t('sidebar.mobileConnection.regenerateRelayPairing')}
+      </Button>
+    );
+  })();
+
   return (
     <div
-      className={cn('flex flex-col bg-background text-foreground', !embedded && 'h-full min-h-0')}
+      className={cn(
+        '@container flex flex-col bg-background text-foreground',
+        !embedded && 'h-full min-h-0'
+      )}
     >
-      <div
-        className={cn(
-          'flex shrink-0 items-center gap-3 border-b border-border',
-          embedded ? 'justify-end pb-3' : 'justify-between px-6 py-3'
-        )}
-      >
-        {!embedded && (
-          <div className="flex min-w-0 items-center gap-2">
-            <Smartphone className="size-4 shrink-0 text-foreground-muted" />
-            <h1 className="truncate text-sm font-medium">{t('sidebar.mobileConnection.title')}</h1>
-          </div>
-        )}
-        <div className="flex shrink-0 items-center gap-2">
-          <ToggleGroup
-            multiple={false}
-            value={[mode]}
-            onValueChange={([value]) => {
-              if (value) {
-                setSelectedMode(value as MobileGatewayMode);
-                setStepIndex(0);
-              }
-            }}
-          >
-            <ToggleGroupItem value="development" className="gap-1.5">
-              <FlaskConical className="h-3.5 w-3.5" />
-              <span>{t('sidebar.mobileConnection.modeDev')}</span>
-            </ToggleGroupItem>
-            <ToggleGroupItem value="production" className="gap-1.5">
-              <Rocket className="h-3.5 w-3.5" />
-              <span>{t('sidebar.mobileConnection.modeProd')}</span>
-            </ToggleGroupItem>
-          </ToggleGroup>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void refetch()}
-            disabled={isFetching}
-          >
-            <RefreshCw className={cn('size-4', isFetching && 'animate-spin')} />
-            {t('common.refresh')}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            disabled={!isReady || (isDevView && devUnavailable)}
-            onClick={() => copy(details, t('common.copied'), t('common.copyFailed'))}
-          >
-            <Copy className="size-4" />
-            {t('sidebar.mobileConnection.copyAll')}
-          </Button>
+      {!embedded ? (
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-6 py-3">
+          <Smartphone className="size-4 shrink-0 text-foreground-muted" />
+          <h1 className="truncate text-sm font-medium">{t('sidebar.mobileConnection.title')}</h1>
         </div>
-      </div>
+      ) : null}
 
       <div className={cn(!embedded && 'min-h-0 flex-1 overflow-y-auto')}>
         <div
-          className={cn('flex w-full flex-col gap-4', embedded ? 'py-4' : 'mx-auto max-w-2xl p-6')}
+          className={cn('flex w-full flex-col gap-4', embedded ? 'py-4' : 'mx-auto max-w-4xl p-6')}
         >
-          <div className="flex items-start gap-3 rounded-lg border border-border bg-background-quaternary-1 p-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
-              {isDevView ? <FlaskConical className="size-4" /> : <Rocket className="size-4" />}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-foreground">
-                {isDevView
-                  ? t('sidebar.mobileConnection.devHeading')
-                  : t('sidebar.mobileConnection.prodHeading')}
-              </div>
-              <p className="mt-1 text-xs leading-5 text-foreground-muted">
-                {isDevView
-                  ? t('sidebar.mobileConnection.devDescription')
-                  : t('sidebar.mobileConnection.prodDescription')}
-              </p>
-            </div>
-          </div>
-
-          {error ? (
-            <div className="rounded-lg border border-border-destructive bg-background-destructive px-3 py-2 text-xs text-foreground-destructive">
-              {t('sidebar.mobileConnection.loadFailed')}
+          {gateway.error ? (
+            <div
+              role="alert"
+              className="flex items-center gap-3 rounded-lg border border-border-destructive bg-background-destructive px-3 py-2 text-xs text-foreground-destructive"
+            >
+              <WifiOff className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                {gateway.data
+                  ? t('sidebar.mobileConnection.gatewayRefreshFailed')
+                  : t('sidebar.mobileConnection.loadFailed')}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                onClick={() => void retryAll()}
+                disabled={gateway.isFetching || relay.isFetching}
+              >
+                <RefreshCw
+                  className={cn(
+                    'size-3',
+                    (gateway.isFetching || relay.isFetching) && 'animate-spin'
+                  )}
+                />
+                {t('common.retry')}
+              </Button>
             </div>
           ) : null}
 
-          {isDevView && devUnavailable ? (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-700 dark:text-amber-300">
-              <FlaskConical className="mt-0.5 size-4 shrink-0" />
-              <span>{t('sidebar.mobileConnection.devUnavailableInProd')}</span>
-            </div>
-          ) : (
-            <>
-              <div
-                className={cn(
-                  'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs',
-                  isReady
-                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                    : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                )}
-              >
-                {isReady ? <CheckCircle2 className="size-4" /> : <WifiOff className="size-4" />}
-                <span className="font-medium">
-                  {isLoading
-                    ? t('common.loading')
-                    : isReady
-                      ? t('sidebar.mobileConnection.running')
-                      : data?.enabled
-                        ? t('sidebar.mobileConnection.notReady')
-                        : t('sidebar.mobileConnection.disabled')}
-                </span>
-                {isReady && data?.connectionKind === 'tailscale' ? (
-                  <span className="ml-auto rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium">
-                    {t('sidebar.mobileConnection.tailscaleReady')}
-                  </span>
-                ) : null}
-              </div>
-
-              <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Cloud className="size-4" />
+          <section className="overflow-hidden rounded-xl border border-border bg-background shadow-xs">
+            <div className="grid gap-6 p-5 @3xl:grid-cols-[minmax(0,1fr)_220px] @3xl:items-center">
+              <div className="min-w-0">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-foreground text-background">
+                    <Cloud className="size-4.5" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-sm font-medium">
-                        {t('sidebar.mobileConnection.relayTitle')}
-                      </div>
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                        {t('sidebar.mobileConnection.recommended')}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs leading-5 text-foreground-muted">
-                      {t('sidebar.mobileConnection.relayDescription')}
-                    </p>
-                    <div className="mt-2 flex items-center gap-2 text-xs">
-                      <span
-                        className={cn(
-                          'size-2 rounded-full',
-                          relay.data?.connected
-                            ? 'bg-emerald-500'
-                            : relay.data?.connecting
-                              ? 'animate-pulse bg-amber-500'
-                              : 'bg-foreground-tertiary-passive'
-                        )}
-                      />
-                      <span className="text-foreground-muted">
-                        {relay.data?.connected
-                          ? t('sidebar.mobileConnection.relayConnected')
-                          : relay.data?.connecting
-                            ? t('sidebar.mobileConnection.relayConnecting')
-                            : t('sidebar.mobileConnection.relayDisconnected')}
-                      </span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">
+                      {t('sidebar.mobileConnection.relayTitle')}
                     </div>
                   </div>
                 </div>
-                {relayError || relay.data?.lastError ? (
-                  <p className="mt-3 text-xs text-foreground-destructive">
-                    {relayError ?? relay.data?.lastError}
+
+                <h2 className="mt-5 text-xl font-medium tracking-tight text-foreground">
+                  {t('sidebar.mobileConnection.relayHeroTitle')}
+                </h2>
+                <p className="mt-2 max-w-lg text-sm leading-6 text-foreground-muted">
+                  {t('sidebar.mobileConnection.relayHeroDescription')}
+                </p>
+
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={cn(
+                    'mt-4 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium',
+                    relayIsHealthy
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                      : relayIsPending
+                        ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                        : 'bg-background-quaternary-1 text-foreground-muted'
+                  )}
+                >
+                  {relayIsHealthy ? (
+                    <CheckCircle2 className="size-3.5" />
+                  ) : relayIsPending ? (
+                    <RefreshCw className="size-3.5 animate-spin" />
+                  ) : (
+                    <span className="size-1.5 rounded-full bg-current opacity-70" />
+                  )}
+                  {relayStatusLabel(relayState.phase, t)}
+                </div>
+
+                {relayErrorText ? (
+                  <div
+                    role="alert"
+                    className="mt-4 flex items-start gap-2 rounded-lg border border-border-destructive bg-background-destructive px-3 py-2 text-xs leading-5 text-foreground-destructive"
+                  >
+                    <WifiOff className="mt-0.5 size-4 shrink-0" />
+                    <span className="min-w-0 flex-1 break-words">{relayErrorText}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={t('sidebar.mobileConnection.copyRelayError')}
+                      onClick={() =>
+                        copy(
+                          relayErrorCopyText ?? relayErrorText,
+                          t('common.copied'),
+                          t('common.copyFailed')
+                        )
+                      }
+                    >
+                      <Copy className="size-3" />
+                    </Button>
+                  </div>
+                ) : null}
+
+                {relayState.phase === 'pairing-expired' ? (
+                  <p className="mt-3 text-xs leading-5 text-amber-700 dark:text-amber-300">
+                    {t('sidebar.mobileConnection.relayPairingExpiredHint')}
                   </p>
                 ) : null}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {!isAccountSignedIn || !relay.data?.configured ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void enableRelay()}
-                      disabled={relayBusy || account.isLoading}
-                    >
-                      {isAccountSignedIn ? (
-                        <Cloud className="size-3.5" />
-                      ) : (
-                        <LogIn className="size-3.5" />
-                      )}
-                      {relayBusy
-                        ? signIn.isPending
-                          ? t('sidebar.mobileConnection.relaySigningIn')
-                          : t('sidebar.mobileConnection.relayEnabling')
-                        : isAccountSignedIn
-                          ? t('sidebar.mobileConnection.enableRelay')
-                          : t('sidebar.mobileConnection.signInToEnableRelay')}
-                    </Button>
-                  ) : !relay.data.connected ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void enableRelay()}
-                      disabled={relayBusy || relay.data.connecting}
-                    >
-                      <RefreshCw
-                        className={cn(
-                          'size-3.5',
-                          (relayBusy || relay.data.connecting) && 'animate-spin'
-                        )}
-                      />
-                      {relayBusy || relay.data.connecting
-                        ? t('sidebar.mobileConnection.relayConnecting')
-                        : t('sidebar.mobileConnection.reconnectRelay')}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void createRelayPairing()}
-                      disabled={relayBusy}
-                    >
-                      <Smartphone className="size-3.5" />
-                      {t('sidebar.mobileConnection.generateRelayPairing')}
-                    </Button>
-                  )}
-                </div>
+
+                {relayAction ? <div className="mt-5">{relayAction}</div> : null}
+                {relayState.phase === 'needs-sign-in' || relayState.phase === 'needs-enable' ? (
+                  <p className="mt-3 max-w-lg text-xs leading-5 text-foreground-tertiary-passive">
+                    {t('sidebar.mobileConnection.relayTrialNote')}
+                  </p>
+                ) : null}
               </div>
 
-              <div className="rounded-lg border border-border bg-background p-4">
-                <div className="flex items-start gap-3">
-                  <div
-                    className={cn(
-                      'flex size-9 shrink-0 items-center justify-center rounded-lg',
-                      data?.connectionKind === 'tailscale'
-                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                        : 'bg-background-quaternary-1 text-foreground-muted'
-                    )}
-                  >
-                    <Network className="size-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-sm font-medium">
-                        {t('sidebar.mobileConnection.tailscaleTitle')}
-                      </div>
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                          data?.connectionKind === 'tailscale'
-                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                            : 'bg-background-quaternary-1 text-foreground-muted'
-                        )}
+              <div className="flex flex-col items-center gap-3 @3xl:justify-self-end">
+                <QRBox
+                  value={relayState.pairingUrl}
+                  label={t('sidebar.mobileConnection.relayPairingQrLabel')}
+                  disabledLabel={
+                    relayState.phase === 'pairing-expired'
+                      ? t('sidebar.mobileConnection.relayPairingExpiredQr')
+                      : t('sidebar.mobileConnection.relayPairingPlaceholder')
+                  }
+                />
+                {relayState.pairingUrl ? (
+                  <>
+                    <p className="text-center text-xs leading-5 text-foreground-muted">
+                      {t('sidebar.mobileConnection.scanRelayPairing')}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() =>
+                          copy(
+                            relayState.pairingUrl ?? '',
+                            t('common.copied'),
+                            t('common.copyFailed')
+                          )
+                        }
                       >
-                        {data?.connectionKind === 'tailscale'
-                          ? t('sidebar.mobileConnection.tailscaleDetected')
-                          : t('sidebar.mobileConnection.tailscaleNotDetected')}
-                      </span>
+                        <Copy className="size-3" />
+                        {t('sidebar.mobileConnection.copyRelayPairing')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        disabled={relayBusy}
+                        onClick={() => void createRelayPairing()}
+                      >
+                        <RefreshCw className={cn('size-3', relayBusy && 'animate-spin')} />
+                        {relayBusy
+                          ? t('sidebar.mobileConnection.relayPairingGenerating')
+                          : t('sidebar.mobileConnection.regenerateRelayPairing')}
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 border-t border-border/70 bg-background-quaternary-1/45 px-5 py-3 text-xs leading-5 text-foreground-muted">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+              <span>{t('sidebar.mobileConnection.relaySecurityNote')}</span>
+            </div>
+
+            <Collapsible>
+              <CollapsibleTrigger className="group flex w-full items-center gap-3 border-t border-border/70 px-5 py-3.5 text-left hover:bg-background-1">
+                <Smartphone className="size-4 shrink-0 text-foreground-muted" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">
+                    {t('sidebar.mobileConnection.installDisclosureTitle')}
+                  </div>
+                  <div className="mt-0.5 text-xs text-foreground-muted">
+                    {t('sidebar.mobileConnection.installDisclosureDescription')}
+                  </div>
+                </div>
+                <ChevronDown className="size-4 shrink-0 text-foreground-muted transition-transform group-data-[panel-open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="grid gap-5 border-t border-border/70 p-5 @3xl:grid-cols-[204px_minmax(0,1fr)] @3xl:items-center">
+                  <QRBox
+                    value={installUrl || null}
+                    label={t('sidebar.mobileConnection.installQrLabel')}
+                    disabledLabel={t('sidebar.mobileConnection.installUnavailable')}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">
+                      {t('sidebar.mobileConnection.installTitle')}
                     </div>
                     <p className="mt-1 text-xs leading-5 text-foreground-muted">
-                      {data?.connectionKind === 'tailscale'
-                        ? t('sidebar.mobileConnection.tailscaleDetectedDescription', {
-                            url: primaryUrl,
-                          })
-                        : t('sidebar.mobileConnection.tailscaleDescription')}
+                      {t('sidebar.mobileConnection.installDescription')}
                     </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      disabled={!installUrl}
+                      onClick={() => copy(installUrl, t('common.copied'), t('common.copyFailed'))}
+                    >
+                      <Copy className="size-3.5" />
+                      {t('sidebar.mobileConnection.copyInstallUrl')}
+                    </Button>
                   </div>
                 </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </section>
 
-                {data?.connectionKind !== 'tailscale' ? (
-                  <ol className="mt-3 grid gap-2 text-xs leading-5 text-foreground-muted">
-                    {[
-                      'sidebar.mobileConnection.tailscaleStep1',
-                      'sidebar.mobileConnection.tailscaleStep2',
-                      'sidebar.mobileConnection.tailscaleStep3',
-                    ].map((key, index) => (
-                      <li key={key} className="flex gap-2">
-                        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-background-quaternary-1 font-mono text-[10px] text-foreground">
-                          {index + 1}
-                        </span>
-                        <span>{t(key)}</span>
-                      </li>
-                    ))}
-                  </ol>
-                ) : null}
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void rpc.app.openExternal(TAILSCALE_DOWNLOAD_URL)}
-                  >
-                    <ExternalLink className="size-3.5" />
-                    {t('sidebar.mobileConnection.downloadTailscale')}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void rpc.app.openExternal(TAILSCALE_SETUP_URL)}
-                  >
-                    <ExternalLink className="size-3.5" />
-                    {t('sidebar.mobileConnection.tailscaleSetupGuide')}
-                  </Button>
+          <Collapsible>
+            <CollapsibleTrigger className="group flex w-full items-center gap-3 rounded-xl border border-border bg-background px-4 py-3.5 text-left hover:bg-background-1 data-[panel-open]:rounded-b-none">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background-quaternary-1 text-foreground-muted">
+                <Network className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium">
+                  {t('sidebar.mobileConnection.alternativeConnections')}
+                </div>
+                <div className="mt-0.5 text-xs text-foreground-muted">
+                  {t('sidebar.mobileConnection.alternativeConnectionsDescription')}
                 </div>
               </div>
-
-              <div className="rounded-lg border border-border bg-background p-4">
-                <StepIndicator
-                  steps={[
-                    {
-                      title: isDevView
-                        ? t('sidebar.mobileConnection.localExpoTitle')
-                        : t('sidebar.mobileConnection.installTitle'),
-                      label: t('sidebar.mobileConnection.stepLabel', { n: 1 }),
-                    },
-                    {
-                      title: t('sidebar.mobileConnection.connectTitle'),
-                      label: t('sidebar.mobileConnection.stepLabel', { n: 2 }),
-                    },
-                  ]}
-                  current={stepIndex}
-                  onSelect={setStepIndex}
-                />
-
-                <div className="mt-5 flex flex-col items-center gap-4">
-                  {stepIndex === 0 ? (
-                    <>
-                      <p className="max-w-sm text-center text-xs leading-5 text-foreground-muted">
-                        {isDevView
-                          ? t('sidebar.mobileConnection.localExpoDescription')
-                          : t('sidebar.mobileConnection.installDescription')}
-                      </p>
-                      <QRBox
-                        value={isDevView ? localExpoUrl : installUrl || null}
-                        disabledLabel={
-                          isDevView
-                            ? t('sidebar.mobileConnection.localExpoUnavailable')
-                            : t('sidebar.mobileConnection.installUnavailable')
-                        }
-                      />
-                      <div className="w-full">
-                        {isDevView ? (
-                          <InfoRow
-                            label={t('sidebar.mobileConnection.localExpoUrl')}
-                            value={localExpoUrl ?? t('common.loading')}
-                            copyLabel={t('sidebar.mobileConnection.copyLocalExpoUrl')}
-                            disabled={!localExpoUrl}
-                          />
-                        ) : (
-                          <InfoRow
-                            label={t('sidebar.mobileConnection.installUrl')}
-                            value={installUrl || t('common.loading')}
-                            copyLabel={t('sidebar.mobileConnection.installTitle')}
-                            disabled={!installUrl}
-                          />
-                        )}
+              {data?.connectionKind === 'tailscale' ? (
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+                  {t('sidebar.mobileConnection.tailscaleDetected')}
+                </span>
+              ) : null}
+              <ChevronDown className="size-4 shrink-0 text-foreground-muted transition-transform group-data-[panel-open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="overflow-hidden rounded-b-xl border-x border-b border-border bg-background">
+                <div className="p-4">
+                  <div className="flex flex-wrap items-start gap-3">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background-quaternary-1 text-foreground-muted">
+                      <Network className="size-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-sm font-medium">
+                          {t('sidebar.mobileConnection.fallbackConnectionTitle')}
+                        </div>
+                        <span
+                          className={cn(
+                            'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                            isLocalReady
+                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                              : 'bg-background-quaternary-1 text-foreground-muted'
+                          )}
+                        >
+                          {isLocalReady
+                            ? data?.connectionKind === 'tailscale'
+                              ? t('sidebar.mobileConnection.tailscaleReady')
+                              : t('sidebar.mobileConnection.localReady')
+                            : gateway.isLoading
+                              ? t('common.loading')
+                              : t('sidebar.mobileConnection.notReady')}
+                        </span>
                       </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="max-w-sm text-center text-xs leading-5 text-foreground-muted">
-                        {relay.data?.pairingUrl
-                          ? t('sidebar.mobileConnection.relayConnectDescription')
+                      <p className="mt-1 text-xs leading-5 text-foreground-muted">
+                        {data?.connectionKind === 'local'
+                          ? t('sidebar.mobileConnection.fallbackUnavailableDescription')
                           : data?.connectionKind === 'tailscale'
-                            ? t('sidebar.mobileConnection.tailscaleConnectDescription')
-                            : t('sidebar.mobileConnection.connectDescription')}
+                            ? t('sidebar.mobileConnection.fallbackTailscaleDescription')
+                            : t('sidebar.mobileConnection.fallbackLanDescription')}
                       </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!isLocalReady}
+                      onClick={() => setShowFallbackQr((current) => !current)}
+                    >
+                      <Smartphone className="size-3.5" />
+                      {showFallbackQr
+                        ? t('sidebar.mobileConnection.hideFallbackQr')
+                        : t('sidebar.mobileConnection.showFallbackQr')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void rpc.app.openExternal(TAILSCALE_DOWNLOAD_URL)}
+                    >
+                      <ExternalLink className="size-3.5" />
+                      {t('sidebar.mobileConnection.downloadTailscale')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void rpc.app.openExternal(TAILSCALE_SETUP_URL)}
+                    >
+                      <ExternalLink className="size-3.5" />
+                      {t('sidebar.mobileConnection.tailscaleSetupGuide')}
+                    </Button>
+                  </div>
+
+                  {showFallbackQr ? (
+                    <div className="mt-4 grid gap-4 rounded-xl bg-background-quaternary-1 p-4 @3xl:grid-cols-[204px_minmax(0,1fr)] @3xl:items-center">
                       <QRBox
-                        value={relay.data?.pairingUrl ?? (isReady ? pairingUrl : null)}
+                        value={reachableLocalPairingUrl}
+                        label={t('sidebar.mobileConnection.fallbackQrLabel')}
                         disabledLabel={t('sidebar.mobileConnection.connectUnavailable')}
                       />
-                      <div className="flex w-full items-start gap-2 rounded-lg border border-border bg-background-quaternary-1 px-3 py-2 text-xs leading-5 text-foreground-muted">
-                        <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-                        <span>
-                          {t(
-                            relay.data?.pairingUrl
-                              ? 'sidebar.mobileConnection.relaySecurityNote'
-                              : 'sidebar.mobileConnection.securityNote'
-                          )}
-                        </span>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium">
+                          {t('sidebar.mobileConnection.connectTitle')}
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-foreground-muted">
+                          {data?.connectionKind === 'tailscale'
+                            ? t('sidebar.mobileConnection.tailscaleConnectDescription')
+                            : t('sidebar.mobileConnection.connectDescription')}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-3"
+                          disabled={!reachableLocalPairingUrl}
+                          onClick={() =>
+                            copy(
+                              reachableLocalPairingUrl ?? '',
+                              t('common.copied'),
+                              t('common.copyFailed')
+                            )
+                          }
+                        >
+                          <Copy className="size-3.5" />
+                          {t('sidebar.mobileConnection.copyFallbackPairing')}
+                        </Button>
+                        <div className="mt-3 flex items-start gap-2 text-xs leading-5 text-foreground-muted">
+                          <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+                          <span>{t('sidebar.mobileConnection.securityNote')}</span>
+                        </div>
                       </div>
-                      <Collapsible className="w-full">
-                        <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-xs text-foreground-muted hover:text-foreground">
-                          <span>{t('sidebar.mobileConnection.advancedDetails')}</span>
-                          <ChevronDown className="size-4 transition-transform group-data-[panel-open]:rotate-180" />
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <div className="mt-2 grid gap-2">
-                            <InfoRow
-                              label={t('sidebar.mobileConnection.gatewayUrl')}
-                              value={primaryUrl || t('common.loading')}
-                              copyLabel={t('sidebar.mobileConnection.copyGatewayUrl')}
-                              disabled={!primaryUrl}
-                            />
-                            <InfoRow
-                              label={t('sidebar.mobileConnection.token')}
-                              value={data?.token ?? t('common.loading')}
-                              copyLabel={t('sidebar.mobileConnection.copyToken')}
-                              disabled={!data?.token}
-                            />
-                            {data && data.urls.length > 1 ? (
-                              <div className="grid gap-1">
-                                <div className="text-[10px] font-mono uppercase tracking-wide text-foreground-tertiary-passive">
-                                  {t('sidebar.mobileConnection.otherAddresses')}
-                                </div>
-                                {data.urls.slice(1).map((url) => (
-                                  <button
-                                    key={url}
-                                    type="button"
-                                    className="truncate rounded-md px-2 py-1 text-left font-mono text-xs text-foreground-muted hover:bg-background-1 hover:text-foreground"
-                                    onClick={() =>
-                                      copy(url, t('common.copied'), t('common.copyFailed'))
-                                    }
-                                  >
-                                    {url}
-                                  </button>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    </>
-                  )}
-                </div>
-
-                <div className="mt-5 flex items-center justify-between">
-                  {stepIndex > 0 ? (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setStepIndex(0)}>
-                      <ChevronLeft className="size-4" />
-                      {t('common.back')}
-                    </Button>
-                  ) : (
-                    <span />
-                  )}
-                  {stepIndex === 0 ? (
-                    <Button type="button" size="sm" onClick={() => setStepIndex(1)}>
-                      {t('common.next')}
-                      <ChevronRight className="size-4" />
-                    </Button>
+                    </div>
                   ) : null}
                 </div>
+
+                {isDevelopmentBuild ? (
+                  <div className="border-t border-border/70 p-4">
+                    <div className="flex flex-wrap items-start gap-3">
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background-quaternary-1 text-foreground-muted">
+                        <FlaskConical className="size-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium">
+                          {t('sidebar.mobileConnection.developerConnectionTitle')}
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-foreground-muted">
+                          {t('sidebar.mobileConnection.localExpoDescription')}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!localExpoUrl}
+                        onClick={() => setShowDeveloperQr((current) => !current)}
+                      >
+                        {showDeveloperQr
+                          ? t('sidebar.mobileConnection.hideDeveloperQr')
+                          : t('sidebar.mobileConnection.showDeveloperQr')}
+                      </Button>
+                    </div>
+                    {showDeveloperQr ? (
+                      <div className="mt-4 grid gap-4 rounded-xl bg-background-quaternary-1 p-4 @3xl:grid-cols-[204px_minmax(0,1fr)] @3xl:items-center">
+                        <QRBox
+                          value={localExpoUrl}
+                          label={t('sidebar.mobileConnection.developerQrLabel')}
+                          disabledLabel={t('sidebar.mobileConnection.localExpoUnavailable')}
+                        />
+                        <InfoRow
+                          label={t('sidebar.mobileConnection.localExpoUrl')}
+                          value={localExpoUrl ?? t('common.loading')}
+                          copyLabel={t('sidebar.mobileConnection.copyLocalExpoUrl')}
+                          disabled={!localExpoUrl}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <Collapsible>
+                  <CollapsibleTrigger className="group flex w-full items-center gap-3 border-t border-border/70 px-4 py-3 text-left hover:bg-background-1">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">
+                        {t('sidebar.mobileConnection.connectionDiagnostics')}
+                      </div>
+                      <div className="mt-0.5 text-xs text-foreground-muted">
+                        {data?.running
+                          ? t('sidebar.mobileConnection.gatewayOnline')
+                          : t('sidebar.mobileConnection.gatewayOffline')}
+                      </div>
+                    </div>
+                    <ChevronDown className="size-4 shrink-0 text-foreground-muted transition-transform group-data-[panel-open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="grid gap-2 border-t border-border/70 bg-background-quaternary-1/45 p-4">
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs leading-5 text-foreground-muted">
+                          {t('sidebar.mobileConnection.localDiagnosticsWarning')}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          disabled={!isLocalReady}
+                          onClick={() =>
+                            copy(localDetails, t('common.copied'), t('common.copyFailed'))
+                          }
+                        >
+                          <Copy className="size-3" />
+                          {t('sidebar.mobileConnection.copyLocalDetails')}
+                        </Button>
+                      </div>
+                      <InfoRow
+                        label={t('sidebar.mobileConnection.gatewayUrl')}
+                        value={primaryUrl || t('common.loading')}
+                        copyLabel={t('sidebar.mobileConnection.copyGatewayUrl')}
+                        disabled={!primaryUrl}
+                      />
+                      <InfoRow
+                        label={t('sidebar.mobileConnection.token')}
+                        value={data?.token ?? t('common.loading')}
+                        copyLabel={t('sidebar.mobileConnection.copyToken')}
+                        disabled={!data?.token}
+                      />
+                      {data && data.urls.length > 1 ? (
+                        <div className="mt-1 grid gap-1">
+                          <div className="text-[10px] font-mono uppercase tracking-wide text-foreground-tertiary-passive">
+                            {t('sidebar.mobileConnection.otherAddresses')}
+                          </div>
+                          {data.urls.slice(1).map((url) => (
+                            <button
+                              key={url}
+                              type="button"
+                              className="truncate rounded-md px-2 py-1 text-left font-mono text-xs text-foreground-muted hover:bg-background-1 hover:text-foreground"
+                              onClick={() => copy(url, t('common.copied'), t('common.copyFailed'))}
+                            >
+                              {url}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
-            </>
-          )}
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       </div>
     </div>
