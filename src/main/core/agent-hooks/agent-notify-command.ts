@@ -70,11 +70,14 @@ function windowsCodexNotifyScript(): string {
   return [
     'param([string]$payload)',
     'try {',
+    "  $endpointPath = Join-Path $HOME '.yoda\\hook-endpoint.json'",
+    '  $endpoint = Get-Content -Raw -LiteralPath $endpointPath | ConvertFrom-Json',
+    '  if (-not $endpoint.port) { exit 0 }',
     '  Invoke-WebRequest -UseBasicParsing -Method POST ' +
-      "-Uri ('http://127.0.0.1:' + $env:YODA_HOOK_PORT + '/hook') " +
+      "-Uri ('http://127.0.0.1:' + $endpoint.port + '/hook') " +
       '-Headers @{ ' +
       "'Content-Type' = 'application/json'; " +
-      "'X-Yoda-Token' = $env:YODA_HOOK_TOKEN; " +
+      "'X-Yoda-Token' = $endpoint.token; " +
       "'X-Yoda-Pty-Id' = $env:YODA_PTY_ID; " +
       "'X-Yoda-Event-Type' = 'notification' " +
       '} -Body $payload | Out-Null',

@@ -16,6 +16,13 @@ describe('makeCodexNotifyCommand', () => {
 
     expect(mkdir).toHaveBeenCalledTimes(1);
     expect(writeFile).toHaveBeenCalledTimes(1);
+    const script = writeFile.mock.calls[0]?.[1];
+    expect(script).toContain('hook-endpoint.json');
+    expect(script).toContain('$endpoint.port');
+    expect(script).toContain('$endpoint.token');
+    expect(script).toContain('$env:YODA_PTY_ID');
+    expect(script).not.toContain('YODA_HOOK_PORT');
+    expect(script).not.toContain('YODA_HOOK_TOKEN');
   });
 });
 
