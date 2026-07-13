@@ -1,7 +1,10 @@
 import os from 'node:os';
+import path from 'node:path';
 import { createRPCController } from '@/shared/ipc/rpc';
-import type { SkillTriggerQuery } from '@shared/skills/types';
+import type { SkillEvaluationCase, SkillTriggerQuery } from '@shared/skills/types';
 import { getSkillUsageStats } from '@main/core/skills/getUsageStats';
+import { SkillEvaluationStore } from '@main/core/skills/skill-evaluation-store';
+import { routeSkills } from '@main/core/skills/skill-router';
 import { skillsService } from '@main/core/skills/SkillsService';
 import { cancelSkillTriggerRuns, runSkillTriggerQuery } from '@main/core/skills/trigger-test';
 import { requestUtilityAgentJson } from '@main/core/tasks/name-generation/task-naming-service';
@@ -10,6 +13,10 @@ import { log } from '@main/lib/logger';
 function ensureTrailingNewline(content: string): string {
   return content.endsWith('\n') ? content : `${content}\n`;
 }
+
+const evaluationStore = new SkillEvaluationStore(
+  path.join(os.homedir(), '.agentskills', '.yoda', 'evaluations.json')
+);
 
 function parseTriggerQueries(raw: unknown): SkillTriggerQuery[] {
   if (!Array.isArray(raw)) return [];
@@ -46,9 +53,9 @@ export const skillsController = createRPCController({
     }
   },
 
-  install: async (args: { skillId: string }) => {
+  install: async (args: { skillKey: string }) => {
     try {
-      const skill = await skillsService.installSkill(args.skillId);
+      const skill = await skillsService.installSkill(args.skillKey);
       return { success: true, data: skill };
     } catch (error) {
       log.error('Failed to install skill:', error);
@@ -56,9 +63,9 @@ export const skillsController = createRPCController({
     }
   },
 
-  uninstall: async (args: { skillId: string }) => {
+  uninstall: async (args: { skillKey: string }) => {
     try {
-      await skillsService.uninstallSkill(args.skillId);
+      await skillsService.uninstallSkill(args.skillKey);
       return { success: true };
     } catch (error) {
       log.error('Failed to uninstall skill:', error);
@@ -66,9 +73,9 @@ export const skillsController = createRPCController({
     }
   },
 
-  setDisabled: async (args: { skillId: string; disabled: boolean }) => {
+  setDisabled: async (args: { skillKey: string; disabled: boolean }) => {
     try {
-      const skill = await skillsService.setSkillDisabled(args.skillId, args.disabled);
+      const skill = await skillsService.setSkillDisabled(args.skillKey, args.disabled);
       return { success: true, data: skill };
     } catch (error) {
       log.error('Failed to update skill disabled state:', error);
@@ -76,9 +83,9 @@ export const skillsController = createRPCController({
     }
   },
 
-  getDetail: async (args: { skillId: string }) => {
+  getDetail: async (args: { skillKey: string }) => {
     try {
-      const skill = await skillsService.getSkillDetail(args.skillId);
+      const skill = await skillsService.getSkillDetail(args.skillKey);
       return { success: true, data: skill };
     } catch (error) {
       log.error('Failed to get skill detail:', error);
@@ -107,12 +114,88 @@ export const skillsController = createRPCController({
     }
   },
 
-  tryTriggerQuery: async (args: { skillId: string; query: string }) => {
+  getFiles: async (args: { skillKey: string }) => {
     try {
-      const skill = await skillsService.getSkillDetail(args.skillId);
-      if (!skill) throw new Error(`Skill not found: ${args.skillId}`);
+      return { success: true, data: await skillsService.getSkillFiles(args.skillKey) };
+    } catch (error) {
+      log.error('Failed to get skill files:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  route: async (args: {
+    query: string;
+    projectPath?: string;
+    allowedSkillKeys?: string[];
+    limit?: number;
+  }) => {
+    try {
+      const catalog = await skillsService.getCatalogIndex(args.projectPath);
+      return {
+        success: true,
+        data: routeSkills({
+          query: args.query,
+          skills: catalog.skills,
+          allowedSkillKeys: args.allowedSkillKeys ? new Set(args.allowedSkillKeys) : undefined,
+          limit: args.limit,
+        }),
+      };
+    } catch (error) {
+      log.error('Failed to route skills:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  getEvaluation: async (args: { skillKey: string }) => {
+    try {
+      return { success: true, data: await evaluationStore.get(args.skillKey) };
+    } catch (error) {
+      log.error('Failed to load skill evaluation:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  saveEvaluationCases: async (args: { skillKey: string; cases: SkillEvaluationCase[] }) => {
+    try {
+      await evaluationStore.saveCases(args.skillKey, args.cases);
+      return { success: true };
+    } catch (error) {
+      log.error('Failed to save skill evaluation cases:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  markReviewed: async (args: { skillKey: string }) => {
+    try {
+      return { success: true, data: await skillsService.markSkillReviewed(args.skillKey) };
+    } catch (error) {
+      log.error('Failed to mark skill as reviewed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  tryTriggerQuery: async (args: {
+    skillKey: string;
+    caseId: string;
+    query: string;
+    shouldTrigger: boolean;
+  }) => {
+    try {
+      const skill = await skillsService.getSkillDetail(args.skillKey);
+      if (!skill) throw new Error(`Skill not found: ${args.skillKey}`);
       const skillNames = [skill.id, skill.frontmatter.name].filter(Boolean);
       const result = await runSkillTriggerQuery({ query: args.query, skillNames });
+      const passed = args.shouldTrigger
+        ? result.status === 'triggered'
+        : result.status === 'not-triggered' || result.status === 'other-skill';
+      await evaluationStore.recordResult(skill.key, {
+        caseId: args.caseId,
+        result,
+        passed,
+        runtime: 'claude',
+        contentHash: skill.contentHash,
+        runAt: new Date().toISOString(),
+      });
       return { success: true, data: result };
     } catch (error) {
       log.error('Failed to run skill trigger query:', error);
@@ -125,10 +208,10 @@ export const skillsController = createRPCController({
     return { success: true };
   },
 
-  generateTriggerQueries: async (args: { skillId: string }) => {
+  generateTriggerQueries: async (args: { skillKey: string }) => {
     try {
-      const skill = await skillsService.getSkillDetail(args.skillId);
-      if (!skill) throw new Error(`Skill not found: ${args.skillId}`);
+      const skill = await skillsService.getSkillDetail(args.skillKey);
+      if (!skill) throw new Error(`Skill not found: ${args.skillKey}`);
       const prompt = [
         'You design trigger tests for an agent skill. A trigger test checks whether',
         'a coding agent invokes the skill for a given user query.',
@@ -136,8 +219,9 @@ export const skillsController = createRPCController({
         'Rules:',
         '- Produce exactly 3 queries that SHOULD trigger the skill: realistic user requests,',
         '  varied phrasing, written in the same language as the skill description.',
-        '- Produce exactly 2 queries that should NOT trigger it: adjacent but out-of-scope',
-        '  requests that a careless description would wrongly match.',
+        '- Produce exactly 3 queries that should NOT trigger it: two difficult nearest-neighbor',
+        '  requests plus one request for which no skill should be selected. These should expose',
+        '  overly broad descriptions instead of being obviously unrelated.',
         '- Keep each query under 120 characters.',
         'JSON schema: {"queries":[{"text":"...","shouldTrigger":true}]}',
         '',
@@ -155,10 +239,10 @@ export const skillsController = createRPCController({
   },
 
   /** AI-revise a skill's SKILL.md per a user instruction. Returns the proposal; nothing is written. */
-  revise: async (args: { skillId: string; instruction: string }) => {
+  revise: async (args: { skillKey: string; instruction: string }) => {
     try {
-      const skill = await skillsService.getSkillDetail(args.skillId);
-      if (!skill?.skillMdContent) throw new Error(`Skill content unavailable: ${args.skillId}`);
+      const skill = await skillsService.getSkillDetail(args.skillKey);
+      if (!skill?.skillMdContent) throw new Error(`Skill content unavailable: ${args.skillKey}`);
       const prompt = [
         'You revise an agent skill definition (a SKILL.md file with YAML frontmatter).',
         'Apply the user instruction to the file. Keep everything the instruction does not',
@@ -185,9 +269,9 @@ export const skillsController = createRPCController({
     }
   },
 
-  updateContent: async (args: { skillId: string; content: string }) => {
+  updateContent: async (args: { skillKey: string; content: string }) => {
     try {
-      const skill = await skillsService.updateSkillContent(args.skillId, args.content);
+      const skill = await skillsService.updateSkillContent(args.skillKey, args.content);
       return { success: true, data: skill };
     } catch (error) {
       log.error('Failed to update skill content:', error);
@@ -195,9 +279,9 @@ export const skillsController = createRPCController({
     }
   },
 
-  duplicate: async (args: { skillId: string; newName: string }) => {
+  duplicate: async (args: { skillKey: string; newName: string }) => {
     try {
-      const skill = await skillsService.duplicateSkill(args.skillId, args.newName);
+      const skill = await skillsService.duplicateSkill(args.skillKey, args.newName);
       return { success: true, data: skill };
     } catch (error) {
       log.error('Failed to duplicate skill:', error);

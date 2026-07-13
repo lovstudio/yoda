@@ -210,6 +210,7 @@ class RoomConductor {
           runtime,
           title: member.displayName,
           autoApprove: member.autoApprove,
+          skillSelection: member.skillSelection ?? undefined,
           initialPrompt: subst(`${systemPrompt}\n\n${turnPrompt}`),
         });
         await setMemberConversation(member.id, conversationId);

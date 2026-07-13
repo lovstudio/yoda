@@ -1,5 +1,7 @@
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import { findRuntimePermissionMode, getRuntime, type RuntimeId } from '@shared/runtime-registry';
+import type { SkillSessionPolicy } from '@shared/skills/types';
+import { buildClaudeSkillOverrides, buildCodexSkillConfig } from './skill-runtime-policy';
 
 export type AgentCommand = {
   command: string;
@@ -224,6 +226,7 @@ export function buildAgentCommand({
   appendSystemPrompt,
   model,
   terminalThemeMode,
+  skillPolicy,
 }: {
   runtimeId: RuntimeId;
   providerConfig: RuntimeCustomConfig | undefined;
@@ -248,6 +251,8 @@ export function buildAgentCommand({
    * terminal background. Omit for non-interactive or shareable commands.
    */
   terminalThemeMode?: 'light' | 'dark';
+  /** Concrete skill paths captured with the conversation. */
+  skillPolicy?: SkillSessionPolicy;
 }): AgentCommand {
   const providerDef = getRuntime(runtimeId);
   const [command, ...args] = parseCliPrefix(providerConfig?.cli, runtimeId);
@@ -313,19 +318,26 @@ export function buildAgentCommand({
 
   const extraArgs = parseArgField(providerConfig?.extraArgs);
 
+  if (skillPolicy && runtimeId === 'codex') {
+    args.push('-c', `skills.config=${buildCodexSkillConfig(skillPolicy)}`);
+  }
+
   // Claude ignores OSC 11 terminal-background detection once a theme is set in
   // its own config, so its dark-theme palette (e.g. pale blue 256-color 153)
   // washes out on Yoda's light terminal. Pass the terminal's mode explicitly so
   // the TUI's colors track the background. `--settings` merges over the user's
   // config (theme only); skip if the user already supplies their own --settings.
   const isClaudeCli = command === 'claude' || command.endsWith('/claude');
-  if (
-    isClaudeCli &&
-    terminalThemeMode &&
-    !args.includes('--settings') &&
-    !extraArgs.includes('--settings')
-  ) {
-    args.push('--settings', JSON.stringify({ theme: terminalThemeMode }));
+  const canInjectClaudeSettings =
+    isClaudeCli && !args.includes('--settings') && !extraArgs.includes('--settings');
+  if (canInjectClaudeSettings && (terminalThemeMode || skillPolicy)) {
+    args.push(
+      '--settings',
+      JSON.stringify({
+        ...(terminalThemeMode ? { theme: terminalThemeMode } : {}),
+        ...(skillPolicy ? { skillOverrides: buildClaudeSkillOverrides(skillPolicy) } : {}),
+      })
+    );
   }
 
   args.push(...extraArgs);

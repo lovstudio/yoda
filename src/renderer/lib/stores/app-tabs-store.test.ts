@@ -40,6 +40,24 @@ describe('AppTabsStore navigation history integration', () => {
     expect(navigation._applyNavigation).not.toHaveBeenCalled();
   });
 
+  it('reuses the active skill tab for an in-detail list selection', () => {
+    const navigation = createNavigationStub();
+    const tabs = new AppTabsStore(navigation);
+    tabs.openTab('skill', { skillId: 'alpha', displayName: 'Alpha' });
+    const activeId = tabs.activeTabId;
+    vi.mocked(navigation.navigate).mockClear();
+
+    tabs.replaceActiveTab('skill', { skillId: 'beta', displayName: 'Beta' });
+
+    expect(tabs.activeTabId).toBe(activeId);
+    expect(tabs.tabs.filter((tab) => tab.viewId === 'skill')).toHaveLength(1);
+    expect(tabs.activeTab?.params).toEqual({ skillId: 'beta', displayName: 'Beta' });
+    expect(navigation.navigate).toHaveBeenCalledWith('skill', {
+      skillId: 'beta',
+      displayName: 'Beta',
+    });
+  });
+
   it('records explicit tab activation but not the fallback after closing it', () => {
     const navigation = createNavigationStub();
     const tabs = new AppTabsStore(navigation);

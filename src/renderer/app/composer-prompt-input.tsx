@@ -30,7 +30,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
 import type { RuntimeId } from '@shared/runtime-registry';
-import type { CatalogIndex } from '@shared/skills/types';
+import type { CatalogIndex, SkillSelectionInput } from '@shared/skills/types';
 import { recordSkillInvocation } from '@renderer/features/skills/skill-usage-stats';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -79,6 +79,7 @@ import {
 type SkillShortcutPrefix = '/' | '$';
 
 interface SkillShortcutOption {
+  skillKey: string;
   value: string;
   label: string;
   description: string;
@@ -110,6 +111,8 @@ export interface ComposerPromptInputProps {
   runtimeId: RuntimeId | null;
   projectId?: string | null;
   projectPath?: string;
+  /** Agent profile for this session: auto skills may be suggested; manual skills remain explicit. */
+  skillSelection?: SkillSelectionInput;
   runHostKind?: ComposerPromptInputRunHostKind;
   className?: string;
   containerClassName?: string;
@@ -309,6 +312,7 @@ export function ComposerPromptInput({
   runtimeId,
   projectId = null,
   projectPath,
+  skillSelection,
   runHostKind = 'local',
   className,
   containerClassName = 'border-border bg-background-1',
@@ -357,17 +361,28 @@ export function ComposerPromptInput({
     },
   });
   const skillShortcutOptions = useMemo<SkillShortcutOption[]>(() => {
+    const configuredKeys = skillSelection
+      ? new Set([...skillSelection.autoSkillKeys, ...skillSelection.manualSkillKeys])
+      : null;
     const installed = (skillCatalog?.skills ?? [])
-      .filter((skill) => skill.installed)
+      .filter(
+        (skill) =>
+          skill.installed &&
+          (!configuredKeys ||
+            skill.scope === 'plugin' ||
+            configuredKeys.has(skill.key) ||
+            configuredKeys.has(skill.id))
+      )
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
     return installed.map((skill) => ({
+      skillKey: skill.key,
       value: skill.id,
       label: skill.displayName,
       description: skill.description,
       command: runtimeId ? applyAgentCommandPrefix(runtimeId, skill.id) : skill.id,
     }));
-  }, [runtimeId, skillCatalog?.skills]);
+  }, [runtimeId, skillCatalog?.skills, skillSelection]);
   const skillIdByShortcutCommand = useMemo(
     () => new Map(skillShortcutOptions.map((skill) => [skill.command, skill.value])),
     [skillShortcutOptions]
@@ -455,6 +470,58 @@ export function ComposerPromptInput({
   const activeSkillShortcutKey = activeSkillShortcut
     ? `${activeSkillShortcut.start}:${activeSkillShortcut.end}:${activeSkillShortcut.prefix}:${activeSkillShortcut.query}`
     : null;
+  const automaticSkillKeys = useMemo(
+    () => skillSelection?.autoSkillKeys ?? [],
+    [skillSelection?.autoSkillKeys]
+  );
+  const automaticSkillKeysKey = automaticSkillKeys.join('\0');
+  const [routingQuery, setRoutingQuery] = useState('');
+  useEffect(() => {
+    const intent = value.trim();
+    const containsExplicitSkill = skillShortcutOptions.some((option) =>
+      intent.includes(option.command)
+    );
+    if (
+      !focused ||
+      disabled ||
+      activeSkillShortcut ||
+      automaticSkillKeys.length === 0 ||
+      intent.length < 8 ||
+      containsExplicitSkill
+    ) {
+      setRoutingQuery('');
+      return;
+    }
+    const timer = window.setTimeout(() => setRoutingQuery(intent), 320);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeSkillShortcut,
+    automaticSkillKeys.length,
+    disabled,
+    focused,
+    skillShortcutOptions,
+    value,
+  ]);
+  const { data: routedSkills = [] } = useQuery({
+    queryKey: ['skills', 'route', routingQuery, projectPath ?? null, automaticSkillKeysKey],
+    queryFn: async () => {
+      const result = await rpc.skills.route({
+        query: routingQuery,
+        projectPath,
+        allowedSkillKeys: automaticSkillKeys,
+        limit: 3,
+      });
+      if (result.success && result.data) return result.data;
+      throw new Error(result.error ?? 'Failed to route skills');
+    },
+    enabled: Boolean(routingQuery),
+    staleTime: 30_000,
+  });
+  const visibleRoutedSkills = routedSkills.filter(
+    (suggestion) =>
+      suggestion.confidence !== 'low' &&
+      skillShortcutOptions.some((option) => option.skillKey === suggestion.skillKey)
+  );
   const filteredSkillShortcutOptions = useMemo(() => {
     if (!activeSkillShortcut) return [];
     const searchQuery = skillShortcutSearchQuery.trim();
@@ -1198,6 +1265,31 @@ export function ComposerPromptInput({
                 );
               })()}
           </div>
+          {visibleRoutedSkills.length > 0 && routingQuery === value.trim() && (
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-border/50 px-3 py-2">
+              <span className="mr-0.5 flex items-center gap-1 text-[10px] font-medium text-foreground-muted">
+                <Sparkles className="size-3" />
+                {t('home.suggestedSkills')}
+              </span>
+              {visibleRoutedSkills.map((suggestion) => {
+                const option = skillShortcutOptions.find(
+                  (candidate) => candidate.skillKey === suggestion.skillKey
+                );
+                if (!option) return null;
+                return (
+                  <button
+                    key={suggestion.skillKey}
+                    type="button"
+                    title={suggestion.reason}
+                    onClick={() => commitSkillShortcut(option.command)}
+                    className="rounded-full border border-border bg-background-2/70 px-2 py-0.5 text-[11px] text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10"
+                  >
+                    {suggestion.displayName}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="flex items-center justify-between gap-2 px-2.5 py-2">
             <div className="flex items-center gap-1">
               <input

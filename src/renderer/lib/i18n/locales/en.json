@@ -1038,6 +1038,7 @@
     "skillShortcutAria": "Insert skill",
     "skillShortcutLabel": "Skills",
     "searchSkills": "Search skills...",
+    "suggestedSkills": "Suggested skills",
     "developmentParadigm": "Development paradigm",
     "modeAria": "Choose development paradigm",
     "modeGroupWorkflow": "Workflow",
@@ -2008,9 +2009,17 @@
     "newSkill": "New Skill",
     "installed": "Installed",
     "recommended": "Recommended",
+    "attention": "Needs attention",
     "noMatches": "No skills match your search.",
     "noSkills": "No skills available.",
     "disabled": "Disabled",
+    "source": {
+      "openai": "OpenAI",
+      "anthropic": "Anthropic",
+      "lovstudio-general": "LovStudio General",
+      "lovstudio-dev": "LovStudio Dev",
+      "local": "Local"
+    },
     "usageTitle": "{{manual}} manual / {{auto}} agent invocations",
     "layout": {
       "ariaLabel": "Switch layout",
@@ -2028,7 +2037,7 @@
       "auto": "Most agent-invoked",
       "recent": "Recently used"
     },
-    "catalogDescription": "Skills from the <openai>OpenAI</openai> and <anthropic>Anthropic</anthropic> catalogs. Install a skill to make it available across all your coding agents. Skills follow the open <standard>Agent Skills</standard> standard. If you want to use skills from another library, feel free to let us know through the feedback modal.",
+    "catalogDescription": "Skills from the <openai>OpenAI</openai>, <anthropic>Anthropic</anthropic>, and LovStudio catalogs. Configure installed skills per Agent as automatic, manual-only, or off. Skills follow the open <standard>Agent Skills</standard> standard.",
     "create": {
       "validation": {
         "name": "Name must be lowercase letters, numbers, and hyphens (2-64 chars).",
@@ -2080,10 +2089,55 @@
       "validation": "Validation"
     },
     "compare": {
-      "action": "Compare SKILL.md",
+      "action": "Compare full skill",
       "lines": "lines",
+      "changedFiles": "{{count}} files changed",
+      "binary": "Binary files cannot be compared as text",
+      "tooLarge": "This text file is too large for an in-app diff",
+      "status": {
+        "added": "Added",
+        "deleted": "Deleted",
+        "modified": "Modified",
+        "unchanged": "Unchanged"
+      },
       "loadFailed": "Could not load skill comparison",
       "loadFailedHint": "Refresh the skill catalog and try again."
+    },
+    "scope": {
+      "catalog": "Catalog",
+      "managed": "Yoda managed",
+      "user": "User",
+      "project": "Project",
+      "plugin": "Plugin"
+    },
+    "risk": {
+      "low": "Low risk",
+      "elevated": "Review advised",
+      "high": "High risk"
+    },
+    "health": {
+      "title": "Health and safety",
+      "healthy": "No issues need attention",
+      "contentHash": "Content hash",
+      "files": "Files",
+      "size": "Total size",
+      "dependencies": "Dependencies",
+      "markReviewed": "Mark reviewed",
+      "reviewed": "Current version recorded as reviewed",
+      "reviewFailed": "Could not record reviewed version",
+      "issue": {
+        "identity-conflict": "The catalog contains same-name skill variants",
+        "runtime-name-conflict": "Another installed skill uses the same runtime name",
+        "external-install": "This installation is managed outside Yoda and cannot be removed here",
+        "validation": "The skill has format validation issues",
+        "scripted": "The skill includes executable scripts or hooks; review before enabling",
+        "network-access": "The skill contains network access instructions or code",
+        "dependency-missing": "A skill dependency is unavailable",
+        "unreviewed": "This skill has not been reviewed in Yoda yet",
+        "content-changed": "Skill files changed since the last review",
+        "content-scan-limited": "Some large text files were hashed but omitted from content and risk scanning",
+        "runtime-isolation-limited": "The current runtime cannot fully isolate this skill"
+      }
     },
     "uninstall": "Uninstall",
     "disable": "Disable",
@@ -2116,7 +2170,8 @@
       "reviseAction": "Optimize description",
       "reviseInstruction": "Improve the description field in this skill's frontmatter so the failing trigger tests below pass. Change only the description field; keep the body and other fields untouched. Failing tests:",
       "failExpectedTrigger": "expected to trigger, but did not",
-      "failExpectedNoTrigger": "expected not to trigger, but it did"
+      "failExpectedNoTrigger": "expected not to trigger, but it did",
+      "stale": "Result is stale"
     },
     "revise": {
       "action": "AI revise",
@@ -2172,6 +2227,17 @@
     "noSystemPrompt": "No system prompt",
     "skills": "Skills",
     "skillsEnabledCount": "{{count}} enabled",
+    "skillProfileTitle": "Session skill profile",
+    "skillProfileHint": "Auto skills become Agent candidates; manual skills are intended for explicit commands. Exact isolation depends on the runtime.",
+    "skillBudget": "auto",
+    "skillBudgetWarning": "More than eight automatic skills increases routing noise and context cost.",
+    "skillModeAuto": "Auto",
+    "skillModeManual": "Manual only",
+    "skillModeOff": "Off",
+    "skillModePlugin": "Plugin managed",
+    "skillScopeProject": "Project scope",
+    "skillScopeManaged": "Managed by Yoda",
+    "skillScopeExternal": "External installation",
     "noEnabledSkills": "No skills enabled",
     "noSkills": "No installed skills. Install skills first to enable them here.",
     "deleteTitle": "Delete agent",

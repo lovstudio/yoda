@@ -1038,6 +1038,7 @@
     "skillShortcutAria": "插入 skill",
     "skillShortcutLabel": "Skills",
     "searchSkills": "搜索 skills…",
+    "suggestedSkills": "建议技能",
     "developmentParadigm": "开发范式",
     "modeAria": "选择开发范式",
     "modeGroupWorkflow": "工作流",
@@ -2008,9 +2009,17 @@
     "newSkill": "新建技能",
     "installed": "已安装",
     "recommended": "推荐",
+    "attention": "需关注",
     "noMatches": "没有匹配的技能。",
     "noSkills": "暂无可用技能。",
     "disabled": "已禁用",
+    "source": {
+      "openai": "OpenAI",
+      "anthropic": "Anthropic",
+      "lovstudio-general": "LovStudio 通用",
+      "lovstudio-dev": "LovStudio 开发",
+      "local": "本地"
+    },
     "usageTitle": "手动调用 {{manual}} 次 / Agent 调用 {{auto}} 次",
     "layout": {
       "ariaLabel": "切换布局",
@@ -2028,7 +2037,7 @@
       "auto": "Agent 调用最多",
       "recent": "最近使用"
     },
-    "catalogDescription": "技能来自 <openai>OpenAI</openai> 和 <anthropic>Anthropic</anthropic> 目录。安装技能后，它会在所有编码代理中可用。技能遵循开放的 <standard>Agent Skills</standard> 标准。如果你想使用其他库中的技能，欢迎通过反馈弹窗告诉我们。",
+    "catalogDescription": "技能来自 <openai>OpenAI</openai>、<anthropic>Anthropic</anthropic> 与 LovStudio 目录。安装后可按 Agent 配置为自动、仅手动或关闭。技能遵循开放的 <standard>Agent Skills</standard> 标准。",
     "create": {
       "validation": {
         "name": "名称必须为小写字母、数字和连字符（2-64 个字符）。",
@@ -2080,10 +2089,55 @@
       "validation": "校验"
     },
     "compare": {
-      "action": "对比 SKILL.md",
+      "action": "对比完整技能",
       "lines": "行",
+      "changedFiles": "{{count}} 个文件变更",
+      "binary": "二进制文件无法进行文本对比",
+      "tooLarge": "该文本文件过大，无法在应用内对比",
+      "status": {
+        "added": "新增",
+        "deleted": "删除",
+        "modified": "修改",
+        "unchanged": "未变"
+      },
       "loadFailed": "无法加载技能对比",
       "loadFailedHint": "请刷新技能目录后重试。"
+    },
+    "scope": {
+      "catalog": "目录",
+      "managed": "Yoda 管理",
+      "user": "用户级",
+      "project": "项目级",
+      "plugin": "插件"
+    },
+    "risk": {
+      "low": "低风险",
+      "elevated": "需审查",
+      "high": "高风险"
+    },
+    "health": {
+      "title": "健康与安全",
+      "healthy": "未发现需要处理的问题",
+      "contentHash": "内容哈希",
+      "files": "文件数",
+      "size": "总大小",
+      "dependencies": "依赖",
+      "markReviewed": "标记已审查",
+      "reviewed": "已记录当前审查版本",
+      "reviewFailed": "无法记录审查版本",
+      "issue": {
+        "identity-conflict": "目录中存在同名技能变体",
+        "runtime-name-conflict": "另一个已安装技能使用相同运行时名称",
+        "external-install": "此安装由 Yoda 之外管理，不能在这里卸载",
+        "validation": "技能格式存在校验问题",
+        "scripted": "技能包含可执行脚本或 hooks，启用前应审查",
+        "network-access": "技能包含网络访问指令或代码",
+        "dependency-missing": "技能依赖尚未满足",
+        "unreviewed": "此技能尚未在 Yoda 中完成审查",
+        "content-changed": "技能文件自上次审查后发生变化",
+        "content-scan-limited": "部分大型文本文件只计算了哈希，未载入内容或参与风险扫描",
+        "runtime-isolation-limited": "当前运行时无法完整隔离此技能"
+      }
     },
     "uninstall": "卸载",
     "disable": "禁用",
@@ -2116,7 +2170,8 @@
       "reviseAction": "AI 优化描述",
       "reviseInstruction": "优化这个技能 frontmatter 里的 description，让下列触发测试通过。只修改 description 字段，不要改动正文和其他字段。失败的测试：",
       "failExpectedTrigger": "期望触发，但未触发",
-      "failExpectedNoTrigger": "期望不触发，但被触发了"
+      "failExpectedNoTrigger": "期望不触发，但被触发了",
+      "stale": "结果已过期"
     },
     "revise": {
       "action": "AI 修改",
@@ -2172,6 +2227,17 @@
     "noSystemPrompt": "暂无 system prompt",
     "skills": "Skills",
     "skillsEnabledCount": "已启用 {{count}} 个",
+    "skillProfileTitle": "会话技能配置",
+    "skillProfileHint": "自动技能会进入 Agent 候选集；仅手动技能用于显式命令。具体隔离能力取决于运行时。",
+    "skillBudget": "自动",
+    "skillBudgetWarning": "自动技能超过 8 个会增加误触发和上下文成本。",
+    "skillModeAuto": "自动",
+    "skillModeManual": "仅手动",
+    "skillModeOff": "关闭",
+    "skillModePlugin": "由插件管理",
+    "skillScopeProject": "项目级",
+    "skillScopeManaged": "Yoda 托管",
+    "skillScopeExternal": "外部安装",
     "noEnabledSkills": "未启用 skill",
     "noSkills": "暂无已安装的 skill，请先在 Skills 中安装后再启用。",
     "deleteTitle": "删除 Agent",

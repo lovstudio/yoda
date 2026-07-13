@@ -46,7 +46,7 @@ function AgentCard({
           className="mt-0.5"
           runtime={agent.preferredRuntime}
           model={agent.model || t('agentManager.modelDefault')}
-          skillCount={agent.enabledSkillIds.length}
+          skillCount={agent.enabledSkillIds.length + agent.manualSkillIds.length}
         />
       }
       trailing={

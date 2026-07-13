@@ -47,8 +47,8 @@ export function sortSkills(
   if (mode === 'trigger' || mode === 'body') {
     // Decorate-sort: measuring inside the comparator would re-parse per compare.
     const measure = mode === 'trigger' ? triggerTextLength : bodyLength;
-    const lengths = new Map(skills.map((skill) => [skill.id, measure(skill)]));
-    return [...skills].sort((a, b) => (lengths.get(b.id) ?? 0) - (lengths.get(a.id) ?? 0));
+    const lengths = new Map(skills.map((skill) => [skill.key, measure(skill)]));
+    return [...skills].sort((a, b) => (lengths.get(b.key) ?? 0) - (lengths.get(a.key) ?? 0));
   }
 
   return [...skills].sort((a, b) => {

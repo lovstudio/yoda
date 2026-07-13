@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -13,13 +13,14 @@ import {
   Power,
   PowerOff,
   Route,
+  ShieldCheck,
   Sparkles,
   Trash2,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { applyAgentCommandPrefix } from '@shared/agent-command-prefix';
-import type { CatalogSkill, SkillValidationIssue } from '@shared/skills/types';
+import type { CatalogSkill, SkillHealthIssue, SkillValidationIssue } from '@shared/skills/types';
 import { parseFrontmatter, skillIssueAgentLabel } from '@shared/skills/validation';
 import {
   FilePathActionsDropdown,
@@ -45,6 +46,7 @@ import {
 } from '@renderer/lib/ui/dropdown-menu';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';
+import { formatBytes } from '@renderer/utils/formatBytes';
 import { cn } from '@renderer/utils/utils';
 import { skillFilePath } from '../skill-file-path';
 import { getSkillUsageStats, skillUsageStatsChangedEvent } from '../skill-usage-stats';
@@ -81,12 +83,6 @@ function getTextStats(text: string): TextStats {
   };
 }
 
-function sourceLabel(source: CatalogSkill['source']): string {
-  if (source === 'openai') return 'OpenAI';
-  if (source === 'anthropic') return 'Anthropic';
-  return 'Local';
-}
-
 function formatLastUsedAt(value: string | null, formatter: Intl.DateTimeFormat): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -96,22 +92,23 @@ function formatLastUsedAt(value: string | null, formatter: Intl.DateTimeFormat):
 
 /** Full-page skill detail — rendered by the `skill` view as its own app tab. */
 const SkillDetailPanel: React.FC<{
-  skillId: string;
-  catalogSection?: 'installed' | 'recommended';
-}> = ({ skillId, catalogSection }) => {
+  skillKey: string;
+  catalogSection?: 'installed' | 'recommended' | 'attention';
+}> = ({ skillKey, catalogSection }) => {
   const { t } = useTranslation();
   const { catalog, isLoading: isCatalogLoading, install, uninstall, setDisabled } = useSkills();
 
   const { data: detailData, isFetching: isDetailLoading } = useQuery({
-    queryKey: ['skills', 'detail', skillId],
+    queryKey: ['skills', 'detail', skillKey],
     queryFn: async () => {
-      const result = await rpc.skills.getDetail({ skillId });
+      const result = await rpc.skills.getDetail({ skillKey });
       if (result.success && result.data) return result.data;
       throw new Error('Failed to load skill detail');
     },
   });
 
-  const skill = detailData ?? catalog?.skills.find((s) => s.id === skillId) ?? null;
+  const skill =
+    detailData ?? catalog?.skills.find((candidate) => candidate.key === skillKey) ?? null;
 
   if (!skill) {
     if (isCatalogLoading || isDetailLoading) {
@@ -123,7 +120,7 @@ const SkillDetailPanel: React.FC<{
     }
     return (
       <div className="h-full bg-background text-foreground">
-        <EmptyState label={t('skills.detail.unavailable')} description={skillId} />
+        <EmptyState label={t('skills.detail.unavailable')} description={skillKey} />
       </div>
     );
   }
@@ -131,13 +128,13 @@ const SkillDetailPanel: React.FC<{
   return (
     <div className="@container flex h-full min-w-0 overflow-hidden bg-background text-foreground">
       <SkillDetailSidebar
-        activeSkillId={skill.id}
+        activeSkillId={skill.key}
         catalogSection={catalogSection ?? (skill.installed ? 'installed' : 'recommended')}
         skills={catalog?.skills ?? [skill]}
       />
       <div className="min-w-0 flex-1">
         <SkillDetailContent
-          key={skill.id}
+          key={skill.key}
           skill={skill}
           isLoadingDetail={isDetailLoading}
           onInstall={install}
@@ -152,12 +149,13 @@ const SkillDetailPanel: React.FC<{
 const SkillDetailContent: React.FC<{
   skill: CatalogSkill;
   isLoadingDetail: boolean;
-  onInstall: (skillId: string) => Promise<boolean>;
-  onUninstall: (skillId: string) => Promise<boolean>;
-  onSetDisabled: (skillId: string, disabled: boolean) => Promise<boolean>;
+  onInstall: (skillKey: string) => Promise<boolean>;
+  onUninstall: (skillKey: string) => Promise<boolean>;
+  onSetDisabled: (skillKey: string, disabled: boolean) => Promise<boolean>;
 }> = ({ skill, isLoadingDetail, onInstall, onUninstall, onSetDisabled }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isProcessing, setIsProcessing] = useState(false);
   const [usageStats, setUsageStats] = useState(() => getSkillUsageStats(skill.id));
 
@@ -187,6 +185,10 @@ const SkillDetailContent: React.FC<{
     ? t('skills.detail.lastUsedAt', { time: lastUsedAt })
     : t('skills.detail.neverUsed');
   const validationIssues = skill.validationIssues ?? [];
+  const healthIssues = skill.healthIssues ?? [];
+  const needsReview = healthIssues.some(
+    (issue) => issue.code === 'content-changed' || issue.code === 'unreviewed'
+  );
   const descriptionText = frontmatter.description || skill.description;
 
   useEffect(() => {
@@ -213,50 +215,70 @@ const SkillDetailContent: React.FC<{
   const handleInstall = useCallback(async () => {
     setIsProcessing(true);
     try {
-      await onInstall(skill.id);
+      await onInstall(skill.key);
     } finally {
       setIsProcessing(false);
     }
-  }, [skill.id, onInstall]);
+  }, [skill.key, onInstall]);
 
   const handleUninstall = useCallback(async () => {
     setIsProcessing(true);
     try {
-      await onUninstall(skill.id);
+      await onUninstall(skill.key);
     } finally {
       setIsProcessing(false);
     }
-  }, [skill.id, onUninstall]);
+  }, [skill.key, onUninstall]);
 
   const handleSetDisabled = useCallback(
     async (disabled: boolean) => {
       setIsProcessing(true);
       try {
-        await onSetDisabled(skill.id, disabled);
+        await onSetDisabled(skill.key, disabled);
       } finally {
         setIsProcessing(false);
       }
     },
-    [skill.id, onSetDisabled]
+    [skill.key, onSetDisabled]
   );
+
+  const handleMarkReviewed = useCallback(async () => {
+    setIsProcessing(true);
+    try {
+      const result = await rpc.skills.markReviewed({ skillKey: skill.key });
+      if (!result.success) throw new Error(result.error ?? 'Could not mark skill as reviewed');
+      await queryClient.invalidateQueries({ queryKey: ['skills'] });
+      toast({ title: t('skills.health.reviewed') });
+    } catch (error) {
+      toast({
+        title: t('skills.health.reviewFailed'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [queryClient, skill.key, t, toast]);
 
   const showReviseModal = useShowModal('reviseSkillModal');
   const showForkModal = useShowModal('forkSkillModal');
 
   const handleRevise = useCallback(() => {
-    showReviseModal({ skillId: skill.id });
-  }, [showReviseModal, skill.id]);
+    showReviseModal({ skillId: skill.key, skillName: skill.displayName });
+  }, [showReviseModal, skill.displayName, skill.key]);
 
   const handleFork = useCallback(() => {
     showForkModal({
-      skillId: skill.id,
-      onSuccess: ({ skillId: newSkillId }) => {
-        appState.appTabs.openTab('skill', { skillId: newSkillId, displayName: newSkillId });
+      skillId: skill.key,
+      skillName: skill.id,
+      onSuccess: ({ skillId: newSkillId, displayName }) => {
+        appState.appTabs.openTab('skill', { skillId: newSkillId, displayName });
       },
     });
-  }, [showForkModal, skill.id]);
+  }, [showForkModal, skill.id, skill.key]);
 
-  const canEditLocally = skill.installed && Boolean(skill.localPath);
+  const canEditLocally = skill.installed && Boolean(skill.localPath) && skill.scope !== 'plugin';
+  const canForkLocally = skill.installed && Boolean(skill.localPath);
 
   const handleOpenSource = useCallback(() => {
     if (skill.sourceUrl) void rpc.app.openExternal(skill.sourceUrl);
@@ -300,7 +322,13 @@ const SkillDetailContent: React.FC<{
                       : t('skills.installed')
                     : t('skills.detail.notInstalled')}
                 </Badge>
-                <Badge variant="outline">{sourceLabel(skill.source)}</Badge>
+                <Badge variant="outline">{t(`skills.source.${skill.source}`)}</Badge>
+                <Badge variant="outline">{t(`skills.scope.${skill.scope}`)}</Badge>
+                {skill.riskLevel && skill.riskLevel !== 'low' && (
+                  <Badge variant={skill.riskLevel === 'high' ? 'destructive' : 'secondary'}>
+                    {t(`skills.risk.${skill.riskLevel}`)}
+                  </Badge>
+                )}
                 {/* The directory id only adds information when it differs from
                     the title (displayName falls back to the id otherwise) */}
                 {skill.id !== skill.displayName && (
@@ -327,26 +355,32 @@ const SkillDetailContent: React.FC<{
                     }
                   />
                   <DropdownMenuContent align="end" className="min-w-40">
-                    {canEditLocally && (
+                    {(canEditLocally || canForkLocally) && (
                       <>
-                        <DropdownMenuItem onClick={handleRevise}>
-                          <Sparkles />
-                          {t('skills.revise.action')}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleFork}>
-                          <CopyPlus />
-                          {t('skills.fork.action')}
-                        </DropdownMenuItem>
+                        {canEditLocally && (
+                          <DropdownMenuItem onClick={handleRevise}>
+                            <Sparkles />
+                            {t('skills.revise.action')}
+                          </DropdownMenuItem>
+                        )}
+                        {canForkLocally && (
+                          <DropdownMenuItem onClick={handleFork}>
+                            <CopyPlus />
+                            {t('skills.fork.action')}
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                       </>
                     )}
-                    <DropdownMenuItem
-                      disabled={isProcessing}
-                      onClick={() => void handleSetDisabled(!skill.disabled)}
-                    >
-                      {skill.disabled ? <Power /> : <PowerOff />}
-                      {skill.disabled ? t('skills.enable') : t('skills.disable')}
-                    </DropdownMenuItem>
+                    {skill.scope !== 'plugin' && (
+                      <DropdownMenuItem
+                        disabled={isProcessing}
+                        onClick={() => void handleSetDisabled(!skill.disabled)}
+                      >
+                        {skill.disabled ? <Power /> : <PowerOff />}
+                        {skill.disabled ? t('skills.enable') : t('skills.disable')}
+                      </DropdownMenuItem>
+                    )}
                     {localSkillFilePath && (
                       <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
@@ -364,15 +398,19 @@ const SkillDetailContent: React.FC<{
                         </DropdownMenuSubContent>
                       </DropdownMenuSub>
                     )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      variant="destructive"
-                      disabled={isProcessing}
-                      onClick={() => void handleUninstall()}
-                    >
-                      <Trash2 />
-                      {t('skills.uninstall')}
-                    </DropdownMenuItem>
+                    {skill.managed && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          disabled={isProcessing}
+                          onClick={() => void handleUninstall()}
+                        >
+                          <Trash2 />
+                          {t('skills.uninstall')}
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
@@ -434,6 +472,77 @@ const SkillDetailContent: React.FC<{
             />
           </div>
 
+          {skill.installed && (
+            <DetailSection
+              title={t('skills.health.title')}
+              action={
+                needsReview && skill.managed ? (
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    disabled={isProcessing}
+                    onClick={() => void handleMarkReviewed()}
+                  >
+                    <ShieldCheck className="size-3" />
+                    {t('skills.health.markReviewed')}
+                  </Button>
+                ) : null
+              }
+            >
+              <div className="space-y-2">
+                {healthIssues.length === 0 ? (
+                  <div className="flex items-center gap-2 rounded-md border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle2 className="size-3.5 shrink-0" />
+                    {t('skills.health.healthy')}
+                  </div>
+                ) : (
+                  healthIssues.map((issue) => (
+                    <HealthIssueRow key={`${issue.code}-${issue.message}`} issue={issue} />
+                  ))
+                )}
+                {skill.installation && (
+                  <div className="grid gap-2 @xl:grid-cols-3">
+                    <MetadataItem
+                      label={t('skills.health.contentHash')}
+                      value={skill.installation.contentHash.slice(0, 12)}
+                    />
+                    <MetadataItem
+                      label={t('skills.health.files')}
+                      value={numberFormatter.format(skill.installation.fileCount)}
+                    />
+                    <MetadataItem
+                      label={t('skills.health.size')}
+                      value={formatBytes(skill.installation.totalBytes)}
+                    />
+                  </div>
+                )}
+                {(skill.dependencies?.length ?? 0) > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                      {t('skills.health.dependencies')}
+                    </p>
+                    {skill.dependencies?.map((dependency) => (
+                      <div
+                        key={`${dependency.type}-${dependency.value}`}
+                        className={cn(
+                          'flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs',
+                          dependency.available === false
+                            ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                            : 'border-border bg-muted/20 text-muted-foreground'
+                        )}
+                      >
+                        <span className="shrink-0 uppercase text-[9px]">{dependency.type}</span>
+                        <span className="min-w-0 flex-1 truncate font-mono">
+                          {dependency.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </DetailSection>
+          )}
+
           {validationIssues.length > 0 && (
             <DetailSection title={t('skills.detail.validation')}>
               <div className="space-y-2">
@@ -479,7 +588,11 @@ const SkillDetailContent: React.FC<{
 
           {skill.installed && !skill.disabled && (
             <DetailSection title={t('skills.triggerTest.title')}>
-              <SkillTriggerTest skillId={skill.id} />
+              <SkillTriggerTest
+                skillKey={skill.key}
+                skillName={skill.displayName}
+                contentHash={skill.contentHash}
+              />
             </DetailSection>
           )}
 
@@ -731,6 +844,34 @@ function ValidationIssueRow({ issue }: { issue: SkillValidationIssue }) {
         {typeof issue.actual === 'number' && typeof issue.max === 'number' && (
           <div className="text-[10px] opacity-80">
             {issue.actual} / {issue.max}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HealthIssueRow({ issue }: { issue: SkillHealthIssue }) {
+  const { t } = useTranslation();
+  return (
+    <div
+      className={cn(
+        'flex min-w-0 gap-2 rounded-md border px-3 py-2 text-xs',
+        issue.severity === 'error'
+          ? 'border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300'
+          : issue.severity === 'warning'
+            ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+            : 'border-border bg-muted/20 text-muted-foreground'
+      )}
+    >
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+      <div className="min-w-0">
+        <div className="font-medium">
+          {t(`skills.health.issue.${issue.code}`, { defaultValue: issue.message })}
+        </div>
+        {issue.relatedSkillKeys && issue.relatedSkillKeys.length > 0 && (
+          <div className="mt-1 truncate font-mono text-[10px] opacity-75">
+            {issue.relatedSkillKeys.join(', ')}
           </div>
         )}
       </div>

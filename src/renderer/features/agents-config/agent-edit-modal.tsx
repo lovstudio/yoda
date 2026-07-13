@@ -1,5 +1,5 @@
-import { Check } from 'lucide-react';
-import { useState } from 'react';
+import { AlertTriangle, MousePointer2, Sparkles, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { agentToDraft, emptyAgentDraft, type Agent, type AgentDraft } from '@shared/agents';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
@@ -18,6 +18,13 @@ import {
 } from '@renderer/lib/ui/dialog';
 import { Input } from '@renderer/lib/ui/input';
 import { Label } from '@renderer/lib/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 import { useAgents } from './use-agents';
@@ -31,6 +38,17 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
   const { installedSkills, isLoading: skillsLoading } = useSkills();
   const [draft, setDraft] = useState<AgentDraft>(agent ? agentToDraft(agent) : emptyAgentDraft());
   const [saving, setSaving] = useState(false);
+  const legacySkillKeyById = useMemo(() => {
+    const preferred = [...installedSkills].sort((left, right) => {
+      if (left.managed !== right.managed) return left.managed ? -1 : 1;
+      return left.key.localeCompare(right.key);
+    });
+    const result = new Map<string, string>();
+    for (const skill of preferred) {
+      if (!result.has(skill.id)) result.set(skill.id, skill.key);
+    }
+    return result;
+  }, [installedSkills]);
 
   useCloseGuard(saving);
 
@@ -47,13 +65,35 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
     toast({ title: t(key), variant: 'destructive' });
   };
 
-  const toggleSkill = (id: string) =>
+  const skillMode = (key: string, legacyId: string): 'auto' | 'manual' | 'off' => {
+    const resolvesLegacyId = legacySkillKeyById.get(legacyId) === key;
+    if (
+      draft.enabledSkillIds.includes(key) ||
+      (resolvesLegacyId && draft.enabledSkillIds.includes(legacyId))
+    )
+      return 'auto';
+    if (
+      draft.manualSkillIds.includes(key) ||
+      (resolvesLegacyId && draft.manualSkillIds.includes(legacyId))
+    )
+      return 'manual';
+    return 'off';
+  };
+
+  const setSkillMode = (key: string, legacyId: string, mode: 'auto' | 'manual' | 'off') =>
     setDraft((prev) => ({
       ...prev,
-      enabledSkillIds: prev.enabledSkillIds.includes(id)
-        ? prev.enabledSkillIds.filter((s) => s !== id)
-        : [...prev.enabledSkillIds, id],
+      enabledSkillIds: [
+        ...prev.enabledSkillIds.filter((skillId) => skillId !== key && skillId !== legacyId),
+        ...(mode === 'auto' ? [key] : []),
+      ],
+      manualSkillIds: [
+        ...prev.manualSkillIds.filter((skillId) => skillId !== key && skillId !== legacyId),
+        ...(mode === 'manual' ? [key] : []),
+      ],
     }));
+
+  const configuredSkillCount = draft.enabledSkillIds.length + draft.manualSkillIds.length;
 
   const handleSave = async () => {
     if (!draft.name.trim()) {
@@ -169,33 +209,88 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
             <div className="flex items-center justify-between">
               <Label className="text-xs">{t('agentManager.skills')}</Label>
               <span className="text-[10px] text-muted-foreground">
-                {t('agentManager.skillsEnabledCount', { count: draft.enabledSkillIds.length })}
+                {t('agentManager.skillsEnabledCount', { count: configuredSkillCount })}
               </span>
             </div>
+            <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/20 px-2.5 py-2">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-foreground">
+                  {t('agentManager.skillProfileTitle')}
+                </p>
+                <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+                  {t('agentManager.skillProfileHint')}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                  draft.enabledSkillIds.length > 8
+                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                    : 'border-border bg-background text-muted-foreground'
+                )}
+              >
+                {draft.enabledSkillIds.length}/8 {t('agentManager.skillBudget')}
+              </span>
+            </div>
+            {draft.enabledSkillIds.length > 8 && (
+              <p className="flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="size-3 shrink-0" />
+                {t('agentManager.skillBudgetWarning')}
+              </p>
+            )}
             {skillsLoading ? (
               <p className="text-xs text-muted-foreground">{t('common.loading')}</p>
             ) : installedSkills.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t('agentManager.noSkills')}</p>
             ) : (
-              <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-border p-2">
+              <div className="max-h-56 divide-y divide-border overflow-y-auto rounded-md border border-border">
                 {installedSkills.map((skill) => {
-                  const enabled = draft.enabledSkillIds.includes(skill.id);
+                  const mode = skillMode(skill.key, skill.id);
                   return (
-                    <button
-                      key={skill.id}
-                      type="button"
-                      onClick={() => toggleSkill(skill.id)}
-                      title={skill.description}
-                      className={cn(
-                        'flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors',
-                        enabled
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : 'border-border text-foreground-muted hover:bg-background-2'
+                    <div key={skill.key} className="flex items-center gap-2 px-2.5 py-2">
+                      <div className="min-w-0 flex-1" title={skill.description}>
+                        <p className="truncate text-xs font-medium text-foreground">
+                          {skill.displayName}
+                        </p>
+                        <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                          {skill.scope === 'project'
+                            ? t('agentManager.skillScopeProject')
+                            : skill.managed
+                              ? t('agentManager.skillScopeManaged')
+                              : t('agentManager.skillScopeExternal')}
+                        </p>
+                      </div>
+                      {skill.scope === 'plugin' ? (
+                        <span className="w-28 shrink-0 rounded-md border border-border bg-muted/30 px-2 py-1 text-center text-[10px] text-muted-foreground">
+                          {t('agentManager.skillModePlugin')}
+                        </span>
+                      ) : (
+                        <Select
+                          value={mode}
+                          onValueChange={(value) =>
+                            setSkillMode(skill.key, skill.id, value as 'auto' | 'manual' | 'off')
+                          }
+                        >
+                          <SelectTrigger className="h-7 w-28 shrink-0 text-[11px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent align="end">
+                            <SelectItem value="auto" className="text-xs">
+                              <Sparkles className="size-3" />
+                              {t('agentManager.skillModeAuto')}
+                            </SelectItem>
+                            <SelectItem value="manual" className="text-xs">
+                              <MousePointer2 className="size-3" />
+                              {t('agentManager.skillModeManual')}
+                            </SelectItem>
+                            <SelectItem value="off" className="text-xs">
+                              <X className="size-3" />
+                              {t('agentManager.skillModeOff')}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                       )}
-                    >
-                      {enabled && <Check className="size-3" />}
-                      <span className="max-w-40 truncate">{skill.displayName}</span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>

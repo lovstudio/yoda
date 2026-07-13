@@ -13,8 +13,8 @@ interface SkillsTreeSectionProps {
   orderBy: 'position' | 'count';
   lookupUsage: (skillId: string) => SkillUsageStat | undefined;
   onSelect: (skill: CatalogSkill) => void;
-  onInstall: (skillId: string) => void;
-  setSkillRef: (skillId: string) => (node: HTMLDivElement | null) => void;
+  onInstall: (skillKey: string) => void;
+  setSkillRef: (skillKey: string) => (node: HTMLDivElement | null) => void;
   highlightedSkillId: string | null;
 }
 
@@ -35,13 +35,13 @@ const SkillsTreeSection: React.FC<SkillsTreeSectionProps> = ({
       {entries.map((entry) =>
         entry.kind === 'leaf' ? (
           <SkillTreeRow
-            key={entry.skill.id}
+            key={entry.skill.key}
             skill={entry.skill}
             usage={lookupUsage(entry.skill.id)}
             onSelect={onSelect}
             onInstall={onInstall}
             setSkillRef={setSkillRef}
-            highlighted={highlightedSkillId === entry.skill.id}
+            highlighted={highlightedSkillId === entry.skill.key}
           />
         ) : (
           <SkillTreeGroup
@@ -101,13 +101,13 @@ const SkillTreeGroup: React.FC<SkillTreeGroupProps> = ({
         <div className="ml-[1.0625rem] flex flex-col gap-0.5 border-l border-border/60 pl-2">
           {skills.map((skill) => (
             <SkillTreeRow
-              key={skill.id}
+              key={skill.key}
               skill={skill}
               usage={lookupUsage(skill.id)}
               onSelect={onSelect}
               onInstall={onInstall}
               setSkillRef={setSkillRef}
-              highlighted={highlightedSkillId === skill.id}
+              highlighted={highlightedSkillId === skill.key}
             />
           ))}
         </div>
@@ -120,8 +120,8 @@ interface SkillTreeRowProps {
   skill: CatalogSkill;
   usage: SkillUsageStat | undefined;
   onSelect: (skill: CatalogSkill) => void;
-  onInstall: (skillId: string) => void;
-  setSkillRef: (skillId: string) => (node: HTMLDivElement | null) => void;
+  onInstall: (skillKey: string) => void;
+  setSkillRef: (skillKey: string) => (node: HTMLDivElement | null) => void;
   highlighted: boolean;
 }
 
@@ -138,7 +138,7 @@ const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
 
   return (
     <div
-      ref={setSkillRef(skill.id)}
+      ref={setSkillRef(skill.key)}
       role="button"
       tabIndex={0}
       onClick={() => onSelect(skill)}
@@ -191,7 +191,7 @@ const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onInstall(skill.id);
+              onInstall(skill.key);
             }}
             className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label={`Install ${skill.displayName}`}

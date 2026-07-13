@@ -24,6 +24,7 @@ import {
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@renderer/lib/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
+import { skillNeedsAttention } from '../skill-health';
 import { SKILL_SORT_MODES, sortSkills, type SkillSortMode } from '../skill-sort';
 import SkillCard from './SkillCard';
 import SkillsCatalogHint from './SkillsCatalogHint';
@@ -32,7 +33,7 @@ import { useSkills } from './useSkills';
 import { useSkillUsage } from './useSkillUsage';
 
 type SkillsLayout = 'grid' | 'tree';
-type SkillsSection = 'installed' | 'recommended';
+type SkillsSection = 'installed' | 'recommended' | 'attention';
 
 const LAYOUT_STORAGE_KEY = 'yoda.skillsLayout';
 
@@ -98,6 +99,10 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     () => sortSkills(recommendedSkills, sortMode, lookupUsage),
     [recommendedSkills, sortMode, lookupUsage]
   );
+  const attentionSkills = React.useMemo(
+    () => sortedInstalledSkills.filter(skillNeedsAttention),
+    [sortedInstalledSkills]
+  );
 
   const showCreateSkillModal = useShowModal('createSkillModal');
   const focusedSkillId =
@@ -106,11 +111,11 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   const [highlightedSkillId, setHighlightedSkillId] = React.useState<string | null>(null);
 
   const setSkillCardRef = React.useCallback(
-    (skillId: string) => (node: HTMLDivElement | null) => {
+    (skillKey: string) => (node: HTMLDivElement | null) => {
       if (node) {
-        skillCardRefs.current.set(skillId, node);
+        skillCardRefs.current.set(skillKey, node);
       } else {
-        skillCardRefs.current.delete(skillId);
+        skillCardRefs.current.delete(skillKey);
       }
     },
     []
@@ -121,7 +126,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   const { openViewTab } = useOpenViewTab();
   const openDetail = (skill: CatalogSkill) => {
     openViewTab('skill', {
-      skillId: skill.id,
+      skillId: skill.key,
       displayName: skill.displayName,
       catalogSection: section,
     });
@@ -130,17 +135,23 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   React.useEffect(() => {
     if (!focusedSkillId || isLoading) return;
 
-    const isInstalled = installedSkills.some((skill) => skill.id === focusedSkillId);
-    const isRecommended = recommendedSkills.some((skill) => skill.id === focusedSkillId);
+    const isInstalled = installedSkills.some((skill) => skill.key === focusedSkillId);
+    const isAttention = attentionSkills.some((skill) => skill.key === focusedSkillId);
+    const isRecommended = recommendedSkills.some((skill) => skill.key === focusedSkillId);
     const isVisible = isInstalled || isRecommended;
-    const existsInCatalog = catalog?.skills.some((skill) => skill.id === focusedSkillId) ?? false;
+    const existsInCatalog = catalog?.skills.some((skill) => skill.key === focusedSkillId) ?? false;
 
     if (!isVisible && existsInCatalog && searchQuery) {
       setSearchQuery('');
       return;
     }
 
-    const focusedSection: SkillsSection = isInstalled ? 'installed' : 'recommended';
+    const focusedSection: SkillsSection =
+      section === 'attention' && isAttention
+        ? 'attention'
+        : isInstalled
+          ? 'installed'
+          : 'recommended';
     if (isVisible && section !== focusedSection) {
       setSection(focusedSection);
       return;
@@ -164,6 +175,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     };
   }, [
     catalog?.skills,
+    attentionSkills,
     focusedSkillId,
     installedSkills,
     isLoading,
@@ -203,11 +215,11 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
       <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
         {skills.map((skill) => (
           <div
-            key={skill.id}
-            ref={setSkillCardRef(skill.id)}
+            key={skill.key}
+            ref={setSkillCardRef(skill.key)}
             className={cn(
               'scroll-mt-20 rounded-lg transition-shadow duration-300',
-              highlightedSkillId === skill.id &&
+              highlightedSkillId === skill.key &&
                 'ring-2 ring-amber-400 ring-offset-2 ring-offset-background'
             )}
           >
@@ -347,9 +359,14 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
               {t('skills.recommended')}
               <span className="text-foreground-muted">{sortedRecommendedSkills.length}</span>
             </TabsTab>
+            <TabsTab value="attention">
+              {t('skills.attention')}
+              <span className="text-foreground-muted">{attentionSkills.length}</span>
+            </TabsTab>
           </TabsList>
           <TabsPanel value="installed">{renderSkills(sortedInstalledSkills)}</TabsPanel>
           <TabsPanel value="recommended">{renderSkills(sortedRecommendedSkills)}</TabsPanel>
+          <TabsPanel value="attention">{renderSkills(attentionSkills)}</TabsPanel>
         </Tabs>
       </div>
     </div>

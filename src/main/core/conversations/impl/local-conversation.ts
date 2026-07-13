@@ -155,6 +155,13 @@ export class LocalConversationProvider implements ConversationProvider {
 
     const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
     recordConversationAuthProvider(conversation.id, providerConfig);
+    if (conversation.skillPolicy?.warnings.length) {
+      log.warn('Agent skill profile has runtime limitations', {
+        conversationId: conversation.id,
+        runtimeId: conversation.runtimeId,
+        warnings: conversation.skillPolicy.warnings,
+      });
+    }
     const agentSessionId = isResuming
       ? resolveAgentResumeSessionId(conversation, this.taskPath)
       : conversation.id;
@@ -193,6 +200,7 @@ export class LocalConversationProvider implements ConversationProvider {
       ),
       model,
       terminalThemeMode: await resolveTerminalThemeMode(),
+      skillPolicy: conversation.skillPolicy,
     });
     const args = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 

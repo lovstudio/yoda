@@ -198,6 +198,7 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       visibleTabs: computed,
       start: action,
       openTab: action,
+      replaceActiveTab: action,
       stickTab: action,
       activateTab: action,
       closeTab: action,
@@ -471,6 +472,37 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
     this.tabs.splice(this._insertIndex(viewId, normalizedParams), 0, tab);
     if (activate) this._activate(tab);
     if (activate) this.navigation.navigate(tab.viewId, tab.params as WrapParams<T>);
+  }
+
+  /**
+   * Reuses the active tab for an in-view selection change. This is deliberately
+   * separate from `openTab`: list/detail navigators can preserve their mounted
+   * scroll state, while explicit opens still create deduplicated tabs.
+   */
+  replaceActiveTab<T extends ViewId>(viewId: T, params?: WrapParams<T>): void {
+    const normalizedParams = normalizeTabParams(
+      viewId,
+      toJS(params ?? {}) as Record<string, unknown>
+    );
+    const key = routeKey(viewId, normalizedParams);
+    const active = this.activeTab;
+    if (!active) {
+      this.openTab(viewId, params);
+      return;
+    }
+
+    const existing = this.tabs.find(
+      (entry) => entry.id !== active.id && routeKey(entry.viewId, entry.params) === key
+    );
+    if (existing) {
+      existing.params = normalizedParams;
+      this._activate(existing);
+    } else {
+      active.viewId = viewId;
+      active.params = normalizedParams;
+    }
+    this.replayNonce += 1;
+    this.navigation.navigate(viewId, normalizedParams as WrapParams<T>);
   }
 
   /** Insert after the last same-scope tab, else after the active tab. */

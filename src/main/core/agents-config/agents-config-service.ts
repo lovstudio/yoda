@@ -17,6 +17,14 @@ function slugify(input: string): string {
 }
 
 function rowToAgent(row: AgentRow): Agent {
+  const storedSkillPolicies = Array.isArray(row.enabledSkillIds) ? row.enabledSkillIds : [];
+  const enabledSkillIds: string[] = [];
+  const manualSkillIds: string[] = [];
+  for (const value of storedSkillPolicies) {
+    if (value.startsWith('manual:')) manualSkillIds.push(value.slice('manual:'.length));
+    else if (value.startsWith('auto:')) enabledSkillIds.push(value.slice('auto:'.length));
+    else enabledSkillIds.push(value); // Legacy rows stored plain ids as automatic.
+  }
   return {
     id: row.id,
     slug: row.slug,
@@ -24,7 +32,8 @@ function rowToAgent(row: AgentRow): Agent {
     description: row.description,
     icon: row.icon,
     systemPrompt: row.systemPrompt,
-    enabledSkillIds: Array.isArray(row.enabledSkillIds) ? row.enabledSkillIds : [],
+    enabledSkillIds,
+    manualSkillIds,
     preferredRuntime: isValidRuntimeId(row.preferredRuntime) ? row.preferredRuntime : null,
     model: row.model ?? null,
     source: row.source === 'imported' ? 'imported' : 'local',
@@ -34,18 +43,30 @@ function rowToAgent(row: AgentRow): Agent {
 }
 
 function sanitizeDraft(draft: AgentDraft): Omit<AgentDraft, 'name'> & { name: string } {
+  const enabledSkillIds = [...new Set(draft.enabledSkillIds)];
+  const automatic = new Set(enabledSkillIds);
   return {
     name: draft.name.trim() || 'Untitled agent',
     description: draft.description.trim(),
     icon: draft.icon.trim(),
     systemPrompt: draft.systemPrompt,
-    enabledSkillIds: [...new Set(draft.enabledSkillIds)],
+    enabledSkillIds,
+    manualSkillIds: [...new Set(draft.manualSkillIds)].filter((skillId) => !automatic.has(skillId)),
     preferredRuntime: isValidRuntimeId(draft.preferredRuntime) ? draft.preferredRuntime : null,
     model: draft.model?.trim() ? draft.model.trim() : null,
   };
 }
 
 class AgentsConfigService {
+  private encodeSkillPolicies(
+    draft: Pick<AgentDraft, 'enabledSkillIds' | 'manualSkillIds'>
+  ): string[] {
+    return [
+      ...draft.enabledSkillIds.map((skillId) => `auto:${skillId}`),
+      ...draft.manualSkillIds.map((skillId) => `manual:${skillId}`),
+    ];
+  }
+
   async list(): Promise<Agent[]> {
     const rows = await db.select().from(agents).orderBy(desc(agents.updatedAt)).execute();
     return rows.map(rowToAgent);
@@ -88,7 +109,7 @@ class AgentsConfigService {
         description: clean.description,
         icon: clean.icon,
         systemPrompt: clean.systemPrompt,
-        enabledSkillIds: clean.enabledSkillIds,
+        enabledSkillIds: this.encodeSkillPolicies(clean),
         preferredRuntime: clean.preferredRuntime,
         model: clean.model,
         source,
@@ -108,7 +129,7 @@ class AgentsConfigService {
         description: clean.description,
         icon: clean.icon,
         systemPrompt: clean.systemPrompt,
-        enabledSkillIds: clean.enabledSkillIds,
+        enabledSkillIds: this.encodeSkillPolicies(clean),
         preferredRuntime: clean.preferredRuntime,
         model: clean.model,
         updatedAt: new Date().toISOString(),
@@ -134,6 +155,7 @@ class AgentsConfigService {
         icon: source.icon,
         systemPrompt: source.systemPrompt,
         enabledSkillIds: source.enabledSkillIds,
+        manualSkillIds: source.manualSkillIds,
         preferredRuntime: source.preferredRuntime,
         model: source.model,
       },

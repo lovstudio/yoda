@@ -6,6 +6,8 @@ export interface AgentSyncTarget {
   name: string;
   /** Directory where the agent looks for skills/commands */
   getSkillDir: (skillId: string) => string;
+  /** Previous Yoda locations cleaned up on sync/uninstall, but never newly populated. */
+  getLegacySkillDirs?: (skillId: string) => string[];
   /** Top-level config dir to check if agent is installed */
   configDir: string;
 }
@@ -21,7 +23,8 @@ export const agentTargets: AgentSyncTarget[] = [
     id: 'claude-code',
     name: 'Claude Code',
     configDir: path.join(home, '.claude'),
-    getSkillDir: (skillId: string) => path.join(home, '.claude', 'commands', skillId),
+    getSkillDir: (skillId: string) => path.join(home, '.claude', 'skills', skillId),
+    getLegacySkillDirs: (skillId: string) => [path.join(home, '.claude', 'commands', skillId)],
   },
   {
     id: 'codex',
@@ -71,6 +74,7 @@ export const skillScanPaths: string[] = [
   ...new Set(agentTargets.map((t) => path.dirname(t.getSkillDir('_placeholder')))),
   // Additional paths some agents read from (not covered by targets above)
   path.join(home, '.claude', 'skills'),
+  path.join(home, '.claude', 'commands'),
   path.join(home, '.agent', 'skills'),
   path.join(home, '.agents', 'skills'),
 ];

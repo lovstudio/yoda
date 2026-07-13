@@ -50,6 +50,7 @@ import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { withSystemPrompt } from '@shared/prompt-format';
 import { REVIEW_MAX_ROUNDS } from '@shared/review-protocol';
 import { getRuntime, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
+import type { SkillSelectionInput } from '@shared/skills/types';
 import { ensureUniqueTaskDisplayName, taskNameFromPrompt } from '@shared/task-name';
 import { resolveHomeProjectId } from '@renderer/app/home-project-selection';
 import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
@@ -274,6 +275,14 @@ function resolveAgentSlot(args: {
     provider: args.runtimeOverride ?? agent.preferredRuntime,
     systemPrompt: agent.systemPrompt,
     agent,
+  };
+}
+
+function agentSkillSelection(agent: Agent | null): SkillSelectionInput | undefined {
+  if (!agent) return undefined;
+  return {
+    autoSkillKeys: agent.enabledSkillIds,
+    manualSkillKeys: agent.manualSkillIds,
   };
 }
 
@@ -702,6 +711,27 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [selectedAgentIdsByMode, updateDraft]
   );
+  const composerAgent = useMemo<Agent | null>(() => {
+    if (runMode === 'team') {
+      const leader =
+        activeTeam?.members.find((member) => member.role === 'leader') ?? activeTeam?.members[0];
+      if (!leader?.agentRef) return null;
+      return (
+        userAgents.find(
+          (agent) => agent.id === leader.agentRef || agent.slug === leader.agentRef
+        ) ?? null
+      );
+    }
+    const slotKey =
+      runMode === 'brainstorm'
+        ? SPEC_PROMPT_KEY
+        : runMode === 'review'
+          ? REVIEW_IMPLEMENTER_PROMPT_KEY
+          : NORMAL_PROMPT_KEY;
+    const agentId = slotAgentId(slotKey);
+    return agentId ? (userAgents.find((agent) => agent.id === agentId) ?? null) : null;
+  }, [activeTeam, runMode, slotAgentId, userAgents]);
+  const composerSkillSelection = useMemo(() => agentSkillSelection(composerAgent), [composerAgent]);
   const permissionModes = useRuntimePermissionModes();
   const runModeSummary = useMemo(() => {
     const runtimeName = (id: RuntimeId | null) => (id ? (getRuntime(id)?.name ?? id) : null);
@@ -1145,6 +1175,7 @@ export const HomeComposer = observer(function HomeComposer({
           initialPrompt: string | undefined;
           titlePrompt?: string;
           model?: string | null;
+          skillSelection?: SkillSelectionInput;
         }) => {
           const conversationId = crypto.randomUUID();
           const title = initialConversationTitle(
@@ -1164,6 +1195,7 @@ export const HomeComposer = observer(function HomeComposer({
             deferInitialPrompt,
             imagePaths: sessionImagePaths,
             model: args.model,
+            skillSelection: args.skillSelection,
           });
           return { conversationId, runtime: args.provider, promise };
         };
@@ -1191,6 +1223,7 @@ export const HomeComposer = observer(function HomeComposer({
             }),
             titlePrompt: trimmed || undefined,
             model: slot.agent?.model,
+            skillSelection: agentSkillSelection(slot.agent),
           });
           finishTaskConversationSubmit();
           scheduleDeferredPrompt({
@@ -1223,6 +1256,7 @@ export const HomeComposer = observer(function HomeComposer({
             }),
             titlePrompt: trimmed || undefined,
             model: implementerSlot.agent?.model,
+            skillSelection: agentSkillSelection(implementerSlot.agent),
           });
           finishTaskConversationSubmit();
           const reviewerProvider = reviewerSlot.provider;
@@ -1235,6 +1269,7 @@ export const HomeComposer = observer(function HomeComposer({
               requirement: resolvedRequirement,
               reviewerRuntime: reviewerProvider,
               reviewerSystemPrompt,
+              reviewerSkillSelection: agentSkillSelection(reviewerSlot.agent),
               reviewerAutoApprove: permissionModes.isDanger(reviewerProvider),
             });
           const reviewPromise = deferInitialPrompt
@@ -1316,6 +1351,7 @@ export const HomeComposer = observer(function HomeComposer({
             : requirement || undefined,
           titlePrompt: trimmed || undefined,
           model: normalSlot.agent?.model,
+          skillSelection: agentSkillSelection(normalSlot.agent),
         });
         finishTaskConversationSubmit();
         scheduleDeferredPrompt({
@@ -1385,6 +1421,7 @@ export const HomeComposer = observer(function HomeComposer({
             deferInitialPrompt,
             imagePaths: sessionImagePaths,
             model: draftSlot.agent?.model,
+            skillSelection: agentSkillSelection(draftSlot.agent),
           },
         });
         scheduleDeferredPrompt({
@@ -1443,6 +1480,7 @@ export const HomeComposer = observer(function HomeComposer({
         strategyKind: TaskSubmitStrategyKind;
         parentTaskId?: string;
         model?: string | null;
+        skillSelection?: SkillSelectionInput;
       }) => {
         const taskId = crypto.randomUUID();
         const conversationId = crypto.randomUUID();
@@ -1481,6 +1519,7 @@ export const HomeComposer = observer(function HomeComposer({
             deferInitialPrompt,
             imagePaths: sessionImagePaths,
             model: args.model,
+            skillSelection: args.skillSelection,
           },
         });
         return { taskId, taskName, conversationId, runtime: args.provider, promise };
@@ -1499,6 +1538,7 @@ export const HomeComposer = observer(function HomeComposer({
           titlePrompt: trimmed || undefined,
           strategyKind: 'no-worktree',
           model: slot.agent?.model,
+          skillSelection: agentSkillSelection(slot.agent),
         });
         goToTask(mounted.data.id, task.taskId);
         scheduleDeferredPrompt({
@@ -1529,6 +1569,7 @@ export const HomeComposer = observer(function HomeComposer({
           projectId: string;
           provider: RuntimeId;
           model: string | null | undefined;
+          skillSelection?: SkillSelectionInput;
           systemPrompt: string;
           strategyKind: TaskStrategyKind;
           baseBranch: Branch | null;
@@ -1597,6 +1638,7 @@ export const HomeComposer = observer(function HomeComposer({
               deferInitialPrompt,
               imagePaths: sessionImagePaths,
               model: spec.model,
+              skillSelection: spec.skillSelection,
             },
           });
           return {
@@ -1620,6 +1662,7 @@ export const HomeComposer = observer(function HomeComposer({
               projectId: variant.projectId,
               provider: slot.provider,
               model: slot.agent?.model,
+              skillSelection: agentSkillSelection(slot.agent),
               systemPrompt: slot.systemPrompt,
               strategyKind: variant.strategyKind,
               baseBranch: variant.baseBranch,
@@ -1674,6 +1717,7 @@ export const HomeComposer = observer(function HomeComposer({
           titlePrompt: trimmed || undefined,
           strategyKind: reviewSubmitKind,
           model: implementerSlot.agent?.model,
+          skillSelection: agentSkillSelection(implementerSlot.agent),
         });
         goToTask(mounted.data.id, implementation.taskId);
         const reviewerProvider = reviewerSlot.provider;
@@ -1686,6 +1730,7 @@ export const HomeComposer = observer(function HomeComposer({
             requirement: resolvedRequirement,
             reviewerRuntime: reviewerProvider,
             reviewerSystemPrompt,
+            reviewerSkillSelection: agentSkillSelection(reviewerSlot.agent),
             reviewerAutoApprove: permissionModes.isDanger(reviewerProvider),
           });
         const reviewPromise = deferInitialPrompt
@@ -1766,6 +1811,7 @@ export const HomeComposer = observer(function HomeComposer({
         titlePrompt: trimmed || undefined,
         strategyKind: standardSubmitKind,
         model: normalSlot.agent?.model,
+        skillSelection: agentSkillSelection(normalSlot.agent),
       });
       goToTask(mounted.data.id, task.taskId);
       scheduleDeferredPrompt({
@@ -2133,6 +2179,7 @@ export const HomeComposer = observer(function HomeComposer({
         runtimeId={runtimeId}
         projectId={projectData?.id ?? null}
         projectPath={skillProjectPath}
+        skillSelection={composerSkillSelection}
         runHostKind={runHostKind}
         containerClassName={promptInputChrome.containerClassName}
         canSubmit={canSubmit}
@@ -3222,10 +3269,16 @@ function Agent({
   // preferred runtime. Editing it here sets the per-slot override (loose
   // coupling — it does not mutate the Agent).
   const runtime = value ?? selectedAgent?.preferredRuntime ?? null;
+  const resolveSkillName = (identifier: string) =>
+    installedSkills.find((skill) => skill.key === identifier || skill.id === identifier)
+      ?.displayName ?? identifier;
   const skillNames = selectedAgent
-    ? selectedAgent.enabledSkillIds.map(
-        (id) => installedSkills.find((s) => s.id === id)?.displayName ?? id
-      )
+    ? [
+        ...selectedAgent.enabledSkillIds.map((identifier) => resolveSkillName(identifier)),
+        ...selectedAgent.manualSkillIds.map(
+          (identifier) => `${resolveSkillName(identifier)} · ${t('agentManager.skillModeManual')}`
+        ),
+      ]
     : [];
   const editAgent = () =>
     selectedAgent && showAgentModal({ agent: selectedAgent, onSuccess: () => undefined });

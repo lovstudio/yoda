@@ -2,7 +2,11 @@ import { GitCompare, PanelRightOpen, Search } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CatalogSkill } from '@shared/skills/types';
-import { useOpenViewTab } from '@renderer/lib/layout/navigation-provider';
+import {
+  useIsPinHosted,
+  useOpenViewTab,
+  useParams,
+} from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import {
   ContextMenu,
@@ -12,6 +16,7 @@ import {
 } from '@renderer/lib/ui/context-menu';
 import { Input } from '@renderer/lib/ui/input';
 import { cn } from '@renderer/utils/utils';
+import { skillNeedsAttention } from '../skill-health';
 import SkillIconRenderer from './SkillIconRenderer';
 
 function sortSkills(skills: CatalogSkill[]): CatalogSkill[] {
@@ -23,21 +28,37 @@ function sortSkills(skills: CatalogSkill[]): CatalogSkill[] {
 
 const SkillDetailSidebar: React.FC<{
   activeSkillId: string;
-  catalogSection: 'installed' | 'recommended';
+  catalogSection: 'installed' | 'recommended' | 'attention';
   skills: CatalogSkill[];
 }> = ({ activeSkillId, catalogSection, skills }) => {
   const { t } = useTranslation();
   const { openViewTab } = useOpenViewTab();
+  const isPinHosted = useIsPinHosted();
+  const { setParams: setSkillParams } = useParams('skill');
   const [query, setQuery] = useState('');
   const activeItemRef = useRef<HTMLButtonElement>(null);
   const [emphasizedSkillId, setEmphasizedSkillId] = useState<string | null>(null);
 
+  const selectSkill = (skill: CatalogSkill) => {
+    const params = {
+      skillId: skill.key,
+      displayName: skill.displayName,
+      catalogSection,
+    };
+    if (isPinHosted) {
+      setSkillParams(() => params);
+      return;
+    }
+    appState.appTabs.replaceActiveTab('skill', params);
+  };
+
   const visibleSkills = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const sorted = sortSkills(
-      skills.filter((skill) =>
-        catalogSection === 'installed' ? skill.installed : !skill.installed
-      )
+      skills.filter((skill) => {
+        if (catalogSection === 'attention') return skillNeedsAttention(skill);
+        return catalogSection === 'installed' ? skill.installed : !skill.installed;
+      })
     );
     if (!normalizedQuery) return sorted;
     return sorted.filter(
@@ -82,28 +103,22 @@ const SkillDetailSidebar: React.FC<{
 
       <nav className="min-h-0 flex-1 overflow-y-auto p-1.5" aria-label={t('skills.title')}>
         {visibleSkills.map((skill) => {
-          const active = skill.id === activeSkillId;
+          const active = skill.key === activeSkillId;
           return (
-            <ContextMenu key={skill.id}>
+            <ContextMenu key={skill.key}>
               <ContextMenuTrigger
                 render={
                   <button
                     ref={active ? activeItemRef : undefined}
                     type="button"
                     aria-current={active ? 'page' : undefined}
-                    onClick={() =>
-                      openViewTab('skill', {
-                        skillId: skill.id,
-                        displayName: skill.displayName,
-                        catalogSection,
-                      })
-                    }
+                    onClick={() => selectSkill(skill)}
                     className={cn(
                       'relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
                       active
                         ? 'bg-background-1 text-foreground'
                         : 'text-foreground-muted hover:bg-background-2 hover:text-foreground',
-                      emphasizedSkillId === skill.id &&
+                      emphasizedSkillId === skill.key &&
                         'ring-2 ring-amber-400 ring-offset-1 ring-offset-background-secondary'
                     )}
                   >
@@ -116,7 +131,12 @@ const SkillDetailSidebar: React.FC<{
                         {skill.displayName}
                       </span>
                       <span className="mt-0.5 block truncate text-[10px] text-foreground-muted">
-                        {skill.installed ? t('skills.installed') : t('skills.recommended')}
+                        {t(`skills.source.${skill.source}`)} ·{' '}
+                        {catalogSection === 'attention'
+                          ? t('skills.attention')
+                          : skill.installed
+                            ? t('skills.installed')
+                            : t('skills.recommended')}
                       </span>
                     </span>
                     {skill.disabled && (
@@ -131,9 +151,9 @@ const SkillDetailSidebar: React.FC<{
                   onClick={() =>
                     openViewTab('skillCompare', {
                       baseSkillId: activeSkillId,
-                      targetSkillId: skill.id,
+                      targetSkillId: skill.key,
                       baseDisplayName:
-                        skills.find((candidate) => candidate.id === activeSkillId)?.displayName ??
+                        skills.find((candidate) => candidate.key === activeSkillId)?.displayName ??
                         activeSkillId,
                       targetDisplayName: skill.displayName,
                     })
@@ -146,7 +166,7 @@ const SkillDetailSidebar: React.FC<{
                   disabled={active}
                   onClick={() =>
                     appState.sidePane.pinView('skill', {
-                      skillId: skill.id,
+                      skillId: skill.key,
                       displayName: skill.displayName,
                       catalogSection,
                     })

@@ -19,8 +19,10 @@ export interface Agent {
   /** Emoji/glyph, image URL, or data URL used as the card avatar. */
   icon: string;
   systemPrompt: string;
-  /** Skill ids this agent enables when it runs. */
+  /** Stable skill keys this agent enables for implicit routing when it runs. */
   enabledSkillIds: string[];
+  /** Skills exposed for explicit invocation but hidden from implicit routing. */
+  manualSkillIds: string[];
   /**
    * Preferred Agent Runtime. At execution time we use this runtime when it is
    * available/supported, otherwise we fall back to the run-mode default.
@@ -43,6 +45,7 @@ export interface AgentDraft {
   icon: string;
   systemPrompt: string;
   enabledSkillIds: string[];
+  manualSkillIds: string[];
   preferredRuntime: RuntimeId | null;
   model: string | null;
 }
@@ -56,6 +59,7 @@ export function emptyAgentDraft(): AgentDraft {
     icon: DEFAULT_AGENT_ICON,
     systemPrompt: '',
     enabledSkillIds: [],
+    manualSkillIds: [],
     preferredRuntime: null,
     model: null,
   };
@@ -68,6 +72,7 @@ export function agentToDraft(agent: Agent): AgentDraft {
     icon: agent.icon,
     systemPrompt: agent.systemPrompt,
     enabledSkillIds: [...agent.enabledSkillIds],
+    manualSkillIds: [...agent.manualSkillIds],
     preferredRuntime: agent.preferredRuntime,
     model: agent.model,
   };

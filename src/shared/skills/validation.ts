@@ -10,6 +10,7 @@ export const SPEC_SKILL_COMPATIBILITY_MAX_LENGTH = 500;
 const KNOWN_FRONTMATTER_FIELDS = new Set([
   'name',
   'description',
+  'when_to_use',
   'license',
   'allowed-tools',
   'metadata',
@@ -57,6 +58,9 @@ export function parseFrontmatter(content: string): {
       license: frontmatter['license'],
       compatibility: frontmatter['compatibility'],
       'allowed-tools': frontmatter['allowed-tools'],
+      when_to_use: frontmatter['when_to_use'],
+      'disable-model-invocation': frontmatter['disable-model-invocation'],
+      'user-invocable': frontmatter['user-invocable'],
     },
     body,
     hasFrontmatter: true,

@@ -19,6 +19,7 @@ export function mapConversationRowToConversation(
     archivedAt: row.archivedAt,
     autoApprove: config?.autoApprove,
     permissionMode: config?.permissionMode,
+    skillPolicy: config?.skillPolicy,
     resume: resume,
     lastInteractedAt: row.lastInteractedAt ?? null,
     isInitialConversation: row.isInitialConversation,

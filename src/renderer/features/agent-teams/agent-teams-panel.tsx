@@ -34,7 +34,13 @@ import { useAgentTeams } from './use-agent-teams';
 function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | null {
   let base: Pick<
     Agent,
-    'name' | 'description' | 'icon' | 'systemPrompt' | 'enabledSkillIds' | 'model'
+    | 'name'
+    | 'description'
+    | 'icon'
+    | 'systemPrompt'
+    | 'enabledSkillIds'
+    | 'manualSkillIds'
+    | 'model'
   > | null = null;
   if (member.agentRef) {
     const user = agents.find((a) => a.id === member.agentRef);
@@ -48,6 +54,7 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
           icon: preset.icon,
           systemPrompt: preset.systemPrompt,
           enabledSkillIds: [],
+          manualSkillIds: [],
           model: null,
         };
     }
@@ -59,6 +66,7 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
       icon: '🤖',
       systemPrompt: member.systemPrompt,
       enabledSkillIds: [],
+      manualSkillIds: [],
       model: null,
     };
   }
@@ -71,6 +79,7 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
     icon: base.icon,
     systemPrompt: base.systemPrompt,
     enabledSkillIds: base.enabledSkillIds,
+    manualSkillIds: base.manualSkillIds,
     preferredRuntime: member.runtime,
     model: base.model,
     source: 'local',
@@ -98,7 +107,9 @@ function MemberCard({
   trailing?: ReactNode;
 }) {
   const resolved = resolveMemberAgent(member, agents);
-  const skillCount = resolved?.enabledSkillIds.length ?? 0;
+  const skillCount = resolved
+    ? resolved.enabledSkillIds.length + resolved.manualSkillIds.length
+    : 0;
 
   const card = (
     <AgentCard

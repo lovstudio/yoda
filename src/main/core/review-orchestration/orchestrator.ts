@@ -10,6 +10,7 @@ import {
   REVIEW_MAX_ROUNDS,
 } from '@shared/review-protocol';
 import type { RuntimeId } from '@shared/runtime-registry';
+import type { SkillSelectionInput } from '@shared/skills/types';
 import { createConversation } from '@main/core/conversations/createConversation';
 import { injectPrompt } from '@main/core/conversations/inject-prompt';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
@@ -34,6 +35,7 @@ export type StartReviewOrchestrationParams = {
   requirement: string;
   reviewerRuntime: RuntimeId;
   reviewerSystemPrompt: string;
+  reviewerSkillSelection?: SkillSelectionInput;
   reviewerAutoApprove: boolean;
 };
 
@@ -53,6 +55,7 @@ class ReviewOrchestrator {
         requirement: params.requirement,
         reviewerRuntime: params.reviewerRuntime,
         reviewerSystemPrompt: params.reviewerSystemPrompt,
+        reviewerSkillSelection: params.reviewerSkillSelection ?? null,
         reviewerAutoApprove: params.reviewerAutoApprove,
         maxRounds: REVIEW_MAX_ROUNDS,
         round: 1,
@@ -227,6 +230,7 @@ class ReviewOrchestrator {
       runtime: reviewerRuntime,
       title: 'Review',
       autoApprove: row.reviewerAutoApprove,
+      skillSelection: row.reviewerSkillSelection ?? undefined,
       initialPrompt: buildReviewPrompt({
         requirement: row.requirement,
         round,

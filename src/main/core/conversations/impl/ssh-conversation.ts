@@ -118,6 +118,12 @@ export class SshConversationProvider implements ConversationProvider {
 
     const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
     recordConversationAuthProvider(conversation.id, providerConfig);
+    if (conversation.skillPolicy) {
+      log.warn('Skipping local Agent skill profile for SSH conversation', {
+        conversationId: conversation.id,
+        runtimeId: conversation.runtimeId,
+      });
+    }
     const { command, args } = buildAgentCommand({
       runtimeId: conversation.runtimeId,
       providerConfig,

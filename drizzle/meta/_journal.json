@@ -260,6 +260,13 @@
       "when": 1782902726589,
       "tag": "0036_silly_jocasta",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1783930412484,
+      "tag": "0037_parallel_sentinel",
+      "breakpoints": true
     }
   ]
 }

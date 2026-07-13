@@ -1,4 +1,5 @@
 import type { RuntimeId } from './runtime-registry';
+import type { SkillSelectionInput } from './skills/types';
 import type { RoutingHopLimit } from './team-routing-limit';
 
 /** Preset that seeded a room. `review-loop` wires implementer↔reviewer routing. */
@@ -49,6 +50,7 @@ export interface RoomMember {
   role: string;
   runtime: RuntimeId | null;
   systemPrompt: string;
+  skillSelection: SkillSelectionInput | null;
   autoApprove: boolean;
   accent: MemberAccent;
   status: MemberStatus;
