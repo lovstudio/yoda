@@ -74,8 +74,8 @@ export interface TerminalFileLinkOptions {
   workspaceRootAliases?: readonly string[];
   /** Home directory used to expand `~/...` paths. */
   homeDir?: string;
-  /** Disable menu items that require local filesystem access. */
-  isRemote?: boolean;
+  /** SSH connection used by shared remote file actions. */
+  sshConnectionId?: string;
   onOpen: (target: TerminalFileLinkTarget) => void;
 }
 

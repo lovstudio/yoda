@@ -587,6 +587,10 @@ export class MonacoModelRegistry {
 
     const entry = this.modelMap.get(newUri);
     if (entry?.type === 'buffer') {
+      // Observable location requests can re-run their surrounding autorun after
+      // they are consumed. Re-attaching the exact same model would restore its
+      // saved view state and overwrite the cursor position that was just set.
+      if (editor.getModel() === entry.model) return;
       editor.setModel(entry.model);
       if (entry.viewState) {
         editor.restoreViewState(entry.viewState);
