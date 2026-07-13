@@ -2,6 +2,10 @@ import { autorun, reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import type * as monacoNS from 'monaco-editor';
 import { useEffect, useRef, type ReactNode } from 'react';
+import {
+  applyPendingEditorReveal,
+  type PendingEditorRevealSource,
+} from '@renderer/features/tasks/editor/editor-location';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { registerActiveCodeEditor } from '@renderer/lib/editor/activeCodeEditor';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
@@ -20,6 +24,10 @@ interface LeasedMonacoEditorProps {
   filePath: string;
   /** Optional floating overlay (e.g. a source/preview toggle). */
   overlay?: ReactNode;
+  /** Observable location request owned by the file tab hosting this editor. */
+  revealSource?: PendingEditorRevealSource;
+  /** Side panes can reveal a location without asynchronously stealing focus. */
+  focusReveal?: boolean;
 }
 
 /**
@@ -31,6 +39,8 @@ interface LeasedMonacoEditorProps {
 export const LeasedMonacoEditor = observer(function LeasedMonacoEditor({
   filePath,
   overlay,
+  revealSource,
+  focusReveal = true,
 }: LeasedMonacoEditorProps) {
   const { taskView } = useProvisionedTask();
   const { editorView } = taskView;
@@ -96,6 +106,7 @@ export const LeasedMonacoEditor = observer(function LeasedMonacoEditor({
     () =>
       autorun(() => {
         const lease = leaseBox.get();
+        const pendingReveal = revealSource?.pendingReveal ?? null;
         if (!lease) return;
 
         const bufferUri = buildMonacoModelPath(editorView.modelRootPath, filePath);
@@ -104,6 +115,9 @@ export const LeasedMonacoEditor = observer(function LeasedMonacoEditor({
 
         modelRegistry.attach(lease.editor, bufferUri, prevBufUriRef.current);
         prevBufUriRef.current = bufferUri;
+        if (pendingReveal && revealSource) {
+          applyPendingEditorReveal(lease.editor, revealSource, { focus: focusReveal });
+        }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []

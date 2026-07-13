@@ -25,6 +25,7 @@ export const MarkdownEditorPanel = observer(function MarkdownEditorPanel() {
       <LeasedMonacoEditor
         key={activeTab.tabId}
         filePath={activeTab.path}
+        revealSource={activeTab}
         overlay={<MarkdownSourceToggleOverlay filePath={activeTab.path} />}
       />
     );

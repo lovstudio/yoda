@@ -15,7 +15,7 @@ import { modelRegistry } from '@renderer/lib/monaco/monaco-model-registry';
 import { defineMonacoThemes, getMonacoTheme } from '@renderer/lib/monaco/monaco-themes';
 import { useMonacoLease } from '@renderer/lib/monaco/use-monaco-lease';
 import { useIsActiveTask } from '../hooks/use-is-active-task';
-import type { FileRevealTarget } from '../tabs/file-tab-store';
+import { applyPendingEditorReveal } from './editor-location';
 
 interface EditorContextValue {
   /**
@@ -33,22 +33,6 @@ interface EditorContextValue {
 
 const EditorContext = createContext<EditorContextValue | null>(null);
 
-function revealEditorLocation(
-  editor: monacoNS.editor.IStandaloneCodeEditor,
-  target: FileRevealTarget
-): void {
-  const model = editor.getModel();
-  if (!model) return;
-
-  const lineNumber = Math.min(target.lineNumber, model.getLineCount());
-  const column = Math.min(target.column, model.getLineMaxColumn(lineNumber));
-  const position = { lineNumber, column };
-
-  editor.setPosition(position);
-  editor.revealPositionInCenter(position);
-  editor.focus();
-}
-
 export function useEditorContext(): EditorContextValue {
   const ctx = useContext(EditorContext);
   if (!ctx) throw new Error('useEditorContext must be used within EditorProvider');
@@ -65,7 +49,8 @@ export const EditorProvider = observer(function EditorProvider({
   projectId: string;
 }) {
   const provisionedTask = useProvisionedTask();
-  const { editorView, tabManager } = provisionedTask.taskView;
+  const { taskView } = provisionedTask;
+  const { editorView, tabManager } = taskView;
   const { effectiveTheme, themeFingerprint } = useTheme();
   const isActive = useIsActiveTask(taskId);
 
@@ -163,6 +148,7 @@ export const EditorProvider = observer(function EditorProvider({
         const newBufUri = editorView.activeBufferUri; // reactive (derived from active file entry)
         const activeFileEntry = tabManager.activeFileEntry; // reactive
         const pendingReveal = activeFileEntry?.pendingReveal ?? null; // reactive
+        const activeRenderer = taskView.activeRenderer; // reactive
 
         if (!lease) return;
 
@@ -178,9 +164,8 @@ export const EditorProvider = observer(function EditorProvider({
         modelRegistry.attach(lease.editor, newBufUri, prevBufUriRef.current);
         prevBufUriRef.current = newBufUri;
 
-        if (pendingReveal) {
-          revealEditorLocation(lease.editor, pendingReveal);
-          activeFileEntry?.consumePendingReveal();
+        if (pendingReveal && activeFileEntry && activeRenderer === 'monaco') {
+          applyPendingEditorReveal(lease.editor, activeFileEntry);
         }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps

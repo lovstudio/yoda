@@ -1,7 +1,8 @@
-import { Copy, ExternalLink, FileText, FolderOpen } from 'lucide-react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { Copy, ExternalLink, FileText } from 'lucide-react';
+import { useEffect, useRef, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { FilePathMenuItems } from '@renderer/lib/components/file-path-actions';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { cn } from '@renderer/utils/utils';
@@ -85,10 +86,14 @@ function MenuItem({
   children,
   disabled = false,
   onSelect,
+  onClick,
+  className,
 }: {
-  children: ReactNode;
+  children?: ReactNode;
   disabled?: boolean;
-  onSelect: () => void;
+  onSelect?: () => void;
+  onClick?: (event: ReactMouseEvent) => void;
+  className?: string;
 }) {
   return (
     <button
@@ -97,12 +102,15 @@ function MenuItem({
       disabled={disabled}
       className={cn(
         "relative flex w-full cursor-default items-center gap-2 overflow-hidden rounded-sm px-2 py-1.5 text-left text-sm outline-hidden transition-colors select-none before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:rounded-full before:bg-transparent before:transition-colors before:content-[''] hover:bg-background-quaternary-2 hover:text-foreground hover:before:bg-foreground/70 hover:**:text-foreground focus:bg-background-quaternary-2 focus:text-foreground focus:before:bg-foreground/70 not-data-[variant=destructive]:focus:**:text-foreground active:bg-background-quaternary-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        className,
         disabled && 'pointer-events-none opacity-50'
       )}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (!disabled) onSelect();
+        if (disabled) return;
+        onClick?.(event);
+        onSelect?.();
       }}
     >
       {children}
@@ -125,10 +133,8 @@ function FileMenuItems({
   onAfterAction: () => void;
   t: (key: string) => string;
 }) {
-  const isRemote = fileLinks?.isRemote ?? false;
   const canOpenInEditor = Boolean(fileLinks && target.filePath);
   const absolutePath = target.absolutePath ?? null;
-  const canActOnAbsolute = !isRemote && Boolean(absolutePath);
 
   return (
     <>
@@ -143,37 +149,21 @@ function FileMenuItems({
           {t('fileActions.openInMainArea')}
         </MenuItem>
       ) : null}
-      <MenuItem
-        disabled={!canActOnAbsolute}
-        onSelect={() => {
-          if (absolutePath) void openInSystemApp(absolutePath, t);
-          onAfterAction();
-        }}
-      >
-        <ExternalLink className="size-4" />
-        {t('tasks.panel.openFile')}
-      </MenuItem>
-      <MenuItem
-        disabled={!canActOnAbsolute}
-        onSelect={() => {
-          if (absolutePath) void revealInFolder(absolutePath, t);
-          onAfterAction();
-        }}
-      >
-        <FolderOpen className="size-4" />
-        {t('tasks.panel.revealInFolder')}
-      </MenuItem>
-      <MenuSeparator />
-      <MenuItem
-        disabled={!absolutePath}
-        onSelect={() => {
-          if (absolutePath) void copyText(absolutePath, t('tasks.panel.filePathCopied'), t);
-          onAfterAction();
-        }}
-      >
-        <Copy className="size-4" />
-        {t('tasks.panel.copyFilePath')}
-      </MenuItem>
+      {canOpenInEditor && absolutePath ? <MenuSeparator /> : null}
+      {absolutePath ? (
+        <FilePathMenuItems
+          target={{
+            absolutePath,
+            relativePath: target.filePath ?? null,
+            kind: target.isDirectory ? 'directory' : 'file',
+            sshConnectionId: fileLinks?.sshConnectionId ?? null,
+            line: target.line,
+            column: target.column,
+          }}
+          components={{ Item: MenuItem, Separator: MenuSeparator }}
+          onAfterAction={onAfterAction}
+        />
+      ) : null}
     </>
   );
 }
@@ -210,44 +200,6 @@ function UrlMenuItems({
       </MenuItem>
     </>
   );
-}
-
-async function openInSystemApp(path: string, t: (key: string) => string): Promise<void> {
-  try {
-    const res = await rpc.app.openIn({ app: 'finder', path });
-    if (!res?.success) {
-      toast({
-        title: t('tasks.panel.openFileFailed'),
-        description: res?.error,
-        variant: 'destructive',
-      });
-    }
-  } catch (error) {
-    toast({
-      title: t('tasks.panel.openFileFailed'),
-      description: error instanceof Error ? error.message : String(error),
-      variant: 'destructive',
-    });
-  }
-}
-
-async function revealInFolder(path: string, t: (key: string) => string): Promise<void> {
-  try {
-    const res = await rpc.app.openIn({ app: 'finder', path, reveal: true });
-    if (!res?.success) {
-      toast({
-        title: t('tasks.panel.revealFileFailed'),
-        description: res?.error,
-        variant: 'destructive',
-      });
-    }
-  } catch (error) {
-    toast({
-      title: t('tasks.panel.revealFileFailed'),
-      description: error instanceof Error ? error.message : String(error),
-      variant: 'destructive',
-    });
-  }
 }
 
 async function copyText(

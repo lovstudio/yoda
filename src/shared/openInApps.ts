@@ -4,6 +4,8 @@ export type PlatformKey = 'darwin' | 'win32' | 'linux';
 
 export type PlatformConfig = {
   openCommands?: string[];
+  /** Commands that can open a file at a specific line/column. */
+  openLocationCommands?: string[];
   openUrls?: string[];
   checkCommands?: string[];
   bundleIds?: string[];
@@ -109,6 +111,11 @@ const _OPEN_IN_APPS = {
           'open -n -b com.microsoft.VSCode --args {{path}}',
           'open -n -a "Visual Studio Code" {{path}}',
         ],
+        openLocationCommands: [
+          'command -v code >/dev/null 2>&1 && code --goto {{path_location}}',
+          'open -n -b com.microsoft.VSCode --args --goto {{path_location}}',
+          'open -n -a "Visual Studio Code" --args --goto {{path_location}}',
+        ],
         checkCommands: ['code'],
         bundleIds: ['com.microsoft.VSCode', 'com.microsoft.VSCodeInsiders'],
         appNames: ['Visual Studio Code'],
@@ -119,6 +126,10 @@ const _OPEN_IN_APPS = {
       },
       linux: {
         openCommands: ['code {{path}}', 'code-insiders {{path}}'],
+        openLocationCommands: [
+          'code --goto {{path_location}}',
+          'code-insiders --goto {{path_location}}',
+        ],
         checkCommands: ['code', 'code-insiders'],
       },
     },
@@ -504,6 +515,16 @@ const _OPEN_IN_APPS = {
 } satisfies Record<string, OpenInAppConfigShape>;
 
 export type OpenInAppId = keyof typeof _OPEN_IN_APPS;
+
+export type OpenInRequest = {
+  app: OpenInAppId;
+  path: string;
+  isRemote?: boolean;
+  sshConnectionId?: string | null;
+  reveal?: boolean;
+  line?: number;
+  column?: number;
+};
 
 export type OpenInAppConfig = OpenInAppConfigShape & { id: OpenInAppId };
 

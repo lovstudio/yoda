@@ -16,6 +16,7 @@ import type { FileTabStore } from '@renderer/features/tasks/tabs/file-tab-store'
 import type { TabEntry } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { useWorkspaceWebLinks } from '@renderer/features/tasks/terminals/use-workspace-web-links';
+import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
 import { MarkdownEditorRenderer } from '@renderer/lib/editor/markdown-renderer';
 import { rpc } from '@renderer/lib/ipc';
 import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
@@ -83,6 +84,8 @@ const SidebarPinnedFile = observer(function SidebarPinnedFile({ file }: { file: 
       return (
         <LeasedMonacoEditor
           filePath={file.path}
+          revealSource={file}
+          focusReveal={false}
           overlay={<FileActionsOverlay filePath={file.path} />}
         />
       );
@@ -92,6 +95,8 @@ const SidebarPinnedFile = observer(function SidebarPinnedFile({ file }: { file: 
       return (
         <LeasedMonacoEditor
           filePath={file.path}
+          revealSource={file}
+          focusReveal={false}
           overlay={<MarkdownSourceToggleOverlay filePath={file.path} />}
         />
       );
@@ -156,7 +161,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
       workspaceRoot: provisioned.path,
       workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
-      isRemote: Boolean(remoteConnectionId),
+      sshConnectionId: remoteConnectionId,
       onOpen: ({ filePath, absolutePath, line, column }) => {
         if (filePath) {
           // Open into the MAIN area — the whole point of pinning is keeping
@@ -166,7 +171,14 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
           return;
         }
         if (absolutePath) {
-          void rpc.app.openIn({ app: 'finder', path: absolutePath });
+          void rpc.app.openIn(
+            buildFilePathDefaultOpenRequest({
+              absolutePath,
+              sshConnectionId: remoteConnectionId,
+              line,
+              column,
+            })
+          );
         }
       },
     }),
