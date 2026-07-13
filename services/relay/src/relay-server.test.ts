@@ -108,7 +108,8 @@ function sendJsonResponse(
   requestId: string,
   body: string,
   headers: Record<string, string> = {},
-  status = 200
+  status = 200,
+  chunkBytes = 64 * 1024
 ): void {
   socket.send(
     JSON.stringify({
@@ -119,15 +120,20 @@ function sendJsonResponse(
       headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers },
     })
   );
-  socket.send(
-    JSON.stringify({
-      v: 1,
-      type: 'response.chunk',
-      requestId,
-      sequence: 0,
-      bodyBase64: Buffer.from(body).toString('base64'),
-    })
-  );
+  const buffer = Buffer.from(body);
+  for (let offset = 0, sequence = 0; offset < buffer.length; sequence += 1) {
+    const chunk = buffer.subarray(offset, Math.min(offset + chunkBytes, buffer.length));
+    socket.send(
+      JSON.stringify({
+        v: 1,
+        type: 'response.chunk',
+        requestId,
+        sequence,
+        bodyBase64: chunk.toString('base64'),
+      })
+    );
+    offset += chunk.length;
+  }
   socket.send(JSON.stringify({ v: 1, type: 'response.end', requestId }));
 }
 
@@ -198,6 +204,109 @@ describe('Yoda Relay server', () => {
       token: MOBILE_TOKEN,
       deviceId: DEVICE_ID,
     });
+  });
+
+  it.each([65_579, 160 * 1024])(
+    'preserves a %i-byte response split at the 64 KiB desktop boundary',
+    async (bodyBytes) => {
+      const { httpBaseUrl, wsBaseUrl } = await startRelay();
+      const host = await connectHost(wsBaseUrl);
+      const body = JSON.stringify({ data: 'x'.repeat(bodyBytes - 11) });
+      expect(Buffer.byteLength(body)).toBe(bodyBytes);
+      host.once('message', (data) => {
+        const request = JSON.parse(data.toString()) as { requestId: string };
+        sendJsonResponse(host, request.requestId, body, {}, 200, 64 * 1024);
+      });
+
+      const response = await fetch(`${httpBaseUrl}/v1/devices/${DEVICE_ID}/v1/snapshot`, {
+        headers: { Authorization: `Bearer ${MOBILE_TOKEN}` },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-length')).toBe(String(bodyBytes));
+      await expect(response.text()).resolves.toBe(body);
+      expect(host.readyState).toBe(WebSocket.OPEN);
+    }
+  );
+
+  it('returns a structured error when a buffered desktop response exceeds the limit', async () => {
+    const { httpBaseUrl, wsBaseUrl } = await startRelay({
+      config: { maxResponseBytes: 64 * 1024 },
+    });
+    const host = await connectHost(wsBaseUrl);
+    let requestCount = 0;
+    host.on('message', (data) => {
+      const request = JSON.parse(data.toString()) as { type: string; requestId: string };
+      if (request.type !== 'request.start') return;
+      requestCount += 1;
+      sendJsonResponse(
+        host,
+        request.requestId,
+        requestCount === 1 ? 'x'.repeat(64 * 1024 + 1) : '{"ok":true}',
+        {},
+        200,
+        64 * 1024
+      );
+    });
+
+    const oversized = await fetch(`${httpBaseUrl}/v1/devices/${DEVICE_ID}/v1/snapshot`, {
+      headers: { Authorization: `Bearer ${MOBILE_TOKEN}` },
+    });
+    expect(oversized.status).toBe(502);
+    await expect(oversized.json()).resolves.toMatchObject({
+      error: { code: 'response_too_large' },
+    });
+    expect(host.readyState).toBe(WebSocket.OPEN);
+
+    const next = await fetch(`${httpBaseUrl}/v1/devices/${DEVICE_ID}/v1/snapshot`, {
+      headers: { Authorization: `Bearer ${MOBILE_TOKEN}` },
+    });
+    expect(next.status).toBe(200);
+    await expect(next.json()).resolves.toEqual({ ok: true });
+  });
+
+  it('returns a structured error when the desktop fails after starting a buffered response', async () => {
+    const { httpBaseUrl, wsBaseUrl } = await startRelay();
+    const host = await connectHost(wsBaseUrl);
+    host.once('message', (data) => {
+      const request = JSON.parse(data.toString()) as { requestId: string };
+      host.send(
+        JSON.stringify({
+          v: 1,
+          type: 'response.start',
+          requestId: request.requestId,
+          status: 200,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        })
+      );
+      host.send(
+        JSON.stringify({
+          v: 1,
+          type: 'response.chunk',
+          requestId: request.requestId,
+          sequence: 0,
+          bodyBase64: Buffer.from('{"partial":').toString('base64'),
+        })
+      );
+      host.send(
+        JSON.stringify({
+          v: 1,
+          type: 'response.error',
+          requestId: request.requestId,
+          code: 'loopback_failed',
+          message: 'Loopback failed.',
+        })
+      );
+    });
+
+    const response = await fetch(`${httpBaseUrl}/v1/devices/${DEVICE_ID}/v1/snapshot`, {
+      headers: { Authorization: `Bearer ${MOBILE_TOKEN}` },
+    });
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'desktop_gateway_error' },
+    });
+    expect(host.readyState).toBe(WebSocket.OPEN);
   });
 
   it('periodically reauthorizes a connected host', async () => {

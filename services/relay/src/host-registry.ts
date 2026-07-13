@@ -30,6 +30,11 @@ type Exchange = ForwardRequest & {
   requestId: string;
   responseStarted: boolean;
   responseIsEventStream: boolean;
+  bufferedResponse: {
+    status: number;
+    headers: Record<string, string>;
+    chunks: Buffer[];
+  } | null;
   expectedSequence: number;
   responseBytes: number;
   timer: NodeJS.Timeout | null;
@@ -127,6 +132,7 @@ class HostConnection {
       requestId,
       responseStarted: false,
       responseIsEventStream: false,
+      bufferedResponse: null,
       expectedSequence: 0,
       responseBytes: 0,
       timer: null,
@@ -226,19 +232,26 @@ class HostConnection {
             );
             return;
           }
+          if (!exchange.bufferedResponse) {
+            throw new ProtocolError('Buffered response metadata is missing.');
+          }
+          exchange.bufferedResponse.chunks.push(chunk);
         } else {
           this.armTimeout(exchange, this.options.streamIdleTimeoutMs);
-        }
-        if (!exchange.res.write(chunk)) {
-          this.cancel(exchange, 'backpressure');
-          this.detach(exchange);
-          exchange.res.destroy(new Error('Relay response backpressure limit reached.'));
+          // SSE responses are intentionally unbounded. Treat a full HTTP write buffer as the
+          // slow-client limit for streams, while bounded JSON responses are buffered separately.
+          if (!exchange.res.write(chunk)) {
+            this.cancel(exchange, 'backpressure');
+            this.detach(exchange);
+            exchange.res.destroy(new Error('Relay response backpressure limit reached.'));
+          }
         }
         return;
       }
       case 'response.end':
         if (!exchange.responseStarted)
           throw new ProtocolError('response.end arrived before start.');
+        if (!exchange.responseIsEventStream) this.writeBufferedResponse(exchange);
         this.detach(exchange);
         if (!exchange.res.destroyed && !exchange.res.writableEnded) exchange.res.end();
         return;
@@ -273,12 +286,28 @@ class HostConnection {
     } else if (!headers['cache-control']) {
       headers['cache-control'] = 'no-store';
     }
-    exchange.res.writeHead(status, {
+    const responseHeaders = {
       ...securityHeaders(),
       ...exchange.responseHeaders,
       ...headers,
+    };
+    if (exchange.responseIsEventStream) {
+      exchange.res.writeHead(status, responseHeaders);
+      exchange.res.flushHeaders();
+    } else {
+      exchange.bufferedResponse = { status, headers: responseHeaders, chunks: [] };
+    }
+  }
+
+  private writeBufferedResponse(exchange: Exchange): void {
+    const buffered = exchange.bufferedResponse;
+    if (!buffered) throw new ProtocolError('Buffered response metadata is missing.');
+    const body = Buffer.concat(buffered.chunks, exchange.responseBytes);
+    exchange.res.writeHead(buffered.status, {
+      ...buffered.headers,
+      'content-length': String(body.length),
     });
-    exchange.res.flushHeaders();
+    exchange.res.end(body);
   }
 
   private handleClientClose(requestId: string): void {
@@ -309,7 +338,7 @@ class HostConnection {
 
   private fail(exchange: Exchange, status: number, code: string, message: string): void {
     if (exchange.settled) return;
-    const responseStarted = exchange.responseStarted || exchange.res.headersSent;
+    const responseStarted = exchange.res.headersSent;
     this.detach(exchange);
     if (exchange.res.destroyed || exchange.res.writableEnded) return;
     if (responseStarted) {
