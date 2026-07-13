@@ -30,6 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popove
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
+import { getQuotaWindowLabel } from './workspace-runtime-bar-format';
 
 export function explicitConversationRuntimeId(value: unknown): RuntimeId | null {
   return typeof value === 'string' && isValidRuntimeId(value) ? value : null;
@@ -484,12 +485,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   <div className="flex flex-col gap-3 p-3">
                     {accountRateLimits.map((limit) => {
                       const percent = Math.round(limit.usedPercent);
+                      const windowLabel = getQuotaWindowLabel(limit.windowMinutes);
                       return (
                         <div key={limit.windowMinutes} className="flex flex-col gap-1.5">
                           <div className="flex items-center justify-between gap-3 text-xs">
                             <span className="text-foreground-muted">
-                              {t('workspaceRuntime.quotaWindow', {
-                                minutes: limit.windowMinutes,
+                              {t(windowLabel.translationKey, {
+                                value: windowLabel.value,
                               })}
                             </span>
                             <span className="font-mono tabular-nums text-foreground">
