@@ -3,7 +3,8 @@ import { sessionSummarySnapshotUpdatedChannel } from '@shared/events/sessionSumm
 import type { TaskNamingContextSnapshot, TaskNamingStatus } from '@shared/task-naming';
 import { estimateTokens } from '@main/core/tasks/name-generation/task-naming-service';
 import { events } from '@main/lib/events';
-import type { ResolvedSummaryRuntime, SummaryDraft } from './generateSessionSummary';
+import type { ResolvedSummaryRuntime } from './generateSessionSummary';
+import type { SummaryDraft } from './session-summary-prompt';
 
 /**
  * In-memory debug snapshots of whole-session summary generation, mirroring
@@ -82,6 +83,16 @@ function buildSummaryContextSnapshot(
 ): TaskNamingContextSnapshot {
   const draft = input.draft;
   const sources = [
+    ...(draft?.previousSummary
+      ? [
+          {
+            id: 'previous-summary',
+            label: 'Existing summary',
+            content: draft.previousSummary,
+            estimatedTokens: estimateTokens(draft.previousSummary),
+          },
+        ]
+      : []),
     ...(draft?.projectLine
       ? [
           {
@@ -96,7 +107,7 @@ function buildSummaryContextSnapshot(
       ? [
           {
             id: 'prompt',
-            label: 'Session transcript',
+            label: draft.previousSummary ? 'New session transcript' : 'Session transcript',
             content: draft.transcript,
             estimatedTokens: estimateTokens(draft.transcript),
             truncated: draft.transcriptTruncated,

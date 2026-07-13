@@ -1,5 +1,7 @@
 import { and, eq } from 'drizzle-orm';
+import { formatDeliverySummaryContext } from '@shared/agent-command-context';
 import { err, ok, type Result } from '@shared/result';
+import { getTaskDeliverySummaries } from '@main/core/conversations/session-summary-context';
 import { projectManager } from '@main/core/projects/project-manager';
 import { db } from '@main/db/client';
 import { tasks } from '@main/db/schema';
@@ -52,6 +54,19 @@ export async function generateTaskCommitMessage(
   }
   if (!diffStat.trim() && !diff.trim()) return err('There are no changes to describe.');
 
+  let deliveryContext = '';
+  try {
+    deliveryContext = formatDeliverySummaryContext(
+      await getTaskDeliverySummaries(projectId, taskId),
+      'commit'
+    );
+  } catch (error) {
+    log.warn('generateTaskCommitMessage: failed to load delivery summaries', {
+      taskId,
+      error: String(error),
+    });
+  }
+
   const prompt = [
     'You write a git commit message for squash-merging a task branch.',
     'Return strict JSON only. Do not include markdown, code fences, comments, or explanations.',
@@ -63,6 +78,7 @@ export async function generateTaskCommitMessage(
     '',
     `Task: ${task.name}`,
     `Branch: ${task.taskBranch} -> ${source.branch}`,
+    ...(deliveryContext ? ['', deliveryContext] : []),
     '',
     'Diff stat:',
     diffStat.trim(),

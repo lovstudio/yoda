@@ -16,6 +16,7 @@ import { resolveQuitAgentSessionsDecision } from './core/app/quit-agent-sessions
 import { appService } from './core/app/service';
 import { automationScheduler } from './core/automation/automation-scheduler';
 import { agentSessionRuntimeStore } from './core/conversations/agent-session-runtime';
+import { sessionSummaryAutoRefreshService } from './core/conversations/session-summary-autorefresh';
 import { localDependencyManager } from './core/dependencies/dependency-manager';
 import { knownBinDirs } from './core/dependencies/probe';
 import { editorBufferService } from './core/editor/editor-buffer-service';
@@ -139,6 +140,7 @@ void app.whenReady().then(async () => {
   try {
     await initializeDatabase();
     __bootMark('initializeDatabase done');
+    sessionSummaryAutoRefreshService.initialize();
     searchService.initialize();
     __bootMark('searchService.initialize done');
     void editorBufferService.pruneStale();
@@ -279,6 +281,7 @@ function beginShutdown(mode: TeardownMode): void {
     void (async () => {
       try {
         agentHookService.dispose();
+        sessionSummaryAutoRefreshService.dispose();
         agentSessionRuntimeStore.dispose();
         mobileGatewayService.dispose();
         updateService.dispose();

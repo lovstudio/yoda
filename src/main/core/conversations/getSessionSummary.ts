@@ -15,13 +15,10 @@ import type { RuntimeId } from '@shared/runtime-registry';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { agentSessionRuntimeStore } from './agent-session-runtime';
-import {
-  buildSummaryDraft,
-  generateSessionSummary,
-  resolveSummaryRuntime,
-} from './generateSessionSummary';
+import { generateSessionSummary, resolveSummaryRuntime } from './generateSessionSummary';
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getCodexSessionContext } from './getCodexSessionContext';
+import { buildSummaryDraft } from './session-summary-prompt';
 import {
   createSessionSummarySnapshot,
   saveSessionSummarySnapshot,
@@ -32,6 +29,7 @@ import {
   getStoredSummary,
   setManualSummary,
   setStoredSummary,
+  type StoredSummary,
 } from './session-summary-store';
 
 /** Number of trailing transcript messages a `recent` summary covers. */
@@ -42,11 +40,13 @@ const SUMMARY_CACHE_MAX = 128;
 // durable copy lives in SQLite (see session-summary-store) so it survives
 // restarts; this Map is only a per-process accelerator.
 const generatedSummaryCache = new Map<string, SessionSummary>();
+const generatedSummaryInFlight = new Map<string, Promise<SessionSummary | null>>();
 
 /**
  * Resolves a session summary for one scope:
- *   - `global`: the whole session. Prefers the runtime's own compaction
- *     summary (zero cost); otherwise generates from all user prompts.
+ *   - `global`: the whole session. Generates a compact delivery summary and
+ *     incrementally updates it as new transcript messages arrive; a runtime
+ *     compaction summary remains the read-only fallback.
  *   - `recent`: only the last few user/assistant transcript messages. Always
  *     generated, kept short, and cached by input signature — meant to refresh
  *     after every reply.
@@ -114,22 +114,13 @@ export async function getSessionSummary(
     }
   }
 
-  // Global scope can short-circuit to the runtime's own compaction summary.
-  if (scope === 'global' && loaded.summary) {
-    log.info('[session-summary] resolved', {
-      runtimeId,
-      scope,
-      status: 'compaction',
-      contextDurationMs,
-      totalDurationMs: Date.now() - startedAt,
-    });
-    return { summary: loaded.summary, status: 'compaction' };
-  }
-
   // Provider/model/prompt/context come from the configured summary Agent, NOT
   // the session's runtime — so a dead session runtime never blocks summaries.
   const runtime = await resolveSummaryRuntime(scope, projectId);
   if (runtime.language === 'skip') {
+    if (scope === 'global' && loaded.summary) {
+      return { summary: loaded.summary, status: 'compaction' };
+    }
     if (scope === 'global') {
       saveSessionSummarySnapshot({
         conversationId,
@@ -159,6 +150,16 @@ export async function getSessionSummary(
   );
   const messages = scope === 'recent' ? included.slice(-RECENT_MESSAGE_COUNT) : included;
   if (messages.length === 0) {
+    if (scope === 'global' && loaded.summary) {
+      log.info('[session-summary] resolved', {
+        runtimeId,
+        scope,
+        status: 'compaction',
+        contextDurationMs,
+        totalDurationMs: Date.now() - startedAt,
+      });
+      return { summary: loaded.summary, status: 'compaction' };
+    }
     log.info('[session-summary] resolved', {
       runtimeId,
       scope,
@@ -190,6 +191,7 @@ export async function getSessionSummary(
   // Persisted entry is invalidated by runtime changes too, so switching the
   // summary Agent or language re-generates instead of returning stale text.
   const storedFingerprint = `${runtimeKey}:${fingerprint}`;
+  const stored = await getStoredSummary(conversationId, scope);
 
   // Content-dedupe: in-process cache, then the durable SQLite copy. Both are
   // keyed by the transcript fingerprint, so an unchanged conversation never
@@ -209,7 +211,6 @@ export async function getSessionSummary(
       return { summary: cached, status: 'generated' };
     }
 
-    const stored = await getStoredSummary(conversationId, scope);
     if (stored && stored.fingerprint === storedFingerprint) {
       setSummaryCache(cacheKey, stored.summary);
       log.info('[session-summary] resolved', {
@@ -225,11 +226,30 @@ export async function getSessionSummary(
     // Peek: a stale persisted summary still beats a blank row; never generate.
     if (peek) {
       if (stored) return { summary: stored.summary, status: 'generated' };
+      if (scope === 'global' && loaded.summary) {
+        return { summary: loaded.summary, status: 'compaction' };
+      }
       return { summary: null, status: running ? 'running' : 'empty' };
     }
   }
 
-  const draft = buildSummaryDraft(runtime, cwd, messages, scope);
+  const incrementalStored = resolveIncrementalStoredSummary({
+    scope,
+    stored,
+    runtimeKey,
+    messages,
+    force: Boolean(force),
+  });
+  const draftMessages = incrementalStored
+    ? messages.slice(incrementalStored.messageCount)
+    : messages;
+  const draft = buildSummaryDraft(
+    runtime,
+    cwd,
+    draftMessages.length > 0 ? draftMessages : messages,
+    scope,
+    incrementalStored?.summary.text
+  );
   if (!draft) return { summary: null, status: 'empty' };
   const snapshotBase = {
     conversationId,
@@ -248,15 +268,20 @@ export async function getSessionSummary(
   // streams in live instead of appearing only when generation finishes.
   const topic = sessionSummaryTopic(conversationId, scope);
   const generateStartedAt = Date.now();
-  const generated = await generateSessionSummary(runtime, cwd, draft, scope, (delta) =>
-    events.emit(sessionSummaryStreamChannel, { scope, delta }, topic)
-  );
+  const runGeneration = () =>
+    generateSessionSummary(runtime, cwd, draft, scope, (delta) =>
+      events.emit(sessionSummaryStreamChannel, { scope, delta }, topic)
+    );
+  const generated = force
+    ? await runGeneration()
+    : await getOrCreateSummaryGeneration(cacheKey, runGeneration);
   const generateDurationMs = Date.now() - generateStartedAt;
   if (generated) {
     setSummaryCache(cacheKey, generated);
     await setStoredSummary(conversationId, scope, {
       summary: generated,
       fingerprint: storedFingerprint,
+      messageCount: messages.length,
     });
     // An explicit regenerate replaces a manual override — otherwise the fresh
     // result would stay invisible behind it.
@@ -411,4 +436,41 @@ function setSummaryCache(key: string, summary: SessionSummary): void {
     if (oldest) generatedSummaryCache.delete(oldest);
   }
   generatedSummaryCache.set(key, summary);
+}
+
+function getOrCreateSummaryGeneration(
+  key: string,
+  generate: () => Promise<SessionSummary | null>
+): Promise<SessionSummary | null> {
+  const existing = generatedSummaryInFlight.get(key);
+  if (existing) return existing;
+
+  const pending = generate().finally(() => {
+    if (generatedSummaryInFlight.get(key) === pending) generatedSummaryInFlight.delete(key);
+  });
+  generatedSummaryInFlight.set(key, pending);
+  return pending;
+}
+
+function resolveIncrementalStoredSummary({
+  scope,
+  stored,
+  runtimeKey,
+  messages,
+  force,
+}: {
+  scope: SessionSummaryScope;
+  stored: StoredSummary | null;
+  runtimeKey: string;
+  messages: SessionTranscriptMessage[];
+  force: boolean;
+}): { summary: SessionSummary; messageCount: number } | null {
+  if (force || scope !== 'global' || !stored) return null;
+  if (typeof stored.messageCount !== 'number') return null;
+  if (stored.messageCount <= 0 || stored.messageCount >= messages.length) return null;
+
+  const coveredMessages = messages.slice(0, stored.messageCount);
+  const coveredFingerprint = `${runtimeKey}:${summaryFingerprint(coveredMessages)}`;
+  if (stored.fingerprint !== coveredFingerprint) return null;
+  return { summary: stored.summary, messageCount: stored.messageCount };
 }
