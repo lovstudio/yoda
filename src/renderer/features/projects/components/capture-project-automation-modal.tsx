@@ -9,13 +9,16 @@ import {
   serializePromptWithTokens,
   type PromptToken,
 } from '@renderer/app/prompt-attachment-tokens';
+import { runProjectCommand } from '@renderer/features/projects/run-project-command';
 import {
   asMounted,
   getProjectSettingsStore,
   getProjectStore,
+  getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
@@ -94,6 +97,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   const [setupScript, setSetupScript] = useState('');
   const [runScript, setRunScript] = useState('');
   const [teardownScript, setTeardownScript] = useState('');
+  const [quickActionId] = useState(() => genId());
   const settingsStore = getProjectSettingsStore(projectId);
   const projectStore = getProjectStore(projectId);
   const mountedProject = asMounted(projectStore);
@@ -105,10 +109,11 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   const runtimeOverrideValue =
     settingsStore?.settings?.composerDefaults?.runtimeId ?? homeDraft?.runtimeOverride ?? null;
   const ignoreRuntimeOverride = useCallback(() => {}, []);
-  const { runtimeId } = useEffectiveRuntime(connectionId, {
+  const { runtimeId, createDisabled } = useEffectiveRuntime(connectionId, {
     value: runtimeOverrideValue,
     set: ignoreRuntimeOverride,
   });
+  const { navigate } = useNavigate();
   const serializedIntent = useMemo(
     () => serializePromptWithTokens(intent, intentTokens, { imagesAsPaths: true }).text,
     [intent, intentTokens]
@@ -157,37 +162,41 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     setLabelOverridden(next.trim().length > 0);
   };
 
-  const saveQuickAction = async () => {
+  const saveQuickAction = async (): Promise<QuickAction | null> => {
     const settingsStore = getProjectSettingsStore(projectId);
     const currentSettings = settingsStore?.settings;
     if (!settingsStore || !currentSettings) {
       setError(t('projects.projectNotReady'));
-      return false;
+      return null;
     }
     const cleanedLabel =
       label.trim() || suggestedLabel || t('sidebar.captureAutomation.defaultLabel');
     const cleanedCommand = command.trim();
     if (!cleanedCommand) {
       setError(t('sidebar.captureAutomation.commandRequired'));
-      return false;
+      return null;
     }
     const action: QuickAction = {
-      id: genId(),
+      id: quickActionId,
       label: cleanedLabel,
       command: cleanedCommand,
     };
+    const currentActions = currentSettings.quickActions ?? [];
+    const nextActions = currentActions.some((item) => item.id === action.id)
+      ? currentActions.map((item) => (item.id === action.id ? action : item))
+      : [...currentActions, action];
     const nextSettings = JSON.parse(
       JSON.stringify({
         ...currentSettings,
-        quickActions: [...(currentSettings.quickActions ?? []), action],
+        quickActions: nextActions,
       })
     ) as typeof currentSettings;
     const updateRes = await settingsStore.save(nextSettings);
     if (!updateRes.success) {
       setError(t('projects.settings.saveFailed'));
-      return false;
+      return null;
     }
-    return true;
+    return action;
   };
 
   const saveRunScripts = async () => {
@@ -219,9 +228,59 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     if (loading || submitting) return;
     setSubmitting(true);
     setError(null);
-    const ok = target === 'runScript' ? await saveRunScripts() : await saveQuickAction();
-    setSubmitting(false);
-    if (ok) onSuccess();
+    try {
+      if (target === 'runScript') {
+        if (await saveRunScripts()) onSuccess();
+        return;
+      }
+
+      const project = asMounted(getProjectStore(projectId));
+      const repository = getRepositoryStore(projectId);
+      if (!project || !repository || !runtimeId || createDisabled) {
+        setError(t('sidebar.captureAutomation.executionUnavailable'));
+        return;
+      }
+
+      await Promise.all([repository.localData.load(), repository.remoteData.load()]);
+      const defaultBranch = repository.defaultBranch;
+      if (!defaultBranch) {
+        setError(t('sidebar.captureAutomation.executionUnavailable'));
+        return;
+      }
+
+      const action = await saveQuickAction();
+      if (!action) return;
+
+      try {
+        const taskId = await runProjectCommand({
+          project,
+          action,
+          runtimeId,
+          defaultBranch,
+        });
+        if (!taskId) {
+          setError(t('sidebar.captureAutomation.savedButExecutionFailed'));
+          return;
+        }
+        onSuccess();
+        navigate('task', { projectId, taskId });
+      } catch (executionError) {
+        setError(
+          t('sidebar.captureAutomation.savedButExecutionFailedWithReason', {
+            error:
+              executionError instanceof Error ? executionError.message : String(executionError),
+          })
+        );
+      }
+    } catch (submitError) {
+      setError(
+        t('sidebar.captureAutomation.submitFailed', {
+          error: submitError instanceof Error ? submitError.message : String(submitError),
+        })
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -370,7 +429,15 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
           </Button>
         ) : (
           <ConfirmButton onClick={() => void handleSubmit()} disabled={loading || submitting}>
-            {submitting ? t('common.saving') : t('sidebar.captureAutomation.save')}
+            {target === 'quickAction'
+              ? t(
+                  submitting
+                    ? 'sidebar.captureAutomation.savingAndRunning'
+                    : 'sidebar.captureAutomation.saveAndRun'
+                )
+              : submitting
+                ? t('common.saving')
+                : t('sidebar.captureAutomation.save')}
           </ConfirmButton>
         )}
       </DialogFooter>

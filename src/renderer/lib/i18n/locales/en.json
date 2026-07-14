@@ -282,8 +282,14 @@
       "skillDraftDescription": "Draft only for now. Copy it into a skill when the operation needs reusable judgment, fallbacks, or verification rules.",
       "copySkillDraft": "Copy draft",
       "save": "Save",
+      "saveAndRun": "Save and run",
+      "savingAndRunning": "Saving and running…",
       "defaultLabel": "Project operation",
-      "commandRequired": "Action prompt is required."
+      "commandRequired": "Action prompt is required.",
+      "executionUnavailable": "The quick operation cannot run because the project, runtime, or default branch is not ready.",
+      "savedButExecutionFailed": "The quick operation was saved, but execution could not start.",
+      "savedButExecutionFailedWithReason": "The quick operation was saved, but execution failed: {{error}}",
+      "submitFailed": "The quick operation could not be submitted: {{error}}"
     },
     "mobileConnection": {
       "title": "Mobile connection",
