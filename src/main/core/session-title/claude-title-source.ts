@@ -36,7 +36,16 @@ export function encodeClaudeProjectDir(cwd: string): string {
 }
 
 export function resolveClaudeTranscriptPath(cwd: string, sessionId: string): string {
-  return join(homedir(), '.claude', 'projects', encodeClaudeProjectDir(cwd), `${sessionId}.jsonl`);
+  const configDir = process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude');
+  return resolveClaudeTranscriptPathFromConfigDir(cwd, sessionId, configDir);
+}
+
+export function resolveClaudeTranscriptPathFromConfigDir(
+  cwd: string,
+  sessionId: string,
+  configDir: string
+): string {
+  return join(configDir, 'projects', encodeClaudeProjectDir(cwd), `${sessionId}.jsonl`);
 }
 
 const READY_POLL_INTERVAL_MS = 1_000;

@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import type {
   AgentAccountRateLimitWindow,
@@ -7,14 +6,7 @@ import type {
   AgentAccountUsage,
   RuntimeId,
 } from '@shared/runtime-registry';
-
-const REQUEST_TIMEOUT_MS = 10_000;
-
-type JsonRpcResponse = {
-  id?: number;
-  result?: unknown;
-  error?: { message?: unknown };
-};
+import { requestCodexAppServer } from './codex-app-server-client';
 
 type CodexRateLimitResponse = {
   rateLimits?: unknown;
@@ -82,88 +74,6 @@ export function resetAccountUsage(id: RuntimeId): Promise<AgentAccountResetResul
   });
 }
 
-function requestCodexAppServer(method: string, params: Record<string, unknown>): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('codex', ['app-server', '--stdio'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    let stdout = '';
-    let stderr = '';
-    let settled = false;
-
-    const finish = (error: Error | null, value?: unknown) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      child.kill();
-      if (error) reject(error);
-      else resolve(value);
-    };
-    const write = (message: object) => child.stdin.write(`${JSON.stringify(message)}\n`);
-    const handleLine = (line: string) => {
-      let response: JsonRpcResponse;
-      try {
-        response = JSON.parse(line) as JsonRpcResponse;
-      } catch {
-        return;
-      }
-      if (response.id === 1) {
-        if (response.error) {
-          finish(
-            new Error(readRpcError(response.error, 'Codex app-server initialization failed.'))
-          );
-          return;
-        }
-        write({ method: 'initialized', params: {} });
-        write({ id: 2, method, params });
-      } else if (response.id === 2) {
-        if (response.error) {
-          finish(new Error(readRpcError(response.error, 'Codex account usage request failed.')));
-          return;
-        }
-        finish(null, response.result);
-      }
-    };
-    const timeout = setTimeout(
-      () => finish(new Error('Timed out while reading Codex account usage.')),
-      REQUEST_TIMEOUT_MS
-    );
-
-    child.on('error', (error) => finish(error));
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
-      let newline = stdout.indexOf('\n');
-      while (newline >= 0) {
-        const line = stdout.slice(0, newline).trim();
-        stdout = stdout.slice(newline + 1);
-        if (line) handleLine(line);
-        newline = stdout.indexOf('\n');
-      }
-    });
-    child.on('exit', (code) => {
-      if (!settled) {
-        const detail = stderr.trim();
-        finish(
-          new Error(
-            detail ||
-              `Codex app-server exited before returning account usage (code ${code ?? '?'}).`
-          )
-        );
-      }
-    });
-
-    write({
-      id: 1,
-      method: 'initialize',
-      params: { clientInfo: { name: 'yoda', title: 'Yoda', version: '0.15.3' } },
-    });
-  });
-}
-
 export function parseCodexResetOutcome(value: unknown): AgentAccountResetOutcome {
   const outcome = objectValue(value)?.outcome;
   if (
@@ -175,10 +85,6 @@ export function parseCodexResetOutcome(value: unknown): AgentAccountResetOutcome
     return outcome;
   }
   throw new Error('Codex returned an unknown account reset outcome.');
-}
-
-function readRpcError(error: { message?: unknown }, fallback: string): string {
-  return typeof error.message === 'string' && error.message ? error.message : fallback;
 }
 
 export function parseCodexRateLimits(value: unknown): {

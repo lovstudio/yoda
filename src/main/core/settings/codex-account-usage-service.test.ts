@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseCodexRateLimits, parseCodexResetOutcome } from './codex-account-usage-service';
+
+vi.mock('./runtime-settings-service', () => ({
+  runtimeOverrideSettings: { getItem: vi.fn(async () => ({ cli: 'codex' })) },
+}));
 
 describe('parseCodexRateLimits', () => {
   it('parses live quota windows and available reset credits', () => {

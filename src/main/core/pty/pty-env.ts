@@ -38,6 +38,7 @@ const AGENT_AUTH_ENV_VARS = [
 ] as const;
 
 const AGENT_NETWORK_ENV_VARS = ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'] as const;
+const AGENT_STATE_ENV_VARS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME'] as const;
 
 export const AGENT_ENV_VARS = [...AGENT_AUTH_ENV_VARS, ...AGENT_NETWORK_ENV_VARS] as const;
 
@@ -208,6 +209,11 @@ export function buildAgentEnv(options: AgentEnvOptions = {}): Record<string, str
   }
 
   for (const key of AGENT_NETWORK_ENV_VARS) {
+    const val = process.env[key];
+    if (val) env[key] = val;
+  }
+
+  for (const key of AGENT_STATE_ENV_VARS) {
     const val = process.env[key];
     if (val) env[key] = val;
   }

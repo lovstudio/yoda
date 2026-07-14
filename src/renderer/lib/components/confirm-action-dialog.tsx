@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
@@ -20,11 +21,12 @@ type Props = BaseModalProps<void> & ConfirmActionDialogArgs;
 export function ConfirmActionDialog({
   title,
   description,
-  confirmLabel = 'Confirm',
+  confirmLabel,
   variant = 'destructive',
   onSuccess,
   onClose,
 }: Props) {
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader showCloseButton={false}>
@@ -35,10 +37,10 @@ export function ConfirmActionDialog({
       </DialogContentArea>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <ConfirmButton variant={variant} onClick={() => onSuccess()}>
-          {confirmLabel}
+          {confirmLabel ?? t('common.confirm')}
         </ConfirmButton>
       </DialogFooter>
     </>

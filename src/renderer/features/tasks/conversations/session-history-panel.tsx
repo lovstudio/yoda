@@ -9,6 +9,7 @@ import { useSessionPrompts } from '@renderer/features/tasks/session-info-panel';
 import { buildPromptPreviewItems } from '@renderer/features/tasks/session-prompts-preview';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { cn } from '@renderer/utils/utils';
+import { SessionPromptRestoreButton } from './session-prompt-restore-button';
 
 /**
  * The active conversation's prompt history rendered as a scrollable list, oldest
@@ -18,10 +19,14 @@ import { cn } from '@renderer/utils/utils';
  */
 export const SessionPromptList = observer(function SessionPromptList({
   prompts,
+  onRestorePrompt,
+  restoringPromptId,
   className,
   style,
 }: {
   prompts: ClaudeSessionPrompt[];
+  onRestorePrompt?: (prompt: ClaudeSessionPrompt, index: number) => void;
+  restoringPromptId?: string | null;
   className?: string;
   style?: CSSProperties;
 }) {
@@ -45,7 +50,13 @@ export const SessionPromptList = observer(function SessionPromptList({
       }}
     >
       {prompts.map((prompt, index) => (
-        <SessionPromptRow key={prompt.id || `prompt-${index}`} prompt={prompt} index={index + 1} />
+        <SessionPromptRow
+          key={prompt.id || `prompt-${index}`}
+          prompt={prompt}
+          index={index + 1}
+          onRestore={onRestorePrompt}
+          isRestoring={restoringPromptId === prompt.id}
+        />
       ))}
     </div>
   );
@@ -83,7 +94,14 @@ export const SessionHistoryPanel = observer(function SessionHistoryPanel({
     );
   }
 
-  return <SessionPromptList prompts={prompts.prompts} className="h-full" />;
+  return (
+    <SessionPromptList
+      prompts={prompts.prompts}
+      onRestorePrompt={prompts.requestRestorePrompt}
+      restoringPromptId={prompts.restoringPromptId}
+      className="h-full"
+    />
+  );
 });
 
 const MIN_DOCK_ROWS = 1;
@@ -157,6 +175,8 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
             prompts={prompts.prompts}
             tailCount={rows}
             onOpenAll={prompts.openPromptsModal}
+            onRestorePrompt={prompts.requestRestorePrompt}
+            restoringPromptId={prompts.restoringPromptId}
           />
         ) : (
           <div className="px-3 pb-2 text-xs text-foreground-passive">
@@ -172,10 +192,14 @@ function DockedSessionPromptPreview({
   prompts,
   tailCount,
   onOpenAll,
+  onRestorePrompt,
+  restoringPromptId,
 }: {
   prompts: ClaudeSessionPrompt[];
   tailCount: number;
   onOpenAll: () => void;
+  onRestorePrompt: (prompt: ClaudeSessionPrompt, index: number) => void;
+  restoringPromptId: string | null;
 }) {
   const { t } = useTranslation();
   const previewItems = useMemo(
@@ -204,6 +228,8 @@ function DockedSessionPromptPreview({
             prompt={item.prompt}
             index={item.promptIndex}
             onClick={onOpenAll}
+            onRestore={onRestorePrompt}
+            isRestoring={restoringPromptId === item.prompt.id}
           />
         )
       )}
@@ -215,15 +241,19 @@ function SessionPromptRow({
   prompt,
   index,
   onClick,
+  onRestore,
+  isRestoring = false,
 }: {
   prompt: ClaudeSessionPrompt;
   index: number;
   onClick?: () => void;
+  onRestore?: (prompt: ClaudeSessionPrompt, index: number) => void;
+  isRestoring?: boolean;
 }) {
   const text = displaySessionPromptText(prompt.text).trim();
   const timestamp = prompt.timestamp ? new Date(prompt.timestamp).toLocaleTimeString() : null;
-  const className =
-    'group flex h-6 w-full min-w-0 items-center gap-2 px-3 text-left transition-colors';
+  const canRestore = Boolean(onRestore && prompt.restoreTarget);
+  const className = 'flex h-6 min-w-0 flex-1 items-center gap-2 text-left';
 
   const content = (
     <>
@@ -233,33 +263,42 @@ function SessionPromptRow({
       <span className="min-w-0 flex-1 truncate text-xs leading-5 text-foreground-muted">
         {text}
       </span>
-      {timestamp ? (
-        <span className="shrink-0 font-mono text-[10px] text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+      {timestamp && !canRestore ? (
+        <span className="shrink-0 font-mono text-[10px] text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           {timestamp}
         </span>
       ) : null}
     </>
   );
 
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        className={cn(
-          className,
-          'hover:bg-background-1 hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border'
-        )}
-        title={text}
-        onClick={onClick}
-      >
-        {content}
-      </button>
-    );
-  }
-
   return (
-    <div className={className} title={text}>
-      {content}
+    <div
+      className="group flex h-6 w-full min-w-0 items-center gap-1 px-3 transition-colors hover:bg-background-1 focus-within:bg-background-1"
+      title={text}
+    >
+      {onClick ? (
+        <button
+          type="button"
+          className={cn(
+            className,
+            'hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border'
+          )}
+          onClick={onClick}
+        >
+          {content}
+        </button>
+      ) : (
+        <div className={className}>{content}</div>
+      )}
+      {canRestore && onRestore ? (
+        <SessionPromptRestoreButton
+          prompt={prompt}
+          index={index}
+          isRestoring={isRestoring}
+          onRestore={onRestore}
+          className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+        />
+      ) : null}
     </div>
   );
 }

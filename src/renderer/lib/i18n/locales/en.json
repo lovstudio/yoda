@@ -1337,6 +1337,12 @@
       "truncatedPrompts": "{{count}} truncated prompt",
       "truncatedPrompts_plural": "{{count}} truncated prompts",
       "promptsModalTitle": "User prompts",
+      "restoreContextAtPrompt": "Restore to prompt {{index}}",
+      "restoreContextTitle": "Restore to prompt {{index}}?",
+      "restoreContextDescription": "This creates a new session with the context through this reply. The current session and working tree files stay unchanged.",
+      "restoreContextConfirm": "Restore here",
+      "restoreContextSuccess": "Created a new session from the selected context",
+      "restoreContextFailed": "Failed to restore context",
       "fieldInfo": {
         "contentSource": "On-disk source file for this session's content (Claude JSONL transcript / Codex rollout). Transcript, stats, and naming all read from it.",
         "autoApprove": "Whether agent tool calls are approved automatically, without per-call confirmation.",

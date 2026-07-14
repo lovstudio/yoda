@@ -1,5 +1,4 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type {
   AgentMemory,
@@ -10,9 +9,11 @@ import type {
 } from '@shared/conversations';
 import {
   encodeClaudeProjectDir,
-  resolveClaudeTranscriptPath,
+  resolveClaudeTranscriptPathFromConfigDir,
 } from '@main/core/session-title/claude-title-source';
 import { log } from '@main/lib/logger';
+import { getClaudeCompletedTurnTargets, isClaudeRealUserPromptRow } from './claude-transcript-fork';
+import { resolveRuntimeStateDirectory } from './impl/runtime-env';
 import { getInstructionFiles } from './instruction-files';
 import { scanClaudeAgents } from './scanClaudeAgents';
 import { scanClaudeSkills } from './scanClaudeSkills';
@@ -28,9 +29,12 @@ import { scanClaudeSkills } from './scanClaudeSkills';
  */
 export async function getClaudeSessionContext(
   cwd: string,
-  sessionId: string
+  sessionId: string,
+  options: { claudeConfigDir?: string } = {}
 ): Promise<ClaudeSessionContext | null> {
-  const transcriptPath = resolveClaudeTranscriptPath(cwd, sessionId);
+  const claudeConfigDir =
+    options.claudeConfigDir ?? resolveRuntimeStateDirectory('claude', undefined);
+  const transcriptPath = resolveClaudeTranscriptPathFromConfigDir(cwd, sessionId, claudeConfigDir);
   let raw: string;
   try {
     raw = await readFile(transcriptPath, 'utf8');
@@ -43,6 +47,7 @@ export async function getClaudeSessionContext(
   const mcpServers = new Map<string, string>();
   const prompts: ClaudeSessionPrompt[] = [];
   const messages: SessionTranscriptMessage[] = [];
+  const completedTurnTargets = getClaudeCompletedTurnTargets(raw);
   // Keep only the latest compaction summary — later compactions supersede earlier ones.
   let summary: SessionSummary | null = null;
 
@@ -64,10 +69,15 @@ export async function getClaudeSessionContext(
         summary = compactSummary;
         continue;
       }
-      const prompt = extractPrompt(parsed, prompts.length);
+      const prompt = extractPrompt(parsed, completedTurnTargets);
       if (prompt) {
         prompts.push(prompt);
-        messages.push({ ...prompt, role: 'user' });
+        messages.push({
+          id: prompt.id,
+          role: 'user',
+          text: prompt.text,
+          timestamp: prompt.timestamp,
+        });
       }
       continue;
     }
@@ -80,7 +90,7 @@ export async function getClaudeSessionContext(
 
   const [memoryFiles, memories, skills, scannedAgents] = await Promise.all([
     getInstructionFiles(cwd),
-    loadMemories(cwd),
+    loadMemories(cwd, claudeConfigDir),
     scanClaudeSkills(cwd),
     scanClaudeAgents(cwd),
   ]);
@@ -173,16 +183,26 @@ function removeStrings(value: unknown, sink: Set<string>): void {
   for (const v of value) if (typeof v === 'string') sink.delete(v);
 }
 
-function extractPrompt(row: Record<string, unknown>, index: number): ClaudeSessionPrompt | null {
-  if (row.isSidechain === true) return null;
-  if (row.isMeta === true) return null;
+function extractPrompt(
+  row: Record<string, unknown>,
+  completedTurnTargets: Map<string, string>
+): ClaudeSessionPrompt | null {
+  if (!isClaudeRealUserPromptRow(row)) return null;
   const message = row.message;
   if (!message || typeof message !== 'object') return null;
   const text = extractUserText((message as Record<string, unknown>).content);
   if (!text) return null;
   const timestamp = typeof row.timestamp === 'string' ? row.timestamp : null;
-  const uuid = typeof row.uuid === 'string' ? row.uuid : `${index}`;
-  return { id: uuid, text, timestamp };
+  const uuid = row.uuid as string;
+  const targetMessageId = completedTurnTargets.get(uuid);
+  return {
+    id: uuid,
+    text,
+    timestamp,
+    ...(targetMessageId
+      ? { restoreTarget: { kind: 'claude-message' as const, messageId: targetMessageId } }
+      : {}),
+  };
 }
 
 function extractAssistantMessage(
@@ -233,8 +253,8 @@ function stripWrapperTags(text: string): string {
  * frontmatter. Distinct from CLAUDE.md / AGENTS.md — these files are written
  * by the agent itself, not the user.
  */
-async function loadMemories(cwd: string): Promise<AgentMemory[]> {
-  const dir = join(homedir(), '.claude', 'projects', encodeClaudeProjectDir(cwd), 'memory');
+async function loadMemories(cwd: string, claudeConfigDir: string): Promise<AgentMemory[]> {
+  const dir = join(claudeConfigDir, 'projects', encodeClaudeProjectDir(cwd), 'memory');
   let names: string[];
   try {
     names = await readdir(dir);

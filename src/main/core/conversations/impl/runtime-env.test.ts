@@ -3,6 +3,7 @@ import {
   resolveAgentApiEnvVars,
   resolveRuntimeBaseEnv,
   resolveRuntimeEnv,
+  resolveRuntimeStateDirectory,
   resolveRuntimeTmuxEnv,
 } from './runtime-env';
 
@@ -141,5 +142,37 @@ describe('resolveRuntimeEnv', () => {
     ).toEqual({
       CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN: '1',
     });
+  });
+
+  it('resolves provider state directories with runtime config taking precedence', () => {
+    expect(
+      resolveRuntimeStateDirectory(
+        'codex',
+        { env: { CODEX_HOME: '/provider/codex' } },
+        { processEnv: { CODEX_HOME: '/inherited/codex' }, home: '/home/user' }
+      )
+    ).toBe('/provider/codex');
+    expect(
+      resolveRuntimeStateDirectory(
+        'claude',
+        { env: { CLAUDE_CONFIG_DIR: '/provider/claude' } },
+        { processEnv: { CLAUDE_CONFIG_DIR: '/inherited/claude' }, home: '/home/user' }
+      )
+    ).toBe('/provider/claude');
+  });
+
+  it('falls back from inherited state directories to provider defaults', () => {
+    expect(
+      resolveRuntimeStateDirectory('codex', undefined, {
+        processEnv: { CODEX_HOME: '/inherited/codex' },
+        home: '/home/user',
+      })
+    ).toBe('/inherited/codex');
+    expect(
+      resolveRuntimeStateDirectory('claude', undefined, {
+        processEnv: {},
+        home: '/home/user',
+      })
+    ).toBe('/home/user/.claude');
   });
 });

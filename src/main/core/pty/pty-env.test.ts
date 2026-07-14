@@ -106,4 +106,20 @@ describe('pty env Windows shell handling', () => {
     expect(env.ANTHROPIC_API_KEY).toBe('secret');
     expect(env.OPENAI_API_KEY).toBeUndefined();
   });
+
+  it('forwards inherited provider state directories and lets provider config override them', async () => {
+    process.env.CLAUDE_CONFIG_DIR = '/inherited/claude';
+    process.env.CODEX_HOME = '/inherited/codex';
+
+    const { buildAgentEnv } = await loadPtyEnv();
+    const inherited = buildAgentEnv({ agentApiVars: false });
+    const overridden = buildAgentEnv({
+      agentApiVars: false,
+      providerVars: { CODEX_HOME: '/provider/codex' },
+    });
+
+    expect(inherited.CLAUDE_CONFIG_DIR).toBe('/inherited/claude');
+    expect(inherited.CODEX_HOME).toBe('/inherited/codex');
+    expect(overridden.CODEX_HOME).toBe('/provider/codex');
+  });
 });
