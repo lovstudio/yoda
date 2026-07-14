@@ -280,8 +280,14 @@
       "skillDraftDescription": "当前只生成草稿。当操作需要可复用判断、回退和验证规则时，再复制成 skill。",
       "copySkillDraft": "复制草稿",
       "save": "保存",
+      "saveAndRun": "保存并执行",
+      "savingAndRunning": "保存并执行中…",
       "defaultLabel": "项目操作",
-      "commandRequired": "操作 prompt 不能为空。"
+      "commandRequired": "操作 prompt 不能为空。",
+      "executionUnavailable": "无法执行快速操作：项目、运行时或默认分支尚未就绪。",
+      "savedButExecutionFailed": "快速操作已保存，但未能启动执行。",
+      "savedButExecutionFailedWithReason": "快速操作已保存，但执行失败：{{error}}",
+      "submitFailed": "快速操作提交失败：{{error}}"
     },
     "mobileConnection": {
       "title": "移动端连接",
