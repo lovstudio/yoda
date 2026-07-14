@@ -1,6 +1,5 @@
 import { existsSync, type Dirent } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type {
@@ -19,6 +18,7 @@ import {
   resolveCodexStatePath,
 } from '@main/core/session-title/codex-title-source';
 import { log } from '@main/lib/logger';
+import { resolveRuntimeStateDirectory } from './impl/runtime-env';
 import { getCodexInstructionFiles } from './instruction-files';
 import { scanCodexSkills } from './scanCodexSkills';
 
@@ -73,9 +73,10 @@ export async function getCodexSessionContext(
   cwd: string,
   conversationId: string,
   conversationTitle?: string,
-  conversationCreatedAt?: string | null
+  conversationCreatedAt?: string | null,
+  options: { codexHome?: string } = {}
 ): Promise<CodexSessionContext | null> {
-  const codexHome = resolveCodexHome();
+  const codexHome = options.codexHome ?? resolveCodexHome();
   const statePath = resolveCodexStatePath(codexHome);
   const thread =
     resolveCodexThread({
@@ -133,9 +134,10 @@ export async function getCodexSessionModel(
   cwd: string,
   conversationId: string,
   conversationTitle?: string,
-  conversationCreatedAt?: string | null
+  conversationCreatedAt?: string | null,
+  options: { codexHome?: string } = {}
 ): Promise<string | null> {
-  const codexHome = resolveCodexHome();
+  const codexHome = options.codexHome ?? resolveCodexHome();
   const statePath = resolveCodexStatePath(codexHome);
   const thread =
     resolveCodexThread({
@@ -156,7 +158,7 @@ export async function getCodexSessionModel(
 }
 
 function resolveCodexHome(): string {
-  return process.env.CODEX_HOME ?? join(homedir(), '.codex');
+  return resolveRuntimeStateDirectory('codex', undefined);
 }
 
 async function resolveCodexThreadFromRollouts({
@@ -551,9 +553,12 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
   let dynamicTools: CodexDynamicTool[] = [];
   const developerMessages: ClaudeSessionPrompt[] = [];
   const eventPrompts: ClaudeSessionPrompt[] = [];
+  const eventPromptTurnIds: Array<string | null> = [];
   const responseUserPrompts: ClaudeSessionPrompt[] = [];
+  const responsePromptTurnIds: Array<string | null> = [];
   const messages: SessionTranscriptMessage[] = [];
   const turnContexts: CodexTurnContext[] = [];
+  let currentTurnId: string | null = null;
   let completedTurnCount = 0;
   // Keep only the latest compaction summary — later compactions supersede earlier ones.
   let summary: SessionSummary | null = null;
@@ -577,15 +582,32 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
 
     if (parsed.type === 'turn_context') {
       const ctx = parseTurnContext(parsed.payload);
-      if (ctx) turnContexts.push(ctx);
+      if (ctx) {
+        turnContexts.push(ctx);
+        currentTurnId = ctx.turnId ?? currentTurnId;
+      }
       continue;
     }
 
     if (parsed.type === 'event_msg') {
       const payload = objectValue(parsed.payload);
       if (!payload) continue;
+      if (payload.type === 'task_started' || payload.type === 'turn_started') {
+        currentTurnId = nullableString(payload.turn_id) ?? currentTurnId;
+        continue;
+      }
       if (payload.type === 'task_complete' || payload.type === 'turn_complete') {
         completedTurnCount += 1;
+        const completedTurnId = nullableString(payload.turn_id) ?? currentTurnId;
+        if (completedTurnId) {
+          markLastPromptForCompletedTurn(eventPrompts, eventPromptTurnIds, completedTurnId);
+          markLastPromptForCompletedTurn(
+            responseUserPrompts,
+            responsePromptTurnIds,
+            completedTurnId
+          );
+        }
+        if (completedTurnId === currentTurnId) currentTurnId = null;
         const lastAgentMessage = nullableString(payload.last_agent_message);
         if (lastAgentMessage) {
           pushMessage(messages, {
@@ -606,6 +628,7 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
           timestamp,
         };
         eventPrompts.push(prompt);
+        eventPromptTurnIds.push(nullableString(payload.turn_id) ?? currentTurnId);
         pushMessage(messages, { ...prompt, role: 'user' });
       }
       continue;
@@ -631,6 +654,7 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
           timestamp,
         };
         responseUserPrompts.push(prompt);
+        responsePromptTurnIds.push(currentTurnId);
         pushMessage(messages, { ...prompt, role: 'user' });
       } else if (payload.role === 'assistant') {
         pushMessage(messages, {
@@ -667,6 +691,21 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
     modelProvider,
     summary,
   };
+}
+
+function markLastPromptForCompletedTurn(
+  prompts: ClaudeSessionPrompt[],
+  promptTurnIds: Array<string | null>,
+  completedTurnId: string
+): void {
+  for (let index = promptTurnIds.length - 1; index >= 0; index -= 1) {
+    if (promptTurnIds[index] !== completedTurnId) continue;
+    const prompt = prompts[index];
+    if (prompt) {
+      prompt.restoreTarget = { kind: 'codex-turn', turnId: completedTurnId };
+    }
+    return;
+  }
 }
 
 function pushMessage(

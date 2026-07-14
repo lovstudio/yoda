@@ -1,5 +1,9 @@
 import { action, computed, makeObservable, observable, onBecomeObserved, runInAction } from 'mobx';
-import { type Conversation, type CreateConversationParams } from '@shared/conversations';
+import {
+  type Conversation,
+  type CreateConversationParams,
+  type ForkConversationAtPromptParams,
+} from '@shared/conversations';
 import type { PendingAction } from '@shared/events/agent-run-state';
 import {
   agentEventChannel,
@@ -30,6 +34,7 @@ export class ConversationManagerStore {
   private offConversationRenamed: (() => void) | null = null;
   private offConversationArchived: (() => void) | null = null;
   private readonly pendingConversationTitles = new Map<string, string>();
+  private readonly pendingContextForks = new Map<string, Promise<Conversation>>();
   conversations = observable.map<string, ConversationStore>();
 
   constructor(
@@ -306,6 +311,51 @@ export class ConversationManagerStore {
     return conversation;
   }
 
+  forkConversationAtPrompt(params: ForkConversationAtPromptParams): Promise<Conversation> {
+    const key = this.contextForkKey(params);
+    const existing = this.pendingContextForks.get(key);
+    if (existing) return existing;
+
+    const pending = this.createContextFork(params).finally(() => {
+      if (this.pendingContextForks.get(key) === pending) {
+        this.pendingContextForks.delete(key);
+      }
+    });
+    this.pendingContextForks.set(key, pending);
+    return pending;
+  }
+
+  isContextForkPending(
+    params: Pick<ForkConversationAtPromptParams, 'conversationId' | 'promptIndex' | 'target'>
+  ): boolean {
+    return this.pendingContextForks.has(this.contextForkKey(params));
+  }
+
+  private contextForkKey(
+    params: Pick<ForkConversationAtPromptParams, 'conversationId' | 'promptIndex' | 'target'>
+  ): string {
+    const targetId =
+      params.target.kind === 'claude-message' ? params.target.messageId : params.target.turnId;
+    return `${params.conversationId}:${params.promptIndex}:${params.target.kind}:${targetId}`;
+  }
+
+  private async createContextFork(params: ForkConversationAtPromptParams): Promise<Conversation> {
+    const conversation = this.consumePendingConversationTitle(
+      await rpc.conversations.forkConversationAtPrompt(params)
+    );
+    runInAction(() => {
+      const store = new ConversationStore(conversation);
+      this.conversations.set(conversation.id, store);
+      if (conversation.resume) {
+        store.setSessionExited(true);
+      } else {
+        void store.session.connect();
+      }
+    });
+    this.onUserPromptAt?.(conversation.lastInteractedAt ?? new Date().toISOString());
+    return conversation;
+  }
+
   async markConversationWorking(conversationId: string): Promise<void> {
     if (!this._loaded || this._loadPromise) {
       await this.load();
@@ -464,6 +514,7 @@ export class ConversationManagerStore {
     this.offConversationArchived?.();
     this.offConversationArchived = null;
     this.pendingConversationTitles.clear();
+    this.pendingContextForks.clear();
     for (const conversation of this.conversations.values()) {
       conversation.dispose();
     }

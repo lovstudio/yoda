@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import { getRuntimeAccountProfile, type RuntimeId } from '@shared/runtime-registry';
 
@@ -85,6 +87,27 @@ export function resolveRuntimeEnv(
   }
 
   return Object.keys(env).length > 0 ? env : undefined;
+}
+
+/**
+ * Resolves the state root used by the actual provider process. Provider env
+ * overrides inherited env; both fall back to the CLI's conventional home.
+ */
+export function resolveRuntimeStateDirectory(
+  runtimeId: 'claude' | 'codex',
+  providerConfig: RuntimeCustomConfig | undefined,
+  options: { processEnv?: NodeJS.ProcessEnv; home?: string } = {}
+): string {
+  const envName = runtimeId === 'codex' ? 'CODEX_HOME' : 'CLAUDE_CONFIG_DIR';
+  const defaultDirectory = runtimeId === 'codex' ? '.codex' : '.claude';
+  const providerEnv = resolveRuntimeEnv(providerConfig, { runtimeId });
+  const defaultPath = join(options.home ?? homedir(), defaultDirectory);
+
+  if (providerEnv?.[envName] !== undefined) {
+    return providerEnv[envName].trim() || defaultPath;
+  }
+  const inheritedEnv = options.processEnv ?? process.env;
+  return inheritedEnv[envName]?.trim() || defaultPath;
 }
 
 export function resolveRuntimeTmuxEnv(

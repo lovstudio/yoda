@@ -34,6 +34,21 @@ describe('getCodexSessionContext', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  function getConfiguredCodexSessionContext(
+    targetCwd: string,
+    conversationId: string,
+    conversationTitle?: string,
+    conversationCreatedAt?: string | null
+  ) {
+    return getCodexSessionContext(
+      targetCwd,
+      conversationId,
+      conversationTitle,
+      conversationCreatedAt,
+      { codexHome }
+    );
+  }
+
   it('aggregates Codex thread metadata, rollout prompts, tools, memory, and skills', async () => {
     writeFileSync(join(cwd, 'AGENTS.md'), 'Project instructions');
     mkdirSync(join(cwd, '.codex', 'skills', 'local-skill'), { recursive: true });
@@ -50,7 +65,7 @@ describe('getCodexSessionContext', () => {
     });
     insertDynamicTool(statePath, 'conversation-1');
 
-    const context = await getCodexSessionContext(cwd, 'conversation-1');
+    const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
 
     expect(context).toEqual(
       expect.objectContaining({
@@ -69,6 +84,7 @@ describe('getCodexSessionContext', () => {
         id: '2026-06-02T11:00:03.000Z',
         text: 'Implement Codex context',
         timestamp: '2026-06-02T11:00:03.000Z',
+        restoreTarget: { kind: 'codex-turn', turnId: 'turn-1' },
       },
     ]);
     expect(context?.messages).toEqual([
@@ -109,6 +125,70 @@ describe('getCodexSessionContext', () => {
     expect(context?.skillsListing).toContain('- local-skill: Local skill description');
   });
 
+  it('only exposes the last prompt of a completed turn as a restore checkpoint', async () => {
+    writeFileSync(
+      rolloutPath,
+      [
+        {
+          timestamp: '2026-06-02T11:00:00.000Z',
+          type: 'session_meta',
+          payload: { id: 'conversation-1', cwd },
+        },
+        {
+          timestamp: '2026-06-02T11:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'task_started', turn_id: 'turn-1' },
+        },
+        {
+          timestamp: '2026-06-02T11:00:02.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'Initial request' },
+        },
+        {
+          timestamp: '2026-06-02T11:00:03.000Z',
+          type: 'turn_context',
+          payload: { turn_id: 'turn-1', model: 'gpt-5.5' },
+        },
+        {
+          timestamp: '2026-06-02T11:00:04.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'Steer the same turn' },
+        },
+        {
+          timestamp: '2026-06-02T11:00:05.000Z',
+          type: 'event_msg',
+          payload: { type: 'turn_complete', turn_id: 'turn-1' },
+        },
+        {
+          timestamp: '2026-06-02T11:00:06.000Z',
+          type: 'event_msg',
+          payload: { type: 'turn_started', turn_id: 'turn-2' },
+        },
+        {
+          timestamp: '2026-06-02T11:00:07.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'Still running' },
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join('\n')
+    );
+    insertThread(statePath, rolloutPath, {
+      id: 'conversation-1',
+      cwd,
+      title: 'Thread title',
+      firstUserMessage: 'Initial request',
+    });
+
+    const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
+
+    expect(context?.prompts.map((prompt) => [prompt.text, prompt.restoreTarget])).toEqual([
+      ['Initial request', undefined],
+      ['Steer the same turn', { kind: 'codex-turn', turnId: 'turn-1' }],
+      ['Still running', undefined],
+    ]);
+  });
+
   it('can resolve a Codex thread by conversation title when the ids differ', async () => {
     writeRollout(rolloutPath);
     insertThread(statePath, rolloutPath, {
@@ -118,7 +198,7 @@ describe('getCodexSessionContext', () => {
       firstUserMessage: 'Fallback prompt',
     });
 
-    const context = await getCodexSessionContext(cwd, 'conversation-1', 'Matching title');
+    const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1', 'Matching title');
 
     expect(context?.threadId).toBe('thread-1');
   });
@@ -134,7 +214,7 @@ describe('getCodexSessionContext', () => {
       createdAtMs: Date.parse('2026-06-02T11:00:00.000Z'),
     });
 
-    const context = await getCodexSessionContext(
+    const context = await getConfiguredCodexSessionContext(
       cwd,
       'yoda-conversation-id',
       '@src/renderer/features/tasks/context-panel.tsx:91:5 context pane',
@@ -155,7 +235,7 @@ describe('getCodexSessionContext', () => {
       createdAtMs: Date.parse('2026-06-02T11:21:00.000Z'),
     });
 
-    const context = await getCodexSessionContext(
+    const context = await getConfiguredCodexSessionContext(
       cwd,
       'yoda-conversation-id',
       'Yoda conversation title',
@@ -177,7 +257,7 @@ describe('getCodexSessionContext', () => {
       createdAtMs: Date.parse('2026-06-02T11:00:00.000Z'),
     });
 
-    const context = await getCodexSessionContext(
+    const context = await getConfiguredCodexSessionContext(
       cwd,
       'yoda-conversation-id',
       'Build a search service',
@@ -196,7 +276,7 @@ describe('getCodexSessionContext', () => {
     mkdirSync(sessionDir, { recursive: true });
     writeRollout(sessionRolloutPath, { cwd: oldCwd, id: 'thread-1' });
 
-    const context = await getCodexSessionContext(
+    const context = await getConfiguredCodexSessionContext(
       cwd,
       'yoda-conversation-id',
       'Implement Codex con',
@@ -214,7 +294,7 @@ describe('getCodexSessionContext', () => {
     mkdirSync(sessionDir, { recursive: true });
     writeRollout(sessionRolloutPath, { cwd });
 
-    const context = await getCodexSessionContext(cwd, 'conversation-1');
+    const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
 
     expect(context).toEqual(
       expect.objectContaining({
@@ -238,7 +318,11 @@ describe('getCodexSessionContext', () => {
     mkdirSync(sessionDir, { recursive: true });
     writeRollout(sessionRolloutPath, { cwd, id: 'thread-1' });
 
-    const context = await getCodexSessionContext(cwd, 'missing-conversation', 'Missing title');
+    const context = await getConfiguredCodexSessionContext(
+      cwd,
+      'missing-conversation',
+      'Missing title'
+    );
 
     expect(context).toBeNull();
   });

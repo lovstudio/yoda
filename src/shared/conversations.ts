@@ -77,6 +77,22 @@ export type ClaudeSessionPrompt = {
   id: string;
   text: string;
   timestamp: string | null;
+  /** Provider-native checkpoint used to fork the session through this prompt's completed turn. */
+  restoreTarget?: SessionContextRestoreTarget;
+};
+
+export type SessionContextRestoreTarget =
+  | { kind: 'claude-message'; messageId: string }
+  | { kind: 'codex-turn'; turnId: string };
+
+export type ForkConversationAtPromptParams = {
+  projectId: string;
+  taskId: string;
+  conversationId: string;
+  /** Zero-based index used to revalidate the checkpoint against the source transcript. */
+  promptIndex: number;
+  target: SessionContextRestoreTarget;
+  initialSize?: { cols: number; rows: number };
 };
 
 export type ClaudeMemoryFile = {

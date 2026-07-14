@@ -1337,6 +1337,12 @@
       "truncatedPrompts": "已截断 {{count}} 条 prompt",
       "truncatedPrompts_plural": "已截断 {{count}} 条 prompt",
       "promptsModalTitle": "用户 prompts",
+      "restoreContextAtPrompt": "恢复到第 {{index}} 条",
+      "restoreContextTitle": "恢复到第 {{index}} 条？",
+      "restoreContextDescription": "将创建一个新会话，并保留截至此条回复的上下文。当前会话和工作区文件不会改变。",
+      "restoreContextConfirm": "恢复到此处",
+      "restoreContextSuccess": "已从所选上下文创建新会话",
+      "restoreContextFailed": "恢复上下文失败",
       "fieldInfo": {
         "contentSource": "会话内容在磁盘上的来源文件（Claude 的 JSONL 记录 / Codex 的 rollout 文件），转写、统计、命名都从这里读取。",
         "autoApprove": "是否自动批准 agent 的工具调用与操作，无需逐次人工确认。",
