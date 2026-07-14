@@ -747,6 +747,7 @@
     "update": {
       "version": "Version",
       "currentVersion": "Current version",
+      "viewReleases": "View releases",
       "checkForUpdates": "Check for updates",
       "checking": "Checking for updates…",
       "checkFailed": "Couldn't check for updates",

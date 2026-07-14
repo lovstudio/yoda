@@ -44,6 +44,17 @@ export const UpdateCard = observer(function UpdateCard(): React.JSX.Element {
         description={renderStatusMessage()}
         control={
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => void update.openReleasePage()}
+              aria-label={t('settings.update.viewReleases')}
+              title={t('settings.update.viewReleases')}
+            >
+              <ExternalLink className="h-3 w-3" />
+            </Button>
             {update.state.status !== 'downloaded' && update.state.status !== 'installing' && (
               <Button
                 type="button"
