@@ -32,17 +32,19 @@ describe('resolveDefaultGatewaySource', () => {
 });
 
 describe('workspace Gateway placement', () => {
-  it('renders the Gateway globally before the flexible status-bar spacer', () => {
+  it('renders the global Gateway in the right-side action area', () => {
     const source = readFileSync(
       new URL('../../app/workspace-runtime-bar.tsx', import.meta.url),
       'utf8'
     );
     const triggerIndex = source.indexOf("aria-label={t('workspaceRuntime.gateway.title')}");
-    const spacerIndex = source.indexOf('<span className="flex-1" />', triggerIndex);
+    const spacerIndex = source.indexOf('<span className="flex-1" />');
+    const terminalIndex = source.indexOf("title={t('workspaceRuntime.terminal')}", triggerIndex);
     const localRuntimeBlockEnd = source.lastIndexOf('      ) : null}', triggerIndex);
 
     expect(triggerIndex).toBeGreaterThan(localRuntimeBlockEnd);
-    expect(spacerIndex).toBeGreaterThan(triggerIndex);
+    expect(triggerIndex).toBeGreaterThan(spacerIndex);
+    expect(terminalIndex).toBeGreaterThan(triggerIndex);
     expect(source).toContain('<GatewayRuntimeSources');
     expect(source).not.toContain('<span>MaaS</span>');
   });

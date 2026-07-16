@@ -615,6 +615,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           ) : null}
         </div>
       ) : null}
+      <span className="flex-1" />
       <Popover>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.gateway.title')}
@@ -711,7 +712,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           </div>
         </PopoverContent>
       </Popover>
-      <span className="flex-1" />
       <button
         type="button"
         title={t('workspaceRuntime.terminal')}
