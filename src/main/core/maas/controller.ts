@@ -3,6 +3,7 @@ import type {
   MaasConnectInput,
   MaasInvocationFilterKind,
   MaasPlatformId,
+  MaasSetRuntimeBindingInput,
   MaasUsageSummaryInput,
 } from '@shared/maas';
 import { maasService } from './maas-service';
@@ -52,6 +53,14 @@ async function getUsageSummary(args: MaasUsageSummaryInput) {
   return maasService.getUsageSummary(args);
 }
 
+async function listRuntimeBindings() {
+  return maasService.listRuntimeBindings();
+}
+
+async function setRuntimeBinding(input: MaasSetRuntimeBindingInput) {
+  return maasService.setRuntimeBinding(input);
+}
+
 export const maasController = createRPCController({
   listConnections,
   listPlatformDescriptions,
@@ -62,4 +71,6 @@ export const maasController = createRPCController({
   copyStoredApiKey,
   listInvocationRecords,
   getUsageSummary,
+  listRuntimeBindings,
+  setRuntimeBinding,
 });

@@ -1,8 +1,9 @@
 import { clipboard, net } from 'electron';
-import type { MaasSettings } from '@shared/app-settings';
+import type { MaasSettings, RuntimeCustomConfig } from '@shared/app-settings';
 import {
   MAAS_PLATFORM_IDS,
   MAAS_PLATFORMS,
+  supportsMaasPlatformForRuntime,
   type MaasConnectInput,
   type MaasConnection,
   type MaasConnectionCheckResult,
@@ -14,13 +15,18 @@ import {
   type MaasPlatformId,
   type MaasPlatformInfoSnapshot,
   type MaasPlatformOfficialDescription,
+  type MaasRuntimeBinding,
+  type MaasRuntimeBindingStatus,
+  type MaasSetRuntimeBindingInput,
   type MaasUsageSummary,
   type MaasUsageSummaryInput,
 } from '@shared/maas';
+import { isValidRuntimeId, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
 import { TTLCache } from '@main/core/utils/ttl-cache';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
 import { encryptedAppSecretsStore } from '../secrets/encrypted-app-secrets-store';
+import { runtimeOverrideSettings } from '../settings/runtime-settings-service';
 import { appSettingsService } from '../settings/settings-service';
 import {
   extractMaasPlatformInfoSnapshot,
@@ -29,8 +35,10 @@ import {
   toMaasPlatformOfficialDescription,
 } from './platform-description';
 import { getMaasPlatformInfoSnapshot, setMaasPlatformInfoSnapshot } from './platform-info-store';
+import { resolveRestoredMaasRuntimeConfig, supportsMaasRuntimeBinding } from './runtime-env';
 
 const SECRET_PREFIX = 'yoda-maas-token';
+const INFERENCE_SECRET_PREFIX = 'yoda-maas-inference-token';
 const REAL_RECORDS_CACHE_TTL_MS = 30_000;
 const PLATFORM_INFO_CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
 const PLATFORM_DESCRIPTION_TIMEOUT_MS = 10_000;
@@ -94,6 +102,10 @@ function secretKey(platformId: MaasPlatformId): string {
   return `${SECRET_PREFIX}:${platformId}`;
 }
 
+function inferenceSecretKey(platformId: MaasPlatformId): string {
+  return `${INFERENCE_SECRET_PREFIX}:${platformId}`;
+}
+
 function keyFingerprint(apiKey: string): string {
   const trimmed = apiKey.trim();
   if (trimmed.length <= 4) return trimmed;
@@ -107,6 +119,7 @@ function defaultConnection(platformId: MaasPlatformId): MaasConnection {
     displayName: platform.name,
     endpoint: platform.defaultEndpoint,
     keyFingerprint: null,
+    inferenceKeyFingerprint: null,
     connectedAt: null,
     lastCheckedAt: null,
     connected: false,
@@ -350,9 +363,167 @@ export class MaasService {
         if (!saved) return defaultConnection(platformId);
 
         const apiKey = await encryptedAppSecretsStore.getSecret(secretKey(platformId));
-        const connection = apiKey ? { ...saved, keyFingerprint: keyFingerprint(apiKey) } : saved;
+        const inferenceApiKey = await encryptedAppSecretsStore.getSecret(
+          platformId === 'zenmux' ? inferenceSecretKey(platformId) : secretKey(platformId)
+        );
+        const connection = {
+          ...saved,
+          keyFingerprint: apiKey ? keyFingerprint(apiKey) : saved.keyFingerprint,
+          inferenceKeyFingerprint: inferenceApiKey
+            ? keyFingerprint(inferenceApiKey)
+            : saved.inferenceKeyFingerprint,
+        };
         return toConnection(connection, platformId);
       })
+    );
+  }
+
+  async listRuntimeBindings(): Promise<MaasRuntimeBindingStatus[]> {
+    const settings = await appSettingsService.get('maas');
+    const statuses = await Promise.all(
+      RUNTIME_IDS.filter((runtimeId) => supportsMaasRuntimeBinding(runtimeId)).map(
+        async (runtimeId): Promise<MaasRuntimeBindingStatus> => {
+          const config = await runtimeOverrideSettings.getItem(runtimeId);
+          const savedBinding = settings.runtimeBindings.find(
+            (binding) => binding.runtimeId === runtimeId
+          );
+          const configuredPlatformId = config?.maasPlatformId ?? savedBinding?.platformId ?? null;
+          const credentials =
+            configuredPlatformId && supportsMaasPlatformForRuntime(runtimeId, configuredPlatformId)
+              ? await this.getInferenceCredentials(configuredPlatformId)
+              : undefined;
+          const effective =
+            config?.authProvider === 'yoda-maas' &&
+            configuredPlatformId !== null &&
+            credentials !== undefined;
+
+          return {
+            runtimeId,
+            platformId: configuredPlatformId,
+            supported: true,
+            bound: savedBinding !== undefined || config?.authProvider === 'yoda-maas',
+            effective,
+            connected: credentials !== undefined,
+            enabledAt: savedBinding?.enabledAt ?? null,
+          };
+        }
+      )
+    );
+
+    return statuses;
+  }
+
+  async setRuntimeBinding(
+    input: MaasSetRuntimeBindingInput
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (!isValidRuntimeId(input.runtimeId) || !supportsMaasRuntimeBinding(input.runtimeId)) {
+        return { success: false, error: 'This Agent Client does not support MaaS switching.' };
+      }
+      if (!isMaasPlatformId(input.platformId)) {
+        return { success: false, error: 'Unsupported MaaS platform.' };
+      }
+      if (!supportsMaasPlatformForRuntime(input.runtimeId, input.platformId)) {
+        return {
+          success: false,
+          error: 'This MaaS platform does not expose a protocol compatible with the Client.',
+        };
+      }
+
+      const settings = await appSettingsService.get('maas');
+      const existingBinding = settings.runtimeBindings.find(
+        (binding) => binding.runtimeId === input.runtimeId
+      );
+      const currentConfig = (await runtimeOverrideSettings.getItem(input.runtimeId)) ?? {};
+
+      if (input.enabled) {
+        if (!(await this.getInferenceCredentials(input.platformId))) {
+          return {
+            success: false,
+            error: 'Connect the MaaS platform and save an API key before enabling a Client.',
+          };
+        }
+
+        const binding: MaasRuntimeBinding = {
+          runtimeId: input.runtimeId,
+          platformId: input.platformId,
+          previousAuthProvider:
+            existingBinding?.previousAuthProvider ?? currentConfig.authProvider ?? null,
+          previousMaasPlatformId:
+            existingBinding?.previousMaasPlatformId ?? currentConfig.maasPlatformId ?? null,
+          enabledAt: existingBinding?.enabledAt ?? new Date().toISOString(),
+        };
+        await runtimeOverrideSettings.updateItem(input.runtimeId, {
+          ...currentConfig,
+          authProvider: 'yoda-maas',
+          maasPlatformId: input.platformId,
+        });
+        await appSettingsService.update('maas', {
+          selectedPlatformId: input.platformId,
+          runtimeBindings: [
+            binding,
+            ...settings.runtimeBindings.filter((item) => item.runtimeId !== input.runtimeId),
+          ],
+        });
+        return { success: true };
+      }
+
+      if (existingBinding && existingBinding.platformId !== input.platformId) {
+        return { success: true };
+      }
+
+      await this.restoreRuntimeConfig(
+        input.runtimeId,
+        currentConfig,
+        existingBinding,
+        input.platformId
+      );
+      await appSettingsService.update('maas', {
+        runtimeBindings: settings.runtimeBindings.filter(
+          (item) => item.runtimeId !== input.runtimeId
+        ),
+      });
+      return { success: true };
+    } catch (error) {
+      log.error('Failed to update MaaS runtime binding:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update MaaS runtime binding.',
+      };
+    }
+  }
+
+  async getRuntimeInferenceCredentials(
+    runtimeId: RuntimeId,
+    platformId?: MaasPlatformId
+  ): Promise<{ platformId: MaasPlatformId; endpoint: string; apiKey: string } | undefined> {
+    if (!supportsMaasRuntimeBinding(runtimeId)) return undefined;
+    const settings = await appSettingsService.get('maas');
+    const selectedPlatformId =
+      platformId ??
+      settings.runtimeBindings.find((binding) => binding.runtimeId === runtimeId)?.platformId ??
+      settings.selectedPlatformId;
+    if (!supportsMaasPlatformForRuntime(runtimeId, selectedPlatformId)) return undefined;
+    const credentials = await this.getInferenceCredentials(selectedPlatformId);
+    return credentials ? { platformId: selectedPlatformId, ...credentials } : undefined;
+  }
+
+  private async restoreRuntimeConfig(
+    runtimeId: RuntimeId,
+    currentConfig: RuntimeCustomConfig,
+    binding: MaasRuntimeBinding | undefined,
+    platformId: MaasPlatformId
+  ): Promise<void> {
+    if (
+      !binding &&
+      (currentConfig.authProvider !== 'yoda-maas' || currentConfig.maasPlatformId !== platformId)
+    ) {
+      return;
+    }
+
+    await runtimeOverrideSettings.updateItem(
+      runtimeId,
+      resolveRestoredMaasRuntimeConfig(currentConfig, binding)
     );
   }
 
@@ -394,7 +565,9 @@ export class MaasService {
     const settings = await appSettingsService.get('maas');
     const connection = getConnectedPlatform(settings, platformId);
     if (!connection) return undefined;
-    const apiKey = await encryptedAppSecretsStore.getSecret(secretKey(platformId));
+    const apiKey = await encryptedAppSecretsStore.getSecret(
+      platformId === 'zenmux' ? inferenceSecretKey(platformId) : secretKey(platformId)
+    );
     if (!apiKey) return undefined;
     return { endpoint: connection.endpoint, apiKey };
   }
@@ -444,8 +617,13 @@ export class MaasService {
       const settings = await appSettingsService.get('maas');
       const existing = getConnectedPlatform(settings, input.platformId);
       const apiKey = input.apiKey?.trim() ?? '';
+      const inferenceApiKey = input.inferenceApiKey?.trim() ?? '';
       let retainedApiKey: string | null = null;
-      if (!apiKey && !existing?.keyFingerprint) {
+      if (
+        !apiKey &&
+        !existing?.keyFingerprint &&
+        !(input.platformId === 'zenmux' && inferenceApiKey)
+      ) {
         return { success: false, error: 'A MaaS API key is required.' };
       }
       if (!apiKey && existing?.keyFingerprint) {
@@ -471,12 +649,28 @@ export class MaasService {
           : retainedApiKey
             ? keyFingerprint(retainedApiKey)
             : (existing?.keyFingerprint ?? null),
+        inferenceKeyFingerprint:
+          input.platformId === 'zenmux'
+            ? inferenceApiKey
+              ? keyFingerprint(inferenceApiKey)
+              : (existing?.inferenceKeyFingerprint ?? null)
+            : apiKey
+              ? keyFingerprint(apiKey)
+              : retainedApiKey
+                ? keyFingerprint(retainedApiKey)
+                : (existing?.inferenceKeyFingerprint ?? existing?.keyFingerprint ?? null),
         connectedAt: existing?.connectedAt ?? now,
         lastCheckedAt: now,
       };
 
       if (apiKey) {
         await encryptedAppSecretsStore.setSecret(secretKey(input.platformId), apiKey);
+      }
+      if (input.platformId === 'zenmux' && inferenceApiKey) {
+        await encryptedAppSecretsStore.setSecret(
+          inferenceSecretKey(input.platformId),
+          inferenceApiKey
+        );
       }
 
       await appSettingsService.update('maas', {
@@ -554,10 +748,22 @@ export class MaasService {
           ? (connections[0]?.platformId ?? MAAS_PLATFORMS.zenmux.id)
           : settings.selectedPlatformId;
 
+      for (const runtimeId of RUNTIME_IDS.filter((id) => supportsMaasRuntimeBinding(id))) {
+        const binding = settings.runtimeBindings.find(
+          (item) => item.runtimeId === runtimeId && item.platformId === platformId
+        );
+        const config = (await runtimeOverrideSettings.getItem(runtimeId)) ?? {};
+        await this.restoreRuntimeConfig(runtimeId, config, binding, platformId);
+      }
+
       await encryptedAppSecretsStore.deleteSecret(secretKey(platformId));
+      await encryptedAppSecretsStore.deleteSecret(inferenceSecretKey(platformId));
       await appSettingsService.update('maas', {
         selectedPlatformId,
         connections,
+        runtimeBindings: settings.runtimeBindings.filter(
+          (binding) => binding.platformId !== platformId
+        ),
       });
       this.recordsCacheByConnection.clear();
       telemetryService.capture('maas_platform_disconnected', { platform: platformId });

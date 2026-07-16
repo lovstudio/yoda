@@ -6,7 +6,7 @@ import { events, rpc } from '@renderer/lib/ipc';
 
 export const aiLogsQueryKey = ['aiLogs'] as const;
 
-export function useAiLogs(input: AiLogListInput) {
+export function useAiLogs(input: AiLogListInput, enabled = true) {
   const queryClient = useQueryClient();
 
   // Live updates: any inserted/updated log row invalidates the list, so
@@ -18,8 +18,18 @@ export function useAiLogs(input: AiLogListInput) {
   }, [queryClient]);
 
   return useQuery({
-    queryKey: [...aiLogsQueryKey, input.status ?? 'all', input.mode ?? 'all'],
+    queryKey: [
+      ...aiLogsQueryKey,
+      input.status ?? 'all',
+      input.mode ?? 'all',
+      input.runtime ?? 'all',
+      input.conversationId ?? 'all',
+      input.authProvider ?? 'all',
+      input.maasPlatformId ?? 'all',
+      input.limit ?? 'default',
+    ],
     queryFn: () => rpc.aiLogs.list(input),
+    enabled,
   });
 }
 

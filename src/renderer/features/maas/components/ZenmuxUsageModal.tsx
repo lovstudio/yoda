@@ -28,6 +28,7 @@ function findZenmuxConnection(connections: MaasConnection[] | undefined): MaasCo
       displayName: MAAS_PLATFORMS.zenmux.name,
       endpoint: MAAS_PLATFORMS.zenmux.defaultEndpoint,
       keyFingerprint: null,
+      inferenceKeyFingerprint: null,
       connectedAt: null,
       lastCheckedAt: null,
       connected: false,

@@ -3,18 +3,28 @@ import { CheckCircle2, ChevronDown, ExternalLink, LogIn, RefreshCw, XCircle } fr
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MAAS_PLATFORMS, type MaasConnection } from '@shared/maas';
+import {
+  hasMaasInferenceCredential,
+  MAAS_PLATFORMS,
+  supportsMaasPlatformForRuntime,
+  type MaasConnection,
+} from '@shared/maas';
 import {
   AGENT_ACCOUNT_PROVIDER_IDS,
   getRuntime,
   getRuntimeAccountProfile,
+  supportsRuntimeMaasSwitch,
   type AgentAccountProviderId,
   type AgentLocalUsage,
   type AgentSubscriptionAccount,
   type RuntimeAccountStatus,
   type RuntimeId,
 } from '@shared/runtime-registry';
-import { useCheckMaasConnection, useMaasConnections } from '@renderer/features/maas/useMaas';
+import {
+  useCheckMaasConnection,
+  useMaasConnections,
+  useSetMaasRuntimeBinding,
+} from '@renderer/features/maas/useMaas';
 import { useRuntimeSettings } from '@renderer/features/settings/use-runtime-settings';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -54,6 +64,7 @@ function findConnection(
       displayName: MAAS_PLATFORMS[platformId].name,
       endpoint: MAAS_PLATFORMS[platformId].defaultEndpoint,
       keyFingerprint: null,
+      inferenceKeyFingerprint: null,
       connectedAt: null,
       lastCheckedAt: null,
       connected: false,
@@ -132,6 +143,7 @@ export const AgentTabAccount: React.FC<AgentTabAccountProps> = observer(function
     },
   });
   const checkMaas = useCheckMaasConnection();
+  const setMaasRuntimeBinding = useSetMaasRuntimeBinding();
 
   const expandedStorageKey = `yoda:agent-account:expanded:${agentId}`;
   const [expandedId, setExpandedId] = useState<AgentAccountProviderId | null>(() => {
@@ -166,15 +178,51 @@ export const AgentTabAccount: React.FC<AgentTabAccountProps> = observer(function
   });
 
   const connectedMaasConnections = useMemo(
-    () => maasConnections.data?.filter((connection) => connection.connected) ?? [],
-    [maasConnections.data]
+    () =>
+      maasConnections.data?.filter(
+        (connection) =>
+          connection.connected &&
+          hasMaasInferenceCredential(connection) &&
+          supportsMaasPlatformForRuntime(agentId, connection.platformId)
+      ) ?? [],
+    [agentId, maasConnections.data]
   );
   const zenmuxConnection = findConnection(maasConnections.data, 'zenmux');
+  const selectedMaasConnection =
+    connectedMaasConnections.find(
+      (connection) => connection.platformId === providerConfig?.maasPlatformId
+    ) ?? connectedMaasConnections[0];
   const handleSelectAuthProvider = useCallback(
     (authProvider: AgentAccountProviderId) => {
-      updateProviderSettings({ ...(providerConfig ?? {}), authProvider });
+      if (authProvider === 'yoda-maas') {
+        if (!selectedMaasConnection) return;
+        setMaasRuntimeBinding.mutate({
+          runtimeId: agentId,
+          platformId: selectedMaasConnection.platformId,
+          enabled: true,
+        });
+        return;
+      }
+
+      const updateAuthProvider = () => {
+        const nextConfig = { ...(providerConfig ?? {}), authProvider };
+        delete nextConfig.maasPlatformId;
+        updateProviderSettings(nextConfig);
+      };
+      if (providerConfig?.authProvider === 'yoda-maas' && providerConfig.maasPlatformId) {
+        setMaasRuntimeBinding.mutate(
+          {
+            runtimeId: agentId,
+            platformId: providerConfig.maasPlatformId,
+            enabled: false,
+          },
+          { onSuccess: updateAuthProvider }
+        );
+        return;
+      }
+      updateAuthProvider();
     },
-    [providerConfig, updateProviderSettings]
+    [agentId, providerConfig, selectedMaasConnection, setMaasRuntimeBinding, updateProviderSettings]
   );
   const handleSaveEnvVar = useCallback(
     (key: string, value: string | null) => {
@@ -201,11 +249,12 @@ export const AgentTabAccount: React.FC<AgentTabAccountProps> = observer(function
   const authProviderAvailability: Record<AgentAccountProviderId, boolean> = {
     'official-subscription': profile.officialSubscription.supported && runtimeDetected,
     'official-api': configuredApiCount > 0,
-    'yoda-maas': profile.maas.supported && connectedMaasConnections.length > 0,
+    'yoda-maas': supportsRuntimeMaasSwitch(agentId) && connectedMaasConnections.length > 0,
   };
   const selectedAuthProvider =
     providerConfig?.authProvider ?? resolveDefaultAuthProvider(authProviderAvailability);
-  const authBusy = providerSettingsLoading || providerSettingsSaving;
+  const authBusy =
+    providerSettingsLoading || providerSettingsSaving || setMaasRuntimeBinding.isPending;
 
   const account = subscriptionAccount.data;
   const subscriptionStatusLabel = !runtimeDetected
@@ -387,8 +436,11 @@ export const AgentTabAccount: React.FC<AgentTabAccountProps> = observer(function
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={!zenmuxConnection.connected || checkMaas.isPending}
-                    onClick={() => checkMaas.mutate('zenmux')}
+                    disabled={!selectedMaasConnection?.connected || checkMaas.isPending}
+                    onClick={() => {
+                      if (selectedMaasConnection)
+                        checkMaas.mutate(selectedMaasConnection.platformId);
+                    }}
                   >
                     <RefreshCw
                       className={cn('h-3.5 w-3.5', checkMaas.isPending && 'animate-spin')}

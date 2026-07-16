@@ -177,13 +177,23 @@ export const maasConnectionSchema = z.object({
   displayName: z.string(),
   endpoint: z.string(),
   keyFingerprint: z.string().nullable(),
+  inferenceKeyFingerprint: z.string().nullable().default(null),
   connectedAt: z.string().nullable(),
   lastCheckedAt: z.string().nullable(),
+});
+
+export const maasRuntimeBindingSchema = z.object({
+  runtimeId: z.enum(RUNTIME_IDS),
+  platformId: maasPlatformIdSchema,
+  previousAuthProvider: z.enum(AGENT_ACCOUNT_PROVIDER_IDS).nullable(),
+  previousMaasPlatformId: maasPlatformIdSchema.nullable(),
+  enabledAt: z.string(),
 });
 
 export const maasSettingsSchema = z.object({
   selectedPlatformId: maasPlatformIdSchema,
   connections: z.array(maasConnectionSchema),
+  runtimeBindings: z.array(maasRuntimeBindingSchema).default([]),
 });
 
 export const llmProfileSchema = z.object({
@@ -318,6 +328,7 @@ export const keyboardSettingsSchema = z
 
 export const runtimeCustomConfigEntrySchema = z.object({
   authProvider: z.enum(AGENT_ACCOUNT_PROVIDER_IDS).optional(),
+  maasPlatformId: maasPlatformIdSchema.optional(),
   cli: z.string().optional(),
   resumeFlag: z.string().optional(),
   resumeSessionIdArg: z.boolean().optional(),

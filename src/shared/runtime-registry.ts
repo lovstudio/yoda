@@ -184,6 +184,11 @@ export type RuntimeAccountProfile = {
     supported: boolean;
     providerHints: readonly string[];
     modelHints?: readonly string[];
+    /** Environment variables used to point this Agent Client at an OpenAI/Anthropic-compatible MaaS. */
+    runtimeEnv?: {
+      apiKeyEnvVars: readonly string[];
+      baseUrlEnvVars: readonly string[];
+    };
   };
 };
 
@@ -931,7 +936,14 @@ export const RUNTIME_ACCOUNT_PROFILES = {
         auth: 'bearer',
       },
     },
-    maas: { supported: true, providerHints: ['openai', 'azure'] },
+    maas: {
+      supported: true,
+      providerHints: ['openai', 'azure'],
+      runtimeEnv: {
+        apiKeyEnvVars: ['OPENAI_API_KEY'],
+        baseUrlEnvVars: ['OPENAI_BASE_URL'],
+      },
+    },
   },
   claude: {
     officialSubscription: {
@@ -950,7 +962,14 @@ export const RUNTIME_ACCOUNT_PROFILES = {
         headers: { 'anthropic-version': '2023-06-01' },
       },
     },
-    maas: { supported: true, providerHints: ['anthropic', 'claude'] },
+    maas: {
+      supported: true,
+      providerHints: ['anthropic', 'claude'],
+      runtimeEnv: {
+        apiKeyEnvVars: ['ANTHROPIC_AUTH_TOKEN'],
+        baseUrlEnvVars: ['ANTHROPIC_BASE_URL'],
+      },
+    },
   },
   devin: {
     officialSubscription: { supported: true },
@@ -1183,6 +1202,11 @@ export function getRuntime(id: RuntimeId): RuntimeDefinition | undefined {
 
 export function getRuntimeAccountProfile(id: RuntimeId): RuntimeAccountProfile {
   return RUNTIME_ACCOUNT_PROFILES[id];
+}
+
+export function supportsRuntimeMaasSwitch(id: RuntimeId): boolean {
+  const maas = getRuntimeAccountProfile(id).maas;
+  return maas.supported && maas.runtimeEnv !== undefined;
 }
 
 export function getInstallCommandForRuntime(id: RuntimeId): string | null {

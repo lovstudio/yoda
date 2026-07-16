@@ -26,6 +26,7 @@ import type {
 } from '@main/core/conversations/types';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { LocalFileSystem } from '@main/core/fs/impl/local-fs';
+import { resolveMaasRuntimeEnv } from '@main/core/maas/runtime-env';
 import { spawnLocalPty } from '@main/core/pty/local-pty';
 import type { Pty } from '@main/core/pty/pty';
 import { buildAgentEnv } from '@main/core/pty/pty-env';
@@ -156,6 +157,29 @@ export class LocalConversationProvider implements ConversationProvider {
     );
 
     const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
+    const authProvider = providerConfig?.authProvider ?? 'official-subscription';
+    const maasCredentials =
+      authProvider === 'yoda-maas'
+        ? await import('@main/core/maas/maas-service').then(({ maasService }) =>
+            maasService.getRuntimeInferenceCredentials(
+              conversation.runtimeId,
+              providerConfig?.maasPlatformId
+            )
+          )
+        : undefined;
+    if (authProvider === 'yoda-maas' && !maasCredentials) {
+      throw new Error(
+        `MaaS is selected for ${conversation.runtimeId}, but no compatible connected platform is available.`
+      );
+    }
+    const maasRuntimeEnv = maasCredentials
+      ? resolveMaasRuntimeEnv(conversation.runtimeId, maasCredentials)
+      : undefined;
+    interactiveTurnLogger.setSessionContext(conversation.id, {
+      authProvider,
+      maasEffective: maasCredentials !== undefined && maasRuntimeEnv !== undefined,
+      ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
+    });
     recordConversationAuthProvider(conversation.id, providerConfig);
     if (conversation.skillPolicy?.warnings.length) {
       log.warn('Agent skill profile has runtime limitations', {
@@ -207,10 +231,14 @@ export class LocalConversationProvider implements ConversationProvider {
     const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 
     const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
-    const providerEnv = resolveRuntimeEnv(providerConfig, {
+    const configuredRuntimeEnv = resolveRuntimeEnv(providerConfig, {
       runtimeId: conversation.runtimeId,
       tmuxEnabled: Boolean(tmuxSessionName),
     });
+    const providerEnv =
+      configuredRuntimeEnv || maasRuntimeEnv
+        ? { ...configuredRuntimeEnv, ...maasRuntimeEnv }
+        : undefined;
 
     const preparedSettings = prepareWindowsClaudeSettings(conversation.runtimeId, argsWithNotify);
     const args = preparedSettings.args;
@@ -281,6 +309,9 @@ export class LocalConversationProvider implements ConversationProvider {
         taskId: conversation.taskId,
         conversationId: conversation.id,
         resuming: String(isResuming),
+        authProvider,
+        maasEffective: String(maasCredentials !== undefined && maasRuntimeEnv !== undefined),
+        ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
       },
     });
 

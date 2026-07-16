@@ -3106,6 +3106,21 @@
     "connected": "Connected",
     "notConnected": "Not connected",
     "connectedCount": "{{count}} connected",
+    "clients": {
+      "title": "Agent Clients",
+      "description": "Selecting a Client saves its current access mode and switches its API key and endpoint to this MaaS. Restore returns to the previous configuration. Changes apply when a session is next started or resumed.",
+      "loading": "Loading Client configuration…",
+      "effective": "Configuration active",
+      "needsAttention": "Linked, but credentials or configuration need attention",
+      "boundElsewhere": "Managed by {{platform}}",
+      "notEnabled": "Not enabled",
+      "restore": "Restore",
+      "connectFirst": "Save the platform endpoint and API key before selecting an Agent Client.",
+      "toggleAria": "Use {{platform}} for {{client}}",
+      "enabledToast": "{{client}} switched to {{platform}}",
+      "restoredToast": "{{client}} restored to its previous configuration",
+      "updateFailed": "Could not update Client configuration"
+    },
     "platforms": {
       "zenmux": {
         "description": "Use a unified API standard to invoke models from different providers."
@@ -3143,6 +3158,10 @@
       "apiKeyPlaceholder": "Paste API or management key",
       "managementApiKey": "Management API key",
       "zenmuxManagementKeyPlaceholder": "Paste ZenMux Management API Key",
+      "inferenceApiKey": "Agent Client API key",
+      "inferenceApiKeyPlaceholder": "Paste a ZenMux API key for model inference",
+      "inferenceApiKeyStoredPlaceholder": "Saved {{fingerprint}} - leave blank to keep it",
+      "inferenceApiKeyHelper": "This key is used only for Agent Client model calls. The Management key above remains dedicated to usage and log statistics.",
       "apiKeyStoredPlaceholder": "Saved {{fingerprint}} - leave blank to keep it",
       "save": "Save",
       "saveChanges": "Save configuration",
@@ -3351,6 +3370,17 @@
   },
   "workspaceRuntime": {
     "terminal": "Terminal",
+    "maas": {
+      "title": "MaaS runtime status",
+      "effective": "Active",
+      "notEffective": "Not active",
+      "lastVerified": "Latest MaaS log: {{time}}",
+      "restartRequired": "This session still uses its old configuration; start or resume it to verify",
+      "waitingForLog": "Configuration switched; the next AI turn will create a verification log",
+      "noVerifiedLog": "No active MaaS log found yet",
+      "manage": "Manage MaaS",
+      "openLogs": "Open AI logs"
+    },
     "currentSession": "Current session",
     "currentSessionTitle": "Current session uses {{name}}",
     "contextUsage": "Context {{used}}/{{limit}} ({{percent}}%)",

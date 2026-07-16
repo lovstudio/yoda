@@ -1,3 +1,5 @@
+import type { AgentAccountProviderId, RuntimeId } from './runtime-registry';
+
 export const MAAS_PLATFORM_IDS = ['zenmux', 'openrouter', 'siliconflow', 'custom'] as const;
 
 export type MaasPlatformId = (typeof MAAS_PLATFORM_IDS)[number];
@@ -13,6 +15,7 @@ export type MaasPlatformConnection = {
   displayName: string;
   endpoint: string;
   keyFingerprint: string | null;
+  inferenceKeyFingerprint: string | null;
   connectedAt: string | null;
   lastCheckedAt: string | null;
 };
@@ -22,9 +25,29 @@ export type MaasConnection = MaasPlatformConnection & {
   error: string | null;
 };
 
+export function hasMaasInferenceCredential(connection: MaasConnection): boolean {
+  return Boolean(
+    connection.platformId === 'zenmux'
+      ? connection.inferenceKeyFingerprint
+      : connection.keyFingerprint
+  );
+}
+
+export function supportsMaasPlatformForRuntime(
+  runtimeId: RuntimeId,
+  platformId: MaasPlatformId
+): boolean {
+  if (runtimeId === 'codex') return true;
+  if (runtimeId === 'claude') {
+    return platformId === 'zenmux' || platformId === 'openrouter';
+  }
+  return false;
+}
+
 export type MaasConnectInput = {
   platformId: MaasPlatformId;
   apiKey?: string;
+  inferenceApiKey?: string;
   displayName?: string;
   endpoint?: string;
 };
@@ -33,6 +56,30 @@ export type MaasConnectionCheckResult = {
   ok: boolean;
   error: string | null;
   checkedAt: string;
+};
+
+export type MaasRuntimeBinding = {
+  runtimeId: RuntimeId;
+  platformId: MaasPlatformId;
+  previousAuthProvider: AgentAccountProviderId | null;
+  previousMaasPlatformId: MaasPlatformId | null;
+  enabledAt: string;
+};
+
+export type MaasRuntimeBindingStatus = {
+  runtimeId: string;
+  platformId: MaasPlatformId | null;
+  supported: boolean;
+  bound: boolean;
+  effective: boolean;
+  connected: boolean;
+  enabledAt: string | null;
+};
+
+export type MaasSetRuntimeBindingInput = {
+  runtimeId: string;
+  platformId: MaasPlatformId;
+  enabled: boolean;
 };
 
 export type MaasPlatformDefinition = {

@@ -5,6 +5,8 @@ import type {
   MaasInvocationFilterKind,
   MaasPlatformId,
   MaasPlatformOfficialDescription,
+  MaasRuntimeBindingStatus,
+  MaasSetRuntimeBindingInput,
   MaasUsageSummary,
 } from '@shared/maas';
 import { rpc } from '@renderer/lib/ipc';
@@ -20,6 +22,8 @@ export const maasQueryKeys = {
     'platform-descriptions',
     PLATFORM_DESCRIPTION_QUERY_VERSION,
   ] as const,
+  runtimeBindings: (platformId?: MaasPlatformId) =>
+    ['maas', 'runtime-bindings', platformId ?? 'all'] as const,
   records: (platformId: MaasPlatformId, kind: MaasInvocationFilterKind, refreshSequence = 0) =>
     ['maas', 'records', REAL_USAGE_QUERY_VERSION, platformId, kind, refreshSequence] as const,
   summary: (
@@ -40,6 +44,34 @@ export const maasQueryKeys = {
       refreshSequence,
     ] as const,
 };
+
+export function useMaasRuntimeBindings(platformId?: MaasPlatformId, enabled = true) {
+  return useQuery<MaasRuntimeBindingStatus[]>({
+    queryKey: maasQueryKeys.runtimeBindings(platformId),
+    queryFn: () => rpc.maas.listRuntimeBindings(),
+    enabled,
+    staleTime: 5_000,
+  });
+}
+
+export function useSetMaasRuntimeBinding() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: MaasSetRuntimeBindingInput) => {
+      const result = await rpc.maas.setRuntimeBinding(input);
+      if (!result.success) throw new Error(result.error ?? 'Failed to update MaaS Client.');
+    },
+    onSuccess: (_result, input) => {
+      void queryClient.invalidateQueries({ queryKey: ['maas', 'runtime-bindings'] });
+      void queryClient.invalidateQueries({
+        queryKey: ['runtimeSettings', input.runtimeId, 'meta'],
+      });
+      void queryClient.invalidateQueries({ queryKey: ['runtimeSettings', 'all'] });
+      void queryClient.invalidateQueries({ queryKey: ['runtimeSnapshot', input.runtimeId] });
+    },
+  });
+}
 
 export function useMaasConnections(enabled = true) {
   return useQuery({
