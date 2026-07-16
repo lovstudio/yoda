@@ -17,12 +17,6 @@ import { useSessionPrompts } from '@renderer/features/tasks/session-info-panel';
 import { buildPromptPreviewItems } from '@renderer/features/tasks/session-prompts-preview';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { toast } from '@renderer/lib/hooks/use-toast';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@renderer/lib/ui/dropdown-menu';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import {
   Popover,
@@ -239,22 +233,21 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
             </button>
           </div>
         ) : null}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            ref={treeAnchorRef}
-            className="flex size-5 shrink-0 items-center justify-center rounded-sm transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-            aria-label={t('tasks.bottomPanel.sessionActions')}
-            title={t('tasks.bottomPanel.sessionActions')}
-          >
-            <MoreHorizontal className="size-3" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" side="top" className="w-44">
-            <DropdownMenuItem onClick={() => setTreeOpen(true)}>
-              <ListTree className="size-3.5" />
-              {t('tasks.bottomPanel.sessionViewTree')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <button
+          ref={treeAnchorRef}
+          type="button"
+          className={cn(
+            'flex size-5 shrink-0 items-center justify-center rounded-sm transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
+            treeOpen && 'bg-background-2 text-foreground'
+          )}
+          onClick={() => setTreeOpen(true)}
+          aria-expanded={treeOpen}
+          aria-haspopup="dialog"
+          aria-label={t('tasks.bottomPanel.sessionViewTree')}
+          title={t('tasks.bottomPanel.sessionViewTree')}
+        >
+          <ListTree className="size-3" />
+        </button>
       </div>
       {!collapsed ? (
         prompts.hasPrompts ? (

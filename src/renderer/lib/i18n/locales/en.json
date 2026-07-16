@@ -1842,7 +1842,6 @@
       "layoutBesideSidebar": "Yield to sidebar",
       "sessionFewerRows": "Fewer rows",
       "sessionMoreRows": "More rows",
-      "sessionActions": "Session history actions",
       "sessionViewTree": "View conversation tree",
       "sessionTreeTitle": "Conversation branches",
       "sessionTreeDescription": "Select a message to continue from there in a new conversation, or select an endpoint to switch branches.",

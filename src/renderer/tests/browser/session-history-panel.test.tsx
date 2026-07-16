@@ -109,7 +109,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
     host.remove();
   });
 
-  it('keeps the current path list visible and opens the complete tree from the menu', async () => {
+  it('keeps the current path list visible and opens the complete tree from the icon', async () => {
     const { DockedSessionHistory } = await import(
       '@renderer/features/tasks/conversations/session-history-panel'
     );
@@ -127,13 +127,9 @@ describe('DockedSessionHistory conversation tree menu', () => {
     expect(mocks.restoreCurrentPrompt).toHaveBeenCalledWith(prompt, 1);
 
     expect(host.querySelector('button[aria-label="tasks.bottomPanel.sessionViewList"]')).toBeNull();
-    const actions = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="tasks.bottomPanel.sessionActions"]'
+    const viewTree = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="tasks.bottomPanel.sessionViewTree"]'
     );
-    await act(async () => actions?.click());
-
-    const viewTree = document.querySelector<HTMLElement>('[data-slot="dropdown-menu-item"]');
-    expect(viewTree?.textContent).toContain('tasks.bottomPanel.sessionViewTree');
     await act(async () => viewTree?.click());
 
     expect(mocks.update).not.toHaveBeenCalled();
@@ -147,7 +143,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
     expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(true);
   });
 
-  it('keeps the tree menu available while the current-path list is collapsed', async () => {
+  it('keeps the tree icon available while the current-path list is collapsed', async () => {
     const { DockedSessionHistory } = await import(
       '@renderer/features/tasks/conversations/session-history-panel'
     );
@@ -157,15 +153,13 @@ describe('DockedSessionHistory conversation tree menu', () => {
     await act(async () => collapse?.click());
 
     expect(host.textContent).not.toContain('current path prompt');
-    const actions = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="tasks.bottomPanel.sessionActions"]'
+    const viewTree = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="tasks.bottomPanel.sessionViewTree"]'
     );
-    expect(actions).not.toBeNull();
+    expect(viewTree).not.toBeNull();
     expect(mocks.useSessionPrompts).toHaveBeenLastCalledWith(false);
     expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(false);
 
-    await act(async () => actions?.click());
-    const viewTree = document.querySelector<HTMLElement>('[data-slot="dropdown-menu-item"]');
     await act(async () => viewTree?.click());
 
     expect(document.querySelector('[data-session-prompt-tree]')).not.toBeNull();

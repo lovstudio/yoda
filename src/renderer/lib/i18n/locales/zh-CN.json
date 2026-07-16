@@ -1842,7 +1842,6 @@
       "layoutBesideSidebar": "底栏避开侧边栏",
       "sessionFewerRows": "减少行数",
       "sessionMoreRows": "增加行数",
-      "sessionActions": "会话历史操作",
       "sessionViewTree": "查看会话树",
       "sessionTreeTitle": "会话分支图",
       "sessionTreeDescription": "点击消息可从该处继续并创建新会话；点击会话终点可切换分支。",
