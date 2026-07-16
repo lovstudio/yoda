@@ -34,7 +34,7 @@ export function SessionPromptTreeView({
   isLoading,
   activeConversationIds,
   restoringPrompt,
-  rows,
+  maxHeight,
   onRestorePrompt,
   onOpenConversation,
 }: {
@@ -42,14 +42,14 @@ export function SessionPromptTreeView({
   isLoading: boolean;
   activeConversationIds: ReadonlySet<string>;
   restoringPrompt: RestoringConversationPrompt | null;
-  rows: number;
+  maxHeight?: CSSProperties['maxHeight'];
   onRestorePrompt: (location: ConversationPromptLocation) => void;
   onOpenConversation: (conversation: Conversation) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [openingConversationId, setOpeningConversationId] = useState<string | null>(null);
   const visualRows = useMemo(() => flattenSessionPromptTree(tree), [tree]);
-  const style = { maxHeight: `${Math.max(2, rows + 1) * 24}px` } satisfies CSSProperties;
+  const style = { maxHeight: maxHeight ?? 'min(60vh, 32rem)' } satisfies CSSProperties;
 
   const openConversation = async (conversation: Conversation) => {
     if (openingConversationId) return;

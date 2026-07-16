@@ -1,17 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  Activity,
-  Brain,
-  ExternalLink,
-  Gauge,
-  Layers,
-  MessageSquare,
-  Terminal,
-} from 'lucide-react';
+import { Activity, Brain, ExternalLink, Gauge, MessageSquare, Route, Terminal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { hasMaasInferenceCredential } from '@shared/maas';
+import type { RuntimeCustomConfig } from '@shared/app-settings';
+import { MAAS_PLATFORMS } from '@shared/maas';
 import {
   getRuntime,
   getRuntimeAccountProfile,
@@ -20,9 +13,9 @@ import {
   type RuntimeId,
 } from '@shared/runtime-registry';
 import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
+import { GatewayRuntimeSources } from '@renderer/features/agents/components/GatewayRuntimeSources';
 import { useAiLogs } from '@renderer/features/ai-logs/use-ai-logs';
-import { MaasRuntimeBindings } from '@renderer/features/maas/components/MaasRuntimeBindings';
-import { useMaasConnections, useMaasRuntimeBindings } from '@renderer/features/maas/useMaas';
+import { useMaasRuntimeBindings } from '@renderer/features/maas/useMaas';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import {
@@ -172,8 +165,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const sessionHistoryLabel = t('workspaceRuntime.sessionHistory', {
     count: displayedPromptCount ?? 0,
   });
-  const maasConnections = useMaasConnections(Boolean(runtimeId && !connectionId));
-  const maasBindings = useMaasRuntimeBindings(undefined, Boolean(runtimeId && !connectionId));
+  const maasBindings = useMaasRuntimeBindings();
+  const runtimeGatewaySettings = useQuery<Record<string, RuntimeCustomConfig>>({
+    queryKey: ['runtimeSettings', 'all'],
+    queryFn: () => rpc.runtimeSettings.getAll() as Promise<Record<string, RuntimeCustomConfig>>,
+    staleTime: 30_000,
+  });
   const recentRuntimeLogs = useAiLogs(
     {
       ...(runtimeId ? { runtime: runtimeId } : {}),
@@ -185,28 +182,31 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const activeMaasBinding = runtimeId
     ? maasBindings.data?.find((binding) => binding.runtimeId === runtimeId)
     : undefined;
+  const activeGatewayAuthProvider =
+    runtimeId && !connectionId
+      ? (runtimeGatewaySettings.data?.[runtimeId]?.authProvider ?? 'official-subscription')
+      : null;
   const activeMaasPlatformId =
-    activeMaasBinding?.platformId ??
-    maasConnections.data?.find(
-      (connection) => connection.connected && hasMaasInferenceCredential(connection)
-    )?.platformId ??
-    maasConnections.data?.find((connection) => connection.connected)?.platformId ??
-    null;
-  const activeMaasConnection = activeMaasPlatformId
-    ? maasConnections.data?.find((connection) => connection.platformId === activeMaasPlatformId)
-    : undefined;
+    activeGatewayAuthProvider === 'yoda-maas' ? (activeMaasBinding?.platformId ?? null) : null;
   const latestRuntimeLog = recentRuntimeLogs.data?.[0] ?? null;
-  const latestVerifiedMaasLog =
+  const latestVerifiedGatewayLog =
     recentRuntimeLogs.data?.find(
       (record) =>
-        record.metadata?.maasEffective === 'true' &&
-        (!activeMaasPlatformId || record.metadata.maasPlatformId === activeMaasPlatformId)
+        record.metadata?.authProvider === activeGatewayAuthProvider &&
+        (activeGatewayAuthProvider !== 'yoda-maas' ||
+          (record.metadata.maasEffective === 'true' &&
+            (!activeMaasPlatformId || record.metadata.maasPlatformId === activeMaasPlatformId)))
     ) ?? null;
-  const showMaasStatus = Boolean(
-    runtimeId &&
-      !connectionId &&
-      (activeMaasBinding?.bound || maasConnections.data?.some((connection) => connection.connected))
-  );
+  const activeGatewaySourceLabel =
+    activeGatewayAuthProvider === 'yoda-maas'
+      ? activeMaasPlatformId
+        ? MAAS_PLATFORMS[activeMaasPlatformId].name
+        : t('workspaceRuntime.gateway.maas')
+      : activeGatewayAuthProvider === 'official-api'
+        ? t('workspaceRuntime.gateway.apiKey')
+        : activeGatewayAuthProvider === 'official-subscription'
+          ? t('workspaceRuntime.gateway.subscription')
+          : t('workspaceRuntime.gateway.unconfigured');
 
   useEffect(() => {
     if (!activeConversation || !provisionedTask) return;
@@ -613,106 +613,104 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               </Popover>
             </>
           ) : null}
-          {showMaasStatus && activeMaasPlatformId ? (
-            <>
-              <span aria-hidden>·</span>
-              <Popover>
-                <PopoverTrigger
-                  aria-label={t('workspaceRuntime.maas.title')}
-                  className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-                  title={t('workspaceRuntime.maas.title')}
-                >
-                  <Layers className="size-3.5" />
-                  <span>MaaS</span>
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'size-1.5 rounded-full',
-                      activeMaasBinding?.effective ? 'bg-emerald-500' : 'bg-amber-500'
-                    )}
-                  />
-                </PopoverTrigger>
-                <PopoverContent
-                  align="start"
-                  side="top"
-                  sideOffset={8}
-                  className="w-[23rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
-                >
-                  <div className="border-b border-border p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium">
-                          {t('workspaceRuntime.maas.title')}
-                        </div>
-                        <div className="mt-0.5 text-xs text-foreground-passive">
-                          {activeMaasConnection?.displayName ?? activeMaasPlatformId}
-                        </div>
-                      </div>
-                      <span
-                        className={cn(
-                          'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
-                          activeMaasBinding?.effective
-                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                            : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                        )}
-                      >
-                        {activeMaasBinding?.effective
-                          ? t('workspaceRuntime.maas.effective')
-                          : t('workspaceRuntime.maas.notEffective')}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex items-center gap-1.5 text-xs text-foreground-muted">
-                      <Activity className="size-3.5" />
-                      <span className="min-w-0 truncate">
-                        {latestVerifiedMaasLog
-                          ? t('workspaceRuntime.maas.lastVerified', {
-                              time: formatRuntimeTimestamp(latestVerifiedMaasLog.startedAt),
-                            })
-                          : activeMaasBinding?.effective && latestRuntimeLog
-                            ? t('workspaceRuntime.maas.restartRequired')
-                            : activeMaasBinding?.effective
-                              ? t('workspaceRuntime.maas.waitingForLog')
-                              : t('workspaceRuntime.maas.noVerifiedLog')}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="grid gap-3 p-3">
-                    <MaasRuntimeBindings
-                      platformId={activeMaasPlatformId}
-                      connected={Boolean(
-                        activeMaasConnection?.connected &&
-                          hasMaasInferenceCredential(activeMaasConnection)
-                      )}
-                      currentRuntimeId={runtimeId}
-                      compact
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => appState.navigation.navigate('maas')}
-                      >
-                        {t('workspaceRuntime.maas.manage')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => appState.sidePane.pinView('settings', { tab: 'ai-logs' })}
-                      >
-                        {t('workspaceRuntime.maas.openLogs')}
-                      </Button>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </>
-          ) : null}
         </div>
       ) : null}
+      <Popover>
+        <PopoverTrigger
+          aria-label={t('workspaceRuntime.gateway.title')}
+          className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+          title={t('workspaceRuntime.gateway.title')}
+        >
+          <Route className="size-3.5" />
+          <span>Gateway</span>
+          <span
+            aria-hidden
+            className={cn(
+              'size-1.5 rounded-full',
+              latestVerifiedGatewayLog
+                ? 'bg-emerald-500'
+                : runtimeId && !connectionId
+                  ? 'bg-amber-500'
+                  : 'bg-foreground-disabled'
+            )}
+          />
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          side="top"
+          sideOffset={8}
+          className="w-[28rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+        >
+          <div className="border-b border-border p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium">{t('workspaceRuntime.gateway.title')}</div>
+                <div className="mt-0.5 text-xs text-foreground-passive">
+                  {runtimeId && !connectionId
+                    ? t('workspaceRuntime.gateway.currentSource', {
+                        client: runtime?.name ?? runtimeId,
+                        source: activeGatewaySourceLabel,
+                      })
+                    : t('workspaceRuntime.gateway.description')}
+                </div>
+              </div>
+              <span
+                className={cn(
+                  'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
+                  latestVerifiedGatewayLog
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : runtimeId && !connectionId
+                      ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                      : 'bg-background-2 text-foreground-muted'
+                )}
+              >
+                {latestVerifiedGatewayLog
+                  ? t('workspaceRuntime.gateway.verified')
+                  : runtimeId && !connectionId
+                    ? t('workspaceRuntime.gateway.awaitingVerification')
+                    : t('workspaceRuntime.gateway.global')}
+              </span>
+            </div>
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-foreground-muted">
+              <Activity className="size-3.5" />
+              <span className="min-w-0 truncate">
+                {latestVerifiedGatewayLog
+                  ? t('workspaceRuntime.gateway.lastVerified', {
+                      time: formatRuntimeTimestamp(latestVerifiedGatewayLog.startedAt),
+                    })
+                  : runtimeId && !connectionId && latestRuntimeLog
+                    ? t('workspaceRuntime.gateway.restartRequired')
+                    : runtimeId && !connectionId
+                      ? t('workspaceRuntime.gateway.waitingForLog')
+                      : t('workspaceRuntime.gateway.globalHint')}
+              </span>
+            </div>
+          </div>
+          <div className="grid gap-3 p-3">
+            <GatewayRuntimeSources currentRuntimeId={!connectionId ? runtimeId : null} />
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => appState.navigation.navigate('maas')}
+              >
+                {t('workspaceRuntime.gateway.manageMaas')}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => appState.sidePane.pinView('settings', { tab: 'ai-logs' })}
+              >
+                {t('workspaceRuntime.gateway.openLogs')}
+              </Button>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
       <span className="flex-1" />
       <button
         type="button"
