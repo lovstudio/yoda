@@ -7,6 +7,7 @@ import {
   type MaasConnectInput,
   type MaasConnection,
   type MaasConnectionCheckResult,
+  type MaasGlobalBindingStatus,
   type MaasInvocationFilterKind,
   type MaasInvocationKind,
   type MaasInvocationPage,
@@ -17,6 +18,7 @@ import {
   type MaasPlatformOfficialDescription,
   type MaasRuntimeBinding,
   type MaasRuntimeBindingStatus,
+  type MaasSetGlobalBindingInput,
   type MaasSetRuntimeBindingInput,
   type MaasUsageSummary,
   type MaasUsageSummaryInput,
@@ -420,6 +422,128 @@ export class MaasService {
     return statuses;
   }
 
+  async getGlobalBinding(): Promise<MaasGlobalBindingStatus> {
+    const settings = await appSettingsService.get('maas');
+    const platformIds = new Set(settings.runtimeBindings.map((binding) => binding.platformId));
+    const platformId =
+      settings.runtimeBindings.length === 0
+        ? null
+        : platformIds.size === 1
+          ? ([...platformIds][0] ?? null)
+          : settings.selectedPlatformId;
+    const runtimeIds = platformId
+      ? RUNTIME_IDS.filter(
+          (runtimeId) =>
+            supportsMaasRuntimeBinding(runtimeId) &&
+            supportsMaasPlatformForRuntime(runtimeId, platformId)
+        )
+      : [];
+    const statuses = await this.listRuntimeBindings();
+    const enabled = settings.runtimeBindings.length > 0;
+    const effective =
+      enabled &&
+      runtimeIds.every((runtimeId) =>
+        statuses.some(
+          (status) =>
+            status.runtimeId === runtimeId && status.platformId === platformId && status.effective
+        )
+      );
+
+    return { platformId, enabled, effective, runtimeIds };
+  }
+
+  async setGlobalBinding(
+    input: MaasSetGlobalBindingInput
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!isMaasPlatformId(input.platformId)) {
+      return { success: false, error: 'Unsupported MaaS platform.' };
+    }
+    if (input.enabled && !(await this.getInferenceCredentials(input.platformId))) {
+      return {
+        success: false,
+        error: 'Connect the MaaS platform and save an API key before enabling it.',
+      };
+    }
+
+    const settings = await appSettingsService.get('maas');
+    const originalRuntimeOverrides = await runtimeOverrideSettings.getOverrides();
+    const supportedRuntimeIds = RUNTIME_IDS.filter((runtimeId) =>
+      supportsMaasRuntimeBinding(runtimeId)
+    );
+
+    try {
+      if (!input.enabled) {
+        for (const runtimeId of supportedRuntimeIds) {
+          const currentConfig = (await runtimeOverrideSettings.getItem(runtimeId)) ?? {};
+          const binding = settings.runtimeBindings.find((item) => item.runtimeId === runtimeId);
+          if (binding || currentConfig.authProvider === 'yoda-maas') {
+            await runtimeOverrideSettings.updateItem(
+              runtimeId,
+              resolveRestoredMaasRuntimeConfig(currentConfig, binding)
+            );
+          }
+        }
+        await appSettingsService.update('maas', { runtimeBindings: [] });
+        return { success: true };
+      }
+
+      const enabledAt = new Date().toISOString();
+      const nextBindings: MaasRuntimeBinding[] = [];
+      for (const runtimeId of supportedRuntimeIds) {
+        const currentConfig = (await runtimeOverrideSettings.getItem(runtimeId)) ?? {};
+        const existingBinding = settings.runtimeBindings.find(
+          (item) => item.runtimeId === runtimeId
+        );
+
+        if (!supportsMaasPlatformForRuntime(runtimeId, input.platformId)) {
+          if (existingBinding || currentConfig.authProvider === 'yoda-maas') {
+            await runtimeOverrideSettings.updateItem(
+              runtimeId,
+              resolveRestoredMaasRuntimeConfig(currentConfig, existingBinding)
+            );
+          }
+          continue;
+        }
+
+        const binding: MaasRuntimeBinding = {
+          runtimeId,
+          platformId: input.platformId,
+          previousAuthProvider: existingBinding
+            ? existingBinding.previousAuthProvider
+            : (currentConfig.authProvider ?? null),
+          previousMaasPlatformId: existingBinding
+            ? existingBinding.previousMaasPlatformId
+            : (currentConfig.maasPlatformId ?? null),
+          enabledAt: existingBinding?.enabledAt ?? enabledAt,
+        };
+        nextBindings.push(binding);
+        await runtimeOverrideSettings.updateItem(runtimeId, {
+          ...currentConfig,
+          authProvider: 'yoda-maas',
+          maasPlatformId: input.platformId,
+        });
+      }
+
+      await appSettingsService.update('maas', {
+        selectedPlatformId: input.platformId,
+        runtimeBindings: nextBindings,
+      });
+      return { success: true };
+    } catch (error) {
+      try {
+        await runtimeOverrideSettings.replaceOverrides(originalRuntimeOverrides);
+        await appSettingsService.update('maas', settings);
+      } catch (rollbackError) {
+        log.error('Failed to roll back global MaaS binding:', rollbackError);
+      }
+      log.error('Failed to update global MaaS binding:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update global MaaS binding.',
+      };
+    }
+  }
+
   async setRuntimeBinding(
     input: MaasSetRuntimeBindingInput
   ): Promise<{ success: boolean; error?: string }> {
@@ -454,10 +578,12 @@ export class MaasService {
         const binding: MaasRuntimeBinding = {
           runtimeId: input.runtimeId,
           platformId: input.platformId,
-          previousAuthProvider:
-            existingBinding?.previousAuthProvider ?? currentConfig.authProvider ?? null,
-          previousMaasPlatformId:
-            existingBinding?.previousMaasPlatformId ?? currentConfig.maasPlatformId ?? null,
+          previousAuthProvider: existingBinding
+            ? existingBinding.previousAuthProvider
+            : (currentConfig.authProvider ?? null),
+          previousMaasPlatformId: existingBinding
+            ? existingBinding.previousMaasPlatformId
+            : (currentConfig.maasPlatformId ?? null),
           enabledAt: existingBinding?.enabledAt ?? new Date().toISOString(),
         };
         await runtimeOverrideSettings.updateItem(input.runtimeId, {

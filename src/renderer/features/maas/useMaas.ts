@@ -2,10 +2,12 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { useCallback, useState } from 'react';
 import type {
   MaasConnectInput,
+  MaasGlobalBindingStatus,
   MaasInvocationFilterKind,
   MaasPlatformId,
   MaasPlatformOfficialDescription,
   MaasRuntimeBindingStatus,
+  MaasSetGlobalBindingInput,
   MaasSetRuntimeBindingInput,
   MaasUsageSummary,
 } from '@shared/maas';
@@ -24,6 +26,7 @@ export const maasQueryKeys = {
   ] as const,
   runtimeBindings: (platformId?: MaasPlatformId) =>
     ['maas', 'runtime-bindings', platformId ?? 'all'] as const,
+  globalBinding: ['maas', 'global-binding'] as const,
   records: (platformId: MaasPlatformId, kind: MaasInvocationFilterKind, refreshSequence = 0) =>
     ['maas', 'records', REAL_USAGE_QUERY_VERSION, platformId, kind, refreshSequence] as const,
   summary: (
@@ -69,6 +72,32 @@ export function useSetMaasRuntimeBinding() {
       });
       void queryClient.invalidateQueries({ queryKey: ['runtimeSettings', 'all'] });
       void queryClient.invalidateQueries({ queryKey: ['runtimeSnapshot', input.runtimeId] });
+    },
+  });
+}
+
+export function useMaasGlobalBinding(enabled = true) {
+  return useQuery<MaasGlobalBindingStatus>({
+    queryKey: maasQueryKeys.globalBinding,
+    queryFn: () => rpc.maas.getGlobalBinding(),
+    enabled,
+    staleTime: 5_000,
+  });
+}
+
+export function useSetMaasGlobalBinding() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: MaasSetGlobalBindingInput) => {
+      const result = await rpc.maas.setGlobalBinding(input);
+      if (!result.success) throw new Error(result.error ?? 'Failed to update MaaS.');
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.globalBinding });
+      void queryClient.invalidateQueries({ queryKey: ['maas', 'runtime-bindings'] });
+      void queryClient.invalidateQueries({ queryKey: ['runtimeSettings'] });
+      void queryClient.invalidateQueries({ queryKey: ['runtimeSnapshot'] });
     },
   });
 }

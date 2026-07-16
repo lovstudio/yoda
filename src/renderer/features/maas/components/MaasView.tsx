@@ -15,7 +15,6 @@ import {
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  hasMaasInferenceCredential,
   MAAS_PLATFORM_IDS,
   MAAS_PLATFORMS,
   type MaasConnection,
@@ -42,7 +41,7 @@ import {
   useMaasConnections,
   useMaasPlatformDescriptions,
 } from '../useMaas';
-import { MaasRuntimeBindings } from './MaasRuntimeBindings';
+import { MaasGlobalSelector } from './MaasGlobalSelector';
 
 function findConnection(
   connections: MaasConnection[] | undefined,
@@ -705,10 +704,7 @@ const ConnectionPanel: React.FC<{
           </Button>
         </div>
 
-        <MaasRuntimeBindings
-          platformId={connection.platformId}
-          connected={connection.connected && hasMaasInferenceCredential(connection)}
-        />
+        <MaasGlobalSelector platformId={connection.platformId} />
       </form>
     </section>
   );

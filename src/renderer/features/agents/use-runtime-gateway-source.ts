@@ -5,7 +5,11 @@ import {
   type MaasPlatformId,
 } from '@shared/maas';
 import type { AgentAccountProviderId, RuntimeId } from '@shared/runtime-registry';
-import { useMaasConnections, useSetMaasRuntimeBinding } from '@renderer/features/maas/useMaas';
+import {
+  useMaasConnections,
+  useMaasGlobalBinding,
+  useSetMaasGlobalBinding,
+} from '@renderer/features/maas/useMaas';
 import { useRuntimeSettings } from '@renderer/features/settings/use-runtime-settings';
 
 type SelectionCallbacks = {
@@ -21,7 +25,8 @@ export function useRuntimeGatewaySource(runtimeId: RuntimeId) {
     update: updateProviderSettings,
   } = useRuntimeSettings(runtimeId);
   const maasConnections = useMaasConnections();
-  const setMaasRuntimeBinding = useSetMaasRuntimeBinding();
+  const globalBinding = useMaasGlobalBinding();
+  const setMaasGlobalBinding = useSetMaasGlobalBinding();
 
   const connectedMaasConnections = useMemo(
     () =>
@@ -50,8 +55,8 @@ export function useRuntimeGatewaySource(runtimeId: RuntimeId) {
           callbacks.onError?.(new Error('No compatible MaaS platform is connected.'));
           return;
         }
-        setMaasRuntimeBinding.mutate(
-          { runtimeId, platformId, enabled: true },
+        setMaasGlobalBinding.mutate(
+          { platformId, enabled: true },
           {
             onSuccess: callbacks.onSuccess,
             onError: (error) =>
@@ -69,11 +74,10 @@ export function useRuntimeGatewaySource(runtimeId: RuntimeId) {
           onError: callbacks.onError,
         });
       };
-      if (providerConfig?.authProvider === 'yoda-maas' && providerConfig.maasPlatformId) {
-        setMaasRuntimeBinding.mutate(
+      if (globalBinding.data?.enabled && globalBinding.data.platformId) {
+        setMaasGlobalBinding.mutate(
           {
-            runtimeId,
-            platformId: providerConfig.maasPlatformId,
+            platformId: globalBinding.data.platformId,
             enabled: false,
           },
           {
@@ -88,9 +92,9 @@ export function useRuntimeGatewaySource(runtimeId: RuntimeId) {
     },
     [
       providerConfig,
-      runtimeId,
+      globalBinding.data,
       selectedMaasConnection?.platformId,
-      setMaasRuntimeBinding,
+      setMaasGlobalBinding,
       updateProviderSettings,
     ]
   );
@@ -104,6 +108,6 @@ export function useRuntimeGatewaySource(runtimeId: RuntimeId) {
     connectedMaasConnections,
     selectedMaasConnection,
     selectAuthProvider,
-    isSaving: providerSettingsSaving || setMaasRuntimeBinding.isPending,
+    isSaving: providerSettingsSaving || setMaasGlobalBinding.isPending,
   };
 }

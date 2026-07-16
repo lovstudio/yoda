@@ -82,6 +82,18 @@ export type MaasSetRuntimeBindingInput = {
   enabled: boolean;
 };
 
+export type MaasGlobalBindingStatus = {
+  platformId: MaasPlatformId | null;
+  enabled: boolean;
+  effective: boolean;
+  runtimeIds: RuntimeId[];
+};
+
+export type MaasSetGlobalBindingInput = {
+  platformId: MaasPlatformId;
+  enabled: boolean;
+};
+
 export type MaasPlatformDefinition = {
   id: MaasPlatformId;
   name: string;

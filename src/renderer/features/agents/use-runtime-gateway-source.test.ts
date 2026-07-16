@@ -31,13 +31,13 @@ describe('resolveDefaultGatewaySource', () => {
   });
 });
 
-describe('workspace Gateway placement', () => {
-  it('renders the global Gateway in the right-side action area', () => {
+describe('workspace MaaS placement', () => {
+  it('renders the global MaaS selector in the right-side action area', () => {
     const source = readFileSync(
       new URL('../../app/workspace-runtime-bar.tsx', import.meta.url),
       'utf8'
     );
-    const triggerIndex = source.indexOf("aria-label={t('workspaceRuntime.gateway.title')}");
+    const triggerIndex = source.indexOf("aria-label={t('workspaceRuntime.maas.title')}");
     const spacerIndex = source.indexOf('<span className="flex-1" />');
     const terminalIndex = source.indexOf("title={t('workspaceRuntime.terminal')}", triggerIndex);
     const localRuntimeBlockEnd = source.lastIndexOf('      ) : null}', triggerIndex);
@@ -45,7 +45,8 @@ describe('workspace Gateway placement', () => {
     expect(triggerIndex).toBeGreaterThan(localRuntimeBlockEnd);
     expect(triggerIndex).toBeGreaterThan(spacerIndex);
     expect(terminalIndex).toBeGreaterThan(triggerIndex);
-    expect(source).toContain('<GatewayRuntimeSources');
-    expect(source).not.toContain('<span>MaaS</span>');
+    expect(source).toContain('<MaasGlobalSelector');
+    expect(source).toContain("    : 'MaaS';");
+    expect(source).not.toContain('<GatewayRuntimeSources');
   });
 });

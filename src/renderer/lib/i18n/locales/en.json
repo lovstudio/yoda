@@ -3159,6 +3159,20 @@
     "connected": "Connected",
     "notConnected": "Not connected",
     "connectedCount": "{{count}} connected",
+    "global": {
+      "title": "Apply globally",
+      "description": "Enabling backs up every compatible Agent CLI access configuration and switches them to this MaaS. Disabling restores them automatically.",
+      "loading": "Loading MaaS status…",
+      "effective": "Active for {{count}} Agent CLI(s)",
+      "needsAttention": "Enabled, but credentials or configuration need attention",
+      "notEnabled": "Available",
+      "needsConfiguration": "Configure an API key first",
+      "toggleAria": "Enable {{platform}} globally",
+      "manage": "Configure {{platform}}",
+      "enabledToast": "{{platform}} is active for every compatible Agent CLI",
+      "restoredToast": "MaaS disabled and Agent CLI configurations restored",
+      "updateFailed": "Could not update global MaaS configuration"
+    },
     "clients": {
       "title": "Agent Clients",
       "description": "Selecting a Client saves its current access mode and switches its API key and endpoint to this MaaS. Restore returns to the previous configuration. Changes apply when a session is next started or resumed.",
@@ -3448,6 +3462,15 @@
       "updateFailed": "Failed to update Gateway",
       "manageClient": "Manage {{client}} account",
       "manageMaas": "Manage MaaS platforms",
+      "openLogs": "Open AI logs"
+    },
+    "maas": {
+      "title": "MaaS",
+      "description": "Choose one MaaS platform for every compatible Agent CLI",
+      "effective": "Active",
+      "needsAttention": "Check setup",
+      "disabled": "Disabled",
+      "manage": "Details & settings",
       "openLogs": "Open AI logs"
     },
     "currentSession": "Current session",

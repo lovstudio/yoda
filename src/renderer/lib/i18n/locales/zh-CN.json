@@ -3159,6 +3159,20 @@
     "connected": "已连接",
     "notConnected": "未连接",
     "connectedCount": "已连接 {{count}} 个",
+    "global": {
+      "title": "全局生效",
+      "description": "启用后会备份所有兼容 Agent CLI 的当前接入配置，并统一切换到该 MaaS；停用时自动复原。",
+      "loading": "正在读取 MaaS 状态…",
+      "effective": "已对 {{count}} 个 Agent CLI 生效",
+      "needsAttention": "已启用，但凭据或配置异常",
+      "notEnabled": "可启用",
+      "needsConfiguration": "需要先配置 API Key",
+      "toggleAria": "全局启用 {{platform}}",
+      "manage": "配置 {{platform}}",
+      "enabledToast": "{{platform}} 已对所有兼容 Agent CLI 生效",
+      "restoredToast": "已停用 MaaS，并复原 Agent CLI 配置",
+      "updateFailed": "无法更新全局 MaaS 配置"
+    },
     "clients": {
       "title": "Agent Client",
       "description": "勾选后会保存当前接入方式，并把该 Client 的 API Key 与端点切换到此 MaaS；复原会恢复切换前配置。新配置从下一次启动或恢复会话开始生效。",
@@ -3448,6 +3462,15 @@
       "updateFailed": "Gateway 更新失败",
       "manageClient": "管理 {{client}} 账号",
       "manageMaas": "管理 MaaS 平台",
+      "openLogs": "查看 AI 日志"
+    },
+    "maas": {
+      "title": "MaaS",
+      "description": "选择一个 MaaS 平台，对所有兼容 Agent CLI 全局生效",
+      "effective": "已生效",
+      "needsAttention": "需检查",
+      "disabled": "未启用",
+      "manage": "详情与配置",
       "openLogs": "查看 AI 日志"
     },
     "currentSession": "当前会话",

@@ -1,9 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Activity, Brain, ExternalLink, Gauge, MessageSquare, Route, Terminal } from 'lucide-react';
+import { Brain, Cloud, ExternalLink, Gauge, MessageSquare, Terminal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { RuntimeCustomConfig } from '@shared/app-settings';
 import { MAAS_PLATFORMS } from '@shared/maas';
 import {
   getRuntime,
@@ -13,9 +12,8 @@ import {
   type RuntimeId,
 } from '@shared/runtime-registry';
 import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
-import { GatewayRuntimeSources } from '@renderer/features/agents/components/GatewayRuntimeSources';
-import { useAiLogs } from '@renderer/features/ai-logs/use-ai-logs';
-import { useMaasRuntimeBindings } from '@renderer/features/maas/useMaas';
+import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
+import { useMaasGlobalBinding } from '@renderer/features/maas/useMaas';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import {
@@ -165,48 +163,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const sessionHistoryLabel = t('workspaceRuntime.sessionHistory', {
     count: displayedPromptCount ?? 0,
   });
-  const maasBindings = useMaasRuntimeBindings();
-  const runtimeGatewaySettings = useQuery<Record<string, RuntimeCustomConfig>>({
-    queryKey: ['runtimeSettings', 'all'],
-    queryFn: () => rpc.runtimeSettings.getAll() as Promise<Record<string, RuntimeCustomConfig>>,
-    staleTime: 30_000,
-  });
-  const recentRuntimeLogs = useAiLogs(
-    {
-      ...(runtimeId ? { runtime: runtimeId } : {}),
-      ...(activeConversationId ? { conversationId: activeConversationId } : {}),
-      limit: 5,
-    },
-    Boolean(runtimeId && !connectionId)
-  );
-  const activeMaasBinding = runtimeId
-    ? maasBindings.data?.find((binding) => binding.runtimeId === runtimeId)
-    : undefined;
-  const activeGatewayAuthProvider =
-    runtimeId && !connectionId
-      ? (runtimeGatewaySettings.data?.[runtimeId]?.authProvider ?? 'official-subscription')
-      : null;
-  const activeMaasPlatformId =
-    activeGatewayAuthProvider === 'yoda-maas' ? (activeMaasBinding?.platformId ?? null) : null;
-  const latestRuntimeLog = recentRuntimeLogs.data?.[0] ?? null;
-  const latestVerifiedGatewayLog =
-    recentRuntimeLogs.data?.find(
-      (record) =>
-        record.metadata?.authProvider === activeGatewayAuthProvider &&
-        (activeGatewayAuthProvider !== 'yoda-maas' ||
-          (record.metadata.maasEffective === 'true' &&
-            (!activeMaasPlatformId || record.metadata.maasPlatformId === activeMaasPlatformId)))
-    ) ?? null;
-  const activeGatewaySourceLabel =
-    activeGatewayAuthProvider === 'yoda-maas'
-      ? activeMaasPlatformId
-        ? MAAS_PLATFORMS[activeMaasPlatformId].name
-        : t('workspaceRuntime.gateway.maas')
-      : activeGatewayAuthProvider === 'official-api'
-        ? t('workspaceRuntime.gateway.apiKey')
-        : activeGatewayAuthProvider === 'official-subscription'
-          ? t('workspaceRuntime.gateway.subscription')
-          : t('workspaceRuntime.gateway.unconfigured');
+  const globalMaasBinding = useMaasGlobalBinding();
+  const selectedMaasPlatformId = globalMaasBinding.data?.enabled
+    ? globalMaasBinding.data.platformId
+    : null;
+  const selectedMaasLabel = selectedMaasPlatformId
+    ? `MaaS (${MAAS_PLATFORMS[selectedMaasPlatformId].name})`
+    : 'MaaS';
 
   useEffect(() => {
     if (!activeConversation || !provisionedTask) return;
@@ -618,19 +581,19 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       <span className="flex-1" />
       <Popover>
         <PopoverTrigger
-          aria-label={t('workspaceRuntime.gateway.title')}
+          aria-label={t('workspaceRuntime.maas.title')}
           className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-          title={t('workspaceRuntime.gateway.title')}
+          title={t('workspaceRuntime.maas.title')}
         >
-          <Route className="size-3.5" />
-          <span>Gateway</span>
+          <Cloud className="size-3.5" />
+          <span>{selectedMaasLabel}</span>
           <span
             aria-hidden
             className={cn(
               'size-1.5 rounded-full',
-              latestVerifiedGatewayLog
+              globalMaasBinding.data?.effective
                 ? 'bg-emerald-500'
-                : runtimeId && !connectionId
+                : globalMaasBinding.data?.enabled
                   ? 'bg-amber-500'
                   : 'bg-foreground-disabled'
             )}
@@ -640,55 +603,36 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           align="start"
           side="top"
           sideOffset={8}
-          className="w-[28rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+          className="w-[22rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
         >
           <div className="border-b border-border p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-sm font-medium">{t('workspaceRuntime.gateway.title')}</div>
+                <div className="text-sm font-medium">{t('workspaceRuntime.maas.title')}</div>
                 <div className="mt-0.5 text-xs text-foreground-passive">
-                  {runtimeId && !connectionId
-                    ? t('workspaceRuntime.gateway.currentSource', {
-                        client: runtime?.name ?? runtimeId,
-                        source: activeGatewaySourceLabel,
-                      })
-                    : t('workspaceRuntime.gateway.description')}
+                  {t('workspaceRuntime.maas.description')}
                 </div>
               </div>
               <span
                 className={cn(
                   'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
-                  latestVerifiedGatewayLog
+                  globalMaasBinding.data?.effective
                     ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                    : runtimeId && !connectionId
+                    : globalMaasBinding.data?.enabled
                       ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
                       : 'bg-background-2 text-foreground-muted'
                 )}
               >
-                {latestVerifiedGatewayLog
-                  ? t('workspaceRuntime.gateway.verified')
-                  : runtimeId && !connectionId
-                    ? t('workspaceRuntime.gateway.awaitingVerification')
-                    : t('workspaceRuntime.gateway.global')}
-              </span>
-            </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs text-foreground-muted">
-              <Activity className="size-3.5" />
-              <span className="min-w-0 truncate">
-                {latestVerifiedGatewayLog
-                  ? t('workspaceRuntime.gateway.lastVerified', {
-                      time: formatRuntimeTimestamp(latestVerifiedGatewayLog.startedAt),
-                    })
-                  : runtimeId && !connectionId && latestRuntimeLog
-                    ? t('workspaceRuntime.gateway.restartRequired')
-                    : runtimeId && !connectionId
-                      ? t('workspaceRuntime.gateway.waitingForLog')
-                      : t('workspaceRuntime.gateway.globalHint')}
+                {globalMaasBinding.data?.effective
+                  ? t('workspaceRuntime.maas.effective')
+                  : globalMaasBinding.data?.enabled
+                    ? t('workspaceRuntime.maas.needsAttention')
+                    : t('workspaceRuntime.maas.disabled')}
               </span>
             </div>
           </div>
           <div className="grid gap-3 p-3">
-            <GatewayRuntimeSources currentRuntimeId={!connectionId ? runtimeId : null} />
+            <MaasGlobalSelector onManagePlatform={() => appState.navigation.navigate('maas')} />
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -697,7 +641,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                 className="flex-1"
                 onClick={() => appState.navigation.navigate('maas')}
               >
-                {t('workspaceRuntime.gateway.manageMaas')}
+                {t('workspaceRuntime.maas.manage')}
               </Button>
               <Button
                 type="button"
@@ -706,7 +650,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                 className="flex-1"
                 onClick={() => appState.sidePane.pinView('settings', { tab: 'ai-logs' })}
               >
-                {t('workspaceRuntime.gateway.openLogs')}
+                {t('workspaceRuntime.maas.openLogs')}
               </Button>
             </div>
           </div>
@@ -729,14 +673,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     </div>
   );
 });
-
-function formatRuntimeTimestamp(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(new Date(value));
-}
 
 function ContextProgressBar({
   percent,

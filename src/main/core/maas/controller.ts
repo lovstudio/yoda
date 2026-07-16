@@ -3,6 +3,7 @@ import type {
   MaasConnectInput,
   MaasInvocationFilterKind,
   MaasPlatformId,
+  MaasSetGlobalBindingInput,
   MaasSetRuntimeBindingInput,
   MaasUsageSummaryInput,
 } from '@shared/maas';
@@ -61,6 +62,14 @@ async function setRuntimeBinding(input: MaasSetRuntimeBindingInput) {
   return maasService.setRuntimeBinding(input);
 }
 
+async function getGlobalBinding() {
+  return maasService.getGlobalBinding();
+}
+
+async function setGlobalBinding(input: MaasSetGlobalBindingInput) {
+  return maasService.setGlobalBinding(input);
+}
+
 export const maasController = createRPCController({
   listConnections,
   listPlatformDescriptions,
@@ -73,4 +82,6 @@ export const maasController = createRPCController({
   getUsageSummary,
   listRuntimeBindings,
   setRuntimeBinding,
+  getGlobalBinding,
+  setGlobalBinding,
 });
