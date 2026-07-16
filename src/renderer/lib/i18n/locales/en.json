@@ -1844,18 +1844,20 @@
       "sessionMoreRows": "More rows",
       "sessionActions": "Session history actions",
       "sessionViewTree": "View conversation tree",
-      "sessionTreeTitle": "All conversation history",
-      "sessionTreeDescription": "Select a prompt to branch from that point, or select an endpoint to switch to an existing conversation.",
-      "sessionTreeSummary": "{{promptCount}} nodes · {{branchCount}} branches",
+      "sessionTreeTitle": "Conversation branches",
+      "sessionTreeDescription": "Select a message to continue from there in a new conversation, or select an endpoint to switch branches.",
+      "sessionTreeSingleConversationDescription": "There are no forks yet. Select any message to continue from there in a new conversation.",
+      "sessionTreeSummary": "{{promptCount}} messages · {{conversationCount}} conversations",
       "sessionTreeLabel": "Session history branch tree",
+      "sessionBranchFromHere": "Continue from here",
       "sessionCheckpointPending": "This prompt does not have a restorable context checkpoint yet",
       "sessionCurrentBranch": "Current branch",
       "sessionOpenBranch": "Switch to branch “{{title}}”",
       "sessionRestoreBranch": "Restore and switch to branch “{{title}}”",
       "sessionOpenBranchFailed": "Failed to switch conversation branch",
-      "sessionCurrent": "Current",
-      "sessionRestore": "Restore",
-      "sessionSwitch": "Switch"
+      "sessionCurrent": "Current conversation",
+      "sessionRestore": "Restore conversation",
+      "sessionSwitch": "Switch conversation"
     }
   },
   "commandPalette": {

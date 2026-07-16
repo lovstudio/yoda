@@ -154,8 +154,9 @@ function SessionPromptTreePromptRow({
         isElbow={isElbow}
         highlighted={node.isOnActivePath}
       />
-      <span className="w-6 shrink-0 text-right font-mono text-[10px] text-foreground-passive">
-        {displayAlias.promptIndex + 1}
+      <PromptNodeMarker highlighted={node.isOnActivePath} isElbow={isElbow} />
+      <span className="w-7 shrink-0 font-mono text-[10px] text-foreground-passive">
+        #{displayAlias.promptIndex + 1}
       </span>
       <span
         className={cn(
@@ -179,15 +180,14 @@ function SessionPromptTreePromptRow({
       aria-level={ariaLevel}
       aria-current={node.isOnActivePath ? 'step' : undefined}
       className={cn(
-        'group flex h-6 w-full min-w-0 items-center gap-1 pr-3 transition-colors hover:bg-background-1 focus-within:bg-background-1',
-        node.isOnActivePath && 'bg-background-1/45'
+        'group flex h-8 w-full min-w-0 items-center gap-1 pr-3 transition-colors hover:bg-background-1 focus-within:bg-background-1'
       )}
       title={text}
     >
       {location ? (
         <button
           type="button"
-          className="flex h-6 min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+          className="flex h-8 min-w-0 flex-1 items-center gap-1.5 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
           onClick={() => onRestorePrompt(location)}
           aria-label={t('tasks.sessionInfo.restoreContextAtPrompt', {
             index: location.promptIndex + 1,
@@ -197,7 +197,7 @@ function SessionPromptTreePromptRow({
         </button>
       ) : (
         <div
-          className="flex h-6 min-w-0 flex-1 items-center gap-2 text-left"
+          className="flex h-8 min-w-0 flex-1 items-center gap-1.5 text-left"
           title={t('tasks.bottomPanel.sessionCheckpointPending')}
         >
           {content}
@@ -209,6 +209,7 @@ function SessionPromptTreePromptRow({
           index={location.promptIndex + 1}
           isRestoring={isRestoring}
           onRestore={() => onRestorePrompt(location)}
+          visibleLabel={t('tasks.bottomPanel.sessionBranchFromHere')}
           className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
         />
       ) : null}
@@ -249,9 +250,9 @@ function SessionPromptTreeEndpointRow({
       aria-level={ariaLevel}
       aria-current={endpoint.isActive ? 'page' : undefined}
       className={cn(
-        'group flex h-6 w-full min-w-0 items-center gap-2 pr-3 text-left text-[11px] text-foreground-passive transition-colors hover:bg-background-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border',
+        'group flex h-9 w-full min-w-0 items-center gap-1.5 pr-3 text-left text-[11px] text-foreground-passive transition-colors hover:bg-background-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border',
         endpoint.isActive && 'bg-background-2 text-foreground',
-        isArchived && 'text-foreground-passive'
+        isArchived && !endpoint.isActive && 'text-foreground-passive'
       )}
       disabled={isOpening}
       onClick={onOpen}
@@ -263,6 +264,7 @@ function SessionPromptTreeEndpointRow({
         isElbow={isElbow}
         highlighted={endpoint.isActive}
       />
+      <EndpointNodeMarker highlighted={endpoint.isActive} isElbow={isElbow} />
       {isOpening ? (
         <Loader2 className="size-3 shrink-0 animate-spin" />
       ) : isArchived ? (
@@ -270,8 +272,15 @@ function SessionPromptTreeEndpointRow({
       ) : (
         <GitBranch className="size-3 shrink-0" />
       )}
-      <span className={cn('min-w-0 flex-1 truncate', isArchived && 'line-through')}>{title}</span>
-      <span className="shrink-0 font-mono text-[10px]">
+      <span className={cn('min-w-0 flex-1 truncate font-medium', isArchived && 'line-through')}>
+        {title}
+      </span>
+      <span
+        className={cn(
+          'shrink-0 rounded-sm border border-border px-1.5 py-0.5 font-mono text-[10px]',
+          endpoint.isActive && 'border-foreground-tertiary/30 bg-background text-foreground'
+        )}
+      >
         {endpoint.isActive
           ? t('tasks.bottomPanel.sessionCurrent')
           : isArchived
@@ -279,6 +288,42 @@ function SessionPromptTreeEndpointRow({
             : t('tasks.bottomPanel.sessionSwitch')}
       </span>
     </button>
+  );
+}
+
+function PromptNodeMarker({ highlighted, isElbow }: { highlighted: boolean; isElbow: boolean }) {
+  const lineClassName = highlighted ? 'bg-foreground-tertiary' : 'bg-border';
+  return (
+    <span className="relative h-full w-5 shrink-0 self-stretch" aria-hidden>
+      <span className={cn('absolute bottom-0 left-1/2 top-0 w-px', lineClassName)} />
+      {isElbow ? (
+        <span className={cn('absolute left-0 right-1/2 top-1/2 h-px', lineClassName)} />
+      ) : null}
+      <span
+        className={cn(
+          'absolute left-1/2 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background ring-2',
+          highlighted ? 'ring-foreground-tertiary' : 'ring-border'
+        )}
+      />
+    </span>
+  );
+}
+
+function EndpointNodeMarker({ highlighted, isElbow }: { highlighted: boolean; isElbow: boolean }) {
+  const lineClassName = highlighted ? 'bg-foreground-tertiary' : 'bg-border';
+  return (
+    <span className="relative h-full w-5 shrink-0 self-stretch" aria-hidden>
+      <span className={cn('absolute left-1/2 top-0 h-1/2 w-px', lineClassName)} />
+      {isElbow ? (
+        <span className={cn('absolute left-0 right-1/2 top-1/2 h-px', lineClassName)} />
+      ) : null}
+      <span
+        className={cn(
+          'absolute left-1/2 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border bg-background',
+          highlighted ? 'border-foreground-tertiary' : 'border-border'
+        )}
+      />
+    </span>
   );
 }
 
@@ -303,7 +348,7 @@ function TreeGuideTrail({
       ))}
     </span>
   ) : (
-    <span className="w-3 shrink-0" aria-hidden />
+    <span className="w-1 shrink-0" aria-hidden />
   );
 }
 

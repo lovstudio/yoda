@@ -1844,18 +1844,20 @@
       "sessionMoreRows": "增加行数",
       "sessionActions": "会话历史操作",
       "sessionViewTree": "查看会话树",
-      "sessionTreeTitle": "全部会话历史",
-      "sessionTreeDescription": "选择提示节点可从该处创建分支；选择分支终点可切换到已有会话。",
-      "sessionTreeSummary": "{{promptCount}} 个节点 · {{branchCount}} 条分支",
+      "sessionTreeTitle": "会话分支图",
+      "sessionTreeDescription": "点击消息可从该处继续并创建新会话；点击会话终点可切换分支。",
+      "sessionTreeSingleConversationDescription": "当前还没有分叉。点击任意一条消息，可从该处继续并创建新会话。",
+      "sessionTreeSummary": "{{promptCount}} 条消息 · {{conversationCount}} 个会话",
       "sessionTreeLabel": "会话历史分支树",
+      "sessionBranchFromHere": "从这里继续",
       "sessionCheckpointPending": "此条尚无可切入的上下文检查点",
       "sessionCurrentBranch": "当前分支",
       "sessionOpenBranch": "切入分支“{{title}}”",
       "sessionRestoreBranch": "恢复并切入分支“{{title}}”",
       "sessionOpenBranchFailed": "切入会话分支失败",
-      "sessionCurrent": "当前",
-      "sessionRestore": "恢复切入",
-      "sessionSwitch": "切入"
+      "sessionCurrent": "当前会话",
+      "sessionRestore": "恢复会话",
+      "sessionSwitch": "切换会话"
     }
   },
   "commandPalette": {
