@@ -14,6 +14,9 @@ const focusedWindowEventNames = new Set([
   'menu:check-for-updates',
   'menu:close-tab',
   'menu:open-settings',
+  'menu:import-settings',
+  'menu:export-settings',
+  'menu:sync-settings',
   'menu:redo',
   'menu:undo',
 ]);

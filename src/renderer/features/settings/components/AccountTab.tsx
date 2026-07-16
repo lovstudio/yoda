@@ -21,6 +21,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { Label } from '@renderer/lib/ui/label';
 import { ServerUnavailableMessage } from './ServerUnavailableMessage';
+import { SettingsSyncCard } from './SettingsSyncCard';
 
 export function AccountTab() {
   const { t } = useTranslation();
@@ -273,6 +274,8 @@ function SignedInAccountPanel({
       </section>
 
       <AccountCommercePanel accountUserId={user.userId} />
+
+      <SettingsSyncCard />
 
       <form
         className="grid gap-3 py-4 @2xl:grid-cols-[10rem_minmax(0,1fr)] @2xl:items-start"

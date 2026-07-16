@@ -1,8 +1,11 @@
 import { useEffect } from 'react';
 import {
   deepLinkOpenChannel,
+  menuExportSettingsChannel,
+  menuImportSettingsChannel,
   menuOpenSettingsChannel,
   menuRedoChannel,
+  menuSyncSettingsChannel,
   menuToggleLeftSidebarChannel,
   menuUndoChannel,
   notificationFocusTaskChannel,
@@ -12,9 +15,16 @@ import {
   performActiveEditorRedo,
   performActiveEditorUndo,
 } from '@renderer/lib/editor/activeCodeEditor';
+import { useToast } from '@renderer/lib/hooks/use-toast';
 import { events, rpc } from '@renderer/lib/ipc';
 import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider';
 import { useNavigate, useWorkspaceSlots } from '@renderer/lib/layout/navigation-provider';
+import {
+  exportSettingsFile,
+  importSettingsFile,
+  restartAfterSettingsRestore,
+  syncSettings,
+} from '@renderer/lib/settings-sync';
 import {
   getTaskWindowLaunchTarget,
   isWarmTaskWindow,
@@ -26,6 +36,7 @@ export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boole
   const { navigate } = useNavigate();
   const { currentView } = useWorkspaceSlots();
   const { toggleLeft } = useWorkspaceLayoutContext();
+  const { toast } = useToast();
 
   useEffect(() => {
     return events.on(menuOpenSettingsChannel, () => {
@@ -40,6 +51,51 @@ export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boole
   useEffect(() => {
     return events.on(menuToggleLeftSidebarChannel, () => toggleLeft());
   }, [toggleLeft]);
+
+  useEffect(() => {
+    const reportError = (error: unknown) =>
+      toast({
+        title: '设置操作失败',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    const offImport = events.on(menuImportSettingsChannel, () => {
+      void importSettingsFile()
+        .then(async (result) => {
+          if (result.status === 'imported') await restartAfterSettingsRestore();
+        })
+        .catch(reportError);
+    });
+    const offExport = events.on(menuExportSettingsChannel, () => {
+      void exportSettingsFile()
+        .then((result) => {
+          if (result.status === 'exported') {
+            toast({ title: '设置已导出', description: result.filePath });
+          }
+        })
+        .catch(reportError);
+    });
+    const offSync = events.on(menuSyncSettingsChannel, () => {
+      void syncSettings('auto')
+        .then(async (result) => {
+          if (result.status === 'downloaded') {
+            await restartAfterSettingsRestore();
+            return;
+          }
+          toast({
+            title: result.status === 'conflict' ? '云端与本机设置存在冲突' : '设置同步完成',
+            description:
+              result.status === 'conflict' ? '请前往账号设置选择使用本机或云端配置。' : undefined,
+          });
+        })
+        .catch(reportError);
+    });
+    return () => {
+      offImport();
+      offExport();
+      offSync();
+    };
+  }, [toast]);
 
   // Menu Undo/Redo (Cmd/Ctrl+Z) arrives as an event because the Edit menu
   // routes through the renderer to keep undo scoped to the focused Monaco

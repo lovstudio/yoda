@@ -373,7 +373,14 @@ export class MaasService {
             ? keyFingerprint(inferenceApiKey)
             : saved.inferenceKeyFingerprint,
         };
-        return toConnection(connection, platformId);
+        const hasCredential = Boolean(apiKey || inferenceApiKey);
+        return {
+          ...connection,
+          connected: hasCredential,
+          error: hasCredential
+            ? null
+            : 'Credentials are not synced. Reconnect this MaaS platform on this device.',
+        };
       })
     );
   }

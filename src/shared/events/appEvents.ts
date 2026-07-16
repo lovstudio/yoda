@@ -16,6 +16,9 @@ export const menuUndoChannel = defineEvent<void>('menu:undo');
 export const menuRedoChannel = defineEvent<void>('menu:redo');
 export const menuCloseTabChannel = defineEvent<void>('menu:close-tab');
 export const menuToggleLeftSidebarChannel = defineEvent<void>('menu:toggle-left-sidebar');
+export const menuImportSettingsChannel = defineEvent<void>('menu:import-settings');
+export const menuExportSettingsChannel = defineEvent<void>('menu:export-settings');
+export const menuSyncSettingsChannel = defineEvent<void>('menu:sync-settings');
 
 export const gitStatusChangedChannel = defineEvent<{
   taskPath: string;

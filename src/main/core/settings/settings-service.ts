@@ -186,6 +186,14 @@ export class SettingsStore implements IInitializable {
     return Object.fromEntries(entries) as AppSettings;
   }
 
+  async replaceMany(settings: Partial<AppSettings>): Promise<void> {
+    for (const key of AppSettingsKeys) {
+      const value = settings[key];
+      if (value === undefined) continue;
+      await this.update(key, value);
+    }
+  }
+
   private async migrateLegacyKeys(): Promise<void> {
     for (const [oldKey, newKey] of Object.entries(LEGACY_KEY_RENAMES)) {
       const [oldRow] = await db

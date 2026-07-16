@@ -35,6 +35,7 @@ import { pullRequestController } from './core/pull-requests/controller';
 import { repositoryController } from './core/repository/controller';
 import { reviewOrchestrationController } from './core/review-orchestration/controller';
 import { searchController } from './core/search/controller';
+import { settingsSyncController } from './core/settings-sync/controller';
 import { appSettingsController } from './core/settings/controller';
 import { runtimeSettingsController } from './core/settings/runtime-settings-controller';
 import { skillsController } from './core/skills/controller';
@@ -62,6 +63,7 @@ export const rpcRouter = createRPCRouter({
   app: appController,
   appSettings: appSettingsController,
   runtimeSettings: runtimeSettingsController,
+  settingsSync: settingsSyncController,
   repository: repositoryController,
   fs: filesController,
   update: updateController,

@@ -59,6 +59,18 @@ export class OverrideSettings<TConfig extends object> {
     return result;
   }
 
+  async getOverrides(): Promise<Record<string, Partial<TConfig>>> {
+    return this.readRawOverrides();
+  }
+
+  async replaceOverrides(overrides: Record<string, Partial<TConfig>>): Promise<void> {
+    const validated: Record<string, Partial<TConfig>> = {};
+    for (const [id, config] of Object.entries(overrides)) {
+      validated[id] = this.itemSchema.parse(config);
+    }
+    await this.storeOverrides(validated);
+  }
+
   async getItem(id: string): Promise<TConfig | undefined> {
     const all = await this.getAll();
     return all[id];

@@ -5,6 +5,7 @@ import { AccountSessionEvents } from './app/account-session-events';
 import { AppMenuEvents } from './app/app-menu-events';
 import { BootScreen } from './app/boot-screen';
 import { ReviewOrchestrationEvents } from './app/review-orchestration-events';
+import { SettingsSyncAgent } from './app/settings-sync-agent';
 import { WelcomeScreen } from './app/welcome';
 import { Workspace } from './app/workspace';
 import { IntegrationsProvider } from './features/integrations/integrations-provider';
@@ -129,6 +130,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AccountSessionEvents />
+      <SettingsSyncAgent />
       <FeatureFlagProvider>
         <AppContent />
       </FeatureFlagProvider>

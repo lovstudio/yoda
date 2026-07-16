@@ -513,7 +513,27 @@
         "offline": "离线",
         "revoked": "已撤销"
       },
-      "revokeDevice": "撤销"
+      "revokeDevice": "撤销",
+      "settingsSync": {
+        "title": "设置同步",
+        "description": "像 IDE 设置同步一样，在不同 Yoda 安装之间恢复界面、快捷键、Agent 与 MaaS 配置。",
+        "autoSync": "自动同步到 LovStudio 账户",
+        "lastSynced": "上次同步：{{date}}",
+        "notSynced": "尚未同步",
+        "syncNow": "立即同步",
+        "useLocal": "用本机覆盖云端",
+        "useCloud": "用云端恢复本机",
+        "export": "导出设置",
+        "import": "导入设置",
+        "conflictTitle": "本机与云端都发生了变化",
+        "conflictDescription": "请选择保留本机设置并覆盖云端，或使用云端设置恢复本机。",
+        "securityNote": "项目、任务、会话、本机路径和缓存不会同步；API Key、Token 与密码始终留在系统安全存储中，换设备后需要重新连接。",
+        "synced": "设置同步完成",
+        "uploaded": "本机设置已同步到云端",
+        "restored": "云端设置已恢复，正在重启",
+        "exported": "设置已导出",
+        "failed": "设置操作失败"
+      }
     },
     "agentsTab": {
       "description": "管理 CLI 客户端与模型配置。",

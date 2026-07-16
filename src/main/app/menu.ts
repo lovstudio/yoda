@@ -3,8 +3,11 @@ import { app, Menu, shell } from 'electron';
 import {
   menuCheckForUpdatesChannel,
   menuCloseTabChannel,
+  menuExportSettingsChannel,
+  menuImportSettingsChannel,
   menuOpenSettingsChannel,
   menuRedoChannel,
+  menuSyncSettingsChannel,
   menuToggleLeftSidebarChannel,
   menuUndoChannel,
 } from '@shared/events/appEvents';
@@ -101,6 +104,25 @@ export async function setupApplicationMenu(): Promise<void> {
     {
       label: 'File',
       submenu: [
+        {
+          label: 'Manage Settings',
+          submenu: [
+            {
+              label: 'Import Settings\u2026',
+              click: () => events.emit(menuImportSettingsChannel, undefined),
+            },
+            {
+              label: 'Export Settings\u2026',
+              click: () => events.emit(menuExportSettingsChannel, undefined),
+            },
+            { type: 'separator' as const },
+            {
+              label: 'Sync Settings Now',
+              click: () => events.emit(menuSyncSettingsChannel, undefined),
+            },
+          ],
+        },
+        { type: 'separator' as const },
         // On non-macOS, put Settings in File menu
         ...(!isMac
           ? [

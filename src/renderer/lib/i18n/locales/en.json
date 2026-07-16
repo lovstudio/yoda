@@ -513,7 +513,27 @@
         "offline": "Offline",
         "revoked": "Revoked"
       },
-      "revokeDevice": "Revoke"
+      "revokeDevice": "Revoke",
+      "settingsSync": {
+        "title": "Settings sync",
+        "description": "Restore interface, shortcuts, Agent, and MaaS settings across Yoda installations, like IDE settings sync.",
+        "autoSync": "Sync automatically with your LovStudio account",
+        "lastSynced": "Last synced: {{date}}",
+        "notSynced": "Not synced yet",
+        "syncNow": "Sync now",
+        "useLocal": "Use local settings",
+        "useCloud": "Use cloud settings",
+        "export": "Export settings",
+        "import": "Import settings",
+        "conflictTitle": "Both local and cloud settings changed",
+        "conflictDescription": "Keep this device's settings and overwrite the cloud, or restore this device from the cloud.",
+        "securityNote": "Projects, tasks, sessions, device paths, and caches are not synced. API keys, tokens, and passwords stay in secure system storage and must be reconnected on a new device.",
+        "synced": "Settings sync complete",
+        "uploaded": "Local settings uploaded",
+        "restored": "Cloud settings restored; restarting",
+        "exported": "Settings exported",
+        "failed": "Settings operation failed"
+      }
     },
     "agentsTab": {
       "description": "Manage clients and model configurations.",
