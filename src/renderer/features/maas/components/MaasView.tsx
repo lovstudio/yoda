@@ -15,6 +15,7 @@ import {
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  hasMaasInferenceCredential,
   MAAS_PLATFORM_IDS,
   MAAS_PLATFORMS,
   type MaasConnection,
@@ -41,6 +42,7 @@ import {
   useMaasConnections,
   useMaasPlatformDescriptions,
 } from '../useMaas';
+import { MaasRuntimeBindings } from './MaasRuntimeBindings';
 
 function findConnection(
   connections: MaasConnection[] | undefined,
@@ -52,6 +54,7 @@ function findConnection(
       displayName: MAAS_PLATFORMS[platformId].name,
       endpoint: MAAS_PLATFORMS[platformId].defaultEndpoint,
       keyFingerprint: null,
+      inferenceKeyFingerprint: null,
       connectedAt: null,
       lastCheckedAt: null,
       connected: false,
@@ -410,6 +413,7 @@ const ConnectionPanel: React.FC<{
   const connectMutation = useConnectMaasPlatform();
   const disconnectMutation = useDisconnectMaasPlatform();
   const [apiKey, setApiKey] = useState('');
+  const [inferenceApiKey, setInferenceApiKey] = useState('');
   const [replacingKey, setReplacingKey] = useState(!connection.connected);
   const [copyingKey, setCopyingKey] = useState(false);
   const [displayName, setDisplayName] = useState(connection.displayName);
@@ -420,7 +424,9 @@ const ConnectionPanel: React.FC<{
   const disconnecting = disconnectMutation.isPending;
   const hasStoredKey = connection.connected && !!connection.keyFingerprint;
   const showingKeyInput = !hasStoredKey || replacingKey;
-  const submitDisabled = saving || (!apiKey.trim() && (!hasStoredKey || replacingKey));
+  const hasNewInferenceKey = connection.platformId === 'zenmux' && !!inferenceApiKey.trim();
+  const submitDisabled =
+    saving || (!apiKey.trim() && !hasNewInferenceKey && (!hasStoredKey || replacingKey));
   const disconnectLabel = t('maas.connection.disconnect');
   const disconnectHint = t('maas.connection.disconnectHint');
   const keyHelper =
@@ -444,7 +450,7 @@ const ConnectionPanel: React.FC<{
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!apiKey.trim() && (!hasStoredKey || replacingKey)) {
+    if (!apiKey.trim() && !hasNewInferenceKey && (!hasStoredKey || replacingKey)) {
       setFormError(t('maas.connection.apiKeyRequired'));
       return;
     }
@@ -454,12 +460,14 @@ const ConnectionPanel: React.FC<{
       {
         platformId: connection.platformId,
         apiKey: apiKey.trim() || undefined,
+        inferenceApiKey: inferenceApiKey.trim() || undefined,
         displayName,
         endpoint,
       },
       {
         onSuccess: () => {
           setApiKey('');
+          setInferenceApiKey('');
           setReplacingKey(false);
         },
         onError: (error) => setFormError(error instanceof Error ? error.message : String(error)),
@@ -649,6 +657,29 @@ const ConnectionPanel: React.FC<{
             )}
             <span className="text-xs leading-relaxed text-foreground-muted">{keyHelper}</span>
           </label>
+          {connection.platformId === 'zenmux' && (
+            <label className="grid gap-1.5 @3xl:col-span-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t('maas.connection.inferenceApiKey')}
+              </span>
+              <Input
+                type="password"
+                value={inferenceApiKey}
+                autoComplete="new-password"
+                placeholder={
+                  connection.inferenceKeyFingerprint
+                    ? t('maas.connection.inferenceApiKeyStoredPlaceholder', {
+                        fingerprint: connection.inferenceKeyFingerprint,
+                      })
+                    : t('maas.connection.inferenceApiKeyPlaceholder')
+                }
+                onChange={(event) => setInferenceApiKey(event.target.value)}
+              />
+              <span className="text-xs leading-relaxed text-foreground-muted">
+                {t('maas.connection.inferenceApiKeyHelper')}
+              </span>
+            </label>
+          )}
         </div>
 
         {formError && <p className="text-xs text-destructive">{formError}</p>}
@@ -673,6 +704,11 @@ const ConnectionPanel: React.FC<{
             {saving ? t('maas.connection.saving') : t('maas.connection.saveChanges')}
           </Button>
         </div>
+
+        <MaasRuntimeBindings
+          platformId={connection.platformId}
+          connected={connection.connected && hasMaasInferenceCredential(connection)}
+        />
       </form>
     </section>
   );

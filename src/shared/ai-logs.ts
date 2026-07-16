@@ -44,5 +44,9 @@ export type AiInvocationLogRecord = {
 export type AiLogListInput = {
   status?: AiLogStatus;
   mode?: AiLogMode;
+  runtime?: string;
+  conversationId?: string;
+  authProvider?: string;
+  maasPlatformId?: string;
   limit?: number;
 };

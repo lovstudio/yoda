@@ -158,13 +158,31 @@ export class AiLogService {
     const conditions = [];
     if (input.status) conditions.push(eq(aiInvocationLogs.status, input.status));
     if (input.mode) conditions.push(eq(aiInvocationLogs.mode, input.mode));
+    if (input.runtime) conditions.push(eq(aiInvocationLogs.runtime, input.runtime));
+    const hasMetadataFilter = Boolean(
+      input.conversationId || input.authProvider || input.maasPlatformId
+    );
     const rows = await db
       .select()
       .from(aiInvocationLogs)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(aiInvocationLogs.startedAt))
-      .limit(limit);
-    return rows.map(toRecord);
+      .limit(hasMetadataFilter ? MAX_ROWS : limit);
+    const records = rows.map(toRecord);
+    if (!hasMetadataFilter) return records;
+    return records
+      .filter((record) => {
+        if (input.conversationId && record.metadata?.conversationId !== input.conversationId) {
+          return false;
+        }
+        if (input.authProvider && record.metadata?.authProvider !== input.authProvider)
+          return false;
+        if (input.maasPlatformId && record.metadata?.maasPlatformId !== input.maasPlatformId) {
+          return false;
+        }
+        return true;
+      })
+      .slice(0, limit);
   }
 
   async clear(): Promise<void> {

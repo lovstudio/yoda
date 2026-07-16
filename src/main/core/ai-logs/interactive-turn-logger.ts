@@ -13,12 +13,28 @@ import { aiLogService } from './ai-log-service';
 class InteractiveTurnLogger {
   /** conversationId → open ai_invocation_logs row id. */
   private openTurns = new Map<string, string>();
+  private sessionContexts = new Map<
+    string,
+    { authProvider: string; maasPlatformId?: string; maasEffective: boolean }
+  >();
+
+  setSessionContext(
+    conversationId: string,
+    context: { authProvider: string; maasPlatformId?: string; maasEffective: boolean }
+  ): void {
+    this.sessionContexts.set(conversationId, context);
+  }
+
+  clearSessionContext(conversationId: string): void {
+    this.sessionContexts.delete(conversationId);
+  }
 
   async onAgentEvent(event: AgentEvent): Promise<void> {
     try {
       if (event.type === 'prompt-submit') {
         // A queued/interrupted previous turn never got its Stop — settle it.
         await this.close(event.conversationId, { status: 'succeeded' });
+        const context = this.sessionContexts.get(event.conversationId);
         const logId = await aiLogService.start({
           purpose: 'interactive-turn',
           mode: 'interactive',
@@ -28,6 +44,13 @@ class InteractiveTurnLogger {
             projectId: event.projectId,
             taskId: event.taskId,
             conversationId: event.conversationId,
+            ...(context
+              ? {
+                  authProvider: context.authProvider,
+                  maasEffective: String(context.maasEffective),
+                  ...(context.maasPlatformId ? { maasPlatformId: context.maasPlatformId } : {}),
+                }
+              : {}),
           },
         });
         this.openTurns.set(event.conversationId, logId);
@@ -60,6 +83,8 @@ class InteractiveTurnLogger {
       });
     } catch (error) {
       log.warn('[ai-log] interactive turn exit logging failed', { error: String(error) });
+    } finally {
+      this.sessionContexts.delete(conversationId);
     }
   }
 

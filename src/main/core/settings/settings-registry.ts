@@ -71,6 +71,7 @@ export const SETTINGS_DEFAULTS = {
   maas: {
     selectedPlatformId: MAAS_PLATFORMS.zenmux.id,
     connections: [],
+    runtimeBindings: [],
   },
   llm: {
     profiles: [

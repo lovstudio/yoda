@@ -3125,6 +3125,21 @@
     "connected": "已连接",
     "notConnected": "未连接",
     "connectedCount": "已连接 {{count}} 个",
+    "clients": {
+      "title": "Agent Client",
+      "description": "勾选后会保存当前接入方式，并把该 Client 的 API Key 与端点切换到此 MaaS；复原会恢复切换前配置。新配置从下一次启动或恢复会话开始生效。",
+      "loading": "正在读取 Client 配置…",
+      "effective": "配置已生效",
+      "needsAttention": "已关联，但凭据或配置异常",
+      "boundElsewhere": "当前由 {{platform}} 管理",
+      "notEnabled": "未启用",
+      "restore": "复原",
+      "connectFirst": "请先保存平台端点与 API Key，再选择 Agent Client。",
+      "toggleAria": "让 {{platform}} 对 {{client}} 生效",
+      "enabledToast": "{{client}} 已切换到 {{platform}}",
+      "restoredToast": "{{client}} 已恢复切换前配置",
+      "updateFailed": "无法更新 Client 配置"
+    },
     "platforms": {
       "zenmux": {
         "description": "使用统一 API 标准调用不同 Provider 的模型。"
@@ -3162,6 +3177,10 @@
       "apiKeyPlaceholder": "粘贴 API Key 或管理 Key",
       "managementApiKey": "Management API Key",
       "zenmuxManagementKeyPlaceholder": "粘贴 ZenMux Management API Key",
+      "inferenceApiKey": "Agent Client API Key",
+      "inferenceApiKeyPlaceholder": "粘贴用于模型调用的 ZenMux API Key",
+      "inferenceApiKeyStoredPlaceholder": "已保存 {{fingerprint}}，留空则继续使用",
+      "inferenceApiKeyHelper": "此 Key 仅用于 Agent Client 的模型调用；上方 Management Key 仅用于用量与日志统计。",
       "apiKeyStoredPlaceholder": "已保存 {{fingerprint}}，留空则继续使用",
       "save": "保存",
       "saveChanges": "保存配置",
@@ -3370,6 +3389,17 @@
   },
   "workspaceRuntime": {
     "terminal": "终端",
+    "maas": {
+      "title": "MaaS 运行状态",
+      "effective": "已生效",
+      "notEffective": "未生效",
+      "lastVerified": "最近一条 MaaS 日志：{{time}}",
+      "restartRequired": "当前会话沿用旧配置，请新建或恢复会话后验证",
+      "waitingForLog": "配置已切换，下一次 AI 对话会生成验证日志",
+      "noVerifiedLog": "尚未发现 MaaS 生效日志",
+      "manage": "管理 MaaS",
+      "openLogs": "查看 AI 日志"
+    },
     "currentSession": "当前会话",
     "currentSessionTitle": "当前会话使用 {{name}}",
     "contextUsage": "上下文 {{used}}/{{limit}}（{{percent}}%）",
