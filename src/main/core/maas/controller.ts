@@ -1,6 +1,7 @@
 import { createRPCController } from '@shared/ipc/rpc';
 import type {
   MaasConnectInput,
+  MaasCopyStoredApiKeyInput,
   MaasInvocationFilterKind,
   MaasPlatformId,
   MaasSetGlobalBindingInput,
@@ -36,8 +37,8 @@ async function checkConnection(platformId: MaasPlatformId) {
   return maasService.checkConnection(platformId);
 }
 
-async function copyStoredApiKey(platformId: MaasPlatformId) {
-  return maasService.copyStoredApiKeyToClipboard(platformId);
+async function copyStoredApiKey(input: MaasCopyStoredApiKeyInput) {
+  return maasService.copyStoredApiKeyToClipboard(input);
 }
 
 async function listInvocationRecords(args: {

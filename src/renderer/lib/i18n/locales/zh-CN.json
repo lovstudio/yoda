@@ -3229,7 +3229,6 @@
       "zenmuxManagementKeyPlaceholder": "粘贴 ZenMux Management API Key",
       "inferenceApiKey": "Agent Client API Key",
       "inferenceApiKeyPlaceholder": "粘贴用于模型调用的 ZenMux API Key",
-      "inferenceApiKeyStoredPlaceholder": "已保存 {{fingerprint}}，留空则继续使用",
       "inferenceApiKeyHelper": "此 Key 仅用于 Agent Client 的模型调用；上方 Management Key 仅用于用量与日志统计。",
       "apiKeyStoredPlaceholder": "已保存 {{fingerprint}}，留空则继续使用",
       "save": "保存",

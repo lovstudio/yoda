@@ -3229,7 +3229,6 @@
       "zenmuxManagementKeyPlaceholder": "Paste ZenMux Management API Key",
       "inferenceApiKey": "Agent Client API key",
       "inferenceApiKeyPlaceholder": "Paste a ZenMux API key for model inference",
-      "inferenceApiKeyStoredPlaceholder": "Saved {{fingerprint}} - leave blank to keep it",
       "inferenceApiKeyHelper": "This key is used only for Agent Client model calls. The Management key above remains dedicated to usage and log statistics.",
       "apiKeyStoredPlaceholder": "Saved {{fingerprint}} - leave blank to keep it",
       "save": "Save",

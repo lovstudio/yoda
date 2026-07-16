@@ -7,6 +7,7 @@ import {
   type MaasConnectInput,
   type MaasConnection,
   type MaasConnectionCheckResult,
+  type MaasCopyStoredApiKeyInput,
   type MaasGlobalBindingStatus,
   type MaasInvocationFilterKind,
   type MaasInvocationKind,
@@ -706,20 +707,30 @@ export class MaasService {
   }
 
   async copyStoredApiKeyToClipboard(
-    platformId: MaasPlatformId
+    input: MaasCopyStoredApiKeyInput
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      if (!isMaasPlatformId(platformId)) {
+      if (!isMaasPlatformId(input.platformId)) {
         return { success: false, error: 'Unsupported MaaS platform.' };
+      }
+      if (input.kind !== 'primary' && input.kind !== 'inference') {
+        return { success: false, error: 'Unsupported MaaS API key kind.' };
+      }
+      if (input.kind === 'inference' && input.platformId !== 'zenmux') {
+        return { success: false, error: 'This platform does not use a separate inference key.' };
       }
 
       const settings = await appSettingsService.get('maas');
-      const connection = getConnectedPlatform(settings, platformId);
+      const connection = getConnectedPlatform(settings, input.platformId);
       if (!connection) {
         return { success: false, error: 'Platform is not connected.' };
       }
 
-      const apiKey = await encryptedAppSecretsStore.getSecret(secretKey(platformId));
+      const storedKey =
+        input.kind === 'inference'
+          ? inferenceSecretKey(input.platformId)
+          : secretKey(input.platformId);
+      const apiKey = await encryptedAppSecretsStore.getSecret(storedKey);
       if (!apiKey) {
         return {
           success: false,

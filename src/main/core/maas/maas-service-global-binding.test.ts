@@ -10,10 +10,12 @@ const mocks = vi.hoisted(() => ({
   } as MaasSettings,
   runtimeConfigs: {} as Record<string, RuntimeCustomConfig>,
   failRuntimeId: null as string | null,
+  secrets: {} as Record<string, string>,
+  clipboardWriteText: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
-  clipboard: { writeText: vi.fn() },
+  clipboard: { writeText: mocks.clipboardWriteText },
   net: { request: vi.fn() },
 }));
 
@@ -42,7 +44,7 @@ vi.mock('../settings/settings-service', () => ({
 
 vi.mock('../secrets/encrypted-app-secrets-store', () => ({
   encryptedAppSecretsStore: {
-    getSecret: vi.fn(),
+    getSecret: vi.fn(async (key: string) => mocks.secrets[key]),
     setSecret: vi.fn(),
     deleteSecret: vi.fn(),
   },
@@ -77,6 +79,7 @@ describe('global MaaS binding', () => {
       qwen: { authProvider: 'official-subscription' },
     };
     mocks.failRuntimeId = null;
+    mocks.secrets = {};
     vi.clearAllMocks();
   });
 
@@ -168,5 +171,44 @@ describe('global MaaS binding', () => {
     expect(result).toEqual({ success: false, error: 'failed claude' });
     expect(mocks.runtimeConfigs).toEqual(originalConfigs);
     expect(mocks.settings).toEqual(originalSettings);
+  });
+});
+
+describe('stored MaaS keys', () => {
+  beforeEach(() => {
+    mocks.settings = {
+      selectedPlatformId: 'zenmux',
+      connections: [
+        {
+          platformId: 'zenmux',
+          displayName: 'ZenMux',
+          endpoint: 'https://zenmux.ai/api/v1',
+          keyFingerprint: 'ma...nt',
+          inferenceKeyFingerprint: 'in...ce',
+          connectedAt: '2026-07-16T00:00:00.000Z',
+          lastCheckedAt: null,
+        },
+      ],
+      runtimeBindings: [],
+    };
+    mocks.secrets = {
+      'yoda-maas-token:zenmux': 'management-secret',
+      'yoda-maas-inference-token:zenmux': 'inference-secret',
+    };
+    vi.clearAllMocks();
+  });
+
+  it('copies the selected key kind without exposing the other stored key', async () => {
+    const service = new MaasService();
+
+    await expect(
+      service.copyStoredApiKeyToClipboard({ platformId: 'zenmux', kind: 'inference' })
+    ).resolves.toEqual({ success: true });
+    expect(mocks.clipboardWriteText).toHaveBeenLastCalledWith('inference-secret');
+
+    await expect(
+      service.copyStoredApiKeyToClipboard({ platformId: 'zenmux', kind: 'primary' })
+    ).resolves.toEqual({ success: true });
+    expect(mocks.clipboardWriteText).toHaveBeenLastCalledWith('management-secret');
   });
 });

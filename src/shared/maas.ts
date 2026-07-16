@@ -52,6 +52,13 @@ export type MaasConnectInput = {
   endpoint?: string;
 };
 
+export type MaasApiKeyKind = 'primary' | 'inference';
+
+export type MaasCopyStoredApiKeyInput = {
+  platformId: MaasPlatformId;
+  kind: MaasApiKeyKind;
+};
+
 export type MaasConnectionCheckResult = {
   ok: boolean;
   error: string | null;

@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import {
   MAAS_PLATFORM_IDS,
   MAAS_PLATFORMS,
+  type MaasApiKeyKind,
   type MaasConnection,
   type MaasPlatformId,
   type MaasPlatformOfficialDescription,
@@ -402,6 +403,124 @@ const PlatformAccordionItem: React.FC<{
   );
 };
 
+const StoredSecretField: React.FC<{
+  value: string;
+  fingerprint: string | null;
+  placeholder: string;
+  replacing: boolean;
+  copying: boolean;
+  onValueChange: (value: string) => void;
+  onCopy: () => void;
+  onReplace: () => void;
+  onCancelReplace: () => void;
+  storedActions?: React.ReactNode;
+}> = ({
+  value,
+  fingerprint,
+  placeholder,
+  replacing,
+  copying,
+  onValueChange,
+  onCopy,
+  onReplace,
+  onCancelReplace,
+  storedActions,
+}) => {
+  const { t } = useTranslation();
+  const hasStoredKey = !!fingerprint;
+  const showingInput = !hasStoredKey || replacing;
+
+  if (showingInput) {
+    return (
+      <div className="grid gap-1.5">
+        <InputGroup className="h-8">
+          <InputGroupInput
+            type="password"
+            value={value}
+            autoComplete="new-password"
+            placeholder={placeholder}
+            onChange={(event) => onValueChange(event.target.value)}
+          />
+          {hasStoredKey ? (
+            <InputGroupAddon align="inline-end" className="gap-1 pr-1">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <InputGroupButton
+                      type="button"
+                      size="icon-xs"
+                      aria-label={t('maas.connection.cancelReplaceKey')}
+                      onClick={onCancelReplace}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </InputGroupButton>
+                  }
+                />
+                <TooltipContent>{t('maas.connection.cancelReplaceKey')}</TooltipContent>
+              </Tooltip>
+            </InputGroupAddon>
+          ) : null}
+        </InputGroup>
+        {hasStoredKey ? (
+          <span className="text-xs leading-relaxed text-foreground-muted">
+            {t('maas.connection.replaceKeyEditingHint')}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <InputGroup className="h-8">
+      <InputGroupInput
+        readOnly
+        value={formatMaskedApiKey(fingerprint)}
+        className="cursor-pointer font-mono"
+        aria-label={t('maas.connection.storedKeyAriaLabel')}
+        onClick={onCopy}
+      />
+      <InputGroupAddon align="inline-end" className="gap-1 pr-1">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <InputGroupButton
+                type="button"
+                size="icon-xs"
+                disabled={copying}
+                aria-label={t('maas.connection.copyKey')}
+                onClick={onCopy}
+              >
+                {copying ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </InputGroupButton>
+            }
+          />
+          <TooltipContent>{t('maas.connection.copyKey')}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <InputGroupButton
+                type="button"
+                size="icon-xs"
+                aria-label={t('maas.connection.replaceKey')}
+                onClick={onReplace}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </InputGroupButton>
+            }
+          />
+          <TooltipContent>{t('maas.connection.replaceKey')}</TooltipContent>
+        </Tooltip>
+        {storedActions}
+      </InputGroupAddon>
+    </InputGroup>
+  );
+};
+
 const ConnectionPanel: React.FC<{
   connection: MaasConnection;
   officialDescription?: MaasPlatformOfficialDescription;
@@ -414,7 +533,8 @@ const ConnectionPanel: React.FC<{
   const [apiKey, setApiKey] = useState('');
   const [inferenceApiKey, setInferenceApiKey] = useState('');
   const [replacingKey, setReplacingKey] = useState(!connection.connected);
-  const [copyingKey, setCopyingKey] = useState(false);
+  const [replacingInferenceKey, setReplacingInferenceKey] = useState(false);
+  const [copyingKeyKind, setCopyingKeyKind] = useState<MaasApiKeyKind | null>(null);
   const [displayName, setDisplayName] = useState(connection.displayName);
   const [endpoint, setEndpoint] = useState(connection.endpoint);
   const [formError, setFormError] = useState<string | null>(null);
@@ -422,14 +542,15 @@ const ConnectionPanel: React.FC<{
   const saving = connectMutation.isPending;
   const disconnecting = disconnectMutation.isPending;
   const hasStoredKey = connection.connected && !!connection.keyFingerprint;
-  const showingKeyInput = !hasStoredKey || replacingKey;
   const hasNewInferenceKey = connection.platformId === 'zenmux' && !!inferenceApiKey.trim();
   const submitDisabled =
-    saving || (!apiKey.trim() && !hasNewInferenceKey && (!hasStoredKey || replacingKey));
+    saving ||
+    (!apiKey.trim() && !hasNewInferenceKey && (!hasStoredKey || replacingKey)) ||
+    (!!connection.inferenceKeyFingerprint && replacingInferenceKey && !hasNewInferenceKey);
   const disconnectLabel = t('maas.connection.disconnect');
   const disconnectHint = t('maas.connection.disconnectHint');
   const keyHelper =
-    hasStoredKey && showingKeyInput
+    hasStoredKey && replacingKey
       ? t('maas.connection.savedKeyHelper')
       : hasStoredKey
         ? t('maas.connection.storedKeyHelper')
@@ -468,6 +589,7 @@ const ConnectionPanel: React.FC<{
           setApiKey('');
           setInferenceApiKey('');
           setReplacingKey(false);
+          setReplacingInferenceKey(false);
         },
         onError: (error) => setFormError(error instanceof Error ? error.message : String(error)),
       }
@@ -481,11 +603,11 @@ const ConnectionPanel: React.FC<{
     });
   };
 
-  const handleCopyStoredKey = () => {
+  const handleCopyStoredKey = (kind: MaasApiKeyKind) => {
     setFormError(null);
-    setCopyingKey(true);
+    setCopyingKeyKind(kind);
     void rpc.maas
-      .copyStoredApiKey(connection.platformId)
+      .copyStoredApiKey({ platformId: connection.platformId, kind })
       .then((result) => {
         if (result.success) {
           toast({ title: t('maas.connection.copyKeySuccess') });
@@ -508,7 +630,7 @@ const ConnectionPanel: React.FC<{
           variant: 'destructive',
         });
       })
-      .finally(() => setCopyingKey(false));
+      .finally(() => setCopyingKeyKind(null));
   };
 
   const handleReplaceKey = () => {
@@ -521,6 +643,18 @@ const ConnectionPanel: React.FC<{
     setFormError(null);
     setApiKey('');
     setReplacingKey(false);
+  };
+
+  const handleReplaceInferenceKey = () => {
+    setFormError(null);
+    setInferenceApiKey('');
+    setReplacingInferenceKey(true);
+  };
+
+  const handleCancelReplaceInferenceKey = () => {
+    setFormError(null);
+    setInferenceApiKey('');
+    setReplacingInferenceKey(false);
   };
 
   return (
@@ -546,114 +680,43 @@ const ConnectionPanel: React.FC<{
           </label>
           <label className="grid gap-1.5 @3xl:col-span-2">
             <span className="text-xs font-medium text-muted-foreground">{apiKeyLabel}</span>
-            {showingKeyInput ? (
-              <div className="grid gap-1.5">
-                <InputGroup className="h-8">
-                  <InputGroupInput
-                    type="password"
-                    value={apiKey}
-                    autoComplete="new-password"
-                    placeholder={apiKeyPlaceholder}
-                    onChange={(event) => setApiKey(event.target.value)}
+            <StoredSecretField
+              value={apiKey}
+              fingerprint={connection.keyFingerprint}
+              placeholder={apiKeyPlaceholder}
+              replacing={replacingKey}
+              copying={copyingKeyKind === 'primary'}
+              onValueChange={setApiKey}
+              onCopy={() => handleCopyStoredKey('primary')}
+              onReplace={handleReplaceKey}
+              onCancelReplace={handleCancelReplaceKey}
+              storedActions={
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <InputGroupButton
+                        type="button"
+                        size="icon-xs"
+                        disabled={disconnecting}
+                        aria-label={`${disconnectLabel}: ${disconnectHint}`}
+                        onClick={handleDisconnect}
+                        className="text-foreground-muted hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        {disconnecting ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </InputGroupButton>
+                    }
                   />
-                  {hasStoredKey && (
-                    <InputGroupAddon align="inline-end" className="gap-1 pr-1">
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <InputGroupButton
-                              type="button"
-                              size="icon-xs"
-                              aria-label={t('maas.connection.cancelReplaceKey')}
-                              onClick={handleCancelReplaceKey}
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </InputGroupButton>
-                          }
-                        />
-                        <TooltipContent>{t('maas.connection.cancelReplaceKey')}</TooltipContent>
-                      </Tooltip>
-                    </InputGroupAddon>
-                  )}
-                </InputGroup>
-                {hasStoredKey && (
-                  <span className="text-xs leading-relaxed text-foreground-muted">
-                    {t('maas.connection.replaceKeyEditingHint')}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <InputGroup className="h-8">
-                <InputGroupInput
-                  readOnly
-                  value={formatMaskedApiKey(connection.keyFingerprint)}
-                  className="cursor-pointer font-mono"
-                  aria-label={t('maas.connection.storedKeyAriaLabel')}
-                  onClick={handleCopyStoredKey}
-                />
-                <InputGroupAddon align="inline-end" className="gap-1 pr-1">
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <InputGroupButton
-                          type="button"
-                          size="icon-xs"
-                          disabled={copyingKey}
-                          aria-label={t('maas.connection.copyKey')}
-                          onClick={handleCopyStoredKey}
-                        >
-                          {copyingKey ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Copy className="h-3.5 w-3.5" />
-                          )}
-                        </InputGroupButton>
-                      }
-                    />
-                    <TooltipContent>{t('maas.connection.copyKey')}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <InputGroupButton
-                          type="button"
-                          size="icon-xs"
-                          aria-label={t('maas.connection.replaceKey')}
-                          onClick={handleReplaceKey}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </InputGroupButton>
-                      }
-                    />
-                    <TooltipContent>{t('maas.connection.replaceKey')}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <InputGroupButton
-                          type="button"
-                          size="icon-xs"
-                          disabled={disconnecting}
-                          aria-label={`${disconnectLabel}: ${disconnectHint}`}
-                          onClick={handleDisconnect}
-                          className="text-foreground-muted hover:bg-destructive/10 hover:text-destructive"
-                        >
-                          {disconnecting ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
-                          )}
-                        </InputGroupButton>
-                      }
-                    />
-                    <TooltipContent className="block w-72 max-w-[calc(100vw-2rem)] text-left leading-relaxed">
-                      <span className="block whitespace-nowrap font-medium">{disconnectLabel}</span>
-                      <span className="mt-1 block">{disconnectHint}</span>
-                    </TooltipContent>
-                  </Tooltip>
-                </InputGroupAddon>
-              </InputGroup>
-            )}
+                  <TooltipContent className="block w-72 max-w-[calc(100vw-2rem)] text-left leading-relaxed">
+                    <span className="block whitespace-nowrap font-medium">{disconnectLabel}</span>
+                    <span className="mt-1 block">{disconnectHint}</span>
+                  </TooltipContent>
+                </Tooltip>
+              }
+            />
             <span className="text-xs leading-relaxed text-foreground-muted">{keyHelper}</span>
           </label>
           {connection.platformId === 'zenmux' && (
@@ -661,18 +724,16 @@ const ConnectionPanel: React.FC<{
               <span className="text-xs font-medium text-muted-foreground">
                 {t('maas.connection.inferenceApiKey')}
               </span>
-              <Input
-                type="password"
+              <StoredSecretField
                 value={inferenceApiKey}
-                autoComplete="new-password"
-                placeholder={
-                  connection.inferenceKeyFingerprint
-                    ? t('maas.connection.inferenceApiKeyStoredPlaceholder', {
-                        fingerprint: connection.inferenceKeyFingerprint,
-                      })
-                    : t('maas.connection.inferenceApiKeyPlaceholder')
-                }
-                onChange={(event) => setInferenceApiKey(event.target.value)}
+                fingerprint={connection.inferenceKeyFingerprint}
+                placeholder={t('maas.connection.inferenceApiKeyPlaceholder')}
+                replacing={replacingInferenceKey}
+                copying={copyingKeyKind === 'inference'}
+                onValueChange={setInferenceApiKey}
+                onCopy={() => handleCopyStoredKey('inference')}
+                onReplace={handleReplaceInferenceKey}
+                onCancelReplace={handleCancelReplaceInferenceKey}
               />
               <span className="text-xs leading-relaxed text-foreground-muted">
                 {t('maas.connection.inferenceApiKeyHelper')}
