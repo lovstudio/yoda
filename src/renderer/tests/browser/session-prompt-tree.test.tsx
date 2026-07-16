@@ -152,7 +152,6 @@ describe('SessionPromptTreeView', () => {
             fixture.liveSibling.id,
           ]),
           restoringPrompt: null,
-          rows: 12,
           onRestorePrompt,
           onOpenConversation,
         })

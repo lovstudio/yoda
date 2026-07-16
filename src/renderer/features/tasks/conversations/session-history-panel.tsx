@@ -1,6 +1,5 @@
 import {
   ChevronDown,
-  List,
   ListTree,
   Loader2,
   MessageSquare,
@@ -18,8 +17,21 @@ import { useSessionPrompts } from '@renderer/features/tasks/session-info-panel';
 import { buildPromptPreviewItems } from '@renderer/features/tasks/session-prompts-preview';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { toast } from '@renderer/lib/hooks/use-toast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
-import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
+import {
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+} from '@renderer/lib/ui/popover';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import { SessionPromptRestoreButton } from './session-prompt-restore-button';
@@ -124,26 +136,24 @@ export const SessionHistoryPanel = observer(function SessionHistoryPanel({
 const MIN_DOCK_ROWS = 1;
 const MAX_DOCK_ROWS = 20;
 const DOCK_PROMPT_HEAD_COUNT = 1;
-type DockSessionHistoryMode = 'list' | 'tree';
 
 /**
  * The same prompt history docked at the bottom of the conversation pane, gated
  * behind the `interface.dockSessionHistory` setting (toggled from the task
  * menu). Shows the first prompt and N latest prompts — adjustable inline via
- * the header — with a clickable ellipsis opening the full modal. Collapsing
- * also stops the background fetch.
+ * the header. The action menu opens the complete branch tree in a separate
+ * floating panel, while collapsing stops the current-path background fetch.
  */
 export const DockedSessionHistory = observer(function DockedSessionHistory() {
   const { t } = useTranslation();
   const { value: ui, update } = useAppSettingsKey('interface');
   const enabled = ui?.dockSessionHistory ?? true;
   const rows = Math.min(MAX_DOCK_ROWS, Math.max(MIN_DOCK_ROWS, ui?.dockSessionHistoryRows ?? 3));
-  const persistedMode = ui?.dockSessionHistoryMode ?? 'list';
-  const [modeOverride, setModeOverride] = useState<DockSessionHistoryMode | null>(null);
-  const mode = modeOverride ?? persistedMode;
   const [collapsed, setCollapsed] = useState(false);
-  const prompts = useSessionPrompts(enabled && !collapsed && mode === 'list');
-  const promptTree = useSessionPromptTree(enabled && !collapsed && mode === 'tree');
+  const [treeOpen, setTreeOpen] = useState(false);
+  const treeAnchorRef = useRef<HTMLButtonElement>(null);
+  const prompts = useSessionPrompts(enabled && !collapsed);
+  const promptTree = useSessionPromptTree(enabled && treeOpen);
   const { restoringPrompt, requestRestorePrompt } = useConversationPromptRestore();
   const provisionedTask = useProvisionedTask();
 
@@ -152,15 +162,16 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
   const setRows = (next: number) =>
     update({ dockSessionHistoryRows: Math.min(MAX_DOCK_ROWS, Math.max(MIN_DOCK_ROWS, next)) });
 
-  const openConversation = async (conversation: Conversation) => {
+  const openConversation = async (conversation: Conversation): Promise<boolean> => {
     if (provisionedTask.conversations.conversations.has(conversation.id)) {
       provisionedTask.taskView.tabManager.openConversation(conversation.id);
       provisionedTask.taskView.setFocusedRegion('main');
-      return;
+      return true;
     }
     try {
       await reopenArchivedConversation(conversation);
       provisionedTask.taskView.setFocusedRegion('main');
+      return true;
     } catch (error) {
       log.warn('DockedSessionHistory: failed to open archived branch', {
         conversationId: conversation.id,
@@ -172,11 +183,21 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
         variant: 'destructive',
         debugInfo: error,
       });
+      return false;
     }
   };
 
-  const promptCount =
-    mode === 'tree' ? countSessionPromptTreeNodes(promptTree.tree) : prompts.prompts.length;
+  const openTreeConversation = async (conversation: Conversation) => {
+    if (await openConversation(conversation)) setTreeOpen(false);
+  };
+
+  const restoreTreePrompt: typeof requestRestorePrompt = (location) => {
+    setTreeOpen(false);
+    requestRestorePrompt(location);
+  };
+
+  const treePromptCount = countSessionPromptTreeNodes(promptTree.tree);
+  const treeBranchCount = promptTree.tree?.lineageConversations.length ?? 0;
 
   return (
     <div className="flex shrink-0 flex-col border-t border-border-primary/60 bg-background">
@@ -190,39 +211,9 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
           <ChevronDown className={cn('size-3 transition-transform', collapsed && '-rotate-90')} />
           <span className="text-[11px] font-medium">{t('tasks.bottomPanel.session')}</span>
           <span className="font-mono text-[10px] tabular-nums text-foreground-passive">
-            {promptCount}
+            {prompts.prompts.length}
           </span>
         </button>
-        <ToggleGroup
-          size="icon-xs"
-          multiple={false}
-          value={[mode]}
-          onValueChange={([value]) => {
-            if (value === 'list' || value === 'tree') {
-              // Switch immediately even before settings metadata has loaded or
-              // while a main-process settings update is still in flight.
-              setModeOverride(value);
-              update({ dockSessionHistoryMode: value });
-            }
-          }}
-          className="h-5 rounded-md border-border/60 bg-transparent"
-          aria-label={t('tasks.bottomPanel.sessionViewMode')}
-        >
-          <ToggleGroupItem
-            value="list"
-            aria-label={t('tasks.bottomPanel.sessionViewList')}
-            title={t('tasks.bottomPanel.sessionViewList')}
-          >
-            <List className="size-3" />
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="tree"
-            aria-label={t('tasks.bottomPanel.sessionViewTree')}
-            title={t('tasks.bottomPanel.sessionViewTree')}
-          >
-            <ListTree className="size-3" />
-          </ToggleGroupItem>
-        </ToggleGroup>
         {!collapsed ? (
           <div className="flex shrink-0 items-center gap-0.5">
             <button
@@ -248,30 +239,25 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
             </button>
           </div>
         ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            ref={treeAnchorRef}
+            className="flex size-5 shrink-0 items-center justify-center rounded-sm transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+            aria-label={t('tasks.bottomPanel.sessionActions')}
+            title={t('tasks.bottomPanel.sessionActions')}
+          >
+            <MoreHorizontal className="size-3" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="top" className="w-44">
+            <DropdownMenuItem onClick={() => setTreeOpen(true)}>
+              <ListTree className="size-3.5" />
+              {t('tasks.bottomPanel.sessionViewTree')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {!collapsed ? (
-        mode === 'tree' ? (
-          promptTree.tree ? (
-            <SessionPromptTreeView
-              tree={promptTree.tree}
-              isLoading={promptTree.isLoading}
-              activeConversationIds={promptTree.activeConversationIds}
-              restoringPrompt={restoringPrompt}
-              rows={rows}
-              onRestorePrompt={requestRestorePrompt}
-              onOpenConversation={openConversation}
-            />
-          ) : promptTree.isLoading ? (
-            <div className="flex h-12 items-center justify-center gap-1.5 text-xs text-foreground-passive">
-              <Loader2 className="size-3 animate-spin" />
-              {t('common.loading')}
-            </div>
-          ) : (
-            <div className="px-3 pb-2 text-xs text-foreground-passive">
-              {t('tasks.panel.noPrompts')}
-            </div>
-          )
-        ) : prompts.hasPrompts ? (
+        prompts.hasPrompts ? (
           <DockedSessionPromptPreview
             prompts={prompts.prompts}
             tailCount={rows}
@@ -285,6 +271,64 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
           </div>
         )
       ) : null}
+      <Popover open={treeOpen} onOpenChange={setTreeOpen}>
+        <PopoverContent
+          anchor={treeAnchorRef}
+          align="end"
+          side="top"
+          sideOffset={6}
+          className="w-[min(44rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0"
+        >
+          <PopoverHeader className="border-b border-border-primary/60 px-3 py-2.5">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <PopoverTitle className="text-xs font-medium">
+                  {t('tasks.bottomPanel.sessionTreeTitle')}
+                </PopoverTitle>
+                <PopoverDescription className="mt-0.5 text-[11px] leading-4">
+                  {t('tasks.bottomPanel.sessionTreeDescription')}
+                </PopoverDescription>
+              </div>
+              <PopoverClose
+                className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+                aria-label={t('common.close')}
+              >
+                {t('common.close')}
+              </PopoverClose>
+            </div>
+            {promptTree.tree ? (
+              <span className="font-mono text-[10px] tabular-nums text-foreground-passive">
+                {t('tasks.bottomPanel.sessionTreeSummary', {
+                  promptCount: treePromptCount,
+                  branchCount: treeBranchCount,
+                })}
+              </span>
+            ) : null}
+          </PopoverHeader>
+          <div className="min-h-24 bg-background">
+            {promptTree.tree ? (
+              <SessionPromptTreeView
+                tree={promptTree.tree}
+                isLoading={promptTree.isLoading}
+                activeConversationIds={promptTree.activeConversationIds}
+                restoringPrompt={restoringPrompt}
+                maxHeight="min(60vh, 32rem)"
+                onRestorePrompt={restoreTreePrompt}
+                onOpenConversation={openTreeConversation}
+              />
+            ) : promptTree.isLoading ? (
+              <div className="flex h-24 items-center justify-center gap-1.5 text-xs text-foreground-passive">
+                <Loader2 className="size-3 animate-spin" />
+                {t('common.loading')}
+              </div>
+            ) : (
+              <div className="flex h-24 items-center justify-center px-3 text-xs text-foreground-passive">
+                {t('tasks.panel.noPrompts')}
+              </div>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 });

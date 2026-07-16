@@ -16,8 +16,4 @@ describe('settings defaults', () => {
   it('uses automatic terminal renderer selection by default', () => {
     expect(getDefaultForKey('terminal').renderer).toBe('auto');
   });
-
-  it('shows the active session path as a list by default', () => {
-    expect(getDefaultForKey('interface').dockSessionHistoryMode).toBe('list');
-  });
 });
