@@ -16,7 +16,7 @@ import {
   CUSTOM_THEME_CSS_VARIABLES,
   getCustomThemeFingerprint,
 } from './custom-theme-css';
-import { resolveDreamSkinAsset } from './dream-skin-assets';
+import { dreamSkinBackgroundImage } from './dream-skin-assets';
 
 type EffectiveTheme = 'ylight' | 'ydark';
 
@@ -54,8 +54,7 @@ export function applyThemeToDocument(
   if (dreamSkin) {
     root.classList.add('ydream');
     root.dataset.dreamShell = effective === 'ydark' ? 'dark' : 'light';
-    const image = resolveDreamSkinAsset(dreamSkin.image);
-    root.style.setProperty('--dream-skin-art', `url(${JSON.stringify(image)})`);
+    root.style.setProperty('--dream-skin-art', dreamSkinBackgroundImage(dreamSkin.image));
     root.style.setProperty('--dream-skin-brand', JSON.stringify(customTheme.name));
     root.style.setProperty('--dream-skin-subtitle', JSON.stringify(dreamSkin.brandSubtitle));
     root.style.setProperty('--dream-skin-tagline', JSON.stringify(dreamSkin.tagline));

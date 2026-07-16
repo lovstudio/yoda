@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createDreamSkinTheme,
+  DREAM_SKIN_BUILTIN_IMAGES,
   YODA_DREAM_ARINA_THEME,
   YODA_DREAM_GOLD_THEME,
   YODA_DREAM_THEME,
 } from '@shared/custom-theme';
+import { dreamSkinBackgroundImage } from '@renderer/lib/providers/dream-skin-assets';
 import { applyThemeToDocument } from '@renderer/lib/providers/theme-provider';
 
 vi.mock('@renderer/lib/pty/pty', () => ({ applyThemeToAll: vi.fn() }));
@@ -32,6 +34,18 @@ afterEach(() => {
 });
 
 describe('Dream Skin document theme', () => {
+  it('produces valid CSS preview backgrounds for every bundled asset', () => {
+    for (const image of DREAM_SKIN_BUILTIN_IMAGES) {
+      const backgroundImage = dreamSkinBackgroundImage(image);
+      const preview = document.createElement('span');
+
+      preview.style.backgroundImage = backgroundImage;
+
+      expect(CSS.supports('background-image', backgroundImage), image).toBe(true);
+      expect(preview.style.backgroundImage, image).not.toBe('');
+    }
+  });
+
   it('uses the original floral gallery artwork for the default light skin', () => {
     applyThemeToDocument('ylight', YODA_DREAM_THEME);
 

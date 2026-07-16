@@ -24,3 +24,12 @@ export const DREAM_SKIN_ASSETS: Record<(typeof DREAM_SKIN_BUILTIN_IMAGES)[number
 export function resolveDreamSkinAsset(image: string): string {
   return DREAM_SKIN_ASSETS[image as keyof typeof DREAM_SKIN_ASSETS] ?? image;
 }
+
+/**
+ * Produces a CSS-safe image value for both emitted asset URLs and Vite's
+ * inlined SVG data URLs. The latter contain quotes, spaces, and angle brackets
+ * that invalidate an unquoted `url(...)` declaration.
+ */
+export function dreamSkinBackgroundImage(image: string): string {
+  return `url(${JSON.stringify(resolveDreamSkinAsset(image))})`;
+}

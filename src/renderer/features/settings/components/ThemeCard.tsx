@@ -31,7 +31,7 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { resolveDreamSkinAsset } from '@renderer/lib/providers/dream-skin-assets';
+import { dreamSkinBackgroundImage } from '@renderer/lib/providers/dream-skin-assets';
 import { Button } from '@renderer/lib/ui/button';
 import {
   Select,
@@ -523,7 +523,7 @@ const ThemeCard: React.FC = () => {
               >
                 <span
                   className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.03]"
-                  style={{ backgroundImage: `url(${resolveDreamSkinAsset(image)})` }}
+                  style={{ backgroundImage: dreamSkinBackgroundImage(image) }}
                   aria-hidden="true"
                 />
                 <span
@@ -562,17 +562,35 @@ const ThemeCard: React.FC = () => {
         </div>
       )}
       <div className="mt-1 grid gap-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-xs font-medium text-foreground-muted">
-            {t('settings.theme.customThemes')}
+        <div className="grid gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-medium text-foreground-muted">
+              {t('settings.theme.customThemes')}
+            </div>
+            <div className="text-xs text-foreground-passive">
+              {t('settings.theme.customThemeCount', { count: customThemes.length })}
+            </div>
           </div>
-          <div className="text-xs text-foreground-passive">
-            {t('settings.theme.customThemeCount', { count: customThemes.length })}
-          </div>
+          <p className="text-xs text-foreground-muted">
+            {t('settings.theme.createSkinDescription')}
+          </p>
+          <p className="text-[11px] text-foreground-passive">
+            {t('settings.theme.imageRightsNotice')}
+          </p>
         </div>
         {customThemes.length === 0 ? (
-          <div className="rounded-md border border-dashed border-border/70 px-3 py-3 text-xs text-foreground-muted">
-            {t('settings.theme.noCustomThemes')}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-border/70 px-3 py-3 text-xs text-foreground-muted">
+            <span>{t('settings.theme.noCustomThemes')}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => imageInputRef.current?.click()}
+              disabled={isSaving}
+            >
+              <ImagePlus className="h-3.5 w-3.5" aria-hidden="true" />
+              {t('settings.theme.createSkin')}
+            </Button>
           </div>
         ) : (
           <div className="grid gap-1.5">
@@ -674,11 +692,10 @@ function SystemSlotSelect({
 
 function ThemeSwatches({ theme }: { theme: CustomTheme }) {
   if (theme.skin) {
-    const backgroundImage = `url(${resolveDreamSkinAsset(theme.skin.image)})`;
     return (
       <span
         className="h-8 w-12 shrink-0 rounded-md border border-border/70 bg-background-3 bg-cover bg-center"
-        style={{ backgroundImage }}
+        style={{ backgroundImage: dreamSkinBackgroundImage(theme.skin.image) }}
       />
     );
   }
