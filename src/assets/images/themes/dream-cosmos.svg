@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071425"/><stop offset=".5" stop-color="#132b52"/><stop offset="1" stop-color="#6b2a71"/></linearGradient>
+    <radialGradient id="planet"><stop stop-color="#ffd88d"/><stop offset=".55" stop-color="#ec6f7d"/><stop offset="1" stop-color="#8d3bb6"/></radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="16"/></filter>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <path d="M840 980c280-430 560-690 1080-800" fill="none" stroke="#6ce5ef" stroke-width="3" opacity=".25"/>
+  <ellipse cx="1460" cy="520" rx="360" ry="112" fill="none" stroke="#f9c7e8" stroke-width="18" opacity=".72" transform="rotate(-18 1460 520)"/>
+  <circle cx="1460" cy="520" r="220" fill="url(#planet)"/>
+  <circle cx="1400" cy="455" r="250" fill="#ffca86" opacity=".22" filter="url(#glow)"/>
+  <g fill="#fff"><circle cx="1060" cy="180" r="3"/><circle cx="1220" cy="780" r="5"/><circle cx="1770" cy="235" r="4"/><circle cx="980" cy="560" r="3"/><circle cx="1640" cy="870" r="3"/><circle cx="760" cy="350" r="4"/></g>
+  <g fill="#72e7f0" opacity=".76"><circle cx="1160" cy="360" r="18"/><circle cx="1720" cy="680" r="12"/><circle cx="1290" cy="840" r="9"/></g>
+  <path d="M0 900c360-150 660-110 940 40 310 165 620 150 980-10v150H0z" fill="#050b16" opacity=".68"/>
+</svg>

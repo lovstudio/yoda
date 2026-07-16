@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BUILT_IN_DREAM_SKIN_THEMES,
   createCustomThemeCollection,
+  createDreamSkinTheme,
   CUSTOM_THEME_EXAMPLE,
   CUSTOM_THEME_EXAMPLE_FILE_NAME,
+  customThemesSettingsSchema,
+  DREAM_SKIN_BUILTIN_IMAGES,
   getCustomThemeId,
   parseCustomThemePackageText,
+  resolveThemeMode,
   toCustomThemeSelection,
   type CustomTheme,
 } from './custom-theme';
@@ -46,8 +51,7 @@ describe('custom theme packages', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.theme.id).toBe('solar-light');
-    expect(result.warnings).toEqual([]);
+    expect(result.themes).toEqual([{ theme: validTheme, warnings: [] }]);
   });
 
   it('keeps the downloadable example importable', () => {
@@ -56,8 +60,8 @@ describe('custom theme packages', () => {
     expect(CUSTOM_THEME_EXAMPLE_FILE_NAME).toBe('yoda-theme-example.json');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.theme.id).toBe(CUSTOM_THEME_EXAMPLE.id);
-    expect(result.warnings).toEqual([]);
+    expect(result.themes[0]?.theme.id).toBe(CUSTOM_THEME_EXAMPLE.id);
+    expect(result.themes[0]?.warnings).toEqual([]);
   });
 
   it('normalizes hex colors to lowercase', () => {
@@ -70,15 +74,49 @@ describe('custom theme packages', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.theme.colors.background).toBe('#faf7ef');
+    expect(result.themes[0]?.theme.colors.background).toBe('#faf7ef');
   });
 
-  it('rejects collection imports for v1', () => {
+  it('round-trips a collection of themes', () => {
+    const secondTheme = {
+      ...validTheme,
+      id: 'solar-dark',
+      name: 'Solar Dark',
+      mode: 'dark' as const,
+    };
     const result = parseCustomThemePackageText(
-      JSON.stringify(createCustomThemeCollection([validTheme]))
+      JSON.stringify(createCustomThemeCollection([validTheme, secondTheme]))
     );
 
-    expect(result).toMatchObject({ ok: false, reason: 'collection-unsupported' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.themes.map(({ theme }) => theme.id)).toEqual(['solar-light', 'solar-dark']);
+  });
+
+  it('supports arbitrarily many custom themes in packages and persisted settings', () => {
+    const themes = Array.from({ length: 128 }, (_, index) => ({
+      ...validTheme,
+      id: `theme-${index}`,
+      name: `Theme ${index}`,
+    }));
+
+    const packageResult = parseCustomThemePackageText(
+      JSON.stringify(createCustomThemeCollection(themes))
+    );
+    const settingsResult = customThemesSettingsSchema.safeParse({ items: themes });
+
+    expect(packageResult.ok).toBe(true);
+    if (!packageResult.ok) return;
+    expect(packageResult.themes).toHaveLength(128);
+    expect(settingsResult.success).toBe(true);
+  });
+
+  it('rejects duplicate themes inside a collection', () => {
+    const result = parseCustomThemePackageText(
+      JSON.stringify(createCustomThemeCollection([validTheme, validTheme]))
+    );
+
+    expect(result).toMatchObject({ ok: false, reason: 'invalid-theme' });
   });
 
   it('warns instead of rejecting low contrast themes', () => {
@@ -95,7 +133,7 @@ describe('custom theme packages', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.warnings).toEqual(
+    expect(result.themes[0]?.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: 'low-contrast',
@@ -112,5 +150,174 @@ describe('custom theme packages', () => {
     expect(selection).toBe('custom:solar-light');
     expect(getCustomThemeId(selection)).toBe('solar-light');
     expect(getCustomThemeId('ylight')).toBeNull();
+  });
+
+  it('resolves the Dream Skin preset as a light theme', () => {
+    expect(
+      resolveThemeMode('ydream', {
+        systemMode: 'dark',
+        systemThemes: { light: 'ylight', dark: 'ydark' },
+        customThemes: [],
+      })
+    ).toBe('light');
+  });
+
+  it('creates an importable image-backed Dream Skin', () => {
+    const skin = createDreamSkinTheme({
+      id: 'dream-ocean',
+      name: 'Ocean Dream',
+      image: 'data:image/png;base64,aA==',
+      imageName: 'ocean.png',
+    });
+    const parsed = parseCustomThemePackageText(JSON.stringify(skin));
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.themes[0]?.theme.skin).toMatchObject({
+      kind: 'dream-skin',
+      imageName: 'ocean.png',
+      imageTreatment: {
+        positionX: 50,
+        positionY: 50,
+        zoom: 1,
+        showOverlayCopy: true,
+        extendToWorkspace: true,
+      },
+      decorations: { preset: 'petals', density: 0.55, motion: true },
+    });
+    expect(parsed.themes[0]?.theme.schemaVersion).toBe(2);
+  });
+
+  it('upgrades a schema v1 skin with v2 composition defaults while importing', () => {
+    const parsed = parseCustomThemePackageText(
+      JSON.stringify({
+        ...validTheme,
+        skin: {
+          kind: 'dream-skin',
+          image: 'data:image/png;base64,aA==',
+          imageName: 'legacy.png',
+        },
+      })
+    );
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.themes[0]?.theme.skin).toMatchObject({
+      imageTreatment: { positionX: 50, positionY: 50, overlayStrength: 0.34 },
+      decorations: { preset: 'glow', density: 0.55, motion: true },
+      typography: 'editorial',
+    });
+  });
+
+  it('round-trips Dream Skin v2 composition, decorations, and provenance', () => {
+    const theme = createDreamSkinTheme({
+      id: 'dream-v2',
+      name: 'Dream V2',
+      image: 'data:image/png;base64,aA==',
+      imageName: 'v2.png',
+      mode: 'dark',
+      skin: {
+        imageTreatment: {
+          positionX: 72,
+          positionY: 38,
+          zoom: 1.35,
+          overlayStrength: 0.52,
+          textSide: 'right',
+          showOverlayCopy: false,
+        },
+        decorations: { preset: 'embers', density: 0.8, motion: false },
+        provenance: {
+          source: 'local',
+          sourceLabel: 'licensed-art.png',
+          rightsConfirmed: true,
+        },
+      },
+    });
+    const parsed = parseCustomThemePackageText(JSON.stringify(theme));
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.themes[0]?.theme).toMatchObject({
+      schemaVersion: 2,
+      mode: 'dark',
+      skin: {
+        imageTreatment: {
+          positionX: 72,
+          positionY: 38,
+          zoom: 1.35,
+          textSide: 'right',
+          showOverlayCopy: false,
+        },
+        decorations: { preset: 'embers', density: 0.8, motion: false },
+        provenance: { source: 'local', rightsConfirmed: true },
+      },
+    });
+  });
+
+  it('rejects executable skin image URLs', () => {
+    const parsed = parseCustomThemePackageText(
+      JSON.stringify({
+        ...validTheme,
+        skin: {
+          kind: 'dream-skin',
+          image: 'javascript:alert(1)',
+          imageName: 'unsafe.png',
+        },
+      })
+    );
+
+    expect(parsed).toMatchObject({ ok: false, reason: 'invalid-theme' });
+  });
+
+  it('resolves the bundled night skin as dark', () => {
+    expect(
+      resolveThemeMode('ydream-night', {
+        systemMode: 'light',
+        systemThemes: { light: 'ylight', dark: 'ydark' },
+        customThemes: [],
+      })
+    ).toBe('dark');
+  });
+
+  it('ships the Arina Hashimoto custom preset as a native light skin', () => {
+    expect(BUILT_IN_DREAM_SKIN_THEMES['ydream-arina']).toMatchObject({
+      name: '桥本有菜专属定制',
+      mode: 'light',
+      skin: {
+        image: 'builtin:dream-bloom',
+        brandSubtitle: '桥本有菜 专属定制皮肤',
+        statusText: 'ARINA CUSTOM ONLINE',
+      },
+    });
+  });
+
+  it('ships the eight upstream gallery moods as native built-in skins', () => {
+    const galleryThemes = [
+      'ydream',
+      'ydream-fortune',
+      'ydream-scifi',
+      'ydream-clear',
+      'ydream-cosmos',
+      'ydream-purple',
+      'ydream-virtual',
+      'ydream-gold',
+    ] as const;
+
+    expect(galleryThemes.map((id) => BUILT_IN_DREAM_SKIN_THEMES[id].skin?.image)).toEqual(
+      DREAM_SKIN_BUILTIN_IMAGES.filter((image) => image !== 'builtin:dream-portal')
+    );
+    expect(BUILT_IN_DREAM_SKIN_THEMES['ydream-night'].skin?.image).toBe('builtin:dream-portal');
+  });
+
+  it('resolves every built-in skin to its declared light or dark mode', () => {
+    for (const [selection, theme] of Object.entries(BUILT_IN_DREAM_SKIN_THEMES)) {
+      expect(
+        resolveThemeMode(selection as keyof typeof BUILT_IN_DREAM_SKIN_THEMES, {
+          systemMode: theme.mode === 'dark' ? 'light' : 'dark',
+          systemThemes: { light: 'ylight', dark: 'ydark' },
+          customThemes: [],
+        })
+      ).toBe(theme.mode);
+    }
   });
 });

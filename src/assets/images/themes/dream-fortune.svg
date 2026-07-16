@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#31070b"/><stop offset=".52" stop-color="#8b171c"/><stop offset="1" stop-color="#e86124"/>
+    </linearGradient>
+    <radialGradient id="sun"><stop stop-color="#ffe8a0"/><stop offset="1" stop-color="#e5a92e" stop-opacity="0"/></radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="18"/></filter>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <circle cx="1470" cy="290" r="390" fill="url(#sun)" opacity=".75"/>
+  <g fill="none" stroke="#f6c84d" opacity=".75">
+    <circle cx="1400" cy="520" r="245" stroke-width="18"/><circle cx="1400" cy="520" r="180" stroke-width="5"/>
+    <path d="M1260 520h280M1400 380v280M1300 420l200 200M1500 420l-200 200" stroke-width="7"/>
+  </g>
+  <g fill="#ffd66b" filter="url(#glow)" opacity=".55">
+    <circle cx="1110" cy="760" r="72"/><circle cx="1630" cy="790" r="96"/><circle cx="1510" cy="190" r="48"/>
+  </g>
+  <path d="M0 850c330-160 570-130 820 20s480 170 1100-80v290H0z" fill="#210509" opacity=".62"/>
+  <g fill="#ffdf83" opacity=".74">
+    <path d="M1120 160l17 42 45 3-35 29 11 44-38-24-38 24 11-44-35-29 45-3z"/>
+    <path d="M1735 390l12 29 31 2-24 20 8 30-27-17-26 17 8-30-24-20 31-2z"/>
+  </g>
+</svg>

@@ -108,6 +108,7 @@ export const SidebarMenuButton = React.forwardRef<HTMLButtonElement, SidebarMenu
   ({ className, isActive, ...props }, ref) => (
     <button
       ref={ref}
+      data-yoda-surface="sidebar-menu-button"
       data-active={isActive || undefined}
       className={cn(sidebarMenuItemClass, className)}
       onMouseDown={(e) => e.preventDefault()}
@@ -129,7 +130,10 @@ export function SidebarSectionHeader({
   rightSlot,
 }: SidebarSectionHeaderProps) {
   return (
-    <div className="group/section-header mx-2 flex h-8 items-center rounded-md pl-3 pr-2 transition-colors hover:bg-background-tertiary-1">
+    <div
+      data-yoda-surface="sidebar-section-header"
+      className="group/section-header mx-2 flex h-8 items-center rounded-md pl-3 pr-2 transition-colors hover:bg-background-tertiary-1"
+    >
       <button
         type="button"
         onClick={onToggle}
@@ -156,6 +160,7 @@ export const SidebarMenuRow = React.forwardRef<HTMLDivElement, SidebarMenuRowPro
   ({ className, isActive, ...props }, ref) => (
     <div
       ref={ref}
+      data-yoda-surface="sidebar-menu-row"
       data-active={isActive || undefined}
       className={cn(sidebarMenuItemClass, className)}
       {...props}

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#fffaf7"/>
+      <stop offset=".52" stop-color="#fbe9e8"/>
+      <stop offset="1" stop-color="#efb7bd"/>
+    </linearGradient>
+    <radialGradient id="halo">
+      <stop stop-color="#fff" stop-opacity=".95"/>
+      <stop offset=".58" stop-color="#fff2ef" stop-opacity=".72"/>
+      <stop offset="1" stop-color="#f4bac0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="dress" x1="0" y1="0" x2=".9" y2="1">
+      <stop stop-color="#fff0ed"/>
+      <stop offset=".45" stop-color="#e9949f"/>
+      <stop offset="1" stop-color="#c75c73"/>
+    </linearGradient>
+    <linearGradient id="hair" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#33242a"/>
+      <stop offset=".55" stop-color="#5b3540"/>
+      <stop offset="1" stop-color="#26191e"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="20"/></filter>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#9d4357" flood-opacity=".24"/>
+    </filter>
+    <g id="rose">
+      <path d="M0 22C-38-13-13-56 21-35C31-70 83-58 74-17C115-17 123 36 84 48C96 88 45 105 24 70C-7 99-51 65-30 31Z" fill="#e98c99"/>
+      <path d="M14 45C-10 21 8-16 34 3C51-22 84 4 63 29C88 46 61 79 38 58C20 79-5 62 14 45Z" fill="#f7c3c6"/>
+      <path d="M24 37C26 18 51 14 57 32C67 49 41 64 28 51Z" fill="#c75870"/>
+    </g>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <circle cx="1450" cy="460" r="590" fill="url(#halo)"/>
+  <circle cx="1700" cy="120" r="210" fill="#fff" opacity=".34" filter="url(#soft)"/>
+
+  <g opacity=".62" fill="none" stroke="#c98789" stroke-width="5">
+    <path d="M120 1040C230 850 220 590 380 390C475 270 560 235 670 165"/>
+    <path d="M1750 1080C1730 840 1810 620 1900 485"/>
+    <path d="M1510 1040C1665 900 1705 710 1710 520"/>
+  </g>
+  <g fill="#c7a17b" opacity=".46">
+    <ellipse cx="282" cy="720" rx="24" ry="58" transform="rotate(-35 282 720)"/>
+    <ellipse cx="337" cy="570" rx="24" ry="58" transform="rotate(34 337 570)"/>
+    <ellipse cx="440" cy="392" rx="22" ry="54" transform="rotate(-38 440 392)"/>
+    <ellipse cx="1775" cy="750" rx="24" ry="62" transform="rotate(35 1775 750)"/>
+    <ellipse cx="1818" cy="622" rx="22" ry="56" transform="rotate(-36 1818 622)"/>
+  </g>
+  <g filter="url(#shadow)">
+    <use href="#rose" transform="translate(185 790) scale(1.15)"/>
+    <use href="#rose" transform="translate(327 525) scale(.78)"/>
+    <use href="#rose" transform="translate(478 282) scale(.56)"/>
+    <use href="#rose" transform="translate(1715 760) scale(1.25)"/>
+    <use href="#rose" transform="translate(1815 540) scale(.74)"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <path d="M1140 1000C1155 780 1240 685 1390 648C1560 607 1694 712 1765 1000Z" fill="url(#dress)"/>
+    <path d="M1280 405C1284 224 1410 132 1554 180C1688 225 1715 384 1658 542C1617 657 1519 711 1402 655C1295 604 1268 512 1280 405Z" fill="url(#hair)"/>
+    <path d="M1384 339C1422 271 1535 250 1601 310C1651 355 1642 461 1602 534C1556 616 1446 625 1392 550C1347 488 1344 410 1384 339Z" fill="#f9d8cf"/>
+    <path d="M1385 360C1420 296 1478 263 1540 273C1498 296 1480 324 1471 365C1442 338 1417 341 1385 360Z" fill="#4d2d37"/>
+    <path d="M1578 294C1634 345 1639 432 1602 534C1636 495 1660 422 1641 348C1632 314 1606 292 1578 294Z" fill="#35212a"/>
+    <path d="M1432 435c28-20 57-19 82 1" fill="none" stroke="#62333d" stroke-width="7" stroke-linecap="round"/>
+    <path d="M1540 434c23-15 46-12 64 4" fill="none" stroke="#62333d" stroke-width="7" stroke-linecap="round"/>
+    <path d="M1464 516c38 24 75 23 108-2" fill="none" stroke="#bd6670" stroke-width="8" stroke-linecap="round"/>
+    <path d="M1464 595C1458 648 1444 683 1416 707L1570 722C1535 671 1532 636 1538 594Z" fill="#f6cec5"/>
+    <path d="M1265 777C1340 684 1439 681 1490 765C1536 681 1650 684 1725 795C1630 772 1574 796 1494 891C1418 797 1351 770 1265 777Z" fill="#fff4f1" opacity=".92"/>
+    <circle cx="1491" cy="765" r="31" fill="#fff" stroke="#eeb4b9" stroke-width="7"/>
+  </g>
+
+  <g fill="#fff" opacity=".72">
+    <path d="M900 186l9 25 25 9-25 9-9 25-9-25-25-9 25-9Z"/>
+    <path d="M1100 330l7 19 19 7-19 7-7 19-7-19-19-7 19-7Z"/>
+    <path d="M1770 300l10 29 29 10-29 10-10 29-10-29-29-10 29-10Z"/>
+  </g>
+  <g fill="#df8e99" opacity=".5">
+    <ellipse cx="800" cy="250" rx="13" ry="28" transform="rotate(-28 800 250)"/>
+    <ellipse cx="1030" cy="650" rx="12" ry="25" transform="rotate(38 1030 650)"/>
+    <ellipse cx="680" cy="760" rx="11" ry="23" transform="rotate(-48 680 760)"/>
+    <ellipse cx="1850" cy="400" rx="12" ry="24" transform="rotate(30 1850 400)"/>
+  </g>
+</svg>

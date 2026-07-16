@@ -1019,6 +1019,7 @@ export function ComposerPromptInput({
   return (
     <div className={className}>
       <div
+        data-yoda-surface="composer"
         className={cn(
           'rounded-lg border shadow-sm transition-[background-color,border-color,box-shadow]',
           containerClassName

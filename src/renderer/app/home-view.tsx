@@ -4,6 +4,8 @@ import {
   Bot,
   Check,
   ChevronDown,
+  ClipboardCheck,
+  Code2,
   FileText,
   Folder,
   FolderOpen,
@@ -13,10 +15,13 @@ import {
   GripVertical,
   Lightbulb,
   Monitor,
+  Puzzle,
   Repeat2,
   Server,
   Settings2,
   ShieldCheck,
+  Sparkles,
+  Wrench,
   X,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
@@ -338,10 +343,32 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const greetingName = sessionUser ? accountGreetingName(sessionUser) : '';
 
   return (
-    <div className="@container flex h-full flex-col overflow-y-auto bg-background text-foreground">
-      <div className="mx-auto flex min-h-full w-full max-w-6xl flex-1 flex-col px-5 pb-8 pt-14 @2xl:px-8 @5xl:px-10">
-        <div className="flex flex-1 flex-col justify-center gap-8 py-4">
-          <div className="text-center">
+    <div
+      data-yoda-surface="home"
+      className="@container flex h-full flex-col overflow-y-auto bg-background text-foreground"
+    >
+      <div
+        data-yoda-surface="home-shell"
+        className="mx-auto flex min-h-full w-full max-w-6xl flex-1 flex-col px-5 pb-8 pt-14 @2xl:px-8 @5xl:px-10"
+      >
+        <div data-yoda-surface="home-masthead" aria-hidden="true">
+          <span className="dream-skin-masthead-icon">
+            <Sparkles />
+          </span>
+          <span className="dream-skin-masthead-copy">
+            <strong />
+            <small />
+          </span>
+        </div>
+        <div
+          data-yoda-surface="home-stage"
+          className="flex flex-1 flex-col justify-center gap-8 py-4"
+        >
+          <div data-yoda-surface="home-hero" className="text-center">
+            <div className="dream-skin-status" aria-hidden="true">
+              <span />
+              DREAM SKIN ONLINE
+            </div>
             <div className="mb-4 flex items-center justify-center">
               <img
                 key={effectiveTheme}
@@ -355,9 +382,10 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
                 ? t(getGreetingKey(new Date().getHours()), { name: greetingName })
                 : t('home.headline')}
             </h1>
+            <p className="dream-skin-tagline" aria-hidden="true" />
           </div>
 
-          <HomeComposer className="mx-auto w-full max-w-4xl" />
+          <HomeComposer className="mx-auto w-full max-w-4xl" showDreamActions />
         </div>
       </div>
     </div>
@@ -373,11 +401,13 @@ export const HomeComposer = observer(function HomeComposer({
   className,
   onSubmitted,
   submitTarget = { kind: 'new-task' },
+  showDreamActions = false,
 }: {
   className?: string;
   /** Called after a successful submit. New-task mode navigates before firing it. */
   onSubmitted?: (result: HomeComposerSubmitResult) => void;
   submitTarget?: HomeComposerSubmitTarget;
+  showDreamActions?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const { navigate } = useNavigate();
@@ -2172,24 +2202,66 @@ export const HomeComposer = observer(function HomeComposer({
   );
 
   return (
-    <div className={className}>
-      <ComposerPromptInput
-        value={prompt}
-        onChange={setPrompt}
-        tokens={promptTokens}
-        onTokensChange={persistPromptTokens}
-        runtimeId={runtimeId}
-        projectId={projectData?.id ?? null}
-        projectPath={skillProjectPath}
-        skillSelection={composerSkillSelection}
-        runHostKind={runHostKind}
-        containerClassName={promptInputChrome.containerClassName}
-        canSubmit={canSubmit}
-        onSubmit={submit}
-        autoFocus
-      />
+    <div data-yoda-surface="home-composer" className={className}>
+      {showDreamActions ? (
+        <div data-yoda-surface="dream-actions" aria-label={t('home.dreamActionsLabel')}>
+          {[
+            {
+              Icon: Code2,
+              title: t('home.dreamActionExplore'),
+              prompt: t('home.dreamActionExplorePrompt'),
+            },
+            {
+              Icon: Puzzle,
+              title: t('home.dreamActionBuild'),
+              prompt: t('home.dreamActionBuildPrompt'),
+            },
+            {
+              Icon: ClipboardCheck,
+              title: t('home.dreamActionReview'),
+              prompt: t('home.dreamActionReviewPrompt'),
+            },
+            {
+              Icon: Wrench,
+              title: t('home.dreamActionFix'),
+              prompt: t('home.dreamActionFixPrompt'),
+            },
+          ].map(({ Icon, title, prompt }) => (
+            <button key={title} type="button" onClick={() => setPrompt(prompt)}>
+              <span className="dream-skin-action-icon">
+                <Icon />
+              </span>
+              <strong>{title}</strong>
+              <span className="dream-skin-action-mark" aria-hidden="true">
+                ♥
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
 
-      <div className="@container/composer mt-3 flex flex-col gap-2">
+      <div data-yoda-surface="home-composer-input">
+        <ComposerPromptInput
+          value={prompt}
+          onChange={setPrompt}
+          tokens={promptTokens}
+          onTokensChange={persistPromptTokens}
+          runtimeId={runtimeId}
+          projectId={projectData?.id ?? null}
+          projectPath={skillProjectPath}
+          skillSelection={composerSkillSelection}
+          runHostKind={runHostKind}
+          containerClassName={promptInputChrome.containerClassName}
+          canSubmit={canSubmit}
+          onSubmit={submit}
+          autoFocus
+        />
+      </div>
+
+      <div
+        data-yoda-surface="home-composer-toolbar"
+        className="@container/composer mt-3 flex flex-col gap-2"
+      >
         {/* Toolbar chips wrap to extra rows in narrow hosts — never min-w-max +
             overflow-x-auto: macOS overlay scrollbars make clipped chips invisible.
             Chip text labels collapse to icon-only below the @lg container width. */}

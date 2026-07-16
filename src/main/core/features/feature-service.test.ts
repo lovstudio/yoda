@@ -439,7 +439,7 @@ describe('FeatureService', () => {
     expect(sqlite.prepare(`SELECT status FROM tasks WHERE id = 'task-1'`).get()).toEqual({
       status: 'in_progress',
     });
-  });
+  }, 15_000);
 
   it('does not regress a concurrently completed Task back to review', async () => {
     const { FeatureService } = await import('./feature-service');

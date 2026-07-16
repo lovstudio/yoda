@@ -1,14 +1,46 @@
 import z from 'zod';
 
-export const CUSTOM_THEME_SCHEMA_VERSION = 1;
+export const CUSTOM_THEME_SCHEMA_VERSION = 2;
 export const CUSTOM_THEME_SELECTION_PREFIX = 'custom:';
 export const CUSTOM_THEME_EXAMPLE_FILE_NAME = 'yoda-theme-example.json';
+export const DREAM_SKIN_BUILTIN_IMAGES = [
+  'builtin:dream-bloom',
+  'builtin:dream-portal',
+  'builtin:dream-fortune',
+  'builtin:dream-scifi',
+  'builtin:dream-clear',
+  'builtin:dream-cosmos',
+  'builtin:dream-purple',
+  'builtin:dream-virtual',
+  'builtin:dream-gold',
+] as const;
+export const DREAM_SKIN_BUILTIN_IMAGE = DREAM_SKIN_BUILTIN_IMAGES[0];
+export const DREAM_SKIN_MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+export const DREAM_SKIN_SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
-export type BuiltInTheme = 'ylight' | 'ydark' | 'ywarm' | 'ygreen' | 'ylight2';
+export type BuiltInTheme =
+  | 'ylight'
+  | 'ydark'
+  | 'ywarm'
+  | 'ygreen'
+  | 'ylight2'
+  | 'ydream'
+  | 'ydream-arina'
+  | 'ydream-night'
+  | 'ydream-fortune'
+  | 'ydream-scifi'
+  | 'ydream-clear'
+  | 'ydream-cosmos'
+  | 'ydream-purple'
+  | 'ydream-virtual'
+  | 'ydream-gold';
+
+export type DreamSkinBuiltInTheme = Extract<BuiltInTheme, `ydream${string}`>;
 
 /** A non-null theme selection, as stored in the system light/dark pair. */
 export type ResolvedThemeSelection = Exclude<ThemeSelection, null>;
 export type CustomThemeMode = 'light' | 'dark';
+export type DreamSkinDecorationPreset = 'none' | 'petals' | 'embers' | 'stars' | 'orbit' | 'glow';
 export type CustomThemeSelection = `${typeof CUSTOM_THEME_SELECTION_PREFIX}${string}`;
 export type ThemeSelection = BuiltInTheme | CustomThemeSelection | null;
 
@@ -53,31 +85,122 @@ export const customThemeColorsSchema = z
   })
   .strict();
 
+const DREAM_SKIN_IMAGE_DATA_URL_RE = /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=\r\n]+$/i;
+const DREAM_SKIN_MAX_DATA_URL_LENGTH = Math.ceil((DREAM_SKIN_MAX_IMAGE_BYTES * 4) / 3) + 128;
+
+export const dreamSkinSchema = z
+  .object({
+    kind: z.literal('dream-skin'),
+    image: z.union([
+      z.enum(DREAM_SKIN_BUILTIN_IMAGES),
+      z
+        .string()
+        .max(DREAM_SKIN_MAX_DATA_URL_LENGTH, 'The skin image must be no larger than 16 MB.')
+        .regex(
+          DREAM_SKIN_IMAGE_DATA_URL_RE,
+          'Use a base64 PNG, JPEG, or WebP data URL for the skin image.'
+        ),
+    ]),
+    imageName: z.string().trim().min(1).max(255),
+    brandSubtitle: z.string().trim().max(80).default('YODA DREAM SKIN'),
+    tagline: z.string().trim().max(160).default('Make something wonderful.'),
+    statusText: z.string().trim().max(80).default('DREAM SKIN ONLINE'),
+    quote: z.string().trim().max(80).default('MAKE SOMETHING WONDERFUL'),
+    imageTreatment: z
+      .object({
+        positionX: z.number().min(0).max(100).default(50),
+        positionY: z.number().min(0).max(100).default(50),
+        zoom: z.number().min(1).max(2.5).default(1),
+        overlayStrength: z.number().min(0).max(0.85).default(0.34),
+        blur: z.number().min(0).max(20).default(0),
+        artOpacity: z.number().min(0.25).max(1).default(1),
+        textSide: z.enum(['left', 'right']).default('left'),
+        showOverlayCopy: z.boolean().default(true),
+        extendToWorkspace: z.boolean().default(true),
+      })
+      .strict()
+      .default({
+        positionX: 50,
+        positionY: 50,
+        zoom: 1,
+        overlayStrength: 0.34,
+        blur: 0,
+        artOpacity: 1,
+        textSide: 'left',
+        showOverlayCopy: true,
+        extendToWorkspace: true,
+      }),
+    decorations: z
+      .object({
+        preset: z.enum(['none', 'petals', 'embers', 'stars', 'orbit', 'glow']).default('glow'),
+        density: z.number().min(0).max(1).default(0.55),
+        motion: z.boolean().default(true),
+      })
+      .strict()
+      .default({ preset: 'glow', density: 0.55, motion: true }),
+    typography: z.enum(['sans', 'serif', 'editorial']).default('editorial'),
+    provenance: z
+      .object({
+        source: z.enum(['builtin', 'local', 'imported']).default('imported'),
+        sourceLabel: z.string().trim().max(160).optional(),
+        rightsConfirmed: z.boolean().default(false),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
 export const customThemeSchema = z
   .object({
-    schemaVersion: z.literal(CUSTOM_THEME_SCHEMA_VERSION),
+    schemaVersion: z.union([z.literal(1), z.literal(CUSTOM_THEME_SCHEMA_VERSION)]),
     id: customThemeIdSchema,
     name: z.string().trim().min(1).max(80),
     mode: z.enum(['light', 'dark']),
     colors: customThemeColorsSchema,
+    skin: dreamSkinSchema.optional(),
   })
   .strict();
 
 export const customThemeCollectionSchema = z
   .object({
-    schemaVersion: z.literal(CUSTOM_THEME_SCHEMA_VERSION),
+    schemaVersion: z.union([z.literal(1), z.literal(CUSTOM_THEME_SCHEMA_VERSION)]),
     kind: z.literal('yoda-theme-collection'),
-    themes: z.array(customThemeSchema).max(100),
+    themes: z.array(customThemeSchema).min(1),
   })
-  .strict();
+  .strict()
+  .superRefine(({ themes }, ctx) => {
+    const ids = new Set<string>();
+    const names = new Set<string>();
+    for (const [index, theme] of themes.entries()) {
+      if (ids.has(theme.id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['themes', index, 'id'],
+          message: `Duplicate theme id: ${theme.id}`,
+        });
+      }
+      ids.add(theme.id);
+
+      const normalizedName = theme.name.trim().toLowerCase();
+      if (names.has(normalizedName)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['themes', index, 'name'],
+          message: `Duplicate theme name: ${theme.name}`,
+        });
+      }
+      names.add(normalizedName);
+    }
+  });
 
 export const customThemesSettingsSchema = z
   .object({
-    items: z.array(customThemeSchema).max(100),
+    items: z.array(customThemeSchema),
   })
   .default({ items: [] });
 
 export type CustomThemeColors = z.infer<typeof customThemeColorsSchema>;
+export type DreamSkin = z.infer<typeof dreamSkinSchema>;
 export type CustomTheme = z.infer<typeof customThemeSchema>;
 export type CustomThemeCollection = z.infer<typeof customThemeCollectionSchema>;
 export type CustomThemesSettings = z.infer<typeof customThemesSettingsSchema>;
@@ -217,6 +340,429 @@ export const YODA_LIGHT2_THEME: CustomTheme = {
   },
 };
 
+// Built-in "Yoda Dream" palette — the native Yoda adaptation of the
+// MIT-licensed Codex Dream Skin project. The palette continues through the
+// shared terminal/Monaco pipeline; its image and glass treatment live in
+// renderer CSS behind the `ydream` root class.
+const DEFAULT_DREAM_SKIN: DreamSkin = {
+  kind: 'dream-skin',
+  image: DREAM_SKIN_BUILTIN_IMAGE,
+  imageName: 'dream-bloom.svg',
+  brandSubtitle: 'YODA DREAM SKIN',
+  tagline: 'Turn inspiration into an interactive agent workspace.',
+  statusText: 'DREAM SKIN ONLINE',
+  quote: 'MAKE SOMETHING WONDERFUL',
+  imageTreatment: {
+    positionX: 50,
+    positionY: 50,
+    zoom: 1,
+    overlayStrength: 0.34,
+    blur: 0,
+    artOpacity: 1,
+    textSide: 'left',
+    showOverlayCopy: true,
+    extendToWorkspace: true,
+  },
+  decorations: { preset: 'petals', density: 0.55, motion: true },
+  typography: 'editorial',
+  provenance: { source: 'builtin', rightsConfirmed: true },
+};
+
+export const YODA_DREAM_THEME: CustomTheme = {
+  schemaVersion: CUSTOM_THEME_SCHEMA_VERSION,
+  id: 'ydream',
+  name: 'Yoda Dream',
+  mode: 'light',
+  skin: DEFAULT_DREAM_SKIN,
+  colors: {
+    background: '#f7f4f5',
+    background1: '#ffffff',
+    background2: '#fff7f8',
+    background3: '#f8e7ea',
+    foreground: '#2b2224',
+    foregroundMuted: '#756669',
+    foregroundPassive: '#a28f93',
+    border: '#ead8dc',
+    border1: '#d9bfc4',
+    border2: '#bd929a',
+    primaryButtonBackground: '#e25563',
+    primaryButtonBackgroundHover: '#c93d4c',
+    primaryButtonForeground: '#ffffff',
+    primaryButtonBorder: '#c93d4c',
+    statusInProgress: '#c97a32',
+    statusInReview: '#a25480',
+    statusDone: '#5f8d77',
+    statusTodo: '#7b7073',
+    statusCancelled: '#aa747c',
+    diffAdded: '#4f9572',
+    diffModified: '#c58b3e',
+    diffDeleted: '#d14f5d',
+  },
+};
+
+export const YODA_DREAM_NIGHT_THEME: CustomTheme = {
+  schemaVersion: CUSTOM_THEME_SCHEMA_VERSION,
+  id: 'ydream-night',
+  name: 'Yoda Dream Night',
+  mode: 'dark',
+  skin: {
+    ...DEFAULT_DREAM_SKIN,
+    image: 'builtin:dream-portal',
+    imageName: 'codex-dream-skin.jpg',
+    brandSubtitle: 'YODA DREAM NIGHT',
+    statusText: 'NIGHT SKIN ONLINE',
+    decorations: { preset: 'stars', density: 0.62, motion: true },
+  },
+  colors: {
+    background: '#0b1118',
+    background1: '#111a22',
+    background2: '#17232c',
+    background3: '#21313b',
+    foreground: '#f7edf0',
+    foregroundMuted: '#bca9ae',
+    foregroundPassive: '#786970',
+    border: '#2b3942',
+    border1: '#3b4a54',
+    border2: '#56646d',
+    primaryButtonBackground: '#f07a86',
+    primaryButtonBackgroundHover: '#ff929d',
+    primaryButtonForeground: '#241014',
+    primaryButtonBorder: '#d85d69',
+    statusInProgress: '#d9a24f',
+    statusInReview: '#d991bc',
+    statusDone: '#7ba68f',
+    statusTodo: '#98878c',
+    statusCancelled: '#79676c',
+    diffAdded: '#70bd91',
+    diffModified: '#dda95a',
+    diffDeleted: '#ee7080',
+  },
+};
+
+export const YODA_DREAM_ARINA_THEME = createBuiltInDreamVariant({
+  id: 'ydream-arina',
+  name: '桥本有菜专属定制',
+  mode: 'light',
+  image: 'builtin:dream-bloom',
+  imageName: 'dream-bloom.svg',
+  brandSubtitle: '桥本有菜 专属定制皮肤',
+  tagline: '在玫瑰与灵感之间，创造只属于你的作品。',
+  statusText: 'ARINA CUSTOM ONLINE',
+  decoration: 'petals',
+  colors: {
+    background: '#fff7f5',
+    background1: '#fffdfb',
+    background2: '#fceeed',
+    background3: '#f5d9dc',
+    foreground: '#382328',
+    foregroundMuted: '#84656c',
+    foregroundPassive: '#b28f96',
+    border: '#f0d6d8',
+    border1: '#dfb9bf',
+    border2: '#c98d98',
+    primaryButtonBackground: '#db6d82',
+    primaryButtonBackgroundHover: '#bf5068',
+    primaryButtonBorder: '#bf5068',
+    statusInReview: '#b96391',
+    diffModified: '#c78c4a',
+  },
+});
+
+function createBuiltInDreamVariant(input: {
+  id: Exclude<DreamSkinBuiltInTheme, 'ydream' | 'ydream-night'>;
+  name: string;
+  mode: CustomThemeMode;
+  image: (typeof DREAM_SKIN_BUILTIN_IMAGES)[number];
+  imageName: string;
+  brandSubtitle: string;
+  tagline: string;
+  statusText: string;
+  decoration?: DreamSkinDecorationPreset;
+  colors: Partial<CustomThemeColors>;
+}): CustomTheme {
+  const base = input.mode === 'dark' ? YODA_DREAM_NIGHT_THEME : YODA_DREAM_THEME;
+  return customThemeSchema.parse({
+    ...base,
+    id: input.id,
+    name: input.name,
+    mode: input.mode,
+    skin: {
+      ...base.skin,
+      image: input.image,
+      imageName: input.imageName,
+      brandSubtitle: input.brandSubtitle,
+      tagline: input.tagline,
+      statusText: input.statusText,
+      decorations: {
+        ...base.skin?.decorations,
+        preset: input.decoration ?? (input.mode === 'dark' ? 'stars' : 'glow'),
+      },
+    },
+    colors: { ...base.colors, ...input.colors },
+  });
+}
+
+export const YODA_DREAM_FORTUNE_THEME = createBuiltInDreamVariant({
+  id: 'ydream-fortune',
+  name: 'Fortune at Work',
+  mode: 'dark',
+  image: 'builtin:dream-fortune',
+  imageName: 'dream-fortune.svg',
+  brandSubtitle: 'FORTUNE AT WORK',
+  tagline: 'Good ideas compound when you keep shipping.',
+  statusText: 'FORTUNE FLOW ONLINE',
+  decoration: 'embers',
+  colors: {
+    background: '#21070a',
+    background1: '#310b0e',
+    background2: '#481014',
+    background3: '#64181a',
+    foreground: '#fff3d1',
+    foregroundMuted: '#d9ba85',
+    foregroundPassive: '#896947',
+    border: '#5a261d',
+    border1: '#814026',
+    border2: '#b56c2d',
+    primaryButtonBackground: '#f0bd47',
+    primaryButtonBackgroundHover: '#ffd36a',
+    primaryButtonForeground: '#2b1307',
+    primaryButtonBorder: '#c98c25',
+    statusInReview: '#f0bd47',
+    diffModified: '#eeb74a',
+  },
+});
+
+export const YODA_DREAM_SCIFI_THEME = createBuiltInDreamVariant({
+  id: 'ydream-scifi',
+  name: 'Red White Sci-Fi',
+  mode: 'light',
+  image: 'builtin:dream-scifi',
+  imageName: 'dream-scifi.svg',
+  brandSubtitle: 'RED WHITE SCI-FI',
+  tagline: 'A precise workspace for ambitious systems.',
+  statusText: 'SCI-FI CORE ONLINE',
+  decoration: 'orbit',
+  colors: {
+    background: '#f5f3f1',
+    background1: '#ffffff',
+    background2: '#eee9e6',
+    background3: '#dfd6d2',
+    foreground: '#211d1e',
+    foregroundMuted: '#6f6264',
+    foregroundPassive: '#a39395',
+    border: '#ded3d0',
+    border1: '#c9b9b6',
+    border2: '#a58f8c',
+    primaryButtonBackground: '#dc302f',
+    primaryButtonBackgroundHover: '#b91f25',
+    primaryButtonBorder: '#b91f25',
+    statusInReview: '#c52b46',
+    diffDeleted: '#cf3037',
+  },
+});
+
+export const YODA_DREAM_CLEAR_THEME = createBuiltInDreamVariant({
+  id: 'ydream-clear',
+  name: 'Crystal Clear',
+  mode: 'light',
+  image: 'builtin:dream-clear',
+  imageName: 'dream-clear.svg',
+  brandSubtitle: 'CRYSTAL CLEAR',
+  tagline: 'Quiet light, clear context, focused momentum.',
+  statusText: 'CLEAR FLOW ONLINE',
+  decoration: 'glow',
+  colors: {
+    background: '#eff9f9',
+    background1: '#ffffff',
+    background2: '#e5f4f3',
+    background3: '#d2e9e8',
+    foreground: '#183538',
+    foregroundMuted: '#587579',
+    foregroundPassive: '#8eaaad',
+    border: '#d0e7e7',
+    border1: '#acd1d1',
+    border2: '#7facb0',
+    primaryButtonBackground: '#258f92',
+    primaryButtonBackgroundHover: '#16767a',
+    primaryButtonBorder: '#16767a',
+    statusInReview: '#7764bd',
+    diffAdded: '#3a967c',
+  },
+});
+
+export const YODA_DREAM_COSMOS_THEME = createBuiltInDreamVariant({
+  id: 'ydream-cosmos',
+  name: 'Idea Cosmos',
+  mode: 'dark',
+  image: 'builtin:dream-cosmos',
+  imageName: 'dream-cosmos.svg',
+  brandSubtitle: 'IDEA COSMOS',
+  tagline: 'Orbit the problem until the right idea appears.',
+  statusText: 'COSMOS ONLINE',
+  decoration: 'orbit',
+  colors: {
+    background: '#071322',
+    background1: '#0d1d31',
+    background2: '#152b46',
+    background3: '#253956',
+    foreground: '#f5edf9',
+    foregroundMuted: '#b5a9c2',
+    foregroundPassive: '#70657e',
+    border: '#253a56',
+    border1: '#385277',
+    border2: '#5e6f98',
+    primaryButtonBackground: '#ed758f',
+    primaryButtonBackgroundHover: '#ff91a7',
+    primaryButtonForeground: '#231018',
+    primaryButtonBorder: '#cf5572',
+    statusInReview: '#77dbe3',
+    diffModified: '#e6b66c',
+  },
+});
+
+export const YODA_DREAM_PURPLE_THEME = createBuiltInDreamVariant({
+  id: 'ydream-purple',
+  name: 'Purple Night',
+  mode: 'dark',
+  image: 'builtin:dream-purple',
+  imageName: 'dream-purple.svg',
+  brandSubtitle: 'PURPLE NIGHT',
+  tagline: 'Deep focus after the city lights fade.',
+  statusText: 'PURPLE NIGHT ONLINE',
+  decoration: 'stars',
+  colors: {
+    background: '#0b0818',
+    background1: '#151027',
+    background2: '#24183c',
+    background3: '#382554',
+    foreground: '#f7efff',
+    foregroundMuted: '#b9a6cd',
+    foregroundPassive: '#746187',
+    border: '#34254a',
+    border1: '#4d356b',
+    border2: '#725196',
+    primaryButtonBackground: '#bd73e5',
+    primaryButtonBackgroundHover: '#d58df5',
+    primaryButtonForeground: '#1c0c27',
+    primaryButtonBorder: '#9953c5',
+    statusInReview: '#ee78ce',
+    diffModified: '#d5a060',
+  },
+});
+
+export const YODA_DREAM_VIRTUAL_THEME = createBuiltInDreamVariant({
+  id: 'ydream-virtual',
+  name: 'Future Rhythm',
+  mode: 'dark',
+  image: 'builtin:dream-virtual',
+  imageName: 'dream-virtual.svg',
+  brandSubtitle: 'FUTURE RHYTHM',
+  tagline: 'Code in tempo with a bright digital current.',
+  statusText: 'RHYTHM ENGINE ONLINE',
+  decoration: 'orbit',
+  colors: {
+    background: '#05151d',
+    background1: '#08212b',
+    background2: '#0c313e',
+    background3: '#134453',
+    foreground: '#e9ffff',
+    foregroundMuted: '#9ac9cb',
+    foregroundPassive: '#587f84',
+    border: '#153b46',
+    border1: '#1e5865',
+    border2: '#2d7d88',
+    primaryButtonBackground: '#51dcd6',
+    primaryButtonBackgroundHover: '#78f2e9',
+    primaryButtonForeground: '#061d22',
+    primaryButtonBorder: '#36b9b5',
+    statusInReview: '#6f96ff',
+    diffAdded: '#58d8b1',
+  },
+});
+
+export const YODA_DREAM_GOLD_THEME = createBuiltInDreamVariant({
+  id: 'ydream-gold',
+  name: 'Stage Black Gold',
+  mode: 'dark',
+  image: 'builtin:dream-gold',
+  imageName: 'dream-gold.svg',
+  brandSubtitle: 'STAGE BLACK GOLD',
+  tagline: 'Put the work under a single decisive spotlight.',
+  statusText: 'MAIN STAGE ONLINE',
+  decoration: 'glow',
+  colors: {
+    background: '#090806',
+    background1: '#12100c',
+    background2: '#201b12',
+    background3: '#302718',
+    foreground: '#fff4d2',
+    foregroundMuted: '#c3ae7d',
+    foregroundPassive: '#756544',
+    border: '#302819',
+    border1: '#4a3b20',
+    border2: '#71592d',
+    primaryButtonBackground: '#d8ac4c',
+    primaryButtonBackgroundHover: '#f1c765',
+    primaryButtonForeground: '#1a1307',
+    primaryButtonBorder: '#aa7c27',
+    statusInReview: '#e2b854',
+    diffModified: '#d7a94c',
+  },
+});
+
+export const BUILT_IN_DREAM_SKIN_THEMES: Record<DreamSkinBuiltInTheme, CustomTheme> = {
+  ydream: YODA_DREAM_THEME,
+  'ydream-arina': YODA_DREAM_ARINA_THEME,
+  'ydream-night': YODA_DREAM_NIGHT_THEME,
+  'ydream-fortune': YODA_DREAM_FORTUNE_THEME,
+  'ydream-scifi': YODA_DREAM_SCIFI_THEME,
+  'ydream-clear': YODA_DREAM_CLEAR_THEME,
+  'ydream-cosmos': YODA_DREAM_COSMOS_THEME,
+  'ydream-purple': YODA_DREAM_PURPLE_THEME,
+  'ydream-virtual': YODA_DREAM_VIRTUAL_THEME,
+  'ydream-gold': YODA_DREAM_GOLD_THEME,
+};
+
+type DreamSkinThemeOverrides = Partial<
+  Omit<DreamSkin, 'kind' | 'image' | 'imageName' | 'imageTreatment' | 'decorations'>
+> & {
+  imageTreatment?: Partial<DreamSkin['imageTreatment']>;
+  decorations?: Partial<DreamSkin['decorations']>;
+};
+
+export function createDreamSkinTheme(input: {
+  id: string;
+  name: string;
+  image: string;
+  imageName: string;
+  mode?: CustomThemeMode;
+  colors?: CustomThemeColors;
+  skin?: DreamSkinThemeOverrides;
+}): CustomTheme {
+  const base = input.mode === 'dark' ? YODA_DREAM_NIGHT_THEME : YODA_DREAM_THEME;
+  return customThemeSchema.parse({
+    ...base,
+    id: input.id,
+    name: input.name,
+    mode: input.mode ?? 'light',
+    colors: input.colors ?? base.colors,
+    skin: {
+      ...base.skin,
+      ...input.skin,
+      image: input.image,
+      imageName: input.imageName,
+      imageTreatment: {
+        ...base.skin?.imageTreatment,
+        ...input.skin?.imageTreatment,
+      },
+      decorations: {
+        ...base.skin?.decorations,
+        ...input.skin?.decorations,
+      },
+    },
+  });
+}
+
 export type CustomThemeWarning = {
   code: 'low-contrast';
   foreground: keyof CustomThemeColors;
@@ -226,10 +772,13 @@ export type CustomThemeWarning = {
 };
 
 export type CustomThemePackageParseResult =
-  | { ok: true; theme: CustomTheme; warnings: CustomThemeWarning[] }
+  | {
+      ok: true;
+      themes: Array<{ theme: CustomTheme; warnings: CustomThemeWarning[] }>;
+    }
   | {
       ok: false;
-      reason: 'invalid-json' | 'collection-unsupported' | 'invalid-theme';
+      reason: 'invalid-json' | 'invalid-theme';
       message: string;
     };
 
@@ -267,6 +816,16 @@ const BUILT_IN_THEME_MODES: Record<BuiltInTheme, CustomThemeMode> = {
   ywarm: 'light',
   ygreen: 'dark',
   ylight2: 'light',
+  ydream: 'light',
+  'ydream-arina': 'light',
+  'ydream-night': 'dark',
+  'ydream-fortune': 'dark',
+  'ydream-scifi': 'light',
+  'ydream-clear': 'light',
+  'ydream-cosmos': 'dark',
+  'ydream-purple': 'dark',
+  'ydream-virtual': 'dark',
+  'ydream-gold': 'dark',
 };
 
 /**
@@ -303,15 +862,10 @@ export function parseCustomThemePackageText(text: string): CustomThemePackagePar
     };
   }
 
-  if (looksLikeThemeCollection(raw)) {
-    return {
-      ok: false,
-      reason: 'collection-unsupported',
-      message: 'Theme collection import is not supported in this version.',
-    };
-  }
-
-  const parsed = customThemeSchema.safeParse(raw);
+  const isCollection = looksLikeThemeCollection(raw);
+  const parsed = isCollection
+    ? customThemeCollectionSchema.safeParse(raw)
+    : customThemeSchema.safeParse(raw);
   if (!parsed.success) {
     return {
       ok: false,
@@ -322,8 +876,13 @@ export function parseCustomThemePackageText(text: string): CustomThemePackagePar
 
   return {
     ok: true,
-    theme: parsed.data,
-    warnings: getCustomThemeWarnings(parsed.data),
+    themes: (isCollection
+      ? (parsed.data as CustomThemeCollection).themes
+      : [parsed.data as CustomTheme]
+    ).map((theme) => ({
+      theme,
+      warnings: getCustomThemeWarnings(theme),
+    })),
   };
 }
 

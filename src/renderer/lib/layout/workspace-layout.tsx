@@ -30,6 +30,7 @@ export function WorkspaceLayout({ leftSidebar, mainContent, rightPane }: Workspa
   return (
     <ResizablePanelGroup
       id="workspace-outer"
+      data-yoda-surface="workspace"
       orientation="horizontal"
       className="h-full w-full overflow-hidden"
       defaultLayout={defaultLayout}
@@ -48,7 +49,9 @@ export function WorkspaceLayout({ leftSidebar, mainContent, rightPane }: Workspa
         }}
         collapsible
       >
-        {leftSidebar}
+        <div data-yoda-surface="workspace-sidebar" className="h-full">
+          {leftSidebar}
+        </div>
       </ResizablePanel>
       <ResizableHandle
         className={cn(
@@ -58,6 +61,7 @@ export function WorkspaceLayout({ leftSidebar, mainContent, rightPane }: Workspa
       />
       <ResizablePanel
         id="workspace-main"
+        data-yoda-surface="workspace-main"
         minSize={MAIN_PANEL_MIN_SIZE}
         className="relative bg-background text-foreground"
         data-modal-scope-root
@@ -69,6 +73,7 @@ export function WorkspaceLayout({ leftSidebar, mainContent, rightPane }: Workspa
           <ResizableHandle className="items-center justify-center transition-colors hover:bg-border/80" />
           <ResizablePanel
             id="workspace-right-pane"
+            data-yoda-surface="workspace-right-pane"
             defaultSize="30%"
             minSize="280px"
             maxSize="50%"
@@ -109,7 +114,10 @@ export function WorkspaceContentLayout({
   }, [bottomPanelRef, isBottomPaneOpen]);
 
   return (
-    <div className="flex h-full flex-col bg-background text-foreground">
+    <div
+      data-yoda-surface="workspace-content"
+      className="flex h-full flex-col bg-background text-foreground"
+    >
       <div className="select-none">{titlebarSlot}</div>
       <div className="min-h-0 flex-1 overflow-hidden bg-background text-foreground">
         <ResizablePanelGroup
@@ -122,7 +130,10 @@ export function WorkspaceContentLayout({
             minSize="30%"
             className="min-h-0 overflow-hidden"
           >
-            <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
+            <div
+              data-yoda-surface="workspace-main-panel"
+              className="flex h-full flex-col overflow-hidden bg-background text-foreground"
+            >
               {mainPanel}
             </div>
           </ResizablePanel>
