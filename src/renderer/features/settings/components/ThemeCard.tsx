@@ -1,9 +1,11 @@
 import {
   Download,
   FileJson,
+  ImagePlus,
   Leaf,
   Monitor,
   Moon,
+  Sparkles,
   Sprout,
   Sun,
   Sunset,
@@ -15,13 +17,16 @@ import { useTranslation } from 'react-i18next';
 import type { SystemThemes, Theme } from '@shared/app-settings';
 import {
   createCustomThemeCollection,
+  createDreamSkinTheme,
   CUSTOM_THEME_EXAMPLE,
   CUSTOM_THEME_EXAMPLE_FILE_NAME,
+  DREAM_SKIN_BUILTIN_IMAGE,
+  DREAM_SKIN_MAX_IMAGE_BYTES,
+  DREAM_SKIN_SUPPORTED_IMAGE_TYPES,
   getCustomThemeId,
   parseCustomThemePackageText,
   toCustomThemeSelection,
   type CustomTheme,
-  type CustomThemeWarning,
 } from '@shared/custom-theme';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -47,6 +52,13 @@ const BUILT_IN_THEME_BUTTONS = [
   { value: 'ylight2', Icon: Sprout, label: 'yodaLightGreen', aria: 'ariaLightGreen' },
   { value: 'ygreen', Icon: Leaf, label: 'yodaDarkGreen', aria: 'ariaDarkGreen' },
   { value: 'ywarm', Icon: Sunset, label: 'yodaWarm', aria: 'ariaWarm' },
+  { value: 'ydream', Icon: Sparkles, label: 'yodaDream', aria: 'ariaDream' },
+  {
+    value: 'ydream-night',
+    Icon: Sparkles,
+    label: 'yodaDreamNight',
+    aria: 'ariaDreamNight',
+  },
 ] as const;
 
 const ThemeCard: React.FC = () => {
@@ -58,6 +70,7 @@ const ThemeCard: React.FC = () => {
   const { toast } = useToast();
   const showConfirm = useShowModal('confirmActionModal');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const customThemes = useMemo(() => customThemesValue?.items ?? [], [customThemesValue?.items]);
   const selectedCustomThemeId = getCustomThemeId(theme);
   const systemThemes: SystemThemes = systemThemesValue ?? { light: 'ylight', dark: 'ydark' };
@@ -75,12 +88,15 @@ const ThemeCard: React.FC = () => {
     })),
   ];
 
-  const handleSetTheme = (next: Theme) => {
-    if (theme !== next) {
-      captureTelemetry('setting_changed', { setting: 'theme' });
-    }
-    setTheme(next);
-  };
+  const handleSetTheme = useCallback(
+    (next: Theme) => {
+      if (theme !== next) {
+        captureTelemetry('setting_changed', { setting: 'theme' });
+      }
+      setTheme(next);
+    },
+    [setTheme, theme]
+  );
 
   const buttonBase =
     'flex min-h-24 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:px-3';
@@ -90,64 +106,79 @@ const ThemeCard: React.FC = () => {
   const customThemeButtonClass =
     'flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring';
 
-  const saveImportedTheme = useCallback(
-    (nextTheme: CustomTheme, existingTheme?: CustomTheme) => {
-      const nextItems = existingTheme
-        ? customThemes.map((item) => (item.id === existingTheme.id ? nextTheme : item))
-        : [...customThemes, nextTheme];
+  const saveImportedThemes = useCallback(
+    (nextThemes: CustomTheme[]) => {
+      const nextItems = [...customThemes];
+      let updatedCount = 0;
+
+      for (const nextTheme of nextThemes) {
+        const duplicateIndex = nextItems.findIndex(
+          (item) =>
+            item.id === nextTheme.id ||
+            item.name.trim().toLowerCase() === nextTheme.name.trim().toLowerCase()
+        );
+        if (duplicateIndex === -1) {
+          nextItems.push(nextTheme);
+        } else {
+          nextItems[duplicateIndex] = nextTheme;
+          updatedCount += 1;
+        }
+      }
 
       update({ items: nextItems });
       toast({
-        title: existingTheme ? t('settings.theme.themeUpdated') : t('settings.theme.themeImported'),
-        description: nextTheme.name,
+        title:
+          nextThemes.length === 1
+            ? t(updatedCount > 0 ? 'settings.theme.themeUpdated' : 'settings.theme.themeImported')
+            : t('settings.theme.themeCollectionImported'),
+        description:
+          nextThemes.length === 1
+            ? nextThemes[0]?.name
+            : t('settings.theme.themeCollectionImportSummary', {
+                count: nextThemes.length,
+                updated: updatedCount,
+              }),
       });
     },
     [customThemes, t, toast, update]
   );
 
-  const findDuplicateTheme = useCallback(
-    (nextTheme: CustomTheme): CustomTheme | undefined =>
-      customThemes.find(
-        (item) =>
-          item.id === nextTheme.id ||
-          item.name.trim().toLowerCase() === nextTheme.name.toLowerCase()
-      ),
-    [customThemes]
-  );
-
-  const confirmOverwrite = useCallback(
-    (nextTheme: CustomTheme, existingTheme: CustomTheme) => {
-      showConfirm({
-        title: t('settings.theme.overwriteTitle'),
-        description: t('settings.theme.overwriteDescription', { name: existingTheme.name }),
-        confirmLabel: t('settings.theme.overwriteConfirm'),
-        variant: 'default',
-        onSuccess: () => saveImportedTheme(nextTheme, existingTheme),
-      });
-    },
-    [saveImportedTheme, showConfirm, t]
-  );
-
   const finishImport = useCallback(
-    (nextTheme: CustomTheme) => {
-      const duplicate = findDuplicateTheme(nextTheme);
-      if (duplicate) {
-        confirmOverwrite(nextTheme, duplicate);
+    (nextThemes: CustomTheme[]) => {
+      const duplicateCount = nextThemes.filter((nextTheme) =>
+        customThemes.some(
+          (item) =>
+            item.id === nextTheme.id ||
+            item.name.trim().toLowerCase() === nextTheme.name.trim().toLowerCase()
+        )
+      ).length;
+      if (duplicateCount === 0) {
+        saveImportedThemes(nextThemes);
         return;
       }
-      saveImportedTheme(nextTheme);
+
+      showConfirm({
+        title: t('settings.theme.overwriteTitle'),
+        description:
+          nextThemes.length === 1
+            ? t('settings.theme.overwriteDescription', { name: nextThemes[0]?.name })
+            : t('settings.theme.overwriteCollectionDescription', { count: duplicateCount }),
+        confirmLabel: t('settings.theme.overwriteConfirm'),
+        variant: 'default',
+        onSuccess: () => saveImportedThemes(nextThemes),
+      });
     },
-    [confirmOverwrite, findDuplicateTheme, saveImportedTheme]
+    [customThemes, saveImportedThemes, showConfirm, t]
   );
 
   const confirmWarnings = useCallback(
-    (nextTheme: CustomTheme, warnings: CustomThemeWarning[]) => {
+    (nextThemes: CustomTheme[], warningCount: number) => {
       showConfirm({
         title: t('settings.theme.warningTitle'),
-        description: t('settings.theme.warningDescription', { count: warnings.length }),
+        description: t('settings.theme.warningDescription', { count: warningCount }),
         confirmLabel: t('settings.theme.importAnyway'),
         variant: 'default',
-        onSuccess: () => finishImport(nextTheme),
+        onSuccess: () => finishImport(nextThemes),
       });
     },
     [finishImport, showConfirm, t]
@@ -170,12 +201,17 @@ const ThemeCard: React.FC = () => {
           return;
         }
 
-        if (result.warnings.length > 0) {
-          confirmWarnings(result.theme, result.warnings);
+        const nextThemes = result.themes.map(({ theme: nextTheme }) => nextTheme);
+        const warningCount = result.themes.reduce(
+          (total, { warnings }) => total + warnings.length,
+          0
+        );
+        if (warningCount > 0) {
+          confirmWarnings(nextThemes, warningCount);
           return;
         }
 
-        finishImport(result.theme);
+        finishImport(nextThemes);
       } catch (error) {
         toast({
           title: t('settings.theme.importFailed'),
@@ -185,6 +221,57 @@ const ThemeCard: React.FC = () => {
       }
     },
     [confirmWarnings, finishImport, t, toast]
+  );
+
+  const handleCreateSkin = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) return;
+
+      if (
+        !DREAM_SKIN_SUPPORTED_IMAGE_TYPES.includes(
+          file.type as (typeof DREAM_SKIN_SUPPORTED_IMAGE_TYPES)[number]
+        )
+      ) {
+        toast({
+          title: t('settings.theme.skinImportFailed'),
+          description: t('settings.theme.skinUnsupportedType'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (file.size > DREAM_SKIN_MAX_IMAGE_BYTES) {
+        toast({
+          title: t('settings.theme.skinImportFailed'),
+          description: t('settings.theme.skinTooLarge'),
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      try {
+        const image = await readFileAsDataUrl(file);
+        const baseName =
+          file.name.replace(/\.[^.]+$/, '').trim() || t('settings.theme.untitledSkin');
+        const id = `dream-${safeFileName(baseName).slice(0, 36)}-${Date.now().toString(36)}`;
+        const nextTheme = createDreamSkinTheme({
+          id,
+          name: baseName,
+          image,
+          imageName: file.name,
+        });
+        saveImportedThemes([nextTheme]);
+        handleSetTheme(toCustomThemeSelection(nextTheme.id));
+      } catch (error) {
+        toast({
+          title: t('settings.theme.skinImportFailed'),
+          description: error instanceof Error ? error.message : t('settings.theme.readFailed'),
+          variant: 'destructive',
+        });
+      }
+    },
+    [handleSetTheme, saveImportedThemes, t, toast]
   );
 
   const handleDeleteTheme = useCallback(
@@ -280,6 +367,23 @@ const ThemeCard: React.FC = () => {
             className="hidden"
             onChange={(event) => void handleImportFile(event)}
           />
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept={DREAM_SKIN_SUPPORTED_IMAGE_TYPES.join(',')}
+            className="hidden"
+            onChange={(event) => void handleCreateSkin(event)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={isSaving}
+          >
+            <ImagePlus className="h-3.5 w-3.5" aria-hidden="true" />
+            {t('settings.theme.createSkin')}
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -392,6 +496,11 @@ const ThemeCard: React.FC = () => {
                         <span className="rounded-sm border border-border/70 px-1 uppercase">
                           {item.mode}
                         </span>
+                        {item.skin ? (
+                          <span className="rounded-sm border border-border/70 px-1 uppercase">
+                            {t('settings.theme.skinBadge')}
+                          </span>
+                        ) : null}
                       </span>
                     </span>
                   </button>
@@ -459,6 +568,17 @@ function SystemSlotSelect({
 }
 
 function ThemeSwatches({ theme }: { theme: CustomTheme }) {
+  if (theme.skin) {
+    const backgroundImage =
+      theme.skin.image === DREAM_SKIN_BUILTIN_IMAGE ? undefined : `url(${theme.skin.image})`;
+    return (
+      <span
+        className="h-8 w-12 shrink-0 rounded-md border border-border/70 bg-background-3 bg-cover bg-center"
+        style={backgroundImage ? { backgroundImage } : undefined}
+      />
+    );
+  }
+
   const swatches = [
     theme.colors.background,
     theme.colors.background2,
@@ -479,6 +599,21 @@ function ThemeSwatches({ theme }: { theme: CustomTheme }) {
       ))}
     </span>
   );
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read image.'));
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Failed to read image.'));
+        return;
+      }
+      resolve(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function IconButton({

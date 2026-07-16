@@ -11,13 +11,17 @@
           var pref = raw ? JSON.parse(raw) : null;
           if (pref === 'emlight' || pref === 'ywarm') pref = 'ylight';
           else if (pref === 'emdark') pref = 'ydark';
+          var isDream = pref === 'ydream' || pref === 'ydream-night';
           var effective =
-            pref === 'ylight' || pref === 'ydark'
+            pref === 'ylight' || pref === 'ydark' || isDream
               ? pref
               : window.matchMedia('(prefers-color-scheme: dark)').matches
                 ? 'ydark'
                 : 'ylight';
-          document.documentElement.classList.add(effective);
+          document.documentElement.classList.add(
+            pref === 'ydream-night' ? 'ydark' : isDream ? 'ylight' : effective
+          );
+          if (isDream) document.documentElement.classList.add('ydream');
           // Returning launches show the logo centered (part 1 only); the first
           // launch shifts it up to where the full boot screen's hood lands.
           var entered = localStorage.getItem('yoda:boot-entered') === 'true';

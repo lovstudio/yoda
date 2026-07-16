@@ -3,8 +3,18 @@ import z from 'zod';
 export const CUSTOM_THEME_SCHEMA_VERSION = 1;
 export const CUSTOM_THEME_SELECTION_PREFIX = 'custom:';
 export const CUSTOM_THEME_EXAMPLE_FILE_NAME = 'yoda-theme-example.json';
+export const DREAM_SKIN_BUILTIN_IMAGE = 'builtin:dream-portal';
+export const DREAM_SKIN_MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+export const DREAM_SKIN_SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
-export type BuiltInTheme = 'ylight' | 'ydark' | 'ywarm' | 'ygreen' | 'ylight2';
+export type BuiltInTheme =
+  | 'ylight'
+  | 'ydark'
+  | 'ywarm'
+  | 'ygreen'
+  | 'ylight2'
+  | 'ydream'
+  | 'ydream-night';
 
 /** A non-null theme selection, as stored in the system light/dark pair. */
 export type ResolvedThemeSelection = Exclude<ThemeSelection, null>;
@@ -53,6 +63,30 @@ export const customThemeColorsSchema = z
   })
   .strict();
 
+const DREAM_SKIN_IMAGE_DATA_URL_RE = /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=\r\n]+$/i;
+const DREAM_SKIN_MAX_DATA_URL_LENGTH = Math.ceil((DREAM_SKIN_MAX_IMAGE_BYTES * 4) / 3) + 128;
+
+export const dreamSkinSchema = z
+  .object({
+    kind: z.literal('dream-skin'),
+    image: z.union([
+      z.literal(DREAM_SKIN_BUILTIN_IMAGE),
+      z
+        .string()
+        .max(DREAM_SKIN_MAX_DATA_URL_LENGTH, 'The skin image must be no larger than 16 MB.')
+        .regex(
+          DREAM_SKIN_IMAGE_DATA_URL_RE,
+          'Use a base64 PNG, JPEG, or WebP data URL for the skin image.'
+        ),
+    ]),
+    imageName: z.string().trim().min(1).max(255),
+    brandSubtitle: z.string().trim().max(80).default('YODA DREAM SKIN'),
+    tagline: z.string().trim().max(160).default('Make something wonderful.'),
+    statusText: z.string().trim().max(80).default('DREAM SKIN ONLINE'),
+    quote: z.string().trim().max(80).default('MAKE SOMETHING WONDERFUL'),
+  })
+  .strict();
+
 export const customThemeSchema = z
   .object({
     schemaVersion: z.literal(CUSTOM_THEME_SCHEMA_VERSION),
@@ -60,6 +94,7 @@ export const customThemeSchema = z
     name: z.string().trim().min(1).max(80),
     mode: z.enum(['light', 'dark']),
     colors: customThemeColorsSchema,
+    skin: dreamSkinSchema.optional(),
   })
   .strict();
 
@@ -67,9 +102,33 @@ export const customThemeCollectionSchema = z
   .object({
     schemaVersion: z.literal(CUSTOM_THEME_SCHEMA_VERSION),
     kind: z.literal('yoda-theme-collection'),
-    themes: z.array(customThemeSchema).max(100),
+    themes: z.array(customThemeSchema).min(1).max(100),
   })
-  .strict();
+  .strict()
+  .superRefine(({ themes }, ctx) => {
+    const ids = new Set<string>();
+    const names = new Set<string>();
+    for (const [index, theme] of themes.entries()) {
+      if (ids.has(theme.id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['themes', index, 'id'],
+          message: `Duplicate theme id: ${theme.id}`,
+        });
+      }
+      ids.add(theme.id);
+
+      const normalizedName = theme.name.trim().toLowerCase();
+      if (names.has(normalizedName)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['themes', index, 'name'],
+          message: `Duplicate theme name: ${theme.name}`,
+        });
+      }
+      names.add(normalizedName);
+    }
+  });
 
 export const customThemesSettingsSchema = z
   .object({
@@ -78,6 +137,7 @@ export const customThemesSettingsSchema = z
   .default({ items: [] });
 
 export type CustomThemeColors = z.infer<typeof customThemeColorsSchema>;
+export type DreamSkin = z.infer<typeof dreamSkinSchema>;
 export type CustomTheme = z.infer<typeof customThemeSchema>;
 export type CustomThemeCollection = z.infer<typeof customThemeCollectionSchema>;
 export type CustomThemesSettings = z.infer<typeof customThemesSettingsSchema>;
@@ -217,6 +277,109 @@ export const YODA_LIGHT2_THEME: CustomTheme = {
   },
 };
 
+// Built-in "Yoda Dream" palette — the native Yoda adaptation of the
+// MIT-licensed Codex Dream Skin project. The palette continues through the
+// shared terminal/Monaco pipeline; its image and glass treatment live in
+// renderer CSS behind the `ydream` root class.
+const DEFAULT_DREAM_SKIN: DreamSkin = {
+  kind: 'dream-skin',
+  image: DREAM_SKIN_BUILTIN_IMAGE,
+  imageName: 'codex-dream-skin.jpg',
+  brandSubtitle: 'YODA DREAM SKIN',
+  tagline: 'Turn inspiration into an interactive agent workspace.',
+  statusText: 'DREAM SKIN ONLINE',
+  quote: 'MAKE SOMETHING WONDERFUL',
+};
+
+export const YODA_DREAM_THEME: CustomTheme = {
+  schemaVersion: CUSTOM_THEME_SCHEMA_VERSION,
+  id: 'ydream',
+  name: 'Yoda Dream',
+  mode: 'light',
+  skin: DEFAULT_DREAM_SKIN,
+  colors: {
+    background: '#f7f4f5',
+    background1: '#ffffff',
+    background2: '#fff7f8',
+    background3: '#f8e7ea',
+    foreground: '#2b2224',
+    foregroundMuted: '#756669',
+    foregroundPassive: '#a28f93',
+    border: '#ead8dc',
+    border1: '#d9bfc4',
+    border2: '#bd929a',
+    primaryButtonBackground: '#e25563',
+    primaryButtonBackgroundHover: '#c93d4c',
+    primaryButtonForeground: '#ffffff',
+    primaryButtonBorder: '#c93d4c',
+    statusInProgress: '#c97a32',
+    statusInReview: '#a25480',
+    statusDone: '#5f8d77',
+    statusTodo: '#7b7073',
+    statusCancelled: '#aa747c',
+    diffAdded: '#4f9572',
+    diffModified: '#c58b3e',
+    diffDeleted: '#d14f5d',
+  },
+};
+
+export const YODA_DREAM_NIGHT_THEME: CustomTheme = {
+  schemaVersion: CUSTOM_THEME_SCHEMA_VERSION,
+  id: 'ydream-night',
+  name: 'Yoda Dream Night',
+  mode: 'dark',
+  skin: {
+    ...DEFAULT_DREAM_SKIN,
+    brandSubtitle: 'YODA DREAM NIGHT',
+    statusText: 'NIGHT SKIN ONLINE',
+  },
+  colors: {
+    background: '#0b1118',
+    background1: '#111a22',
+    background2: '#17232c',
+    background3: '#21313b',
+    foreground: '#f7edf0',
+    foregroundMuted: '#bca9ae',
+    foregroundPassive: '#786970',
+    border: '#2b3942',
+    border1: '#3b4a54',
+    border2: '#56646d',
+    primaryButtonBackground: '#f07a86',
+    primaryButtonBackgroundHover: '#ff929d',
+    primaryButtonForeground: '#241014',
+    primaryButtonBorder: '#d85d69',
+    statusInProgress: '#d9a24f',
+    statusInReview: '#d991bc',
+    statusDone: '#7ba68f',
+    statusTodo: '#98878c',
+    statusCancelled: '#79676c',
+    diffAdded: '#70bd91',
+    diffModified: '#dda95a',
+    diffDeleted: '#ee7080',
+  },
+};
+
+export function createDreamSkinTheme(input: {
+  id: string;
+  name: string;
+  image: string;
+  imageName: string;
+  mode?: CustomThemeMode;
+}): CustomTheme {
+  const base = input.mode === 'dark' ? YODA_DREAM_NIGHT_THEME : YODA_DREAM_THEME;
+  return customThemeSchema.parse({
+    ...base,
+    id: input.id,
+    name: input.name,
+    mode: input.mode ?? 'light',
+    skin: {
+      ...base.skin,
+      image: input.image,
+      imageName: input.imageName,
+    },
+  });
+}
+
 export type CustomThemeWarning = {
   code: 'low-contrast';
   foreground: keyof CustomThemeColors;
@@ -226,10 +389,13 @@ export type CustomThemeWarning = {
 };
 
 export type CustomThemePackageParseResult =
-  | { ok: true; theme: CustomTheme; warnings: CustomThemeWarning[] }
+  | {
+      ok: true;
+      themes: Array<{ theme: CustomTheme; warnings: CustomThemeWarning[] }>;
+    }
   | {
       ok: false;
-      reason: 'invalid-json' | 'collection-unsupported' | 'invalid-theme';
+      reason: 'invalid-json' | 'invalid-theme';
       message: string;
     };
 
@@ -267,6 +433,8 @@ const BUILT_IN_THEME_MODES: Record<BuiltInTheme, CustomThemeMode> = {
   ywarm: 'light',
   ygreen: 'dark',
   ylight2: 'light',
+  ydream: 'light',
+  'ydream-night': 'dark',
 };
 
 /**
@@ -303,15 +471,10 @@ export function parseCustomThemePackageText(text: string): CustomThemePackagePar
     };
   }
 
-  if (looksLikeThemeCollection(raw)) {
-    return {
-      ok: false,
-      reason: 'collection-unsupported',
-      message: 'Theme collection import is not supported in this version.',
-    };
-  }
-
-  const parsed = customThemeSchema.safeParse(raw);
+  const isCollection = looksLikeThemeCollection(raw);
+  const parsed = isCollection
+    ? customThemeCollectionSchema.safeParse(raw)
+    : customThemeSchema.safeParse(raw);
   if (!parsed.success) {
     return {
       ok: false,
@@ -322,8 +485,13 @@ export function parseCustomThemePackageText(text: string): CustomThemePackagePar
 
   return {
     ok: true,
-    theme: parsed.data,
-    warnings: getCustomThemeWarnings(parsed.data),
+    themes: (isCollection
+      ? (parsed.data as CustomThemeCollection).themes
+      : [parsed.data as CustomTheme]
+    ).map((theme) => ({
+      theme,
+      warnings: getCustomThemeWarnings(theme),
+    })),
   };
 }
 

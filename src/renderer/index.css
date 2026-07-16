@@ -392,6 +392,349 @@
   }
 }
 
+/* Yoda Dream — native adaptation of Codex Dream Skin Studio. The image is a
+   licensed derivative tracked in THIRD_PARTY_NOTICES.md. Only semantic
+   `data-yoda-surface` hooks are styled here so route/component markup can
+   evolve without relying on brittle generated class selectors. */
+.ydream body {
+  background:
+    radial-gradient(circle at 12% 8%, rgb(255 255 255 / 0.72), transparent 38%),
+    linear-gradient(
+      120deg,
+      var(--background-1) 0%,
+      var(--background-3) 48%,
+      color-mix(in srgb, var(--primary-button-background) 68%, var(--background)) 100%
+    );
+}
+
+.ydream [data-yoda-surface='workspace'] {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--background-1) 96%, transparent) 0%,
+      color-mix(in srgb, var(--background-2) 72%, transparent) 36%,
+      color-mix(in srgb, var(--background-3) 48%, transparent) 100%
+    ),
+    var(--dream-skin-art) 69% center / cover no-repeat;
+}
+
+.ydream [data-yoda-surface='workspace']::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background-image:
+    radial-gradient(
+      circle,
+      color-mix(in srgb, var(--primary-button-background) 38%, transparent) 0 1px,
+      transparent 1.8px
+    ),
+    radial-gradient(circle, rgb(255 255 255 / 0.74) 0 1px, transparent 1.7px);
+  background-position:
+    0 0,
+    29px 37px;
+  background-size:
+    79px 79px,
+    97px 97px;
+  content: '';
+  opacity: 0.42;
+  pointer-events: none;
+  animation: dream-skin-drift 18s linear infinite;
+}
+
+.ydream [data-yoda-surface='workspace'] > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ydream [data-yoda-surface='workspace-sidebar'] {
+  padding: 8px 0 8px 8px;
+}
+
+.ydream [data-yoda-surface='left-sidebar'] {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--primary-button-background) 20%, transparent);
+  border-right-color: color-mix(in srgb, var(--primary-button-background) 32%, transparent);
+  border-radius: 16px 0 0 16px;
+  background:
+    radial-gradient(circle at 14% 4%, rgb(255 255 255 / 0.68), transparent 34%),
+    linear-gradient(180deg, var(--background-tertiary), var(--background-tertiary-2)) !important;
+  box-shadow:
+    10px 0 30px rgb(108 44 55 / 0.1),
+    inset -1px 0 rgb(255 255 255 / 0.72);
+  backdrop-filter: blur(20px) saturate(118%);
+}
+
+.ydream [data-yoda-surface='workspace-main'],
+.ydream [data-yoda-surface='workspace-right-pane'],
+.ydream [data-yoda-surface='workspace-content'],
+.ydream [data-yoda-surface='workspace-main-panel'],
+.ydream [data-yoda-surface='home'] {
+  background-color: transparent !important;
+}
+
+.ydream [data-yoda-surface='workspace-main'] {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--primary-button-background) 20%, transparent);
+  border-radius: 0 16px 16px 0;
+  box-shadow:
+    0 18px 48px rgb(110 38 51 / 0.12),
+    inset 0 1px rgb(255 255 255 / 0.72);
+  backdrop-filter: blur(14px) saturate(112%);
+}
+
+.ydream [data-yoda-surface='workspace-right-pane'] {
+  border-color: color-mix(in srgb, var(--primary-button-background) 22%, transparent);
+  border-radius: 16px;
+  backdrop-filter: blur(18px) saturate(115%);
+}
+
+.ydream [data-yoda-surface='workspace-main-panel'] article {
+  border-color: color-mix(in srgb, var(--primary-button-background) 16%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--background-1) 86%, transparent);
+  box-shadow: 0 10px 30px rgb(104 35 48 / 0.08);
+  backdrop-filter: blur(10px) saturate(108%);
+}
+
+.ydream [data-yoda-surface='composer'] {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--primary-button-background) 44%, transparent);
+  background:
+    radial-gradient(circle at 88% 16%, rgb(255 255 255 / 0.66), transparent 32%),
+    linear-gradient(145deg, var(--background-1), var(--background-2));
+  box-shadow:
+    0 16px 36px rgb(108 35 48 / 0.12),
+    inset 0 1px rgb(255 255 255 / 0.58);
+  backdrop-filter: blur(18px) saturate(118%);
+}
+
+.ydream [data-yoda-surface='composer']::before {
+  position: absolute;
+  z-index: 2;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--primary-button-background), var(--status-in-review));
+  content: '';
+  pointer-events: none;
+}
+
+.ydream [data-yoda-surface='home'] > div {
+  padding-top: 1.75rem;
+}
+
+.ydream [data-yoda-surface='home-hero'] {
+  position: relative;
+  display: flex;
+  min-height: 232px;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  padding: 2.25rem 2.5rem;
+  border: 1px solid color-mix(in srgb, var(--primary-button-background) 38%, transparent);
+  border-radius: 22px;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--background-1) 98%, transparent) 0%,
+      color-mix(in srgb, var(--background-1) 92%, transparent) 31%,
+      color-mix(in srgb, var(--background-2) 42%, transparent) 54%,
+      transparent 72%
+    ),
+    var(--dream-skin-art) center / cover no-repeat;
+  box-shadow:
+    0 18px 42px rgb(133 51 64 / 0.16),
+    inset 0 0 0 3px rgb(255 255 255 / 0.38);
+  text-align: left;
+}
+
+.ydream [data-yoda-surface='home-hero'] > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ydream [data-yoda-surface='home-hero'] > div:not(.dream-skin-status) {
+  justify-content: flex-start;
+}
+
+.ydream [data-yoda-surface='home-hero'] h1 {
+  max-width: 47%;
+  color: var(--foreground);
+  font-size: clamp(1.45rem, 2.8cqw, 2.2rem);
+  line-height: 1.2;
+  text-shadow: 0 1px 16px rgb(255 255 255 / 0.88);
+}
+
+.dream-skin-status {
+  display: none;
+}
+
+.ydream .dream-skin-status {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.42rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--primary-button-background) 24%, transparent);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.72);
+  color: var(--primary-button-background-hover);
+  font: 700 0/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  backdrop-filter: blur(12px);
+}
+
+.ydream .dream-skin-status::after {
+  content: var(--dream-skin-status, 'DREAM SKIN ONLINE');
+  font-size: 0.625rem;
+}
+
+.ydream .dream-skin-status span {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: var(--primary-button-background);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--primary-button-background) 72%, transparent);
+  animation: dream-skin-pulse 2.4s ease-in-out infinite;
+}
+
+.ydream[data-dream-shell='dark'] body {
+  background:
+    radial-gradient(
+      circle at 82% 6%,
+      color-mix(in srgb, var(--primary-button-background) 24%, transparent),
+      transparent 32%
+    ),
+    linear-gradient(145deg, #060b10 0%, #0b1118 52%, #17121a 100%);
+}
+
+.ydream[data-dream-shell='dark'] [data-yoda-surface='workspace'] {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--background) 96%, #05080d) 0%,
+      color-mix(in srgb, var(--background) 83%, transparent) 47%,
+      color-mix(in srgb, var(--background) 58%, transparent) 100%
+    ),
+    var(--dream-skin-art) 69% center / cover no-repeat;
+  background-blend-mode: normal, luminosity;
+}
+
+.ydream[data-dream-shell='dark'] [data-yoda-surface='left-sidebar'] {
+  background:
+    radial-gradient(
+      circle at 12% 4%,
+      color-mix(in srgb, var(--primary-button-background) 10%, transparent),
+      transparent 30%
+    ),
+    linear-gradient(180deg, var(--background-tertiary), var(--background-tertiary-2)) !important;
+  box-shadow:
+    10px 0 34px rgb(0 0 0 / 0.28),
+    inset -1px 0 color-mix(in srgb, var(--primary-button-background) 8%, transparent);
+}
+
+.ydream[data-dream-shell='dark'] [data-yoda-surface='workspace-main'] {
+  box-shadow:
+    0 18px 48px rgb(0 0 0 / 0.28),
+    inset 0 1px rgb(255 255 255 / 0.05);
+}
+
+.ydream[data-dream-shell='dark'] [data-yoda-surface='workspace-main-panel'] article {
+  background: color-mix(in srgb, var(--background-1) 84%, transparent);
+  box-shadow: 0 12px 34px rgb(0 0 0 / 0.2);
+}
+
+.ydream[data-dream-shell='dark'] [data-yoda-surface='composer'] {
+  background:
+    radial-gradient(
+      circle at 88% 14%,
+      color-mix(in srgb, var(--primary-button-background) 12%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(145deg, var(--background-1), var(--background-2));
+  box-shadow:
+    0 16px 36px rgb(0 0 0 / 0.32),
+    inset 0 1px rgb(255 255 255 / 0.05);
+}
+
+.ydream[data-dream-shell='dark'] [data-yoda-surface='home-hero'] {
+  background:
+    linear-gradient(
+      90deg,
+      rgb(5 9 14 / 0.98) 0%,
+      rgb(10 17 25 / 0.93) 38%,
+      rgb(21 18 29 / 0.58) 62%,
+      transparent 82%
+    ),
+    var(--dream-skin-art) center / cover no-repeat;
+  background-blend-mode: normal, luminosity;
+  box-shadow:
+    0 18px 42px rgb(0 0 0 / 0.36),
+    inset 0 0 0 3px rgb(255 255 255 / 0.04);
+}
+
+.ydream[data-dream-shell='dark'] [data-yoda-surface='home-hero'] h1 {
+  color: var(--foreground);
+  text-shadow: 0 2px 16px rgb(0 0 0 / 0.74);
+}
+
+.ydream[data-dream-shell='dark'] .dream-skin-status {
+  background: rgb(9 15 21 / 0.72);
+  color: var(--primary-button-background);
+}
+
+@keyframes dream-skin-drift {
+  from {
+    background-position:
+      0 0,
+      29px 37px;
+  }
+  to {
+    background-position:
+      79px 79px,
+      126px 134px;
+  }
+}
+
+@keyframes dream-skin-pulse {
+  0%,
+  100% {
+    opacity: 0.58;
+    transform: scale(0.86);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ydream [data-yoda-surface='workspace']::after,
+  .ydream .dream-skin-status span {
+    animation: none;
+  }
+}
+
+@container (max-width: 680px) {
+  .ydream [data-yoda-surface='home-hero'] {
+    min-height: 190px;
+    padding: 1.75rem;
+    background-position: 61% center;
+  }
+
+  .ydream [data-yoda-surface='home-hero'] h1 {
+    max-width: 68%;
+  }
+
+  .ydream .dream-skin-status {
+    display: none;
+  }
+}
+
 @layer components {
   .logo-shimmer-container {
     position: relative;

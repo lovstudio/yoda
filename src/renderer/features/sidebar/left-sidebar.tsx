@@ -179,6 +179,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
 
   return (
     <div
+      data-yoda-surface="left-sidebar"
       className={cn(
         'relative flex flex-col h-full bg-background-tertiary text-foreground-tertiary-muted transition-colors',
         isDragOver && 'bg-accent/10 ring-2 ring-inset ring-accent/50'

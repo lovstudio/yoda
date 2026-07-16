@@ -338,10 +338,17 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
   const greetingName = sessionUser ? accountGreetingName(sessionUser) : '';
 
   return (
-    <div className="@container flex h-full flex-col overflow-y-auto bg-background text-foreground">
+    <div
+      data-yoda-surface="home"
+      className="@container flex h-full flex-col overflow-y-auto bg-background text-foreground"
+    >
       <div className="mx-auto flex min-h-full w-full max-w-6xl flex-1 flex-col px-5 pb-8 pt-14 @2xl:px-8 @5xl:px-10">
         <div className="flex flex-1 flex-col justify-center gap-8 py-4">
-          <div className="text-center">
+          <div data-yoda-surface="home-hero" className="text-center">
+            <div className="dream-skin-status" aria-hidden="true">
+              <span />
+              DREAM SKIN ONLINE
+            </div>
             <div className="mb-4 flex items-center justify-center">
               <img
                 key={effectiveTheme}

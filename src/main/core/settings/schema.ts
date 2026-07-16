@@ -261,7 +261,18 @@ export const terminalSettingsSchema = z.object({
 });
 
 const legacyThemeSchema = z
-  .enum(['ylight', 'ydark', 'ywarm', 'ygreen', 'ylight2', 'ymatrix', 'emlight', 'emdark'])
+  .enum([
+    'ylight',
+    'ydark',
+    'ywarm',
+    'ygreen',
+    'ylight2',
+    'ydream',
+    'ydream-night',
+    'ymatrix',
+    'emlight',
+    'emdark',
+  ])
   .transform((value) => {
     if (value === 'emlight') return 'ylight' as const;
     if (value === 'emdark') return 'ydark' as const;

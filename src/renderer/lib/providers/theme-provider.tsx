@@ -1,8 +1,12 @@
 import { createContext, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
+import dreamSkinArt from '@/assets/images/themes/codex-dream-skin.jpg';
 import type { Theme } from '@shared/app-settings';
 import {
+  DREAM_SKIN_BUILTIN_IMAGE,
   findCustomTheme,
   resolveThemeMode,
+  YODA_DREAM_NIGHT_THEME,
+  YODA_DREAM_THEME,
   YODA_GREEN_THEME,
   YODA_LIGHT2_THEME,
   YODA_WARM_THEME,
@@ -32,16 +36,45 @@ function findBuiltInOverlay(selection: Theme) {
       return YODA_GREEN_THEME;
     case 'ylight2':
       return YODA_LIGHT2_THEME;
+    case 'ydream':
+      return YODA_DREAM_THEME;
+    case 'ydream-night':
+      return YODA_DREAM_NIGHT_THEME;
     default:
       return undefined;
   }
 }
 
-function applyTheme(effective: EffectiveTheme, customTheme?: ReturnType<typeof findCustomTheme>) {
+export function applyThemeToDocument(
+  effective: EffectiveTheme,
+  customTheme?: ReturnType<typeof findCustomTheme>
+) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  root.classList.remove('ylight', 'ydark', 'emlight', 'emdark');
+  root.classList.remove('ylight', 'ydark', 'emlight', 'emdark', 'ydream');
   root.classList.add(effective);
+  const dreamSkin = customTheme?.skin;
+  if (dreamSkin) {
+    root.classList.add('ydream');
+    root.dataset.dreamShell = effective === 'ydark' ? 'dark' : 'light';
+    const image = dreamSkin.image === DREAM_SKIN_BUILTIN_IMAGE ? dreamSkinArt : dreamSkin.image;
+    root.style.setProperty('--dream-skin-art', `url(${JSON.stringify(image)})`);
+    root.style.setProperty('--dream-skin-brand', JSON.stringify(customTheme.name));
+    root.style.setProperty('--dream-skin-tagline', JSON.stringify(dreamSkin.tagline));
+    root.style.setProperty('--dream-skin-status', JSON.stringify(dreamSkin.statusText));
+    root.style.setProperty('--dream-skin-quote', JSON.stringify(dreamSkin.quote));
+  } else {
+    root.removeAttribute('data-dream-shell');
+    for (const variable of [
+      '--dream-skin-art',
+      '--dream-skin-brand',
+      '--dream-skin-tagline',
+      '--dream-skin-status',
+      '--dream-skin-quote',
+    ]) {
+      root.style.removeProperty(variable);
+    }
+  }
 
   for (const variable of CUSTOM_THEME_CSS_VARIABLES) {
     root.style.removeProperty(variable);
@@ -108,8 +141,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useLayoutEffect(() => {
     if (isThemeLoading) return;
-    applyTheme(effectiveTheme, selectedCustomTheme);
-  }, [effectiveTheme, selectedCustomTheme, isThemeLoading]);
+    applyThemeToDocument(effectiveTheme, selectedCustomTheme);
+  }, [activeSelection, effectiveTheme, selectedCustomTheme, isThemeLoading]);
 
   useEffect(() => {
     if (isThemeLoading) return;

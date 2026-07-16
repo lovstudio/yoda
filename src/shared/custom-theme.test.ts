@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   createCustomThemeCollection,
+  createDreamSkinTheme,
   CUSTOM_THEME_EXAMPLE,
   CUSTOM_THEME_EXAMPLE_FILE_NAME,
   getCustomThemeId,
   parseCustomThemePackageText,
+  resolveThemeMode,
   toCustomThemeSelection,
   type CustomTheme,
 } from './custom-theme';
@@ -46,8 +48,7 @@ describe('custom theme packages', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.theme.id).toBe('solar-light');
-    expect(result.warnings).toEqual([]);
+    expect(result.themes).toEqual([{ theme: validTheme, warnings: [] }]);
   });
 
   it('keeps the downloadable example importable', () => {
@@ -56,8 +57,8 @@ describe('custom theme packages', () => {
     expect(CUSTOM_THEME_EXAMPLE_FILE_NAME).toBe('yoda-theme-example.json');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.theme.id).toBe(CUSTOM_THEME_EXAMPLE.id);
-    expect(result.warnings).toEqual([]);
+    expect(result.themes[0]?.theme.id).toBe(CUSTOM_THEME_EXAMPLE.id);
+    expect(result.themes[0]?.warnings).toEqual([]);
   });
 
   it('normalizes hex colors to lowercase', () => {
@@ -70,15 +71,31 @@ describe('custom theme packages', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.theme.colors.background).toBe('#faf7ef');
+    expect(result.themes[0]?.theme.colors.background).toBe('#faf7ef');
   });
 
-  it('rejects collection imports for v1', () => {
+  it('round-trips a collection of themes', () => {
+    const secondTheme = {
+      ...validTheme,
+      id: 'solar-dark',
+      name: 'Solar Dark',
+      mode: 'dark' as const,
+    };
     const result = parseCustomThemePackageText(
-      JSON.stringify(createCustomThemeCollection([validTheme]))
+      JSON.stringify(createCustomThemeCollection([validTheme, secondTheme]))
     );
 
-    expect(result).toMatchObject({ ok: false, reason: 'collection-unsupported' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.themes.map(({ theme }) => theme.id)).toEqual(['solar-light', 'solar-dark']);
+  });
+
+  it('rejects duplicate themes inside a collection', () => {
+    const result = parseCustomThemePackageText(
+      JSON.stringify(createCustomThemeCollection([validTheme, validTheme]))
+    );
+
+    expect(result).toMatchObject({ ok: false, reason: 'invalid-theme' });
   });
 
   it('warns instead of rejecting low contrast themes', () => {
@@ -95,7 +112,7 @@ describe('custom theme packages', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.warnings).toEqual(
+    expect(result.themes[0]?.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: 'low-contrast',
@@ -112,5 +129,57 @@ describe('custom theme packages', () => {
     expect(selection).toBe('custom:solar-light');
     expect(getCustomThemeId(selection)).toBe('solar-light');
     expect(getCustomThemeId('ylight')).toBeNull();
+  });
+
+  it('resolves the Dream Skin preset as a light theme', () => {
+    expect(
+      resolveThemeMode('ydream', {
+        systemMode: 'dark',
+        systemThemes: { light: 'ylight', dark: 'ydark' },
+        customThemes: [],
+      })
+    ).toBe('light');
+  });
+
+  it('creates an importable image-backed Dream Skin', () => {
+    const skin = createDreamSkinTheme({
+      id: 'dream-ocean',
+      name: 'Ocean Dream',
+      image: 'data:image/png;base64,aA==',
+      imageName: 'ocean.png',
+    });
+    const parsed = parseCustomThemePackageText(JSON.stringify(skin));
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.themes[0]?.theme.skin).toMatchObject({
+      kind: 'dream-skin',
+      imageName: 'ocean.png',
+    });
+  });
+
+  it('rejects executable skin image URLs', () => {
+    const parsed = parseCustomThemePackageText(
+      JSON.stringify({
+        ...validTheme,
+        skin: {
+          kind: 'dream-skin',
+          image: 'javascript:alert(1)',
+          imageName: 'unsafe.png',
+        },
+      })
+    );
+
+    expect(parsed).toMatchObject({ ok: false, reason: 'invalid-theme' });
+  });
+
+  it('resolves the bundled night skin as dark', () => {
+    expect(
+      resolveThemeMode('ydream-night', {
+        systemMode: 'light',
+        systemThemes: { light: 'ylight', dark: 'ydark' },
+        customThemes: [],
+      })
+    ).toBe('dark');
   });
 });

@@ -97,6 +97,8 @@ export const CUSTOM_THEME_CSS_VARIABLES = [
 export function buildCustomThemeCssVars(theme: CustomTheme): CssVarMap {
   const c = theme.colors;
   const isDark = theme.mode === 'dark';
+  const surface = (color: string, opacity: number) =>
+    theme.skin ? transparent(color, opacity) : color;
   const destructiveBg = mix(c.diffDeleted, c.background, isDark ? 0.24 : 0.1);
   const destructiveBg1 = mix(c.diffDeleted, c.background, isDark ? 0.3 : 0.16);
   const destructiveMuted = mix(c.diffDeleted, c.foregroundMuted, 0.72);
@@ -111,31 +113,31 @@ export function buildCustomThemeCssVars(theme: CustomTheme): CssVarMap {
   const quaternaryBg = isDark ? c.background1 : mix('#ffffff', c.background, 0.75);
 
   return {
-    '--background': c.background,
-    '--background-1': c.background1,
-    '--background-2': c.background2,
-    '--background-3': c.background3,
+    '--background': surface(c.background, isDark ? 0.88 : 0.86),
+    '--background-1': surface(c.background1, 0.9),
+    '--background-2': surface(c.background2, 0.91),
+    '--background-3': surface(c.background3, 0.9),
     '--foreground': c.foreground,
     '--foreground-inverse': c.background,
     '--foreground-muted': c.foregroundMuted,
     '--foreground-passive': c.foregroundPassive,
-    '--background-secondary': isDark ? c.background : c.background1,
-    '--background-secondary-1': isDark ? c.background1 : c.background,
-    '--background-secondary-2': c.background2,
-    '--background-secondary-3': c.background3,
+    '--background-secondary': surface(isDark ? c.background : c.background1, 0.88),
+    '--background-secondary-1': surface(isDark ? c.background1 : c.background, 0.9),
+    '--background-secondary-2': surface(c.background2, 0.9),
+    '--background-secondary-3': surface(c.background3, 0.9),
     '--foreground-secondary': c.foreground,
     '--foreground-secondary-muted': c.foregroundMuted,
     '--foreground-secondary-passive': c.foregroundPassive,
-    '--background-tertiary': tertiaryBg,
-    '--background-tertiary-1': tertiaryBg1,
-    '--background-tertiary-2': tertiaryBg2,
-    '--background-tertiary-3': tertiaryBg3,
+    '--background-tertiary': surface(tertiaryBg, 0.76),
+    '--background-tertiary-1': surface(tertiaryBg1, 0.82),
+    '--background-tertiary-2': surface(tertiaryBg2, 0.86),
+    '--background-tertiary-3': surface(tertiaryBg3, 0.9),
     '--foreground-tertiary': c.foreground,
     '--foreground-tertiary-muted': c.foregroundMuted,
     '--foreground-tertiary-passive': c.foregroundPassive,
-    '--background-quaternary': quaternaryBg,
-    '--background-quaternary-1': isDark ? c.background2 : c.background1,
-    '--background-quaternary-2': isDark ? c.background3 : c.background2,
+    '--background-quaternary': surface(quaternaryBg, 0.96),
+    '--background-quaternary-1': surface(isDark ? c.background2 : c.background1, 0.97),
+    '--background-quaternary-2': surface(isDark ? c.background3 : c.background2, 0.97),
     '--background-destructive': destructiveBg,
     '--background-destructive-1': destructiveBg1,
     '--foreground-destructive': c.diffDeleted,
@@ -205,7 +207,7 @@ export function buildCustomThemeCssVars(theme: CustomTheme): CssVarMap {
 
 export function getCustomThemeFingerprint(theme: CustomTheme | undefined): string {
   if (!theme) return 'builtin';
-  return `${theme.id}:${theme.mode}:${Object.values(theme.colors).join(':')}`;
+  return `${theme.id}:${theme.mode}:${Object.values(theme.colors).join(':')}:${JSON.stringify(theme.skin ?? null)}`;
 }
 
 function mix(foreground: string, background: string, foregroundWeight: number): string {
