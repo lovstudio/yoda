@@ -120,7 +120,6 @@ export const SETTINGS_DEFAULTS = {
     autoRightSidebarBehavior: false,
     dockSessionHistory: true,
     dockSessionHistoryRows: 3,
-    dockSessionHistoryMode: 'list' as const,
   },
   browserPreview: {
     enabled: true,

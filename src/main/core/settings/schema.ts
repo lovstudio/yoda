@@ -377,8 +377,6 @@ export const interfaceSettingsSchema = z.object({
   dockSessionHistory: z.boolean(),
   /** Number of latest prompts shown after the first prompt in the docked history preview. */
   dockSessionHistoryRows: z.number().int().min(1).max(20),
-  /** Presentation used by the docked history: active path only or the complete branch tree. */
-  dockSessionHistoryMode: z.enum(['list', 'tree']),
 });
 
 export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });
