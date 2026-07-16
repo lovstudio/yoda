@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.3
+
+### Patch Changes
+
+- 修复 macOS 增量更新失败后被误报为完整包遭拒的问题，并将 Sparkle 更新资源固定到所属版本的发布地址。
+
 ## Unreleased
 
 ## 0.16.2
