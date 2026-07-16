@@ -61,6 +61,12 @@ const DREAM_SKIN_BUTTONS = [
     image: 'builtin:dream-bloom',
   },
   {
+    value: 'ydream-arina',
+    label: 'yodaDreamArina',
+    aria: 'ariaDreamArina',
+    image: 'builtin:dream-bloom',
+  },
+  {
     value: 'ydream-night',
     label: 'yodaDreamNight',
     aria: 'ariaDreamNight',

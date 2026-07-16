@@ -185,6 +185,18 @@ describe('custom theme packages', () => {
     ).toBe('dark');
   });
 
+  it('ships the Arina Hashimoto custom preset as a native light skin', () => {
+    expect(BUILT_IN_DREAM_SKIN_THEMES['ydream-arina']).toMatchObject({
+      name: '桥本有菜专属定制',
+      mode: 'light',
+      skin: {
+        image: 'builtin:dream-bloom',
+        brandSubtitle: '桥本有菜 专属定制皮肤',
+        statusText: 'ARINA CUSTOM ONLINE',
+      },
+    });
+  });
+
   it('ships the eight upstream gallery moods as native built-in skins', () => {
     const galleryThemes = [
       'ydream',

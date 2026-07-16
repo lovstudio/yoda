@@ -25,6 +25,7 @@ export type BuiltInTheme =
   | 'ygreen'
   | 'ylight2'
   | 'ydream'
+  | 'ydream-arina'
   | 'ydream-night'
   | 'ydream-fortune'
   | 'ydream-scifi'
@@ -381,6 +382,34 @@ export const YODA_DREAM_NIGHT_THEME: CustomTheme = {
   },
 };
 
+export const YODA_DREAM_ARINA_THEME = createBuiltInDreamVariant({
+  id: 'ydream-arina',
+  name: '桥本有菜专属定制',
+  mode: 'light',
+  image: 'builtin:dream-bloom',
+  imageName: 'dream-bloom.svg',
+  brandSubtitle: '桥本有菜 专属定制皮肤',
+  tagline: '在玫瑰与灵感之间，创造只属于你的作品。',
+  statusText: 'ARINA CUSTOM ONLINE',
+  colors: {
+    background: '#fff7f5',
+    background1: '#fffdfb',
+    background2: '#fceeed',
+    background3: '#f5d9dc',
+    foreground: '#382328',
+    foregroundMuted: '#84656c',
+    foregroundPassive: '#b28f96',
+    border: '#f0d6d8',
+    border1: '#dfb9bf',
+    border2: '#c98d98',
+    primaryButtonBackground: '#db6d82',
+    primaryButtonBackgroundHover: '#bf5068',
+    primaryButtonBorder: '#bf5068',
+    statusInReview: '#b96391',
+    diffModified: '#c78c4a',
+  },
+});
+
 function createBuiltInDreamVariant(input: {
   id: Exclude<DreamSkinBuiltInTheme, 'ydream' | 'ydream-night'>;
   name: string;
@@ -613,6 +642,7 @@ export const YODA_DREAM_GOLD_THEME = createBuiltInDreamVariant({
 
 export const BUILT_IN_DREAM_SKIN_THEMES: Record<DreamSkinBuiltInTheme, CustomTheme> = {
   ydream: YODA_DREAM_THEME,
+  'ydream-arina': YODA_DREAM_ARINA_THEME,
   'ydream-night': YODA_DREAM_NIGHT_THEME,
   'ydream-fortune': YODA_DREAM_FORTUNE_THEME,
   'ydream-scifi': YODA_DREAM_SCIFI_THEME,
@@ -698,6 +728,7 @@ const BUILT_IN_THEME_MODES: Record<BuiltInTheme, CustomThemeMode> = {
   ygreen: 'dark',
   ylight2: 'light',
   ydream: 'light',
+  'ydream-arina': 'light',
   'ydream-night': 'dark',
   'ydream-fortune': 'dark',
   'ydream-scifi': 'light',

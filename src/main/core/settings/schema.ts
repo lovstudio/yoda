@@ -268,6 +268,7 @@ const legacyThemeSchema = z
     'ygreen',
     'ylight2',
     'ydream',
+    'ydream-arina',
     'ydream-night',
     'ydream-fortune',
     'ydream-scifi',

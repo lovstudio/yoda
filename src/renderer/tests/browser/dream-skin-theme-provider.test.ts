@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createDreamSkinTheme,
+  YODA_DREAM_ARINA_THEME,
   YODA_DREAM_GOLD_THEME,
   YODA_DREAM_THEME,
 } from '@shared/custom-theme';
@@ -37,6 +38,16 @@ describe('Dream Skin document theme', () => {
     const root = document.documentElement;
     expect(root.style.getPropertyValue('--dream-skin-art')).toContain('dream-bloom.svg');
     expect(root.style.getPropertyValue('--dream-skin-subtitle')).toContain('YODA DREAM SKIN');
+  });
+
+  it('applies the Arina Hashimoto custom branding and floral artwork', () => {
+    applyThemeToDocument('ylight', YODA_DREAM_ARINA_THEME);
+
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue('--dream-skin-art')).toContain('dream-bloom.svg');
+    expect(root.style.getPropertyValue('--dream-skin-brand')).toContain('桥本有菜专属定制');
+    expect(root.style.getPropertyValue('--dream-skin-subtitle')).toContain('桥本有菜 专属定制皮肤');
+    expect(root.style.getPropertyValue('--dream-skin-status')).toContain('ARINA CUSTOM ONLINE');
   });
 
   it('resolves a bundled gallery skin to its packaged artwork', () => {
