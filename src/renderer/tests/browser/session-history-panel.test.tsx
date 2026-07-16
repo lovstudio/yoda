@@ -139,6 +139,10 @@ describe('DockedSessionHistory conversation tree menu', () => {
     expect(mocks.update).not.toHaveBeenCalled();
     expect(host.textContent).toContain('current path prompt');
     expect(document.querySelector('[data-session-prompt-tree]')?.textContent).toBe('tree path');
+    expect(document.body.textContent).toContain(
+      'tasks.bottomPanel.sessionTreeSingleConversationDescription'
+    );
+    expect(document.body.textContent).toContain('tasks.bottomPanel.sessionTreeSummary');
     expect(mocks.useSessionPrompts).toHaveBeenLastCalledWith(true);
     expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(true);
   });

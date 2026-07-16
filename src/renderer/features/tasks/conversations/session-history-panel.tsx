@@ -197,7 +197,7 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
   };
 
   const treePromptCount = countSessionPromptTreeNodes(promptTree.tree);
-  const treeBranchCount = promptTree.tree?.lineageConversations.length ?? 0;
+  const treeConversationCount = promptTree.tree?.lineageConversations.length ?? 0;
 
   return (
     <div className="flex shrink-0 flex-col border-t border-border-primary/60 bg-background">
@@ -286,7 +286,11 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
                   {t('tasks.bottomPanel.sessionTreeTitle')}
                 </PopoverTitle>
                 <PopoverDescription className="mt-0.5 text-[11px] leading-4">
-                  {t('tasks.bottomPanel.sessionTreeDescription')}
+                  {t(
+                    promptTree.tree && treeConversationCount <= 1
+                      ? 'tasks.bottomPanel.sessionTreeSingleConversationDescription'
+                      : 'tasks.bottomPanel.sessionTreeDescription'
+                  )}
                 </PopoverDescription>
               </div>
               <PopoverClose
@@ -300,7 +304,7 @@ export const DockedSessionHistory = observer(function DockedSessionHistory() {
               <span className="font-mono text-[10px] tabular-nums text-foreground-passive">
                 {t('tasks.bottomPanel.sessionTreeSummary', {
                   promptCount: treePromptCount,
-                  branchCount: treeBranchCount,
+                  conversationCount: treeConversationCount,
                 })}
               </span>
             ) : null}
