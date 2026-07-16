@@ -25,4 +25,29 @@ describe('custom theme CSS variables', () => {
     expect(vars['--xterm-bg']).toBe(theme.colors.background);
     expect(vars['--monaco-bg']).toBe(theme.colors.background);
   });
+
+  it('uses the composition overlay setting to control IDE panel opacity', () => {
+    const soft = createDreamSkinTheme({
+      id: 'dream-soft',
+      name: 'Dream Soft',
+      image: 'data:image/png;base64,aA==',
+      imageName: 'soft.png',
+      skin: { imageTreatment: { overlayStrength: 0.1 } },
+    });
+    const strong = createDreamSkinTheme({
+      id: 'dream-strong',
+      name: 'Dream Strong',
+      image: 'data:image/png;base64,aA==',
+      imageName: 'strong.png',
+      skin: { imageTreatment: { overlayStrength: 0.8 } },
+    });
+
+    const softAlpha = Number(
+      buildCustomThemeCssVars(soft)['--background']?.match(/, ([\d.]+)\)$/)?.[1]
+    );
+    const strongAlpha = Number(
+      buildCustomThemeCssVars(strong)['--background']?.match(/, ([\d.]+)\)$/)?.[1]
+    );
+    expect(strongAlpha).toBeGreaterThan(softAlpha);
+  });
 });

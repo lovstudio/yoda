@@ -5,6 +5,7 @@ import {
   Leaf,
   Monitor,
   Moon,
+  Pencil,
   Sprout,
   Sun,
   Sunset,
@@ -32,6 +33,11 @@ import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { dreamSkinBackgroundImage } from '@renderer/lib/providers/dream-skin-assets';
+import {
+  analyzeDreamSkinImage,
+  humanizeDreamSkinFileName,
+  suggestDreamSkinDecoration,
+} from '@renderer/lib/providers/dream-skin-palette';
 import { Button } from '@renderer/lib/ui/button';
 import {
   Select,
@@ -126,6 +132,7 @@ const ThemeCard: React.FC = () => {
     useAppSettingsKey('systemThemes');
   const { toast } = useToast();
   const showConfirm = useShowModal('confirmActionModal');
+  const showSkinEditor = useShowModal('dreamSkinEditorModal');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const customThemes = useMemo(() => customThemesValue?.items ?? [], [customThemesValue?.items]);
@@ -309,17 +316,40 @@ const ThemeCard: React.FC = () => {
 
       try {
         const image = await readFileAsDataUrl(file);
-        const baseName =
-          file.name.replace(/\.[^.]+$/, '').trim() || t('settings.theme.untitledSkin');
+        const analysis = await analyzeDreamSkinImage(image);
+        const baseName = humanizeDreamSkinFileName(file.name) || t('settings.theme.untitledSkin');
         const id = `dream-${safeFileName(baseName).slice(0, 36)}-${Date.now().toString(36)}`;
         const nextTheme = createDreamSkinTheme({
           id,
           name: baseName,
           image,
           imageName: file.name,
+          mode: analysis.mode,
+          colors: analysis.colors,
+          skin: {
+            brandSubtitle: `${baseName.toUpperCase()} · YODA DREAM SKIN`,
+            tagline: t('settings.theme.skinDefaultTagline'),
+            statusText: t('settings.theme.skinDefaultStatus'),
+            quote: baseName.toUpperCase(),
+            decorations: {
+              preset: suggestDreamSkinDecoration(analysis.accent),
+              density: 0.55,
+              motion: true,
+            },
+            provenance: {
+              source: 'local',
+              sourceLabel: file.name,
+              rightsConfirmed: false,
+            },
+          },
         });
-        saveImportedThemes([nextTheme]);
-        handleSetTheme(toCustomThemeSelection(nextTheme.id));
+        showSkinEditor({
+          initialTheme: nextTheme,
+          onSuccess: (editedTheme) => {
+            saveImportedThemes([editedTheme]);
+            handleSetTheme(toCustomThemeSelection(editedTheme.id));
+          },
+        });
       } catch (error) {
         toast({
           title: t('settings.theme.skinImportFailed'),
@@ -328,7 +358,23 @@ const ThemeCard: React.FC = () => {
         });
       }
     },
-    [handleSetTheme, saveImportedThemes, t, toast]
+    [handleSetTheme, saveImportedThemes, showSkinEditor, t, toast]
+  );
+
+  const handleEditSkin = useCallback(
+    (item: CustomTheme) => {
+      if (!item.skin) return;
+      showSkinEditor({
+        initialTheme: item,
+        onSuccess: (editedTheme) => {
+          saveImportedThemes([editedTheme]);
+          if (selectedCustomThemeId === editedTheme.id) {
+            handleSetTheme(toCustomThemeSelection(editedTheme.id));
+          }
+        },
+      });
+    },
+    [handleSetTheme, saveImportedThemes, selectedCustomThemeId, showSkinEditor]
   );
 
   const handleDeleteTheme = useCallback(
@@ -628,6 +674,14 @@ const ThemeCard: React.FC = () => {
                     </span>
                   </button>
                   <div className="flex items-center gap-1 px-2">
+                    {item.skin ? (
+                      <IconButton
+                        label={t('settings.theme.editTheme', { name: item.name })}
+                        onClick={() => handleEditSkin(item)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                      </IconButton>
+                    ) : null}
                     <IconButton
                       label={t('settings.theme.exportTheme', { name: item.name })}
                       onClick={() => exportTheme(item)}

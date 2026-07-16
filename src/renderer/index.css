@@ -410,32 +410,121 @@
 .ydream [data-yoda-surface='workspace'] {
   position: relative;
   isolation: isolate;
+  overflow: hidden;
   background:
     radial-gradient(circle at 76% 8%, rgb(255 255 255 / 0.82), transparent 34%),
     linear-gradient(135deg, var(--background-1), var(--background-2));
+}
+
+.ydream [data-yoda-surface='workspace']::before {
+  position: absolute;
+  z-index: 0;
+  inset: -3%;
+  background-image: var(--dream-skin-art);
+  background-position: var(--dream-skin-position-x, 50%) var(--dream-skin-position-y, 50%);
+  background-size: cover;
+  content: '';
+  filter: blur(var(--dream-skin-blur, 0));
+  opacity: var(--dream-skin-workspace-opacity, 0.17);
+  pointer-events: none;
+  transform: scale(var(--dream-skin-zoom, 1));
+  transform-origin: var(--dream-skin-position-x, 50%) var(--dream-skin-position-y, 50%);
+}
+
+.ydream[data-dream-extend='off'] [data-yoda-surface='workspace']::before {
+  display: none;
 }
 
 .ydream [data-yoda-surface='workspace']::after {
   position: absolute;
   z-index: 0;
   inset: 0;
-  background-image:
-    radial-gradient(
-      circle,
-      color-mix(in srgb, var(--primary-button-background) 38%, transparent) 0 1px,
-      transparent 1.8px
-    ),
-    radial-gradient(circle, rgb(255 255 255 / 0.74) 0 1px, transparent 1.7px);
-  background-position:
-    0 0,
-    29px 37px;
-  background-size:
-    79px 79px,
-    97px 97px;
   content: '';
-  opacity: 0.42;
+  opacity: var(--dream-skin-decoration-opacity, 0.48);
   pointer-events: none;
   animation: dream-skin-drift 18s linear infinite;
+}
+
+.ydream[data-dream-decoration='none'] [data-yoda-surface='workspace']::after {
+  display: none;
+}
+
+.ydream[data-dream-decoration='stars'] [data-yoda-surface='workspace']::after {
+  background-image:
+    radial-gradient(circle, var(--primary-button-background) 0 1px, transparent 1.8px),
+    radial-gradient(circle, rgb(255 255 255 / 0.78) 0 1px, transparent 1.7px),
+    radial-gradient(circle, var(--status-in-review) 0 1.5px, transparent 2.1px);
+  background-position:
+    0 0,
+    29px 37px,
+    17px 61px;
+  background-size:
+    79px 79px,
+    97px 97px,
+    131px 131px;
+}
+
+.ydream[data-dream-decoration='petals'] [data-yoda-surface='workspace']::after {
+  background-image:
+    radial-gradient(ellipse, var(--primary-button-background) 0 1.5px, transparent 2.5px),
+    radial-gradient(ellipse, var(--status-in-review) 0 2px, transparent 3px);
+  background-position:
+    6px 12px,
+    44px 58px;
+  background-size:
+    83px 113px,
+    127px 157px;
+  filter: blur(0.25px);
+}
+
+.ydream[data-dream-decoration='embers'] [data-yoda-surface='workspace']::after {
+  background-image:
+    radial-gradient(circle, var(--primary-button-background) 0 1.5px, transparent 2.8px),
+    radial-gradient(circle, var(--status-in-progress) 0 1px, transparent 2px);
+  background-position:
+    0 100%,
+    33px 89%;
+  background-size:
+    91px 137px,
+    127px 173px;
+  filter: drop-shadow(0 0 5px var(--primary-button-background));
+  animation-name: dream-skin-embers;
+}
+
+.ydream[data-dream-decoration='orbit'] [data-yoda-surface='workspace']::after {
+  inset: 8% 5% auto auto;
+  width: min(44rem, 60vw);
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, var(--primary-button-background) 22%, transparent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 72% 14%, var(--primary-button-background) 0 3px, transparent 4px),
+    radial-gradient(
+      circle at center,
+      transparent 54%,
+      var(--status-in-review) 54.2%,
+      transparent 55%
+    );
+  animation-name: dream-skin-orbit;
+}
+
+.ydream[data-dream-decoration='glow'] [data-yoda-surface='workspace']::after {
+  background:
+    radial-gradient(
+      circle at 82% 14%,
+      color-mix(in srgb, var(--primary-button-background) 40%, transparent),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 16% 82%,
+      color-mix(in srgb, var(--status-in-review) 28%, transparent),
+      transparent 24%
+    );
+  animation-name: dream-skin-breathe;
+}
+
+.ydream[data-dream-motion='off'] [data-yoda-surface='workspace']::after {
+  animation: none;
 }
 
 .ydream [data-yoda-surface='workspace'] > * {
@@ -515,6 +604,24 @@
   background: color-mix(in srgb, var(--background-1) 86%, transparent);
   box-shadow: 0 10px 30px rgb(104 35 48 / 0.08);
   backdrop-filter: blur(10px) saturate(108%);
+}
+
+.ydream [data-slot='dialog-content'],
+.ydream [data-slot='popover-content'],
+.ydream [data-slot='select-content'] {
+  border-color: color-mix(in srgb, var(--primary-button-background) 18%, var(--border));
+  background-color: color-mix(in srgb, var(--background-quaternary) 94%, transparent);
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--background) 60%, transparent);
+  backdrop-filter: blur(22px) saturate(118%);
+}
+
+.ydream ::selection {
+  background: color-mix(in srgb, var(--primary-button-background) 42%, transparent);
+  color: var(--foreground);
+}
+
+.ydream *::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--primary-button-background) 34%, transparent);
 }
 
 .ydream [data-yoda-surface='composer'] {
@@ -615,24 +722,53 @@
   padding: clamp(5.25rem, 9vh, 7rem) clamp(2.5rem, 6cqw, 6.5rem) 13.5rem;
   border: 1px solid color-mix(in srgb, var(--primary-button-background) 38%, transparent);
   border-radius: 26px;
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--background-1) 98%, transparent) 0%,
-      color-mix(in srgb, var(--background-1) 88%, transparent) 34%,
-      color-mix(in srgb, var(--background-2) 26%, transparent) 58%,
-      transparent 78%
-    ),
-    var(--dream-skin-art) center / cover no-repeat;
+  background: var(--background-1);
   box-shadow:
     0 20px 48px color-mix(in srgb, var(--primary-button-background) 18%, transparent),
     inset 0 0 0 3px rgb(255 255 255 / 0.38);
   text-align: left;
 }
 
+.ydream [data-yoda-surface='home-hero']::before {
+  position: absolute;
+  z-index: 0;
+  inset: -3%;
+  background-image: var(--dream-skin-art);
+  background-position: var(--dream-skin-position-x, 50%) var(--dream-skin-position-y, 50%);
+  background-size: cover;
+  content: '';
+  filter: blur(var(--dream-skin-blur, 0));
+  opacity: var(--dream-skin-art-opacity, 1);
+  transform: scale(var(--dream-skin-zoom, 1));
+  transform-origin: var(--dream-skin-position-x, 50%) var(--dream-skin-position-y, 50%);
+}
+
+.ydream [data-yoda-surface='home-hero']::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--background-1) var(--dream-skin-overlay-strong, 80%), transparent) 0%,
+    color-mix(in srgb, var(--background-1) var(--dream-skin-overlay-weak, 58%), transparent) 40%,
+    transparent 82%
+  );
+  content: '';
+  pointer-events: none;
+}
+
+.ydream[data-dream-text-side='right'] [data-yoda-surface='home-hero']::after {
+  background: linear-gradient(
+    270deg,
+    color-mix(in srgb, var(--background-1) var(--dream-skin-overlay-strong, 80%), transparent) 0%,
+    color-mix(in srgb, var(--background-1) var(--dream-skin-overlay-weak, 58%), transparent) 40%,
+    transparent 82%
+  );
+}
+
 .ydream [data-yoda-surface='home-hero'] > * {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .ydream [data-yoda-surface='home-hero'] > div:not(.dream-skin-status) {
@@ -661,6 +797,36 @@
   font-weight: 650;
   line-height: 1.18;
   text-shadow: 0 1px 16px rgb(255 255 255 / 0.88);
+}
+
+.ydream[data-dream-text-side='right'] [data-yoda-surface='home-hero'] > div,
+.ydream[data-dream-text-side='right'] [data-yoda-surface='home-hero'] h1,
+.ydream[data-dream-text-side='right'] [data-yoda-surface='home-hero'] .dream-skin-tagline {
+  align-self: flex-end;
+  margin-right: 0;
+  margin-left: auto;
+  text-align: right;
+}
+
+.ydream[data-dream-overlay-copy='off']
+  [data-yoda-surface='home-hero']
+  > div:not(.dream-skin-status),
+.ydream[data-dream-overlay-copy='off'] [data-yoda-surface='home-hero'] h1,
+.ydream[data-dream-overlay-copy='off'] [data-yoda-surface='home-hero'] .dream-skin-tagline {
+  visibility: hidden;
+}
+
+.ydream[data-dream-typography='sans'] [data-yoda-surface='home-hero'] h1,
+.ydream[data-dream-typography='sans'] .dream-skin-tagline,
+.ydream[data-dream-typography='sans'] [data-yoda-surface='dream-actions'] strong {
+  font-family: var(--font-sans);
+}
+
+.ydream[data-dream-typography='serif']
+  [data-yoda-surface='home-hero']
+  > div:not(.dream-skin-status)::after {
+  font-family: ui-serif, 'Songti SC', 'STSong', serif;
+  font-style: italic;
 }
 
 .ydream .dream-skin-tagline {
@@ -870,18 +1036,33 @@
 }
 
 .ydream[data-dream-shell='dark'] [data-yoda-surface='home-hero'] {
-  background:
-    linear-gradient(
-      90deg,
-      rgb(5 9 14 / 0.98) 0%,
-      rgb(10 17 25 / 0.93) 38%,
-      rgb(21 18 29 / 0.58) 62%,
-      transparent 82%
-    ),
-    var(--dream-skin-art) center / cover no-repeat;
+  background: var(--background-1);
   box-shadow:
     0 18px 42px rgb(0 0 0 / 0.36),
     inset 0 0 0 3px rgb(255 255 255 / 0.04);
+}
+
+.ydream[data-dream-shell='dark'] [data-yoda-surface='home-hero']::after {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--background-1) var(--dream-skin-overlay-dark-strong, 84%), transparent)
+      0%,
+    color-mix(in srgb, var(--background-1) var(--dream-skin-overlay-dark-weak, 63%), transparent)
+      42%,
+    transparent 84%
+  );
+}
+
+.ydream[data-dream-shell='dark'][data-dream-text-side='right']
+  [data-yoda-surface='home-hero']::after {
+  background: linear-gradient(
+    270deg,
+    color-mix(in srgb, var(--background-1) var(--dream-skin-overlay-dark-strong, 84%), transparent)
+      0%,
+    color-mix(in srgb, var(--background-1) var(--dream-skin-overlay-dark-weak, 63%), transparent)
+      42%,
+    transparent 84%
+  );
 }
 
 .ydream[data-dream-shell='dark'] [data-yoda-surface='home-hero'] h1 {
@@ -932,6 +1113,79 @@
   }
 }
 
+@keyframes dream-skin-embers {
+  from {
+    background-position:
+      0 100%,
+      33px 89%;
+  }
+  to {
+    background-position:
+      17px -137px,
+      8px -173px;
+  }
+}
+
+@keyframes dream-skin-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes dream-skin-breathe {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.62;
+    transform: scale(1.03);
+  }
+}
+
+[data-dream-decoration='petals'] > .dream-skin-editor-decoration,
+[data-dream-decoration='stars'] > .dream-skin-editor-decoration,
+[data-dream-decoration='embers'] > .dream-skin-editor-decoration {
+  background-image:
+    radial-gradient(circle, var(--primary-button-background) 0 1.5px, transparent 2.5px),
+    radial-gradient(circle, var(--status-in-review) 0 1px, transparent 2px);
+  background-position:
+    0 0,
+    31px 47px;
+  background-size:
+    61px 61px,
+    89px 89px;
+  animation: dream-skin-drift 18s linear infinite;
+}
+
+[data-dream-decoration='embers'] > .dream-skin-editor-decoration {
+  filter: drop-shadow(0 0 4px var(--primary-button-background));
+  animation-name: dream-skin-embers;
+}
+
+[data-dream-decoration='orbit'] > .dream-skin-editor-decoration {
+  inset: 12% 8% auto auto;
+  width: 45%;
+  aspect-ratio: 1;
+  border: 1px solid var(--primary-button-background);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 72% 14%,
+    var(--primary-button-background) 0 3px,
+    transparent 4px
+  );
+  animation: dream-skin-orbit 18s linear infinite;
+}
+
+[data-dream-decoration='glow'] > .dream-skin-editor-decoration {
+  background: radial-gradient(circle at 78% 18%, var(--primary-button-background), transparent 34%);
+  animation: dream-skin-breathe 6s ease-in-out infinite;
+}
+
 @keyframes dream-skin-pulse {
   0%,
   100% {
@@ -946,7 +1200,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ydream [data-yoda-surface='workspace']::after,
-  .ydream .dream-skin-status span {
+  .ydream .dream-skin-status span,
+  .dream-skin-editor-decoration {
     animation: none;
   }
 }

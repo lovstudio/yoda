@@ -24,12 +24,24 @@ const DREAM_VARIABLES = [
   '--dream-skin-tagline',
   '--dream-skin-status',
   '--dream-skin-quote',
+  '--dream-skin-position-x',
+  '--dream-skin-position-y',
+  '--dream-skin-zoom',
+  '--dream-skin-overlay',
+  '--dream-skin-blur',
+  '--dream-skin-art-opacity',
 ] as const;
 
 afterEach(() => {
   const root = document.documentElement;
   root.classList.remove('ylight', 'ydark', 'ydream');
   root.removeAttribute('data-dream-shell');
+  root.removeAttribute('data-dream-decoration');
+  root.removeAttribute('data-dream-motion');
+  root.removeAttribute('data-dream-typography');
+  root.removeAttribute('data-dream-text-side');
+  root.removeAttribute('data-dream-extend');
+  root.removeAttribute('data-dream-overlay-copy');
   root.removeAttribute('style');
 });
 
@@ -69,6 +81,7 @@ describe('Dream Skin document theme', () => {
 
     const root = document.documentElement;
     expect(root.dataset.dreamShell).toBe('dark');
+    expect(root.dataset.dreamDecoration).toBe('glow');
     expect(root.style.getPropertyValue('--dream-skin-art')).toContain('data:image/svg+xml');
     expect(root.style.getPropertyValue('--dream-skin-brand')).toContain('Stage Black Gold');
   });
@@ -79,6 +92,10 @@ describe('Dream Skin document theme', () => {
       name: 'Browser Dream',
       image: 'data:image/png;base64,aA==',
       imageName: 'browser.png',
+      skin: {
+        imageTreatment: { positionX: 72, positionY: 34, zoom: 1.4, textSide: 'right' },
+        decorations: { preset: 'embers', density: 0.8, motion: false },
+      },
     });
 
     applyThemeToDocument('ylight', theme);
@@ -87,6 +104,13 @@ describe('Dream Skin document theme', () => {
     expect(root.classList.contains('ylight')).toBe(true);
     expect(root.classList.contains('ydream')).toBe(true);
     expect(root.dataset.dreamShell).toBe('light');
+    expect(root.dataset.dreamDecoration).toBe('embers');
+    expect(root.dataset.dreamMotion).toBe('off');
+    expect(root.dataset.dreamTextSide).toBe('right');
+    expect(root.dataset.dreamExtend).toBe('on');
+    expect(root.style.getPropertyValue('--dream-skin-position-x')).toBe('72%');
+    expect(root.style.getPropertyValue('--dream-skin-position-y')).toBe('34%');
+    expect(root.style.getPropertyValue('--dream-skin-zoom')).toBe('1.4');
     expect(root.style.getPropertyValue('--dream-skin-art')).toContain('data:image/png;base64,aA==');
     expect(root.style.getPropertyValue('--dream-skin-brand')).toContain('Browser Dream');
     expect(root.style.getPropertyValue('--background')).toMatch(/^rgba\(/);
@@ -95,6 +119,7 @@ describe('Dream Skin document theme', () => {
 
     expect(root.classList.contains('ydream')).toBe(false);
     expect(root.dataset.dreamShell).toBeUndefined();
+    expect(root.dataset.dreamDecoration).toBeUndefined();
     for (const variable of DREAM_VARIABLES) {
       expect(root.style.getPropertyValue(variable)).toBe('');
     }

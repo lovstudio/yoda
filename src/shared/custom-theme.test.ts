@@ -157,6 +157,81 @@ describe('custom theme packages', () => {
     expect(parsed.themes[0]?.theme.skin).toMatchObject({
       kind: 'dream-skin',
       imageName: 'ocean.png',
+      imageTreatment: {
+        positionX: 50,
+        positionY: 50,
+        zoom: 1,
+        showOverlayCopy: true,
+        extendToWorkspace: true,
+      },
+      decorations: { preset: 'petals', density: 0.55, motion: true },
+    });
+    expect(parsed.themes[0]?.theme.schemaVersion).toBe(2);
+  });
+
+  it('upgrades a schema v1 skin with v2 composition defaults while importing', () => {
+    const parsed = parseCustomThemePackageText(
+      JSON.stringify({
+        ...validTheme,
+        skin: {
+          kind: 'dream-skin',
+          image: 'data:image/png;base64,aA==',
+          imageName: 'legacy.png',
+        },
+      })
+    );
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.themes[0]?.theme.skin).toMatchObject({
+      imageTreatment: { positionX: 50, positionY: 50, overlayStrength: 0.34 },
+      decorations: { preset: 'glow', density: 0.55, motion: true },
+      typography: 'editorial',
+    });
+  });
+
+  it('round-trips Dream Skin v2 composition, decorations, and provenance', () => {
+    const theme = createDreamSkinTheme({
+      id: 'dream-v2',
+      name: 'Dream V2',
+      image: 'data:image/png;base64,aA==',
+      imageName: 'v2.png',
+      mode: 'dark',
+      skin: {
+        imageTreatment: {
+          positionX: 72,
+          positionY: 38,
+          zoom: 1.35,
+          overlayStrength: 0.52,
+          textSide: 'right',
+          showOverlayCopy: false,
+        },
+        decorations: { preset: 'embers', density: 0.8, motion: false },
+        provenance: {
+          source: 'local',
+          sourceLabel: 'licensed-art.png',
+          rightsConfirmed: true,
+        },
+      },
+    });
+    const parsed = parseCustomThemePackageText(JSON.stringify(theme));
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.themes[0]?.theme).toMatchObject({
+      schemaVersion: 2,
+      mode: 'dark',
+      skin: {
+        imageTreatment: {
+          positionX: 72,
+          positionY: 38,
+          zoom: 1.35,
+          textSide: 'right',
+          showOverlayCopy: false,
+        },
+        decorations: { preset: 'embers', density: 0.8, motion: false },
+        provenance: { source: 'local', rightsConfirmed: true },
+      },
     });
   });
 

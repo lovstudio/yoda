@@ -18,6 +18,7 @@ import { ManageQuickActionsModal } from '@renderer/features/projects/components/
 import { RenameProjectModal } from '@renderer/features/projects/components/rename-project-modal';
 import { ShareProjectConfigModal } from '@renderer/features/projects/components/settings-view/share-project-config-modal';
 import { LeakedPromptViewerModal } from '@renderer/features/prompt-library/leaked-prompt-viewer-modal';
+import { DreamSkinEditorModal } from '@renderer/features/settings/components/DreamSkinEditorModal';
 import { CreateSkillModal } from '@renderer/features/skills/components/CreateSkillModal';
 import { ForkSkillModal } from '@renderer/features/skills/components/ForkSkillModal';
 import { ReviseSkillModal } from '@renderer/features/skills/components/ReviseSkillModal';
@@ -105,6 +106,7 @@ export const modalRegistry = {
   manageRunScriptsModal: createModal(ManageRunScriptsModal, { size: 'md' }),
   manageQuickActionsModal: createModal(ManageQuickActionsModal, { size: 'md' }),
   integrationSetupModal: createModal(IntegrationSetupModal, { size: 'md' }),
+  dreamSkinEditorModal: createModal(DreamSkinEditorModal, { size: 'xl' }),
   addRemoteModal: createModal(AddRemoteModal),
   quitAgentSessionsModal: createModal(QuitAgentSessionsModal, { size: 'md' }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

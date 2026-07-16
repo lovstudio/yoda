@@ -1,6 +1,6 @@
 import z from 'zod';
 
-export const CUSTOM_THEME_SCHEMA_VERSION = 1;
+export const CUSTOM_THEME_SCHEMA_VERSION = 2;
 export const CUSTOM_THEME_SELECTION_PREFIX = 'custom:';
 export const CUSTOM_THEME_EXAMPLE_FILE_NAME = 'yoda-theme-example.json';
 export const DREAM_SKIN_BUILTIN_IMAGES = [
@@ -40,6 +40,7 @@ export type DreamSkinBuiltInTheme = Extract<BuiltInTheme, `ydream${string}`>;
 /** A non-null theme selection, as stored in the system light/dark pair. */
 export type ResolvedThemeSelection = Exclude<ThemeSelection, null>;
 export type CustomThemeMode = 'light' | 'dark';
+export type DreamSkinDecorationPreset = 'none' | 'petals' | 'embers' | 'stars' | 'orbit' | 'glow';
 export type CustomThemeSelection = `${typeof CUSTOM_THEME_SELECTION_PREFIX}${string}`;
 export type ThemeSelection = BuiltInTheme | CustomThemeSelection | null;
 
@@ -105,12 +106,53 @@ export const dreamSkinSchema = z
     tagline: z.string().trim().max(160).default('Make something wonderful.'),
     statusText: z.string().trim().max(80).default('DREAM SKIN ONLINE'),
     quote: z.string().trim().max(80).default('MAKE SOMETHING WONDERFUL'),
+    imageTreatment: z
+      .object({
+        positionX: z.number().min(0).max(100).default(50),
+        positionY: z.number().min(0).max(100).default(50),
+        zoom: z.number().min(1).max(2.5).default(1),
+        overlayStrength: z.number().min(0).max(0.85).default(0.34),
+        blur: z.number().min(0).max(20).default(0),
+        artOpacity: z.number().min(0.25).max(1).default(1),
+        textSide: z.enum(['left', 'right']).default('left'),
+        showOverlayCopy: z.boolean().default(true),
+        extendToWorkspace: z.boolean().default(true),
+      })
+      .strict()
+      .default({
+        positionX: 50,
+        positionY: 50,
+        zoom: 1,
+        overlayStrength: 0.34,
+        blur: 0,
+        artOpacity: 1,
+        textSide: 'left',
+        showOverlayCopy: true,
+        extendToWorkspace: true,
+      }),
+    decorations: z
+      .object({
+        preset: z.enum(['none', 'petals', 'embers', 'stars', 'orbit', 'glow']).default('glow'),
+        density: z.number().min(0).max(1).default(0.55),
+        motion: z.boolean().default(true),
+      })
+      .strict()
+      .default({ preset: 'glow', density: 0.55, motion: true }),
+    typography: z.enum(['sans', 'serif', 'editorial']).default('editorial'),
+    provenance: z
+      .object({
+        source: z.enum(['builtin', 'local', 'imported']).default('imported'),
+        sourceLabel: z.string().trim().max(160).optional(),
+        rightsConfirmed: z.boolean().default(false),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
 export const customThemeSchema = z
   .object({
-    schemaVersion: z.literal(CUSTOM_THEME_SCHEMA_VERSION),
+    schemaVersion: z.union([z.literal(1), z.literal(CUSTOM_THEME_SCHEMA_VERSION)]),
     id: customThemeIdSchema,
     name: z.string().trim().min(1).max(80),
     mode: z.enum(['light', 'dark']),
@@ -121,7 +163,7 @@ export const customThemeSchema = z
 
 export const customThemeCollectionSchema = z
   .object({
-    schemaVersion: z.literal(CUSTOM_THEME_SCHEMA_VERSION),
+    schemaVersion: z.union([z.literal(1), z.literal(CUSTOM_THEME_SCHEMA_VERSION)]),
     kind: z.literal('yoda-theme-collection'),
     themes: z.array(customThemeSchema).min(1).max(100),
   })
@@ -310,6 +352,20 @@ const DEFAULT_DREAM_SKIN: DreamSkin = {
   tagline: 'Turn inspiration into an interactive agent workspace.',
   statusText: 'DREAM SKIN ONLINE',
   quote: 'MAKE SOMETHING WONDERFUL',
+  imageTreatment: {
+    positionX: 50,
+    positionY: 50,
+    zoom: 1,
+    overlayStrength: 0.34,
+    blur: 0,
+    artOpacity: 1,
+    textSide: 'left',
+    showOverlayCopy: true,
+    extendToWorkspace: true,
+  },
+  decorations: { preset: 'petals', density: 0.55, motion: true },
+  typography: 'editorial',
+  provenance: { source: 'builtin', rightsConfirmed: true },
 };
 
 export const YODA_DREAM_THEME: CustomTheme = {
@@ -355,6 +411,7 @@ export const YODA_DREAM_NIGHT_THEME: CustomTheme = {
     imageName: 'codex-dream-skin.jpg',
     brandSubtitle: 'YODA DREAM NIGHT',
     statusText: 'NIGHT SKIN ONLINE',
+    decorations: { preset: 'stars', density: 0.62, motion: true },
   },
   colors: {
     background: '#0b1118',
@@ -391,6 +448,7 @@ export const YODA_DREAM_ARINA_THEME = createBuiltInDreamVariant({
   brandSubtitle: '桥本有菜 专属定制皮肤',
   tagline: '在玫瑰与灵感之间，创造只属于你的作品。',
   statusText: 'ARINA CUSTOM ONLINE',
+  decoration: 'petals',
   colors: {
     background: '#fff7f5',
     background1: '#fffdfb',
@@ -419,6 +477,7 @@ function createBuiltInDreamVariant(input: {
   brandSubtitle: string;
   tagline: string;
   statusText: string;
+  decoration?: DreamSkinDecorationPreset;
   colors: Partial<CustomThemeColors>;
 }): CustomTheme {
   const base = input.mode === 'dark' ? YODA_DREAM_NIGHT_THEME : YODA_DREAM_THEME;
@@ -434,6 +493,10 @@ function createBuiltInDreamVariant(input: {
       brandSubtitle: input.brandSubtitle,
       tagline: input.tagline,
       statusText: input.statusText,
+      decorations: {
+        ...base.skin?.decorations,
+        preset: input.decoration ?? (input.mode === 'dark' ? 'stars' : 'glow'),
+      },
     },
     colors: { ...base.colors, ...input.colors },
   });
@@ -448,6 +511,7 @@ export const YODA_DREAM_FORTUNE_THEME = createBuiltInDreamVariant({
   brandSubtitle: 'FORTUNE AT WORK',
   tagline: 'Good ideas compound when you keep shipping.',
   statusText: 'FORTUNE FLOW ONLINE',
+  decoration: 'embers',
   colors: {
     background: '#21070a',
     background1: '#310b0e',
@@ -477,6 +541,7 @@ export const YODA_DREAM_SCIFI_THEME = createBuiltInDreamVariant({
   brandSubtitle: 'RED WHITE SCI-FI',
   tagline: 'A precise workspace for ambitious systems.',
   statusText: 'SCI-FI CORE ONLINE',
+  decoration: 'orbit',
   colors: {
     background: '#f5f3f1',
     background1: '#ffffff',
@@ -505,6 +570,7 @@ export const YODA_DREAM_CLEAR_THEME = createBuiltInDreamVariant({
   brandSubtitle: 'CRYSTAL CLEAR',
   tagline: 'Quiet light, clear context, focused momentum.',
   statusText: 'CLEAR FLOW ONLINE',
+  decoration: 'glow',
   colors: {
     background: '#eff9f9',
     background1: '#ffffff',
@@ -533,6 +599,7 @@ export const YODA_DREAM_COSMOS_THEME = createBuiltInDreamVariant({
   brandSubtitle: 'IDEA COSMOS',
   tagline: 'Orbit the problem until the right idea appears.',
   statusText: 'COSMOS ONLINE',
+  decoration: 'orbit',
   colors: {
     background: '#071322',
     background1: '#0d1d31',
@@ -562,6 +629,7 @@ export const YODA_DREAM_PURPLE_THEME = createBuiltInDreamVariant({
   brandSubtitle: 'PURPLE NIGHT',
   tagline: 'Deep focus after the city lights fade.',
   statusText: 'PURPLE NIGHT ONLINE',
+  decoration: 'stars',
   colors: {
     background: '#0b0818',
     background1: '#151027',
@@ -591,6 +659,7 @@ export const YODA_DREAM_VIRTUAL_THEME = createBuiltInDreamVariant({
   brandSubtitle: 'FUTURE RHYTHM',
   tagline: 'Code in tempo with a bright digital current.',
   statusText: 'RHYTHM ENGINE ONLINE',
+  decoration: 'orbit',
   colors: {
     background: '#05151d',
     background1: '#08212b',
@@ -620,6 +689,7 @@ export const YODA_DREAM_GOLD_THEME = createBuiltInDreamVariant({
   brandSubtitle: 'STAGE BLACK GOLD',
   tagline: 'Put the work under a single decisive spotlight.',
   statusText: 'MAIN STAGE ONLINE',
+  decoration: 'glow',
   colors: {
     background: '#090806',
     background1: '#12100c',
@@ -653,12 +723,21 @@ export const BUILT_IN_DREAM_SKIN_THEMES: Record<DreamSkinBuiltInTheme, CustomThe
   'ydream-gold': YODA_DREAM_GOLD_THEME,
 };
 
+type DreamSkinThemeOverrides = Partial<
+  Omit<DreamSkin, 'kind' | 'image' | 'imageName' | 'imageTreatment' | 'decorations'>
+> & {
+  imageTreatment?: Partial<DreamSkin['imageTreatment']>;
+  decorations?: Partial<DreamSkin['decorations']>;
+};
+
 export function createDreamSkinTheme(input: {
   id: string;
   name: string;
   image: string;
   imageName: string;
   mode?: CustomThemeMode;
+  colors?: CustomThemeColors;
+  skin?: DreamSkinThemeOverrides;
 }): CustomTheme {
   const base = input.mode === 'dark' ? YODA_DREAM_NIGHT_THEME : YODA_DREAM_THEME;
   return customThemeSchema.parse({
@@ -666,10 +745,20 @@ export function createDreamSkinTheme(input: {
     id: input.id,
     name: input.name,
     mode: input.mode ?? 'light',
+    colors: input.colors ?? base.colors,
     skin: {
       ...base.skin,
+      ...input.skin,
       image: input.image,
       imageName: input.imageName,
+      imageTreatment: {
+        ...base.skin?.imageTreatment,
+        ...input.skin?.imageTreatment,
+      },
+      decorations: {
+        ...base.skin?.decorations,
+        ...input.skin?.decorations,
+      },
     },
   });
 }

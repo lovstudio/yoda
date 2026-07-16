@@ -97,8 +97,13 @@ export const CUSTOM_THEME_CSS_VARIABLES = [
 export function buildCustomThemeCssVars(theme: CustomTheme): CssVarMap {
   const c = theme.colors;
   const isDark = theme.mode === 'dark';
+  const skinSurfaceAdjustment = theme.skin
+    ? (theme.skin.imageTreatment.overlayStrength - 0.34) * 0.22
+    : 0;
   const surface = (color: string, opacity: number) =>
-    theme.skin ? transparent(color, opacity) : color;
+    theme.skin
+      ? transparent(color, Math.max(0.62, Math.min(0.98, opacity + skinSurfaceAdjustment)))
+      : color;
   const destructiveBg = mix(c.diffDeleted, c.background, isDark ? 0.24 : 0.1);
   const destructiveBg1 = mix(c.diffDeleted, c.background, isDark ? 0.3 : 0.16);
   const destructiveMuted = mix(c.diffDeleted, c.foregroundMuted, 0.72);
