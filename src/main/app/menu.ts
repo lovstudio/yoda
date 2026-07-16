@@ -52,6 +52,23 @@ function configureAboutPanel(appVersion: string): void {
   });
 }
 
+function settingsTransferMenuItems(): Electron.MenuItemConstructorOptions[] {
+  return [
+    {
+      label: 'Import Settings\u2026',
+      click: () => events.emit(menuImportSettingsChannel, undefined),
+    },
+    {
+      label: 'Export Settings\u2026',
+      click: () => events.emit(menuExportSettingsChannel, undefined),
+    },
+    {
+      label: 'Sync Settings Now',
+      click: () => events.emit(menuSyncSettingsChannel, undefined),
+    },
+  ];
+}
+
 export async function setupApplicationMenu(): Promise<void> {
   const isMac = process.platform === 'darwin';
   const appVersion = await resolveAppVersion();
@@ -80,6 +97,8 @@ export async function setupApplicationMenu(): Promise<void> {
                 click: () => events.emit(menuOpenSettingsChannel, undefined),
               },
               { type: 'separator' as const },
+              ...settingsTransferMenuItems(),
+              { type: 'separator' as const },
               { role: 'services' as const },
               { type: 'separator' as const },
               { role: 'hide' as const },
@@ -104,24 +123,7 @@ export async function setupApplicationMenu(): Promise<void> {
     {
       label: 'File',
       submenu: [
-        {
-          label: 'Manage Settings',
-          submenu: [
-            {
-              label: 'Import Settings\u2026',
-              click: () => events.emit(menuImportSettingsChannel, undefined),
-            },
-            {
-              label: 'Export Settings\u2026',
-              click: () => events.emit(menuExportSettingsChannel, undefined),
-            },
-            { type: 'separator' as const },
-            {
-              label: 'Sync Settings Now',
-              click: () => events.emit(menuSyncSettingsChannel, undefined),
-            },
-          ],
-        },
+        ...settingsTransferMenuItems(),
         { type: 'separator' as const },
         // On non-macOS, put Settings in File menu
         ...(!isMac
