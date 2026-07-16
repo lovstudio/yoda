@@ -18,6 +18,7 @@ vi.mock('react-i18next', () => ({
       }
       if (key === 'tasks.bottomPanel.sessionTreeLabel') return '会话路径树';
       if (key === 'tasks.bottomPanel.sessionBranchFromHere') return '从这里继续';
+      if (key === 'tasks.bottomPanel.sessionCurrentNode') return '当前节点';
       if (key === 'tasks.bottomPanel.sessionCurrentBranch') return '当前分支';
       if (key === 'tasks.bottomPanel.sessionOpenBranch') {
         return `打开分支 ${String(values?.title)}`;
@@ -169,19 +170,16 @@ describe('SessionPromptTreeView', () => {
     expect(tree?.textContent).toContain('当前继续');
     expect(tree?.textContent).toContain('活跃兄弟继续');
     expect(tree?.textContent).toContain('归档兄弟继续');
-    expect(host.querySelector('button[aria-label="当前分支"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="当前分支"]')).toBeNull();
     expect(host.querySelector('button[aria-label="打开分支 活跃兄弟路径"]')).not.toBeNull();
     expect(host.querySelector('button[aria-label="恢复分支 归档兄弟路径"]')).not.toBeNull();
 
-    expect(
-      host.querySelector('[role="treeitem"][title="当前继续"]')?.getAttribute('aria-current')
-    ).toBe('step');
+    const currentNode = host.querySelector('[role="treeitem"][title="当前继续"]');
+    expect(currentNode?.getAttribute('aria-current')).toBe('page');
+    expect(currentNode?.textContent).toContain('当前节点');
     expect(
       host.querySelector('[role="treeitem"][title="活跃兄弟继续"]')?.hasAttribute('aria-current')
     ).toBe(false);
-    expect(host.querySelector('button[aria-label="当前分支"]')?.getAttribute('aria-current')).toBe(
-      'page'
-    );
 
     const unrestorable = host.querySelector('[role="treeitem"][title="不可切入副本"]');
     expect(unrestorable).not.toBeNull();

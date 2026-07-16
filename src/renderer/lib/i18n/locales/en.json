@@ -1850,6 +1850,7 @@
       "sessionTreeSummary": "{{promptCount}} messages · {{conversationCount}} conversations",
       "sessionTreeLabel": "Session history branch tree",
       "sessionBranchFromHere": "Continue from here",
+      "sessionCurrentNode": "Current node",
       "sessionCheckpointPending": "This prompt does not have a restorable context checkpoint yet",
       "sessionCurrentBranch": "Current branch",
       "sessionOpenBranch": "Switch to branch “{{title}}”",

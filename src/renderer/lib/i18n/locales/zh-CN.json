@@ -1850,6 +1850,7 @@
       "sessionTreeSummary": "{{promptCount}} 条消息 · {{conversationCount}} 个会话",
       "sessionTreeLabel": "会话历史分支树",
       "sessionBranchFromHere": "从这里继续",
+      "sessionCurrentNode": "当前节点",
       "sessionCheckpointPending": "此条尚无可切入的上下文检查点",
       "sessionCurrentBranch": "当前分支",
       "sessionOpenBranch": "切入分支“{{title}}”",

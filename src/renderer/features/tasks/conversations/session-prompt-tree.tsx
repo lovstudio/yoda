@@ -130,6 +130,7 @@ function SessionPromptTreePromptRow({
   const { t } = useTranslation();
   const displayAlias = node.preferredAlias;
   const restoreAlias = node.preferredRestoreAlias ?? undefined;
+  const isCurrentNode = node.endpoints.some((endpoint) => endpoint.isActive);
   const text = displaySessionPromptText(displayAlias.prompt.text).trim();
   const timestamp = displayAlias.prompt.timestamp
     ? new Date(displayAlias.prompt.timestamp).toLocaleTimeString()
@@ -154,7 +155,11 @@ function SessionPromptTreePromptRow({
         isElbow={isElbow}
         highlighted={node.isOnActivePath}
       />
-      <PromptNodeMarker highlighted={node.isOnActivePath} isElbow={isElbow} />
+      <PromptNodeMarker
+        highlighted={node.isOnActivePath}
+        isCurrent={isCurrentNode}
+        isElbow={isElbow}
+      />
       <span className="w-7 shrink-0 font-mono text-[10px] text-foreground-passive">
         #{displayAlias.promptIndex + 1}
       </span>
@@ -166,6 +171,11 @@ function SessionPromptTreePromptRow({
       >
         {text}
       </span>
+      {isCurrentNode ? (
+        <span className="shrink-0 rounded-sm border border-foreground-tertiary/30 bg-background px-1.5 py-0.5 font-mono text-[10px] text-foreground">
+          {t('tasks.bottomPanel.sessionCurrentNode')}
+        </span>
+      ) : null}
       {timestamp && !location ? (
         <span className="shrink-0 font-mono text-[10px] text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           {timestamp}
@@ -178,9 +188,10 @@ function SessionPromptTreePromptRow({
     <div
       role="treeitem"
       aria-level={ariaLevel}
-      aria-current={node.isOnActivePath ? 'step' : undefined}
+      aria-current={isCurrentNode ? 'page' : node.isOnActivePath ? 'step' : undefined}
       className={cn(
-        'group flex h-8 w-full min-w-0 items-center gap-1 pr-3 transition-colors hover:bg-background-1 focus-within:bg-background-1'
+        'group flex h-8 w-full min-w-0 items-center gap-1 pr-3 transition-colors hover:bg-background-1 focus-within:bg-background-1',
+        isCurrentNode && 'bg-background-2'
       )}
       title={text}
     >
@@ -291,7 +302,15 @@ function SessionPromptTreeEndpointRow({
   );
 }
 
-function PromptNodeMarker({ highlighted, isElbow }: { highlighted: boolean; isElbow: boolean }) {
+function PromptNodeMarker({
+  highlighted,
+  isCurrent,
+  isElbow,
+}: {
+  highlighted: boolean;
+  isCurrent: boolean;
+  isElbow: boolean;
+}) {
   const lineClassName = highlighted ? 'bg-foreground-tertiary' : 'bg-border';
   return (
     <span className="relative h-full w-5 shrink-0 self-stretch" aria-hidden>
@@ -302,7 +321,8 @@ function PromptNodeMarker({ highlighted, isElbow }: { highlighted: boolean; isEl
       <span
         className={cn(
           'absolute left-1/2 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background ring-2',
-          highlighted ? 'ring-foreground-tertiary' : 'ring-border'
+          highlighted ? 'ring-foreground-tertiary' : 'ring-border',
+          isCurrent && 'bg-foreground-tertiary'
         )}
       />
     </span>
@@ -383,7 +403,9 @@ function flattenSessionPromptTree(tree: NonNullable<SessionPromptTree>): Session
     if (entry.kind === 'endpoint') return;
 
     const descendants: SessionPromptTreeEntry[] = [
-      ...entry.node.endpoints.map((endpoint) => ({ kind: 'endpoint' as const, endpoint })),
+      ...entry.node.endpoints
+        .filter((endpoint) => !endpoint.isActive)
+        .map((endpoint) => ({ kind: 'endpoint' as const, endpoint })),
       ...entry.node.children.map((node) => ({ kind: 'prompt' as const, node })),
     ];
     if (descendants.length === 1) {
