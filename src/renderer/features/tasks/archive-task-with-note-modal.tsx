@@ -140,20 +140,25 @@ export const ArchiveTaskWithNoteModal = observer(function ArchiveTaskWithNoteMod
           </Field>
         </FieldGroup>
       </DialogContentArea>
-      <DialogFooter className={withSkill ? 'sm:justify-between' : undefined}>
+      <DialogFooter
+        className={
+          withSkill ? 'sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center' : undefined
+        }
+      >
         {withSkill && (
           <Button
             variant="ghost"
+            className="min-w-0 max-w-full justify-start overflow-hidden"
             onClick={() => {
               onClose();
               navigate('settings', { tab: 'sessions' });
             }}
           >
             <Settings2 className="size-4" />
-            {t('tasks.context.configureArchiveSkill')}
+            <span className="truncate">{t('tasks.context.configureArchiveSkill')}</span>
           </Button>
         )}
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <Button variant="outline" onClick={onClose}>
             {t('common.cancel')}
           </Button>
