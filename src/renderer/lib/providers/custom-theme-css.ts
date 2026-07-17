@@ -212,7 +212,26 @@ export function buildCustomThemeCssVars(theme: CustomTheme): CssVarMap {
 
 export function getCustomThemeFingerprint(theme: CustomTheme | undefined): string {
   if (!theme) return 'builtin';
-  return `${theme.id}:${theme.mode}:${Object.values(theme.colors).join(':')}:${JSON.stringify(theme.skin ?? null)}`;
+  const skin = theme.skin;
+  if (!skin) {
+    return `${theme.id}:${theme.mode}:${Object.values(theme.colors).join(':')}`;
+  }
+
+  // A local Dream Skin can contain a 16 MB base64 image. Keeping that image in
+  // the fingerprint made every ThemeContext value enormous and forced React to
+  // serialize it again whenever the provider rendered. Hash the image once per
+  // selected theme instead; the remaining skin metadata is intentionally small.
+  const { image, ...skinMetadata } = skin;
+  return `${theme.id}:${theme.mode}:${Object.values(theme.colors).join(':')}:${image.length}:${hashString(image)}:${JSON.stringify(skinMetadata)}`;
+}
+
+function hashString(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 function mix(foreground: string, background: string, foregroundWeight: number): string {

@@ -1,4 +1,12 @@
-import { createContext, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import type { Theme } from '@shared/app-settings';
 import {
   BUILT_IN_DREAM_SKIN_THEMES,
@@ -198,7 +206,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }) === 'dark'
       ? 'ydark'
       : 'ylight';
-  const themeFingerprint = getCustomThemeFingerprint(selectedCustomTheme);
+  const themeFingerprint = useMemo(
+    () => getCustomThemeFingerprint(selectedCustomTheme),
+    [selectedCustomTheme]
+  );
   const isThemeLoading = isLoading || customThemesLoading || systemThemesLoading;
 
   useLayoutEffect(() => {
@@ -216,20 +227,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applyThemeToAll();
   }, [effectiveTheme, themeFingerprint]);
 
-  const setTheme = (newTheme: Theme) => {
-    update(newTheme);
-  };
+  const setTheme = useCallback(
+    (newTheme: Theme) => {
+      update(newTheme);
+    },
+    [update]
+  );
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     const next = effectiveTheme === 'ylight' ? 'ydark' : 'ylight';
     setTheme(next);
-  };
+  }, [effectiveTheme, setTheme]);
 
-  return (
-    <ThemeContext.Provider
-      value={{ theme, setTheme, toggleTheme, effectiveTheme, themeFingerprint }}
-    >
-      {children}
-    </ThemeContext.Provider>
+  const contextValue = useMemo(
+    () => ({ theme, setTheme, toggleTheme, effectiveTheme, themeFingerprint }),
+    [effectiveTheme, setTheme, theme, themeFingerprint, toggleTheme]
   );
+
+  return <ThemeContext.Provider value={contextValue}>{children}</ThemeContext.Provider>;
 }

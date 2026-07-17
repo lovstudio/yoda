@@ -9,10 +9,6 @@ import dreamScifiArt from '@/assets/images/themes/dream-scifi.svg';
 import dreamVirtualArt from '@/assets/images/themes/dream-virtual.svg';
 import type { DREAM_SKIN_BUILTIN_IMAGES } from '@shared/custom-theme';
 
-// Chromium silently rejects CSS custom-property values at roughly 2 MiB.
-// Keep a little headroom for the wrapping url("...") token.
-export const DREAM_SKIN_CSS_DATA_URL_MAX_CHARS = 2_000_000;
-
 const dreamSkinObjectUrls = new Map<string, string>();
 
 export const DREAM_SKIN_ASSETS: Record<(typeof DREAM_SKIN_BUILTIN_IMAGES)[number], string> = {
@@ -66,7 +62,6 @@ export function dreamSkinBackgroundImage(image: string): string {
 
 function shouldUseObjectUrl(image: string): boolean {
   return (
-    image.length > DREAM_SKIN_CSS_DATA_URL_MAX_CHARS &&
     image.startsWith('data:image/') &&
     image.slice(0, 64).includes(';base64,') &&
     typeof globalThis.URL?.createObjectURL === 'function' &&

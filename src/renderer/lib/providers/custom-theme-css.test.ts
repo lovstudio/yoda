@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDreamSkinTheme, CUSTOM_THEME_EXAMPLE } from '@shared/custom-theme';
-import { buildCustomThemeCssVars } from './custom-theme-css';
+import { buildCustomThemeCssVars, getCustomThemeFingerprint } from './custom-theme-css';
 
 describe('custom theme CSS variables', () => {
   it('keeps light sidebar active rows distinct from the sidebar background', () => {
@@ -49,5 +49,27 @@ describe('custom theme CSS variables', () => {
       buildCustomThemeCssVars(strong)['--background']?.match(/, ([\d.]+)\)$/)?.[1]
     );
     expect(strongAlpha).toBeGreaterThan(softAlpha);
+  });
+
+  it('keeps image-backed theme fingerprints compact and image-sensitive', () => {
+    const first = createDreamSkinTheme({
+      id: 'dream-fingerprint',
+      name: 'Dream Fingerprint',
+      image: `data:image/png;base64,${'A'.repeat(1_000_000)}`,
+      imageName: 'first.png',
+    });
+    const second = createDreamSkinTheme({
+      id: 'dream-fingerprint',
+      name: 'Dream Fingerprint',
+      image: `data:image/png;base64,${'B'.repeat(1_000_000)}`,
+      imageName: 'second.png',
+    });
+
+    const firstFingerprint = getCustomThemeFingerprint(first);
+    const secondFingerprint = getCustomThemeFingerprint(second);
+
+    expect(firstFingerprint.length).toBeLessThan(2_000);
+    expect(secondFingerprint.length).toBeLessThan(2_000);
+    expect(firstFingerprint).not.toBe(secondFingerprint);
   });
 });

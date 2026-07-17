@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import '@renderer/index.css';
 import {
   createDreamSkinTheme,
   DREAM_SKIN_BUILTIN_IMAGES,
@@ -6,7 +7,10 @@ import {
   YODA_DREAM_GOLD_THEME,
   YODA_DREAM_THEME,
 } from '@shared/custom-theme';
-import { dreamSkinBackgroundImage } from '@renderer/lib/providers/dream-skin-assets';
+import {
+  dreamSkinBackgroundImage,
+  releaseAllDreamSkinAssets,
+} from '@renderer/lib/providers/dream-skin-assets';
 import { applyThemeToDocument } from '@renderer/lib/providers/theme-provider';
 
 vi.mock('@renderer/lib/pty/pty', () => ({ applyThemeToAll: vi.fn() }));
@@ -33,6 +37,7 @@ const DREAM_VARIABLES = [
 ] as const;
 
 afterEach(() => {
+  releaseAllDreamSkinAssets();
   const root = document.documentElement;
   root.classList.remove('ylight', 'ydark', 'ydream');
   root.removeAttribute('data-dream-shell');
@@ -46,6 +51,25 @@ afterEach(() => {
 });
 
 describe('Dream Skin document theme', () => {
+  it('keeps persistent workspace surfaces out of the full-frame repaint path', () => {
+    const workspace = document.createElement('div');
+    workspace.dataset.yodaSurface = 'workspace';
+    const sidebar = document.createElement('div');
+    sidebar.dataset.yodaSurface = 'left-sidebar';
+    const main = document.createElement('div');
+    main.dataset.yodaSurface = 'workspace-main';
+    workspace.append(sidebar, main);
+    document.body.appendChild(workspace);
+
+    applyThemeToDocument('ylight', YODA_DREAM_THEME);
+
+    expect(getComputedStyle(workspace, '::after').animationName).toBe('none');
+    expect(getComputedStyle(sidebar).backdropFilter).toBe('none');
+    expect(getComputedStyle(main).backdropFilter).toBe('none');
+
+    workspace.remove();
+  });
+
   it('produces valid CSS preview backgrounds for every bundled asset', () => {
     for (const image of DREAM_SKIN_BUILTIN_IMAGES) {
       const backgroundImage = dreamSkinBackgroundImage(image);
@@ -111,7 +135,7 @@ describe('Dream Skin document theme', () => {
     expect(root.style.getPropertyValue('--dream-skin-position-x')).toBe('72%');
     expect(root.style.getPropertyValue('--dream-skin-position-y')).toBe('34%');
     expect(root.style.getPropertyValue('--dream-skin-zoom')).toBe('1.4');
-    expect(root.style.getPropertyValue('--dream-skin-art')).toContain('data:image/png;base64,aA==');
+    expect(root.style.getPropertyValue('--dream-skin-art')).toMatch(/^url\("blob:/);
     expect(root.style.getPropertyValue('--dream-skin-brand')).toContain('Browser Dream');
     expect(root.style.getPropertyValue('--background')).toMatch(/^rgba\(/);
 

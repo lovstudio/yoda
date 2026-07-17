@@ -1,18 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  DREAM_SKIN_CSS_DATA_URL_MAX_CHARS,
   dreamSkinBackgroundImage,
   releaseAllDreamSkinAssets,
   releaseDreamSkinAsset,
   resolveDreamSkinAsset,
 } from '@renderer/lib/providers/dream-skin-assets';
-
-function createOversizedImageDataUrl(): string {
-  const prefix = 'data:image/png;base64,';
-  const minimumPayloadLength = DREAM_SKIN_CSS_DATA_URL_MAX_CHARS - prefix.length + 1;
-  const base64Length = Math.ceil(minimumPayloadLength / 4) * 4;
-  return `${prefix}${'A'.repeat(base64Length)}`;
-}
 
 afterEach(() => {
   document.documentElement.style.removeProperty('--dream-skin-test-art');
@@ -20,14 +12,14 @@ afterEach(() => {
 });
 
 describe('Dream Skin image assets', () => {
-  it('keeps compact image data URLs inline', () => {
+  it('uses a Blob URL even for compact image data URLs', () => {
     const image = 'data:image/png;base64,aA==';
 
-    expect(resolveDreamSkinAsset(image)).toBe(image);
+    expect(resolveDreamSkinAsset(image)).toMatch(/^blob:/);
   });
 
-  it('uses a cached Blob URL when an image exceeds Chromium CSS limits', () => {
-    const image = createOversizedImageDataUrl();
+  it('uses a cached Blob URL instead of copying image data into CSS', () => {
+    const image = `data:image/png;base64,${'A'.repeat(16_384)}`;
     const firstUrl = resolveDreamSkinAsset(image);
     const secondUrl = resolveDreamSkinAsset(image);
     const backgroundImage = dreamSkinBackgroundImage(image);
@@ -42,7 +34,7 @@ describe('Dream Skin image assets', () => {
   });
 
   it('revokes an image Blob URL so a future render creates a fresh one', () => {
-    const image = createOversizedImageDataUrl();
+    const image = 'data:image/png;base64,aA==';
     const firstUrl = resolveDreamSkinAsset(image);
 
     releaseDreamSkinAsset(image);
