@@ -362,7 +362,7 @@ describe('terminal file links', () => {
     ]);
     expect(
       getTerminalFileLinkMatches(terminal, 1, {
-        homeDir: '/Users/mark',
+        workspaceRoot: '/Users/mark/lovstudio/coding/yoda/.worktrees/ykguj',
         onOpen: (): void => undefined,
       }).map((match) => ({ text: match.text, target: match.target }))
     ).toEqual([
