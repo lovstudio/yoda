@@ -1113,7 +1113,12 @@ export const SessionOverviewAIButton = observer(function SessionOverviewAIButton
           </button>
         }
       />
-      <PopoverContent align="end" side="bottom" className="max-h-[70vh] w-96 overflow-y-auto p-0">
+      <PopoverContent
+        align="end"
+        side="top"
+        className="w-96 overflow-hidden p-0"
+        style={{ height: 'min(32rem, 70vh)', maxHeight: 'var(--available-height)' }}
+      >
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
           <NamingDebugContent chromeless>
             <Tabs value={tab} onValueChange={(next) => setTab(next as 'summary' | 'title')}>
