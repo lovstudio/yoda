@@ -70,6 +70,7 @@ export class ProjectProvider implements IDisposable {
   readonly repository: GitRepositoryService;
   readonly fs: FileSystemProvider;
   readonly worktreeService: WorktreeService;
+  readonly worktreePoolPath: string;
   readonly gitFetchService: GitFetchService;
   /** Workspace type for standard worktree tasks. BYOI tasks use their own remote workspace type. */
   readonly defaultWorkspaceType: WorkspaceType;
@@ -91,6 +92,7 @@ export class ProjectProvider implements IDisposable {
     this._ctx = transport.ctx;
     this.settings = transport.settings;
     this.fs = transport.fs;
+    this.worktreePoolPath = transport.worktreePoolPath;
     this.repository = repository;
     this.worktreeService = worktreeService;
     this.gitFetchService = gitFetchService;

@@ -337,6 +337,69 @@ describe('WorktreeService', () => {
       }
     });
 
+    it('keeps an existing local branch when it is ahead of the explicit remote source', async () => {
+      const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-ahead-'));
+      try {
+        await git(['init', '--bare'], { cwd: remoteDir });
+        await git(['remote', 'add', 'origin', remoteDir], { cwd: repoDir });
+        fs.writeFileSync(path.join(repoDir, 'tracked.txt'), 'base');
+        await git(['add', 'tracked.txt'], { cwd: repoDir });
+        await git(['commit', '-m', 'add tracked file'], { cwd: repoDir });
+        await git(['push', '-u', 'origin', 'main'], { cwd: repoDir });
+        await git(['commit', '--allow-empty', '-m', 'local update'], { cwd: repoDir });
+        const localHead = await git(['rev-parse', 'main'], { cwd: repoDir });
+        fs.writeFileSync(path.join(repoDir, 'tracked.txt'), 'local edit');
+
+        const svc = makeService();
+        const result = await svc.checkoutExistingBranch('main', {
+          type: 'remote',
+          branch: 'main',
+          remote: originRemote(remoteDir),
+        });
+
+        expect(result.success).toBe(true);
+        if (!result.success) throw new Error('expected success');
+        expect(result.data).toBe(fs.realpathSync(repoDir));
+        const headAfterProvision = await git(['rev-parse', 'main'], { cwd: repoDir });
+        expect(headAfterProvision.stdout.trim()).toBe(localHead.stdout.trim());
+        expect(fs.readFileSync(path.join(repoDir, 'tracked.txt'), 'utf8')).toBe('local edit');
+      } finally {
+        fs.rmSync(remoteDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects an existing local branch that has truly diverged from the remote source', async () => {
+      const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-diverged-'));
+      try {
+        await git(['init', '--bare'], { cwd: remoteDir });
+        await git(['remote', 'add', 'origin', remoteDir], { cwd: repoDir });
+        await git(['push', '-u', 'origin', 'main'], { cwd: repoDir });
+        await git(['commit', '--allow-empty', '-m', 'local update'], { cwd: repoDir });
+        const localHead = await git(['rev-parse', 'main'], { cwd: repoDir });
+        await git(['reset', '--hard', 'origin/main'], { cwd: repoDir });
+        await git(['commit', '--allow-empty', '-m', 'remote update'], { cwd: repoDir });
+        await git(['push', 'origin', 'main'], { cwd: repoDir });
+        await git(['reset', '--hard', localHead.stdout.trim()], { cwd: repoDir });
+
+        const svc = makeService();
+        const result = await svc.checkoutExistingBranch('main', {
+          type: 'remote',
+          branch: 'main',
+          remote: originRemote(remoteDir),
+        });
+
+        expect(result.success).toBe(false);
+        if (result.success) throw new Error('expected failure');
+        expect(result.error.type).toBe('worktree-setup-failed');
+        if (result.error.type !== 'worktree-setup-failed') throw new Error('expected setup error');
+        expect(result.error.cause).toEqual(
+          expect.objectContaining({ message: expect.stringContaining('has diverged') })
+        );
+      } finally {
+        fs.rmSync(remoteDir, { recursive: true, force: true });
+      }
+    });
+
     it('fast-forwards a checked out branch when only untracked files are present', async () => {
       const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-ff-untracked-'));
       try {

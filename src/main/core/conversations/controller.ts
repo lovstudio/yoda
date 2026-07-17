@@ -10,7 +10,6 @@ import {
   getConversationNamingPreview,
   getConversationNamingSnapshot,
 } from './generateConversationTitle';
-import { getAllRuntimeStatuses } from './getAllRuntimeStatuses';
 import { getArchivedConversationsForTask } from './getArchivedConversationsForTask';
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getClaudeSessionMetadata } from './getClaudeSessionMetadata';
@@ -78,7 +77,6 @@ export const conversationController = createRPCController({
   resumeConversation,
   interruptConversation,
   getConversationRuntimeStatuses,
-  getAllRuntimeStatuses,
   getConversationsForTask,
   getArchivedConversationsForTask,
   touchConversation,

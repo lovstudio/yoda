@@ -1,5 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { Brain, Cloud, ExternalLink, Gauge, MessageSquare, Terminal } from 'lucide-react';
+import {
+  Activity,
+  Brain,
+  Cloud,
+  ExternalLink,
+  Gauge,
+  HardDrive,
+  MessageSquare,
+  Terminal,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -47,6 +56,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     useAppSettingsKey('interface');
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
+  const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
+  const [isCleaningWorktrees, setIsCleaningWorktrees] = useState(false);
   const [sessionPromptCount, setSessionPromptCount] = useState<{
     conversationId: string;
     count: number;
@@ -170,6 +181,24 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const selectedMaasLabel = selectedMaasPlatformId
     ? `MaaS (${MAAS_PLATFORMS[selectedMaasPlatformId].name})`
     : 'MaaS';
+  const { data: resourceSnapshot } = useQuery({
+    queryKey: ['app', 'resourceSnapshot'],
+    queryFn: () => rpc.app.getResourceSnapshot(),
+    staleTime: 2_000,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: false,
+  });
+  const {
+    data: worktreeStorage,
+    isFetching: isScanningWorktrees,
+    refetch: refreshWorktreeStorage,
+  } = useQuery({
+    queryKey: ['projects', 'worktreeStorage'],
+    queryFn: () => rpc.projects.getWorktreeStorageSnapshot(),
+    enabled: isResourcePopoverOpen,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
 
   useEffect(() => {
     if (!activeConversation || !provisionedTask) return;
@@ -286,6 +315,49 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
 
   const toggleSessionHistoryDock = () => {
     updateInterfaceSettings({ dockSessionHistory: !sessionHistoryDocked });
+  };
+
+  const cleanupWorktrees = async () => {
+    setIsCleaningWorktrees(true);
+    try {
+      const result = await rpc.projects.cleanupUnusedWorktrees();
+      await refreshWorktreeStorage();
+      if (result.removedCount === 0) {
+        toast(t('workspaceRuntime.resources.worktreeCleanupNone'));
+      } else {
+        toast.success(
+          t('workspaceRuntime.resources.worktreeCleanupSuccess', {
+            count: result.removedCount,
+            size: formatBytes(result.reclaimedBytes),
+          })
+        );
+      }
+      if (result.failedPaths.length > 0) {
+        toast.error(
+          t('workspaceRuntime.resources.worktreeCleanupPartial', {
+            count: result.failedPaths.length,
+          })
+        );
+      }
+    } catch {
+      toast.error(t('workspaceRuntime.resources.worktreeCleanupFailed'));
+    } finally {
+      setIsCleaningWorktrees(false);
+    }
+  };
+
+  const confirmWorktreeCleanup = () => {
+    if (!worktreeStorage?.reclaimableCount) return;
+    showConfirmActionModal({
+      title: t('workspaceRuntime.resources.confirmCleanupTitle'),
+      description: t('workspaceRuntime.resources.confirmCleanupDescription', {
+        count: worktreeStorage.reclaimableCount,
+        size: formatBytes(worktreeStorage.reclaimableBytes),
+      }),
+      confirmLabel: t('workspaceRuntime.resources.cleanup'),
+      variant: 'default',
+      onSuccess: () => void cleanupWorktrees(),
+    });
   };
 
   return (
@@ -579,6 +651,105 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         </div>
       ) : null}
       <span className="flex-1" />
+      <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>
+        <PopoverTrigger
+          aria-label={t('workspaceRuntime.resources.title')}
+          className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+          title={t('workspaceRuntime.resources.title')}
+        >
+          <Activity className="size-3.5" />
+          <span className="font-mono tabular-nums">
+            {resourceSnapshot
+              ? `${formatBytes(resourceSnapshot.memoryBytes)} · ${Math.round(resourceSnapshot.cpuPercent)}%`
+              : '—'}
+          </span>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          side="top"
+          sideOffset={8}
+          className="w-80 gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+        >
+          <div className="border-b border-border p-3">
+            <div className="text-sm font-medium">{t('workspaceRuntime.resources.title')}</div>
+            <div className="mt-0.5 text-xs text-foreground-passive">
+              {t('workspaceRuntime.resources.description')}
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-px bg-border">
+            <ResourceMetric
+              label={t('workspaceRuntime.resources.cpu')}
+              value={resourceSnapshot ? `${Math.round(resourceSnapshot.cpuPercent)}%` : '—'}
+            />
+            <ResourceMetric
+              label={t('workspaceRuntime.resources.memory')}
+              value={resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—'}
+            />
+            <ResourceMetric
+              label={t('workspaceRuntime.resources.sessions')}
+              value={String(resourceSnapshot?.activeAgentSessions ?? 0)}
+            />
+          </div>
+          {resourceSnapshot?.processes.length ? (
+            <div className="border-b border-border p-3">
+              <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
+                {t('workspaceRuntime.resources.processes')}
+              </div>
+              <div className="space-y-1.5">
+                {resourceSnapshot.processes.slice(0, 4).map((process) => (
+                  <div
+                    key={process.pid}
+                    className="flex items-center justify-between gap-3 text-xs"
+                  >
+                    <span className="truncate text-foreground-muted">
+                      {formatProcessType(process.type)}
+                    </span>
+                    <span className="shrink-0 font-mono tabular-nums text-foreground-passive">
+                      {formatBytes(process.memoryBytes)} · {Math.round(process.cpuPercent)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className="p-3">
+            <div className="flex items-start gap-2.5">
+              <HardDrive className="mt-0.5 size-4 shrink-0 text-foreground-passive" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="font-medium">{t('workspaceRuntime.resources.worktrees')}</span>
+                  <span className="font-mono tabular-nums text-foreground-muted">
+                    {worktreeStorage ? formatBytes(worktreeStorage.totalBytes) : '—'}
+                  </span>
+                </div>
+                <div className="mt-1 text-[11px] leading-relaxed text-foreground-passive">
+                  {isScanningWorktrees && !worktreeStorage
+                    ? t('workspaceRuntime.resources.scanningWorktrees')
+                    : t('workspaceRuntime.resources.worktreeSummary', {
+                        count: worktreeStorage?.worktreeCount ?? 0,
+                        reclaimable: worktreeStorage?.reclaimableCount ?? 0,
+                        size: formatBytes(worktreeStorage?.reclaimableBytes ?? 0),
+                      })}
+                </div>
+                {worktreeStorage?.reclaimableCount ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-full"
+                    disabled={isCleaningWorktrees || isScanningWorktrees}
+                    onClick={confirmWorktreeCleanup}
+                  >
+                    {isCleaningWorktrees
+                      ? t('workspaceRuntime.resources.cleaning')
+                      : t('workspaceRuntime.resources.cleanup')}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
       <Popover>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.maas.title')}
@@ -702,6 +873,15 @@ function ContextProgressBar({
   );
 }
 
+function ResourceMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-background p-2.5">
+      <div className="text-[10px] uppercase tracking-wide text-foreground-passive">{label}</div>
+      <div className="mt-1 font-mono text-sm tabular-nums text-foreground">{value}</div>
+    </div>
+  );
+}
+
 function ContextMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
@@ -739,4 +919,19 @@ function getUsageTone(percent: number): string {
   if (percent >= 95) return 'bg-red-500';
   if (percent >= 80) return 'bg-amber-500';
   return 'bg-emerald-500';
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** unitIndex;
+  const digits = value >= 100 || unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)} ${units[unitIndex]}`;
+}
+
+function formatProcessType(type: string): string {
+  if (type === 'Browser') return 'Main';
+  if (type === 'Tab') return 'Renderer';
+  return type;
 }

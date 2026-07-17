@@ -4,8 +4,7 @@ import {
   isAgentSessionRunningStatus,
   type AgentSessionRuntimeStatus,
 } from '@shared/events/agentEvents';
-import { events, rpc } from '@renderer/lib/ipc';
-import { log } from '@renderer/utils/logger';
+import { events } from '@renderer/lib/ipc';
 
 export type AgentRuntimeSnapshot = {
   /** Task ids the user has opened since their status last became attention-worthy. */
@@ -24,10 +23,10 @@ function isAttentionStatus(status: AgentSessionRuntimeStatus): boolean {
 /**
  * Global, mount-independent mirror of the main-process agent run-state store.
  *
- * The per-task `ConversationManagerStore` only knows the status of a task that is
- * currently mounted. This store cold-loads every session's status on startup and
- * keeps it live via {@link agentSessionStatusChangedChannel}, so counts (running /
- * unread) are accurate for tasks the user has never opened in this session.
+ * The per-task `ConversationManagerStore` hydrates persisted status only when a
+ * task is mounted. This store mirrors those task-scoped results and keeps them
+ * live via {@link agentSessionStatusChangedChannel}. Avoiding a global cold-load
+ * keeps startup cost proportional to the task the user actually opens.
  *
  * Aggregation mirrors `ConversationManagerStore.taskStatus`: a task is "working"
  * if any of its conversations is working; "awaiting-input"/"error"/"completed"
@@ -49,19 +48,6 @@ export class AgentRuntimeStore {
     this.off = events.on(agentSessionStatusChangedChannel, (event) => {
       this.applyStatus(event.projectId, event.taskId, event.conversationId, event.status);
     });
-    try {
-      const all = await rpc.conversations.getAllRuntimeStatuses();
-      runInAction(() => {
-        for (const entry of all) {
-          this.statuses.set(
-            `${taskKey(entry.projectId, entry.taskId)}\0${entry.conversationId}`,
-            entry.status
-          );
-        }
-      });
-    } catch (error) {
-      log.warn('[agent-runtime] cold-load failed:', error);
-    }
   }
 
   dispose(): void {

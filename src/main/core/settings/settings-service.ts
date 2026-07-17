@@ -64,20 +64,32 @@ export class SettingsStore implements IInitializable {
     await db.delete(appSettings).where(eq(appSettings.key, key)).execute();
   }
 
+  private resolveStoredValue<K extends AppSettingsKey>(
+    key: K,
+    raw: unknown,
+    defaults: AppSettings[K]
+  ): { value: AppSettings[K]; isValid: boolean } {
+    let candidate: unknown = raw;
+    if (raw === undefined) {
+      candidate = defaults;
+    } else if (isPlainObject(raw) && isPlainObject(defaults)) {
+      candidate = mergeDeep(defaults as Record<string, unknown>, raw);
+    }
+
+    const parsed = APP_SETTINGS_SCHEMA_MAP[key].safeParse(candidate);
+    if (!parsed.success) {
+      return { value: defaults, isValid: false };
+    }
+    return { value: parsed.data as AppSettings[K], isValid: true };
+  }
+
   async get<K extends AppSettingsKey>(key: K): Promise<AppSettings[K]> {
     if (key in this.cache) return this.cache[key] as AppSettings[K];
 
     const defaults = getDefaultForKey(key);
     const raw = await this.readRaw(key);
 
-    let value: AppSettings[K];
-    if (raw === undefined) {
-      value = defaults;
-    } else if (isPlainObject(raw) && isPlainObject(defaults)) {
-      value = mergeDeep(defaults as Record<string, unknown>, raw) as AppSettings[K];
-    } else {
-      value = raw as AppSettings[K];
-    }
+    const { value } = this.resolveStoredValue(key, raw, defaults);
 
     this.cache[key] = value;
     return value;
@@ -97,16 +109,18 @@ export class SettingsStore implements IInitializable {
       return { value: defaults, defaults, overrides: {} as Partial<AppSettings[K]> };
     }
 
-    let value: AppSettings[K];
+    const { value, isValid } = this.resolveStoredValue(key, raw, defaults);
+    if (!isValid) {
+      return { value: defaults, defaults, overrides: {} as Partial<AppSettings[K]> };
+    }
+
     let overrides: Partial<AppSettings[K]>;
 
     if (isPlainObject(raw) && isPlainObject(defaults)) {
-      value = mergeDeep(defaults as Record<string, unknown>, raw) as AppSettings[K];
       overrides = computeTrueOverrides(raw, defaults as Record<string, unknown>) as Partial<
         AppSettings[K]
       >;
     } else {
-      value = raw as AppSettings[K];
       overrides = (isDeepEqual(raw, defaults) ? {} : raw) as Partial<AppSettings[K]>;
     }
 

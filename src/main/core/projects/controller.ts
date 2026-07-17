@@ -20,6 +20,7 @@ import {
   shareProjectSettingsToConfig,
   updateProjectSettings,
 } from './settings/project-settings-service';
+import { cleanupUnusedWorktrees, getWorktreeStorageSnapshot } from './worktrees/worktree-storage';
 
 export const projectController = createRPCController({
   createProject,
@@ -37,6 +38,8 @@ export const projectController = createRPCController({
   updateProjectAlias,
   moveProjectPath,
   openProject,
+  getWorktreeStorageSnapshot,
+  cleanupUnusedWorktrees,
 
   // Acquires the slim project-view workspace that backs project-level file
   // tabs. Refcounted — callers must pair with releaseProjectViewWorkspace.

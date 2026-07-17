@@ -2,7 +2,8 @@ import { exec } from 'node:child_process';
 import { stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { clipboard, dialog, shell } from 'electron';
+import { app, clipboard, dialog, shell } from 'electron';
+import type { AppResourceSnapshot } from '@shared/app-resource';
 import { isComparisonWindowTarget, type ComparisonWindowTarget } from '@shared/comparison-window';
 import {
   appPasteChannel,
@@ -31,6 +32,7 @@ import {
 } from '@main/app/task-window-dock';
 import { openTaskWindowFromPool } from '@main/app/task-window-pool';
 import { createComparisonWindow, getMainWindow } from '@main/app/window';
+import { taskManager } from '@main/core/tasks/task-manager';
 import { db } from '@main/db/client';
 import { sshConnections } from '@main/db/schema';
 import { events } from '@main/lib/events';
@@ -112,6 +114,28 @@ class AppService implements IInitializable, IDisposable {
       });
     }
     return this.cachedAppVersionPromise;
+  }
+
+  getResourceSnapshot(): AppResourceSnapshot {
+    const processes = app
+      .getAppMetrics()
+      .map((metric) => ({
+        pid: metric.pid,
+        type: String(metric.type),
+        cpuPercent: Math.round(metric.cpu.percentCPUUsage * 10) / 10,
+        // Electron reports process working-set size in KiB.
+        memoryBytes: metric.memory.workingSetSize * 1024,
+      }))
+      .sort((left, right) => right.memoryBytes - left.memoryBytes);
+
+    return {
+      sampledAt: new Date().toISOString(),
+      cpuPercent:
+        Math.round(processes.reduce((total, item) => total + item.cpuPercent, 0) * 10) / 10,
+      memoryBytes: processes.reduce((total, item) => total + item.memoryBytes, 0),
+      activeAgentSessions: taskManager.getActiveAgentSessionSummary().running,
+      processes,
+    };
   }
 
   async listInstalledFonts(

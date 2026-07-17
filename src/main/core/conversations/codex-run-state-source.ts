@@ -1,5 +1,5 @@
 import { watch, type FSWatcher } from 'node:fs';
-import { open, readFile } from 'node:fs/promises';
+import { open, type FileHandle } from 'node:fs/promises';
 import {
   initialRunState,
   reduceRunState,
@@ -47,6 +47,15 @@ const BIND_POLL_MAX_MS = 5 * 60_000;
 const RESUME_START_GRACE_MS = 10_000;
 const NEW_SESSION_THREAD_CREATE_MAX_DISTANCE_MS = 60_000;
 const REQUEST_USER_INPUT_TOOL = 'request_user_input';
+const RUN_STATE_SCAN_CHUNK_BYTES = 256 * 1024;
+const MAX_RUN_STATE_LINE_BYTES = 2 * 1024 * 1024;
+const RUN_STATE_LINE_MARKERS = [
+  Buffer.from('"task_started"'),
+  Buffer.from('"task_complete"'),
+  Buffer.from('"turn_aborted"'),
+  Buffer.from('"request_user_input"'),
+  Buffer.from('"function_call_output"'),
+];
 
 export interface CodexRunStateContext {
   conversationId: string;
@@ -389,9 +398,94 @@ export async function readCodexTurnVerdict(
           getClaimedCodexThreadId(conversationId) ?? conversationId
         );
   if (!rolloutPath) return null;
-  const raw = await readFile(rolloutPath, 'utf8').catch(() => undefined);
-  if (raw === undefined) return null;
-  return classifyCodexRollout(raw);
+  return readCodexTurnVerdictFile(rolloutPath);
+}
+
+/**
+ * Read only the newest run-state segment from a Codex rollout.
+ *
+ * Rollouts can contain image/tool payloads hundreds of megabytes large. Reading
+ * the whole file briefly keeps the Buffer, decoded string, and parsed JSON in
+ * the Electron main-process heap at once. Scan backwards in fixed-size chunks
+ * instead and stop at the most recent turn boundary; older rows cannot affect
+ * the current verdict.
+ */
+export async function readCodexTurnVerdictFile(
+  rolloutPath: string
+): Promise<CodexTurnVerdict | null> {
+  const file = await open(rolloutPath, 'r').catch(() => undefined);
+  if (!file) return null;
+  try {
+    const { size } = await file.stat();
+    const lines = await readRecentRunStateLines(file, size);
+    return classifyCodexRollout(lines.join('\n'));
+  } finally {
+    await file.close();
+  }
+}
+
+async function readRecentRunStateLines(file: FileHandle, size: number): Promise<string[]> {
+  const newestFirst: string[] = [];
+  let position = size;
+  let carry = Buffer.alloc(0);
+  let discardingOversizedLine = false;
+
+  const collect = (line: Buffer): boolean => {
+    if (
+      line.length === 0 ||
+      line.length > MAX_RUN_STATE_LINE_BYTES ||
+      !RUN_STATE_LINE_MARKERS.some((marker) => line.includes(marker))
+    ) {
+      return false;
+    }
+    const text = line.toString('utf8').trim();
+    if (!text) return false;
+    newestFirst.push(text);
+    return parseTurnEvent(text)?.kind === 'turn-started';
+  };
+
+  while (position > 0) {
+    const start = Math.max(0, position - RUN_STATE_SCAN_CHUNK_BYTES);
+    const chunk = Buffer.allocUnsafe(position - start);
+    const { bytesRead } = await file.read(chunk, 0, chunk.length, start);
+    position = start;
+    let data = chunk.subarray(0, bytesRead);
+
+    if (discardingOversizedLine) {
+      const separator = data.lastIndexOf(0x0a);
+      if (separator < 0) continue;
+      data = data.subarray(0, separator + 1);
+      discardingOversizedLine = false;
+    }
+
+    const lastSeparator = data.lastIndexOf(0x0a);
+    if (lastSeparator < 0 && data.length + carry.length > MAX_RUN_STATE_LINE_BYTES) {
+      carry = Buffer.alloc(0);
+      discardingOversizedLine = true;
+      continue;
+    }
+
+    const combined = carry.length > 0 ? Buffer.concat([data, carry]) : data;
+    const firstSeparator = combined.indexOf(0x0a);
+    if (firstSeparator < 0) {
+      carry = combined;
+      continue;
+    }
+
+    let lineEnd = combined.length;
+    for (let separator = combined.lastIndexOf(0x0a, lineEnd - 1); separator >= firstSeparator; ) {
+      if (collect(combined.subarray(separator + 1, lineEnd))) {
+        return newestFirst.reverse();
+      }
+      lineEnd = separator;
+      if (separator === firstSeparator) break;
+      separator = combined.lastIndexOf(0x0a, separator - 1);
+    }
+    carry = combined.subarray(0, firstSeparator);
+  }
+
+  if (!discardingOversizedLine && carry.length > 0) collect(carry);
+  return newestFirst.reverse();
 }
 
 export function classifyCodexRollout(raw: string): CodexTurnVerdict {

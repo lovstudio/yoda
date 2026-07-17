@@ -8,6 +8,7 @@ import {
   parseCodexRunStateEvent,
   parseTurnEvent,
   readCodexTurnVerdict,
+  readCodexTurnVerdictFile,
   resolveCodexRolloutPathForConversation,
 } from './codex-run-state-source';
 
@@ -183,6 +184,64 @@ describe('classifyCodexRollout', () => {
     ].join('\n');
 
     expect(classifyCodexRollout(raw)).toEqual({ state: 'working', lastStartedAt: at });
+  });
+});
+
+describe('readCodexTurnVerdictFile', () => {
+  let dir: string | undefined;
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  it('scans past an oversized irrelevant row without loading the full rollout', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'yoda-codex-run-state-tail-'));
+    const rolloutPath = join(dir, 'rollout.jsonl');
+    writeFileSync(
+      rolloutPath,
+      `${line({ type: 'task_started', turn_id: 't1' })}\n${JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'function_call_output',
+          call_id: 'unrelated',
+          output: 'x'.repeat(5_000_000),
+        },
+      })}\n`
+    );
+
+    await expect(readCodexTurnVerdictFile(rolloutPath)).resolves.toEqual({
+      state: 'working',
+      lastStartedAt: at,
+    });
+  });
+
+  it('keeps request_user_input semantics within the newest turn only', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'yoda-codex-run-state-tail-'));
+    const rolloutPath = join(dir, 'rollout.jsonl');
+    writeFileSync(
+      rolloutPath,
+      [
+        line({ type: 'task_started', turn_id: 'old' }),
+        line({ type: 'task_complete', turn_id: 'old' }),
+        line({ type: 'task_started', turn_id: 'current' }),
+        JSON.stringify({
+          timestamp: ts,
+          type: 'response_item',
+          payload: {
+            type: 'function_call',
+            name: 'request_user_input',
+            arguments: JSON.stringify({ questions: [{ question: 'Pick a path?' }] }),
+            call_id: 'call_question',
+          },
+        }),
+      ].join('\n')
+    );
+
+    await expect(readCodexTurnVerdictFile(rolloutPath)).resolves.toEqual({
+      state: 'awaiting-input',
+      lastStartedAt: at,
+    });
   });
 });
 

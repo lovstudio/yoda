@@ -7,7 +7,7 @@ import { join } from 'node:path';
  * was spawned in.
  *
  * The canonical path is ~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl, but
- * cold-load callers (e.g. `getAllRuntimeStatuses`) often cannot resolve the cwd:
+ * on-demand callers may not have mounted the task yet and cannot resolve the cwd:
  * the task is not provisioned after an app restart, so the in-memory task
  * manager has no entry for it. Session ids are UUIDs — globally unique — so a
  * one-shot scan of the projects directory is an unambiguous lookup.

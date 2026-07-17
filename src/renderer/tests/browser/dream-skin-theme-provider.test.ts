@@ -6,6 +6,7 @@ import {
   YODA_DREAM_ARINA_THEME,
   YODA_DREAM_GOLD_THEME,
   YODA_DREAM_THEME,
+  type CustomTheme,
 } from '@shared/custom-theme';
 import {
   dreamSkinBackgroundImage,
@@ -108,6 +109,34 @@ describe('Dream Skin document theme', () => {
     expect(root.dataset.dreamDecoration).toBe('glow');
     expect(root.style.getPropertyValue('--dream-skin-art')).toContain('data:image/svg+xml');
     expect(root.style.getPropertyValue('--dream-skin-brand')).toContain('Stage Black Gold');
+  });
+
+  it('normalizes a cached legacy skin before reading composition fields', () => {
+    const theme = createDreamSkinTheme({
+      id: 'legacy-browser',
+      name: 'Legacy Browser',
+      image: 'data:image/png;base64,aA==',
+      imageName: 'legacy.png',
+    });
+    if (!theme.skin) throw new Error('Expected Dream Skin fixture');
+    const {
+      imageTreatment: _imageTreatment,
+      decorations: _decorations,
+      ...legacySkin
+    } = theme.skin;
+    const cachedLegacyTheme = {
+      ...theme,
+      schemaVersion: 1,
+      skin: legacySkin,
+    } as unknown as CustomTheme;
+
+    expect(() => applyThemeToDocument('ylight', cachedLegacyTheme)).not.toThrow();
+
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue('--dream-skin-position-x')).toBe('50%');
+    expect(root.style.getPropertyValue('--dream-skin-position-y')).toBe('50%');
+    expect(root.style.getPropertyValue('--dream-skin-zoom')).toBe('1');
+    expect(root.dataset.dreamDecoration).toBe('glow');
   });
 
   it('applies an image-backed skin and removes it when another theme is selected', () => {

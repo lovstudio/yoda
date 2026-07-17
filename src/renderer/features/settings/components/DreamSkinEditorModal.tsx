@@ -43,7 +43,7 @@ const DECORATIONS: DreamSkinDecorationPreset[] = [
 
 export function DreamSkinEditorModal({ initialTheme, onSuccess, onClose }: Props) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState<CustomTheme>(initialTheme);
+  const [draft, setDraft] = useState<CustomTheme>(() => customThemeSchema.parse(initialTheme));
   const [analyzing, setAnalyzing] = useState(false);
   const skin = draft.skin;
 

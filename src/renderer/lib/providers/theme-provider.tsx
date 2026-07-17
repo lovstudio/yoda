@@ -10,6 +10,7 @@ import {
 import type { Theme } from '@shared/app-settings';
 import {
   BUILT_IN_DREAM_SKIN_THEMES,
+  customThemeSchema,
   findCustomTheme,
   resolveThemeMode,
   YODA_GREEN_THEME,
@@ -80,12 +81,14 @@ export function applyThemeToDocument(
   const root = document.documentElement;
   root.classList.remove('ylight', 'ydark', 'emlight', 'emdark', 'ydream');
   root.classList.add(effective);
-  const dreamSkin = customTheme?.skin;
+  const parsedCustomTheme = customTheme ? customThemeSchema.safeParse(customTheme) : undefined;
+  const resolvedCustomTheme = parsedCustomTheme?.success ? parsedCustomTheme.data : undefined;
+  const dreamSkin = resolvedCustomTheme?.skin;
   if (dreamSkin) {
     root.classList.add('ydream');
     root.dataset.dreamShell = effective === 'ydark' ? 'dark' : 'light';
     root.style.setProperty('--dream-skin-art', dreamSkinBackgroundImage(dreamSkin.image));
-    root.style.setProperty('--dream-skin-brand', JSON.stringify(customTheme.name));
+    root.style.setProperty('--dream-skin-brand', JSON.stringify(resolvedCustomTheme.name));
     root.style.setProperty('--dream-skin-subtitle', JSON.stringify(dreamSkin.brandSubtitle));
     root.style.setProperty('--dream-skin-tagline', JSON.stringify(dreamSkin.tagline));
     root.style.setProperty('--dream-skin-status', JSON.stringify(dreamSkin.statusText));
@@ -150,8 +153,8 @@ export function applyThemeToDocument(
     root.style.removeProperty(variable);
   }
 
-  if (customTheme) {
-    const vars = buildCustomThemeCssVars(customTheme);
+  if (resolvedCustomTheme) {
+    const vars = buildCustomThemeCssVars(resolvedCustomTheme);
     for (const [name, value] of Object.entries(vars)) {
       root.style.setProperty(name, value);
     }

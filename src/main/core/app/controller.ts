@@ -123,6 +123,7 @@ export const appController = createRPCController({
     }
   },
   getAppVersion: () => appService.getCachedAppVersion(),
+  getResourceSnapshot: () => appService.getResourceSnapshot(),
   getElectronVersion: () => process.versions.electron,
   getPlatform: () => process.platform,
   getHomeDir: () => homedir(),

@@ -227,6 +227,18 @@ export class WorktreeService {
     try {
       await this.ctx.exec('git', ['merge-base', '--is-ancestor', localRef, remoteSource.data.ref]);
     } catch {
+      try {
+        await this.ctx.exec('git', [
+          'merge-base',
+          '--is-ancestor',
+          remoteSource.data.ref,
+          localRef,
+        ]);
+        // The local branch only has commits on top of the selected remote.
+        // Keep those commits: provisioning must not rewrite or reject valid
+        // local work merely because it has not been pushed yet.
+        return ok(undefined);
+      } catch {}
       return err({
         type: 'worktree-setup-failed',
         cause: new Error(
