@@ -3,10 +3,15 @@ import type { SessionSummaryScope, SessionTranscriptMessage } from '@shared/conv
 import type { TaskOutputLanguage } from '@shared/project-settings';
 import type { SummaryContext } from '@shared/session-summary';
 
-const MAX_PROMPT_CHARS = 8_000;
+const MAX_TRANSCRIPT_CHARS = 8_000;
+const MAX_TRANSCRIPT_ANCHOR_CHARS = 2_000;
 const MAX_SUMMARY_CHARS = 800;
 /** `recent` is a one-line progress note: ~40 CJK chars, plus slack for ASCII. */
 const MAX_RECENT_SUMMARY_CHARS = 60;
+const SKILL_BLOCK_OPEN = '<skill>';
+const SKILL_BLOCK_CLOSE = '</skill>';
+const SKILL_NAME_OPEN = '<name>';
+const SKILL_NAME_CLOSE = '</name>';
 
 export type SummaryPromptRuntime = {
   systemPrompt: string;
@@ -33,21 +38,18 @@ export function buildSummaryDraft(
   previousSummary?: string | null
 ): SummaryDraft | null {
   const { context } = runtime;
-  const transcriptMessages = messages
-    .map((message) => ({ ...message, text: message.text.trim() }))
+  const normalizedMessages = messages
+    .map((message) => ({ ...message, text: normalizeTranscriptMessageText(message.text) }))
     .filter((message) => message.text)
     .filter((message) => (message.role === 'assistant' ? context.assistant : context.user));
-  if (transcriptMessages.length === 0) return null;
+  if (normalizedMessages.length === 0) return null;
 
   const projectLine = context.project ? `Project: ${basename(cwd)} @ ${cwd}` : null;
-  const rawTranscript = transcriptMessages
-    .map((message, index) => `${index + 1}. ${message.role.toUpperCase()}: ${message.text}`)
-    .join('\n\n');
-  const transcript = clip(rawTranscript, MAX_PROMPT_CHARS);
+  const transcriptSelection = buildTranscriptSelection(normalizedMessages);
   const normalizedPreviousSummary =
     scope === 'global' && previousSummary?.trim() ? previousSummary.trim() : null;
   const basePrompt = buildSummaryPrompt(
-    transcript,
+    transcriptSelection.transcript,
     runtime.language,
     scope,
     projectLine,
@@ -58,13 +60,113 @@ export function buildSummaryDraft(
     : basePrompt;
 
   return {
-    messages: transcriptMessages,
-    transcript,
-    transcriptTruncated: transcript.length < rawTranscript.length,
+    messages: transcriptSelection.messages,
+    transcript: transcriptSelection.transcript,
+    transcriptTruncated: transcriptSelection.truncated,
     projectLine,
     previousSummary: normalizedPreviousSummary,
     prompt,
   };
+}
+
+function normalizeTranscriptMessageText(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith(SKILL_BLOCK_OPEN) || !trimmed.endsWith(SKILL_BLOCK_CLOSE)) {
+    return trimmed;
+  }
+
+  const skillNames: string[] = [];
+  let cursor = 0;
+  while (cursor < trimmed.length) {
+    while (/\s/.test(trimmed[cursor] ?? '')) cursor += 1;
+    if (!trimmed.startsWith(SKILL_BLOCK_OPEN, cursor)) return trimmed;
+    const closeIndex = trimmed.indexOf(SKILL_BLOCK_CLOSE, cursor + SKILL_BLOCK_OPEN.length);
+    if (closeIndex < 0) return trimmed;
+    const blockEnd = closeIndex + SKILL_BLOCK_CLOSE.length;
+    const name = extractSkillName(trimmed.slice(cursor, blockEnd));
+    if (name) skillNames.push(name);
+    cursor = blockEnd;
+  }
+
+  if (skillNames.length === 0) return '[Skill invocation metadata omitted]';
+  return skillNames.map((name) => `[Skill invoked: $${name}]`).join('\n');
+}
+
+function extractSkillName(block: string): string | null {
+  const start = block.indexOf(SKILL_NAME_OPEN);
+  if (start < 0) return null;
+  const valueStart = start + SKILL_NAME_OPEN.length;
+  const end = block.indexOf(SKILL_NAME_CLOSE, valueStart);
+  if (end < 0) return null;
+  const value = block.slice(valueStart, end).trim();
+  return /^[a-zA-Z0-9_:@./+-]{1,128}$/.test(value) ? value : null;
+}
+
+function buildTranscriptSelection(messages: SessionTranscriptMessage[]): {
+  messages: SessionTranscriptMessage[];
+  transcript: string;
+  truncated: boolean;
+} {
+  const entries = messages.map((message, index) => formatTranscriptEntry(message, index));
+  const rawTranscript = entries.join('\n\n');
+  if (rawTranscript.length <= MAX_TRANSCRIPT_CHARS) {
+    return { messages, transcript: rawTranscript, truncated: false };
+  }
+
+  if (messages.length === 1) {
+    return {
+      messages,
+      transcript: clip(entries[0], MAX_TRANSCRIPT_CHARS),
+      truncated: true,
+    };
+  }
+
+  const anchor = clip(entries[0], MAX_TRANSCRIPT_ANCHOR_CHARS);
+  const markerReserve = 96;
+  const tailBudget = MAX_TRANSCRIPT_CHARS - anchor.length - markerReserve;
+  const tailEntries: string[] = [];
+  const tailMessageIndexes: number[] = [];
+  let used = 0;
+
+  for (let index = entries.length - 1; index >= 1; index -= 1) {
+    const separatorChars = tailEntries.length > 0 ? 2 : 0;
+    const nextChars = entries[index].length + separatorChars;
+    if (used + nextChars > tailBudget) {
+      if (tailEntries.length === 0) {
+        tailEntries.unshift(clipTranscriptEntryEnd(entries[index], tailBudget));
+        tailMessageIndexes.unshift(index);
+      }
+      break;
+    }
+    tailEntries.unshift(entries[index]);
+    tailMessageIndexes.unshift(index);
+    used += nextChars;
+  }
+
+  const omittedCount = Math.max(0, messages.length - 1 - tailMessageIndexes.length);
+  const omissionMarker =
+    omittedCount > 0
+      ? `[${omittedCount} earlier transcript message${omittedCount === 1 ? '' : 's'} omitted for length]`
+      : '[Earlier transcript content clipped for length]';
+  const transcript = [anchor, omissionMarker, ...tailEntries].join('\n\n');
+  return {
+    messages: [messages[0], ...tailMessageIndexes.map((index) => messages[index])],
+    transcript: clip(transcript, MAX_TRANSCRIPT_CHARS),
+    truncated: true,
+  };
+}
+
+function formatTranscriptEntry(message: SessionTranscriptMessage, index: number): string {
+  return `${index + 1}. ${message.role.toUpperCase()}: ${message.text}`;
+}
+
+function clipTranscriptEntryEnd(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  const separator = value.indexOf(': ');
+  const prefix = separator >= 0 ? value.slice(0, separator + 2) : '';
+  const contentBudget = Math.max(0, maxChars - prefix.length - 1);
+  if (contentBudget === 0) return prefix.slice(0, maxChars);
+  return `${prefix}…${value.slice(-contentBudget)}`;
 }
 
 export function normalizeGeneratedSummaryText(value: string, scope: SessionSummaryScope): string {

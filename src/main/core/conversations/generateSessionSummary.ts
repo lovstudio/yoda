@@ -19,6 +19,11 @@ const SUMMARY_TIMEOUT_MS = 90_000;
 
 type SummaryCommand = { command: string; args: string[]; stdin: string };
 
+export type SessionSummaryGenerationResult = {
+  summary: SessionSummary | null;
+  error: string | null;
+};
+
 /**
  * The provider/model/prompt a summary should run on. Resolved from the
  * configured summary Agent (NOT the session's runtime) so summaries keep
@@ -77,8 +82,10 @@ export async function generateSessionSummary(
   draft: SummaryDraft,
   scope: SessionSummaryScope,
   onDelta?: (delta: string) => void
-): Promise<SessionSummary | null> {
-  if (runtime.language === 'skip') return null;
+): Promise<SessionSummaryGenerationResult> {
+  if (runtime.language === 'skip') {
+    return { summary: null, error: 'Session summary generation is disabled.' };
+  }
   const { runtimeId, runtimeName } = runtime;
   const { messages: transcriptMessages, prompt } = draft;
 
@@ -87,7 +94,12 @@ export async function generateSessionSummary(
   // see resolveSummaryRuntime. Provider is the Agent's own, never the session's.
   const providerConfig = await runtimeOverrideSettings.getItem(runtimeId);
   const command = buildSummaryCommand(runtimeId, prompt, runtime.model);
-  if (!command) return null;
+  if (!command) {
+    return {
+      summary: null,
+      error: `Session summary generation is not supported for ${runtimeName}.`,
+    };
+  }
 
   try {
     const cliStartedAt = Date.now();
@@ -107,7 +119,9 @@ export async function generateSessionSummary(
     });
     const cliDurationMs = Date.now() - cliStartedAt;
     const text = normalizeGeneratedSummaryText(extractAgentMessageText(result.stdout), scope);
-    if (!text) return null;
+    if (!text) {
+      return { summary: null, error: `${runtimeName} returned no summary text.` };
+    }
     log.info('[session-summary] generate timing', {
       runtimeId,
       scope,
@@ -119,16 +133,20 @@ export async function generateSessionSummary(
       cliDurationMs,
       totalDurationMs: Date.now() - startedAt,
     });
-    return { text, timestamp: new Date().toISOString() };
+    return {
+      summary: { text, timestamp: new Date().toISOString() },
+      error: null,
+    };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     log.warn('generateSessionSummary: failed', {
       runtimeId,
       scope,
       messageCount: transcriptMessages.length,
       totalDurationMs: Date.now() - startedAt,
-      error: error instanceof Error ? error.message : String(error),
+      error: message,
     });
-    return null;
+    return { summary: null, error: message };
   }
 }
 

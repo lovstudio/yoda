@@ -15,7 +15,11 @@ import type { RuntimeId } from '@shared/runtime-registry';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { agentSessionRuntimeStore } from './agent-session-runtime';
-import { generateSessionSummary, resolveSummaryRuntime } from './generateSessionSummary';
+import {
+  generateSessionSummary,
+  resolveSummaryRuntime,
+  type SessionSummaryGenerationResult,
+} from './generateSessionSummary';
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getCodexSessionContext } from './getCodexSessionContext';
 import { buildSummaryDraft } from './session-summary-prompt';
@@ -40,7 +44,7 @@ const SUMMARY_CACHE_MAX = 128;
 // durable copy lives in SQLite (see session-summary-store) so it survives
 // restarts; this Map is only a per-process accelerator.
 const generatedSummaryCache = new Map<string, SessionSummary>();
-const generatedSummaryInFlight = new Map<string, Promise<SessionSummary | null>>();
+const generatedSummaryInFlight = new Map<string, Promise<SessionSummaryGenerationResult>>();
 
 /**
  * Resolves a session summary for one scope:
@@ -272,9 +276,10 @@ export async function getSessionSummary(
     generateSessionSummary(runtime, cwd, draft, scope, (delta) =>
       events.emit(sessionSummaryStreamChannel, { scope, delta }, topic)
     );
-  const generated = force
+  const generation = force
     ? await runGeneration()
     : await getOrCreateSummaryGeneration(cacheKey, runGeneration);
+  const generated = generation.summary;
   const generateDurationMs = Date.now() - generateStartedAt;
   if (generated) {
     setSummaryCache(cacheKey, generated);
@@ -292,7 +297,7 @@ export async function getSessionSummary(
       ...snapshotBase,
       status: generated ? 'ready' : 'failed',
       generatedSummary: generated?.text,
-      error: generated ? undefined : 'Generation produced no usable summary.',
+      error: generated ? undefined : (generation.error ?? 'Generation produced no usable summary.'),
     });
   }
   events.emit(
@@ -440,8 +445,8 @@ function setSummaryCache(key: string, summary: SessionSummary): void {
 
 function getOrCreateSummaryGeneration(
   key: string,
-  generate: () => Promise<SessionSummary | null>
-): Promise<SessionSummary | null> {
+  generate: () => Promise<SessionSummaryGenerationResult>
+): Promise<SessionSummaryGenerationResult> {
   const existing = generatedSummaryInFlight.get(key);
   if (existing) return existing;
 
