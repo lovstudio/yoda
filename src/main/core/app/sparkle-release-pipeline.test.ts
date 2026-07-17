@@ -42,4 +42,10 @@ describe('Sparkle release pipeline', () => {
     expect(productionWorkflow).toContain('release/appcast-*.xml');
     expect(productionWorkflow).toContain('release/*.delta');
   });
+
+  it('refreshes stable manifests, appcasts, and overwritten latest binaries on Qiniu', () => {
+    expect(chinaUploader).toContain('const latestAssetUrls = [...installers, ...blockmaps].map');
+    expect(chinaUploader).toContain("joinUrl(publicBaseUrl, 'latest', basename(file))");
+    expect(chinaUploader).toContain('...latestAssetUrls');
+  });
 });

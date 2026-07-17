@@ -118,6 +118,9 @@ const binaryUploads = [...installers, ...blockmaps].flatMap((file) => {
     },
   ] satisfies UploadItem[];
 });
+const latestAssetUrls = [...installers, ...blockmaps].map((file) =>
+  joinUrl(publicBaseUrl, 'latest', basename(file))
+);
 
 const sparkleDeltaUploads = sparkleDeltas.flatMap((file) => {
   const name = basename(file);
@@ -164,6 +167,7 @@ if (isQiniuEndpoint(endpoint)) {
   await refreshQiniuCdnUrls([
     ...rootManifestUrls,
     ...sparkleFeeds.map((feed) => joinUrl(publicBaseUrl, basename(feed))),
+    ...latestAssetUrls,
   ]);
 }
 
@@ -274,7 +278,7 @@ async function refreshQiniuCdnUrls(urls: string[]): Promise<void> {
   }
 
   assertQiniuUploadApi();
-  step(`Refreshing ${urls.length} China mirror CDN manifest URL(s)`);
+  step(`Refreshing ${urls.length} China mirror CDN URL(s)`);
 
   const mac = new qiniu.auth.digest.Mac(accessKeyId, secretAccessKey);
   const cdnManager = new qiniu.cdn.CdnManager(mac);
@@ -290,13 +294,13 @@ async function refreshQiniuCdnUrls(urls: string[]): Promise<void> {
       });
     }),
     QINIU_CDN_REFRESH_TIMEOUT_MS,
-    'Qiniu CDN refresh timed out for update manifests'
+    'Qiniu CDN refresh timed out for published release URLs'
   );
 
   const statusCode = result.respInfo?.statusCode;
   if (typeof statusCode !== 'number' || statusCode >= 400) {
     fail(
-      `Qiniu CDN refresh failed for update manifests: HTTP ${statusCode ?? 'unknown'} ${JSON.stringify(result.respBody)}`
+      `Qiniu CDN refresh failed for published release URLs: HTTP ${statusCode ?? 'unknown'} ${JSON.stringify(result.respBody)}`
     );
   }
 
