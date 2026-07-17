@@ -85,6 +85,15 @@ describe('terminal file links', () => {
     ]);
   });
 
+  it('extracts a rooted path whose filename contains spaces and CJK punctuation', () => {
+    const line = '  /Users/mark/lovstudio/vault/Agent 时代，我们需要怎样的 IDE.pdf';
+    const expected = '/Users/mark/lovstudio/vault/Agent 时代，我们需要怎样的 IDE.pdf';
+
+    expect(extractTerminalFileLinkCandidates(line)).toEqual([
+      { text: expected, index: line.indexOf(expected) },
+    ]);
+  });
+
   it('keeps separate rooted paths from being merged through prose', () => {
     const first = '/Users/mark/Library/Application Support/yoda/first.log';
     const second = '/Users/mark/Library/Application Support/yoda/second.log';
