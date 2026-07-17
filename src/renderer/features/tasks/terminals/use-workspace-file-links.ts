@@ -28,7 +28,7 @@ export function useWorkspaceFileLinks(
       workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
       sshConnectionId: remoteConnectionId,
-      onOpen: ({ filePath, absolutePath, line, column }) => {
+      onOpen: ({ filePath, absolutePath, line, column, isDirectory }) => {
         if (filePath) {
           // Open into the sidebar so the pane stays visible.
           provisionedTask.taskView.tabManager.openFileInSidebar(filePath, { line, column });
@@ -39,6 +39,7 @@ export function useWorkspaceFileLinks(
           void rpc.app.openIn(
             buildFilePathDefaultOpenRequest({
               absolutePath,
+              kind: isDirectory ? 'directory' : 'file',
               sshConnectionId: remoteConnectionId,
               line,
               column,

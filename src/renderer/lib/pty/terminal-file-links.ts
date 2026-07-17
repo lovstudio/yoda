@@ -464,8 +464,22 @@ export function resolveTerminalFileLinkTarget(
 
   // Expand `~/...` against the home dir when provided.
   if (rawPath.startsWith('~/')) {
-    if (!normalizedHome) return null;
-    rawPath = `${normalizedHome}/${rawPath.slice(2)}`;
+    const homeRelativePath = rawPath.slice(2).replace(/\/+$/g, '');
+    if (normalizedHome) {
+      rawPath = `${normalizedHome}/${homeRelativePath}`;
+    } else if (isDirectory && normalizedRoot && normalizedRoot.endsWith(`/${homeRelativePath}`)) {
+      // The current workspace itself is often printed as a compact `~/...`
+      // directory before the async home-directory query has completed.
+      rawPath = normalizedRoot;
+    } else {
+      return null;
+    }
+  }
+
+  // A directory equal to the workspace root has no workspace-relative tail;
+  // keep the absolute root instead of rejecting the empty relative path.
+  if (isDirectory && normalizedRoot && rawPath.replace(/\/+$/g, '') === normalizedRoot) {
+    return { originalText: text, isDirectory: true, absolutePath: normalizedRoot };
   }
 
   const base = resolveFileTarget(text, rawPath, parsed, normalizedRoot, normalizedRootAliases);

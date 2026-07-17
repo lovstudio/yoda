@@ -206,7 +206,7 @@ export const ConversationSession = observer(function ConversationSession({
       workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
       sshConnectionId: remoteConnectionId,
-      onOpen: ({ filePath, absolutePath, line, column }) => {
+      onOpen: ({ filePath, absolutePath, line, column, isDirectory }) => {
         if (filePath) {
           provisioned.taskView.tabManager.openFileInSidebar(filePath, { line, column });
           provisioned.taskView.setSidebarCollapsed(false);
@@ -216,6 +216,7 @@ export const ConversationSession = observer(function ConversationSession({
           void rpc.app.openIn(
             buildFilePathDefaultOpenRequest({
               absolutePath,
+              kind: isDirectory ? 'directory' : 'file',
               sshConnectionId: remoteConnectionId,
               line,
               column,

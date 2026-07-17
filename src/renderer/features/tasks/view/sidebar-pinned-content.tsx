@@ -162,7 +162,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
       workspaceRootAliases: projectRoot ? [projectRoot] : undefined,
       homeDir: typeof homeDir === 'string' ? homeDir : undefined,
       sshConnectionId: remoteConnectionId,
-      onOpen: ({ filePath, absolutePath, line, column }) => {
+      onOpen: ({ filePath, absolutePath, line, column, isDirectory }) => {
         if (filePath) {
           // Open into the MAIN area — the whole point of pinning is keeping
           // this session visible while inspecting other content.
@@ -174,6 +174,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
           void rpc.app.openIn(
             buildFilePathDefaultOpenRequest({
               absolutePath,
+              kind: isDirectory ? 'directory' : 'file',
               sshConnectionId: remoteConnectionId,
               line,
               column,
