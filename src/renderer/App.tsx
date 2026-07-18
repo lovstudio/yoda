@@ -9,10 +9,12 @@ import { ReviewOrchestrationEvents } from './app/review-orchestration-events';
 import { SettingsSyncAgent } from './app/settings-sync-agent';
 import { WelcomeScreen } from './app/welcome';
 import { Workspace } from './app/workspace';
+import { AiLabAppWindow } from './features/ai-lab/ai-lab-window';
 import { IntegrationsProvider } from './features/integrations/integrations-provider';
 import { Onboarding } from './features/onboarding/onboarding';
 import { ComparisonWindow } from './features/tasks/comparison-window';
 import { TaskTabWindow } from './features/tasks/task-window';
+import { getAiLabWindowLaunchTarget, isAiLabWindowLaunch } from './lib/ai-lab-window-launch-target';
 import {
   getComparisonWindowLaunchTarget,
   isComparisonWindowLaunch,
@@ -43,10 +45,10 @@ const AppContent = observer(function AppContent() {
 
   const isLoading = sessionLoading;
 
-  // Boot splash: main/full-app windows only — detached task/comparison windows
+  // Boot splash: main/full-app windows only — detached task/comparison/AI Lab windows
   // pop open instantly without the kernel boot screen.
   const [bootScreenDone, setBootScreenDone] = useState(
-    isTaskWindowLaunch || isComparisonWindowLaunch
+    isTaskWindowLaunch || isComparisonWindowLaunch || isAiLabWindowLaunch
   );
 
   // Computed once when queries first resolve while in onboarding. Never updated
@@ -70,13 +72,17 @@ const AppContent = observer(function AppContent() {
   };
 
   const handleOpenSettingsFromMenu = useCallback(() => {
-    if (isTaskWindowLaunch || isComparisonWindowLaunch) return false;
+    if (isTaskWindowLaunch || isComparisonWindowLaunch || isAiLabWindowLaunch) return false;
     if (view === 'onboarding' && stepsNeeded.length > 0) return false;
     setView('workspace');
     return true;
   }, [view, stepsNeeded.length]);
 
   const renderContent = () => {
+    if (isAiLabWindowLaunch) {
+      const target = getAiLabWindowLaunchTarget();
+      return target ? <AiLabAppWindow target={target} /> : null;
+    }
     if (isComparisonWindowLaunch) {
       const target = getComparisonWindowLaunchTarget();
       return target ? <ComparisonWindow target={target} /> : null;
@@ -107,7 +113,9 @@ const AppContent = observer(function AppContent() {
               <WorkspaceViewProvider>
                 <AppMenuEvents onOpenSettings={handleOpenSettingsFromMenu} />
                 <ReviewOrchestrationEvents />
-                {!isTaskWindowLaunch && !isComparisonWindowLaunch && <AiLabBuildEvents />}
+                {!isTaskWindowLaunch && !isComparisonWindowLaunch && !isAiLabWindowLaunch && (
+                  <AiLabBuildEvents />
+                )}
                 <RightSidebarProvider>
                   <ThemeProvider>
                     {renderContent()}

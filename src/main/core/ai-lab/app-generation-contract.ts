@@ -34,12 +34,24 @@ RUNTIME CONTRACT:
 - Do not use external scripts, stylesheets, fonts, images, network requests, or package imports. The app must work offline immediately.
 - Recreate React/shadcn interaction quality with accessible semantic HTML, reusable JavaScript render functions, restrained design tokens, clear focus states, and polished empty/error states.
 - Keep data access behind an explicit async service/repository boundary so a real backend adapter can replace local state without changing the UI.
-- When the request needs a backend, implement the API contract and error/loading states against local in-memory data. Do not fake remote success.
+- When a request needs image restyling or reference-image generation, call the host capability documented below. Do not substitute Canvas filters, local calculations, timers, or fake success for a model result.
+- For backend capabilities not listed below, implement honest unavailable/error states against a service boundary. Do not fake remote success.
 - Use localStorage only as an optional enhancement: the sandbox may deny it, so catch storage errors and keep an in-memory fallback.
 - Do not attempt to access window.parent, Electron, Node.js, cookies, or the filesystem.
 - Make the layout responsive down to 360px. Respect prefers-color-scheme and prefers-reduced-motion.
 - No placeholder buttons: every visible control must work.
 - Prefer a focused app with one memorable primary workflow over a generic dashboard.
+
+HOST CAPABILITY — ZENMUX IMAGE EDIT:
+- The sandbox exposes window.yoda.ai.editImage(input). The host obtains the user's configured ZenMux MaaS inference credentials; API keys are never available inside the app.
+- Input: { imageDataUrl, prompt, size?, quality? }. imageDataUrl must be a base64 PNG/JPEG/WebP data URL. size is one of "1024x1024", "1536x1024", "1024x1536". quality is "auto", "medium", or "high".
+- Output: Promise<{ imageDataUrl, model }>. model is pinned by the host to "openai/gpt-image-2" and imageDataUrl is the actual generated PNG.
+- The host sends the source as a multipart image edit. GPT Image 2 automatically processes every image input at high input fidelity, so do not pass the legacy input_fidelity option. For portrait restyling, prompts must explicitly preserve the exact person's identity, gender presentation, age, facial geometry, hairstyle, pose, camera angle, clothing, and distinctive objects.
+- A complete call looks like: const result = await window.yoda.ai.editImage({ imageDataUrl, prompt, size: "1024x1024", quality: "high" });
+- To copy the latest host/model error, call await window.yoda.ai.copyLastError(). This delegates clipboard writing to Yoda because the sandbox cannot access the Clipboard API directly.
+- Always show genuine pending and error states around the awaited call. Only show success or enable download after result.imageDataUrl is returned.
+- Remote error states must keep the full error message available and include a visible control that copies it to the clipboard.
+- The host asks the user for permission before the first paid model call in each open app session.
 
 OUTPUT CONTRACT:
 Output exactly these two markers and their content, with no Markdown fence or commentary:

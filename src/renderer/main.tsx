@@ -10,6 +10,7 @@ import type {
   NavigationSnapshot,
   SidebarSnapshot,
 } from '@shared/view-state';
+import { isAiLabWindowLaunch } from '@renderer/lib/ai-lab-window-launch-target';
 import { setupAppCommandProvider } from '@renderer/lib/commands/app-commands';
 import { setupViewCommandProvider } from '@renderer/lib/commands/registry';
 import { wireCommitHistoryInvalidation } from '@renderer/lib/commit-history-invalidation';
@@ -77,12 +78,12 @@ async function bootstrap() {
         },
       },
     });
-  } else if (navResult && !isComparisonWindowLaunch) {
+  } else if (navResult && !isComparisonWindowLaunch && !isAiLabWindowLaunch) {
     appState.navigation.restoreSnapshot(navResult);
   }
   // Detached windows are not the app-tab surface — comparison windows tile their
-  // own panes and task windows are single-route, so skip tab/side-pane restore.
-  if (!launchTarget && !isComparisonWindowLaunch) {
+  // own panes, while task and AI Lab windows are single-route, so skip restore.
+  if (!launchTarget && !isComparisonWindowLaunch && !isAiLabWindowLaunch) {
     const appTabsResult = (allViewState as Record<string, unknown>)?.appTabs;
     if (appTabsResult) {
       appState.appTabs.restoreSnapshot(appTabsResult as Partial<AppTabsSnapshot>);

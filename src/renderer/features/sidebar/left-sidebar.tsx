@@ -241,20 +241,13 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               </span>
               <ShortcutHint settingsKey="commandPaletteTasks" />
             </SidebarMenuButton>
-            <GlobalSidePaneTarget
-              viewId="library"
-              params={skillIssueCount > 0 ? { section: 'skills' } : undefined}
-              altHeld={altHeld}
-            >
+            <GlobalSidePaneTarget viewId="library" params={libraryParams} altHeld={altHeld}>
               <SidebarMenuButton
                 isActive={isCurrentView(currentView, 'library')}
                 onClick={(e) =>
                   e.altKey
-                    ? appState.sidePane.pinView(
-                        'library',
-                        skillIssueCount > 0 ? { section: 'skills' } : {}
-                      )
-                    : navigate('library', skillIssueCount > 0 ? { section: 'skills' } : undefined)
+                    ? appState.sidePane.pinView('library', libraryParams)
+                    : navigate('library', libraryParams)
                 }
                 aria-label={t('sidebar.library')}
                 title={skillIssueTitle ?? t('sidebar.library')}

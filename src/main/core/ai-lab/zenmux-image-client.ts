@@ -1,5 +1,11 @@
 import type { AiLabZenmuxModel } from '@shared/ai-lab';
+import {
+  AI_LAB_APP_IMAGE_MODEL,
+  type AiLabImageEditQuality,
+  type AiLabImageEditSize,
+} from '@shared/ai-lab-bridge';
 import { aiLogService } from '@main/core/ai-logs/ai-log-service';
+import type { AiLabImageMimeType } from './app-image-edit';
 
 const REQUEST_TIMEOUT_MS = 180_000;
 
@@ -17,6 +23,62 @@ type VertexGenerateContentResponse = ApiErrorBody & {
     content?: { parts?: Array<{ inlineData?: { data?: string } }> };
   }>;
 };
+
+/** Restyles a source image through ZenMux's OpenAI-compatible multipart edit protocol. */
+export async function editZenmuxImage(input: {
+  endpoint: string;
+  apiKey: string;
+  appId: string;
+  prompt: string;
+  source: Buffer;
+  sourceMimeType: AiLabImageMimeType;
+  size: AiLabImageEditSize;
+  quality: AiLabImageEditQuality;
+}): Promise<Buffer> {
+  const url = `${trimTrailingSlash(input.endpoint)}/images/edits`;
+  const logId = await aiLogService.start({
+    purpose: 'app-image-edit',
+    mode: 'api',
+    runtime: 'zenmux',
+    model: AI_LAB_APP_IMAGE_MODEL,
+    command: url,
+    prompt: input.prompt,
+    metadata: { appId: input.appId, size: input.size, quality: input.quality },
+  });
+  try {
+    const form = new FormData();
+    form.set('model', AI_LAB_APP_IMAGE_MODEL);
+    form.append(
+      'image[]',
+      new Blob([Uint8Array.from(input.source)], { type: input.sourceMimeType }),
+      sourceFileName(input.sourceMimeType)
+    );
+    form.set('prompt', input.prompt);
+    form.set('n', '1');
+    form.set('size', input.size);
+    form.set('quality', input.quality);
+    form.set('output_format', 'png');
+
+    const body = await postMultipart<OpenAiImagesResponse>(url, input.apiKey, form);
+    const b64 = body.data?.[0]?.b64_json;
+    if (typeof b64 !== 'string' || b64.length === 0) {
+      throw new Error('ZenMux Images edit API returned no image data.');
+    }
+    const buffer = Buffer.from(b64, 'base64');
+    if (buffer.length === 0) throw new Error('ZenMux Images edit API returned an empty image.');
+    await aiLogService.finish(logId, {
+      status: 'succeeded',
+      output: '1 edited image generated.',
+    });
+    return buffer;
+  } catch (error) {
+    await aiLogService.finish(logId, {
+      status: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
 
 /**
  * Generates logo candidates through ZenMux. OpenAI image models use the
@@ -145,6 +207,42 @@ async function postJson<T extends ApiErrorBody>(
   }
 }
 
+async function postMultipart<T extends ApiErrorBody>(
+  url: string,
+  apiKey: string,
+  form: FormData
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+    });
+
+    let body: T | null = null;
+    try {
+      body = (await response.json()) as T;
+    } catch {
+      body = null;
+    }
+
+    if (!response.ok || !body) {
+      throw new Error(
+        `ZenMux image request failed (${response.status}): ${extractErrorMessage(
+          body,
+          response.statusText || 'Request failed.'
+        )}`
+      );
+    }
+    return body;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function extractErrorMessage(body: ApiErrorBody | null, fallback: string): string {
   if (!body) return fallback;
   if (typeof body.error === 'string' && body.error.trim()) return body.error;
@@ -155,4 +253,10 @@ function extractErrorMessage(body: ApiErrorBody | null, fallback: string): strin
 
 function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '');
+}
+
+function sourceFileName(mimeType: AiLabImageMimeType): string {
+  if (mimeType === 'image/jpeg') return 'source.jpg';
+  if (mimeType === 'image/webp') return 'source.webp';
+  return 'source.png';
 }

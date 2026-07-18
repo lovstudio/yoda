@@ -1,6 +1,11 @@
 import { join } from 'node:path';
 import { BrowserWindow, screen } from 'electron';
 import appIcon from '@/assets/images/yoda/yoda_logo.png?asset';
+import {
+  AI_LAB_WINDOW_TARGET_PARAM,
+  encodeAiLabWindowTarget,
+  type AiLabWindowTarget,
+} from '@shared/ai-lab-window';
 import { PRODUCT_NAME } from '@shared/app-identity';
 import {
   COMPARISON_WINDOW_TARGET_PARAM,
@@ -80,6 +85,11 @@ export function createComparisonWindow(comparison: ComparisonWindowTarget): Brow
   return createAppWindow({ comparison });
 }
 
+/** Open one persisted AI Lab app in its own sandboxed renderer window. */
+export function createAiLabWindow(aiLab: AiLabWindowTarget): BrowserWindow {
+  return createAppWindow({ aiLab });
+}
+
 /** Spawn an empty, hidden task window that boots its renderer shell and parks. */
 export function createWarmTaskWindow(): BrowserWindow {
   return createAppWindow({ warm: true });
@@ -97,20 +107,28 @@ export function positionTaskWindow(win: BrowserWindow, bounds?: TaskWindowBounds
 }
 
 function createAppWindow(
-  options: { target?: TaskWindowTarget; comparison?: ComparisonWindowTarget; warm?: boolean } = {}
+  options: {
+    target?: TaskWindowTarget;
+    comparison?: ComparisonWindowTarget;
+    aiLab?: AiLabWindowTarget;
+    warm?: boolean;
+  } = {}
 ): BrowserWindow {
   const isComparisonWindow = Boolean(options.comparison);
+  const isAiLabWindow = Boolean(options.aiLab);
   const isTaskWindow = Boolean(options.target) || options.warm === true;
   // Comparison windows are detached surfaces like task windows (no app-tab strip)
   // but want a larger default footprint to fit several tiled panes.
-  const isDetachedWindow = isTaskWindow || isComparisonWindow;
+  const isDetachedWindow = isTaskWindow || isComparisonWindow || isAiLabWindow;
   const bounds = isComparisonWindow
     ? resolveComparisonWindowBounds()
-    : isTaskWindow && !options.warm
-      ? resolveTaskWindowBounds(options.target?.bounds)
-      : isTaskWindow
-        ? resolveTaskWindowBounds(undefined)
-        : { width: 1400, height: 900, x: undefined, y: undefined };
+    : isAiLabWindow
+      ? resolveTaskWindowBounds(undefined)
+      : isTaskWindow && !options.warm
+        ? resolveTaskWindowBounds(options.target?.bounds)
+        : isTaskWindow
+          ? resolveTaskWindowBounds(undefined)
+          : { width: 1400, height: 900, x: undefined, y: undefined };
 
   const win = new BrowserWindow({
     width: bounds.width,
@@ -230,6 +248,7 @@ function clamp(value: number, min: number, max: number): number {
 function rendererUrl(options: {
   target?: TaskWindowTarget;
   comparison?: ComparisonWindowTarget;
+  aiLab?: AiLabWindowTarget;
   warm?: boolean;
 }): string {
   const base = import.meta.env.DEV
@@ -244,6 +263,9 @@ function rendererUrl(options: {
       COMPARISON_WINDOW_TARGET_PARAM,
       encodeComparisonWindowTarget(options.comparison)
     );
+  }
+  if (options.aiLab) {
+    url.searchParams.set(AI_LAB_WINDOW_TARGET_PARAM, encodeAiLabWindowTarget(options.aiLab));
   }
   if (options.warm) {
     url.searchParams.set(TASK_WINDOW_WARM_PARAM, '1');
