@@ -3,6 +3,7 @@ import { stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { app, clipboard, dialog, shell } from 'electron';
+import { isAiLabWindowTarget, type AiLabWindowTarget } from '@shared/ai-lab-window';
 import type { AppResourceSnapshot } from '@shared/app-resource';
 import { isComparisonWindowTarget, type ComparisonWindowTarget } from '@shared/comparison-window';
 import {
@@ -31,7 +32,7 @@ import {
   type TaskStripDropZone,
 } from '@main/app/task-window-dock';
 import { openTaskWindowFromPool } from '@main/app/task-window-pool';
-import { createComparisonWindow, getMainWindow } from '@main/app/window';
+import { createAiLabWindow, createComparisonWindow, getMainWindow } from '@main/app/window';
 import { taskManager } from '@main/core/tasks/task-manager';
 import { db } from '@main/db/client';
 import { sshConnections } from '@main/db/schema';
@@ -245,6 +246,11 @@ class AppService implements IInitializable, IDisposable {
   openComparisonWindow(target: ComparisonWindowTarget): void {
     if (!isComparisonWindowTarget(target)) throw new Error('Invalid comparison window target');
     createComparisonWindow(target);
+  }
+
+  openAiLabWindow(target: AiLabWindowTarget): void {
+    if (!isAiLabWindowTarget(target)) throw new Error('Invalid AI Lab window target');
+    createAiLabWindow(target);
   }
 
   /** From a comparison pane: route the main window to one of the compared tasks. */

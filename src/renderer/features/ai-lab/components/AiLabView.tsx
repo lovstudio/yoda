@@ -2,24 +2,27 @@ import {
   AppWindow,
   ArrowLeft,
   CornerUpLeft,
+  ExternalLink,
+  Loader2,
   Pin,
   PinOff,
   Plus,
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AiLabUserApp } from '@shared/ai-lab';
 import { getRuntime } from '@shared/runtime-registry';
 import { useToast } from '@renderer/lib/hooks/use-toast';
+import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { cn } from '@renderer/utils/utils';
 import { AI_LAB_APPS, type AiLabAppDefinition } from '../app-registry';
-import { applySandboxPolicy } from '../sandbox-policy';
 import { useAiLabApps, useDeleteAiLabApp, useUpdateAiLabApp } from '../use-ai-lab';
+import { UserAppFrame } from './user-app-frame';
 
 type AiLabViewProps = {
   embedded?: boolean;
@@ -224,7 +227,7 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
   const { toast } = useToast();
   const updateApp = useUpdateAiLabApp();
   const deleteApp = useDeleteAiLabApp();
-  const source = useMemo(() => applySandboxPolicy(app.html), [app.html]);
+  const [isOpeningWindow, setIsOpeningWindow] = useState(false);
 
   const openBuildTask = () => {
     if (!app.projectId || !app.taskId) return;
@@ -250,6 +253,28 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
     });
   };
 
+  const openInWindow = async () => {
+    setIsOpeningWindow(true);
+    try {
+      const result = await rpc.app.openAiLabWindow({ appId: app.id });
+      if (!result.success) {
+        toast({
+          title: t('aiLab.openInWindowFailed'),
+          description: result.error,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: t('aiLab.openInWindowFailed'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsOpeningWindow(false);
+    }
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <header className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
@@ -265,6 +290,16 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
           <ShieldCheck className="mr-1 size-3" />
           {t('aiLab.sandbox')}
         </Badge>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          disabled={isOpeningWindow}
+          aria-label={t('aiLab.openInWindow')}
+          title={t('aiLab.openInWindow')}
+          onClick={() => void openInWindow()}
+        >
+          {isOpeningWindow ? <Loader2 className="animate-spin" /> : <ExternalLink />}
+        </Button>
         {app.projectId && app.taskId && (
           <Button
             size="sm"
@@ -299,14 +334,7 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
         </Button>
       </header>
       <div className="min-h-0 flex-1 bg-background-secondary p-3 @max-md:p-0">
-        <iframe
-          key={app.updatedAt}
-          title={app.name}
-          srcDoc={source}
-          sandbox="allow-scripts allow-forms allow-modals"
-          referrerPolicy="no-referrer"
-          className="h-full min-h-[420px] w-full rounded-xl border border-border bg-white shadow-sm @max-md:rounded-none @max-md:border-0"
-        />
+        <UserAppFrame app={app} className="@max-md:rounded-none @max-md:border-0" />
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { homedir } from 'node:os';
+import type { AiLabWindowTarget } from '@shared/ai-lab-window';
 import type { ComparisonWindowTarget } from '@shared/comparison-window';
 import type { TaskWindowReturnPayload } from '@shared/events/appEvents';
 import { createRPCController } from '@shared/ipc/rpc';
@@ -50,6 +51,14 @@ export const appController = createRPCController({
   openComparisonWindow: async (target: ComparisonWindowTarget) => {
     try {
       appService.openComparisonWindow(target);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  openAiLabWindow: async (target: AiLabWindowTarget) => {
+    try {
+      appService.openAiLabWindow(target);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
