@@ -1,12 +1,44 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { LogoGenerationInput } from '@shared/ai-lab';
+import type { CreateAiLabAppInput, LogoGenerationInput, UpdateAiLabAppInput } from '@shared/ai-lab';
 import { rpc } from '@renderer/lib/ipc';
 
 export const aiLabQueryKeys = {
   engines: ['aiLab', 'engines'] as const,
   generations: ['aiLab', 'generations'] as const,
   image: (id: string, index: number) => ['aiLab', 'image', id, index] as const,
+  apps: ['aiLab', 'apps'] as const,
 };
+
+export function useAiLabApps() {
+  return useQuery({
+    queryKey: aiLabQueryKeys.apps,
+    queryFn: () => rpc.aiLab.listApps(),
+  });
+}
+
+export function useCreateAiLabApp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateAiLabAppInput) => rpc.aiLab.createApp(input),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: aiLabQueryKeys.apps }),
+  });
+}
+
+export function useUpdateAiLabApp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateAiLabAppInput) => rpc.aiLab.updateApp(input),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: aiLabQueryKeys.apps }),
+  });
+}
+
+export function useDeleteAiLabApp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => rpc.aiLab.deleteApp(id),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: aiLabQueryKeys.apps }),
+  });
+}
 
 export function useAiLabEngines() {
   return useQuery({

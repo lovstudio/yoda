@@ -2007,6 +2007,7 @@
   },
   "library": {
     "sections": {
+      "aiLab": "AI Lab",
       "prompts": "提示词",
       "agents": "智能体",
       "agentTeams": "智能体团队",
@@ -3115,8 +3116,33 @@
   },
   "aiLab": {
     "title": "AI Lab",
-    "subtitle": "你的 AI 应用中心——vibe coding 做出来的小应用都装在这里，持续上新。",
+    "subtitle": "用自然语言创建、运行并收藏你的单文件应用。",
     "back": "返回 AI Lab",
+    "myApps": "我的应用",
+    "myAppsDescription": "每个应用都是一份可立即运行的单文件作品。",
+    "builtInApps": "开箱即用",
+    "pin": "固定到导航栏",
+    "unpin": "取消固定",
+    "delete": "删除应用",
+    "deleteConfirm": "确定删除「{{name}}」吗？此操作无法撤销。",
+    "deleteFailed": "删除应用失败",
+    "builder": {
+      "title": "一句话，做一个 App",
+      "description": "描述你需要的工具或体验，AI Lab 会在隔离沙箱中生成并运行它。",
+      "placeholder": "例如：做一个适合旅行前使用的打包清单，按证件、衣物和电子设备分组，能保存勾选进度……",
+      "create": "生成 App",
+      "creating": "正在生成",
+      "creatingHint": "Codex 正在完成界面、状态和交互，通常需要一两分钟。",
+      "failed": "生成应用失败",
+      "emptyTitle": "还没有自己做的应用",
+      "emptyDescription": "从上面写下一句话开始。第一版生成后会直接在这里打开。",
+      "capabilities": {
+        "react": "React 交互范式",
+        "shadcn": "shadcn 设计系统",
+        "api": "前后端契约",
+        "sandbox": "隔离沙箱"
+      }
+    },
     "comingSoonTitle": "更多应用在路上",
     "comingSoonDescription": "这里会不断生长——下一个想法就是下一个应用。",
     "apps": {

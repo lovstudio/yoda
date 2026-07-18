@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   BookOpen,
   ExternalLink,
   FolderInput,
@@ -18,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { skillIssueAgentLabel } from '@shared/skills/validation';
 import { YODA_DOCS_URL, YODA_WEBSITE_URL } from '@shared/urls';
 import type { ViewId } from '@renderer/app/view-registry';
+import { useAiLabApps } from '@renderer/features/ai-lab/use-ai-lab';
 import {
   useSkillValidationIssues,
   type SkillValidationIssueEntry,
@@ -131,6 +133,9 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
 
   const { params: taskParams } = useParams('task');
   const { params: projectParams } = useParams('project');
+  const { params: libraryParams } = useParams('library');
+  const aiLabApps = useAiLabApps();
+  const pinnedApps = (aiLabApps.data ?? []).filter((app) => app.pinned);
   const currentProjectId =
     currentView === 'task'
       ? taskParams.projectId
@@ -264,6 +269,35 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </span>
               </SidebarMenuButton>
             </GlobalSidePaneTarget>
+            {pinnedApps.map((app) => (
+              <GlobalSidePaneTarget
+                key={app.id}
+                viewId="library"
+                params={{ section: 'aiLab', appId: app.id }}
+                altHeld={altHeld}
+              >
+                <SidebarMenuButton
+                  isActive={
+                    currentView === 'library' &&
+                    libraryParams.section === 'aiLab' &&
+                    libraryParams.appId === app.id
+                  }
+                  onClick={(event) =>
+                    event.altKey
+                      ? appState.sidePane.pinView('library', { section: 'aiLab', appId: app.id })
+                      : navigate('library', { section: 'aiLab', appId: app.id })
+                  }
+                  aria-label={app.name}
+                  title={app.description}
+                  className="w-full justify-start pl-7"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <AppWindow className="size-3.5 shrink-0 text-sky-500" />
+                    <span className="min-w-0 truncate text-xs">{app.name}</span>
+                  </span>
+                </SidebarMenuButton>
+              </GlobalSidePaneTarget>
+            ))}
             <div className="my-1 border-t border-border" />
           </SidebarMenu>
         </SidebarFooter>

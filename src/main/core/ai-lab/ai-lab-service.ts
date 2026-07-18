@@ -8,10 +8,13 @@ import {
   AI_LAB_DEFAULT_ZENMUX_MODEL,
   type AiLabEngineId,
   type AiLabEngineStatus,
+  type AiLabUserApp,
   type AiLabZenmuxModel,
+  type CreateAiLabAppInput,
   type LogoGenerationInput,
   type LogoGenerationListItem,
   type LogoGenerationStatus,
+  type UpdateAiLabAppInput,
 } from '@shared/ai-lab';
 import { resolveCommandPath } from '@main/core/dependencies/probe';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
@@ -20,6 +23,8 @@ import { db } from '@main/db/client';
 import { aiLabGenerations } from '@main/db/schema';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
+import { generateAiLabApp } from './app-generation';
+import { AiLabAppStore } from './app-store';
 import { generateCodexImages } from './codex-image-engine';
 import { buildLogoPrompt } from './logo-prompt';
 import { generateZenmuxImages } from './zenmux-image-client';
@@ -59,6 +64,33 @@ function fileNameSlug(value: string): string {
 }
 
 export class AiLabService {
+  private appStore: AiLabAppStore | null = null;
+
+  private getAppStore(): AiLabAppStore {
+    this.appStore ??= new AiLabAppStore(join(app.getPath('userData'), 'ai-lab', 'apps.json'));
+    return this.appStore;
+  }
+
+  async listApps(): Promise<AiLabUserApp[]> {
+    return this.getAppStore().list();
+  }
+
+  async createApp(input: CreateAiLabAppInput): Promise<AiLabUserApp> {
+    const prompt = input.prompt.trim();
+    if (!prompt) throw new Error('Describe the app you want to create.');
+    if (prompt.length > 4_000) throw new Error('The app description is too long.');
+    const generated = await generateAiLabApp(prompt);
+    return this.getAppStore().create({ ...generated, prompt });
+  }
+
+  async updateApp(input: UpdateAiLabAppInput): Promise<AiLabUserApp> {
+    return this.getAppStore().update(input.id, { pinned: input.pinned });
+  }
+
+  async deleteApp(id: string): Promise<void> {
+    return this.getAppStore().delete(id);
+  }
+
   async listEngines(): Promise<AiLabEngineStatus[]> {
     const [zenmuxCredentials, codexPath] = await Promise.all([
       maasService.getInferenceCredentials('zenmux'),
