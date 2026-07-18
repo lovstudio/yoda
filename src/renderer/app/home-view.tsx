@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Anchor,
+  AppWindow,
   Bot,
   Check,
   ChevronDown,
@@ -14,6 +15,7 @@ import {
   GitFork,
   GripVertical,
   Lightbulb,
+  Loader2,
   Monitor,
   Puzzle,
   Repeat2,
@@ -142,7 +144,7 @@ type TaskStrategyKind = 'new-branch' | 'no-worktree';
 /** Strategy actually submitted to createTask — adds checkout-existing, which is
  *  derived (not forking + a non-current local or remote branch picked), never persisted. */
 type TaskSubmitStrategyKind = TaskStrategyKind | 'checkout-existing';
-type HomeRunMode = 'normal' | 'brainstorm' | 'review' | 'team';
+type HomeRunMode = 'normal' | 'build' | 'brainstorm' | 'review' | 'team';
 type RunHostKind = 'local' | 'ssh';
 
 /**
@@ -215,6 +217,7 @@ const INPUT_PROMPT_ENABLED_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'zh-
 type ExplicitTaskOutputLanguage = Extract<TaskOutputLanguage, 'en' | 'zh-CN'>;
 
 const NORMAL_PROMPT_KEY = 'normal:agent';
+const BUILD_PROMPT_KEY = 'build:agent';
 const REVIEW_IMPLEMENTER_PROMPT_KEY = 'review:implementer';
 const REVIEW_REVIEWER_PROMPT_KEY = 'review:reviewer';
 const SPEC_PROMPT_KEY = 'brainstorm:agent';
@@ -222,6 +225,7 @@ const SPEC_PROMPT_KEY = 'brainstorm:agent';
 /** The built-in Agent preset a slot defaults to when nothing is selected. */
 const SLOT_DEFAULT_BUILTIN_KEY: Record<string, string> = {
   [NORMAL_PROMPT_KEY]: BUILTIN_AGENT_KEYS.general,
+  [BUILD_PROMPT_KEY]: BUILTIN_AGENT_KEYS.general,
   [SPEC_PROMPT_KEY]: BUILTIN_AGENT_KEYS.spec,
   [REVIEW_IMPLEMENTER_PROMPT_KEY]: BUILTIN_AGENT_KEYS.reviewImplementer,
   [REVIEW_REVIEWER_PROMPT_KEY]: BUILTIN_AGENT_KEYS.reviewReviewer,
@@ -255,6 +259,11 @@ function getRunModeInputChrome(mode: HomeRunMode): RunModeInputChrome {
     case 'team':
       return {
         containerClassName: ADVANCED_INPUT_CONTAINER_CLASS,
+      };
+    case 'build':
+      return {
+        containerClassName:
+          'border-amber-500/30 bg-amber-500/[0.035] ring-1 ring-amber-500/15 focus-within:border-amber-500/45 focus-within:ring-amber-500/25',
       };
     case 'normal':
       return {
@@ -329,6 +338,7 @@ export const HomeTitlebar = observer(function HomeTitlebar() {
 interface HomeViewWrapperProps {
   children: ReactNode;
   projectId?: string;
+  runMode?: HomeRunMode;
 }
 
 export function HomeViewWrapper({ children }: HomeViewWrapperProps) {
@@ -670,6 +680,11 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [runModeOverridden, setComposerDefault, updateDraft]
   );
+  useEffect(() => {
+    if (!homeParams.runMode) return;
+    setRunMode(homeParams.runMode);
+    setHomeParams({ runMode: undefined });
+  }, [homeParams.runMode, setHomeParams, setRunMode]);
   // Extra comparison environments (ephemeral, not persisted). Empty = a plain
   // single-task submit; non-empty = multi-config compare (base + variants).
   const [compareVariants, setCompareVariants] = useState<CompareVariant[]>([]);
@@ -758,11 +773,13 @@ export const HomeComposer = observer(function HomeComposer({
       );
     }
     const slotKey =
-      runMode === 'brainstorm'
-        ? SPEC_PROMPT_KEY
-        : runMode === 'review'
-          ? REVIEW_IMPLEMENTER_PROMPT_KEY
-          : NORMAL_PROMPT_KEY;
+      runMode === 'build'
+        ? BUILD_PROMPT_KEY
+        : runMode === 'brainstorm'
+          ? SPEC_PROMPT_KEY
+          : runMode === 'review'
+            ? REVIEW_IMPLEMENTER_PROMPT_KEY
+            : NORMAL_PROMPT_KEY;
     const agentId = slotAgentId(slotKey);
     return agentId ? (userAgents.find((agent) => agent.id === agentId) ?? null) : null;
   }, [activeTeam, runMode, slotAgentId, userAgents]);
@@ -777,14 +794,16 @@ export const HomeComposer = observer(function HomeComposer({
       return activeTeam ? teamDisplayName(activeTeam, t) : null;
     }
 
-    // Single-Agent modes (normal / brainstorm / review): the implementer slot's
+    // Single-Agent modes (normal / build / brainstorm / review): the implementer slot's
     // resolved runtime · model.
     const slotKey =
-      runMode === 'brainstorm'
-        ? SPEC_PROMPT_KEY
-        : runMode === 'review'
-          ? REVIEW_IMPLEMENTER_PROMPT_KEY
-          : NORMAL_PROMPT_KEY;
+      runMode === 'build'
+        ? BUILD_PROMPT_KEY
+        : runMode === 'brainstorm'
+          ? SPEC_PROMPT_KEY
+          : runMode === 'review'
+            ? REVIEW_IMPLEMENTER_PROMPT_KEY
+            : NORMAL_PROMPT_KEY;
     const resolved = resolveAgentSlot({
       selectedAgentId: slotAgentId(slotKey),
       agents: userAgents,
@@ -1033,7 +1052,9 @@ export const HomeComposer = observer(function HomeComposer({
         ? Boolean(activeTeam && activeTeam.members.length > 0)
         : runMode === 'brainstorm'
           ? hasSlotAgent(SPEC_PROMPT_KEY)
-          : hasSlotAgent(NORMAL_PROMPT_KEY);
+          : runMode === 'build'
+            ? hasSlotAgent(BUILD_PROMPT_KEY)
+            : hasSlotAgent(NORMAL_PROMPT_KEY);
   // Multi-config compare only fires in plain (normal, non-task-scoped) submits;
   // every variant must target a real project before it can spawn a task.
   const compareActive = runMode === 'normal' && !taskScopedTarget && compareVariants.length > 0;
@@ -1056,11 +1077,16 @@ export const HomeComposer = observer(function HomeComposer({
     modeHasAgents &&
     !featureWorkflowNeedsBrief &&
     compareVariantsReady &&
+    (runMode !== 'build' || (trimmed.length > 0 && mounted?.data.type === 'local')) &&
     (taskScopedTarget
-      ? !!targetProvisionedTask
+      ? runMode === 'build'
+        ? !!mounted
+        : !!targetProvisionedTask
       : modeCanRunWithoutProject
         ? !mounted || !!defaultBranch
-        : !!mounted && (needsInitialCommit || !!defaultBranch));
+        : runMode === 'build'
+          ? !!mounted
+          : !!mounted && (needsInitialCommit || !!defaultBranch));
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || submitting) return;
@@ -1187,6 +1213,32 @@ export const HomeComposer = observer(function HomeComposer({
           agents: userAgents,
           runtimeOverride,
         });
+
+      if (runMode === 'build') {
+        if (!mounted || mounted.data.type !== 'local') return;
+        const slot = resolveSlot(BUILD_PROMPT_KEY, runtimeId);
+        if (!slot.provider) return;
+        const resolvedRequirement = deferInitialPrompt ? await requirementPromise : requirement;
+        if (!resolvedRequirement) return;
+        try {
+          const app = await rpc.aiLab.createApp({
+            prompt: resolvedRequirement,
+            projectId: mounted.data.id,
+            runtimeId: slot.provider,
+            model: slot.agent?.model,
+            systemPrompt: slot.systemPrompt,
+          });
+          await queryClient.invalidateQueries({ queryKey: ['aiLab', 'apps'] });
+          resetComposer();
+          navigate('library', { section: 'apps', appId: app.id });
+          toast.success(t('home.buildCreated', { name: app.name }));
+        } catch (error) {
+          toast.error(t('home.buildFailed'), {
+            description: error instanceof Error ? error.message : t('common.unknownError'),
+          });
+        }
+        return;
+      }
 
       if (taskScopedTarget) {
         if (!targetProvisionedTask) return;
@@ -2250,6 +2302,8 @@ export const HomeComposer = observer(function HomeComposer({
           projectId={projectData?.id ?? null}
           projectPath={skillProjectPath}
           skillSelection={composerSkillSelection}
+          placeholder={runMode === 'build' ? t('home.buildPromptPlaceholder') : undefined}
+          disabled={runMode === 'build' && submitting}
           runHostKind={runHostKind}
           containerClassName={promptInputChrome.containerClassName}
           canSubmit={canSubmit}
@@ -2339,6 +2393,18 @@ export const HomeComposer = observer(function HomeComposer({
               onSelectKind={isProjectLocked ? undefined : selectRunHostProject}
             />
             {runMode === 'brainstorm' && <Chip icon={Lightbulb}>{t('home.brainstormPolicy')}</Chip>}
+            {runMode === 'build' && <Chip icon={AppWindow}>{t('home.buildDestination')}</Chip>}
+            {runMode === 'build' && runHostKind === 'ssh' && (
+              <span className="flex h-7 items-center rounded-md border border-destructive/25 bg-destructive/10 px-2.5 text-xs font-medium text-destructive">
+                {t('home.buildLocalOnly')}
+              </span>
+            )}
+            {runMode === 'build' && submitting && (
+              <span className="flex h-7 items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 text-xs font-medium text-amber-700 ydark:text-amber-300">
+                <Loader2 className="size-3.5 animate-spin" />
+                {t('home.buildGenerating')}
+              </span>
+            )}
             {!taskScopedTarget && mounted && runMode === 'team' && (
               <Chip icon={GitFork}>{t('home.teamBranchPolicy')}</Chip>
             )}
@@ -2855,6 +2921,14 @@ const WORKFLOW_RUN_MODE_OPTIONS: RunModeOption[] = [
     descKey: 'home.modeNormalDesc',
   },
   {
+    id: 'build',
+    mode: 'build',
+    icon: AppWindow,
+    labelKey: 'home.modeBuild',
+    descKey: 'home.modeBuildDesc',
+    alpha: true,
+  },
+  {
     id: 'review-workflow',
     mode: 'review',
     icon: Repeat2,
@@ -3240,6 +3314,22 @@ function ModeConfigurationPanel({
             connectionId={connectionId}
             {...slotProps(NORMAL_PROMPT_KEY)}
           />
+        </div>
+      )}
+
+      {mode === 'build' && (
+        <div className="flex flex-col gap-1.5">
+          <Agent
+            icon={AppWindow}
+            label={t('home.buildAgent')}
+            value={runtimeId}
+            onChange={onRuntimeChange}
+            connectionId={connectionId}
+            {...slotProps(BUILD_PROMPT_KEY)}
+          />
+          <p className="px-1 text-xs leading-relaxed text-foreground-muted">
+            {t('home.buildAgentHint')}
+          </p>
         </div>
       )}
 

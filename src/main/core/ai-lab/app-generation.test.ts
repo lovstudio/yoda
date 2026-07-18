@@ -23,8 +23,13 @@ describe('AI Lab app generation', () => {
   });
 
   it('puts the natural-language request into the sandbox contract', () => {
-    const prompt = buildAppGenerationPrompt('做一个旅行打包清单');
+    const prompt = buildAppGenerationPrompt('做一个旅行打包清单', {
+      projectPath: '/workspace/travel',
+      systemPrompt: 'Reuse the existing product language.',
+    });
     expect(prompt).toContain('做一个旅行打包清单');
+    expect(prompt).toContain('/workspace/travel');
+    expect(prompt).toContain('Reuse the existing product language.');
     expect(prompt).toContain('one complete HTML document');
     expect(prompt).toContain('work offline immediately');
   });

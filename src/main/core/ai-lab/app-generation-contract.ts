@@ -7,8 +7,22 @@ export type GeneratedAiLabApp = {
   html: string;
 };
 
-export function buildAppGenerationPrompt(prompt: string): string {
+export function buildAppGenerationPrompt(
+  prompt: string,
+  context?: { projectPath?: string; systemPrompt?: string }
+): string {
   return `You are the app generator inside Yoda AI Lab. Build a polished, genuinely useful mini app from the user's natural-language request.
+
+${
+  context?.projectPath
+    ? `PROJECT CONTEXT:\nYou are running read-only inside ${context.projectPath}. Inspect the existing project when useful and reuse its product language, data shapes, design tokens, and API conventions. Do not modify project files.`
+    : ''
+}
+${
+  context?.systemPrompt?.trim()
+    ? `\nSELECTED AGENT INSTRUCTIONS:\n${context.systemPrompt.trim()}`
+    : ''
+}
 
 USER REQUEST:
 ${prompt}

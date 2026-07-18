@@ -1,31 +1,16 @@
-import {
-  AppWindow,
-  ArrowLeft,
-  FlaskConical,
-  Loader2,
-  Pin,
-  PinOff,
-  Plus,
-  ShieldCheck,
-  Sparkles,
-  Trash2,
-} from 'lucide-react';
+import { AppWindow, ArrowLeft, Pin, PinOff, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AiLabUserApp } from '@shared/ai-lab';
+import { getRuntime } from '@shared/runtime-registry';
 import { useToast } from '@renderer/lib/hooks/use-toast';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
-import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 import { AI_LAB_APPS, type AiLabAppDefinition } from '../app-registry';
 import { applySandboxPolicy } from '../sandbox-policy';
-import {
-  useAiLabApps,
-  useCreateAiLabApp,
-  useDeleteAiLabApp,
-  useUpdateAiLabApp,
-} from '../use-ai-lab';
+import { useAiLabApps, useDeleteAiLabApp, useUpdateAiLabApp } from '../use-ai-lab';
 
 type AiLabViewProps = {
   embedded?: boolean;
@@ -33,7 +18,7 @@ type AiLabViewProps = {
   onActiveAppChange?: (appId: string | null) => void;
 };
 
-/** AI Lab is a natural-language app workshop hosted as a Library section. */
+/** Apps library: generated apps are created by Home's Yoda Build mode and launched here. */
 export const AiLabView: React.FC<AiLabViewProps> = ({
   embedded = false,
   activeAppId: controlledAppId,
@@ -72,28 +57,10 @@ function Launcher({
   showHeader: boolean;
 }) {
   const { t } = useTranslation();
-  const { toast } = useToast();
-  const [prompt, setPrompt] = useState('');
-  const createApp = useCreateAiLabApp();
+  const { navigate } = useNavigate();
 
-  const handleCreate = () => {
-    const value = prompt.trim();
-    if (!value || createApp.isPending) return;
-    createApp.mutate(
-      { prompt: value },
-      {
-        onSuccess: (app) => {
-          setPrompt('');
-          onOpen(app.id);
-        },
-        onError: (error) =>
-          toast({
-            title: t('aiLab.builder.failed'),
-            description: error instanceof Error ? error.message : String(error),
-            variant: 'destructive',
-          }),
-      }
-    );
+  const openYodaBuild = () => {
+    navigate('home', { runMode: 'build' });
   };
 
   return (
@@ -101,59 +68,10 @@ function Launcher({
       <div className="mx-auto w-full max-w-5xl space-y-7 px-6 py-8 @max-md:px-4 @max-md:py-5">
         {showHeader && (
           <header className="flex items-center gap-2">
-            <FlaskConical className="size-4 text-foreground-muted" />
-            <h1 className="text-sm font-semibold">{t('aiLab.title')}</h1>
+            <AppWindow className="size-4 text-foreground-muted" />
+            <h1 className="text-sm font-semibold">{t('library.sections.apps')}</h1>
           </header>
         )}
-
-        <section className="relative overflow-hidden rounded-2xl border border-border/80 bg-background-secondary px-5 py-5 shadow-sm @max-md:px-4">
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-52 bg-[radial-gradient(circle_at_center,var(--color-accent)_0,transparent_68%)] opacity-[0.06]" />
-          <div className="relative max-w-3xl">
-            <div className="mb-4 flex items-start gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-foreground text-background">
-                <Sparkles className="size-4" />
-              </span>
-              <div>
-                <h2 className="text-base font-semibold tracking-tight">
-                  {t('aiLab.builder.title')}
-                </h2>
-                <p className="mt-0.5 text-xs leading-relaxed text-foreground-muted">
-                  {t('aiLab.builder.description')}
-                </p>
-              </div>
-            </div>
-            <Textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') handleCreate();
-              }}
-              disabled={createApp.isPending}
-              maxLength={4_000}
-              placeholder={t('aiLab.builder.placeholder')}
-              className="min-h-24 resize-none bg-background/80 px-3 py-3 text-[13px] leading-relaxed shadow-inner"
-            />
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-1.5">
-                {(['react', 'shadcn', 'api', 'sandbox'] as const).map((item) => (
-                  <Badge key={item} variant="outline" className="font-normal text-[10px]">
-                    {item === 'sandbox' && <ShieldCheck className="mr-1 size-3" />}
-                    {t(`aiLab.builder.capabilities.${item}`)}
-                  </Badge>
-                ))}
-              </div>
-              <Button onClick={handleCreate} disabled={!prompt.trim() || createApp.isPending}>
-                {createApp.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />}
-                {createApp.isPending ? t('aiLab.builder.creating') : t('aiLab.builder.create')}
-              </Button>
-            </div>
-            {createApp.isPending && (
-              <p className="mt-3 text-xs text-foreground-muted">
-                {t('aiLab.builder.creatingHint')}
-              </p>
-            )}
-          </div>
-        </section>
 
         <section>
           <div className="mb-3 flex items-center justify-between gap-3">
@@ -161,26 +79,34 @@ function Launcher({
               <h2 className="text-sm font-semibold">{t('aiLab.myApps')}</h2>
               <p className="mt-0.5 text-xs text-foreground-muted">{t('aiLab.myAppsDescription')}</p>
             </div>
-            <span className="text-xs tabular-nums text-foreground-passive">{apps.length}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs tabular-nums text-foreground-passive">{apps.length}</span>
+              <Button size="sm" onClick={openYodaBuild}>
+                <Plus />
+                {t('aiLab.newApp')}
+              </Button>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
             {apps.map((app) => (
               <AppTile key={app.id} app={app} onOpen={() => onOpen(app.id)} />
             ))}
             {apps.length === 0 && (
-              <div className="col-span-full flex min-h-28 items-center gap-4 rounded-xl border border-dashed border-border px-5 py-4 text-foreground-muted">
+              <button
+                type="button"
+                onClick={openYodaBuild}
+                className="col-span-full flex min-h-28 items-center gap-4 rounded-xl border border-dashed border-border px-5 py-4 text-left text-foreground-muted transition-colors hover:border-border-primary hover:bg-background-secondary"
+              >
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-background-2">
                   <Plus className="size-4" />
                 </span>
                 <div>
                   <p className="text-sm font-medium text-foreground-muted">
-                    {t('aiLab.builder.emptyTitle')}
+                    {t('aiLab.emptyTitle')}
                   </p>
-                  <p className="mt-0.5 text-xs leading-relaxed">
-                    {t('aiLab.builder.emptyDescription')}
-                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed">{t('aiLab.emptyDescription')}</p>
                 </div>
-              </div>
+              </button>
             )}
           </div>
         </section>
@@ -239,6 +165,12 @@ function AppTile({ app, onOpen }: { app: AiLabUserApp; onOpen: () => void }) {
         <span className="mt-0.5 line-clamp-2 block text-xs leading-relaxed text-foreground-muted">
           {app.description}
         </span>
+        {app.runtimeId && (
+          <span className="mt-1.5 block truncate font-mono text-[10px] text-foreground-passive">
+            {getRuntime(app.runtimeId)?.name ?? app.runtimeId}
+            {app.model ? ` · ${app.model}` : ''}
+          </span>
+        )}
       </span>
       <Button
         size="icon-xs"
@@ -308,7 +240,7 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
         </div>
         <Badge variant="outline" className="hidden font-normal text-[10px] @lg:flex">
           <ShieldCheck className="mr-1 size-3" />
-          {t('aiLab.builder.capabilities.sandbox')}
+          {t('aiLab.sandbox')}
         </Badge>
         <Button
           size="sm"

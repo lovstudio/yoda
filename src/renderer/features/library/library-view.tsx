@@ -1,9 +1,9 @@
 import {
+  AppWindow,
   Bot,
   Boxes,
   Check,
   FileText,
-  FlaskConical,
   Menu,
   Plug,
   Puzzle,
@@ -33,7 +33,7 @@ import { cn } from '@renderer/utils/utils';
 
 /** The Library groups the user's reusable resources behind one nav entry. */
 export type LibrarySection =
-  | 'aiLab'
+  | 'apps'
   | 'prompts'
   | 'agents'
   | 'agentTeams'
@@ -47,7 +47,7 @@ const SECTIONS: {
   icon: LucideIcon;
   labelKey: string;
 }[] = [
-  { id: 'aiLab', icon: FlaskConical, labelKey: 'library.sections.aiLab' },
+  { id: 'apps', icon: AppWindow, labelKey: 'library.sections.apps' },
   { id: 'prompts', icon: FileText, labelKey: 'library.sections.prompts' },
   { id: 'agents', icon: Bot, labelKey: 'library.sections.agents' },
   { id: 'agentTeams', icon: Users, labelKey: 'library.sections.agentTeams' },
@@ -62,11 +62,11 @@ const LibrarySectionContext = createContext<{
   onSectionChange: (section: LibrarySection) => void;
   appId: string | null;
   onAppChange: (appId: string | null) => void;
-}>({ section: 'aiLab', onSectionChange: () => {}, appId: null, onAppChange: () => {} });
+}>({ section: 'apps', onSectionChange: () => {}, appId: null, onAppChange: () => {} });
 
 export function LibraryViewWrapper({
   children,
-  section = 'aiLab',
+  section = 'apps',
   appId,
 }: {
   children: ReactNode;
@@ -74,6 +74,9 @@ export function LibraryViewWrapper({
   appId?: string;
 }) {
   const { setParams } = useParams('library');
+  // Navigation snapshots from the earlier AI Lab placement may still carry
+  // `aiLab`; migrate that hidden legacy value into the user-facing Apps shelf.
+  const resolvedSection = (section as string) === 'aiLab' ? 'apps' : section;
   const onSectionChange = useCallback(
     (next: LibrarySection) => setParams({ section: next }),
     [setParams]
@@ -84,7 +87,7 @@ export function LibraryViewWrapper({
   );
   return (
     <LibrarySectionContext.Provider
-      value={{ section, onSectionChange, appId: appId ?? null, onAppChange }}
+      value={{ section: resolvedSection, onSectionChange, appId: appId ?? null, onAppChange }}
     >
       {children}
     </LibrarySectionContext.Provider>
@@ -109,7 +112,7 @@ function LibrarySectionContent({
   onAppChange: (appId: string | null) => void;
 }) {
   switch (section) {
-    case 'aiLab':
+    case 'apps':
       return <AiLabView embedded activeAppId={appId} onActiveAppChange={onAppChange} />;
     case 'prompts':
       return <PromptLibraryPanel />;

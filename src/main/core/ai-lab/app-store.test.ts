@@ -23,9 +23,18 @@ describe('AiLabAppStore', () => {
       description: 'A packing list',
       prompt: 'Build a packing list',
       html: '<!doctype html><html></html>',
+      projectId: 'travel-project',
+      runtimeId: 'codex',
+      model: 'gpt-5.4',
     });
 
-    expect((await store.list())[0]).toMatchObject({ id: created.id, pinned: false });
+    expect((await store.list())[0]).toMatchObject({
+      id: created.id,
+      projectId: 'travel-project',
+      runtimeId: 'codex',
+      model: 'gpt-5.4',
+      pinned: false,
+    });
     expect(await store.update(created.id, { pinned: true })).toMatchObject({ pinned: true });
     expect(JSON.parse(await readFile(filePath, 'utf8'))).toHaveLength(1);
 

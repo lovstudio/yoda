@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { shareableProjectSettingsSchema } from './project-settings';
 
 describe('shareableProjectSettingsSchema', () => {
+  it('accepts Yoda Build as a project composer mode', () => {
+    const parsed = shareableProjectSettingsSchema.parse({
+      composerDefaults: { runMode: 'build' },
+    });
+
+    expect(parsed.composerDefaults?.runMode).toBe('build');
+  });
+
   it('accepts composer language overrides', () => {
     const parsed = shareableProjectSettingsSchema.parse({
       composerDefaults: {

@@ -1,3 +1,5 @@
+import type { RuntimeId } from './runtime-registry';
+
 export const AI_LAB_ENGINE_IDS = ['zenmux', 'codex'] as const;
 
 export type AiLabEngineId = (typeof AI_LAB_ENGINE_IDS)[number];
@@ -76,6 +78,9 @@ export type AiLabUserApp = {
   description: string;
   prompt: string;
   html: string;
+  projectId?: string;
+  runtimeId?: RuntimeId;
+  model?: string | null;
   pinned: boolean;
   createdAt: string;
   updatedAt: string;
@@ -83,6 +88,10 @@ export type AiLabUserApp = {
 
 export type CreateAiLabAppInput = {
   prompt: string;
+  projectId: string;
+  runtimeId: RuntimeId;
+  model?: string | null;
+  systemPrompt?: string;
 };
 
 export type UpdateAiLabAppInput = {

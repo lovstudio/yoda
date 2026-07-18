@@ -19,6 +19,7 @@ import {
 import { resolveCommandPath } from '@main/core/dependencies/probe';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { maasService } from '@main/core/maas/maas-service';
+import { projectManager } from '@main/core/projects/project-manager';
 import { db } from '@main/db/client';
 import { aiLabGenerations } from '@main/db/schema';
 import { log } from '@main/lib/logger';
@@ -79,8 +80,25 @@ export class AiLabService {
     const prompt = input.prompt.trim();
     if (!prompt) throw new Error('Describe the app you want to create.');
     if (prompt.length > 4_000) throw new Error('The app description is too long.');
-    const generated = await generateAiLabApp(prompt);
-    return this.getAppStore().create({ ...generated, prompt });
+    const project = projectManager.getProject(input.projectId);
+    if (!project) throw new Error('Select a project for Yoda Build.');
+    if (!project.ctx.supportsLocalSpawn) {
+      throw new Error('Yoda Build currently requires a local project.');
+    }
+    const generated = await generateAiLabApp({
+      prompt,
+      projectPath: project.repoPath,
+      runtimeId: input.runtimeId,
+      model: input.model,
+      systemPrompt: input.systemPrompt,
+    });
+    return this.getAppStore().create({
+      ...generated,
+      prompt,
+      projectId: input.projectId,
+      runtimeId: input.runtimeId,
+      model: input.model,
+    });
   }
 
   async updateApp(input: UpdateAiLabAppInput): Promise<AiLabUserApp> {

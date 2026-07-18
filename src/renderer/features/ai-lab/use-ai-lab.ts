@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreateAiLabAppInput, LogoGenerationInput, UpdateAiLabAppInput } from '@shared/ai-lab';
+import type { LogoGenerationInput, UpdateAiLabAppInput } from '@shared/ai-lab';
 import { rpc } from '@renderer/lib/ipc';
 
 export const aiLabQueryKeys = {
@@ -13,14 +13,6 @@ export function useAiLabApps() {
   return useQuery({
     queryKey: aiLabQueryKeys.apps,
     queryFn: () => rpc.aiLab.listApps(),
-  });
-}
-
-export function useCreateAiLabApp() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: CreateAiLabAppInput) => rpc.aiLab.createApp(input),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: aiLabQueryKeys.apps }),
   });
 }
 

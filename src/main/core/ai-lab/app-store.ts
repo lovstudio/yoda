@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { AiLabUserApp } from '@shared/ai-lab';
+import { isValidRuntimeId } from '@shared/runtime-registry';
 
 export class AiLabAppStore {
   constructor(private readonly filePath: string) {}
@@ -22,6 +23,9 @@ export class AiLabAppStore {
     description: string;
     prompt: string;
     html: string;
+    projectId?: string;
+    runtimeId?: AiLabUserApp['runtimeId'];
+    model?: string | null;
   }): Promise<AiLabUserApp> {
     const apps = await this.list();
     const now = new Date().toISOString();
@@ -71,6 +75,9 @@ function isStoredApp(value: unknown): value is AiLabUserApp {
     typeof app.description === 'string' &&
     typeof app.prompt === 'string' &&
     typeof app.html === 'string' &&
+    (app.projectId === undefined || typeof app.projectId === 'string') &&
+    (app.runtimeId === undefined || isValidRuntimeId(app.runtimeId)) &&
+    (app.model === undefined || app.model === null || typeof app.model === 'string') &&
     typeof app.pinned === 'boolean' &&
     typeof app.createdAt === 'string' &&
     typeof app.updatedAt === 'string'

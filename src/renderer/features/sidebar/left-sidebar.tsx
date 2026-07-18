@@ -273,19 +273,19 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               <GlobalSidePaneTarget
                 key={app.id}
                 viewId="library"
-                params={{ section: 'aiLab', appId: app.id }}
+                params={{ section: 'apps', appId: app.id }}
                 altHeld={altHeld}
               >
                 <SidebarMenuButton
                   isActive={
                     currentView === 'library' &&
-                    libraryParams.section === 'aiLab' &&
+                    libraryParams.section === 'apps' &&
                     libraryParams.appId === app.id
                   }
                   onClick={(event) =>
                     event.altKey
-                      ? appState.sidePane.pinView('library', { section: 'aiLab', appId: app.id })
-                      : navigate('library', { section: 'aiLab', appId: app.id })
+                      ? appState.sidePane.pinView('library', { section: 'apps', appId: app.id })
+                      : navigate('library', { section: 'apps', appId: app.id })
                   }
                   aria-label={app.name}
                   title={app.description}

@@ -403,7 +403,7 @@ export const interfaceSettingsSchema = z.object({
 
 export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });
 
-const homeRunModeSchema = z.enum(['normal', 'brainstorm', 'review', 'team']);
+const homeRunModeSchema = z.enum(['normal', 'build', 'brainstorm', 'review', 'team']);
 const teamRuntimeSelectionSchema = z.object({
   ceo: z.enum(RUNTIME_IDS),
   product: z.enum(RUNTIME_IDS),
