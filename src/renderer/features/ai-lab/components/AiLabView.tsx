@@ -14,12 +14,12 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AiLabUserApp } from '@shared/ai-lab';
 import { getRuntime } from '@shared/runtime-registry';
+import { HeaderActionButton, HeaderActionToolbar } from '@renderer/lib/components/header-actions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import { AI_LAB_APPS, type AiLabAppDefinition } from '../app-registry';
 import { useAiLabApps, useDeleteAiLabApp, useUpdateAiLabApp } from '../use-ai-lab';
@@ -291,24 +291,20 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
           <ShieldCheck className="mr-1 size-3" />
           {t('aiLab.sandbox')}
         </Badge>
-        <div
-          role="toolbar"
-          aria-label={t('aiLab.appActions')}
-          className="flex shrink-0 items-center gap-0.5"
-        >
-          <AppHeaderAction
+        <HeaderActionToolbar label={t('aiLab.appActions')}>
+          <HeaderActionButton
             label={t('aiLab.openInWindow')}
             disabled={isOpeningWindow}
             onClick={() => void openInWindow()}
           >
             {isOpeningWindow ? <Loader2 className="animate-spin" /> : <ExternalLink />}
-          </AppHeaderAction>
+          </HeaderActionButton>
           {app.projectId && app.taskId && (
-            <AppHeaderAction label={t('aiLab.returnToBuildTask')} onClick={openBuildTask}>
+            <HeaderActionButton label={t('aiLab.returnToBuildTask')} onClick={openBuildTask}>
               <CornerUpLeft />
-            </AppHeaderAction>
+            </HeaderActionButton>
           )}
-          <AppHeaderAction
+          <HeaderActionButton
             label={app.pinned ? t('aiLab.unpin') : t('aiLab.pin')}
             variant={app.pinned ? 'secondary' : 'ghost'}
             aria-pressed={app.pinned}
@@ -316,16 +312,16 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
             onClick={() => updateApp.mutate({ id: app.id, pinned: !app.pinned })}
           >
             {app.pinned ? <PinOff /> : <Pin />}
-          </AppHeaderAction>
-          <AppHeaderAction
+          </HeaderActionButton>
+          <HeaderActionButton
             label={t('aiLab.delete')}
             className="hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive"
             disabled={deleteApp.isPending}
             onClick={handleDelete}
           >
             <Trash2 />
-          </AppHeaderAction>
-        </div>
+          </HeaderActionButton>
+        </HeaderActionToolbar>
       </header>
       <div className="min-h-0 flex-1 bg-background-secondary p-3 @max-md:p-0">
         <UserAppFrame app={app} className="@max-md:rounded-none @max-md:border-0" />
@@ -334,37 +330,11 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
   );
 }
 
-function AppHeaderAction({
-  label,
-  children,
-  ...props
-}: React.ComponentProps<typeof Button> & { label: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={<Button size="icon-sm" variant="ghost" aria-label={label} {...props} />}
-      >
-        {children}
-      </TooltipTrigger>
-      <TooltipContent side="bottom" sideOffset={8}>
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 function BackButton({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation();
   return (
-    <Button
-      size="icon-sm"
-      variant="ghost"
-      aria-label={t('aiLab.back')}
-      title={t('aiLab.back')}
-      onClick={onBack}
-      className="shrink-0"
-    >
+    <HeaderActionButton label={t('aiLab.back')} onClick={onBack} className="shrink-0">
       <ArrowLeft />
-    </Button>
+    </HeaderActionButton>
   );
 }
