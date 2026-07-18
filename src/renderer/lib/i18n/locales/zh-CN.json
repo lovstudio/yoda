@@ -2017,7 +2017,7 @@
   },
   "library": {
     "sections": {
-      "aiLab": "AI Lab",
+      "apps": "应用",
       "prompts": "提示词",
       "agents": "智能体",
       "agentTeams": "智能体团队",
