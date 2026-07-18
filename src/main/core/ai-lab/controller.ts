@@ -1,4 +1,4 @@
-import type { LogoGenerationInput } from '@shared/ai-lab';
+import type { CreateAiLabAppInput, LogoGenerationInput, UpdateAiLabAppInput } from '@shared/ai-lab';
 import { createRPCController } from '@shared/ipc/rpc';
 import { aiLabService } from './ai-lab-service';
 
@@ -30,6 +30,22 @@ async function deleteGeneration(id: string) {
   return aiLabService.deleteGeneration(id);
 }
 
+async function listApps() {
+  return aiLabService.listApps();
+}
+
+async function createApp(input: CreateAiLabAppInput) {
+  return aiLabService.createApp(input);
+}
+
+async function updateApp(input: UpdateAiLabAppInput) {
+  return aiLabService.updateApp(input);
+}
+
+async function deleteApp(id: string) {
+  return aiLabService.deleteApp(id);
+}
+
 export const aiLabController = createRPCController({
   listEngines,
   generateLogo,
@@ -38,4 +54,8 @@ export const aiLabController = createRPCController({
   saveGenerationImage,
   copyGenerationImage,
   deleteGeneration,
+  listApps,
+  createApp,
+  updateApp,
+  deleteApp,
 });

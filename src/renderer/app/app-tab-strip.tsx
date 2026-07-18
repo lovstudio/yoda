@@ -13,6 +13,7 @@ import {
   GitPullRequest,
   House,
   LayoutDashboard,
+  Library as LibraryIcon,
   ListTodo,
   Loader2,
   MessageSquare,
@@ -78,6 +79,7 @@ import { cn } from '@renderer/utils/utils';
  * Keep in sync with the sidebar nav items in features/sidebar/left-sidebar.tsx.
  */
 const VIEW_ICONS: Partial<Record<ViewId, LucideIcon>> = {
+  library: LibraryIcon,
   aiLab: FlaskConical,
   settings: Settings,
   skills: Puzzle,

@@ -2007,6 +2007,7 @@
   },
   "library": {
     "sections": {
+      "aiLab": "AI Lab",
       "prompts": "Prompts",
       "agents": "Agents",
       "agentTeams": "Agent Teams",
@@ -3115,8 +3116,33 @@
   },
   "aiLab": {
     "title": "AI Lab",
-    "subtitle": "Your hub for AI mini-apps — vibe-coded tools live here, and the collection keeps growing.",
+    "subtitle": "Create, run, and collect single-file apps with natural language.",
     "back": "Back to AI Lab",
+    "myApps": "My apps",
+    "myAppsDescription": "Every app is a single-file creation that runs immediately.",
+    "builtInApps": "Ready to use",
+    "pin": "Pin to navigation",
+    "unpin": "Unpin",
+    "delete": "Delete app",
+    "deleteConfirm": "Delete “{{name}}”? This cannot be undone.",
+    "deleteFailed": "Could not delete app",
+    "builder": {
+      "title": "One sentence. One app.",
+      "description": "Describe the tool or experience you need. AI Lab builds and runs it in an isolated sandbox.",
+      "placeholder": "For example: Make a travel packing list grouped by documents, clothes, and electronics, and remember checked items…",
+      "create": "Generate app",
+      "creating": "Generating",
+      "creatingHint": "Codex is building the interface, state, and interactions. This usually takes a minute or two.",
+      "failed": "App generation failed",
+      "emptyTitle": "No personal apps yet",
+      "emptyDescription": "Start with one sentence above. The first version opens here as soon as it is ready.",
+      "capabilities": {
+        "react": "React patterns",
+        "shadcn": "shadcn system",
+        "api": "API contract",
+        "sandbox": "Isolated sandbox"
+      }
+    },
     "comingSoonTitle": "More apps on the way",
     "comingSoonDescription": "This hub is built to grow — the next idea becomes the next app.",
     "apps": {

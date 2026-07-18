@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { AgentManagerView } from '@renderer/features/agents-config/agent-manager-view';
 import { RuntimeAccordion } from '@renderer/features/agents/components/RuntimeAccordion';
-import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
 import { AiLogsPanel } from '@renderer/features/ai-logs/components/AiLogsPanel';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
 import { KanbanBoard } from '@renderer/features/kanban/components/KanbanBoard';
@@ -82,7 +81,6 @@ export type SettingsPageTab =
   | 'terminal'
   | 'keyboard-shortcuts'
   | 'kanban'
-  | 'ai-lab'
   | 'roadmap';
 
 interface SectionConfig {
@@ -143,7 +141,6 @@ function useSettingsTabGroups(): SettingsTabEntry[][] {
     // Early previews and outlook.
     [
       { id: 'kanban', label: t('settings.tabs.kanban'), badge: 'Alpha' },
-      { id: 'ai-lab', label: t('settings.tabs.aiLab'), badge: 'Alpha' },
       { id: 'roadmap', label: t('settings.tabs.roadmap') },
     ],
   ];
@@ -476,11 +473,6 @@ export function SettingsPage({
           ),
         },
       ],
-    },
-    'ai-lab': {
-      title: t('aiLab.title'),
-      description: t('aiLab.subtitle'),
-      sections: [{ id: 'ai-lab', surface: 'plain', component: <AiLabView embedded /> }],
     },
     roadmap: {
       title: t('roadmap.title'),

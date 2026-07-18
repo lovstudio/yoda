@@ -68,3 +68,24 @@ export type LogoGenerationRecord = {
 export type LogoGenerationListItem = LogoGenerationRecord & {
   thumbnails: string[];
 };
+
+/** A user-created, single-file app hosted by AI Lab's isolated web sandbox. */
+export type AiLabUserApp = {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  html: string;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateAiLabAppInput = {
+  prompt: string;
+};
+
+export type UpdateAiLabAppInput = {
+  id: string;
+  pinned: boolean;
+};
