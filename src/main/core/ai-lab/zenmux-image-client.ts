@@ -24,15 +24,7 @@ type VertexGenerateContentResponse = ApiErrorBody & {
   }>;
 };
 
-type VertexImageResponse = ApiErrorBody & {
-  predictions?: Array<{
-    bytesBase64Encoded?: string;
-    mimeType?: string;
-    raiFilteredReason?: string;
-  }>;
-};
-
-/** Restyles a source image through ZenMux's documented Vertex image edit protocol. */
+/** Restyles a source image through ZenMux's OpenAI-compatible multipart edit protocol. */
 export async function editZenmuxImage(input: {
   endpoint: string;
   apiKey: string;
@@ -43,7 +35,7 @@ export async function editZenmuxImage(input: {
   size: AiLabImageEditSize;
   quality: AiLabImageEditQuality;
 }): Promise<Buffer> {
-  const url = vertexImagePredictionUrl(input.endpoint);
+  const url = `${trimTrailingSlash(input.endpoint)}/images/edits`;
   const logId = await aiLogService.start({
     purpose: 'app-image-edit',
     mode: 'api',
@@ -54,28 +46,24 @@ export async function editZenmuxImage(input: {
     metadata: { appId: input.appId, size: input.size, quality: input.quality },
   });
   try {
-    const body = await postJson<VertexImageResponse>(url, input.apiKey, {
-      instances: [
-        {
-          prompt: input.prompt,
-          image: {
-            bytesBase64Encoded: input.source.toString('base64'),
-            mimeType: input.sourceMimeType,
-          },
-        },
-      ],
-      parameters: {
-        sampleCount: 1,
-        imageSize: input.size,
-        quality: input.quality,
-        outputOptions: { mimeType: 'image/png' },
-      },
-    });
-    const prediction = body.predictions?.[0];
-    const b64 = prediction?.bytesBase64Encoded;
+    const form = new FormData();
+    form.set('model', AI_LAB_APP_IMAGE_MODEL);
+    form.append(
+      'image[]',
+      new Blob([Uint8Array.from(input.source)], { type: input.sourceMimeType }),
+      sourceFileName(input.sourceMimeType)
+    );
+    form.set('prompt', input.prompt);
+    form.set('input_fidelity', 'high');
+    form.set('n', '1');
+    form.set('size', input.size);
+    form.set('quality', input.quality);
+    form.set('output_format', 'png');
+
+    const body = await postMultipart<OpenAiImagesResponse>(url, input.apiKey, form);
+    const b64 = body.data?.[0]?.b64_json;
     if (typeof b64 !== 'string' || b64.length === 0) {
-      const reason = prediction?.raiFilteredReason?.trim();
-      throw new Error(reason || 'ZenMux Vertex image edit API returned no image data.');
+      throw new Error('ZenMux Images edit API returned no image data.');
     }
     const buffer = Buffer.from(b64, 'base64');
     if (buffer.length === 0) throw new Error('ZenMux Images edit API returned an empty image.');
@@ -220,6 +208,42 @@ async function postJson<T extends ApiErrorBody>(
   }
 }
 
+async function postMultipart<T extends ApiErrorBody>(
+  url: string,
+  apiKey: string,
+  form: FormData
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+    });
+
+    let body: T | null = null;
+    try {
+      body = (await response.json()) as T;
+    } catch {
+      body = null;
+    }
+
+    if (!response.ok || !body) {
+      throw new Error(
+        `ZenMux image request failed (${response.status}): ${extractErrorMessage(
+          body,
+          response.statusText || 'Request failed.'
+        )}`
+      );
+    }
+    return body;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function extractErrorMessage(body: ApiErrorBody | null, fallback: string): string {
   if (!body) return fallback;
   if (typeof body.error === 'string' && body.error.trim()) return body.error;
@@ -232,9 +256,8 @@ function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '');
 }
 
-function vertexImagePredictionUrl(endpoint: string): string {
-  const apiRoot = trimTrailingSlash(endpoint).replace(/\/v1$/, '');
-  const vertexBase = apiRoot.endsWith('/vertex-ai') ? apiRoot : `${apiRoot}/vertex-ai`;
-  const [provider, model] = AI_LAB_APP_IMAGE_MODEL.split('/');
-  return `${vertexBase}/v1/publishers/${encodeURIComponent(provider!)}/models/${encodeURIComponent(model!)}:predict`;
+function sourceFileName(mimeType: AiLabImageMimeType): string {
+  if (mimeType === 'image/jpeg') return 'source.jpg';
+  if (mimeType === 'image/webp') return 'source.webp';
+  return 'source.png';
 }

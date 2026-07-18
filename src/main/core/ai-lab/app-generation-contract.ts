@@ -46,6 +46,7 @@ HOST CAPABILITY — ZENMUX IMAGE EDIT:
 - The sandbox exposes window.yoda.ai.editImage(input). The host obtains the user's configured ZenMux MaaS inference credentials; API keys are never available inside the app.
 - Input: { imageDataUrl, prompt, size?, quality? }. imageDataUrl must be a base64 PNG/JPEG/WebP data URL. size is one of "1024x1024", "1536x1024", "1024x1536". quality is "auto", "medium", or "high".
 - Output: Promise<{ imageDataUrl, model }>. model is pinned by the host to "openai/gpt-image-2" and imageDataUrl is the actual generated PNG.
+- The host sends the source as a multipart image edit with high input fidelity. For portrait restyling, prompts must explicitly preserve the exact person's identity, gender presentation, age, facial geometry, hairstyle, pose, camera angle, clothing, and distinctive objects.
 - A complete call looks like: const result = await window.yoda.ai.editImage({ imageDataUrl, prompt, size: "1024x1024", quality: "high" });
 - To copy the latest host/model error, call await window.yoda.ai.copyLastError(). This delegates clipboard writing to Yoda because the sandbox cannot access the Clipboard API directly.
 - Always show genuine pending and error states around the awaited call. Only show success or enable download after result.imageDataUrl is returned.

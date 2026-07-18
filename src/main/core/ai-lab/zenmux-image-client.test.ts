@@ -16,16 +16,14 @@ describe('ZenMux image edit client', () => {
     vi.clearAllMocks();
   });
 
-  it('sends a reference image through the official Vertex image edit protocol', async () => {
+  it('sends the source as a high-fidelity multipart image edit', async () => {
     const fetchMock = vi.fn(
       async (_url: string | URL | Request, _init?: RequestInit) =>
         ({
           ok: true,
           status: 200,
           statusText: 'OK',
-          json: async () => ({
-            predictions: [{ bytesBase64Encoded: Buffer.from('edited').toString('base64') }],
-          }),
+          json: async () => ({ data: [{ b64_json: Buffer.from('edited').toString('base64') }] }),
         }) as Response
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -44,30 +42,32 @@ describe('ZenMux image edit client', () => {
     expect(result.toString()).toBe('edited');
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe(
-      'https://zenmux.ai/api/vertex-ai/v1/publishers/openai/models/gpt-image-2:predict'
-    );
+    expect(url).toBe('https://zenmux.ai/api/v1/images/edits');
     expect(init?.headers).toEqual({
-      'Content-Type': 'application/json',
       Authorization: 'Bearer secret',
     });
-    expect(JSON.parse(String(init?.body))).toEqual({
-      instances: [
-        {
-          prompt: 'Preserve the person and render a Riso portrait.',
-          image: {
-            bytesBase64Encoded: Buffer.from('image').toString('base64'),
-            mimeType: 'image/png',
-          },
-        },
-      ],
-      parameters: {
-        sampleCount: 1,
-        imageSize: '1024x1024',
-        quality: 'high',
-        outputOptions: { mimeType: 'image/png' },
-      },
-    });
+    const form = init?.body as FormData;
+    expect(form.get('model')).toBe('openai/gpt-image-2');
+    expect(form.get('prompt')).toBe('Preserve the person and render a Riso portrait.');
+    expect(form.get('input_fidelity')).toBe('high');
+    expect(form.get('n')).toBe('1');
+    expect(form.get('size')).toBe('1024x1024');
+    expect(form.get('quality')).toBe('high');
+    expect(form.get('output_format')).toBe('png');
+    const image = form.get('image[]');
+    expect(image).toBeInstanceOf(Blob);
+    expect((image as Blob).type).toBe('image/png');
+    expect(Buffer.from(await (image as Blob).arrayBuffer()).toString()).toBe('image');
+    expect([...form.keys()]).toEqual([
+      'model',
+      'image[]',
+      'prompt',
+      'input_fidelity',
+      'n',
+      'size',
+      'quality',
+      'output_format',
+    ]);
     expect(logMocks.finish).toHaveBeenCalledWith('log-1', {
       status: 'succeeded',
       output: '1 edited image generated.',
