@@ -16,6 +16,7 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import { AI_LAB_APPS, type AiLabAppDefinition } from '../app-registry';
 import { applySandboxPolicy } from '../sandbox-policy';
@@ -263,38 +264,34 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
           <ShieldCheck className="mr-1 size-3" />
           {t('aiLab.sandbox')}
         </Badge>
-        {app.projectId && app.taskId && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="@max-xl:w-8 @max-xl:px-0"
-            aria-label={t('aiLab.returnToBuildTask')}
-            title={t('aiLab.returnToBuildTask')}
-            onClick={openBuildTask}
+        <div
+          role="toolbar"
+          aria-label={t('aiLab.appActions')}
+          className="flex shrink-0 items-center gap-0.5"
+        >
+          {app.projectId && app.taskId && (
+            <AppHeaderAction label={t('aiLab.returnToBuildTask')} onClick={openBuildTask}>
+              <CornerUpLeft />
+            </AppHeaderAction>
+          )}
+          <AppHeaderAction
+            label={app.pinned ? t('aiLab.unpin') : t('aiLab.pin')}
+            variant={app.pinned ? 'secondary' : 'ghost'}
+            aria-pressed={app.pinned}
+            disabled={updateApp.isPending}
+            onClick={() => updateApp.mutate({ id: app.id, pinned: !app.pinned })}
           >
-            <CornerUpLeft />
-            <span className="@max-xl:hidden">{t('aiLab.returnToBuildTask')}</span>
-          </Button>
-        )}
-        <Button
-          size="sm"
-          variant={app.pinned ? 'secondary' : 'outline'}
-          disabled={updateApp.isPending}
-          onClick={() => updateApp.mutate({ id: app.id, pinned: !app.pinned })}
-        >
-          {app.pinned ? <PinOff /> : <Pin />}
-          {app.pinned ? t('aiLab.unpin') : t('aiLab.pin')}
-        </Button>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          disabled={deleteApp.isPending}
-          aria-label={t('aiLab.delete')}
-          title={t('aiLab.delete')}
-          onClick={handleDelete}
-        >
-          <Trash2 />
-        </Button>
+            {app.pinned ? <PinOff /> : <Pin />}
+          </AppHeaderAction>
+          <AppHeaderAction
+            label={t('aiLab.delete')}
+            className="hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive"
+            disabled={deleteApp.isPending}
+            onClick={handleDelete}
+          >
+            <Trash2 />
+          </AppHeaderAction>
+        </div>
       </header>
       <div className="min-h-0 flex-1 bg-background-secondary p-3 @max-md:p-0">
         <iframe
@@ -307,6 +304,25 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
         />
       </div>
     </div>
+  );
+}
+
+function AppHeaderAction({
+  label,
+  children,
+  ...props
+}: React.ComponentProps<typeof Button> & { label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<Button size="icon-sm" variant="ghost" aria-label={label} {...props} />}
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={8}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

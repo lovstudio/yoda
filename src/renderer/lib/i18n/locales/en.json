@@ -3131,6 +3131,7 @@
     "newApp": "New app",
     "openApp": "Open app",
     "returnToBuildTask": "Back to build task",
+    "appActions": "App actions",
     "myApps": "My apps",
     "myAppsDescription": "Every app is a single-file creation that runs immediately.",
     "builtInApps": "Ready to use",

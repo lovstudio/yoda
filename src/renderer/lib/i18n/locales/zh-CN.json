@@ -3131,6 +3131,7 @@
     "newApp": "新建 App",
     "openApp": "打开应用",
     "returnToBuildTask": "返回创建任务",
+    "appActions": "应用操作",
     "myApps": "我的应用",
     "myAppsDescription": "每个应用都是一份可立即运行的单文件作品。",
     "builtInApps": "开箱即用",
