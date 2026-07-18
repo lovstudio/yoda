@@ -15,6 +15,7 @@ export const AI_LOG_KNOWN_PURPOSES = [
   'session-summary',
   'commit-message',
   'logo-generation',
+  'app-image-edit',
   'maas-chat',
   'llm-debug',
   'interactive-session',

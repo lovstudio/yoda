@@ -18,6 +18,7 @@ import {
   type PrepareAiLabBuildTaskResult,
   type UpdateAiLabAppInput,
 } from '@shared/ai-lab';
+import type { AiLabImageEditInput, AiLabImageEditResult } from '@shared/ai-lab-bridge';
 import { resolveCommandPath } from '@main/core/dependencies/probe';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { maasService } from '@main/core/maas/maas-service';
@@ -29,11 +30,12 @@ import { telemetryService } from '@main/lib/telemetry';
 import { AiLabAppBuildRunner } from './app-build-runner';
 import { generateAiLabApp } from './app-generation';
 import { buildAppGenerationPrompt } from './app-generation-contract';
+import { normalizeAiLabImageEditInput, toAiLabImageEditResult } from './app-image-edit';
 import { AiLabAppStore } from './app-store';
 import { AiLabBuildJobStore } from './build-job-store';
 import { generateCodexImages } from './codex-image-engine';
 import { buildLogoPrompt } from './logo-prompt';
-import { generateZenmuxImages } from './zenmux-image-client';
+import { editZenmuxImage, generateZenmuxImages } from './zenmux-image-client';
 
 const HISTORY_LIMIT = 60;
 const THUMBNAIL_WIDTH = 256;
@@ -73,6 +75,7 @@ export class AiLabService {
   private appStore: AiLabAppStore | null = null;
   private buildJobStore: AiLabBuildJobStore | null = null;
   private appBuildRunner: AiLabAppBuildRunner | null = null;
+  private activeAppImageEdits = 0;
 
   private getAppStore(): AiLabAppStore {
     this.appStore ??= new AiLabAppStore(join(app.getPath('userData'), 'ai-lab', 'apps.json'));
@@ -93,6 +96,29 @@ export class AiLabService {
 
   async listApps(): Promise<AiLabUserApp[]> {
     return this.getAppStore().list();
+  }
+
+  async editAppImage(input: AiLabImageEditInput): Promise<AiLabImageEditResult> {
+    const normalized = normalizeAiLabImageEditInput(input).input;
+    const appExists = (await this.getAppStore().list()).some(
+      (item) => item.id === normalized.appId
+    );
+    if (!appExists) throw new Error('AI Lab app not found.');
+    if (this.activeAppImageEdits >= 2) {
+      throw new Error('Too many AI Lab images are generating. Wait for one to finish.');
+    }
+    const credentials = await maasService.getInferenceCredentials('zenmux');
+    if (!credentials) {
+      throw new Error('ZenMux is not connected. Add a ZenMux inference API key first.');
+    }
+
+    this.activeAppImageEdits += 1;
+    try {
+      const buffer = await editZenmuxImage({ ...credentials, ...normalized });
+      return toAiLabImageEditResult(buffer);
+    } finally {
+      this.activeAppImageEdits -= 1;
+    }
   }
 
   async prepareBuildTask(input: PrepareAiLabBuildTaskInput): Promise<PrepareAiLabBuildTaskResult> {

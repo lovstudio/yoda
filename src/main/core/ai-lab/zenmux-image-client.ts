@@ -1,4 +1,9 @@
 import type { AiLabZenmuxModel } from '@shared/ai-lab';
+import {
+  AI_LAB_APP_IMAGE_MODEL,
+  type AiLabImageEditQuality,
+  type AiLabImageEditSize,
+} from '@shared/ai-lab-bridge';
 import { aiLogService } from '@main/core/ai-logs/ai-log-service';
 
 const REQUEST_TIMEOUT_MS = 180_000;
@@ -17,6 +22,57 @@ type VertexGenerateContentResponse = ApiErrorBody & {
     content?: { parts?: Array<{ inlineData?: { data?: string } }> };
   }>;
 };
+
+/** Restyles a source image through ZenMux's OpenAI-compatible Images edit API. */
+export async function editZenmuxImage(input: {
+  endpoint: string;
+  apiKey: string;
+  appId: string;
+  prompt: string;
+  imageDataUrl: string;
+  size: AiLabImageEditSize;
+  quality: AiLabImageEditQuality;
+}): Promise<Buffer> {
+  const url = `${trimTrailingSlash(input.endpoint)}/images/edits`;
+  const logId = await aiLogService.start({
+    purpose: 'app-image-edit',
+    mode: 'api',
+    runtime: 'zenmux',
+    model: AI_LAB_APP_IMAGE_MODEL,
+    command: url,
+    prompt: input.prompt,
+    metadata: { appId: input.appId, size: input.size, quality: input.quality },
+  });
+  try {
+    const body = await postJson<OpenAiImagesResponse>(url, input.apiKey, {
+      model: AI_LAB_APP_IMAGE_MODEL,
+      images: [{ image_url: input.imageDataUrl }],
+      prompt: input.prompt,
+      input_fidelity: 'high',
+      n: 1,
+      size: input.size,
+      quality: input.quality,
+      output_format: 'png',
+    });
+    const b64 = body.data?.[0]?.b64_json;
+    if (typeof b64 !== 'string' || b64.length === 0) {
+      throw new Error('ZenMux Images edit API returned no image data.');
+    }
+    const buffer = Buffer.from(b64, 'base64');
+    if (buffer.length === 0) throw new Error('ZenMux Images edit API returned an empty image.');
+    await aiLogService.finish(logId, {
+      status: 'succeeded',
+      output: '1 edited image generated.',
+    });
+    return buffer;
+  } catch (error) {
+    await aiLogService.finish(logId, {
+      status: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
 
 /**
  * Generates logo candidates through ZenMux. OpenAI image models use the

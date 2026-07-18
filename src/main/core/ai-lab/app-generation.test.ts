@@ -36,6 +36,9 @@ describe('AI Lab app generation', () => {
     expect(prompt).toContain('Reuse the existing product language.');
     expect(prompt).toContain('one complete HTML document');
     expect(prompt).toContain('work offline immediately');
+    expect(prompt).toContain('window.yoda.ai.editImage');
+    expect(prompt).toContain('openai/gpt-image-2');
+    expect(prompt).toContain('Do not substitute Canvas filters');
   });
 
   it('extracts the app from the latest completed assistant turn', () => {
