@@ -25,6 +25,24 @@ export type AiLabImageEditInput = AiLabImageEditRequest & {
 export type AiLabImageEditResult = {
   imageDataUrl: string;
   model: typeof AI_LAB_APP_IMAGE_MODEL;
+  historyId?: string;
+  createdAt?: string;
+};
+
+export type AiLabAppImageEditHistoryItem = {
+  id: string;
+  appId: string;
+  prompt: string;
+  model: typeof AI_LAB_APP_IMAGE_MODEL;
+  createdAt: string;
+  thumbnailDataUrl: string;
+};
+
+export type AiLabAppImageEditHistoryImage = {
+  id: string;
+  imageDataUrl: string;
+  model: typeof AI_LAB_APP_IMAGE_MODEL;
+  createdAt: string;
 };
 
 export type AiLabBridgeImageEditRequest = {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.17.0
+
+### Minor Changes
+
+- 新增 Yoda Build 模式：在首页复用现有项目、Agent、模型与输入配置，通过自然语言启动真实构建任务；生成的单文件子 App 会自动保存到 Library / Apps，并支持从 App 返回原创建任务继续迭代。
+- 完善子 App 的运行与管理体验：提供内置 React、shadcn 与前后端交互约定的隔离沙箱，支持独立窗口运行、固定到导航栏，以及一致的应用工具栏交互。
+- 子 App 可通过已连接的 ZenMux MaaS 调用 GPT Image 2 进行参考图编辑，并由 Yoda 持久保存生成历史；同时完善 Library / Apps 国际化和导航状态恢复。
+
 ## 0.16.8
 
 ### Patch Changes

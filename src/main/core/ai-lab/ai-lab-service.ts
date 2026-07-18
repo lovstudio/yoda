@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { app, clipboard, dialog, nativeImage } from 'electron';
 import {
   AI_LAB_CODEX_MODEL,
@@ -18,7 +18,13 @@ import {
   type PrepareAiLabBuildTaskResult,
   type UpdateAiLabAppInput,
 } from '@shared/ai-lab';
-import type { AiLabImageEditInput, AiLabImageEditResult } from '@shared/ai-lab-bridge';
+import {
+  AI_LAB_APP_IMAGE_MODEL,
+  type AiLabAppImageEditHistoryImage,
+  type AiLabAppImageEditHistoryItem,
+  type AiLabImageEditInput,
+  type AiLabImageEditResult,
+} from '@shared/ai-lab-bridge';
 import { resolveCommandPath } from '@main/core/dependencies/probe';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { maasService } from '@main/core/maas/maas-service';
@@ -30,7 +36,11 @@ import { telemetryService } from '@main/lib/telemetry';
 import { AiLabAppBuildRunner } from './app-build-runner';
 import { generateAiLabApp } from './app-generation';
 import { buildAppGenerationPrompt } from './app-generation-contract';
-import { normalizeAiLabImageEditInput, toAiLabImageEditResult } from './app-image-edit';
+import {
+  normalizeAiLabImageEditInput,
+  toAiLabImageEditResult,
+  type AiLabImageMimeType,
+} from './app-image-edit';
 import { AiLabAppStore } from './app-store';
 import { AiLabBuildJobStore } from './build-job-store';
 import { generateCodexImages } from './codex-image-engine';
@@ -38,6 +48,8 @@ import { buildLogoPrompt } from './logo-prompt';
 import { editZenmuxImage, generateZenmuxImages } from './zenmux-image-client';
 
 const HISTORY_LIMIT = 60;
+const APP_IMAGE_EDIT_HISTORY_LIMIT = 24;
+const APP_IMAGE_EDIT_KIND = 'app-image-edit';
 const THUMBNAIL_WIDTH = 256;
 const MAX_CANDIDATES = 4;
 
@@ -59,8 +71,21 @@ function thumbnailPath(fileName: string): string {
   return join(imagesDir(), `${fileName}.thumb.png`);
 }
 
-function toDataUrl(buffer: Buffer): string {
-  return `data:image/png;base64,${buffer.toString('base64')}`;
+function toDataUrl(buffer: Buffer, mimeType: AiLabImageMimeType = 'image/png'): string {
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
+}
+
+function sourceImageExtension(mimeType: AiLabImageMimeType): string {
+  if (mimeType === 'image/jpeg') return 'jpg';
+  if (mimeType === 'image/webp') return 'webp';
+  return 'png';
+}
+
+function sourceImageMimeType(fileName: string): AiLabImageMimeType {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'image/png';
 }
 
 function fileNameSlug(value: string): string {
@@ -100,10 +125,8 @@ export class AiLabService {
 
   async editAppImage(input: AiLabImageEditInput): Promise<AiLabImageEditResult> {
     const { input: normalized, source, sourceMimeType } = normalizeAiLabImageEditInput(input);
-    const appExists = (await this.getAppStore().list()).some(
-      (item) => item.id === normalized.appId
-    );
-    if (!appExists) throw new Error('AI Lab app not found.');
+    const app = (await this.getAppStore().list()).find((item) => item.id === normalized.appId);
+    if (!app) throw new Error('AI Lab app not found.');
     if (this.activeAppImageEdits >= 2) {
       throw new Error('Too many AI Lab images are generating. Wait for one to finish.');
     }
@@ -123,10 +146,101 @@ export class AiLabService {
         size: normalized.size,
         quality: normalized.quality,
       });
-      return toAiLabImageEditResult(buffer);
+      const result = toAiLabImageEditResult(buffer);
+      const id = randomUUID();
+      const createdAt = new Date().toISOString();
+      const images = await this.persistImages(id, [buffer]);
+      const sourceFileName = await this.persistAppImageSource(id, source, sourceMimeType);
+      images.push(sourceFileName);
+      await db.insert(aiLabGenerations).values({
+        id,
+        kind: APP_IMAGE_EDIT_KIND,
+        brandName: app.name,
+        description: app.description,
+        styleId: app.id,
+        engine: 'zenmux',
+        model: AI_LAB_APP_IMAGE_MODEL,
+        prompt: normalized.prompt,
+        status: 'succeeded',
+        error: null,
+        images,
+        createdAt,
+      });
+      return { ...result, historyId: id, createdAt };
     } finally {
       this.activeAppImageEdits -= 1;
     }
+  }
+
+  async listAppImageEdits(appId: string): Promise<AiLabAppImageEditHistoryItem[]> {
+    await this.requireApp(appId);
+    const rows = await db
+      .select()
+      .from(aiLabGenerations)
+      .where(
+        and(eq(aiLabGenerations.kind, APP_IMAGE_EDIT_KIND), eq(aiLabGenerations.styleId, appId))
+      )
+      .orderBy(desc(aiLabGenerations.createdAt))
+      .limit(APP_IMAGE_EDIT_HISTORY_LIMIT);
+    return Promise.all(rows.map((row) => this.toAppImageEditHistoryItem(row)));
+  }
+
+  async getAppImageEdit(input: {
+    appId: string;
+    id: string;
+  }): Promise<AiLabAppImageEditHistoryImage> {
+    const row = await this.requireAppImageEdit(input);
+    const fileName = requireFileName(row, 0);
+    return {
+      id: row.id,
+      imageDataUrl: toDataUrl(await readFile(imagePath(fileName))),
+      model: AI_LAB_APP_IMAGE_MODEL,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async regenerateAppImage(input: { appId: string; id: string }): Promise<AiLabImageEditResult> {
+    const row = await this.requireAppImageEdit(input);
+    const sourceFileName = row.images[1] ?? requireFileName(row, 0);
+    const imageDataUrl = toDataUrl(
+      await readFile(imagePath(sourceFileName)),
+      sourceImageMimeType(sourceFileName)
+    );
+
+    // New records retain the original source; legacy records fall back to the generated image.
+    // editAppImage always inserts a new row, leaving the selected history item intact.
+    return this.editAppImage({
+      appId: input.appId,
+      imageDataUrl,
+      prompt: row.prompt,
+      quality: 'high',
+    });
+  }
+
+  async saveAppImageEdit(input: {
+    appId: string;
+    id: string;
+  }): Promise<{ saved: boolean; path: string | null }> {
+    const row = await this.requireAppImageEdit(input);
+    const fileName = requireFileName(row, 0);
+    const result = await dialog.showSaveDialog({
+      defaultPath: `${fileNameSlug(row.brandName)}-${row.createdAt.slice(0, 10)}.png`,
+      filters: [{ name: 'PNG', extensions: ['png'] }],
+    });
+    if (result.canceled || !result.filePath) return { saved: false, path: null };
+    await copyFile(imagePath(fileName), result.filePath);
+    return { saved: true, path: result.filePath };
+  }
+
+  async deleteAppImageEdit(input: { appId: string; id: string }): Promise<void> {
+    const row = await this.requireAppImageEdit(input);
+    await Promise.all(
+      row.images.flatMap((fileName) => [
+        unlink(imagePath(fileName)).catch(() => undefined),
+        unlink(thumbnailPath(fileName)).catch(() => undefined),
+      ])
+    );
+    await db.delete(aiLabGenerations).where(eq(aiLabGenerations.id, row.id));
   }
 
   async prepareBuildTask(input: PrepareAiLabBuildTaskInput): Promise<PrepareAiLabBuildTaskResult> {
@@ -191,7 +305,33 @@ export class AiLabService {
   }
 
   async deleteApp(id: string): Promise<void> {
-    return this.getAppStore().delete(id);
+    await this.getAppStore().delete(id);
+    try {
+      const rows = await db
+        .select()
+        .from(aiLabGenerations)
+        .where(
+          and(eq(aiLabGenerations.kind, APP_IMAGE_EDIT_KIND), eq(aiLabGenerations.styleId, id))
+        );
+      await Promise.all(
+        rows.flatMap((row) =>
+          row.images.flatMap((fileName) => [
+            unlink(imagePath(fileName)).catch(() => undefined),
+            unlink(thumbnailPath(fileName)).catch(() => undefined),
+          ])
+        )
+      );
+      await db
+        .delete(aiLabGenerations)
+        .where(
+          and(eq(aiLabGenerations.kind, APP_IMAGE_EDIT_KIND), eq(aiLabGenerations.styleId, id))
+        );
+    } catch (error) {
+      log.warn('[ai-lab] failed to clean up generated app image history', {
+        appId: id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   async listEngines(): Promise<AiLabEngineStatus[]> {
@@ -271,6 +411,7 @@ export class AiLabService {
     const rows = await db
       .select()
       .from(aiLabGenerations)
+      .where(eq(aiLabGenerations.kind, 'logo'))
       .orderBy(desc(aiLabGenerations.createdAt))
       .limit(HISTORY_LIMIT);
     return Promise.all(rows.map((row) => this.toListItem(row)));
@@ -358,6 +499,17 @@ export class AiLabService {
     );
   }
 
+  private async persistAppImageSource(
+    id: string,
+    source: Buffer,
+    mimeType: AiLabImageMimeType
+  ): Promise<string> {
+    await mkdir(imagesDir(), { recursive: true });
+    const fileName = `${id}-source.${sourceImageExtension(mimeType)}`;
+    await writeFile(imagePath(fileName), source);
+    return fileName;
+  }
+
   private async toListItem(row: GenerationRow): Promise<LogoGenerationListItem> {
     const thumbnails = await Promise.all(
       row.images.map(async (fileName) => {
@@ -389,11 +541,54 @@ export class AiLabService {
     };
   }
 
+  private async toAppImageEditHistoryItem(
+    row: GenerationRow
+  ): Promise<AiLabAppImageEditHistoryItem> {
+    const fileName = requireFileName(row, 0);
+    let thumbnailDataUrl = '';
+    try {
+      thumbnailDataUrl = toDataUrl(await readFile(thumbnailPath(fileName)));
+    } catch {
+      thumbnailDataUrl = toDataUrl(await readFile(imagePath(fileName)));
+    }
+    return {
+      id: row.id,
+      appId: row.styleId,
+      prompt: row.prompt,
+      model: AI_LAB_APP_IMAGE_MODEL,
+      createdAt: row.createdAt,
+      thumbnailDataUrl,
+    };
+  }
+
+  private async requireApp(appId: string): Promise<AiLabUserApp> {
+    const app = (await this.getAppStore().list()).find((item) => item.id === appId);
+    if (!app) throw new Error('AI Lab app not found.');
+    return app;
+  }
+
+  private async requireAppImageEdit(input: { appId: string; id: string }): Promise<GenerationRow> {
+    await this.requireApp(input.appId);
+    const [row] = await db
+      .select()
+      .from(aiLabGenerations)
+      .where(
+        and(
+          eq(aiLabGenerations.id, input.id),
+          eq(aiLabGenerations.kind, APP_IMAGE_EDIT_KIND),
+          eq(aiLabGenerations.styleId, input.appId)
+        )
+      )
+      .limit(1);
+    if (!row) throw new Error('Generated app image not found.');
+    return row;
+  }
+
   private async requireRow(id: string): Promise<GenerationRow> {
     const [row] = await db
       .select()
       .from(aiLabGenerations)
-      .where(eq(aiLabGenerations.id, id))
+      .where(and(eq(aiLabGenerations.id, id), eq(aiLabGenerations.kind, 'logo')))
       .limit(1);
     if (!row) throw new Error('Logo generation not found.');
     return row;

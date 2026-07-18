@@ -41,7 +41,10 @@ describe('AI Lab app generation', () => {
     expect(prompt).toContain('openai/gpt-image-2');
     expect(prompt).toContain('high input fidelity');
     expect(prompt).toContain('Do not substitute Canvas filters');
-    expect(prompt).toContain('copies it to the clipboard');
+    expect(prompt).toContain('copy-error control');
+    expect(prompt).toContain('private implementation details');
+    expect(prompt).toContain('must never appear');
+    expect(prompt).toContain('product-language failure message');
   });
 
   it('extracts the app from the latest completed assistant turn', () => {

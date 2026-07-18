@@ -1,9 +1,8 @@
-import { AppWindow, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AppWindow, RefreshCw } from 'lucide-react';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AiLabWindowTarget } from '@shared/ai-lab-window';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
-import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { Spinner } from '@renderer/lib/ui/spinner';
 import { UserAppFrame } from './components/user-app-frame';
@@ -29,10 +28,6 @@ export function AiLabAppWindow({ target }: { target: AiLabWindowTarget }) {
         <span className="min-w-0 flex-1 truncate text-xs font-medium">
           {app?.name ?? t('aiLab.title')}
         </span>
-        <Badge variant="outline" className="shrink-0 font-normal text-[10px]">
-          <ShieldCheck className="mr-1 size-3" />
-          {t('aiLab.sandbox')}
-        </Badge>
       </header>
       <main className="min-h-0 flex-1 overflow-hidden bg-background-secondary">
         {apps.isPending ? (

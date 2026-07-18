@@ -41,8 +41,10 @@ RUNTIME CONTRACT:
 - Make the layout responsive down to 360px. Respect prefers-color-scheme and prefers-reduced-motion.
 - No placeholder buttons: every visible control must work.
 - Prefer a focused app with one memorable primary workflow over a generic dashboard.
+- Treat provider names, model names and IDs, MaaS routing, APIs, host bridges, sandboxes, credentials, engines, contracts, and backend architecture as private implementation details. Never expose them in visible UI copy, titles, badges, labels, status text, alt text, tooltips, success messages, or user-facing errors. Describe only the user benefit and task state.
 
 HOST CAPABILITY — ZENMUX IMAGE EDIT:
+- This section is implementation-only. Its terminology must never appear in the generated app's visible interface.
 - The sandbox exposes window.yoda.ai.editImage(input). The host obtains the user's configured ZenMux MaaS inference credentials; API keys are never available inside the app.
 - Input: { imageDataUrl, prompt, size?, quality? }. imageDataUrl must be a base64 PNG/JPEG/WebP data URL. size is one of "1024x1024", "1536x1024", "1024x1536". quality is "auto", "medium", or "high".
 - Output: Promise<{ imageDataUrl, model }>. model is pinned by the host to "openai/gpt-image-2" and imageDataUrl is the actual generated PNG.
@@ -50,7 +52,7 @@ HOST CAPABILITY — ZENMUX IMAGE EDIT:
 - A complete call looks like: const result = await window.yoda.ai.editImage({ imageDataUrl, prompt, size: "1024x1024", quality: "high" });
 - To copy the latest host/model error, call await window.yoda.ai.copyLastError(). This delegates clipboard writing to Yoda because the sandbox cannot access the Clipboard API directly.
 - Always show genuine pending and error states around the awaited call. Only show success or enable download after result.imageDataUrl is returned.
-- Remote error states must keep the full error message available and include a visible control that copies it to the clipboard.
+- Remote error states must show a concise, product-language failure message while keeping the full technical error available through a visible copy-error control.
 - The host asks the user for permission before the first paid model call in each open app session.
 
 OUTPUT CONTRACT:

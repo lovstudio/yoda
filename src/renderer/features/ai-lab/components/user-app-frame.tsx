@@ -9,8 +9,10 @@ import {
 } from '@shared/ai-lab-bridge';
 import { rpc } from '@renderer/lib/ipc';
 import { cn } from '@renderer/utils/utils';
+import { appImageEditRuntime } from '../app-image-edit-runtime';
 import { normalizeAiLabBridgeError } from '../bridge-error';
 import { applySandboxPolicy } from '../sandbox-policy';
+import { AppImageEditActivity } from './app-image-edit-activity';
 
 export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?: string }) {
   const { t } = useTranslation();
@@ -76,6 +78,18 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
         return;
       }
 
+      if (appImageEditRuntime.getSnapshot(app.id).status === 'running') {
+        lastBridgeError = t('aiLab.bridgeBusy');
+        respond({
+          channel: AI_LAB_BRIDGE_CHANNEL,
+          kind: 'response',
+          requestId: request.requestId,
+          ok: false,
+          error: lastBridgeError,
+        });
+        return;
+      }
+
       if (!permissionGranted) {
         permissionGranted = window.confirm(t('aiLab.bridgePermissionConfirm', { name: app.name }));
         if (!permissionGranted) {
@@ -92,8 +106,8 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
       }
 
       activeRequestId = request.requestId;
-      void rpc.aiLab
-        .editAppImage({ ...request.payload, appId: app.id })
+      void appImageEditRuntime
+        .run(app.id, () => rpc.aiLab.editAppImage({ ...request.payload, appId: app.id }))
         .then((result) => {
           lastBridgeError = null;
           respond({
@@ -125,17 +139,17 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
   }, [app.id, app.name, t]);
 
   return (
-    <iframe
-      ref={iframeRef}
-      key={app.updatedAt}
-      title={app.name}
-      srcDoc={source}
-      sandbox="allow-scripts allow-forms allow-modals"
-      referrerPolicy="no-referrer"
-      className={cn(
-        'h-full min-h-[420px] w-full rounded-xl border border-border bg-white shadow-sm',
-        className
-      )}
-    />
+    <div className={cn('flex h-full min-h-[420px] w-full flex-col overflow-hidden', className)}>
+      <AppImageEditActivity app={app} />
+      <iframe
+        ref={iframeRef}
+        key={app.updatedAt}
+        title={app.name}
+        srcDoc={source}
+        sandbox="allow-scripts allow-forms allow-modals"
+        referrerPolicy="no-referrer"
+        className="min-h-0 w-full flex-1 border-0 bg-white"
+      />
+    </div>
   );
 }

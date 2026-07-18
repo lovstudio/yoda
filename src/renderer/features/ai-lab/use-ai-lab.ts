@@ -7,6 +7,8 @@ export const aiLabQueryKeys = {
   generations: ['aiLab', 'generations'] as const,
   image: (id: string, index: number) => ['aiLab', 'image', id, index] as const,
   apps: ['aiLab', 'apps'] as const,
+  appImageEdits: (appId: string) => ['aiLab', 'appImageEdits', appId] as const,
+  appImageEdit: (appId: string, id: string) => ['aiLab', 'appImageEdit', appId, id] as const,
 };
 
 export function useAiLabApps() {
@@ -29,6 +31,33 @@ export function useDeleteAiLabApp() {
   return useMutation({
     mutationFn: (id: string) => rpc.aiLab.deleteApp(id),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: aiLabQueryKeys.apps }),
+  });
+}
+
+export function useAppImageEdits(appId: string) {
+  return useQuery({
+    queryKey: aiLabQueryKeys.appImageEdits(appId),
+    queryFn: () => rpc.aiLab.listAppImageEdits(appId),
+  });
+}
+
+export function useAppImageEdit(appId: string, id: string | null) {
+  return useQuery({
+    queryKey: aiLabQueryKeys.appImageEdit(appId, id ?? ''),
+    queryFn: () => rpc.aiLab.getAppImageEdit({ appId, id: id ?? '' }),
+    enabled: id !== null,
+    staleTime: Infinity,
+  });
+}
+
+export function useDeleteAppImageEdit(appId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => rpc.aiLab.deleteAppImageEdit({ appId, id }),
+    onSuccess: (_, id) => {
+      queryClient.removeQueries({ queryKey: aiLabQueryKeys.appImageEdit(appId, id) });
+      void queryClient.invalidateQueries({ queryKey: aiLabQueryKeys.appImageEdits(appId) });
+    },
   });
 }
 
