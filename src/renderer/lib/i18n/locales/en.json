@@ -2017,7 +2017,7 @@
   },
   "library": {
     "sections": {
-      "aiLab": "AI Lab",
+      "apps": "Apps",
       "prompts": "Prompts",
       "agents": "Agents",
       "agentTeams": "Agent Teams",
