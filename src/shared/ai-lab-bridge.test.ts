@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AI_LAB_BRIDGE_CHANNEL,
+  AI_LAB_COPY_LAST_ERROR_METHOD,
   AI_LAB_IMAGE_EDIT_MAX_DATA_URL_CHARS,
   AI_LAB_IMAGE_EDIT_METHOD,
   parseAiLabBridgeRequest,
@@ -47,6 +48,21 @@ describe('AI Lab host bridge', () => {
       parseAiLabBridgeRequest(
         request({ imageDataUrl: 'data:image/png;base64,eA==', prompt: 'x', quality: 'ultra' })
       )
+    ).toBeNull();
+  });
+
+  it('accepts only an empty payload for copying the last host error', () => {
+    expect(
+      parseAiLabBridgeRequest({
+        ...request({}),
+        method: AI_LAB_COPY_LAST_ERROR_METHOD,
+      })
+    ).toMatchObject({ method: AI_LAB_COPY_LAST_ERROR_METHOD, payload: {} });
+    expect(
+      parseAiLabBridgeRequest({
+        ...request({ text: 'arbitrary clipboard content' }),
+        method: AI_LAB_COPY_LAST_ERROR_METHOD,
+      })
     ).toBeNull();
   });
 

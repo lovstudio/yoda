@@ -5,11 +5,9 @@ import {
   type AiLabImageEditSize,
 } from '@shared/ai-lab-bridge';
 import { aiLogService } from '@main/core/ai-logs/ai-log-service';
+import type { AiLabImageMimeType } from './app-image-edit';
 
 const REQUEST_TIMEOUT_MS = 180_000;
-// ZenMux's OpenAI Images JSON protocol expects the OpenAI-native model name,
-// while its catalog and the rest of Yoda use the provider-qualified ID.
-const ZENMUX_OPENAI_IMAGES_MODEL = AI_LAB_APP_IMAGE_MODEL.replace(/^openai\//, '');
 
 type ApiErrorBody = {
   error?: string | { message?: string };
@@ -26,40 +24,58 @@ type VertexGenerateContentResponse = ApiErrorBody & {
   }>;
 };
 
-/** Restyles a source image through ZenMux's OpenAI-compatible Images edit API. */
+type VertexImageResponse = ApiErrorBody & {
+  predictions?: Array<{
+    bytesBase64Encoded?: string;
+    mimeType?: string;
+    raiFilteredReason?: string;
+  }>;
+};
+
+/** Restyles a source image through ZenMux's documented Vertex image edit protocol. */
 export async function editZenmuxImage(input: {
   endpoint: string;
   apiKey: string;
   appId: string;
   prompt: string;
-  imageDataUrl: string;
+  source: Buffer;
+  sourceMimeType: AiLabImageMimeType;
   size: AiLabImageEditSize;
   quality: AiLabImageEditQuality;
 }): Promise<Buffer> {
-  const url = `${trimTrailingSlash(input.endpoint)}/images/edits`;
+  const url = vertexImagePredictionUrl(input.endpoint);
   const logId = await aiLogService.start({
     purpose: 'app-image-edit',
     mode: 'api',
     runtime: 'zenmux',
-    model: ZENMUX_OPENAI_IMAGES_MODEL,
+    model: AI_LAB_APP_IMAGE_MODEL,
     command: url,
     prompt: input.prompt,
     metadata: { appId: input.appId, size: input.size, quality: input.quality },
   });
   try {
-    const body = await postJson<OpenAiImagesResponse>(url, input.apiKey, {
-      model: ZENMUX_OPENAI_IMAGES_MODEL,
-      images: [{ image_url: input.imageDataUrl }],
-      prompt: input.prompt,
-      input_fidelity: 'high',
-      n: 1,
-      size: input.size,
-      quality: input.quality,
-      output_format: 'png',
+    const body = await postJson<VertexImageResponse>(url, input.apiKey, {
+      instances: [
+        {
+          prompt: input.prompt,
+          image: {
+            bytesBase64Encoded: input.source.toString('base64'),
+            mimeType: input.sourceMimeType,
+          },
+        },
+      ],
+      parameters: {
+        sampleCount: 1,
+        imageSize: input.size,
+        quality: input.quality,
+        outputOptions: { mimeType: 'image/png' },
+      },
     });
-    const b64 = body.data?.[0]?.b64_json;
+    const prediction = body.predictions?.[0];
+    const b64 = prediction?.bytesBase64Encoded;
     if (typeof b64 !== 'string' || b64.length === 0) {
-      throw new Error('ZenMux Images edit API returned no image data.');
+      const reason = prediction?.raiFilteredReason?.trim();
+      throw new Error(reason || 'ZenMux Vertex image edit API returned no image data.');
     }
     const buffer = Buffer.from(b64, 'base64');
     if (buffer.length === 0) throw new Error('ZenMux Images edit API returned an empty image.');
@@ -214,4 +230,11 @@ function extractErrorMessage(body: ApiErrorBody | null, fallback: string): strin
 
 function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '');
+}
+
+function vertexImagePredictionUrl(endpoint: string): string {
+  const apiRoot = trimTrailingSlash(endpoint).replace(/\/v1$/, '');
+  const vertexBase = apiRoot.endsWith('/vertex-ai') ? apiRoot : `${apiRoot}/vertex-ai`;
+  const [provider, model] = AI_LAB_APP_IMAGE_MODEL.split('/');
+  return `${vertexBase}/v1/publishers/${encodeURIComponent(provider!)}/models/${encodeURIComponent(model!)}:predict`;
 }

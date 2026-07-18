@@ -18,9 +18,12 @@ export type NormalizedAiLabImageEditInput = {
   quality: AiLabImageEditQuality;
 };
 
+export type AiLabImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp';
+
 export function normalizeAiLabImageEditInput(input: AiLabImageEditInput): {
   input: NormalizedAiLabImageEditInput;
   source: Buffer;
+  sourceMimeType: AiLabImageMimeType;
 } {
   if (!input || typeof input !== 'object') throw new Error('Invalid image edit request.');
   if (typeof input.appId !== 'string' || input.appId.trim().length === 0) {
@@ -28,7 +31,7 @@ export function normalizeAiLabImageEditInput(input: AiLabImageEditInput): {
   }
   if (!isImageEditRequest(input)) throw new Error('Invalid image edit request.');
 
-  const source = decodeImageDataUrl(input.imageDataUrl);
+  const { source, mimeType: sourceMimeType } = decodeImageDataUrl(input.imageDataUrl);
   if (source.length > MAX_INPUT_IMAGE_BYTES) {
     throw new Error('The source image exceeds the 15 MB limit.');
   }
@@ -42,6 +45,7 @@ export function normalizeAiLabImageEditInput(input: AiLabImageEditInput): {
       quality: input.quality ?? 'high',
     },
     source,
+    sourceMimeType,
   };
 }
 
@@ -57,7 +61,10 @@ export function toAiLabImageEditResult(buffer: Buffer): AiLabImageEditResult {
   };
 }
 
-function decodeImageDataUrl(dataUrl: string): Buffer {
+function decodeImageDataUrl(dataUrl: string): {
+  source: Buffer;
+  mimeType: AiLabImageMimeType;
+} {
   const commaIndex = dataUrl.indexOf(',');
   const prefix = dataUrl.slice(0, commaIndex).toLowerCase();
   const encoded = dataUrl.slice(commaIndex + 1);
@@ -79,7 +86,7 @@ function decodeImageDataUrl(dataUrl: string): Buffer {
     (prefix === 'data:image/jpeg;base64' && hasJpegSignature(source)) ||
     (prefix === 'data:image/webp;base64' && hasWebpSignature(source));
   if (!matchesDeclaredType) throw new Error('The source image data is invalid.');
-  return source;
+  return { source, mimeType: prefix.slice(5, -7) as AiLabImageMimeType };
 }
 
 function hasPngSignature(buffer: Buffer): boolean {

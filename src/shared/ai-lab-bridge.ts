@@ -1,5 +1,6 @@
 export const AI_LAB_BRIDGE_CHANNEL = 'yoda:ai-lab-host:v1';
 export const AI_LAB_IMAGE_EDIT_METHOD = 'images.edit';
+export const AI_LAB_COPY_LAST_ERROR_METHOD = 'errors.copyLast';
 export const AI_LAB_APP_IMAGE_MODEL = 'openai/gpt-image-2';
 export const AI_LAB_IMAGE_EDIT_MAX_PROMPT_CHARS = 4_000;
 export const AI_LAB_IMAGE_EDIT_MAX_DATA_URL_CHARS = 21_000_000;
@@ -26,7 +27,7 @@ export type AiLabImageEditResult = {
   model: typeof AI_LAB_APP_IMAGE_MODEL;
 };
 
-export type AiLabBridgeRequest = {
+export type AiLabBridgeImageEditRequest = {
   channel: typeof AI_LAB_BRIDGE_CHANNEL;
   kind: 'request';
   requestId: string;
@@ -34,23 +35,50 @@ export type AiLabBridgeRequest = {
   payload: AiLabImageEditRequest;
 };
 
+export type AiLabBridgeCopyLastErrorRequest = {
+  channel: typeof AI_LAB_BRIDGE_CHANNEL;
+  kind: 'request';
+  requestId: string;
+  method: typeof AI_LAB_COPY_LAST_ERROR_METHOD;
+  payload: Record<string, never>;
+};
+
+export type AiLabBridgeRequest = AiLabBridgeImageEditRequest | AiLabBridgeCopyLastErrorRequest;
+
+export type AiLabCopyLastErrorResult = { copied: true };
+
 export type AiLabBridgeResponse = {
   channel: typeof AI_LAB_BRIDGE_CHANNEL;
   kind: 'response';
   requestId: string;
-} & ({ ok: true; result: AiLabImageEditResult } | { ok: false; error: string });
+} & (
+  | { ok: true; result: AiLabImageEditResult | AiLabCopyLastErrorResult }
+  | { ok: false; error: string }
+);
 
 export function parseAiLabBridgeRequest(value: unknown): AiLabBridgeRequest | null {
   if (!isRecord(value)) return null;
   if (
     value.channel !== AI_LAB_BRIDGE_CHANNEL ||
     value.kind !== 'request' ||
-    value.method !== AI_LAB_IMAGE_EDIT_METHOD ||
-    !isRequestId(value.requestId) ||
-    !isImageEditRequest(value.payload)
+    !isRequestId(value.requestId)
   ) {
     return null;
   }
+  if (
+    value.method === AI_LAB_COPY_LAST_ERROR_METHOD &&
+    isRecord(value.payload) &&
+    Object.keys(value.payload).length === 0
+  ) {
+    return {
+      channel: AI_LAB_BRIDGE_CHANNEL,
+      kind: 'request',
+      requestId: value.requestId,
+      method: AI_LAB_COPY_LAST_ERROR_METHOD,
+      payload: {},
+    };
+  }
+  if (value.method !== AI_LAB_IMAGE_EDIT_METHOD || !isImageEditRequest(value.payload)) return null;
   const payload = value.payload as unknown as AiLabImageEditRequest;
   return {
     channel: AI_LAB_BRIDGE_CHANNEL,

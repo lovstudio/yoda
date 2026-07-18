@@ -16,14 +16,16 @@ describe('ZenMux image edit client', () => {
     vi.clearAllMocks();
   });
 
-  it('sends a reference image through the official JSON images edit protocol', async () => {
+  it('sends a reference image through the official Vertex image edit protocol', async () => {
     const fetchMock = vi.fn(
       async (_url: string | URL | Request, _init?: RequestInit) =>
         ({
           ok: true,
           status: 200,
           statusText: 'OK',
-          json: async () => ({ data: [{ b64_json: Buffer.from('edited').toString('base64') }] }),
+          json: async () => ({
+            predictions: [{ bytesBase64Encoded: Buffer.from('edited').toString('base64') }],
+          }),
         }) as Response
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -33,7 +35,8 @@ describe('ZenMux image edit client', () => {
       apiKey: 'secret',
       appId: 'app-1',
       prompt: 'Preserve the person and render a Riso portrait.',
-      imageDataUrl: 'data:image/png;base64,aW1hZ2U=',
+      source: Buffer.from('image'),
+      sourceMimeType: 'image/png',
       size: '1024x1024',
       quality: 'high',
     });
@@ -41,20 +44,29 @@ describe('ZenMux image edit client', () => {
     expect(result.toString()).toBe('edited');
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe('https://zenmux.ai/api/v1/images/edits');
+    expect(url).toBe(
+      'https://zenmux.ai/api/vertex-ai/v1/publishers/openai/models/gpt-image-2:predict'
+    );
     expect(init?.headers).toEqual({
       'Content-Type': 'application/json',
       Authorization: 'Bearer secret',
     });
     expect(JSON.parse(String(init?.body))).toEqual({
-      model: 'gpt-image-2',
-      images: [{ image_url: 'data:image/png;base64,aW1hZ2U=' }],
-      prompt: 'Preserve the person and render a Riso portrait.',
-      input_fidelity: 'high',
-      n: 1,
-      size: '1024x1024',
-      quality: 'high',
-      output_format: 'png',
+      instances: [
+        {
+          prompt: 'Preserve the person and render a Riso portrait.',
+          image: {
+            bytesBase64Encoded: Buffer.from('image').toString('base64'),
+            mimeType: 'image/png',
+          },
+        },
+      ],
+      parameters: {
+        sampleCount: 1,
+        imageSize: '1024x1024',
+        quality: 'high',
+        outputOptions: { mimeType: 'image/png' },
+      },
     });
     expect(logMocks.finish).toHaveBeenCalledWith('log-1', {
       status: 'succeeded',

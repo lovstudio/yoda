@@ -7,7 +7,9 @@ describe('AI Lab app sandbox', () => {
     expect(source).toContain("default-src 'none'");
     expect(source).toContain("connect-src 'none'");
     expect(source).toContain("Object.defineProperty(globalThis,'yoda'");
-    expect(source).toContain('method:M');
+    expect(source).toContain('M="images.edit"');
+    expect(source).toContain('E="errors.copyLast"');
+    expect(source).toContain('copyLastError');
     expect(source).toContain('parent.postMessage');
     expect(source).not.toContain('apiKey');
     expect(source.indexOf('Content-Security-Policy')).toBeLessThan(source.indexOf('</head>'));

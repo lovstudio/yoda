@@ -18,6 +18,7 @@ describe('AI Lab app image edit validation', () => {
       quality: 'high',
     });
     expect(result.source).toEqual(png);
+    expect(result.sourceMimeType).toBe('image/png');
   });
 
   it('rejects malformed source image data', () => {

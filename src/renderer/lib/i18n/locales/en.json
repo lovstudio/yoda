@@ -3147,6 +3147,8 @@
     "sandbox": "Isolated sandbox",
     "bridgePermissionConfirm": "“{{name}}” wants to call GPT Image 2 through your connected ZenMux MaaS account. Allow image generation for this open session?",
     "bridgePermissionDenied": "Permission to use ZenMux image generation was not granted.",
+    "bridgeNoErrorToCopy": "There is no model error to copy.",
+    "bridgeCopyFailed": "Failed to copy the error.",
     "bridgeBusy": "An image is already being generated. Wait for it to finish and try again.",
     "emptyTitle": "No personal apps yet",
     "emptyDescription": "Go Home and choose Yoda Build to create your first app with the current project and Agent configuration.",

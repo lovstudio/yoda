@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { AiLabUserApp } from '@shared/ai-lab';
 import {
   AI_LAB_BRIDGE_CHANNEL,
+  AI_LAB_COPY_LAST_ERROR_METHOD,
   parseAiLabBridgeRequest,
   type AiLabBridgeResponse,
 } from '@shared/ai-lab-bridge';
@@ -19,6 +20,7 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
   useEffect(() => {
     let permissionGranted = false;
     let activeRequestId: string | null = null;
+    let lastBridgeError: string | null = null;
 
     const respond = (response: AiLabBridgeResponse) => {
       iframeRef.current?.contentWindow?.postMessage(response, '*');
@@ -29,13 +31,47 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
       const request = parseAiLabBridgeRequest(event.data);
       if (!request) return;
 
+      if (request.method === AI_LAB_COPY_LAST_ERROR_METHOD) {
+        if (!lastBridgeError) {
+          respond({
+            channel: AI_LAB_BRIDGE_CHANNEL,
+            kind: 'response',
+            requestId: request.requestId,
+            ok: false,
+            error: t('aiLab.bridgeNoErrorToCopy'),
+          });
+          return;
+        }
+        void rpc.app.clipboardWriteText(lastBridgeError).then((result) => {
+          respond(
+            result.success
+              ? {
+                  channel: AI_LAB_BRIDGE_CHANNEL,
+                  kind: 'response',
+                  requestId: request.requestId,
+                  ok: true,
+                  result: { copied: true },
+                }
+              : {
+                  channel: AI_LAB_BRIDGE_CHANNEL,
+                  kind: 'response',
+                  requestId: request.requestId,
+                  ok: false,
+                  error: result.error || t('aiLab.bridgeCopyFailed'),
+                }
+          );
+        });
+        return;
+      }
+
       if (activeRequestId) {
+        lastBridgeError = t('aiLab.bridgeBusy');
         respond({
           channel: AI_LAB_BRIDGE_CHANNEL,
           kind: 'response',
           requestId: request.requestId,
           ok: false,
-          error: t('aiLab.bridgeBusy'),
+          error: lastBridgeError,
         });
         return;
       }
@@ -43,12 +79,13 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
       if (!permissionGranted) {
         permissionGranted = window.confirm(t('aiLab.bridgePermissionConfirm', { name: app.name }));
         if (!permissionGranted) {
+          lastBridgeError = t('aiLab.bridgePermissionDenied');
           respond({
             channel: AI_LAB_BRIDGE_CHANNEL,
             kind: 'response',
             requestId: request.requestId,
             ok: false,
-            error: t('aiLab.bridgePermissionDenied'),
+            error: lastBridgeError,
           });
           return;
         }
@@ -58,6 +95,7 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
       void rpc.aiLab
         .editAppImage({ ...request.payload, appId: app.id })
         .then((result) => {
+          lastBridgeError = null;
           respond({
             channel: AI_LAB_BRIDGE_CHANNEL,
             kind: 'response',
@@ -68,6 +106,7 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
         })
         .catch((error: unknown) => {
           const message = normalizeAiLabBridgeError(error);
+          lastBridgeError = message;
           respond({
             channel: AI_LAB_BRIDGE_CHANNEL,
             kind: 'response',

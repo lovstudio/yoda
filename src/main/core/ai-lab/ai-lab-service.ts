@@ -99,7 +99,7 @@ export class AiLabService {
   }
 
   async editAppImage(input: AiLabImageEditInput): Promise<AiLabImageEditResult> {
-    const normalized = normalizeAiLabImageEditInput(input).input;
+    const { input: normalized, source, sourceMimeType } = normalizeAiLabImageEditInput(input);
     const appExists = (await this.getAppStore().list()).some(
       (item) => item.id === normalized.appId
     );
@@ -114,7 +114,15 @@ export class AiLabService {
 
     this.activeAppImageEdits += 1;
     try {
-      const buffer = await editZenmuxImage({ ...credentials, ...normalized });
+      const buffer = await editZenmuxImage({
+        ...credentials,
+        appId: normalized.appId,
+        prompt: normalized.prompt,
+        source,
+        sourceMimeType,
+        size: normalized.size,
+        quality: normalized.quality,
+      });
       return toAiLabImageEditResult(buffer);
     } finally {
       this.activeAppImageEdits -= 1;

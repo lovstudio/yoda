@@ -37,6 +37,7 @@ describe('AI Lab app generation', () => {
     expect(prompt).toContain('one complete HTML document');
     expect(prompt).toContain('work offline immediately');
     expect(prompt).toContain('window.yoda.ai.editImage');
+    expect(prompt).toContain('window.yoda.ai.copyLastError');
     expect(prompt).toContain('openai/gpt-image-2');
     expect(prompt).toContain('Do not substitute Canvas filters');
     expect(prompt).toContain('copies it to the clipboard');
