@@ -3136,6 +3136,7 @@
     "windowLoadFailed": "Could not load app",
     "windowNotFound": "This app no longer exists or is unavailable.",
     "returnToBuildTask": "Back to build task",
+    "appActions": "App actions",
     "myApps": "My apps",
     "myAppsDescription": "Every app is a single-file creation that runs immediately.",
     "builtInApps": "Ready to use",

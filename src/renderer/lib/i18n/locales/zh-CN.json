@@ -3136,6 +3136,7 @@
     "windowLoadFailed": "应用加载失败",
     "windowNotFound": "这个应用已不存在或无法访问。",
     "returnToBuildTask": "返回创建任务",
+    "appActions": "应用操作",
     "myApps": "我的应用",
     "myAppsDescription": "每个应用都是一份可立即运行的单文件作品。",
     "builtInApps": "开箱即用",
