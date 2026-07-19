@@ -5,6 +5,7 @@ import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   classifyCodexRollout,
+  initialCodexTailEvents,
   parseCodexRunStateEvent,
   parseTurnEvent,
   readCodexTurnVerdict,
@@ -112,6 +113,46 @@ describe('parseCodexRunStateEvent', () => {
       force: true,
     });
     expect(pending.has('call_question')).toBe(false);
+  });
+});
+
+describe('initialCodexTailEvents', () => {
+  it('does not replay a historical completion when an idle session watcher attaches', () => {
+    const lines = [
+      line({ type: 'task_started', turn_id: 'old' }),
+      line({ type: 'task_complete', turn_id: 'old' }),
+    ];
+
+    expect(initialCodexTailEvents(lines, at + 60_000)).toEqual([]);
+  });
+
+  it('restores a historical turn that is still working without marking it finished', () => {
+    const lines = [
+      line({ type: 'task_started', turn_id: 'old' }),
+      line({ type: 'task_complete', turn_id: 'old' }),
+      JSON.stringify({
+        timestamp: '2026-06-08T17:50:00.000Z',
+        type: 'event_msg',
+        payload: { type: 'task_started', turn_id: 'active' },
+      }),
+    ];
+
+    expect(initialCodexTailEvents(lines, at + 120_000)).toEqual([
+      { kind: 'turn-started', at: Date.parse('2026-06-08T17:50:00.000Z'), force: true },
+    ]);
+  });
+
+  it('replays terminal events written after the watcher started', () => {
+    const startedAt = at - 1;
+    const lines = [
+      line({ type: 'task_started', turn_id: 'new' }),
+      line({ type: 'task_complete', turn_id: 'new' }),
+    ];
+
+    expect(initialCodexTailEvents(lines, startedAt)).toEqual([
+      { kind: 'turn-started', at },
+      { kind: 'turn-completed', at },
+    ]);
   });
 });
 
