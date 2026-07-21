@@ -6,6 +6,7 @@ import {
   MoreHorizontal,
   PanelRight,
   PanelRightOpen,
+  RefreshCw,
   TerminalSquare,
 } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
@@ -108,21 +109,26 @@ type MenuPrimitives = {
   Separator: ComponentType<Record<string, never>>;
 };
 
+type RefreshFileAction = () => void | Promise<void>;
+
 /**
  * The base file-action menu items, rendered through injected menu primitives so
  * both DropdownMenu and ContextMenu surfaces share one implementation.
  *
  * Group structure (placement items are the caller's first group, see
  * GlobalFileMenuItems / features/tasks/components/file-actions.tsx):
- * open-in apps incl. Finder, then copy-path actions.
+ * refresh (when the host can reload the content), open-in apps incl. Finder,
+ * then copy-path actions.
  */
 export function FilePathMenuItems({
   target,
   components: { Item, Separator },
+  onRefresh,
   onAfterAction,
 }: {
   target: FilePathTarget;
   components: MenuPrimitives;
+  onRefresh?: RefreshFileAction;
   onAfterAction?: () => void;
 }) {
   const { t } = useTranslation();
@@ -131,6 +137,22 @@ export function FilePathMenuItems({
 
   return (
     <>
+      {onRefresh && target.kind !== 'directory' ? (
+        <>
+          <Item
+            className="whitespace-nowrap"
+            onClick={(event) => {
+              event.stopPropagation();
+              void refreshFile(onRefresh, t);
+              onAfterAction?.();
+            }}
+          >
+            <RefreshCw className="size-4" />
+            {t('fileActions.refreshFile')}
+          </Item>
+          <Separator />
+        </>
+      ) : null}
       {!actions.isRemote && target.kind !== 'directory' ? (
         <Item
           className="whitespace-nowrap"
@@ -230,11 +252,13 @@ export function FilePathActionsDropdown({
   target,
   className,
   children,
+  onRefresh,
   onOpenChangeComplete,
 }: {
   target: FilePathTarget;
   className?: string;
   children?: ReactNode;
+  onRefresh?: RefreshFileAction;
   /** Fires after the open/close transition settles — used to defer panel-switching actions. */
   onOpenChangeComplete?: (open: boolean) => void;
 }) {
@@ -268,6 +292,7 @@ export function FilePathActionsDropdown({
         <FilePathMenuItems
           target={target}
           components={{ Item: DropdownMenuItem, Separator: DropdownMenuSeparator }}
+          onRefresh={onRefresh}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -300,9 +325,11 @@ function activeRoutedProvisionedTask() {
 export function GlobalFileMenuItems({
   absolutePath,
   components,
+  onRefresh,
 }: {
   absolutePath: string;
   components: MenuPrimitives;
+  onRefresh?: RefreshFileAction;
 }) {
   const { t } = useTranslation();
   const { Item, Separator } = components;
@@ -351,7 +378,11 @@ export function GlobalFileMenuItems({
         {placementLabel(t('appTabs.openInGlobalSidePane'), 'globalSidePane')}
       </Item>
       <Separator />
-      <FilePathMenuItems target={{ absolutePath, kind: 'file' }} components={components} />
+      <FilePathMenuItems
+        target={{ absolutePath, kind: 'file' }}
+        components={components}
+        onRefresh={onRefresh}
+      />
     </>
   );
 }
@@ -364,9 +395,11 @@ export function GlobalFileMenuItems({
 export function GlobalFileActionsDropdown({
   absolutePath,
   className,
+  onRefresh,
 }: {
   absolutePath: string;
   className?: string;
+  onRefresh?: RefreshFileAction;
 }) {
   const { t } = useTranslation();
 
@@ -392,6 +425,7 @@ export function GlobalFileActionsDropdown({
         <GlobalFileMenuItems
           absolutePath={absolutePath}
           components={{ Item: DropdownMenuItem, Separator: DropdownMenuSeparator }}
+          onRefresh={onRefresh}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -409,6 +443,19 @@ async function copyPath(path: string, t: (key: string) => string): Promise<void>
     // handled below
   }
   toast({ title: t('common.copyFailed'), variant: 'destructive' });
+}
+
+async function refreshFile(action: RefreshFileAction, t: (key: string) => string): Promise<void> {
+  try {
+    await action();
+    toast({ title: t('fileActions.fileRefreshed') });
+  } catch (error) {
+    toast({
+      title: t('fileActions.refreshFailed'),
+      description: error instanceof Error ? error.message : String(error),
+      variant: 'destructive',
+    });
+  }
 }
 
 async function copyFileContent(

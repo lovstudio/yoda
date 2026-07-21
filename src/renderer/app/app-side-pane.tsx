@@ -230,6 +230,11 @@ export const AppSidePane = observer(function AppSidePane() {
             provisioned.workspace.sshConnectionId
           )}
           components={{ Item: ContextMenuItem, Separator: ContextMenuSeparator }}
+          onRefresh={
+            resolved.kind === 'file'
+              ? () => provisioned.taskView.editorView.refreshFile(resolved.path)
+              : undefined
+          }
         />,
       ],
       [
