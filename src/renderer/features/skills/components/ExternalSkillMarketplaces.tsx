@@ -6,6 +6,7 @@ import { Button } from '@renderer/lib/ui/button';
 
 const EXTERNAL_SKILL_MARKETPLACES = [
   { name: 'Skills.sh', url: 'https://skills.sh' },
+  { name: 'ClawHub', url: 'https://clawhub.ai/skills' },
   { name: 'SkillsMP', url: 'https://skillsmp.com' },
   { name: 'AgentSkill.sh', url: 'https://agentskill.sh' },
   { name: 'GitHub Topics', url: 'https://github.com/topics/agent-skills' },
