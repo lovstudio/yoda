@@ -161,6 +161,29 @@ export class FileModelLifecycleStore implements Snapshottable<EditorViewSnapshot
     }
   }
 
+  /** Re-read an open file from disk without discarding unsaved text edits. */
+  async refreshFile(filePath: string): Promise<void> {
+    const kind = getFileKind(filePath);
+
+    if (kind === 'image' || kind === 'pdf') {
+      const result = await rpc.fs.readImage(this.projectId, this.workspaceId, filePath);
+      if (!result.success) throw new Error(formatResultError(result.error));
+      runInAction(() => {
+        this.tabManager.setImageContent(filePath, result.data?.dataUrl ?? '');
+      });
+      return;
+    }
+
+    if (kind === 'text' || kind === 'markdown' || kind === 'svg') {
+      const bufferUri = buildMonacoModelPath(this.modelRootPath, filePath);
+      const refreshed = await modelRegistry.invalidateModel(modelRegistry.toDiskUri(bufferUri));
+      if (!refreshed) throw new Error('Failed to read the file from disk');
+      return;
+    }
+
+    throw new Error('This file type cannot be refreshed');
+  }
+
   /**
    * Resolves a pending conflict: either reloads buffer from disk ("Accept Incoming")
    * or writes the user's buffer to disk ("Keep Mine").
@@ -284,4 +307,13 @@ export class FileModelLifecycleStore implements Snapshottable<EditorViewSnapshot
     modelRegistry.unregisterModel(modelRegistry.toGitUri(uri, HEAD_REF));
     void rpc.editorBuffer.clearBuffer(this.projectId, this.workspaceId, filePath);
   }
+}
+
+function formatResultError(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
+  }
+  return 'Failed to read the file from disk';
 }

@@ -221,6 +221,11 @@ export const TaskSidebar = observer(function TaskSidebar() {
             key="file-actions"
             target={fileTarget(provisioned.path, tab.path, provisioned.workspace.sshConnectionId)}
             components={{ Item: ContextMenuItem, Separator: ContextMenuSeparator }}
+            onRefresh={
+              tab.kind === 'file'
+                ? () => provisioned.taskView.editorView.refreshFile(tab.path)
+                : undefined
+            }
           />,
         ],
         [
