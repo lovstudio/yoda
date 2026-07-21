@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Conversation } from '@shared/conversations';
 import {
   conversationArchivedChannel,
+  conversationMovedChannel,
   conversationUnarchivedChannel,
 } from '@shared/events/conversationEvents';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -60,10 +61,19 @@ export function useArchivedConversations(
     const offUnarchived = events.on(conversationUnarchivedChannel, (event) => {
       if (event.projectId === projectId && event.taskId === taskId) refresh();
     });
+    const offMoved = events.on(conversationMovedChannel, (event) => {
+      if (
+        event.conversation.projectId === projectId &&
+        (event.sourceTaskId === taskId || event.targetTaskId === taskId)
+      ) {
+        refresh();
+      }
+    });
     return () => {
       cancelled = true;
       offArchived();
       offUnarchived();
+      offMoved();
     };
   }, [enabled, projectId, taskId]);
 

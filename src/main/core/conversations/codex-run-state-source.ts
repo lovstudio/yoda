@@ -89,6 +89,7 @@ class CodexRolloutTailer implements CodexRunStateWatcher {
   private buffer = '';
   private reading = false;
   private pendingRead = false;
+  private initialized = false;
   private stopped = false;
   private readonly pendingRequestUserInputCallIds = new Set<string>();
 
@@ -205,13 +206,26 @@ class CodexRolloutTailer implements CodexRunStateWatcher {
       this.offset = stats.size;
       this.buffer += buf.toString('utf8');
 
+      const lines: string[] = [];
       let nl = this.buffer.indexOf('\n');
       while (nl !== -1) {
         const line = this.buffer.slice(0, nl).trim();
         this.buffer = this.buffer.slice(nl + 1);
-        if (line) this.handleLine(line);
+        if (line) lines.push(line);
         nl = this.buffer.indexOf('\n');
       }
+      if (!this.initialized) {
+        this.initialized = true;
+        for (const event of initialCodexTailEvents(
+          lines,
+          this.ctx.startedAtMs,
+          this.pendingRequestUserInputCallIds
+        )) {
+          this.dispatch(event);
+        }
+        return;
+      }
+      for (const line of lines) this.handleLine(line);
     } finally {
       await fileHandle.close();
     }
@@ -223,6 +237,42 @@ class CodexRolloutTailer implements CodexRunStateWatcher {
     if (!event) return;
     this.dispatch(event);
   }
+}
+
+/**
+ * Establish a live tailer's baseline without replaying old terminal events.
+ *
+ * A resumed Codex thread already contains every previous turn. Re-dispatching
+ * that history on attach makes the last historical `task_complete` look new,
+ * so an idle session repeatedly becomes unread/completed whenever its watcher
+ * reconnects. Historical rows are folded only to recover a genuinely active
+ * working/awaiting-input state. Events written after this watcher started are
+ * still replayed in full so a fast turn that finishes before binding is not
+ * missed.
+ */
+export function initialCodexTailEvents(
+  lines: Iterable<string>,
+  watcherStartedAtMs: number,
+  pendingRequestUserInputCallIds = new Set<string>()
+): RunStateEvent[] {
+  let state = initialRunState();
+  const freshEvents: RunStateEvent[] = [];
+
+  for (const line of lines) {
+    const event = parseCodexRunStateEvent(line, pendingRequestUserInputCallIds);
+    if (!event) continue;
+    state = reduceRunState(state, event);
+    if (event.at >= watcherStartedAtMs) freshEvents.push(event);
+  }
+
+  if (freshEvents.length > 0) return freshEvents;
+  if (state.status === 'working') {
+    return [{ kind: 'turn-started', at: state.updatedAt, force: true }];
+  }
+  if (state.status === 'awaiting-input' && state.pendingAction) {
+    return [{ kind: 'awaiting-input', at: state.updatedAt, pendingAction: state.pendingAction }];
+  }
+  return [];
 }
 
 export function resolveCodexRolloutPathForConversation({

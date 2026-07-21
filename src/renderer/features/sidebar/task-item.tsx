@@ -15,7 +15,7 @@ import {
   asProvisioned,
   getTaskManagerStore,
   getTaskStore,
-  taskDisplayStatus,
+  taskSessionStatusSummary,
 } from '@renderer/features/tasks/stores/task-selectors';
 import { TreeGuideSlot } from '@renderer/lib/components/tree-guide-slot';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
@@ -96,7 +96,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // Any displayed agent status pins the status slot: notifications are a
   // click target (jump to the pending session) and the working spinner keeps
   // its hover-to-interrupt affordance.
-  const hasAgentNotification = taskDisplayStatus(task) !== null;
+  const hasAgentNotification = taskSessionStatusSummary(task).primaryStatus !== null;
 
   const taskName = task.data.name;
   const treeDepth = rowVariant === 'underProject' ? Math.min(depth, TASK_TREE_MAX_VISUAL_DEPTH) : 0;

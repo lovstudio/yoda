@@ -19,6 +19,7 @@ import { AgentStatusIndicator } from '../components/agent-status-indicator';
 import { usePersistedDisclosure } from '../components/persisted-disclosure';
 import { SessionUsageChip } from '../components/session-usage-chip';
 import { useProvisionedTask, useTaskViewContext } from '../task-view-context';
+import { ConversationDragHandle } from './conversation-drag-handle';
 import type { ConversationStore } from './conversation-manager';
 import { formatConversationTitleForDisplay } from './conversation-title-utils';
 import { buildConversationTree, type ConversationTreeNode } from './conversation-tree-model';
@@ -51,16 +52,18 @@ export const ConversationTree = observer(function ConversationTree({
   const roots = buildConversationTree(allConversations, activeConversationId);
 
   return (
-    <ConversationTreeBranch
-      nodes={roots}
-      activeById={activeById}
-      activeConversationId={activeConversationId}
-      usageByConversation={usageByConversation}
-      onOpenActive={onOpenActive}
-      onArchivedRestored={onArchivedRestored}
-      depth={0}
-      ancestorTrail={[]}
-    />
+    <div className="@container min-w-0 rounded-xl border border-border/60 bg-background p-1">
+      <ConversationTreeBranch
+        nodes={roots}
+        activeById={activeById}
+        activeConversationId={activeConversationId}
+        usageByConversation={usageByConversation}
+        onOpenActive={onOpenActive}
+        onArchivedRestored={onArchivedRestored}
+        depth={0}
+        ancestorTrail={[]}
+      />
+    </div>
   );
 });
 
@@ -84,7 +87,7 @@ const ConversationTreeBranch = observer(function ConversationTreeBranch({
   ancestorTrail: readonly boolean[];
 }) {
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0">
+    <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
       {nodes.map((node, index) => {
         const hasNextSibling = index < nodes.length - 1;
         const guideTrail = depth === 0 ? [] : [...ancestorTrail, hasNextSibling];
@@ -197,16 +200,7 @@ const ConversationTreeItem = observer(function ConversationTreeItem({
   return (
     <li className="min-w-0">
       <ChipContextMenu sections={sections}>
-        <div
-          className={cn(
-            'group/row flex min-h-10 min-w-0 items-stretch overflow-hidden rounded-lg border border-border/60 bg-background text-foreground-muted transition-colors hover:border-border hover:bg-background-1 hover:text-foreground',
-            isCurrent && 'border-border bg-background-2 text-foreground',
-            node.isOnActivePath && !isCurrent && 'border-l-foreground-tertiary',
-            isArchived && 'border-border/35 text-foreground-passive',
-            busy && 'opacity-60'
-          )}
-          data-conversation-tree-item
-        >
+        <div className="flex min-w-0 items-stretch" data-conversation-tree-item>
           {visibleTrail.length > 0 ? (
             <span className="flex shrink-0 self-stretch">
               {visibleTrail.map((continues, index) => (
@@ -220,92 +214,112 @@ const ConversationTreeItem = observer(function ConversationTreeItem({
             </span>
           ) : null}
 
-          {hasChildren ? (
+          <div
+            className={cn(
+              'group/row flex min-h-10 min-w-0 flex-1 items-stretch overflow-hidden rounded-lg text-foreground-muted transition-colors hover:bg-background-1 hover:text-foreground',
+              isCurrent &&
+                'bg-background-2 text-foreground ring-1 ring-inset ring-border/70 shadow-sm',
+              node.isOnActivePath && !isCurrent && 'text-foreground',
+              isArchived && 'text-foreground-passive',
+              busy && 'opacity-60'
+            )}
+            data-conversation-tree-row
+          >
+            {hasChildren ? (
+              <button
+                type="button"
+                className="flex w-7 shrink-0 items-center justify-center rounded text-foreground-tertiary outline-none hover:bg-background-2 hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                aria-label={t(
+                  expanded
+                    ? 'tasks.conversationTree.collapseBranches'
+                    : 'tasks.conversationTree.expandBranches',
+                  { title: displayTitle }
+                )}
+                aria-expanded={expanded}
+                onClick={() => setExpanded(!expanded)}
+              >
+                <ChevronRight
+                  className={cn('size-3.5 transition-transform', expanded && 'rotate-90')}
+                />
+              </button>
+            ) : (
+              <span className="w-7 shrink-0" aria-hidden />
+            )}
+
             <button
               type="button"
-              className="flex w-7 shrink-0 items-center justify-center rounded text-foreground-tertiary outline-none hover:bg-background-2 hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-              aria-label={t(
-                expanded
-                  ? 'tasks.conversationTree.collapseBranches'
-                  : 'tasks.conversationTree.expandBranches',
-                { title: displayTitle }
-              )}
-              aria-expanded={expanded}
-              onClick={() => setExpanded(!expanded)}
+              className="flex min-w-0 flex-1 items-center gap-2 py-2 pr-2 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+              aria-current={isCurrent ? 'page' : undefined}
+              title={isArchived ? t('tasks.archivedSession.viewTranscript') : displayTitle}
+              onClick={() =>
+                isArchived ? showTranscript({ conversation }) : onOpenActive(conversation.id)
+              }
             >
-              <ChevronRight
-                className={cn('size-3.5 transition-transform', expanded && 'rotate-90')}
-              />
-            </button>
-          ) : (
-            <span className="w-7 shrink-0" aria-hidden />
-          )}
-
-          <button
-            type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 py-2 pr-2 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-            aria-current={isCurrent ? 'page' : undefined}
-            title={isArchived ? t('tasks.archivedSession.viewTranscript') : displayTitle}
-            onClick={() =>
-              isArchived ? showTranscript({ conversation }) : onOpenActive(conversation.id)
-            }
-          >
-            <span className={cn('shrink-0', isArchived && 'opacity-60')}>
-              {config ? (
-                <AgentLogo
-                  logo={config.logo}
-                  alt={config.alt}
-                  isSvg={config.isSvg}
-                  invertInDark={config.invertInDark}
-                  className="size-4"
-                />
-              ) : (
-                <MessageSquare className="size-4 text-foreground-passive" />
-              )}
-            </span>
-            <span
-              className={cn('min-w-0 flex-1 truncate text-sm', isArchived && 'line-through')}
-              title={displayTitle}
-            >
-              {displayTitle}
-            </span>
-            {conversation.forkedFromPromptIndex !== undefined ? (
-              <span className="hidden shrink-0 items-center gap-1 rounded bg-background-2 px-1.5 py-0.5 font-mono text-[10px] text-foreground-passive sm:inline-flex">
-                <GitFork className="size-3" />
-                {t('tasks.conversationTree.forkedFromPrompt', {
-                  index: conversation.forkedFromPromptIndex + 1,
-                })}
+              <span className={cn('shrink-0', isArchived && 'opacity-60')}>
+                {config ? (
+                  <AgentLogo
+                    logo={config.logo}
+                    alt={config.alt}
+                    isSvg={config.isSvg}
+                    invertInDark={config.invertInDark}
+                    className="size-4"
+                  />
+                ) : (
+                  <MessageSquare className="size-4 text-foreground-passive" />
+                )}
               </span>
-            ) : null}
-            {usage ? <SessionUsageChip usage={usage} /> : null}
-            <span className="flex shrink-0 items-center text-xs text-foreground-passive">
-              {activeStore?.indicatorStatus ? (
-                <AgentStatusIndicator status={activeStore.indicatorStatus} disableTooltip />
-              ) : (
-                <RelativeTime
-                  value={
-                    (isArchived ? conversation.archivedAt : conversation.lastInteractedAt) ?? ''
-                  }
-                  className="font-mono"
-                  compact
-                />
-              )}
-            </span>
-          </button>
+              <span
+                className={cn('min-w-0 flex-1 truncate text-sm', isArchived && 'line-through')}
+                title={displayTitle}
+              >
+                {displayTitle}
+              </span>
+              {conversation.forkedFromPromptIndex !== undefined ? (
+                <span className="hidden shrink-0 items-center gap-1 rounded bg-background-2 px-1.5 py-0.5 font-mono text-[10px] text-foreground-passive @xl:inline-flex">
+                  <GitFork className="size-3" />
+                  {t('tasks.conversationTree.forkedFromPrompt', {
+                    index: conversation.forkedFromPromptIndex + 1,
+                  })}
+                </span>
+              ) : null}
+              {usage ? <SessionUsageChip usage={usage} /> : null}
+              <span className="flex shrink-0 items-center text-xs text-foreground-passive">
+                {activeStore?.indicatorStatus ? (
+                  <AgentStatusIndicator status={activeStore.indicatorStatus} disableTooltip />
+                ) : (
+                  <RelativeTime
+                    value={
+                      (isArchived ? conversation.archivedAt : conversation.lastInteractedAt) ?? ''
+                    }
+                    className="font-mono"
+                    compact
+                  />
+                )}
+              </span>
+            </button>
 
-          {isArchived ? (
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              disabled={busy}
-              title={t('tasks.archivedSession.restore')}
-              aria-label={t('tasks.archivedSession.restore')}
-              className="mr-1 self-center opacity-50 transition-opacity hover:opacity-100 focus-visible:opacity-100"
-              onClick={() => void handleRestore()}
-            >
-              <ArchiveRestore className="size-3.5" />
-            </Button>
-          ) : null}
+            {isArchived ? (
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                disabled={busy}
+                title={t('tasks.archivedSession.restore')}
+                aria-label={t('tasks.archivedSession.restore')}
+                className="mr-1 self-center opacity-50 transition-opacity hover:opacity-100 focus-visible:opacity-100"
+                onClick={() => void handleRestore()}
+              >
+                <ArchiveRestore className="size-3.5" />
+              </Button>
+            ) : null}
+            {!isArchived ? (
+              <ConversationDragHandle
+                projectId={projectId}
+                taskId={taskId}
+                conversationId={conversation.id}
+                className="my-auto mr-1 opacity-0 transition-opacity group-hover/row:opacity-100 focus:opacity-100"
+              />
+            ) : null}
+          </div>
         </div>
       </ChipContextMenu>
 

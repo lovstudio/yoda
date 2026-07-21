@@ -9,16 +9,15 @@ import {
   TaskLinkedIssues,
   type TaskIssueLinkingState,
 } from '@renderer/features/projects/components/issues-view/task-issue-links';
-import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { TaskContextMenu } from '@renderer/features/tasks/components/task-context-menu';
 import { TaskGitDiffStats } from '@renderer/features/tasks/components/task-git-diff-stats';
+import { TaskSessionStatusControl } from '@renderer/features/tasks/components/task-session-status-control';
 import { useTaskMenuActions } from '@renderer/features/tasks/components/use-task-menu-actions';
-import { interruptTaskSessions } from '@renderer/features/tasks/interrupt-task-sessions';
 import { type TaskStore } from '@renderer/features/tasks/stores/task';
 import {
   asProvisioned,
   getTaskManagerStore,
-  taskAgentStatus,
+  taskSessionStatusSummary,
 } from '@renderer/features/tasks/stores/task-selectors';
 import { PrBadge } from '@renderer/lib/components/pr-badge';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -46,7 +45,7 @@ export const TaskRow = observer(function TaskRow({
   const menuActions = useTaskMenuActions(task.data.projectId, task.data.id);
 
   const isArchived = Boolean(task.data.archivedAt);
-  const agentAttention = taskAgentStatus(task);
+  const sessionStatus = taskSessionStatusSummary(task);
   const currentPr = task.data.prs ? selectCurrentPr(task.data.prs) : undefined;
   const provisionedTask = asProvisioned(task);
   const handleProvision = () => void taskManager?.provisionTask(task.data.id);
@@ -140,14 +139,11 @@ export const TaskRow = observer(function TaskRow({
         <div
           className={cn(
             'flex min-w-8 shrink-0 items-center justify-end',
-            agentAttention ? 'justify-end' : 'justify-middle'
+            sessionStatus.primaryStatus ? 'justify-end' : 'justify-middle'
           )}
         >
-          {agentAttention ? (
-            <AgentStatusIndicator
-              status={agentAttention}
-              onInterrupt={() => interruptTaskSessions(task.data.projectId, task.data.id)}
-            />
+          {sessionStatus.primaryStatus ? (
+            <TaskSessionStatusControl task={task} />
           ) : (
             <RelativeTime
               value={task.data.createdAt}

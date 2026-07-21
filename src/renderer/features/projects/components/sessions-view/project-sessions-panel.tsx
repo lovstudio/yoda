@@ -6,9 +6,11 @@ import { useTranslation } from 'react-i18next';
 import type { Conversation } from '@shared/conversations';
 import {
   conversationArchivedChannel,
+  conversationMovedChannel,
   conversationRenamedChannel,
   conversationUnarchivedChannel,
 } from '@shared/events/conversationEvents';
+import { tabDragSource } from '@renderer/app/tab-drag';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { asProvisioned, getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
@@ -82,6 +84,14 @@ const ProjectSessionRow = observer(function ProjectSessionRow({
           });
         })
       }
+      {...(!isArchived
+        ? tabDragSource(() => ({
+            kind: 'conversation-transfer',
+            projectId: conversation.projectId,
+            sourceTaskId: conversation.taskId,
+            conversationId: conversation.id,
+          }))
+        : {})}
     >
       <span className="flex size-6 shrink-0 items-center justify-center rounded bg-background-2">
         {config ? (
@@ -165,11 +175,16 @@ export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
       if (event.projectId !== projectId) return;
       refresh();
     });
+    const offMoved = events.on(conversationMovedChannel, (event) => {
+      if (event.conversation.projectId !== projectId) return;
+      refresh();
+    });
 
     return () => {
       offRenamed();
       offArchived();
       offUnarchived();
+      offMoved();
     };
   }, [projectId, queryClient, queryKey]);
 

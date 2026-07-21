@@ -45,7 +45,14 @@ export type TabDragPayload =
   /** A bottom-panel mode tab — reorders within the bottom strip only. */
   | { kind: 'bottom-mode'; mode: BottomPanelTab }
   /** A terminal row in the bottom drawer's list — reorders within it only. */
-  | { kind: 'terminal-item'; terminalId: string };
+  | { kind: 'terminal-item'; terminalId: string }
+  /** A session being reassigned to another task in the same project. */
+  | {
+      kind: 'conversation-transfer';
+      projectId: string;
+      sourceTaskId: string;
+      conversationId: string;
+    };
 
 /** What a drop handler receives: the zone element plus the pointer position. */
 export type TabDropEvent = { currentTarget: HTMLElement; clientX: number; clientY: number };
@@ -94,7 +101,8 @@ export function tabDragSource(payload: () => TabDragPayload): TabDragSourceProps
     onMouseDown: (event) => {
       if (event.button !== 0) return;
       // The chip's close (×) button must keep its plain click behavior.
-      if ((event.target as HTMLElement).closest('button')) return;
+      const nestedButton = (event.target as HTMLElement).closest('button');
+      if (nestedButton && nestedButton !== event.currentTarget) return;
       pending = {
         payload,
         x: event.clientX,

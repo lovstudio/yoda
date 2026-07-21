@@ -38,6 +38,15 @@ describe('getClaudeCompletedTurnTargets', () => {
       [ids.secondPrompt, ids.secondDone],
     ]);
   });
+
+  it('ignores completed turns abandoned by an Esc Esc rewind', () => {
+    const raw = rewindTranscriptFixture();
+
+    expect([...getClaudeCompletedTurnTargets(raw)]).toEqual([
+      [uuid(101), uuid(103)],
+      [uuid(107), uuid(109)],
+    ]);
+  });
 });
 
 describe('buildForkedClaudeTranscript', () => {
@@ -188,7 +197,47 @@ describe('forkClaudeTranscript', () => {
     await expect(access(targetPath)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(sourcePath, 'utf8')).toBe(raw);
   });
+
+  it('copies only the target ancestry when restoring after an Esc Esc rewind', () => {
+    const generatedIds = Array.from({ length: 12 }, (_, index) => uuid(2000 + index));
+    let generatedIndex = 0;
+
+    const result = buildForkedClaudeTranscript({
+      raw: rewindTranscriptFixture(),
+      sourceSessionId: SOURCE_SESSION_ID,
+      targetSessionId: TARGET_SESSION_ID,
+      targetMessageId: uuid(109),
+      createUuid: () => generatedIds[generatedIndex++],
+      now: () => NOW,
+    });
+    const rows = parseRows(result.raw);
+
+    expect(
+      rows.flatMap((row) => {
+        const message = row.message as Record<string, unknown> | undefined;
+        return typeof message?.content === 'string' ? [message.content] : [];
+      })
+    ).toEqual(['Shared prompt', 'Current prompt']);
+    expect(rows).toHaveLength(6);
+    expect(rows.every((row) => row.sessionId === TARGET_SESSION_ID)).toBe(true);
+  });
 });
+
+function rewindTranscriptFixture(): string {
+  return `${[
+    userRow(uuid(101), null, 'Shared prompt'),
+    assistantRow(uuid(102), uuid(101), 'Shared answer'),
+    systemDoneRow(uuid(103), uuid(102)),
+    userRow(uuid(104), uuid(103), 'Abandoned prompt'),
+    assistantRow(uuid(105), uuid(104), 'Abandoned answer'),
+    systemDoneRow(uuid(106), uuid(105)),
+    userRow(uuid(107), uuid(103), 'Current prompt'),
+    assistantRow(uuid(108), uuid(107), 'Current answer'),
+    systemDoneRow(uuid(109), uuid(108)),
+  ]
+    .map((row) => JSON.stringify(row))
+    .join('\n')}\n`;
+}
 
 function transcriptFixture(
   ids: ReturnType<typeof fixtureIds>,

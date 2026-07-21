@@ -196,7 +196,11 @@ describe('ConversationTree', () => {
 
     expect(host.querySelectorAll('[data-conversation-tree-item]')).toHaveLength(2);
     expect(host.textContent).toContain('fork-3');
-    expect(host.querySelector('button[title="child"]')?.getAttribute('aria-current')).toBe('page');
+    const childButton = host.querySelector('button[title="child"]');
+    expect(childButton?.getAttribute('aria-current')).toBe('page');
+    const childItem = childButton?.closest('[data-conversation-tree-item]');
+    expect(childItem?.querySelector('[data-tree-guide]')).not.toBeNull();
+    expect(childItem?.querySelector('[data-conversation-tree-row] [data-tree-guide]')).toBeNull();
     expect(mocks.buildSections).toHaveBeenCalledWith(
       mocks.provisioned,
       'project-1',

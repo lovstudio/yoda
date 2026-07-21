@@ -1,22 +1,14 @@
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
-import { openTaskTarget } from '@renderer/app/open-task-target';
-import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
 import { CLISpinner } from '@renderer/features/tasks/components/cliSpinner';
-import { interruptTaskSessions } from '@renderer/features/tasks/interrupt-task-sessions';
+import { TaskSessionStatusControl } from '@renderer/features/tasks/components/task-session-status-control';
 import {
   isUnprovisioned,
   isUnregistered,
-  registeredTaskData,
   type TaskStore,
 } from '@renderer/features/tasks/stores/task';
-import {
-  asProvisioned,
-  nextAttentionConversationId,
-  taskDisplayStatus,
-} from '@renderer/features/tasks/stores/task-selectors';
+import { taskSessionStatusSummary } from '@renderer/features/tasks/stores/task-selectors';
 import { useDelayedBoolean } from '@renderer/lib/hooks/use-delay-boolean';
-import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
@@ -25,9 +17,8 @@ import { getSortInstant } from './sidebar-store';
 /**
  * Sidebar tail: spinner while bootstrapping, otherwise the task's agent status
  * in display priority — awaiting-input → unread error/completed → working →
- * manual needs-review flag → idle (relative time). Notification statuses are a
- * click target jumping to the next session that needs consuming (cycling past
- * the one in view); working keeps the hover-to-interrupt affordance.
+ * manual needs-review flag → idle (relative time). Every agent status opens the
+ * shared session manager, so mixed/multiple session states remain inspectable.
  */
 export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
   task,
@@ -37,13 +28,12 @@ export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
   needsReview?: boolean;
 }) {
   const { t } = useTranslation();
-  const { navigate } = useNavigate();
   const isBootstrapping =
     isUnregistered(task) ||
     (isUnprovisioned(task) && (task.phase === 'provision' || task.phase === 'provision-error'));
 
   const delayedIsBootstrapping = useDelayedBoolean(isBootstrapping, 500);
-  const status = taskDisplayStatus(task);
+  const status = taskSessionStatusSummary(task).primaryStatus;
 
   if (delayedIsBootstrapping) {
     return (
@@ -58,43 +48,8 @@ export const TaskSidebarAgentStatus = observer(function TaskSidebarAgentStatus({
     );
   }
 
-  if (status === 'working') {
-    const data = registeredTaskData(task);
-    return (
-      <AgentStatusIndicator
-        status={status}
-        onInterrupt={data ? () => interruptTaskSessions(data.projectId, data.id) : undefined}
-      />
-    );
-  }
-
   if (status) {
-    const data = registeredTaskData(task);
-    const button = (
-      <button
-        type="button"
-        aria-label={t('sidebar.openPendingSession')}
-        className="flex size-6 items-center justify-center rounded-md hover:bg-background-tertiary-2"
-        onClick={(event) => {
-          event.stopPropagation();
-          if (!data) return;
-          const activeConversationId =
-            asProvisioned(task)?.taskView.tabManager.activeConversationId;
-          const conversationId = nextAttentionConversationId(task, activeConversationId);
-          openTaskTarget({ projectId: data.projectId, taskId: data.id, conversationId }, navigate);
-        }}
-      >
-        <AgentStatusIndicator status={status} disableTooltip boxClassName="size-4" />
-      </button>
-    );
-    return (
-      <Tooltip>
-        <TooltipTrigger render={button} />
-        <TooltipContent>
-          {t(`agentStatus.${status}`)} · {t('sidebar.openPendingSession')}
-        </TooltipContent>
-      </Tooltip>
-    );
+    return <TaskSessionStatusControl task={task} side="right" />;
   }
 
   if (needsReview) {

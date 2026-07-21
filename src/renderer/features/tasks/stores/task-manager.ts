@@ -1,5 +1,6 @@
 import { makeObservable, observable, reaction, runInAction, toJS } from 'mobx';
 import type { Conversation } from '@shared/conversations';
+import { conversationMovedChannel } from '@shared/events/conversationEvents';
 import { prSyncProgressChannel, prUpdatedChannel } from '@shared/events/prEvents';
 import {
   taskArchivedChannel,
@@ -178,6 +179,7 @@ export class TaskManagerStore {
   private _unsubPrUpdated: (() => void) | null = null;
   private _unsubPrSyncProgress: (() => void) | null = null;
   private _unsubProvisionProgress: (() => void) | null = null;
+  private _unsubConversationMoved: (() => void) | null = null;
   private _disposeRepositoryReaction: (() => void) | null = null;
 
   tasks = observable.map<string, TaskStore>();
@@ -230,6 +232,19 @@ export class TaskManagerStore {
       runInAction(() => {
         store.data.name = name;
         store.data.isUserNamed = isUserNamed;
+      });
+    });
+
+    this._unsubConversationMoved = events.on(conversationMovedChannel, (event) => {
+      const { conversation, sourceTaskId, targetTaskId } = event;
+      if (conversation.projectId !== this.projectId) return;
+      runInAction(() => {
+        this.adjustStoredConversationCount(sourceTaskId, conversation.runtimeId, -1);
+        this.adjustStoredConversationCount(targetTaskId, conversation.runtimeId, 1);
+        const target = this.tasks.get(targetTaskId);
+        if (target && isRegistered(target) && conversation.lastInteractedAt) {
+          target.data.lastInteractedAt = conversation.lastInteractedAt;
+        }
       });
     });
 
@@ -300,6 +315,17 @@ export class TaskManagerStore {
         (store.data as Task).prs = prs;
       }
     });
+  }
+
+  private adjustStoredConversationCount(
+    taskId: string,
+    runtimeId: Conversation['runtimeId'],
+    delta: number
+  ): void {
+    const store = this.tasks.get(taskId);
+    if (!store || !isRegistered(store) || isProvisioned(store)) return;
+    const current = store.data.conversations[runtimeId] ?? 0;
+    store.data.conversations[runtimeId] = Math.max(0, current + delta);
   }
 
   loadTasks(): Promise<void> {
@@ -841,6 +867,8 @@ export class TaskManagerStore {
     this._unsubPrSyncProgress = null;
     this._unsubProvisionProgress?.();
     this._unsubProvisionProgress = null;
+    this._unsubConversationMoved?.();
+    this._unsubConversationMoved = null;
     this._disposeRepositoryReaction?.();
     this._disposeRepositoryReaction = null;
   }

@@ -19,14 +19,20 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { ChevronDown } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTabDropZone, type TabDragPayload, type TabDropEvent } from '@renderer/app/tab-drag';
 import {
   teamRoomTaskKey,
   useTeamRoomTaskKeys,
 } from '@renderer/features/agent-room/team-room-queries';
 import { type SidebarGroupKey, type SidebarRow } from '@renderer/features/sidebar/sidebar-store';
 import { useMoveTaskToProject } from '@renderer/features/tasks/components/use-move-task-to-project';
+import {
+  canMoveConversationToTask,
+  conversationTransferFromPayload,
+} from '@renderer/features/tasks/conversations/conversation-transfer';
+import { moveConversationToTask } from '@renderer/features/tasks/conversations/move-conversation-to-task';
 import {
   getRegisteredTaskData,
   getTaskStore,
@@ -385,17 +391,23 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
             );
             if (!dndEnabled) {
               return (
-                <div
+                <ConversationTaskDropRow
                   key={`${row.projectId}:${row.taskId}`}
+                  projectId={row.projectId}
+                  taskId={row.taskId}
                   data-sidebar-row={dndId}
-                  className="min-w-0 overflow-hidden"
                 >
                   {taskNode}
-                </div>
+                </ConversationTaskDropRow>
               );
             }
             return (
-              <SortableRow key={`${row.projectId}:${row.taskId}`} dndId={dndId}>
+              <SortableRow
+                key={`${row.projectId}:${row.taskId}`}
+                dndId={dndId}
+                projectId={row.projectId}
+                taskId={row.taskId}
+              >
                 {taskNode}
               </SortableRow>
             );
@@ -682,6 +694,8 @@ const typeRestrictedCollision: CollisionDetection = (args) => {
 interface SortableRowProps {
   dndId: string;
   children: React.ReactNode;
+  projectId?: string;
+  taskId?: string;
 }
 
 /**
@@ -690,10 +704,18 @@ interface SortableRowProps {
  * translates it (make-way animation), making passed-over rows invisible. This
  * row therefore carries `data-sidebar-row` itself — no extra wrapper.
  */
-function SortableRow({ dndId, children }: SortableRowProps) {
+function SortableRow({ dndId, children, projectId, taskId }: SortableRowProps) {
   const { setNodeRef, transform, transition, isDragging, listeners, attributes } = useSortable({
     id: dndId,
   });
+  const { dropRef, isOver } = useConversationTaskDropZone(projectId, taskId);
+  const setRowRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      setNodeRef(node);
+      dropRef(projectId && taskId ? node : null);
+    },
+    [dropRef, projectId, setNodeRef, taskId]
+  );
 
   const dndStyle: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -704,12 +726,62 @@ function SortableRow({ dndId, children }: SortableRowProps) {
 
   return (
     <div
-      ref={setNodeRef}
+      ref={setRowRef}
       style={dndStyle}
       data-sidebar-row={dndId}
-      className="min-w-0 overflow-hidden"
+      className={cn(
+        'min-w-0 overflow-hidden rounded-lg',
+        isOver && 'ring-2 ring-inset ring-primary bg-primary/10'
+      )}
       {...attributes}
       {...listeners}
+    >
+      {children}
+    </div>
+  );
+}
+
+function useConversationTaskDropZone(projectId?: string, taskId?: string) {
+  return useTabDropZone({
+    canDrop: (payload) => {
+      if (!projectId || !taskId || !getRegisteredTaskData(projectId, taskId)) return false;
+      return canMoveConversationToTask(payload, projectId, taskId);
+    },
+    onDrop: (payload: TabDragPayload, _event: TabDropEvent) => {
+      if (!projectId || !taskId) return;
+      const transfer = conversationTransferFromPayload(payload);
+      if (!transfer) return;
+      const taskName = getRegisteredTaskData(projectId, taskId)?.name ?? taskId;
+      void moveConversationToTask({
+        projectId,
+        sourceTaskId: transfer.sourceTaskId,
+        targetTaskId: taskId,
+        targetTaskName: taskName,
+        conversationId: transfer.conversationId,
+      });
+    },
+  });
+}
+
+function ConversationTaskDropRow({
+  projectId,
+  taskId,
+  children,
+  ...props
+}: {
+  projectId: string;
+  taskId: string;
+  children: React.ReactNode;
+} & React.HTMLAttributes<HTMLDivElement>) {
+  const { dropRef, isOver } = useConversationTaskDropZone(projectId, taskId);
+  return (
+    <div
+      {...props}
+      ref={dropRef}
+      className={cn(
+        'min-w-0 overflow-hidden rounded-lg',
+        isOver && 'ring-2 ring-inset ring-primary bg-primary/10'
+      )}
     >
       {children}
     </div>

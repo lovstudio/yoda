@@ -24,6 +24,7 @@ import {
   type AiLabAppImageEditHistoryItem,
   type AiLabImageEditInput,
   type AiLabImageEditResult,
+  type AiLabRegenerateImageInput,
 } from '@shared/ai-lab-bridge';
 import { resolveCommandPath } from '@main/core/dependencies/probe';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
@@ -36,7 +37,11 @@ import { telemetryService } from '@main/lib/telemetry';
 import { AiLabAppBuildRunner } from './app-build-runner';
 import { generateAiLabApp } from './app-generation';
 import { buildAppGenerationPrompt } from './app-generation-contract';
-import { normalizeAiLabImageEditInput, toAiLabImageEditResult } from './app-image-edit';
+import {
+  normalizeAiLabImageEditInput,
+  toAiLabImageEditResult,
+  type AiLabImageMimeType,
+} from './app-image-edit';
 import { AiLabAppStore } from './app-store';
 import { AiLabBuildJobStore } from './build-job-store';
 import { generateCodexImages } from './codex-image-engine';
@@ -67,8 +72,21 @@ function thumbnailPath(fileName: string): string {
   return join(imagesDir(), `${fileName}.thumb.png`);
 }
 
-function toDataUrl(buffer: Buffer): string {
-  return `data:image/png;base64,${buffer.toString('base64')}`;
+function toDataUrl(buffer: Buffer, mimeType: AiLabImageMimeType = 'image/png'): string {
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
+}
+
+function sourceImageExtension(mimeType: AiLabImageMimeType): string {
+  if (mimeType === 'image/jpeg') return 'jpg';
+  if (mimeType === 'image/webp') return 'webp';
+  return 'png';
+}
+
+function sourceImageMimeType(fileName: string): AiLabImageMimeType {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'image/png';
 }
 
 function fileNameSlug(value: string): string {
@@ -133,6 +151,8 @@ export class AiLabService {
       const id = randomUUID();
       const createdAt = new Date().toISOString();
       const images = await this.persistImages(id, [buffer]);
+      const sourceFileName = await this.persistAppImageSource(id, source, sourceMimeType);
+      images.push(sourceFileName);
       await db.insert(aiLabGenerations).values({
         id,
         kind: APP_IMAGE_EDIT_KIND,
@@ -178,6 +198,25 @@ export class AiLabService {
       model: AI_LAB_APP_IMAGE_MODEL,
       createdAt: row.createdAt,
     };
+  }
+
+  async regenerateAppImage(input: AiLabRegenerateImageInput): Promise<AiLabImageEditResult> {
+    const row = await this.requireAppImageEdit(input);
+    const sourceFileName = row.images[1] ?? requireFileName(row, 0);
+    const imageDataUrl = toDataUrl(
+      await readFile(imagePath(sourceFileName)),
+      sourceImageMimeType(sourceFileName)
+    );
+
+    // New records retain the original source; legacy records fall back to the generated image.
+    // editAppImage always inserts a new row, leaving the selected history item intact.
+    return this.editAppImage({
+      appId: input.appId,
+      imageDataUrl,
+      prompt: row.prompt,
+      quality: 'high',
+      userNote: input.userNote,
+    });
   }
 
   async saveAppImageEdit(input: {
@@ -460,6 +499,17 @@ export class AiLabService {
         return fileName;
       })
     );
+  }
+
+  private async persistAppImageSource(
+    id: string,
+    source: Buffer,
+    mimeType: AiLabImageMimeType
+  ): Promise<string> {
+    await mkdir(imagesDir(), { recursive: true });
+    const fileName = `${id}-source.${sourceImageExtension(mimeType)}`;
+    await writeFile(imagePath(fileName), source);
+    return fileName;
   }
 
   private async toListItem(row: GenerationRow): Promise<LogoGenerationListItem> {

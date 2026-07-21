@@ -1,5 +1,7 @@
 import {
   AI_LAB_APP_IMAGE_MODEL,
+  AI_LAB_IMAGE_EDIT_MAX_PROMPT_CHARS,
+  AI_LAB_USER_NOTE_MAX_CHARS,
   isImageEditRequest,
   type AiLabImageEditInput,
   type AiLabImageEditQuality,
@@ -9,6 +11,8 @@ import {
 
 const MAX_INPUT_IMAGE_BYTES = 15 * 1024 * 1024;
 const MAX_OUTPUT_IMAGE_BYTES = 30 * 1024 * 1024;
+const USER_NOTE_PREFIX =
+  '\n\nAdditional user note for this generation. Apply it to edge cases while preserving the core subject and identity constraints:\n';
 
 export type NormalizedAiLabImageEditInput = {
   appId: string;
@@ -30,6 +34,11 @@ export function normalizeAiLabImageEditInput(input: AiLabImageEditInput): {
     throw new Error('Invalid AI Lab app.');
   }
   if (!isImageEditRequest(input)) throw new Error('Invalid image edit request.');
+  if (input.userNote !== undefined && typeof input.userNote !== 'string') {
+    throw new Error('Invalid user note.');
+  }
+
+  const prompt = appendUserNote(input.prompt.trim(), input.userNote);
 
   const { source, mimeType: sourceMimeType } = decodeImageDataUrl(input.imageDataUrl);
   if (source.length > MAX_INPUT_IMAGE_BYTES) {
@@ -40,13 +49,26 @@ export function normalizeAiLabImageEditInput(input: AiLabImageEditInput): {
     input: {
       appId: input.appId.trim(),
       imageDataUrl: input.imageDataUrl,
-      prompt: input.prompt.trim(),
+      prompt,
       size: input.size ?? '1024x1024',
       quality: input.quality ?? 'high',
     },
     source,
     sourceMimeType,
   };
+}
+
+function appendUserNote(prompt: string, value: string | undefined): string {
+  const note = value?.trim() ?? '';
+  if (!note) return prompt;
+  if (note.length > AI_LAB_USER_NOTE_MAX_CHARS) {
+    throw new Error(`The user note exceeds the ${AI_LAB_USER_NOTE_MAX_CHARS} character limit.`);
+  }
+  const combined = `${prompt}${USER_NOTE_PREFIX}${note}`;
+  if (combined.length > AI_LAB_IMAGE_EDIT_MAX_PROMPT_CHARS) {
+    throw new Error('The image instructions and user note are too long.');
+  }
+  return combined;
 }
 
 export function toAiLabImageEditResult(buffer: Buffer): AiLabImageEditResult {

@@ -12,7 +12,11 @@ import {
   resolveClaudeTranscriptPathFromConfigDir,
 } from '@main/core/session-title/claude-title-source';
 import { log } from '@main/lib/logger';
-import { getClaudeCompletedTurnTargets, isClaudeRealUserPromptRow } from './claude-transcript-fork';
+import {
+  getClaudeCompletedTurnTargets,
+  getClaudeCurrentBranchMessageIds,
+  isClaudeRealUserPromptRow,
+} from './claude-transcript-fork';
 import { resolveRuntimeStateDirectory } from './impl/runtime-env';
 import { getInstructionFiles } from './instruction-files';
 import { scanClaudeAgents } from './scanClaudeAgents';
@@ -48,6 +52,7 @@ export async function getClaudeSessionContext(
   const prompts: ClaudeSessionPrompt[] = [];
   const messages: SessionTranscriptMessage[] = [];
   const completedTurnTargets = getClaudeCompletedTurnTargets(raw);
+  const currentBranchMessageIds = getClaudeCurrentBranchMessageIds(raw);
   // Keep only the latest compaction summary — later compactions supersede earlier ones.
   let summary: SessionSummary | null = null;
 
@@ -55,6 +60,9 @@ export async function getClaudeSessionContext(
     if (!line) continue;
     const parsed = safeParse(line);
     if (!parsed) continue;
+
+    const rowId = typeof parsed.uuid === 'string' ? parsed.uuid : null;
+    if (rowId && !currentBranchMessageIds.has(rowId)) continue;
 
     if (parsed.type === 'attachment') {
       collectAttachment(parsed.attachment, { tools, agents: transcriptAgents, mcpServers });

@@ -49,6 +49,11 @@ type ParsedCodexRollout = {
   summary: SessionSummary | null;
 };
 
+type TurnTagged<T> = {
+  value: T;
+  turnId: string | null;
+};
+
 /**
  * Codex wraps each compaction summary with this prefix and reinjects it as a
  * `user` message (`prompts/templates/compact/summary_prefix.md`). We match on
@@ -551,16 +556,19 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
   let cliVersion: string | null = null;
   let modelProvider: string | null = null;
   let dynamicTools: CodexDynamicTool[] = [];
-  const developerMessages: ClaudeSessionPrompt[] = [];
+  const developerMessages: Array<TurnTagged<ClaudeSessionPrompt>> = [];
   const eventPrompts: ClaudeSessionPrompt[] = [];
   const eventPromptTurnIds: Array<string | null> = [];
   const responseUserPrompts: ClaudeSessionPrompt[] = [];
   const responsePromptTurnIds: Array<string | null> = [];
-  const messages: SessionTranscriptMessage[] = [];
+  const messages: Array<TurnTagged<SessionTranscriptMessage>> = [];
   const turnContexts: CodexTurnContext[] = [];
+  const activeUserTurnIds: string[] = [];
+  const completionCountsByTurnId = new Map<string, number>();
   let currentTurnId: string | null = null;
   let pendingResponseUser: { turnId: string; text: string } | null = null;
   let completedTurnCount = 0;
+  let sawRolloutUserPrompt = false;
   // Keep only the latest compaction summary — later compactions supersede earlier ones.
   let summary: SessionSummary | null = null;
 
@@ -577,6 +585,29 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
       markTurnRestorable(currentTurnId);
     }
     currentTurnId = turnId;
+  };
+  const noteUserTurn = (turnId: string | null): void => {
+    if (turnId && !activeUserTurnIds.includes(turnId)) activeUserTurnIds.push(turnId);
+  };
+  const rollbackTurns = (count: number): void => {
+    const removedTurnIds = new Set(
+      activeUserTurnIds.splice(Math.max(0, activeUserTurnIds.length - count), count)
+    );
+    if (removedTurnIds.size === 0) return;
+
+    removePromptsForTurns(eventPrompts, eventPromptTurnIds, removedTurnIds);
+    removePromptsForTurns(responseUserPrompts, responsePromptTurnIds, removedTurnIds);
+    removeTaggedTurns(messages, removedTurnIds);
+    removeTaggedTurns(developerMessages, removedTurnIds);
+    removeTurnContexts(turnContexts, removedTurnIds);
+    for (const turnId of removedTurnIds) {
+      completedTurnCount -= completionCountsByTurnId.get(turnId) ?? 0;
+      completionCountsByTurnId.delete(turnId);
+    }
+
+    currentTurnId = null;
+    pendingResponseUser = null;
+    summary = null;
   };
 
   for (const line of raw.split('\n')) {
@@ -608,6 +639,11 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
     if (parsed.type === 'event_msg') {
       const payload = objectValue(parsed.payload);
       if (!payload) continue;
+      if (payload.type === 'thread_rolled_back') {
+        const count = nonNegativeInteger(payload.num_turns);
+        if (count > 0) rollbackTurns(count);
+        continue;
+      }
       if (payload.type === 'task_started' || payload.type === 'turn_started') {
         transitionToTurn(nullableString(payload.turn_id));
         continue;
@@ -616,23 +652,32 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
         completedTurnCount += 1;
         const completedTurnId: string | null = nullableString(payload.turn_id) ?? currentTurnId;
         if (completedTurnId) {
+          completionCountsByTurnId.set(
+            completedTurnId,
+            (completionCountsByTurnId.get(completedTurnId) ?? 0) + 1
+          );
           markTurnRestorable(completedTurnId);
         }
         if (completedTurnId === currentTurnId) currentTurnId = null;
         const lastAgentMessage = nullableString(payload.last_agent_message);
         if (lastAgentMessage) {
-          pushMessage(messages, {
-            id: timestamp ?? `event-assistant-${messages.length}`,
-            role: 'assistant',
-            text: lastAgentMessage,
-            timestamp,
-          });
+          pushMessage(
+            messages,
+            {
+              id: timestamp ?? `event-assistant-${messages.length}`,
+              role: 'assistant',
+              text: lastAgentMessage,
+              timestamp,
+            },
+            completedTurnId
+          );
         }
         continue;
       }
       if (payload.type !== 'user_message') continue;
       const text = nullableString(payload.message)?.trim();
       if (text) {
+        sawRolloutUserPrompt = true;
         const matchingPendingTurnId =
           pendingResponseUser?.text === text ? pendingResponseUser.turnId : null;
         const promptTurnId: string | null =
@@ -644,9 +689,10 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
         };
         eventPrompts.push(prompt);
         eventPromptTurnIds.push(promptTurnId);
+        noteUserTurn(promptTurnId);
         if (!currentTurnId && promptTurnId) currentTurnId = promptTurnId;
         pendingResponseUser = null;
-        pushMessage(messages, { ...prompt, role: 'user' });
+        pushMessage(messages, { ...prompt, role: 'user' }, promptTurnId);
       }
       continue;
     }
@@ -660,13 +706,17 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
       if (!text) continue;
       if (payload.role === 'developer') {
         developerMessages.push({
-          id: timestamp ?? `developer-${developerMessages.length}`,
-          text,
-          timestamp,
+          value: {
+            id: timestamp ?? `developer-${developerMessages.length}`,
+            text,
+            timestamp,
+          },
+          turnId: responseTurnId ?? currentTurnId,
         });
       } else if (payload.role === 'user' && text.startsWith(CODEX_SUMMARY_PREFIX)) {
         summary = { text, timestamp };
       } else if (payload.role === 'user' && !isCodexEnvironmentMessage(text)) {
+        sawRolloutUserPrompt = true;
         const promptTurnId: string | null = responseTurnId ?? currentTurnId;
         const prompt = {
           id: timestamp ?? `response-user-${responseUserPrompts.length}`,
@@ -675,16 +725,21 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
         };
         responseUserPrompts.push(prompt);
         responsePromptTurnIds.push(promptTurnId);
+        noteUserTurn(promptTurnId);
         if (!currentTurnId && responseTurnId) currentTurnId = responseTurnId;
         pendingResponseUser = responseTurnId ? { turnId: responseTurnId, text } : null;
-        pushMessage(messages, { ...prompt, role: 'user' });
+        pushMessage(messages, { ...prompt, role: 'user' }, promptTurnId);
       } else if (payload.role === 'assistant') {
-        pushMessage(messages, {
-          id: timestamp ?? `response-assistant-${messages.length}`,
-          role: 'assistant',
-          text,
-          timestamp,
-        });
+        pushMessage(
+          messages,
+          {
+            id: timestamp ?? `response-assistant-${messages.length}`,
+            role: 'assistant',
+            text,
+            timestamp,
+          },
+          responseTurnId ?? currentTurnId
+        );
       }
     }
   }
@@ -694,17 +749,17 @@ function parseCodexRollout(raw: string, firstUserMessage: string | null): Parsed
       ? eventPrompts
       : responseUserPrompts.length > 0
         ? responseUserPrompts
-        : firstUserMessage
+        : firstUserMessage && !sawRolloutUserPrompt
           ? [{ id: 'first-user-message', text: firstUserMessage, timestamp: null }]
           : [];
 
   return {
     baseInstructions,
-    developerMessages,
+    developerMessages: developerMessages.map((entry) => entry.value),
     prompts,
     messages:
       messages.length > 0
-        ? messages
+        ? messages.map((entry) => entry.value)
         : prompts.map((prompt) => ({ ...prompt, role: 'user' as const })),
     turnContexts,
     dynamicTools,
@@ -731,12 +786,46 @@ function markLastPromptForTurn(
 }
 
 function pushMessage(
-  messages: SessionTranscriptMessage[],
-  message: SessionTranscriptMessage
+  messages: Array<TurnTagged<SessionTranscriptMessage>>,
+  message: SessionTranscriptMessage,
+  turnId: string | null
 ): void {
-  const previous = messages[messages.length - 1];
+  const previous = messages[messages.length - 1]?.value;
   if (previous?.role === message.role && previous.text === message.text) return;
-  messages.push(message);
+  messages.push({ value: message, turnId });
+}
+
+function removePromptsForTurns(
+  prompts: ClaudeSessionPrompt[],
+  promptTurnIds: Array<string | null>,
+  removedTurnIds: ReadonlySet<string>
+): void {
+  for (let index = promptTurnIds.length - 1; index >= 0; index -= 1) {
+    const turnId = promptTurnIds[index];
+    if (!turnId || !removedTurnIds.has(turnId)) continue;
+    promptTurnIds.splice(index, 1);
+    prompts.splice(index, 1);
+  }
+}
+
+function removeTaggedTurns<T>(
+  entries: Array<TurnTagged<T>>,
+  removedTurnIds: ReadonlySet<string>
+): void {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const turnId = entries[index]?.turnId;
+    if (turnId && removedTurnIds.has(turnId)) entries.splice(index, 1);
+  }
+}
+
+function removeTurnContexts(
+  turnContexts: CodexTurnContext[],
+  removedTurnIds: ReadonlySet<string>
+): void {
+  for (let index = turnContexts.length - 1; index >= 0; index -= 1) {
+    const turnId = turnContexts[index]?.turnId;
+    if (turnId && removedTurnIds.has(turnId)) turnContexts.splice(index, 1);
+  }
 }
 
 function parseTurnContext(value: unknown): CodexTurnContext | null {
@@ -870,4 +959,8 @@ function stringValue(value: unknown): string | null {
 function nullableString(value: unknown): string | null {
   const str = stringValue(value)?.trim();
   return str ? str : null;
+}
+
+function nonNegativeInteger(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
 }

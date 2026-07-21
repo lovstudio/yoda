@@ -418,6 +418,81 @@ describe('getCodexSessionContext', () => {
     ]);
   });
 
+  it('removes rolled-back Codex turns from the visible current branch', async () => {
+    writeFileSync(
+      rolloutPath,
+      [
+        codexRow('session_meta', { id: 'conversation-1', cwd }),
+        codexRow('turn_context', { turn_id: 'turn-1', model: 'gpt-5.5' }),
+        codexEvent('task_started', { turn_id: 'turn-1' }),
+        codexEvent('user_message', { message: 'Shared request' }),
+        codexResponse('assistant', 'Shared answer', 'turn-1'),
+        codexEvent('task_complete', { turn_id: 'turn-1' }),
+        codexRow('turn_context', { turn_id: 'turn-2', model: 'gpt-5.5' }),
+        codexEvent('task_started', { turn_id: 'turn-2' }),
+        codexEvent('user_message', { message: 'Request removed by rollback' }),
+        codexResponse('assistant', 'Answer removed by rollback', 'turn-2'),
+        codexEvent('task_complete', { turn_id: 'turn-2' }),
+        codexEvent('thread_rolled_back', { num_turns: 1 }),
+        codexRow('turn_context', { turn_id: 'turn-3', model: 'gpt-5.5' }),
+        codexEvent('task_started', { turn_id: 'turn-3' }),
+        codexEvent('user_message', { message: 'Request on the selected branch' }),
+        codexResponse('assistant', 'Answer on the selected branch', 'turn-3'),
+        codexEvent('task_complete', { turn_id: 'turn-3' }),
+      ]
+        .map((row) => JSON.stringify(row))
+        .join('\n')
+    );
+    insertThread(statePath, rolloutPath, {
+      id: 'conversation-1',
+      cwd,
+      title: 'Thread title',
+      firstUserMessage: 'Shared request',
+    });
+
+    const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
+
+    expect(context?.prompts.map((prompt) => [prompt.text, prompt.restoreTarget])).toEqual([
+      ['Shared request', { kind: 'codex-turn', turnId: 'turn-1' }],
+      ['Request on the selected branch', { kind: 'codex-turn', turnId: 'turn-3' }],
+    ]);
+    expect(context?.messages.map((message) => message.text)).toEqual([
+      'Shared request',
+      'Shared answer',
+      'Request on the selected branch',
+      'Answer on the selected branch',
+    ]);
+    expect(context?.turnContexts.map((turn) => turn.turnId)).toEqual(['turn-1', 'turn-3']);
+    expect(context?.completedTurnCount).toBe(2);
+  });
+
+  it('does not resurrect firstUserMessage after rollback clears every Codex turn', async () => {
+    writeFileSync(
+      rolloutPath,
+      [
+        codexRow('session_meta', { id: 'conversation-1', cwd }),
+        codexEvent('task_started', { turn_id: 'turn-1' }),
+        codexResponse('user', 'Removed request'),
+        codexEvent('turn_aborted', { turn_id: 'turn-1' }),
+        codexEvent('thread_rolled_back', { num_turns: 99 }),
+      ]
+        .map((row) => JSON.stringify(row))
+        .join('\n')
+    );
+    insertThread(statePath, rolloutPath, {
+      id: 'conversation-1',
+      cwd,
+      title: 'Thread title',
+      firstUserMessage: 'Removed request',
+    });
+
+    const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
+
+    expect(context?.prompts).toEqual([]);
+    expect(context?.messages).toEqual([]);
+    expect(context?.completedTurnCount).toBe(0);
+  });
+
   it('can resolve a Codex thread by conversation title when the ids differ', async () => {
     writeRollout(rolloutPath);
     insertThread(statePath, rolloutPath, {
@@ -556,6 +631,34 @@ describe('getCodexSessionContext', () => {
     expect(context).toBeNull();
   });
 });
+
+function codexRow(type: string, payload: Record<string, unknown>): Record<string, unknown> {
+  return { timestamp: nextFixtureTimestamp(), type, payload };
+}
+
+function codexEvent(type: string, payload: Record<string, unknown>): Record<string, unknown> {
+  return codexRow('event_msg', { type, ...payload });
+}
+
+function codexResponse(
+  role: 'user' | 'assistant' | 'developer',
+  text: string,
+  turnId?: string
+): Record<string, unknown> {
+  return codexRow('response_item', {
+    type: 'message',
+    role,
+    content: [{ type: role === 'assistant' ? 'output_text' : 'input_text', text }],
+    ...(turnId ? { internal_chat_message_metadata_passthrough: { turn_id: turnId } } : {}),
+  });
+}
+
+let fixtureTimestamp = 0;
+
+function nextFixtureTimestamp(): string {
+  fixtureTimestamp += 1;
+  return new Date(Date.UTC(2026, 6, 19, 0, 0, fixtureTimestamp)).toISOString();
+}
 
 function createStateDb(statePath: string): void {
   const db = new Database(statePath);

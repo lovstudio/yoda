@@ -85,7 +85,61 @@ describe('getClaudeSessionContext restore checkpoints', () => {
       { id: 'prompt-2', role: 'user', text: 'Second prompt', timestamp: null },
     ]);
   });
+
+  it('returns only the current parentUuid branch after a Claude rewind', async () => {
+    writeFileSync(
+      mocks.transcriptPath,
+      [
+        row('user', 'prompt-1', null, { role: 'user', content: 'Shared prompt' }),
+        row('assistant', 'answer-1', 'prompt-1', {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Shared answer' }],
+        }),
+        doneRow('done-1', 'answer-1'),
+        row('user', 'abandoned-prompt', 'done-1', {
+          role: 'user',
+          content: 'Prompt removed by Esc Esc',
+        }),
+        row('assistant', 'abandoned-answer', 'abandoned-prompt', {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Answer removed by Esc Esc' }],
+        }),
+        doneRow('abandoned-done', 'abandoned-answer'),
+        row('user', 'current-prompt', 'done-1', {
+          role: 'user',
+          content: 'Prompt on the selected branch',
+        }),
+        row('assistant', 'current-answer', 'current-prompt', {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Answer on the selected branch' }],
+        }),
+        doneRow('current-done', 'current-answer'),
+      ]
+        .map((value) => JSON.stringify(value))
+        .join('\n'),
+      'utf8'
+    );
+
+    const context = await getClaudeSessionContext('/repo', 'session-1', {
+      claudeConfigDir: directory,
+    });
+
+    expect(context?.prompts.map((prompt) => [prompt.id, prompt.restoreTarget])).toEqual([
+      ['prompt-1', { kind: 'claude-message', messageId: 'done-1' }],
+      ['current-prompt', { kind: 'claude-message', messageId: 'current-done' }],
+    ]);
+    expect(context?.messages.map((message) => message.text)).toEqual([
+      'Shared prompt',
+      'Shared answer',
+      'Prompt on the selected branch',
+      'Answer on the selected branch',
+    ]);
+  });
 });
+
+function doneRow(uuid: string, parentUuid: string): Record<string, unknown> {
+  return { type: 'system', subtype: 'turn_duration', uuid, parentUuid, isSidechain: false };
+}
 
 function row(
   type: 'user' | 'assistant',

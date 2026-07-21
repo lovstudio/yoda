@@ -26,6 +26,7 @@ describe('AI Lab host bridge', () => {
         size: '1024x1024',
         quality: 'high',
         appId: 'spoofed-app',
+        userNote: 'spoofed note',
         ignored: 'not forwarded to IPC',
       })
     );

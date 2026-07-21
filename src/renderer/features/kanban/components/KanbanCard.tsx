@@ -2,9 +2,9 @@ import { useDraggable } from '@dnd-kit/core';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useState } from 'react';
 import type { Task } from '@shared/tasks';
-import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
+import { TaskSessionStatusControl } from '@renderer/features/tasks/components/task-session-status-control';
 import type { TaskStore } from '@renderer/features/tasks/stores/task';
-import { taskAgentStatus } from '@renderer/features/tasks/stores/task-selectors';
+import { taskSessionStatusSummary } from '@renderer/features/tasks/stores/task-selectors';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { cn } from '@renderer/utils/utils';
@@ -78,7 +78,7 @@ export const KanbanCardContent = observer(function KanbanCardContent({
   card: BoardCard;
   dragging?: boolean;
 }) {
-  const status = taskAgentStatus(card.taskStore);
+  const sessionStatus = taskSessionStatusSummary(card.taskStore);
 
   return (
     <div
@@ -89,9 +89,9 @@ export const KanbanCardContent = observer(function KanbanCardContent({
     >
       <div className="flex items-start gap-2">
         <span className="min-w-0 flex-1 truncate text-sm text-foreground">{card.task.name}</span>
-        {status && (
+        {sessionStatus.primaryStatus && (
           <span className="shrink-0">
-            <AgentStatusIndicator status={status} />
+            <TaskSessionStatusControl task={card.taskStore} side="right" />
           </span>
         )}
       </div>

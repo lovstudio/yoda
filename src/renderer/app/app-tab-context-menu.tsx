@@ -32,6 +32,7 @@ import {
   TaskContextMenuItems,
 } from '@renderer/features/tasks/components/task-context-menu';
 import { useTaskMenuActions } from '@renderer/features/tasks/components/use-task-menu-actions';
+import { ConversationMoveSubmenu } from '@renderer/features/tasks/conversations/conversation-move-submenu';
 import {
   canForkConversation,
   forkConversationIntoNewTab,
@@ -411,6 +412,12 @@ export function buildConversationSections(
       );
     }
     management.push(
+      <ConversationMoveSubmenu
+        key="move"
+        projectId={projectId}
+        taskId={taskId}
+        conversationId={conversationId}
+      />,
       <ConversationArchiveSubmenu
         key="archive"
         projectId={projectId}

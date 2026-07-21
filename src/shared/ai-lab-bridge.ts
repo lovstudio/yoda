@@ -4,6 +4,7 @@ export const AI_LAB_COPY_LAST_ERROR_METHOD = 'errors.copyLast';
 export const AI_LAB_APP_IMAGE_MODEL = 'openai/gpt-image-2';
 export const AI_LAB_IMAGE_EDIT_MAX_PROMPT_CHARS = 4_000;
 export const AI_LAB_IMAGE_EDIT_MAX_DATA_URL_CHARS = 21_000_000;
+export const AI_LAB_USER_NOTE_MAX_CHARS = 800;
 
 export const AI_LAB_IMAGE_EDIT_SIZES = ['1024x1024', '1536x1024', '1024x1536'] as const;
 export type AiLabImageEditSize = (typeof AI_LAB_IMAGE_EDIT_SIZES)[number];
@@ -20,6 +21,13 @@ export type AiLabImageEditRequest = {
 
 export type AiLabImageEditInput = AiLabImageEditRequest & {
   appId: string;
+  userNote?: string;
+};
+
+export type AiLabRegenerateImageInput = {
+  appId: string;
+  id: string;
+  userNote?: string;
 };
 
 export type AiLabImageEditResult = {

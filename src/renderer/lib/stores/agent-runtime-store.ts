@@ -11,6 +11,11 @@ export type AgentRuntimeSnapshot = {
   seenTaskIds?: string[];
 };
 
+export type TaskAgentRuntimeSession = {
+  conversationId: string;
+  status: Exclude<AgentSessionRuntimeStatus, 'idle'>;
+};
+
 function taskKey(projectId: string, taskId: string): string {
   return `${projectId}\0${taskId}`;
 }
@@ -90,47 +95,20 @@ export class AgentRuntimeStore {
   }
 
   /**
-   * Task status for the sidebar indicator, in display priority: awaiting-input
-   * → unread error/completed (needs the user's verdict, even while another
-   * session still works) → working. Differs from {@link taskStatus}, which
-   * ranks working above finished states for run-state semantics.
+   * Session-level states worth showing in a task's status manager. Running and
+   * awaiting-input sessions always remain visible; terminal states are
+   * notification-like and disappear once the task has been consumed.
    */
-  taskDisplayStatus(projectId: string, taskId: string): AgentSessionRuntimeStatus | null {
+  taskSessionStatuses(projectId: string, taskId: string): TaskAgentRuntimeSession[] {
     const prefix = `${taskKey(projectId, taskId)}\0`;
-    let hasWorking = false;
-    let hasError = false;
-    let hasCompleted = false;
-    for (const [key, status] of this.statuses) {
-      if (!key.startsWith(prefix)) continue;
-      if (status === 'awaiting-input') return 'awaiting-input';
-      if (status === 'working') hasWorking = true;
-      else if (status === 'error') hasError = true;
-      else if (status === 'completed') hasCompleted = true;
-    }
     const unread = !this.seenTaskIds.has(taskKey(projectId, taskId));
-    if (unread && hasError) return 'error';
-    if (unread && hasCompleted) return 'completed';
-    if (hasWorking) return 'working';
-    return null;
-  }
-
-  /**
-   * Conversation ids of this task that want the user's attention, ordered
-   * awaiting-input first, then error/completed. Drives the sidebar's
-   * "jump to next pending session" affordance for tasks that aren't mounted
-   * (mounted tasks use the finer-grained per-conversation `seen` flags).
-   */
-  attentionConversationIds(projectId: string, taskId: string): string[] {
-    const prefix = `${taskKey(projectId, taskId)}\0`;
-    const awaiting: string[] = [];
-    const finished: string[] = [];
+    const sessions: TaskAgentRuntimeSession[] = [];
     for (const [key, status] of this.statuses) {
-      if (!key.startsWith(prefix)) continue;
-      if (status === 'awaiting-input') awaiting.push(key.slice(prefix.length));
-      else if (status === 'error' || status === 'completed')
-        finished.push(key.slice(prefix.length));
+      if (!key.startsWith(prefix) || status === 'idle') continue;
+      if ((status === 'error' || status === 'completed') && !unread) continue;
+      sessions.push({ conversationId: key.slice(prefix.length), status });
     }
-    return [...awaiting, ...finished];
+    return sessions;
   }
 
   /** Conversation ids of this task whose sessions are currently `working`. */
@@ -150,9 +128,9 @@ export class AgentRuntimeStore {
 
   /** A task is unread when it has an attention-worthy status and hasn't been opened. */
   isTaskUnread(projectId: string, taskId: string): boolean {
-    const status = this.taskStatus(projectId, taskId);
-    if (!status || !isAttentionStatus(status)) return false;
-    return !this.seenTaskIds.has(taskKey(projectId, taskId));
+    return this.taskSessionStatuses(projectId, taskId).some(({ status }) =>
+      isAttentionStatus(status)
+    );
   }
 
   markTaskSeen(projectId: string, taskId: string): void {

@@ -114,6 +114,9 @@ export class SearchService {
     conversationEvents.on('conversation:unarchived', (conversationId, projectId, taskId) =>
       this.upsertConversationById(conversationId, projectId, taskId)
     );
+    conversationEvents.on('conversation:moved', (conversation) =>
+      this.upsertConversation(conversation)
+    );
     conversationEvents.on('conversation:deleted', (conversationId) =>
       this.removeByType('conversation', conversationId)
     );

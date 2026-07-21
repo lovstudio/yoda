@@ -28,6 +28,7 @@ import { resolveRuntimeStateDirectory } from './impl/runtime-env';
 import { injectConversationPrompt } from './injectConversationPrompt';
 import { getInstructionFiles, getRuntimeInstructionFiles } from './instruction-files';
 import { interruptConversation } from './interruptConversation';
+import { moveConversation } from './moveConversation';
 import { renameConversation } from './renameConversation';
 import { restartConversation } from './restartConversation';
 import { resumeConversation } from './resumeConversation';
@@ -78,6 +79,7 @@ export const conversationController = createRPCController({
   rewritePrompt,
   resumeConversation,
   interruptConversation,
+  moveConversation,
   getConversationRuntimeStatuses,
   getConversationsForTask,
   getArchivedConversationsForTask,

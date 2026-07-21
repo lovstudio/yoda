@@ -57,7 +57,9 @@ const SOURCE_STATE_FIELDS = ['teamName', 'agentName', 'slug', 'sourceToolAssista
  * unavailable while still including completed background-notification work.
  */
 export function getClaudeCompletedTurnTargets(raw: string): Map<string, string> {
-  const rows = parseForkTranscript(raw, null).transcript.filter((row) => !row.isSidechain);
+  const rows = selectClaudeCurrentBranchRows(
+    parseForkTranscript(raw, null).transcript.filter((row) => !row.isSidechain)
+  );
   const promptIndexes = rows.flatMap((row, index) =>
     isClaudeRealUserPromptRow(row) ? [index] : []
   );
@@ -81,6 +83,24 @@ export function getClaudeCompletedTurnTargets(raw: string): Map<string, string> 
   }
 
   return targets;
+}
+
+/**
+ * Returns the UUIDs on Claude's currently selected transcript branch.
+ *
+ * Claude keeps rewound turns in the append-only JSONL file. A later prompt is
+ * linked back to the selected checkpoint through `parentUuid`, so file order
+ * alone is not conversation order after an Esc Esc rewind.
+ */
+export function getClaudeCurrentBranchMessageIds(raw: string): ReadonlySet<string> {
+  return new Set(
+    selectClaudeCurrentBranchRows(
+      parseForkTranscript(raw, null).transcript.filter((row) => !row.isSidechain)
+    ).flatMap((row) => {
+      const id = stringValue(row.uuid);
+      return id ? [id] : [];
+    })
+  );
 }
 
 /**
@@ -131,11 +151,10 @@ export function buildForkedClaudeTranscript({
     throw new Error(`Claude restore target is not a completed user turn: ${targetMessageId}`);
   }
 
-  const cutoff = transcript.findIndex((row) => row.uuid === targetMessageId);
-  if (cutoff === -1) {
+  if (!transcript.some((row) => row.uuid === targetMessageId)) {
     throw new Error(`Claude restore target not found: ${targetMessageId}`);
   }
-  transcript = transcript.slice(0, cutoff + 1);
+  transcript = selectClaudeBranchThroughTarget(transcript, targetMessageId);
 
   // The SDK assigns UUIDs before filtering progress rows because progress
   // entries can still be links in the parentUuid graph.
@@ -343,6 +362,52 @@ function indexRowsByUuid(rows: ClaudeTranscriptRow[]): Map<string, ClaudeTranscr
     if (typeof row.uuid === 'string') byUuid.set(row.uuid, row);
   }
   return byUuid;
+}
+
+function selectClaudeCurrentBranchRows(rows: ClaudeTranscriptRow[]): ClaudeTranscriptRow[] {
+  const latestPrompt = findLastRow(rows, isClaudeRealUserPromptRow);
+  const latestPromptId = stringValue(latestPrompt?.uuid);
+  if (!latestPromptId) return rows;
+
+  const rowsByUuid = indexRowsByUuid(rows);
+  const leaf = findLastRow(rows, (row) => {
+    const rowId = stringValue(row.uuid);
+    return rowId === latestPromptId || isDescendantOf(row, latestPromptId, rowsByUuid);
+  });
+  const leafId = stringValue(leaf?.uuid) ?? latestPromptId;
+  return selectClaudeBranchThroughTarget(rows, leafId);
+}
+
+function selectClaudeBranchThroughTarget(
+  rows: ClaudeTranscriptRow[],
+  targetMessageId: string
+): ClaudeTranscriptRow[] {
+  const rowsByUuid = indexRowsByUuid(rows);
+  const branchIds = new Set<string>();
+  let cursor: string | null = targetMessageId;
+
+  while (cursor && !branchIds.has(cursor)) {
+    const row = rowsByUuid.get(cursor);
+    if (!row) break;
+    branchIds.add(cursor);
+    cursor = stringValue(row.parentUuid);
+  }
+
+  return rows.filter((row) => {
+    const id = stringValue(row.uuid);
+    return id !== null && branchIds.has(id);
+  });
+}
+
+function findLastRow(
+  rows: readonly ClaudeTranscriptRow[],
+  predicate: (row: ClaudeTranscriptRow) => boolean
+): ClaudeTranscriptRow | undefined {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (row && predicate(row)) return row;
+  }
+  return undefined;
 }
 
 function isDescendantOf(

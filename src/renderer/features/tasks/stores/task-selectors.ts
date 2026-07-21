@@ -1,3 +1,4 @@
+import type { RuntimeId } from '@shared/runtime-registry';
 import type { Task } from '@shared/tasks';
 import { isUnmountedProject } from '@renderer/features/projects/stores/project';
 import { getProjectManagerStore } from '@renderer/features/projects/stores/project-selectors';
@@ -98,86 +99,83 @@ export function isTaskDescendantOf(
   });
 }
 
-export function taskAgentStatus(store: TaskStore): AgentStatus | null {
-  const task = registeredTaskData(store);
-  if (task) {
-    const runtimeStatus = appState.agentRuntime.taskStatus(task.projectId, task.id);
-    if (runtimeStatus === 'working' || runtimeStatus === 'awaiting-input') {
-      return runtimeStatus;
-    }
-    if (
-      (runtimeStatus === 'error' || runtimeStatus === 'completed') &&
-      appState.agentRuntime.isTaskUnread(task.projectId, task.id)
-    ) {
-      return runtimeStatus;
-    }
-  }
-  return asProvisioned(store)?.conversations.taskStatus ?? null;
+export type TaskSessionVisibleStatus = Exclude<AgentStatus, 'idle'>;
+
+export type TaskSessionStatusItem = {
+  conversationId: string;
+  status: TaskSessionVisibleStatus;
+  title?: string;
+  runtimeId?: RuntimeId;
+  lastInteractedAt?: string;
+};
+
+export type TaskSessionStatusSummary = {
+  primaryStatus: TaskSessionVisibleStatus | null;
+  totalCount: number;
+  attentionCount: number;
+  workingCount: number;
+  sessions: TaskSessionStatusItem[];
+};
+
+const TASK_SESSION_STATUS_PRIORITY: Record<TaskSessionVisibleStatus, number> = {
+  'awaiting-input': 0,
+  error: 1,
+  completed: 2,
+  working: 3,
+};
+
+/** Shared, lossless task-session aggregation used by every task surface. */
+export function summarizeTaskSessionStatuses(
+  sessions: TaskSessionStatusItem[]
+): TaskSessionStatusSummary {
+  const ordered = [...sessions].sort((left, right) => {
+    const statusOrder =
+      TASK_SESSION_STATUS_PRIORITY[left.status] - TASK_SESSION_STATUS_PRIORITY[right.status];
+    if (statusOrder !== 0) return statusOrder;
+    const leftTime = left.lastInteractedAt ? new Date(left.lastInteractedAt).getTime() : 0;
+    const rightTime = right.lastInteractedAt ? new Date(right.lastInteractedAt).getTime() : 0;
+    return rightTime - leftTime;
+  });
+  const primaryStatus = ordered[0]?.status ?? null;
+  const workingCount = ordered.filter(({ status }) => status === 'working').length;
+  return {
+    primaryStatus,
+    totalCount: ordered.length,
+    attentionCount: ordered.length - workingCount,
+    workingCount,
+    sessions: ordered,
+  };
 }
 
 /**
- * Task status for the sidebar indicator, in display priority:
- *
- *   1. awaiting-input — a session needs the user's input
- *   2. unread error/completed — a finished session awaits the user's verdict
- *      (outranks working: don't hide a pending verdict behind a spinner)
- *   3. working — sessions still running
- *
- * Below these the sidebar falls back to the manual needs-review flag, then
- * idle (relative time). Prefers the per-conversation `seen` flags of a mounted
- * task; unmounted tasks use the runtime mirror's task-level unread bit.
+ * Rich task-level session status. Mounted tasks contribute titles/runtime/time;
+ * unmounted tasks fall back to the global runtime mirror and remain actionable.
  */
-export function taskDisplayStatus(store: TaskStore): AgentStatus | null {
+export function taskSessionStatusSummary(store: TaskStore): TaskSessionStatusSummary {
   const provisioned = asProvisioned(store);
   if (provisioned && provisioned.conversations.conversations.size > 0) {
-    let hasWorking = false;
-    let hasError = false;
-    let hasCompleted = false;
+    const sessions: TaskSessionStatusItem[] = [];
     for (const conversation of provisioned.conversations.conversations.values()) {
       const status = conversation.indicatorStatus;
-      if (status === 'awaiting-input') return 'awaiting-input';
-      if (status === 'working') hasWorking = true;
-      else if (status === 'error') hasError = true;
-      else if (status === 'completed') hasCompleted = true;
+      if (!status || status === 'idle') continue;
+      sessions.push({
+        conversationId: conversation.data.id,
+        status,
+        title: conversation.data.title,
+        runtimeId: conversation.data.runtimeId,
+        lastInteractedAt: conversation.data.lastInteractedAt ?? undefined,
+      });
     }
-    if (hasError) return 'error';
-    if (hasCompleted) return 'completed';
-    if (hasWorking) return 'working';
-    return null;
+    return summarizeTaskSessionStatuses(sessions);
   }
-  const task = registeredTaskData(store);
-  return task ? appState.agentRuntime.taskDisplayStatus(task.projectId, task.id) : null;
-}
 
-/**
- * The next session that needs consuming: awaiting-input first, then unread
- * error/completed, in conversation order. Cycles past `afterConversationId`
- * (the one currently in view) so repeated clicks walk the pending list.
- */
-export function nextAttentionConversationId(
-  store: TaskStore,
-  afterConversationId?: string
-): string | undefined {
-  const provisioned = asProvisioned(store);
-  let candidates: string[];
-  if (provisioned) {
-    const awaiting: string[] = [];
-    const finished: string[] = [];
-    for (const conversation of provisioned.conversations.conversations.values()) {
-      const status = conversation.indicatorStatus;
-      if (status === 'awaiting-input') awaiting.push(conversation.data.id);
-      else if (status === 'error' || status === 'completed') finished.push(conversation.data.id);
-    }
-    candidates = [...awaiting, ...finished];
-  } else {
-    const task = registeredTaskData(store);
-    candidates = task
-      ? appState.agentRuntime.attentionConversationIds(task.projectId, task.id)
-      : [];
-  }
-  if (candidates.length === 0) return undefined;
-  const index = afterConversationId ? candidates.indexOf(afterConversationId) : -1;
-  return candidates[(index + 1) % candidates.length];
+  const task = registeredTaskData(store);
+  if (!task) return summarizeTaskSessionStatuses([]);
+  return summarizeTaskSessionStatuses(
+    appState.agentRuntime
+      .taskSessionStatuses(task.projectId, task.id)
+      .map(({ conversationId, status }) => ({ conversationId, status }))
+  );
 }
 
 export type TaskViewKind =

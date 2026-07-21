@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AiLabUserApp } from '@shared/ai-lab';
 import {
@@ -18,6 +18,12 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
   const { t } = useTranslation();
   const source = useMemo(() => applySandboxPolicy(app.html), [app.html]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const generationNoteRef = useRef('');
+  const [generationNote, setGenerationNote] = useState('');
+  const updateGenerationNote = useCallback((note: string) => {
+    generationNoteRef.current = note;
+    setGenerationNote(note);
+  }, []);
 
   useEffect(() => {
     let permissionGranted = false;
@@ -106,8 +112,15 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
       }
 
       activeRequestId = request.requestId;
+      const userNote = generationNoteRef.current.trim();
       void appImageEditRuntime
-        .run(app.id, () => rpc.aiLab.editAppImage({ ...request.payload, appId: app.id }))
+        .run(app.id, () =>
+          rpc.aiLab.editAppImage({
+            ...request.payload,
+            appId: app.id,
+            userNote: userNote || undefined,
+          })
+        )
         .then((result) => {
           lastBridgeError = null;
           respond({
@@ -117,6 +130,7 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
             ok: true,
             result,
           });
+          if (userNote) updateGenerationNote('');
         })
         .catch((error: unknown) => {
           const message = normalizeAiLabBridgeError(error);
@@ -136,11 +150,15 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [app.id, app.name, t]);
+  }, [app.id, app.name, t, updateGenerationNote]);
 
   return (
     <div className={cn('flex h-full min-h-[420px] w-full flex-col overflow-hidden', className)}>
-      <AppImageEditActivity app={app} />
+      <AppImageEditActivity
+        app={app}
+        generationNote={generationNote}
+        onGenerationNoteChange={updateGenerationNote}
+      />
       <iframe
         ref={iframeRef}
         key={app.updatedAt}
