@@ -24,6 +24,7 @@ import {
   findInternalTabId,
   openProvisionedTaskTab,
 } from '@renderer/app/open-task-target';
+import { refreshProjectFile } from '@renderer/features/project-file/project-file-session';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { archiveConversationFlow } from '@renderer/features/tasks/archive-task';
@@ -260,6 +261,11 @@ function buildTaskSections(tab: AppTabEntry, t: Translate): ReactNode[][] {
           key="file-actions"
           target={fileTarget(provisioned.path, target.path, provisioned.workspace.sshConnectionId)}
           components={{ Item: ContextMenuItem, Separator: ContextMenuSeparator }}
+          onRefresh={
+            target.kind === 'file'
+              ? () => provisioned.taskView.editorView.refreshFile(target.path)
+              : undefined
+          }
         />,
       ]
     : [];
@@ -578,6 +584,7 @@ function buildProjectFileSection(tab: AppTabEntry): ReactNode[] {
         key="file-actions"
         target={{ absolutePath: filePath, kind: 'file' }}
         components={{ Item: ContextMenuItem, Separator: ContextMenuSeparator }}
+        onRefresh={() => refreshProjectFile(null, filePath)}
       />,
     ];
   }
@@ -595,6 +602,7 @@ function buildProjectFileSection(tab: AppTabEntry): ReactNode[] {
       key="file-actions"
       target={fileTarget(String(data.path), filePath, sshConnectionId)}
       components={{ Item: ContextMenuItem, Separator: ContextMenuSeparator }}
+      onRefresh={() => refreshProjectFile(projectId, filePath)}
     />,
   ];
 }

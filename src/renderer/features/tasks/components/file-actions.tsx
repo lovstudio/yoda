@@ -43,6 +43,10 @@ export function useFileActions(sourcePath: string) {
     provisioned.taskView.setFocusedRegion('main');
   };
 
+  const refreshFile = provisioned.taskView.editorView.openFilePaths.includes(openablePath)
+    ? () => provisioned.taskView.editorView.refreshFile(openablePath)
+    : undefined;
+
   // Reveal needs a node in the workspace file tree — outside files have none.
   const revealInFileTree = relativePath
     ? () => {
@@ -55,7 +59,7 @@ export function useFileActions(sourcePath: string) {
       }
     : null;
 
-  return { t, relativePath, target, openInEditor, revealInFileTree, ...placement };
+  return { t, relativePath, target, openInEditor, refreshFile, revealInFileTree, ...placement };
 }
 
 /**
@@ -109,14 +113,22 @@ export function FileActionsDropdown({
   sourcePath: string;
   className?: string;
 }) {
-  const { t, target, openInEditor, openInSidebar, openInGlobalSidebar, revealInFileTree } =
-    useFileActions(sourcePath);
+  const {
+    t,
+    target,
+    openInEditor,
+    refreshFile,
+    openInSidebar,
+    openInGlobalSidebar,
+    revealInFileTree,
+  } = useFileActions(sourcePath);
   const { runAfterClose, onOpenChangeComplete } = useRunAfterMenuClose();
 
   return (
     <FilePathActionsDropdown
       target={target}
       className={className}
+      onRefresh={refreshFile}
       onOpenChangeComplete={onOpenChangeComplete}
     >
       <DropdownMenuItem
@@ -226,8 +238,15 @@ export function FileActionsMenuItems({
   /** Defers panel-switching actions until the host menu has fully closed. */
   runAfterClose?: (action: () => void) => void;
 }) {
-  const { t, target, openInEditor, openInSidebar, openInGlobalSidebar, revealInFileTree } =
-    useFileActions(sourcePath);
+  const {
+    t,
+    target,
+    openInEditor,
+    refreshFile,
+    openInSidebar,
+    openInGlobalSidebar,
+    revealInFileTree,
+  } = useFileActions(sourcePath);
 
   return (
     <>
@@ -270,6 +289,7 @@ export function FileActionsMenuItems({
       <FilePathMenuItems
         target={target}
         components={{ Item: ContextMenuItem, Separator: ContextMenuSeparator }}
+        onRefresh={kind === 'file' ? refreshFile : undefined}
       />
     </>
   );

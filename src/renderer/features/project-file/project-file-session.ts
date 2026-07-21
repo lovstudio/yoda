@@ -109,6 +109,14 @@ export async function getProjectFileSession(
   return session;
 }
 
+export async function refreshProjectFile(
+  projectId: string | null,
+  filePath: string
+): Promise<void> {
+  const session = await getProjectFileSession(projectId, filePath);
+  await session.lifecycle.refreshFile(filePath);
+}
+
 /** One project-view workspace per project, acquired once and kept for the app's lifetime. */
 function getProjectViewWorkspaceId(projectId: string): Promise<string> {
   const cached = workspaceIds.get(projectId);

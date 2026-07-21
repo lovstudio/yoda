@@ -748,12 +748,14 @@ export class MonacoModelRegistry {
    * Re-fetch the model at `uri` from its source (disk or git). No-op for buffers.
    * Bypasses dedup cache — always fires a fresh RPC.
    */
-  async invalidateModel(uri: string): Promise<void> {
+  async invalidateModel(uri: string): Promise<boolean> {
     const entry = this.modelMap.get(uri);
-    if (!entry) return;
+    if (!entry) return false;
     if (entry.type === 'disk') {
       const res = await rpc.fs.readFile(entry.projectId, entry.workspaceId, entry.filePath);
-      if (res.success) this.applyDiskUpdate(uri, entry, res.data.content);
+      if (!res.success) return false;
+      this.applyDiskUpdate(uri, entry, res.data.content);
+      return true;
     } else if (entry.type === 'git') {
       const res =
         entry.ref.kind === 'staged'
@@ -766,8 +768,10 @@ export class MonacoModelRegistry {
             );
       if (res.success && res.data.content !== null) {
         entry.model.setValue(res.data.content);
+        return true;
       }
     }
+    return false;
   }
 
   // ---------------------------------------------------------------------------
@@ -831,6 +835,9 @@ export class MonacoModelRegistry {
         const fullRange = bufEntry.model.getFullModelRange();
         bufEntry.model.applyEdits([{ range: fullRange, text: newContent }], false);
         this.reloadingFromDisk.delete(bufferUri);
+        runInAction(() => {
+          this.bufferVersions.set(bufferUri, (this.bufferVersions.get(bufferUri) ?? 0) + 1);
+        });
       }
       // Clear dirty state — disk now matches buffer (either buffer was synced to disk, or
       // new disk content already matched existing buffer edits).
