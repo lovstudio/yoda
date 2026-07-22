@@ -53,8 +53,8 @@ Layout Rules:
 **Filename**: 01-slide-cover.png
 
 Headline: Agent 时代的集成委托环境
-Visual: 主标题放大居中，下方放置完整的 Yoda 横向 Logo，不放置其他辅助信息。
-Layout: centered-title-with-logo
+Visual: 参考今日头条融资材料封面结构，以 Yoda 深绿色横向色带承载白色主标题与横向 Logo；色带下方居中放融资材料类型和日期。
+Layout: branded-horizontal-band-cover
 
 ---
 

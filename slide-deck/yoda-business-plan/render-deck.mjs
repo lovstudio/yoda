@@ -78,10 +78,12 @@ const slides = [
   {
     filename: '01-slide-cover.png',
     html: `<section class="slide">
-      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:translateY(-8px)">
-        <h1 style="font-size:64px;line-height:1.12;font-weight:760;letter-spacing:-.035em;text-align:center;color:var(--ink)">Agent 时代的集成委托环境</h1>
-        <img src="${yodaLogo}" alt="Yoda" style="display:block;width:250px;height:auto;margin-top:54px">
+      <div style="position:absolute;left:0;right:0;top:278px;height:304px;background:var(--deep);display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <h1 style="font-size:64px;line-height:1.12;font-weight:750;letter-spacing:-.035em;text-align:center;color:white">Agent 时代的集成委托环境</h1>
+        <img src="${yodaLogo}" alt="Yoda" style="display:block;width:232px;height:auto;margin-top:42px;filter:brightness(0) invert(1)">
       </div>
+      <div style="position:absolute;left:0;right:0;top:654px;text-align:center;color:var(--deep);font-size:20px;font-weight:700;letter-spacing:.12em">融资商业计划书</div>
+      <div style="position:absolute;left:0;right:0;top:710px;text-align:center;color:#777c78;font-size:17px;font-weight:560">2026 年 7 月</div>
     </section>`,
   },
   {
