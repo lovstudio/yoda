@@ -57,16 +57,18 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 9 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 09-slide-traction.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: 两个月完成产品闭环，已有使用信号，商业验证尚未开始
+Chart: 证据成熟度阶梯
+- Build：1,645 次 main 提交 / 73 个公开 Release / 31 种 Agent Client
+- Use：126 个 14 天独立 Cloner / 73 个独立授权用户
+- Pay：3 个 Relay 试用 / 0 付费
+Conclusion: 产品完成度与执行力已验证；留存、付费和机构年约是本轮融资后的核心问题。
+Layout: evidence-ladder
 
 ## Production Note
 

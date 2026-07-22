@@ -57,16 +57,20 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 3 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 03-slide-delegation-gap.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: 实现成本快速下降，委托复杂度反而上升
+Sub-headline: Agent 越能独立工作，人越需要新的控制面
+Chart: 双曲线趋势图（明确标注“趋势示意”）
+- 实现成本：持续下降
+- Agent 自主能力：持续上升
+- 人类注意力：基本不变
+Pain points: 多会话状态、上下文与 Harness、分支与隔离、Review 与证据、Token 成本。
+Conclusion: Agent 能跑只是执行问题；敢不敢委托，才是工程问题。
+Layout: chart-with-annotation
 
 ## Production Note
 

@@ -57,16 +57,19 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 14 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 14-slide-founder.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: Founder–Product Fit：Yoda 是被真实工作流“撞”出来的
+Sub-headline: 创始人同时是第一重度用户、产品经理、开发者与首批渠道
+Evidence:
+- 长期横跨开发工具、内容创作、培训与 AI 产品化
+- 用 Yoda 开发 Yoda，形成高频反馈闭环
+- 高校、商学院、开发者社区与训练营触点
+Visual: 真实分享现场照片 + 1,645 commits / 73 releases / 31 clients。
+Layout: founder-evidence
 
 ## Production Note
 

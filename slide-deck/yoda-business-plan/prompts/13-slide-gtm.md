@@ -57,16 +57,21 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 13 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 13-slide-gtm.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: 用两个高信号入口，验证 C 端口碑与 B 端年约
+Chart: 双楔子增长路径
+- C 端：开源社区 → 超级开发者 → Relay/Pro → Studio/生态
+- B 端：AI 创造营/高校 → 设计伙伴 → 标准产品包 → 机构年约
+Timeline:
+- 0–3 月：体验、埋点、20 位深访
+- 4–6 月：自然增长、2–3 家设计伙伴
+- 7–12 月：个人付费与机构试点
+- 13–24 月：机构年约、渠道与英文市场
+Layout: dual-funnel-timeline
 
 ## Production Note
 

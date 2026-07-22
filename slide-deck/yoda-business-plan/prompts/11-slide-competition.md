@@ -57,16 +57,18 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 11 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 11-slide-competition.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: 市场上多数产品优化“执行”，Yoda 优化“可靠委托”
+Chart: 二维竞争象限
+X 轴：单一生态绑定 → 供应商中立
+Y 轴：代码执行工具 → 委托治理系统
+Plot: VS Code/Cursor、Codex App、Conductor、Agent Team Tools、Yoda
+Footnote: 基于公开产品定位与当前功能的定性判断，不代表第三方厂商自我定义。
+Layout: quadrant-chart
 
 ## Production Note
 

@@ -12,52 +12,57 @@ function dataUri(filePath, mime) {
 }
 
 const logo = dataUri(path.join(repoRoot, 'docs/public/yoda-mark.svg'), 'image/svg+xml');
-const productLaunch = dataUri('/Users/mark/lovstudio/products/yoda/demo.png', 'image/png');
-const educationPhoto = dataUri(
-  '/Users/mark/lovstudio/vault/profile/album/work/2026-05-22-手工川 AI 创造营 EP03.JPG',
-  'image/jpeg'
-);
+const taskScreenshot = dataUri(path.join(deckDir, 'assets/yoda-tasks.jpg'), 'image/jpeg');
+const featureScreenshot = dataUri(path.join(deckDir, 'assets/yoda-feature.jpg'), 'image/jpeg');
 const founderPhoto = dataUri(
   '/Users/mark/lovstudio/vault/profile/album/work/2026-04-26-手工川是如何使用AI的.jpg',
   'image/jpeg'
 );
 
 const css = `
-  :root { --paper:#f7f6f2; --pale:#efeee9; --ink:#111111; --muted:#62645f; --line:#d7d6d0; --green:#5dc98f; --deep:#173d2a; }
+  :root { --paper:#f6f5f1; --stone:#ecebe6; --ink:#111312; --muted:#626762; --grid:#d4d5d0; --deep:#173d2a; --green:#5dc98f; --blue:#526a7a; --gray:#a9aaa5; --white:#ffffff; }
   * { box-sizing:border-box; }
   html,body { margin:0; width:1600px; height:900px; overflow:hidden; background:var(--paper); }
   body { font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif; color:var(--ink); }
-  .slide { position:relative; width:1600px; height:900px; overflow:hidden; padding:70px 90px 64px; background:var(--paper); }
-  .slide.pale { background:var(--pale); }
+  .slide { position:relative; width:1600px; height:900px; overflow:hidden; padding:66px 88px 62px; background:var(--paper); }
+  .slide.stone { background:var(--stone); }
   h1,h2,p { margin:0; }
-  h1 { font-size:78px; line-height:1.06; letter-spacing:-.045em; font-weight:780; }
-  h2 { max-width:1320px; font-size:58px; line-height:1.12; letter-spacing:-.035em; font-weight:760; }
-  .sub { margin-top:18px; max-width:1180px; color:#454743; font-size:27px; line-height:1.45; font-weight:500; }
-  .eyebrow { margin-bottom:18px; color:var(--deep); font-size:17px; font-weight:760; letter-spacing:.15em; text-transform:uppercase; }
-  .brand { display:flex; align-items:center; gap:14px; color:#526057; font-size:20px; font-weight:760; letter-spacing:.16em; }
-  .brand img { width:30px; height:30px; }
+  h1 { font-size:76px; line-height:1.05; letter-spacing:-.045em; font-weight:790; }
+  h2 { max-width:1320px; font-size:56px; line-height:1.12; letter-spacing:-.035em; font-weight:770; }
+  .sub { margin-top:16px; max-width:1180px; color:#424642; font-size:26px; line-height:1.42; font-weight:510; }
+  .eyebrow { margin-bottom:16px; color:var(--deep); font-size:16px; font-weight:780; letter-spacing:.16em; text-transform:uppercase; }
+  .brand { display:flex; align-items:center; gap:13px; color:#506057; font-size:19px; font-weight:760; letter-spacing:.15em; }
+  .brand img { width:29px; height:29px; }
+  .mini-brand { position:absolute; right:88px; top:64px; display:flex; align-items:center; gap:9px; color:#7a817c; font-size:14px; font-weight:730; letter-spacing:.12em; }
+  .mini-brand img { width:20px; height:20px; }
   .muted { color:var(--muted); }
-  .accent { color:#277b52; }
-  .hairline { height:1px; background:var(--line); }
-  .vline { width:1px; background:var(--line); align-self:stretch; }
-  .metric { font-size:82px; line-height:.95; font-weight:820; letter-spacing:-.055em; }
-  .metric-label { margin-top:14px; color:var(--muted); font-size:22px; line-height:1.35; }
-  .body { color:#30322f; font-size:27px; line-height:1.55; }
-  .note { color:#777872; font-size:16px; line-height:1.45; }
-  .foot { position:absolute; left:90px; right:90px; bottom:28px; color:#777872; font-size:15px; line-height:1.4; }
-  .screen { overflow:hidden; border:1px solid #c9c8c2; border-radius:14px; background:#111; box-shadow:0 20px 45px rgba(18,22,19,.08); }
-  .screen img,.photo img { width:100%; height:100%; display:block; object-fit:cover; }
+  .deep { color:var(--deep); }
+  .green { color:#278258; }
+  .blue { color:var(--blue); }
+  .hairline { height:1px; background:var(--grid); }
+  .foot { position:absolute; left:88px; right:88px; bottom:24px; color:#777b77; font-size:15px; line-height:1.4; }
+  .metric { font-size:78px; line-height:.95; font-weight:820; letter-spacing:-.05em; }
+  .metric-sm { font-size:53px; line-height:1; font-weight:800; letter-spacing:-.04em; }
+  .label { color:var(--muted); font-size:18px; line-height:1.4; }
+  .body { color:#2c302d; font-size:25px; line-height:1.52; }
+  .chart-label { font-size:18px; fill:#5e645f; }
+  .chart-strong { font-size:21px; font-weight:720; fill:#151816; }
+  .panel { border:1px solid var(--grid); background:rgba(255,255,255,.28); }
+  .shot { overflow:hidden; border:1px solid #c8c9c4; background:#fff; box-shadow:0 16px 36px rgba(24,35,29,.08); }
+  .shot img,.photo img { width:100%; height:100%; display:block; object-fit:cover; }
   .photo { overflow:hidden; background:#ddd; }
-  .stage { font-size:25px; font-weight:720; }
-  .stage-small { margin-top:12px; color:var(--muted); font-size:20px; line-height:1.42; }
 `;
 
 function doc(content) {
   return `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${content}</body></html>`;
 }
 
-function mark(size = 56) {
+function mark(size = 54) {
   return `<img src="${logo}" style="width:${size}px;height:${size}px" alt="Yoda">`;
+}
+
+function miniBrand() {
+  return `<div class="mini-brand">${mark(20)} YODA</div>`;
 }
 
 const slides = [
@@ -65,219 +70,332 @@ const slides = [
     filename: '01-slide-cover.png',
     html: `<section class="slide">
       <div class="brand">${mark(34)} YODA</div>
-      <div style="position:absolute;left:90px;top:220px;width:980px">
-        <h1>超级开发者的<br><span style="color:var(--deep)">AI Harness 工作台</span></h1>
-        <p class="sub" style="margin-top:30px;font-size:31px">统一 Agent、上下文与交付，让 AI 真正进入持续创造</p>
+      <div style="position:absolute;left:88px;top:220px;width:1010px">
+        <div style="font-size:22px;color:var(--deep);font-weight:750;margin-bottom:22px">INTEGRATED DELEGATION ENVIRONMENT</div>
+        <h1>Agent 时代的<br><span class="deep">集成委托环境</span></h1>
+        <p class="sub" style="margin-top:28px;font-size:30px">面向超级开发者与 AI 原生团队的开源桌面工作区</p>
       </div>
-      <div style="position:absolute;right:92px;top:210px;width:270px;height:460px;border-left:1px solid var(--line);padding-left:34px;display:flex;flex-direction:column;justify-content:space-between">
-        <div><div class="note">01</div><div style="font-size:28px;font-weight:700;margin-top:10px">想法</div></div>
-        <div><div class="note">02</div><div style="font-size:28px;font-weight:700;margin-top:10px;color:#277b52">驾驭 AI</div></div>
-        <div><div class="note">03</div><div style="font-size:28px;font-weight:700;margin-top:10px">真实作品</div></div>
-      </div>
-      <div style="position:absolute;left:90px;bottom:58px;color:#777872;font-size:17px">融资版 BP · 2026.07</div>
-    </section>`,
-  },
-  {
-    filename: '02-slide-problem.png',
-    html: `<section class="slide pale">
-      <div class="eyebrow">用户问题</div><h2>AI 能写代码，但创造过程仍被工具切碎</h2>
-      <p class="sub">同一项任务，需要在 Agent、终端、文件、Git 和发布页面之间反复切换</p>
-      <div style="position:absolute;left:90px;right:90px;top:350px">
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);align-items:center">
-          ${['Agent', '终端 / IDE', '文件与上下文', 'Git / Review', 'CI / 发布']
-            .map(
-              (label, index) =>
-                `<div style="position:relative;border-top:2px solid ${index === 2 ? '#173d2a' : '#b9b8b2'};padding-top:24px;font-size:25px;font-weight:700"><span style="position:absolute;top:-7px;left:0;width:12px;height:12px;border-radius:50%;background:${index === 2 ? '#173d2a' : '#b9b8b2'}"></span>${label}</div>`
-            )
-            .join('')}
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:48px;margin-top:110px">
-          <div style="border-left:1px solid var(--line);padding-left:24px"><div class="stage">上下文反复重述</div><div class="stage-small">每次切换都要重新解释目标和状态</div></div>
-          <div style="border-left:1px solid var(--line);padding-left:24px"><div class="stage">过程难以干预</div><div class="stage-small">人仍需盯守，但缺少友好的控制面</div></div>
-          <div style="border-left:1px solid var(--line);padding-left:24px"><div class="stage">经验无法复用</div><div class="stage-small">Prompt、Skills 与工作流散落各处</div></div>
-        </div>
-      </div>
-      <div style="position:absolute;left:90px;bottom:55px;font-size:27px;font-weight:740;color:var(--deep)">不是 AI 不够强，是工作流没有跟上。</div>
-    </section>`,
-  },
-  {
-    filename: '03-slide-solution.png',
-    html: `<section class="slide">
-      <div class="eyebrow">解决方案</div><h2>Yoda 把整个 AI 创造过程放进一个工作台</h2>
-      <p class="sub">从目标、执行到 Review 与发布，用户始终掌握上下文和方向</p>
-      <div style="position:absolute;left:110px;right:110px;top:410px">
-        <div style="height:3px;background:var(--deep)"></div>
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);margin-top:-11px">
-          ${['目标', '会话', '干预', 'Review', '交付']
-            .map(
-              (label, index) =>
-                `<div style="text-align:${index === 0 ? 'left' : index === 4 ? 'right' : 'center'}"><span style="display:inline-block;width:19px;height:19px;border-radius:50%;background:${index === 4 ? '#5dc98f' : '#173d2a'};border:4px solid var(--paper)"></span><div style="font-size:30px;font-weight:760;margin-top:28px">${label}</div></div>`
-            )
-            .join('')}
-        </div>
-        <div style="margin-top:100px;border-top:1px solid var(--line);padding-top:26px;display:flex;align-items:center;justify-content:space-between">
-          <div style="font-size:26px;font-weight:760;color:var(--deep)">Yoda Harness Workspace</div>
-          <div style="font-size:22px;color:var(--muted)">同一上下文 · 连续观察 · 随时修正 · 可验收结果</div>
-        </div>
-      </div>
-    </section>`,
-  },
-  {
-    filename: '04-slide-product-experience.png',
-    html: `<section class="slide">
-      <div style="display:grid;grid-template-columns:39% 61%;gap:70px;height:100%;align-items:center">
-        <div>
-          <div class="eyebrow">核心体验</div><h2 style="font-size:55px">一个入口，完成一次可控的 AI 交付</h2>
-          <div style="margin-top:48px;border-top:1px solid var(--line)">
-            ${['启动任务', '观察过程', '修正方向', '验收结果']
-              .map(
-                (label, index) =>
-                  `<div style="display:grid;grid-template-columns:48px 1fr;align-items:center;border-bottom:1px solid var(--line);padding:18px 0"><span class="note">0${index + 1}</span><span style="font-size:27px;font-weight:700">${label}</span></div>`
-              )
-              .join('')}
-          </div>
-          <div style="margin-top:30px;font-size:22px;color:var(--deep);font-weight:680">单 Agent 与多 Agent 都适用</div>
-        </div>
-        <div>
-          <div class="screen" style="height:460px"><img src="${productLaunch}" alt="Yoda 实际启动画面"></div>
-          <div class="note" style="margin-top:16px">Yoda 实际启动画面。当前工作区需要账户授权，因此本页不使用虚构主界面。</div>
-        </div>
-      </div>
-    </section>`,
-  },
-  {
-    filename: '05-slide-harness.png',
-    html: `<section class="slide pale">
-      <div class="eyebrow">产品核心</div><h2>Harness 让 AI 的工作过程可控、可复用、可迁移</h2>
-      <p class="sub">31 种 Agent Client 之上，Yoda 统一会话、能力、上下文与交付</p>
-      <div style="position:absolute;left:120px;right:120px;top:360px">
-        <div style="display:flex;justify-content:space-between;padding:0 18px 24px;color:#3d403c;font-size:22px;font-weight:680"><span>Claude Code</span><span>Codex</span><span>Gemini</span><span>OpenCode</span><span>+27 Clients</span></div>
-        <div style="height:118px;background:var(--deep);color:white;display:flex;align-items:center;justify-content:space-around;padding:0 40px">
-          <span style="font-size:19px;letter-spacing:.12em;color:#bde8ce">YODA HARNESS</span><span style="font-size:24px;font-weight:700">Session</span><span style="font-size:24px;font-weight:700">Skills</span><span style="font-size:24px;font-weight:700">Hooks</span><span style="font-size:24px;font-weight:700">Memory</span><span style="font-size:24px;font-weight:700">Review</span><span style="font-size:24px;font-weight:700">CI/CD</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:26px 70px 0;color:#3d403c;font-size:23px;font-weight:700"><span>Diff</span><span>Test</span><span>Release</span><span>可继续迭代的作品</span></div>
-      </div>
-      <div class="foot">31 种 Agent Client：按 Yoda 仓库截至 2026-07-22 的统计口径。</div>
-    </section>`,
-  },
-  {
-    filename: '06-slide-why-now.png',
-    html: `<section class="slide">
-      <div class="eyebrow">Why Now</div><h2>AI 执行能力正在商品化，驾驭能力成为新的价值层</h2>
-      <div style="position:absolute;left:90px;right:90px;top:340px;bottom:130px;display:grid;grid-template-columns:1fr 1px 1fr;gap:72px;align-items:center">
-        <div><div class="metric" style="font-size:132px">75<span style="font-size:58px">%</span></div><div style="font-size:28px;line-height:1.4;font-weight:650;margin-top:26px">创意 AI 已融入或成为<br>工作流必要部分</div></div>
-        <div class="vline"></div>
-        <div><div class="metric accent" style="font-size:132px">85<span style="font-size:58px">%</span></div><div style="font-size:28px;line-height:1.4;font-weight:650;margin-top:26px">最终创意决策<br>仍应由人完成</div></div>
-      </div>
-      <div style="position:absolute;left:90px;bottom:56px;font-size:27px;font-weight:740;color:var(--deep)">AI 执行，人负责方向、判断与品味。</div>
-      <div class="foot" style="left:auto;right:90px;text-align:right">来源：Adobe 2026 Creators’ Toolkit Report。</div>
-    </section>`,
-  },
-  {
-    filename: '07-slide-traction.png',
-    html: `<section class="slide pale">
-      <div class="eyebrow">真实验证</div><h2>已有真实使用信号，付费验证仍在起点</h2>
-      <p class="sub">当前数据证明有人下载、Clone 和授权，但不能替代留存与收入</p>
-      <div style="position:absolute;left:90px;right:90px;top:360px;display:grid;grid-template-columns:repeat(4,1fr) 1.08fr;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
-        ${[
-          ['126', '14 天独立 Cloner'],
-          ['73', '独立授权用户'],
-          ['73', '公开 Release'],
-          ['3', 'Relay 试用账户'],
-        ]
+      <div style="position:absolute;right:90px;top:250px;width:330px;border-left:1px solid var(--grid);padding-left:34px">
+        ${['Intention', 'Delegation', 'Evidence', 'Delivery']
           .map(
-            ([value, label]) =>
-              `<div style="padding:42px 24px 45px 0"><div class="metric">${value}</div><div class="metric-label">${label}</div></div>`
+            (item, index) =>
+              `<div style="display:grid;grid-template-columns:36px 1fr;align-items:center;margin-bottom:58px"><span style="font-size:14px;color:${index === 3 ? '#278258' : '#888'}">0${index + 1}</span><span style="font-size:25px;font-weight:700;color:${index === 3 ? '#173d2a' : '#111'}">${item}</span></div>`
           )
           .join('')}
-        <div style="background:#171817;color:white;padding:40px 30px"><div class="metric">0</div><div style="font-size:24px;margin-top:14px">付费用户</div><div style="font-size:18px;line-height:1.45;color:#bcbdb9;margin-top:22px">下一阶段核心验证：<br>留存、个人付费、机构年约</div></div>
       </div>
-      <div class="foot">GitHub 数据截至 2026-07-22；账号与 Relay 数据截至 2026-07-21。Clone、授权与 Release 均不是去重活跃用户。</div>
+      <div style="position:absolute;left:88px;bottom:60px;font-size:19px;font-weight:680">让人管理意图、委托、证据与交付，而不只是编辑代码</div>
+      <div style="position:absolute;right:90px;bottom:60px;color:#7a7e79;font-size:16px">融资版 BP · 2026.07</div>
     </section>`,
   },
   {
-    filename: '08-slide-business-model.png',
-    html: `<section class="slide">
-      <div style="display:grid;grid-template-columns:54% 46%;gap:60px;height:100%;align-items:center">
-        <div>
-          <div class="eyebrow">商业模式</div><h2 style="font-size:52px">C 端验证产品，<br>B 端教育放大客单价</h2>
-          <p class="sub" style="font-size:25px">个人订阅与机构年约共享同一套 Harness 底座</p>
-          <div style="margin-top:52px;border-top:1px solid var(--line)">
-            <div style="display:grid;grid-template-columns:150px 1fr;padding:25px 0;border-bottom:1px solid var(--line)"><b style="font-size:22px;color:var(--deep)">C 端</b><div style="font-size:24px;font-weight:680">Desktop → Relay / Creator Pro → Studio</div></div>
-            <div style="display:grid;grid-template-columns:150px 1fr;padding:25px 0;border-bottom:1px solid var(--line)"><b style="font-size:22px;color:var(--deep)">B 端</b><div style="font-size:24px;font-weight:680">付费试点 → Education 产品包 → 机构年约</div></div>
-          </div>
-          <div class="note" style="margin-top:24px">收费来自产品化、部署治理、课程培训与持续服务，而不是“允许二开”。</div>
-        </div>
-        <div>
-          <div class="photo" style="height:560px"><img src="${educationPhoto}" style="object-position:center 18%" alt="手工川 AI 创造营现场"></div>
-          <div class="note" style="margin-top:14px">手工川 AI 创造营 EP03：仅证明培训场景与渠道触点，不是 Yoda 客户案例。</div>
-        </div>
-      </div>
-    </section>`,
-  },
-  {
-    filename: '09-slide-market.png',
-    html: `<section class="slide pale">
-      <div class="eyebrow">市场与切入</div><h2>从超级开发者切入一个 248 亿美元创作者工具市场</h2>
-      <p class="sub">先服务高频 Coding 创作者，再扩展到 AI 原生个人与团队</p>
-      <div style="position:absolute;left:90px;right:90px;top:330px;bottom:90px;display:grid;grid-template-columns:46% 54%;align-items:center">
-        <div style="position:relative;height:450px">
-          <div style="position:absolute;width:420px;height:420px;border-radius:50%;border:1px solid #bfc0ba;left:55px;top:15px"></div>
-          <div style="position:absolute;width:300px;height:300px;border-radius:50%;border:1px solid #8cae9a;left:115px;top:75px"></div>
-          <div style="position:absolute;width:178px;height:178px;border-radius:50%;background:var(--deep);color:white;left:176px;top:136px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:25px;font-weight:760">超级<br>开发者</div>
-          <div style="position:absolute;left:362px;top:92px;font-size:20px;color:#456653">Coding 创作者</div>
-          <div style="position:absolute;left:432px;top:22px;font-size:20px;color:var(--muted)">AI 原生个人与团队</div>
-        </div>
-        <div style="border-left:1px solid var(--line);padding-left:70px">
+    filename: '02-slide-ide-shift.png',
+    html: `<section class="slide stone">${miniBrand()}
+      <div class="eyebrow">范式迁移</div><h2>IDE 的中心，正从“代码”迁移到“委托”</h2>
+      <p class="sub">每一代 IDE 都围绕当时最稀缺的生产要素重构</p>
+      <div style="position:absolute;left:88px;right:88px;top:340px">
+        <div style="height:3px;background:linear-gradient(90deg,#b0b2ad 0 75%,#173d2a 75% 100%)"></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:30px;margin-top:-10px">
           ${[
-            ['248 亿美元', 'TAM · 2.07 亿创作者 × 120 美元年费'],
-            ['24.8 亿美元', 'SAM · 假设 10% 适配率'],
-            ['240 万美元', '三年 SOM · 2 万账户 × 120 美元 ARR'],
+            ['1990s', '语言中心', 'Dev-C++ / Visual Studio', '编译与运行'],
+            ['2000s', '工程中心', 'JetBrains', '理解与维护'],
+            ['2015–2025', '代码工作台', 'VS Code / Cursor', '扩展与生成'],
+            ['2026+', '委托环境', 'Yoda', '意图、证据与责任'],
           ]
             .map(
-              ([value, label], index) =>
-                `<div style="padding:${index === 0 ? '0 0 27px' : '27px 0'};border-bottom:${index === 2 ? '0' : '1px solid var(--line)'}"><div style="font-size:49px;font-weight:790;color:${index === 2 ? '#277b52' : '#111'}">${value}</div><div class="note" style="font-size:17px;margin-top:8px">${label}</div></div>`
+              ([era, title, products, job], index) =>
+                `<div><span style="display:block;width:18px;height:18px;border-radius:50%;background:${index === 3 ? '#173d2a' : '#aeb0ab'};border:4px solid var(--stone)"></span><div style="font-size:16px;color:${index === 3 ? '#173d2a' : '#777'};margin-top:25px">${era}</div><div style="font-size:32px;font-weight:780;margin-top:10px;color:${index === 3 ? '#173d2a' : '#111'}">${title}</div><div style="font-size:21px;font-weight:650;margin-top:16px">${products}</div><div class="label" style="margin-top:8px">解决：${job}</div></div>`
             )
             .join('')}
         </div>
       </div>
-      <div class="foot">来源：Visa 2025 Creator Report。SAM、年费与三年 SOM 为待验证假设或经营目标，不代表当前收入。</div>
+      <div style="position:absolute;left:88px;right:88px;bottom:58px;border-top:1px solid var(--grid);padding-top:24px;font-size:25px;font-weight:730;color:var(--deep)">下一代 IDE 不是编辑器旁边多一个聊天框，而是 Integrated Delegation Environment。</div>
     </section>`,
   },
   {
-    filename: '10-slide-differentiation.png',
-    html: `<section class="slide">
-      <div class="eyebrow">竞争与差异化</div><h2>Yoda 不卷模型，也不把 Agent 团队当产品终局</h2>
-      <p class="sub">Yoda 占据跨客户端组织工作、沉淀资产与完成交付的 Harness 层</p>
-      <div style="position:absolute;left:100px;right:100px;top:350px;display:grid;grid-template-columns:55% 45%;gap:80px">
-        <div>
-          <div style="height:94px;border:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 30px;font-size:23px"><b>模型与算力</b><span class="muted">GPT · Claude · MaaS</span></div>
-          <div style="height:94px;border-left:1px solid var(--line);border-right:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 30px;font-size:23px"><b>Agent 执行方式</b><span class="muted">CLI · IDE · 团队</span></div>
-          <div style="height:112px;background:var(--deep);color:white;display:flex;align-items:center;justify-content:space-between;padding:0 30px;font-size:25px"><b>Yoda Harness</b><span style="color:#c5e6d2">上下文 · 治理 · 交付</span></div>
+    filename: '03-slide-delegation-gap.png',
+    html: `<section class="slide">${miniBrand()}
+      <div class="eyebrow">核心问题</div><h2>实现成本快速下降，委托复杂度反而上升</h2>
+      <p class="sub">Agent 越能独立工作，人越需要新的控制面</p>
+      <div style="position:absolute;left:88px;right:88px;top:300px;bottom:82px;display:grid;grid-template-columns:66% 34%;gap:48px">
+        <div class="panel" style="position:relative;padding:28px 32px 24px">
+          <div style="position:absolute;right:24px;top:18px;font-size:14px;color:#888">趋势示意 · 非统计数据</div>
+          <svg viewBox="0 0 880 420" style="width:100%;height:100%">
+            <defs><marker id="arrow3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#555"/></marker></defs>
+            ${[70, 150, 230, 310].map((y) => `<line x1="90" y1="${y}" x2="825" y2="${y}" stroke="#d4d5d0" stroke-width="1"/>`).join('')}
+            <line x1="90" y1="360" x2="835" y2="360" stroke="#8d918d" stroke-width="2" marker-end="url(#arrow3)"/>
+            <line x1="90" y1="360" x2="90" y2="35" stroke="#8d918d" stroke-width="2" marker-end="url(#arrow3)"/>
+            <text x="720" y="402" class="chart-label">Agent 自主能力 →</text><text x="14" y="30" class="chart-label">相对水平</text>
+            <path d="M105 85 C300 120 500 230 805 320" fill="none" stroke="#526a7a" stroke-width="6"/>
+            <path d="M105 315 C340 280 555 155 805 68" fill="none" stroke="#173d2a" stroke-width="7"/>
+            <path d="M105 225 C330 220 560 222 805 218" fill="none" stroke="#a9aaa5" stroke-width="5" stroke-dasharray="12 10"/>
+            <text x="610" y="302" class="chart-strong" fill="#526a7a">实现成本 ↓</text>
+            <text x="600" y="87" class="chart-strong" fill="#173d2a">委托复杂度 ↑</text>
+            <text x="606" y="207" class="chart-strong" fill="#777">人类注意力 ≈ 不变</text>
+          </svg>
         </div>
-        <div style="border-top:1px solid var(--line)">
+        <div style="border-top:1px solid var(--grid)">
           ${[
-            ['31 种 Agent Client', '供应商中立'],
-            ['Skills · Memory · 工作流', '资产持续沉淀'],
-            ['Review · Test · Release', '交付形成闭环'],
+            ['01', '状态', '多个会话谁在运行、等待或卡住'],
+            ['02', '上下文', 'Skills、Hooks、Memory 是否真正生效'],
+            ['03', '工程边界', '分支、Worktree、Diff 与冲突'],
+            ['04', '证据与成本', '测试是否通过、Token 花在哪里'],
           ]
             .map(
-              ([main, sub]) =>
-                `<div style="padding:22px 0;border-bottom:1px solid var(--line)"><div style="font-size:25px;font-weight:720">${main}</div><div class="note" style="font-size:18px;margin-top:7px">${sub}</div></div>`
+              ([n, title, desc]) =>
+                `<div style="display:grid;grid-template-columns:42px 82px 1fr;gap:10px;padding:18px 0;border-bottom:1px solid var(--grid);align-items:start"><span style="font-size:14px;color:#888">${n}</span><b style="font-size:20px">${title}</b><span style="font-size:18px;line-height:1.4;color:var(--muted)">${desc}</span></div>`
             )
             .join('')}
+          <div style="margin-top:26px;font-size:23px;line-height:1.45;font-weight:740;color:var(--deep)">Agent 能跑只是执行问题；<br>敢不敢委托，才是工程问题。</div>
         </div>
       </div>
     </section>`,
   },
   {
-    filename: '11-slide-growth.png',
-    html: `<section class="slide pale">
-      <div class="eyebrow">增长计划</div><h2>下一阶段只验证一件事：可重复增长</h2>
-      <p class="sub">先做实体验与数据，再验证个人付费和机构年约</p>
-      <div style="position:absolute;left:90px;right:90px;top:400px">
-        <div style="height:3px;background:linear-gradient(90deg,#b7b8b2 0 25%,#7fa58d 25% 50%,#5dc98f 50% 75%,#173d2a 75% 100%)"></div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:34px;margin-top:28px">
+    filename: '04-slide-delegation-loop.png',
+    html: `<section class="slide stone">${miniBrand()}
+      <div class="eyebrow">解决方案</div><h2>Yoda 把一次 Agent 执行，变成可审查的交付闭环</h2>
+      <p class="sub">停止不等于完成；生成不等于交付</p>
+      <div style="position:absolute;left:100px;right:100px;top:310px">
+        <div style="display:grid;grid-template-columns:150px repeat(4,1fr);align-items:stretch;border-top:1px solid var(--grid)">
+          <div style="padding:28px 18px 0 0;font-size:18px;font-weight:760;color:var(--deep)">HUMAN</div>
+          ${['定义意图', '设置约束', '审查证据', '批准交付'].map((x, i) => `<div style="padding:26px 18px;border-left:1px solid var(--grid);font-size:26px;font-weight:730"><span style="display:block;font-size:14px;color:#858985;margin-bottom:10px">H${i + 1}</span>${x}</div>`).join('')}
+        </div>
+        <div style="display:grid;grid-template-columns:150px repeat(4,1fr);align-items:stretch;background:var(--deep);color:white">
+          <div style="padding:31px 18px 0 0;font-size:18px;font-weight:760;color:#bce5cc;text-align:right;padding-right:24px">AGENT</div>
+          ${['规划', '执行', '测试', '修正'].map((x, i) => `<div style="padding:28px 18px;border-left:1px solid rgba(255,255,255,.2);font-size:27px;font-weight:730"><span style="display:block;font-size:14px;color:#bce5cc;margin-bottom:10px">A${i + 1}</span>${x}</div>`).join('')}
+        </div>
+        <div style="display:grid;grid-template-columns:150px repeat(5,1fr);align-items:center;border-bottom:1px solid var(--grid)">
+          <div style="padding:26px 18px 26px 0;font-size:18px;font-weight:760;color:var(--blue)">EVIDENCE</div>
+          ${['Diff', 'Test', 'Review', 'PR', 'Release'].map((x) => `<div style="padding:25px 12px;border-left:1px solid var(--grid);font-size:22px;font-weight:700;text-align:center">${x}</div>`).join('')}
+        </div>
+        <svg viewBox="0 0 1400 110" style="width:100%;height:110px;margin-top:12px"><defs><marker id="arrow4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#173d2a"/></marker></defs><path d="M1250 18 C1310 18 1310 88 1240 88 L290 88 C220 88 220 36 280 36" fill="none" stroke="#173d2a" stroke-width="3" marker-end="url(#arrow4)"/><text x="650" y="77" class="chart-label">证据不充分 → 返回修正；人工始终保留最终批准权</text></svg>
+      </div>
+    </section>`,
+  },
+  {
+    filename: '05-slide-task-to-feature.png',
+    html: `<section class="slide">${miniBrand()}
+      <div class="eyebrow">产品体验</div><h2 style="font-size:52px">从 Task 到 Feature：<br>管理的不再是聊天，而是完整交付主线</h2>
+      <p class="sub">Task 保证一次执行稳健，Feature 保证一个需求真正完成</p>
+      <div style="position:absolute;left:88px;right:88px;top:290px;bottom:62px;display:grid;grid-template-columns:28% 47% 25%;gap:22px">
+        <div>
+          <div class="shot" style="height:440px"><img src="${taskScreenshot}" style="object-position:center top" alt="Yoda Task"></div>
+          <div class="label" style="margin-top:12px"><b style="color:var(--ink)">Task</b> · 工作目录、分支、会话、状态与 Diff 绑定</div>
+        </div>
+        <div>
+          <div class="shot" style="height:440px"><img src="${featureScreenshot}" style="object-position:center top" alt="Yoda Feature"></div>
+          <div class="label" style="margin-top:12px"><b style="color:var(--ink)">Feature</b> · Issue、Task、交付物与 Release 形成主线</div>
+        </div>
+        <div style="border-top:1px solid var(--grid)">
+          ${['问题定义', '产品方案', '技术实现', '验证证据', '发布交付']
+            .map(
+              (x, i) =>
+                `<div style="display:grid;grid-template-columns:36px 1fr 24px;align-items:center;padding:17px 0;border-bottom:1px solid var(--grid)"><span style="font-size:14px;color:#8a8d89">0${i + 1}</span><b style="font-size:20px">${x}</b><span style="width:14px;height:14px;border:${i < 2 ? '4px solid #5dc98f' : '2px solid #a9aaa5'};border-radius:50%"></span></div>`
+            )
+            .join('')}
+          <div style="margin-top:26px;font-size:20px;line-height:1.5;color:var(--deep);font-weight:700">没有交付物、Review 或测试证据，就不能假装进入下一阶段。</div>
+        </div>
+      </div>
+      <div class="foot">真实 Yoda 产品截图，来源于《Agent 时代，我们需要怎样的 IDE》。</div>
+    </section>`,
+  },
+  {
+    filename: '06-slide-product-architecture.png',
+    html: `<section class="slide stone">${miniBrand()}
+      <div class="eyebrow">产品架构</div><h2>五层产品架构，把开放的 Agent 生态变成可控生产系统</h2>
+      <div style="position:absolute;left:110px;right:110px;top:250px;bottom:66px;display:grid;grid-template-columns:180px 1fr 250px;grid-template-rows:repeat(5,1fr)">
+        ${[
+          ['01', 'Runtime', '31 种 Agent CLI · MaaS · 模型', '选择自由'],
+          ['02', 'Session Control', '会话 · 状态 · 上下文 · 恢复 · 成本', '过程可见'],
+          ['03', 'Harness Assets', 'Skills · Hooks · Memory · Prompts · 原子原则', '经验复用'],
+          ['04', 'Delivery System', 'Task · Feature · Worktree · Diff · Stage Gate', '工程稳健'],
+          ['05', 'Human Control', '桌面 · 移动端 · 浏览器 · 通知 · 最终批准', '责任在人'],
+        ]
+          .map(
+            ([n, title, items, value], index) =>
+              `<div style="grid-column:1;padding:21px 18px 0 0;border-top:1px solid var(--grid);font-size:14px;color:#858985">${n}</div><div style="grid-column:2;padding:17px 28px;border-top:1px solid ${index === 2 ? '#173d2a' : '#d4d5d0'};background:${index === 2 ? '#173d2a' : 'transparent'};color:${index === 2 ? 'white' : '#111'};display:grid;grid-template-columns:220px 1fr;align-items:center"><b style="font-size:24px">${title}</b><span style="font-size:21px;color:${index === 2 ? '#cce7d7' : '#5f655f'}">${items}</span></div><div style="grid-column:3;padding:20px 0 0 30px;border-top:1px solid var(--grid);font-size:20px;font-weight:720;color:${index === 2 ? '#278258' : '#3e443f'}">${value}</div>`
+          )
+          .join('')}
+      </div>
+    </section>`,
+  },
+  {
+    filename: '07-slide-system-moat.png',
+    html: `<section class="slide">${miniBrand()}
+      <div class="eyebrow">系统壁垒</div><h2>Yoda 的壁垒不是一个 Agent，而是一套“自由、稳健、进化”的系统</h2>
+      <div style="position:absolute;left:88px;right:88px;top:265px">
+        <div style="display:grid;grid-template-columns:190px repeat(3,1fr);border-top:1px solid var(--grid);border-left:1px solid var(--grid)">
+          <div style="padding:22px;border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);font-size:17px;color:#777">能力维度</div>
+          ${[
+            ['自由', '不被单一生态锁定'],
+            ['稳健', '可见、可查、可回退'],
+            ['进化', '经验持续沉淀'],
+          ]
+            .map(
+              ([a, b], i) =>
+                `<div style="padding:18px 24px;border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);background:${i === 1 ? '#173d2a' : 'transparent'};color:${i === 1 ? 'white' : '#111'}"><div style="font-size:29px;font-weight:780">${a}</div><div style="font-size:17px;margin-top:6px;color:${i === 1 ? '#cce7d7' : '#6b706c'}">${b}</div></div>`
+            )
+            .join('')}
+          ${[
+            ['选择', 'Agent / 模型 / 渠道', '隔离强度按风险选择', '原子原则按需开关'],
+            ['过程', '多种范式与交互入口', '状态 / Context / 成本透明', '动态 Harness'],
+            [
+              '验证',
+              '单 Agent 与多 Agent 均可',
+              '交叉 Review / Stage Gate',
+              'Skill / Gene 执行反馈',
+            ],
+            ['资产', '代码与数据归用户', 'Diff / Test / PR 可追溯', 'Library 复用与比较'],
+          ]
+            .map(
+              ([row, a, b, c]) =>
+                `<div style="padding:19px 22px;border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);font-size:17px;color:#747874">${row}</div><div style="padding:19px 22px;border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);font-size:20px;font-weight:650">${a}</div><div style="padding:19px 22px;border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);font-size:20px;font-weight:650">${b}</div><div style="padding:19px 22px;border-right:1px solid var(--grid);border-bottom:1px solid var(--grid);font-size:20px;font-weight:650">${c}</div>`
+            )
+            .join('')}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:32px">
+          <div style="font-size:23px;font-weight:720;color:var(--deep)">换模型，不丢自己的工作方式。</div>
+          <div style="font-size:23px;font-weight:720;color:var(--deep)">Agent 出错，能看见、定位、回退，也能换人。</div>
+        </div>
+      </div>
+    </section>`,
+  },
+  {
+    filename: '08-slide-why-now.png',
+    html: `<section class="slide stone">${miniBrand()}
+      <div class="eyebrow">Why Now</div><h2>模型竞争正在下沉为基础能力，Harness 成为新的价值层</h2>
+      <div style="position:absolute;left:88px;right:88px;top:275px;bottom:70px;display:grid;grid-template-columns:68% 32%;gap:45px">
+        <div class="panel" style="padding:22px 28px 18px;position:relative">
+          <div style="position:absolute;right:22px;top:15px;font-size:14px;color:#888">趋势示意 · 非统计预测</div>
+          <svg viewBox="0 0 930 470" style="width:100%;height:100%">
+            ${[80, 170, 260, 350].map((y) => `<line x1="80" y1="${y}" x2="880" y2="${y}" stroke="#d4d5d0"/>`).join('')}
+            <line x1="80" y1="400" x2="890" y2="400" stroke="#858985" stroke-width="2"/><line x1="80" y1="400" x2="80" y2="42" stroke="#858985" stroke-width="2"/>
+            <text x="720" y="444" class="chart-label">时间 / 普及程度 →</text>
+            <path d="M100 340 C260 305 480 175 855 70" fill="none" stroke="#526a7a" stroke-width="7"/><path d="M100 365 C300 340 530 245 855 115" fill="none" stroke="#173d2a" stroke-width="7"/><path d="M100 255 C360 250 610 250 855 246" fill="none" stroke="#a9aaa5" stroke-width="5" stroke-dasharray="12 10"/>
+            <circle cx="855" cy="70" r="7" fill="#526a7a"/><circle cx="855" cy="115" r="7" fill="#173d2a"/><circle cx="855" cy="246" r="7" fill="#a9aaa5"/>
+            <text x="600" y="68" class="chart-strong">模型能力与可得性 ↑</text><text x="604" y="134" class="chart-strong">Agent 独立执行时长 ↑</text><text x="604" y="235" class="chart-strong">人类注意力 ≈ 不变</text>
+          </svg>
+        </div>
+        <div style="display:grid;grid-template-rows:1fr 1fr;gap:22px">
+          <div style="border-top:4px solid var(--blue);padding-top:25px"><div class="metric">75<span style="font-size:42px">%</span></div><div style="font-size:22px;line-height:1.42;margin-top:15px">创意 AI 已融入或成为工作流必要部分</div></div>
+          <div style="border-top:4px solid var(--green);padding-top:25px"><div class="metric green">85<span style="font-size:42px">%</span></div><div style="font-size:22px;line-height:1.42;margin-top:15px">最终创意决策仍应由人完成</div></div>
+        </div>
+      </div>
+      <div class="foot">数据来源：Adobe 2026 Creators’ Toolkit Report。趋势线为概念示意。</div>
+    </section>`,
+  },
+  {
+    filename: '09-slide-traction.png',
+    html: `<section class="slide">${miniBrand()}
+      <div class="eyebrow">Traction</div><h2>两个月完成产品闭环，已有使用信号，商业验证尚未开始</h2>
+      <div style="position:absolute;left:90px;right:90px;top:280px">
+        <div style="display:grid;grid-template-columns:180px 1fr;align-items:stretch;margin-bottom:18px"><div style="font-size:21px;font-weight:760;padding-top:22px">BUILD</div><div style="height:126px;background:var(--deep);color:white;padding:22px 30px;display:grid;grid-template-columns:repeat(3,1fr)"><div><div class="metric-sm">1,645</div><div style="font-size:17px;color:#cce7d7;margin-top:8px">main 提交</div></div><div><div class="metric-sm">73</div><div style="font-size:17px;color:#cce7d7;margin-top:8px">公开 Release</div></div><div><div class="metric-sm">31</div><div style="font-size:17px;color:#cce7d7;margin-top:8px">Agent Client</div></div></div></div>
+        <div style="display:grid;grid-template-columns:180px 75% 1fr;align-items:stretch;margin-bottom:18px"><div style="font-size:21px;font-weight:760;padding-top:22px">USE</div><div style="height:116px;background:#dce8e0;padding:21px 30px;display:grid;grid-template-columns:1fr 1fr"><div><div class="metric-sm">126</div><div class="label" style="margin-top:7px">14 天独立 Cloner</div></div><div><div class="metric-sm">73</div><div class="label" style="margin-top:7px">独立授权用户</div></div></div><div></div></div>
+        <div style="display:grid;grid-template-columns:180px 42% 1fr;align-items:stretch"><div style="font-size:21px;font-weight:760;padding-top:22px">PAY</div><div style="height:110px;background:#1b1c1b;color:white;padding:20px 30px;display:grid;grid-template-columns:1fr 1fr"><div><div class="metric-sm">3</div><div style="font-size:17px;color:#bbb;margin-top:7px">Relay 试用</div></div><div><div class="metric-sm">0</div><div style="font-size:17px;color:#bbb;margin-top:7px">付费</div></div></div><div style="padding:24px 0 0 28px;font-size:19px;line-height:1.45;color:var(--muted)">留存、个人付费和机构年约<br>是本轮融资后的核心验证</div></div>
+      </div>
+      <div class="foot">GitHub 数据截至 2026-07-22；账号与 Relay 数据截至 2026-07-21。不同指标口径不同，不构成转化漏斗。提交数包含合并与协作者贡献。</div>
+    </section>`,
+  },
+  {
+    filename: '10-slide-market.png',
+    html: `<section class="slide stone">${miniBrand()}
+      <div class="eyebrow">市场机会</div><h2>超级开发者是楔子，集成委托环境是更大的市场</h2>
+      <p class="sub">从高频 Coding 创作者扩展到 AI 原生个人与小型团队</p>
+      <div style="position:absolute;left:88px;right:88px;top:300px;bottom:72px;display:grid;grid-template-columns:48% 52%;align-items:center">
+        <div style="position:relative;height:490px">
+          <div style="position:absolute;left:40px;top:18px;width:440px;height:440px;border:1px solid #b8bbb6;border-radius:50%"></div>
+          <div style="position:absolute;left:104px;top:82px;width:312px;height:312px;border:2px solid #82a991;border-radius:50%"></div>
+          <div style="position:absolute;left:174px;top:152px;width:172px;height:172px;background:var(--deep);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:24px;font-weight:760">超级<br>开发者</div>
+          <div style="position:absolute;left:360px;top:94px;color:#477158;font-size:20px">Coding 创作者</div><div style="position:absolute;left:425px;top:25px;color:#6c716d;font-size:20px">AI 原生个人与团队</div>
+          <div style="position:absolute;left:67px;bottom:0;font-size:17px;color:#777">切入顺序：高频、高痛点、高传播势能 → 更广泛的创造者</div>
+        </div>
+        <div style="border-left:1px solid var(--grid);padding-left:64px">
+          ${[
+            ['TAM', '248 亿美元', '2.07 亿创作者 × 120 美元年费'],
+            ['SAM', '24.8 亿美元', '假设 10% 适配率'],
+            ['3Y SOM', '240 万美元 ARR', '2 万账户 × 120 美元'],
+          ]
+            .map(
+              ([tag, value, note], i) =>
+                `<div style="display:grid;grid-template-columns:90px 1fr;gap:22px;padding:${i === 0 ? '0 0 27px' : '27px 0'};border-bottom:${i === 2 ? '0' : '1px solid var(--grid)'}"><div style="font-size:16px;color:#7a7e7a;padding-top:10px">${tag}</div><div><div style="font-size:48px;font-weight:800;color:${i === 2 ? '#278258' : '#111'}">${value}</div><div class="label" style="margin-top:8px">${note}</div></div></div>`
+            )
+            .join('')}
+        </div>
+      </div>
+      <div class="foot">来源：Visa 2025 Creator Report。SAM、年费与三年 SOM 为假设或经营目标，不代表当前收入。</div>
+    </section>`,
+  },
+  {
+    filename: '11-slide-competition.png',
+    html: `<section class="slide">${miniBrand()}
+      <div class="eyebrow">竞争定位</div><h2>市场上多数产品优化“执行”，Yoda 优化“可靠委托”</h2>
+      <div style="position:absolute;left:90px;right:90px;top:260px;bottom:66px;display:grid;grid-template-columns:76% 24%;gap:34px">
+        <div class="panel" style="padding:18px 24px 20px">
+          <svg viewBox="0 0 1030 500" style="width:100%;height:100%">
+            <defs><marker id="axisArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#777"/></marker></defs>
+            <line x1="90" y1="430" x2="980" y2="430" stroke="#878b87" stroke-width="2" marker-end="url(#axisArrow)"/><line x1="90" y1="430" x2="90" y2="40" stroke="#878b87" stroke-width="2" marker-end="url(#axisArrow)"/>
+            <line x1="535" y1="55" x2="535" y2="430" stroke="#d4d5d0" stroke-dasharray="9 8"/><line x1="90" y1="235" x2="970" y2="235" stroke="#d4d5d0" stroke-dasharray="9 8"/>
+            <text x="92" y="475" class="chart-label">单一生态绑定</text><text x="830" y="475" class="chart-label">供应商中立 →</text><text x="12" y="427" class="chart-label" transform="rotate(-90 12 427)">代码执行工具</text><text x="24" y="170" class="chart-label" transform="rotate(-90 24 170)">委托治理系统 →</text>
+            <circle cx="310" cy="350" r="18" fill="#a9aaa5"/><text x="337" y="357" class="chart-strong">VS Code / Cursor</text>
+            <circle cx="330" cy="270" r="18" fill="#526a7a"/><text x="357" y="277" class="chart-strong">Codex App</text>
+            <circle cx="575" cy="292" r="18" fill="#7c8e82"/><text x="602" y="299" class="chart-strong">Conductor</text>
+            <circle cx="690" cy="178" r="18" fill="#6f8a7b"/><text x="717" y="185" class="chart-strong">Agent Team Tools</text>
+            <circle cx="855" cy="92" r="31" fill="#173d2a"/><circle cx="855" cy="92" r="8" fill="#5dc98f"/><text x="895" y="100" style="font-size:24px;font-weight:800;fill:#173d2a">Yoda</text>
+            <text x="625" y="71" class="chart-label">Harness / 证据 / 治理 / 资产沉淀</text>
+          </svg>
+        </div>
+        <div style="border-top:1px solid var(--grid)">
+          ${[
+            ['供应商中立', '31 种 Agent Client'],
+            ['委托透明', 'Context / Harness / 成本'],
+            ['工程证据', 'Task / Feature / Stage Gate'],
+            ['资产复用', 'Skills / Memory / Library'],
+          ]
+            .map(
+              ([a, b]) =>
+                `<div style="padding:18px 0;border-bottom:1px solid var(--grid)"><div style="font-size:20px;font-weight:740">${a}</div><div class="label" style="margin-top:7px">${b}</div></div>`
+            )
+            .join('')}
+        </div>
+      </div>
+      <div class="foot">基于公开产品定位与当前功能的定性判断，不代表第三方厂商自我定义；位置随产品迭代可能变化。</div>
+    </section>`,
+  },
+  {
+    filename: '12-slide-business-model.png',
+    html: `<section class="slide stone">${miniBrand()}
+      <div class="eyebrow">商业模式</div><h2>本地核心开源，连续性与协作秩序收费</h2>
+      <p class="sub">个人为“离开电脑仍能继续”付费，团队为治理、证据和可追责协作付费</p>
+      <div style="position:absolute;left:90px;right:90px;top:315px;height:420px;border-bottom:2px solid #9b9e99">
+        ${[
+          ['OPEN SOURCE', '本地核心', '工作区 · 数据 · 选择权', '0', 0, 220, '#cfd1cc'],
+          ['RELAY', '连接连续性', '跨网络 · 设备状态', '个人', 220, 250, '#b4cbbd'],
+          ['CREATOR PRO', '个人效率', '同步 · 自动化 · 备份', '个人', 470, 270, '#83b695'],
+          ['EDUCATION / TEAM', '协作秩序', '共享资产 · 权限 · 审计', '机构', 740, 300, '#4f8767'],
+          ['ENTERPRISE', '组织治理', '私有化 · SSO · 合规 · SLA', '企业', 1040, 370, '#173d2a'],
+        ]
+          .map(
+            ([tag, title, desc, buyer, left, width, color], i) =>
+              `<div style="position:absolute;left:${left}px;bottom:0;width:${width}px;height:${110 + i * 52}px;background:${color};color:${i >= 3 ? 'white' : '#111'};padding:20px 22px;border-right:1px solid rgba(255,255,255,.45)"><div style="font-size:13px;letter-spacing:.1em;color:${i >= 3 ? '#d2e7da' : '#59605b'}">${tag}</div><div style="font-size:24px;font-weight:780;margin-top:12px">${title}</div><div style="font-size:17px;line-height:1.4;margin-top:10px;color:${i >= 3 ? '#e2eee6' : '#4f5551'}">${desc}</div><div style="position:absolute;bottom:18px;left:22px;font-size:16px;font-weight:720">付费者：${buyer}</div></div>`
+          )
+          .join('')}
+      </div>
+      <div class="foot">商业化边界：本地能力归用户，联网服务按需付费；个人为连续性付费，团队为协作秩序付费。</div>
+    </section>`,
+  },
+  {
+    filename: '13-slide-gtm.png',
+    html: `<section class="slide">${miniBrand()}
+      <div class="eyebrow">GTM 与里程碑</div><h2>用两个高信号入口，验证 C 端口碑与 B 端年约</h2>
+      <div style="position:absolute;left:90px;right:90px;top:260px">
+        <div style="display:grid;grid-template-columns:120px repeat(4,1fr);align-items:center;border-top:1px solid var(--grid)">
+          <div style="padding:24px 0;font-size:20px;font-weight:760;color:var(--deep)">C 端</div>${['开源社区', '超级开发者', 'Relay / Pro', 'Studio / 生态'].map((x, i) => `<div style="padding:24px 20px;border-left:1px solid var(--grid);font-size:22px;font-weight:700;background:${i === 1 ? '#e3eee7' : 'transparent'}">${x}<span style="float:right;color:#7b817c">${i < 3 ? '→' : ''}</span></div>`).join('')}
+        </div>
+        <div style="display:grid;grid-template-columns:120px repeat(4,1fr);align-items:center;border-top:1px solid var(--grid);border-bottom:1px solid var(--grid)">
+          <div style="padding:24px 0;font-size:20px;font-weight:760;color:var(--blue)">B 端</div>${['创造营 / 高校', '设计伙伴', '标准产品包', '机构年约'].map((x, i) => `<div style="padding:24px 20px;border-left:1px solid var(--grid);font-size:22px;font-weight:700;background:${i === 1 ? '#e5eaed' : 'transparent'}">${x}<span style="float:right;color:#7b817c">${i < 3 ? '→' : ''}</span></div>`).join('')}
+        </div>
+        <div style="margin-top:76px;height:3px;background:linear-gradient(90deg,#b4b7b2 0 25%,#86aa94 25% 50%,#5dc98f 50% 75%,#173d2a 75% 100%)"></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:34px;margin-top:24px">
           ${[
             ['0–3 月', '体验与数据', '埋点 + 20 位深访'],
             ['4–6 月', '自然增长', '2–3 家设计伙伴'],
@@ -285,66 +403,71 @@ const slides = [
             ['13–24 月', '可重复增长', '机构年约 + 渠道 + 英文市场'],
           ]
             .map(
-              ([time, title, proof]) =>
-                `<div><div class="note" style="font-size:18px">${time}</div><div style="font-size:29px;font-weight:760;margin-top:14px">${title}</div><div style="font-size:21px;line-height:1.45;color:var(--muted);margin-top:14px">${proof}</div></div>`
+              ([t, a, b]) =>
+                `<div><div style="font-size:15px;color:#7d817d">${t}</div><div style="font-size:25px;font-weight:760;margin-top:11px">${a}</div><div class="label" style="margin-top:10px">${b}</div></div>`
             )
             .join('')}
         </div>
       </div>
-      <div style="position:absolute;left:90px;bottom:62px;font-size:25px;font-weight:720;color:var(--deep)">产品成立 → 商业成立 → 规模成立</div>
     </section>`,
   },
   {
-    filename: '12-slide-team.png',
-    html: `<section class="slide">
-      <div style="display:grid;grid-template-columns:47% 53%;gap:66px;height:100%;align-items:center">
-        <div class="photo" style="height:680px"><img src="${founderPhoto}" alt="手工川 AI 分享现场"></div>
+    filename: '14-slide-founder.png',
+    html: `<section class="slide stone">${miniBrand()}
+      <div style="display:grid;grid-template-columns:46% 54%;gap:65px;height:100%;align-items:center">
+        <div class="photo" style="height:690px"><img src="${founderPhoto}" style="object-position:center" alt="手工川 AI 分享现场"></div>
         <div>
-          <div class="eyebrow">Founder–Product Fit</div><h2 style="font-size:52px">Yoda 用 Yoda 开发自己，迭代速度就是第一份背书</h2>
-          <p class="sub" style="font-size:25px">创始人长期横跨开发工具、内容创作与 AI 产品化</p>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:52px;border-top:1px solid var(--line);padding-top:32px">
-            <div><div class="metric" style="font-size:55px">1,645</div><div class="metric-label" style="font-size:18px">main 提交</div></div>
-            <div><div class="metric" style="font-size:55px">73</div><div class="metric-label" style="font-size:18px">公开 Release</div></div>
-            <div><div class="metric" style="font-size:55px">31</div><div class="metric-label" style="font-size:18px">Agent Client</div></div>
+          <div class="eyebrow">Founder–Product Fit</div><h2 style="font-size:50px">Yoda 是被真实工作流“撞”出来的</h2>
+          <p class="sub" style="font-size:24px">创始人同时是第一重度用户、产品经理、开发者与首批渠道</p>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:44px;border-top:1px solid var(--grid);padding-top:28px">
+            <div><div class="metric-sm">1,645</div><div class="label" style="margin-top:8px">main 提交</div></div><div><div class="metric-sm">73</div><div class="label" style="margin-top:8px">公开 Release</div></div><div><div class="metric-sm">31</div><div class="label" style="margin-top:8px">Agent Client</div></div>
           </div>
+          <div style="margin-top:38px;border-top:1px solid var(--grid)">${['开发工具 × 内容创作 × AI 产品化', '用 Yoda 开发 Yoda，形成高频反馈闭环', '高校、商学院、开发者社区与训练营触点'].map((x) => `<div style="padding:15px 0;border-bottom:1px solid var(--grid);font-size:20px;font-weight:650">${x}</div>`).join('')}</div>
         </div>
       </div>
-      <div class="foot" style="left:850px">提交数包含合并与协作者贡献，不等同于个人代码量或产品质量。照片：手工川 AI 分享现场。</div>
+      <div class="foot" style="left:820px">提交数包含合并与协作者贡献，不等同于个人代码量或产品质量。照片：手工川 AI 分享现场。</div>
     </section>`,
   },
   {
-    filename: '13-slide-fundraise.png',
-    html: `<section class="slide">
-      <div class="brand">${mark(30)} YODA · FINANCING</div>
-      <div style="position:absolute;left:90px;right:90px;top:210px;display:grid;grid-template-columns:48% 52%;gap:80px">
-        <div>
-          <div class="note" style="font-size:21px">本轮融资</div>
-          <div class="metric" style="font-size:152px;margin-top:25px">200<span style="font-size:52px"> 万元</span></div>
-          <div style="font-size:28px;font-weight:700;margin-top:28px">或 30 万美元 · 出让 10% 股权</div>
+    filename: '15-slide-fundraise.png',
+    html: `<section class="slide">${miniBrand()}
+      <div class="eyebrow">Financing</div><h2 style="font-size:52px">融资 200 万元，<br>验证“集成委托环境”能否形成可重复增长</h2>
+      <p class="sub">或 30 万美元，出让 10% 股权；购买 18–24 个月验证窗口</p>
+      <div style="position:absolute;left:90px;right:90px;top:315px;bottom:70px;display:grid;grid-template-columns:43% 57%;gap:75px">
+        <div style="display:grid;grid-template-columns:260px 1fr;align-items:center">
+          <div style="width:250px;height:250px;border-radius:50%;background:conic-gradient(var(--deep) 0 60%,var(--green) 60% 90%,#b6b7b2 90% 100%);position:relative"><div style="position:absolute;inset:48px;border-radius:50%;background:var(--paper);display:flex;flex-direction:column;align-items:center;justify-content:center"><div class="metric-sm" style="font-size:65px">200</div><div style="font-size:20px;font-weight:700">万元</div></div></div>
+          <div style="padding-left:28px">${[
+            ['60%', '#173d2a', '技术研发与产品体验'],
+            ['30%', '#5dc98f', '市场推广'],
+            ['10%', '#b6b7b2', '基础设施与运营'],
+          ]
+            .map(
+              ([v, c, l]) =>
+                `<div style="display:grid;grid-template-columns:28px 58px 1fr;gap:10px;align-items:center;margin:22px 0"><span style="width:16px;height:16px;background:${c}"></span><b style="font-size:19px">${v}</b><span style="font-size:18px;color:var(--muted)">${l}</span></div>`
+            )
+            .join('')}</div>
         </div>
-        <div>
-          <h2 style="font-size:48px">购买 18–24 个月的验证窗口</h2>
-          <p class="sub" style="font-size:24px">验证留存、个人付费与机构年约能否形成可重复增长</p>
-          <div style="margin-top:46px;border-top:1px solid var(--line)">
-            ${[
-              ['60%', '技术研发与产品体验', '100%'],
-              ['30%', '市场推广', '50%'],
-              ['10%', '基础设施与运营', '17%'],
-            ]
-              .map(
-                ([value, label, width]) =>
-                  `<div style="display:grid;grid-template-columns:75px 210px 1fr;gap:18px;align-items:center;padding:16px 0"><b style="font-size:23px">${value}</b><span style="font-size:20px;color:var(--muted)">${label}</span><div style="height:10px;background:#e2e1dc"><div style="height:10px;width:${width};background:${value === '60%' ? '#173d2a' : value === '30%' ? '#5dc98f' : '#aaa9a3'}"></div></div></div>`
-              )
-              .join('')}
-          </div>
+        <div style="border-top:1px solid var(--grid)">
+          <div style="font-size:18px;color:#777;margin:22px 0 12px">本轮资金要回答四个问题</div>
+          ${[
+            ['01', '留存成立', '用户是否持续把真实任务交给 Yoda'],
+            ['02', '个人付费成立', 'Relay / Pro 是否形成经常性收入'],
+            ['03', '机构年约成立', '教育与团队产品能否标准化交付'],
+            ['04', '增长效率可测量', '渠道、CAC、转化与毛利是否可复现'],
+          ]
+            .map(
+              ([n, t, d], i) =>
+                `<div style="display:grid;grid-template-columns:44px 170px 1fr 24px;gap:12px;align-items:center;padding:16px 0;border-bottom:1px solid var(--grid)"><span style="font-size:14px;color:#888">${n}</span><b style="font-size:21px">${t}</b><span style="font-size:18px;color:var(--muted)">${d}</span><span style="width:14px;height:14px;border-radius:50%;border:2px solid ${i === 0 ? '#173d2a' : '#a9aaa5'}"></span></div>`
+            )
+            .join('')}
         </div>
       </div>
-      <div style="position:absolute;left:90px;bottom:62px;font-size:18px;font-weight:750;letter-spacing:.1em">YODA.LOVSTUDIO.AI</div>
+      <div style="position:absolute;left:90px;bottom:28px;font-size:16px;font-weight:760;letter-spacing:.08em">YODA.LOVSTUDIO.AI</div>
     </section>`,
   },
 ];
 
-if (slides.length !== 13) throw new Error(`Expected 13 slides, got ${slides.length}`);
+if (slides.length !== 15) throw new Error(`Expected 15 slides, got ${slides.length}`);
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({
@@ -355,7 +478,7 @@ const page = await browser.newPage({
 for (const [index, slide] of slides.entries()) {
   await page.setContent(doc(slide.html), { waitUntil: 'load' });
   await page.screenshot({ path: path.join(deckDir, slide.filename), type: 'png' });
-  stdout.write(`Rendered ${index + 1}/13 ${slide.filename}\n`);
+  stdout.write(`Rendered ${index + 1}/15 ${slide.filename}\n`);
 }
 
 await browser.close();

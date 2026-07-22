@@ -57,16 +57,20 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 2 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 02-slide-ide-shift.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: IDE 的中心，正从“代码”迁移到“委托”
+Sub-headline: 每一代 IDE 都围绕当时最稀缺的生产要素重构
+Chart: 四阶段演进时间轴
+- 语言中心：Dev-C++ / Visual Studio，解决编译与运行
+- 工程中心：JetBrains，解决理解与维护
+- 代码工作台：VS Code / Cursor，解决扩展与生成
+- 委托环境：Yoda，解决意图、并行、证据与责任
+Conclusion: 下一代 IDE 不是编辑器旁边多一个聊天框，而是 Integrated Delegation Environment。
+Layout: timeline-horizontal
 
 ## Production Note
 

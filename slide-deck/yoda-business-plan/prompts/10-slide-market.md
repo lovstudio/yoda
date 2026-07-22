@@ -57,16 +57,18 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 10 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 10-slide-market.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: 超级开发者是楔子，集成委托环境是更大的市场
+Sub-headline: 从高频 Coding 创作者扩展到 AI 原生个人与小型团队
+Chart: 同心市场 + TAM/SAM/SOM
+- TAM：248 亿美元创作者工具市场
+- SAM：24.8 亿美元，假设 10% 适配率
+- 三年 SOM：240 万美元 ARR，2 万账户 × 120 美元
+Layout: market-rings
 
 ## Production Note
 

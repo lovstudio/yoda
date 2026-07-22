@@ -57,16 +57,18 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 7 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 07-slide-system-moat.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: Yoda 的壁垒不是一个 Agent，而是一套“自由、稳健、进化”的系统
+Chart: 三列能力矩阵
+- 自由：Agent、渠道、范式、交互、创作对象
+- 稳健：隔离、透明、成本归属、交叉审查、证据门
+- 进化：Skill、Gene、原子原则、动态 Harness、Library
+Conclusion: 换模型不丢工作方式，Agent 出错能看见、定位、回退和换人。
+Layout: capability-matrix
 
 ## Production Note
 

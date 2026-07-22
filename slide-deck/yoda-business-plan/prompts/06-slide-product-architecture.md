@@ -57,16 +57,19 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 6 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 06-slide-product-architecture.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: 五层产品架构，把开放的 Agent 生态变成可控生产系统
+Chart: 五层架构
+1. Runtime：31 种 Agent CLI / MaaS / 模型
+2. Session Control：会话、状态、上下文、恢复、成本
+3. Harness Assets：Skills、Hooks、Memory、Prompts、原子原则
+4. Delivery System：Task、Feature、Worktree、Diff、Stage Gate
+5. Human Control：桌面、移动端、浏览器、通知、最终批准
+Layout: architecture-stack
 
 ## Production Note
 

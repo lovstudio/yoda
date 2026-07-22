@@ -57,16 +57,20 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 12 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 12-slide-business-model.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: 本地核心开源，连续性与协作秩序收费
+Sub-headline: 个人为“离开电脑仍能继续”付费，团队为治理、证据和可追责协作付费
+Chart: 五级价值阶梯
+- Open Source Core：本地工作区、数据与选择权
+- Relay：跨网络连接与设备连续性
+- Creator Pro：同步、自动化、备份、长期任务
+- Education / Team：课程包、共享资产、权限、审计、预算
+- Enterprise：私有化、统一身份、内部模型、合规与 SLA
+Layout: revenue-staircase
 
 ## Production Note
 

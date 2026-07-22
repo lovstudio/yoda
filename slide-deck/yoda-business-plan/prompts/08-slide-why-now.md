@@ -57,16 +57,20 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 8 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 08-slide-why-now.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: 模型竞争正在下沉为基础能力，Harness 成为新的价值层
+Chart: 三条趋势线（概念趋势）
+- 模型能力与可得性上升
+- Agent 可独立执行时长上升
+- 人类可投入注意力基本不变
+Data callouts:
+- 75% 创意 AI 已融入或成为工作流必要部分
+- 85% 最终创意决策仍应由人完成
+Layout: multi-line-chart
 
 ## Production Note
 

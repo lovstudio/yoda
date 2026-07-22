@@ -57,16 +57,16 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 5 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 05-slide-task-to-feature.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: 从 Task 到 Feature：管理的不再是聊天，而是完整交付主线
+Sub-headline: Task 保证一次执行稳健，Feature 保证一个需求真正完成
+Visual: 真实 Yoda Task 与 Feature 工作台截图；右侧绘制阶段门：问题定义 → 产品方案 → 实现 → 验证 → 发布。
+Evidence: 没有交付物、Review 或测试证据，就不能假装进入下一阶段。
+Layout: product-evidence
 
 ## Production Note
 

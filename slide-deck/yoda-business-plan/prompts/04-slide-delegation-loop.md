@@ -57,16 +57,18 @@ Layout Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 15
+## Slide 4 of 15
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 04-slide-delegation-loop.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: Yoda 把一次 Agent 执行，变成可审查的交付闭环
+Sub-headline: 停止不等于完成；生成不等于交付
+Chart: 委托闭环
+Human: 定义意图 → 设置约束 → 审查证据 → 批准交付
+Agent: 规划 → 执行 → 测试 → 修正
+Evidence rail: Diff / Test / Review / PR / Release
+Layout: circular-process
 
 ## Production Note
 
