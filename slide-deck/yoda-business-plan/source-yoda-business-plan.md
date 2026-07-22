@@ -19,5 +19,5 @@
 
 - `src/assets/images/yoda/yoda_logo.svg`
 - `/Users/mark/lovstudio/branding/手工川 - 横向/手工川-logo-orange.svg`
-- `/Users/mark/lovstudio/branding/手工川 - 二维码/qrcode_for_gh_e3ebf1f03e05_1280.jpg`
+- `/Users/mark/lovstudio/branding/南川 - 微信 - 二维码/南川-微信-square.png`
 - `https://yoda.lovstudio.ai`（Yoda 官网二维码）

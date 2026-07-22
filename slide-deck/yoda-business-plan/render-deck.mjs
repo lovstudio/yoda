@@ -16,10 +16,7 @@ const shougongchuanLogo = dataUri(
   'image/svg+xml'
 );
 const yodaWebsiteQr = dataUri(path.join(deckDir, 'assets/yoda-website-qr.png'), 'image/png');
-const shougongchuanOfficialAccountQr = dataUri(
-  path.join(deckDir, 'assets/shougongchuan-official-account-qr.jpg'),
-  'image/jpeg'
-);
+const personalWechatQr = dataUri(path.join(deckDir, 'assets/personal-wechat-qr.png'), 'image/png');
 const taskScreenshot = dataUri(path.join(deckDir, 'assets/yoda-tasks.jpg'), 'image/jpeg');
 const featureScreenshot = dataUri(path.join(deckDir, 'assets/yoda-feature.jpg'), 'image/jpeg');
 const founderPhoto = dataUri(
@@ -469,8 +466,8 @@ const slides = [
               <div><div style="font-size:21px;font-weight:750">Yoda 官网</div><div style="margin-top:8px;font-size:16px;line-height:1.45;color:var(--muted)">产品、文档与下载<br>yoda.lovstudio.ai</div></div>
             </div>
             <div style="display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:center">
-              <img src="${shougongchuanOfficialAccountQr}" alt="手工川公众号二维码" style="display:block;width:150px;height:150px;object-fit:cover;background:white;border:1px solid var(--grid);padding:6px">
-              <div><div style="font-size:21px;font-weight:750">手工川公众号</div><div style="margin-top:8px;font-size:16px;line-height:1.45;color:var(--muted)">项目动态、文章<br>与持续联系</div></div>
+              <img src="${personalWechatQr}" alt="个人微信二维码" style="display:block;width:150px;height:150px;object-fit:cover;background:white;border:1px solid var(--grid);padding:6px">
+              <div><div style="font-size:21px;font-weight:750">个人微信</div><div style="margin-top:8px;font-size:16px;line-height:1.45;color:var(--muted)">项目交流<br>与合作联系</div></div>
             </div>
           </div>
         </div>
