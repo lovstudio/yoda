@@ -43,10 +43,6 @@ const css = `
   .brand-lockup .brand-divider { width:1px; height:22px; background:#c6c8c3; }
   .brand-lockup .yoda-logo { display:block; width:98px; height:auto; }
   .brand-lockup .shougongchuan-logo { display:block; width:100px; height:auto; }
-  .brand-lockup.cover { gap:18px; }
-  .brand-lockup.cover .brand-divider { height:32px; }
-  .brand-lockup.cover .yoda-logo { width:142px; }
-  .brand-lockup.cover .shougongchuan-logo { width:144px; }
   .mini-brand { position:absolute; right:88px; top:62px; }
   .muted { color:var(--muted); }
   .deep { color:var(--deep); }
@@ -82,16 +78,13 @@ const slides = [
   {
     filename: '01-slide-cover.png',
     html: `<section class="slide">
-      ${brandLockup('cover')}
-      <div style="position:absolute;left:88px;top:248px;width:1280px">
-        <div style="font-size:18px;color:var(--deep);font-weight:780;letter-spacing:.14em;margin-bottom:24px">INTEGRATED DELEGATION ENVIRONMENT</div>
-        <h1 style="font-size:88px;line-height:1.02;letter-spacing:-.052em">Agent 时代的<br><span class="deep">集成委托环境</span></h1>
-        <p class="sub" style="margin-top:32px;font-size:29px">面向超级开发者与 AI 原生团队的开源桌面工作区</p>
+      <img src="${yodaLogo}" alt="Yoda" style="position:absolute;left:88px;top:72px;width:174px;height:auto">
+      <div style="position:absolute;left:88px;top:315px;width:1400px">
+        <h1 style="font-size:80px;line-height:1.04;letter-spacing:-.052em;white-space:nowrap">Agent 时代的<span class="deep">集成委托环境</span></h1>
+        <p class="sub" style="margin-top:30px;font-size:28px">面向超级开发者与 AI 原生团队的开源桌面工作区</p>
       </div>
-      <div style="position:absolute;left:88px;right:88px;bottom:58px;border-top:1px solid var(--grid);padding-top:22px;display:flex;align-items:center;justify-content:space-between">
-        <div style="font-size:15px;font-weight:760;letter-spacing:.14em;color:#535953">YODA BUSINESS PLAN</div>
-        <div style="font-size:16px;color:#737873">SEED ROUND · 2026.07</div>
-      </div>
+      <div style="position:absolute;left:88px;bottom:62px;font-size:17px;font-weight:680;color:#5d625e">融资商业计划书 · 2026.07</div>
+      <img src="${shougongchuanLogo}" alt="手工川" style="position:absolute;right:88px;bottom:58px;width:112px;height:auto">
     </section>`,
   },
   {

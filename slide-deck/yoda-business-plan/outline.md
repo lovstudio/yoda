@@ -54,8 +54,8 @@ Layout Rules:
 
 Headline: Yoda｜Agent 时代的集成委托环境
 Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Visual: Yoda × 手工川双品牌、核心定位与种子轮版本信息；用大面积留白建立专业感。
-Layout: minimal-title-cover
+Visual: Yoda 主品牌、单行核心定位与融资日期；手工川作为出品方置于右下角。
+Layout: ultra-minimal-title-cover
 
 ---
 
