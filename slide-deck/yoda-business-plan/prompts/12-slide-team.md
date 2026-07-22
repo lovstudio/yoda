@@ -57,24 +57,27 @@ Style Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 13
+## Slide 12 of 13
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 12-slide-team.png
 
 // NARRATIVE GOAL
-一句话说明产品是谁、服务谁、创造什么价值。
+用真实执行数据证明 Founder–Product Fit。
 
 // KEY CONTENT
-Headline: Yoda：超级开发者的 AI Harness 工作台
-Sub-headline: 统一 Agent、上下文与交付，让 AI 真正进入持续创造
-Body: 融资版 BP · 2026.07
+Headline: Yoda 用 Yoda 开发自己，迭代速度就是第一份背书
+Sub-headline: 创始人长期横跨开发工具、内容创作与 AI 产品化
+Body:
+- 1,645 次 main 提交
+- 73 个公开 Release
+- 31 种 Agent Client 适配
 
 // VISUAL
-暖白底，大标题占据左侧；右侧只有一条从“想法”走向“作品”的细绿色轨道。无功能标签、无多余口号。
+左侧真实分享现场照片；右侧一句结论和三个无底板大数字。
 
 // LAYOUT
-Layout: title-hero
+Layout: split-screen
 
 ## Production Note
 

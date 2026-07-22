@@ -57,24 +57,29 @@ Style Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 13
+## Slide 7 of 13
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 07-slide-traction.png
 
 // NARRATIVE GOAL
-一句话说明产品是谁、服务谁、创造什么价值。
+诚实展示已有使用信号和尚未完成的商业验证。
 
 // KEY CONTENT
-Headline: Yoda：超级开发者的 AI Harness 工作台
-Sub-headline: 统一 Agent、上下文与交付，让 AI 真正进入持续创造
-Body: 融资版 BP · 2026.07
+Headline: 已有真实使用信号，付费验证仍在起点
+Sub-headline: 当前数据证明有人下载、Clone 和授权，但不能替代留存与收入
+Body:
+- 126：14 天独立 Cloner
+- 73：独立授权用户
+- 73：公开 Release
+- 3：Relay 试用账户
+- 0：付费用户
 
 // VISUAL
-暖白底，大标题占据左侧；右侧只有一条从“想法”走向“作品”的细绿色轨道。无功能标签、无多余口号。
+四个使用数字沿一条基线排列；右下角单独强调“0 付费”，并注明这是下一阶段核心验证。
 
 // LAYOUT
-Layout: title-hero
+Layout: metric-row
 
 ## Production Note
 

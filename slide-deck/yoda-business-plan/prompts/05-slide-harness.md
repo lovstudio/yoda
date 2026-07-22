@@ -57,24 +57,24 @@ Style Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 13
+## Slide 5 of 13
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 05-slide-harness.png
 
 // NARRATIVE GOAL
-一句话说明产品是谁、服务谁、创造什么价值。
+把 Harness 解释为产品资产层与技术壁垒，而不是流行术语。
 
 // KEY CONTENT
-Headline: Yoda：超级开发者的 AI Harness 工作台
-Sub-headline: 统一 Agent、上下文与交付，让 AI 真正进入持续创造
-Body: 融资版 BP · 2026.07
+Headline: Harness 让 AI 的工作过程可控、可复用、可迁移
+Sub-headline: 31 种 Agent Client 之上，Yoda 统一会话、能力、上下文与交付
+Body: Session · Skills · Hooks · Memory · Review · CI/CD
 
 // VISUAL
-暖白底，大标题占据左侧；右侧只有一条从“想法”走向“作品”的细绿色轨道。无功能标签、无多余口号。
+三层结构：31 Agent Clients → Yoda Harness 连续轨道 → Diff/Test/Release。中间只用一条深绿色横带。
 
 // LAYOUT
-Layout: title-hero
+Layout: hierarchical-layers
 
 ## Production Note
 

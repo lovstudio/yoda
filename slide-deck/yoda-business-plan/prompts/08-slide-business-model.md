@@ -57,24 +57,26 @@ Style Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 13
+## Slide 8 of 13
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 08-slide-business-model.png
 
 // NARRATIVE GOAL
-一句话说明产品是谁、服务谁、创造什么价值。
+解释 C/B 双轨如何共享产品底座，并把高校教育作为明确 B 端切口。
 
 // KEY CONTENT
-Headline: Yoda：超级开发者的 AI Harness 工作台
-Sub-headline: 统一 Agent、上下文与交付，让 AI 真正进入持续创造
-Body: 融资版 BP · 2026.07
+Headline: C 端验证产品，B 端教育放大客单价
+Sub-headline: 个人订阅与机构年约共享同一套 Harness 底座
+Body:
+- C 端：Desktop → Relay / Creator Pro → Studio
+- B 端：付费试点 → Education 产品包 → 机构年约
 
 // VISUAL
-暖白底，大标题占据左侧；右侧只有一条从“想法”走向“作品”的细绿色轨道。无功能标签、无多余口号。
+左侧两条简洁收入路径；右侧使用真实 AI 创造营照片，标注为渠道与培训场景证明、不是 Yoda 客户案例。
 
 // LAYOUT
-Layout: title-hero
+Layout: split-screen
 
 ## Production Note
 

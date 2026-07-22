@@ -57,24 +57,27 @@ Style Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 13
+## Slide 10 of 13
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 10-slide-differentiation.png
 
 // NARRATIVE GOAL
-一句话说明产品是谁、服务谁、创造什么价值。
+让投资人理解竞争边界和差异化，不列竞品 Logo 墙。
 
 // KEY CONTENT
-Headline: Yoda：超级开发者的 AI Harness 工作台
-Sub-headline: 统一 Agent、上下文与交付，让 AI 真正进入持续创造
-Body: 融资版 BP · 2026.07
+Headline: Yoda 不卷模型，也不把 Agent 团队当产品终局
+Sub-headline: Yoda 占据跨客户端组织工作、沉淀资产与完成交付的 Harness 层
+Body:
+- 供应商中立：31 种 Agent Client
+- 资产沉淀：Skills、Memory、工作流
+- 交付闭环：Review、Test、CI/CD、Release
 
 // VISUAL
-暖白底，大标题占据左侧；右侧只有一条从“想法”走向“作品”的细绿色轨道。无功能标签、无多余口号。
+三层结构中只高亮 Yoda Harness；右侧三条差异化证据，不使用竞品 Logo。
 
 // LAYOUT
-Layout: title-hero
+Layout: layered-comparison
 
 ## Production Note
 

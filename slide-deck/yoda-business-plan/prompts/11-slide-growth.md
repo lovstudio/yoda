@@ -57,24 +57,28 @@ Style Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 13
+## Slide 11 of 13
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 11-slide-growth.png
 
 // NARRATIVE GOAL
-一句话说明产品是谁、服务谁、创造什么价值。
+把 18–24 个月计划压缩为四个可验证阶段。
 
 // KEY CONTENT
-Headline: Yoda：超级开发者的 AI Harness 工作台
-Sub-headline: 统一 Agent、上下文与交付，让 AI 真正进入持续创造
-Body: 融资版 BP · 2026.07
+Headline: 下一阶段只验证一件事：可重复增长
+Sub-headline: 先做实体验与数据，再验证个人付费和机构年约
+Body:
+- 0–3 月：体验、埋点、20 位深访
+- 4–6 月：自然增长、2–3 家设计伙伴
+- 7–12 月：个人付费与机构试点
+- 13–24 月：机构年约、渠道与英文市场
 
 // VISUAL
-暖白底，大标题占据左侧；右侧只有一条从“想法”走向“作品”的细绿色轨道。无功能标签、无多余口号。
+一条四阶段时间轴；每段只有阶段名、目标和一个关键验证信号。
 
 // LAYOUT
-Layout: title-hero
+Layout: timeline-horizontal
 
 ## Production Note
 

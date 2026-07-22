@@ -14,9 +14,9 @@ if (!styleMatch) throw new Error('outline.md 缺少 STYLE_INSTRUCTIONS');
 const slideSections = outline
   .split('\n---\n')
   .map((section) => section.trim())
-  .filter((section) => /^## Slide \d+ of 18\n/.test(section));
-if (slideSections.length !== 18) {
-  throw new Error(`预期 18 页，实际解析到 ${slideSections.length} 页`);
+  .filter((section) => /^## Slide \d+ of 13\n/.test(section));
+if (slideSections.length !== 13) {
+  throw new Error(`预期 13 页，实际解析到 ${slideSections.length} 页`);
 }
 
 fs.mkdirSync(promptsDir, { recursive: true });
@@ -43,7 +43,7 @@ const preamble = `Create a presentation slide image following these guidelines:
 `;
 
 for (const section of slideSections) {
-  const slideNumberMatch = section.match(/^## Slide (\d+) of 18/);
+  const slideNumberMatch = section.match(/^## Slide (\d+) of 13/);
   if (!slideNumberMatch) throw new Error('无法解析页码');
   const slideNumber = Number(slideNumberMatch[1]);
   const slideSection = `${section}\n`;

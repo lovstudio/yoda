@@ -57,24 +57,28 @@ Style Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 13
+## Slide 13 of 13
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Closing
+**Filename**: 13-slide-fundraise.png
 
 // NARRATIVE GOAL
-一句话说明产品是谁、服务谁、创造什么价值。
+清楚给出融资条件、用途和本轮资金要买到的结果。
 
 // KEY CONTENT
-Headline: Yoda：超级开发者的 AI Harness 工作台
-Sub-headline: 统一 Agent、上下文与交付，让 AI 真正进入持续创造
-Body: 融资版 BP · 2026.07
+Headline: 融资 200 万元，购买 18–24 个月的验证窗口
+Sub-headline: 或 30 万美元，出让 10% 股权
+Body:
+- 60% 技术研发与产品体验
+- 30% 市场推广
+- 10% 基础设施与运营
+- 下一阶段目标：验证留存、个人付费与机构年约能否形成可重复增长
 
 // VISUAL
-暖白底，大标题占据左侧；右侧只有一条从“想法”走向“作品”的细绿色轨道。无功能标签、无多余口号。
+左侧大号融资金额；右侧三条极简资金比例线和最终验证目标。该页直接作为结束页，不追加致谢页。
 
 // LAYOUT
-Layout: title-hero
+Layout: closing-ask
 
 ## Production Note
 

@@ -57,24 +57,26 @@ Style Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 13
+## Slide 6 of 13
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 06-slide-why-now.png
 
 // NARRATIVE GOAL
-一句话说明产品是谁、服务谁、创造什么价值。
+说明为什么 Harness 的窗口正在现在形成。
 
 // KEY CONTENT
-Headline: Yoda：超级开发者的 AI Harness 工作台
-Sub-headline: 统一 Agent、上下文与交付，让 AI 真正进入持续创造
-Body: 融资版 BP · 2026.07
+Headline: AI 执行能力正在商品化，驾驭能力成为新的价值层
+Sub-headline: 创作者已把 AI 放进工作流，但最终判断仍由人完成
+Body:
+- 75%：创意 AI 已融入或成为工作流必要部分
+- 85%：最终创意决策仍应由人完成
 
 // VISUAL
-暖白底，大标题占据左侧；右侧只有一条从“想法”走向“作品”的细绿色轨道。无功能标签、无多余口号。
+两个大数字分置两侧，中间一条细线；底部只保留“AI 执行，人负责方向与品味”。
 
 // LAYOUT
-Layout: title-hero
+Layout: data-highlight
 
 ## Production Note
 

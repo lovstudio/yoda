@@ -57,24 +57,24 @@ Style Rules:
 
 ## SLIDE CONTENT
 
-## Slide 1 of 13
+## Slide 3 of 13
 
-**Type**: Cover
-**Filename**: 01-slide-cover.png
+**Type**: Content
+**Filename**: 03-slide-solution.png
 
 // NARRATIVE GOAL
-一句话说明产品是谁、服务谁、创造什么价值。
+说明 Yoda 如何把碎片化步骤变成连续体验。
 
 // KEY CONTENT
-Headline: Yoda：超级开发者的 AI Harness 工作台
-Sub-headline: 统一 Agent、上下文与交付，让 AI 真正进入持续创造
-Body: 融资版 BP · 2026.07
+Headline: Yoda 把整个 AI 创造过程放进一个工作台
+Sub-headline: 从目标、执行到 Review 与发布，用户始终掌握上下文和方向
+Body: 目标 → 会话 → 干预 → Review → 交付
 
 // VISUAL
-暖白底，大标题占据左侧；右侧只有一条从“想法”走向“作品”的细绿色轨道。无功能标签、无多余口号。
+一条连续绿色轨道贯穿五个阶段；Yoda 作为工作台位于轨道下方，不做多张功能卡片。
 
 // LAYOUT
-Layout: title-hero
+Layout: process-flow
 
 ## Production Note
 
