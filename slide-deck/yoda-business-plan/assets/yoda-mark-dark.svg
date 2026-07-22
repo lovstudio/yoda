@@ -1,0 +1,10 @@
+<svg width="240" height="220" viewBox="0 0 240 220" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <mask id="cowl">
+      <rect width="240" height="220" fill="#fff"/>
+      <path fill="#000" d="M 167.2 120.4 A 50 50 0 1 0 72.8 120.4 L 120 256 Z"/>
+    </mask>
+  </defs>
+  <path mask="url(#cowl)" fill="#1a3b2a" d="M 156.4 21.3 L 228.2 162.9 A 34 34 0 0 1 200 216 L 40 216 A 34 34 0 0 1 11.8 162.9 L 83.6 21.3 A 44 44 0 0 1 156.4 21.3 Z"/>
+  <circle cx="120" cy="104" r="13" fill="#2fa56e"/>
+</svg>

@@ -11,6 +11,7 @@ function dataUri(filePath, mime) {
 }
 
 const yodaLogo = dataUri(path.join(deckDir, 'assets/yoda-logo.svg'), 'image/svg+xml');
+const yodaMark = dataUri(path.join(deckDir, 'assets/yoda-mark-dark.svg'), 'image/svg+xml');
 const shougongchuanLogo = dataUri(
   path.join(deckDir, 'assets/shougongchuan-logo.svg'),
   'image/svg+xml'
@@ -78,13 +79,11 @@ const slides = [
   {
     filename: '01-slide-cover.png',
     html: `<section class="slide">
-      <img src="${yodaLogo}" alt="Yoda" style="position:absolute;left:88px;top:72px;width:174px;height:auto">
-      <div style="position:absolute;left:88px;top:315px;width:1400px">
-        <h1 style="font-size:80px;line-height:1.04;letter-spacing:-.052em;white-space:nowrap">Agent 时代的<span class="deep">集成委托环境</span></h1>
-        <p class="sub" style="margin-top:30px;font-size:28px">面向超级开发者与 AI 原生团队的开源桌面工作区</p>
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:translateY(-18px)">
+        <img src="${yodaMark}" alt="Yoda Logo" style="display:block;width:72px;height:72px">
+        <div style="margin-top:28px;font-size:64px;line-height:1;font-weight:760;letter-spacing:.04em;color:var(--deep)">Yoda</div>
+        <div style="margin-top:29px;font-size:31px;line-height:1.3;font-weight:620;letter-spacing:.01em;color:#303531">Agent 时代的集成委托环境</div>
       </div>
-      <div style="position:absolute;left:88px;bottom:62px;font-size:17px;font-weight:680;color:#5d625e">融资商业计划书 · 2026.07</div>
-      <img src="${shougongchuanLogo}" alt="手工川" style="position:absolute;right:88px;bottom:58px;width:112px;height:auto">
     </section>`,
   },
   {

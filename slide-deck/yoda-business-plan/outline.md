@@ -52,10 +52,10 @@ Layout Rules:
 **Type**: Cover
 **Filename**: 01-slide-cover.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Visual: Yoda 主品牌、单行核心定位与融资日期；手工川作为出品方置于右下角。
-Layout: ultra-minimal-title-cover
+Headline: Yoda
+Sub-headline: Agent 时代的集成委托环境
+Visual: 图形 Logo、产品名与一句简介三层居中，不放置其他辅助信息。
+Layout: centered-brand-cover
 
 ---
 
