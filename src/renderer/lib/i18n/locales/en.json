@@ -1856,6 +1856,7 @@
       },
       "copyFailed": "The value could not be copied to the clipboard.",
       "createSubtask": "New subtask",
+      "addSubtask": "Add subtask...",
       "setParent": "Set parent task...",
       "createParent": "Add parent task (group)",
       "moveToProject": "Move to project",
@@ -1943,6 +1944,17 @@
       "cycleDetected": "A task cannot be moved under its own subtask",
       "crossProject": "Parent task must be in the same project",
       "parentArchived": "Parent task is archived"
+    },
+    "addSubtask": {
+      "title": "Add subtask",
+      "existingLabel": "Choose an existing task",
+      "searchPlaceholder": "Search tasks to add...",
+      "noResults": "No matching existing tasks",
+      "newLabel": "Or create a task",
+      "newPlaceholder": "Enter a new subtask name",
+      "addExisting": "Add",
+      "createAndAdd": "Create and add",
+      "failed": "Failed to add subtask"
     },
     "createParent": {
       "title": "Add parent task",

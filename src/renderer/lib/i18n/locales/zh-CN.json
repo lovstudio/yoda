@@ -1856,6 +1856,7 @@
       },
       "copyFailed": "无法复制到剪贴板。",
       "createSubtask": "新建子任务",
+      "addSubtask": "添加子任务…",
       "setParent": "设置父任务…",
       "createParent": "增设父任务（分组）",
       "moveToProject": "移动到项目",
@@ -1943,6 +1944,17 @@
       "cycleDetected": "不能把任务移到它自己的子任务下",
       "crossProject": "父任务必须在同一项目中",
       "parentArchived": "父任务已归档"
+    },
+    "addSubtask": {
+      "title": "添加子任务",
+      "existingLabel": "选择已有任务",
+      "searchPlaceholder": "搜索可添加的任务…",
+      "noResults": "没有匹配的已有任务",
+      "newLabel": "或新建任务",
+      "newPlaceholder": "输入新子任务名称",
+      "addExisting": "添加",
+      "createAndAdd": "新建并添加",
+      "failed": "添加子任务失败"
     },
     "createParent": {
       "title": "增设父任务",

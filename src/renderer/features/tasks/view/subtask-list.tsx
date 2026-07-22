@@ -51,7 +51,7 @@ export const SubtaskList = observer(function SubtaskList({
             onClick={() => showCreateSubtask({ projectId, parentTaskId: taskId })}
           >
             <ListPlus className="size-4" />
-            {t('tasks.context.createSubtask')}
+            {t('tasks.context.addSubtask')}
           </Button>
         </div>
       </div>

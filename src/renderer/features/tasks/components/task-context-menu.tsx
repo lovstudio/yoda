@@ -105,7 +105,7 @@ export interface TaskMenuActions extends TaskMenuInfoFields {
   currentWorkspaceId?: string | null;
   /** Assign this task to a sidebar workspace, or null for the default. */
   onAssignWorkspace?: (workspaceId: string | null) => void;
-  /** Create a new task nested under this one. */
+  /** Add an existing or new session-less task under this one. */
   onCreateSubtask?: () => void;
   /** Open the parent-task picker for this task. */
   onSetParent?: () => void;
@@ -251,7 +251,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       key: 'create-subtask',
       group: 2,
       icon: ListPlus,
-      label: t('tasks.context.createSubtask'),
+      label: t('tasks.context.addSubtask'),
       onSelect: actions.onCreateSubtask,
     });
   }

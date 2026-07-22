@@ -70,7 +70,7 @@ export const modalRegistry = {
   taskModal: createModal(CreateTaskModal),
   newTaskModal: createModal(NewTaskModal, { size: 'lg' }),
   newConversationModal: createModal(NewConversationModal, { size: 'lg' }),
-  newSubtaskModal: createModal(NewSubtaskModal, { size: 'lg' }),
+  newSubtaskModal: createModal(NewSubtaskModal, { size: 'sm' }),
   addProjectModal: createModal(AddProjectModal),
   expressCreateProjectModal: createModal(ExpressCreateProjectModal, { size: 'xs' }),
   initialCommitModal: createModal(InitialCommitModal, { size: 'sm' }),
