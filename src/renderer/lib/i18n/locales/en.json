@@ -2320,8 +2320,7 @@
     "marketplaces": {
       "title": "Explore community skills",
       "description": "Browse independent catalogs for more skills. Review the source and permissions before installing.",
-      "ariaLabel": "External skill marketplaces",
-      "open": "Open {{marketplace}} in your browser"
+      "menuAria": "Choose a skill marketplace or interface language"
     },
     "source": {
       "openai": "OpenAI",

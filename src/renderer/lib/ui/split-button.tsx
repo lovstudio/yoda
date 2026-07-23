@@ -27,6 +27,9 @@ interface SplitButtonProps {
   loading?: boolean;
   loadingLabel?: string;
   icon?: ReactNode;
+  dropdownIcon?: ReactNode;
+  dropdownAriaLabel?: string;
+  dropdownFooter?: ReactNode;
   variant?: VariantProps<typeof buttonVariants>['variant'];
   size?: SplitButtonSize;
   className?: string;
@@ -47,6 +50,9 @@ export function SplitButton({
   loading,
   loadingLabel,
   icon,
+  dropdownIcon,
+  dropdownAriaLabel,
+  dropdownFooter,
   variant = 'default',
   size = 'default',
   className,
@@ -82,10 +88,11 @@ export function SplitButton({
               size={size}
               className={cn('rounded-l-none border-l', px)}
               disabled={isDisabled}
+              aria-label={dropdownAriaLabel}
             />
           }
         >
-          <ChevronDown className={iconSize} />
+          {dropdownIcon ?? <ChevronDown className={iconSize} />}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className={cn('w-64', dropdownContentClassName)}>
           <DropdownMenuRadioGroup
@@ -115,6 +122,7 @@ export function SplitButton({
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
+          {dropdownFooter}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

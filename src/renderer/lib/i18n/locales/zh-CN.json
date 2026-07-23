@@ -2320,8 +2320,7 @@
     "marketplaces": {
       "title": "探索社区 Skills",
       "description": "前往独立目录发现更多技能；安装前请检查来源与权限。",
-      "ariaLabel": "外部 Skill 市场",
-      "open": "在浏览器中打开 {{marketplace}}"
+      "menuAria": "选择 Skill 市场或界面语言"
     },
     "source": {
       "openai": "OpenAI",
