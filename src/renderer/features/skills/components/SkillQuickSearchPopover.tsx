@@ -102,14 +102,27 @@ export function SkillQuickSearchPopover({
   return (
     <div className="flex min-h-0 flex-col">
       <div className="border-b border-border p-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-foreground-muted" />
-          <div>
-            <div className="text-sm font-medium">{t('skills.quickSearch.title')}</div>
-            <div className="text-[11px] text-foreground-passive">
-              {t('skills.quickSearch.description')}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Sparkles className="size-4 shrink-0 text-foreground-muted" />
+            <div className="min-w-0">
+              <div className="text-sm font-medium">{t('skills.quickSearch.title')}</div>
+              <div className="truncate text-[11px] text-foreground-passive">
+                {t('skills.quickSearch.description')}
+              </div>
             </div>
           </div>
+          <Button
+            aria-label={t('skills.quickSearch.manageAll')}
+            className="shrink-0"
+            size="icon-xs"
+            title={t('skills.quickSearch.manageAll')}
+            type="button"
+            variant="ghost"
+            onClick={onManageSkills}
+          >
+            <SlidersHorizontal className="size-3.5" />
+          </Button>
         </div>
         <div className="relative mt-3">
           <Search
@@ -315,12 +328,6 @@ export function SkillQuickSearchPopover({
             </p>
           </section>
         ) : null}
-      </div>
-      <div className="border-t border-border p-2">
-        <Button className="w-full" size="sm" type="button" variant="ghost" onClick={onManageSkills}>
-          <SlidersHorizontal className="size-3.5" />
-          {t('skills.quickSearch.manageAll')}
-        </Button>
       </div>
     </div>
   );

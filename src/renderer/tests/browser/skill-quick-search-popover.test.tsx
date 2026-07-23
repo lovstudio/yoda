@@ -155,10 +155,10 @@ describe('SkillQuickSearchPopover', () => {
     expect(host.textContent).toContain('Calendar');
     expect(mocks.searchClawHub).not.toHaveBeenCalled();
 
-    const manageButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('skills.quickSearch.manageAll')
+    const manageButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="skills.quickSearch.manageAll"]'
     );
-    expect(manageButton).not.toBeUndefined();
+    expect(manageButton).not.toBeNull();
     await act(async () => manageButton?.click());
     expect(mocks.onManageSkills).toHaveBeenCalledOnce();
 
