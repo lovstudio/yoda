@@ -15,6 +15,10 @@ import { cssVar } from '@renderer/utils/cssVars';
 import { log } from '@renderer/utils/logger';
 import { getCellMetrics } from './pty-dimensions';
 import { registerOsc52ClipboardHandler } from './terminal-clipboard';
+import {
+  resolveTerminalRendererEngine,
+  type TerminalRendererEngine,
+} from './terminal-renderer-selection';
 import { ensureXtermHost } from './xterm-host';
 
 // ── Theme helpers ─────────────────────────────────────────────────────────────
@@ -41,7 +45,6 @@ export const TERMINAL_LINE_HEIGHT = 1.0;
  */
 const UNFREEZE_FALLBACK_MS = 300;
 
-export type TerminalRendererEngine = 'webgl' | 'dom';
 export type TerminalRendererIssue = 'webgl-unavailable' | 'webgl-context-lost';
 
 type TerminalRendererDiagnosticsEntry = {
@@ -378,7 +381,10 @@ export class FrontendPty {
   }
 
   private applyRendererPreference(): void {
-    if (this.rendererPreference === 'dom') {
+    const platform = typeof navigator === 'undefined' ? '' : navigator.platform;
+    const selectedEngine = resolveTerminalRendererEngine(this.rendererPreference, platform);
+
+    if (selectedEngine === 'dom') {
       this.disposeWebglRenderer();
       this.hasFreezeSnapshot = false;
       this.setRendererState('dom', null);

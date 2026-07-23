@@ -982,7 +982,7 @@
       "font": "Terminal font",
       "fontDescription": "Choose the font family for the terminal.",
       "renderer": "Terminal renderer",
-      "rendererDescription": "Choose whether terminals use WebGL, DOM compatibility rendering, or automatic fallback.",
+      "rendererDescription": "Auto uses stable DOM rendering on macOS and prefers WebGL elsewhere; you can also choose manually.",
       "rendererAuto": "Auto",
       "rendererWebgl": "WebGL",
       "rendererDom": "DOM",

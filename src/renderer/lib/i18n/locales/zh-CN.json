@@ -982,7 +982,7 @@
       "font": "终端字体",
       "fontDescription": "选择终端使用的字体。",
       "renderer": "终端渲染器",
-      "rendererDescription": "选择终端使用 WebGL、DOM 兼容渲染，或在不可用时自动降级。",
+      "rendererDescription": "自动模式在 macOS 使用稳定的 DOM 渲染，其他系统优先 WebGL；也可手动选择。",
       "rendererAuto": "自动",
       "rendererWebgl": "WebGL",
       "rendererDom": "DOM",
