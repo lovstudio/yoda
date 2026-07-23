@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FrontendPty } from '@renderer/lib/pty/pty';
+import { applyRendererPreferenceToAll, FrontendPty } from '@renderer/lib/pty/pty';
 
 const webglMocks = vi.hoisted(() => ({
   clearTextureAtlas: vi.fn(),
@@ -139,6 +139,20 @@ describe('FrontendPty.commitResize', () => {
     pty.mount(mountTarget, { cols: 120, rows: 32 });
 
     await vi.waitFor(() => expect(webglMocks.clearTextureAtlas).toHaveBeenCalledTimes(1));
+  });
+
+  it('switches and redraws every live terminal renderer immediately', () => {
+    pty = new FrontendPty('session-renderer-toggle');
+    pty.setRendererPreference('webgl');
+    expect(pty.getRendererDiagnosticsEntry().engine).toBe('webgl');
+
+    applyRendererPreferenceToAll('dom');
+    expect(pty.getRendererDiagnosticsEntry().engine).toBe('dom');
+
+    webglMocks.clearTextureAtlas.mockClear();
+    applyRendererPreferenceToAll('webgl');
+    expect(pty.getRendererDiagnosticsEntry().engine).toBe('webgl');
+    expect(webglMocks.clearTextureAtlas).toHaveBeenCalled();
   });
 
   it('keeps the previous frame visible while a wider grid renders', async () => {

@@ -1,24 +1,46 @@
 import type { TerminalRenderer } from '@shared/terminal-settings';
 
 export type TerminalRendererEngine = 'webgl' | 'dom';
+export type TerminalRendererDisplayMode = TerminalRendererEngine | 'mixed';
+
+export type TerminalRendererCounts = {
+  activeCount: number;
+  webglCount: number;
+  domCount: number;
+};
 
 /**
  * Choose the concrete xterm renderer for the user's preference.
  *
- * Chromium's WebGL canvas can retain partially repainted terminal glyphs on
- * macOS during long-running, cursor-addressed TUI updates. The underlying PTY
- * buffer remains correct, but the screen accumulates stale text until it is no
- * longer readable. Prefer xterm's stable DOM renderer for macOS automatic mode;
- * an explicit WebGL selection still opts into the accelerated renderer.
+ * Automatic mode follows the common xterm/VS Code policy: prefer accelerated
+ * WebGL rendering, then let FrontendPty fall back to DOM if WebGL cannot load or
+ * loses its context. Users can explicitly choose DOM when a live WebGL context
+ * develops visual corruption without reporting a hard failure.
  */
 export function resolveTerminalRendererEngine(
-  preference: TerminalRenderer,
-  platform: string
+  preference: TerminalRenderer
 ): TerminalRendererEngine {
-  if (preference === 'webgl') return 'webgl';
   if (preference === 'dom') return 'dom';
-
-  const normalizedPlatform = platform.trim().toLowerCase();
-  if (!normalizedPlatform || normalizedPlatform.startsWith('mac')) return 'dom';
   return 'webgl';
+}
+
+/** Resolve the mode currently visible across live terminals for status UI. */
+export function resolveTerminalRendererDisplayMode(
+  preference: TerminalRenderer,
+  counts: TerminalRendererCounts
+): TerminalRendererDisplayMode {
+  if (counts.activeCount > 0) {
+    if (counts.webglCount > 0 && counts.domCount > 0) return 'mixed';
+    if (counts.webglCount > 0) return 'webgl';
+    if (counts.domCount > 0) return 'dom';
+  }
+
+  return resolveTerminalRendererEngine(preference);
+}
+
+/** Mixed mode converges back to WebGL; otherwise this behaves as a two-way toggle. */
+export function nextTerminalRendererPreference(
+  mode: TerminalRendererDisplayMode
+): TerminalRenderer {
+  return mode === 'webgl' ? 'dom' : 'webgl';
 }

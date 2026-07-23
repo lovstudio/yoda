@@ -19,6 +19,7 @@ import {
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { rpc } from '@renderer/lib/ipc';
 import {
+  applyRendererPreferenceToAll,
   getTerminalRendererDiagnostics,
   subscribeTerminalRendererDiagnostics,
 } from '@renderer/lib/pty/pty';
@@ -209,9 +210,7 @@ const TerminalSettingsCard: React.FC = () => {
     (next: TerminalRenderer) => {
       if (next === renderer) return;
       update({ renderer: next });
-      window.dispatchEvent(
-        new CustomEvent('terminal-renderer-changed', { detail: { renderer: next } })
-      );
+      applyRendererPreferenceToAll(next);
     },
     [renderer, update]
   );
