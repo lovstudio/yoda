@@ -44,6 +44,7 @@ export class AppSidePaneStore implements Snapshottable<AppSidePaneSnapshot> {
       activePinId: observable,
       isMaximized: observable,
       pinView: action,
+      toggleView: action,
       pinTask: action,
       pinTaskView: action,
       unpin: action,
@@ -63,12 +64,21 @@ export class AppSidePaneStore implements Snapshottable<AppSidePaneSnapshot> {
     return this.pins.find((pin) => pin.id === this.activePinId);
   }
 
+  /** Find a view pin by route identity, independent of parameter key order. */
+  findViewPin(
+    viewId: ViewId,
+    params: Record<string, unknown>
+  ): Extract<SidePanePin, { kind: 'view' }> | undefined {
+    const key = routeKey(viewId, params);
+    return this.pins.find(
+      (pin): pin is Extract<SidePanePin, { kind: 'view' }> =>
+        pin.kind === 'view' && routeKey(pin.viewId, pin.params) === key
+    );
+  }
+
   /** Pin a view route (deduplicated by route identity) and select it. */
   pinView(viewId: ViewId, params: Record<string, unknown>): void {
-    const key = routeKey(viewId, params);
-    const existing = this.pins.find(
-      (pin) => pin.kind === 'view' && routeKey(pin.viewId, pin.params) === key
-    );
+    const existing = this.findViewPin(viewId, params);
     if (existing) {
       this.activePinId = existing.id;
       return;
@@ -81,6 +91,16 @@ export class AppSidePaneStore implements Snapshottable<AppSidePaneSnapshot> {
     };
     this.pins.push(pin);
     this.activePinId = pin.id;
+  }
+
+  /** Toggle a view route in the global side pane. */
+  toggleView(viewId: ViewId, params: Record<string, unknown>): void {
+    const existing = this.findViewPin(viewId, params);
+    if (existing) {
+      this.unpin(existing.id);
+      return;
+    }
+    this.pinView(viewId, params);
   }
 
   /** Pin a task entity by its internal tab id (deduplicated) and select it. */

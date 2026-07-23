@@ -66,7 +66,7 @@ export const SidebarStatusBar = observer(function SidebarStatusBar() {
             <button
               type="button"
               onClick={(event) =>
-                event.altKey ? appState.sidePane.pinView(viewId, {}) : navigate(viewId)
+                event.altKey ? appState.sidePane.toggleView(viewId, {}) : navigate(viewId)
               }
               aria-label={label}
               className={cn(

@@ -143,7 +143,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 isActive={isCurrentView(currentView, 'library')}
                 onClick={(e) =>
                   e.altKey
-                    ? appState.sidePane.pinView('library', libraryParams)
+                    ? appState.sidePane.toggleView('library', libraryParams)
                     : navigate('library', libraryParams)
                 }
                 aria-label={t('sidebar.library')}
@@ -174,7 +174,10 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                   }
                   onClick={(event) =>
                     event.altKey
-                      ? appState.sidePane.pinView('library', { section: 'apps', appId: app.id })
+                      ? appState.sidePane.toggleView('library', {
+                          section: 'apps',
+                          appId: app.id,
+                        })
                       : navigate('library', { section: 'apps', appId: app.id })
                   }
                   aria-label={app.name}

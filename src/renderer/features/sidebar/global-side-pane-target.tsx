@@ -1,4 +1,5 @@
-import { PanelRightOpen } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ViewId } from '@renderer/app/view-registry';
@@ -15,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/toolti
  * Shared navigation affordance for views that can either replace the main
  * surface or be pinned into the global side pane with Alt/right-click.
  */
-export function GlobalSidePaneTarget({
+export const GlobalSidePaneTarget = observer(function GlobalSidePaneTarget({
   viewId,
   params,
   altHeld,
@@ -32,7 +33,9 @@ export function GlobalSidePaneTarget({
 }) {
   const { t } = useTranslation();
   const [hovered, setHovered] = React.useState(false);
-  const label = t('appTabs.openInGlobalSidePane');
+  const targetParams = params ?? {};
+  const isPinned = appState.sidePane.findViewPin(viewId, targetParams) !== undefined;
+  const label = t(isPinned ? 'appTabs.unpinFromGlobalSidePane' : 'appTabs.openInGlobalSidePane');
   const visibleTooltip = altHeld ? label : tooltipLabel;
 
   return (
@@ -54,12 +57,16 @@ export function GlobalSidePaneTarget({
       <ContextMenuContent>
         <ContextMenuItem
           className="whitespace-nowrap"
-          onClick={() => appState.sidePane.pinView(viewId, params ?? {})}
+          onClick={() => appState.sidePane.toggleView(viewId, targetParams)}
         >
-          <PanelRightOpen className="size-4" />
+          {isPinned ? (
+            <PanelRightClose className="size-4" />
+          ) : (
+            <PanelRightOpen className="size-4" />
+          )}
           {label}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
-}
+});
