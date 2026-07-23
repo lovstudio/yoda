@@ -982,7 +982,7 @@
       "font": "Terminal font",
       "fontDescription": "Choose the font family for the terminal.",
       "renderer": "Terminal renderer",
-      "rendererDescription": "Auto uses stable DOM rendering on macOS and prefers WebGL elsewhere; you can also choose manually.",
+      "rendererDescription": "Auto prefers WebGL and falls back to DOM when unavailable; you can also choose manually.",
       "rendererAuto": "Auto",
       "rendererWebgl": "WebGL",
       "rendererDom": "DOM",
@@ -3661,6 +3661,12 @@
   "workspaceRuntime": {
     "skill": "Skill",
     "terminal": "Terminal",
+    "renderer": {
+      "dom": "DOM",
+      "webgl": "WebGL",
+      "mixed": "Mixed",
+      "switchMode": "Currently using {{current}} rendering; switch to {{next}} and redraw terminals"
+    },
     "gateway": {
       "title": "Gateway",
       "description": "Choose MaaS, a subscription account, or an API key for each Agent Client",

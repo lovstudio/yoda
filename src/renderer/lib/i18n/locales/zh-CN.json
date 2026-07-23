@@ -982,7 +982,7 @@
       "font": "终端字体",
       "fontDescription": "选择终端使用的字体。",
       "renderer": "终端渲染器",
-      "rendererDescription": "自动模式在 macOS 使用稳定的 DOM 渲染，其他系统优先 WebGL；也可手动选择。",
+      "rendererDescription": "自动模式优先 WebGL，不可用时降级为 DOM；也可手动选择。",
       "rendererAuto": "自动",
       "rendererWebgl": "WebGL",
       "rendererDom": "DOM",
@@ -3661,6 +3661,12 @@
   "workspaceRuntime": {
     "skill": "Skill",
     "terminal": "终端",
+    "renderer": {
+      "dom": "DOM",
+      "webgl": "WebGL",
+      "mixed": "混合",
+      "switchMode": "当前为 {{current}} 渲染；点击切换到 {{next}} 并重绘终端"
+    },
     "gateway": {
       "title": "Gateway",
       "description": "为每个 Agent Client 选择 MaaS、订阅账号或 API Key",

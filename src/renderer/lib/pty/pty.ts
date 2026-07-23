@@ -381,8 +381,7 @@ export class FrontendPty {
   }
 
   private applyRendererPreference(): void {
-    const platform = typeof navigator === 'undefined' ? '' : navigator.platform;
-    const selectedEngine = resolveTerminalRendererEngine(this.rendererPreference, platform);
+    const selectedEngine = resolveTerminalRendererEngine(this.rendererPreference);
 
     if (selectedEngine === 'dom') {
       this.disposeWebglRenderer();
@@ -489,6 +488,7 @@ export class FrontendPty {
       this.webglAddon = webglAddon;
       this.webglContextLossDisposable = contextLossDisposable;
       this.setRendererState('webgl', null);
+      this.redrawViewportFromBuffer();
     } catch (error) {
       contextLossDisposable?.dispose();
       webglAddon?.dispose();
@@ -897,6 +897,15 @@ export function applyLineHeightToAll(): void {
 }
 
 applyLineHeightToAll();
+
+/** Apply and immediately redraw a renderer preference across every live terminal. */
+export function applyRendererPreferenceToAll(renderer: unknown): TerminalRenderer {
+  const normalized = normalizeTerminalRenderer(renderer);
+  for (const pty of FrontendPty.all) {
+    pty.setRendererPreference(normalized);
+  }
+  return normalized;
+}
 
 /** Dispose all live FrontendPty instances. Called on app teardown. */
 export function disposeAllPtys(): void {

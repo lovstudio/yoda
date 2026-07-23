@@ -6,7 +6,6 @@ import { ptyDataChannel, ptyExitChannel } from '@shared/events/ptyEvents';
 import {
   DEFAULT_TERMINAL_RENDERER,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
-  normalizeTerminalRenderer,
 } from '@shared/terminal-settings';
 import { events, rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
@@ -938,12 +937,6 @@ export function usePty(
           detail?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
         );
       };
-      const handleRendererChange = (e: Event) => {
-        const detail = (e as CustomEvent<{ renderer?: unknown }>).detail;
-        frontendPty.setRendererPreference(
-          normalizeTerminalRenderer(detail?.renderer ?? DEFAULT_TERMINAL_RENDERER)
-        );
-      };
       // Host position changes (tab pin/unpin/reclaim between panes) re-host the
       // terminal without a container size change, so the ResizeObserver never
       // fires and a same-sessionId pane skips its mount measure. Same recipe as
@@ -955,7 +948,6 @@ export function usePty(
       window.addEventListener('terminal-font-changed', handleFontChange);
       window.addEventListener('terminal-auto-copy-changed', handleAutoCopyChange);
       window.addEventListener('terminal-scrollback-lines-changed', handleScrollbackLinesChange);
-      window.addEventListener('terminal-renderer-changed', handleRendererChange);
       cleanups.push(
         () => window.removeEventListener(TERMINAL_RELAYOUT_EVENT, handleRelayout),
         () => window.removeEventListener('terminal-font-changed', handleFontChange),
@@ -964,8 +956,7 @@ export function usePty(
           window.removeEventListener(
             'terminal-scrollback-lines-changed',
             handleScrollbackLinesChange
-          ),
-        () => window.removeEventListener('terminal-renderer-changed', handleRendererChange)
+          )
       );
 
       // ── ResizeObserver (observes the mount-target, not the owned container) ─

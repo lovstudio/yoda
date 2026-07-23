@@ -1,21 +1,52 @@
 import { describe, expect, it } from 'vitest';
-import { resolveTerminalRendererEngine } from './terminal-renderer-selection';
+import {
+  nextTerminalRendererPreference,
+  resolveTerminalRendererDisplayMode,
+  resolveTerminalRendererEngine,
+} from './terminal-renderer-selection';
 
 describe('resolveTerminalRendererEngine', () => {
-  it.each(['MacIntel', 'macOS'])('uses the stable DOM renderer for auto mode on %s', (platform) => {
-    expect(resolveTerminalRendererEngine('auto', platform)).toBe('dom');
+  it('prefers WebGL acceleration in automatic mode', () => {
+    expect(resolveTerminalRendererEngine('auto')).toBe('webgl');
   });
 
-  it.each(['Linux x86_64', 'Win32'])('keeps WebGL acceleration for auto mode on %s', (platform) => {
-    expect(resolveTerminalRendererEngine('auto', platform)).toBe('webgl');
+  it('honors explicit renderer choices', () => {
+    expect(resolveTerminalRendererEngine('webgl')).toBe('webgl');
+    expect(resolveTerminalRendererEngine('dom')).toBe('dom');
+  });
+});
+
+describe('terminal renderer status toggle', () => {
+  it('shows the renderer actually used by live terminals', () => {
+    expect(
+      resolveTerminalRendererDisplayMode('webgl', {
+        activeCount: 2,
+        webglCount: 0,
+        domCount: 2,
+      })
+    ).toBe('dom');
+    expect(
+      resolveTerminalRendererDisplayMode('auto', {
+        activeCount: 2,
+        webglCount: 1,
+        domCount: 1,
+      })
+    ).toBe('mixed');
   });
 
-  it('uses DOM when the runtime platform is unavailable', () => {
-    expect(resolveTerminalRendererEngine('auto', '')).toBe('dom');
+  it('uses the configured mode when no terminal is active', () => {
+    expect(
+      resolveTerminalRendererDisplayMode('auto', {
+        activeCount: 0,
+        webglCount: 0,
+        domCount: 0,
+      })
+    ).toBe('webgl');
   });
 
-  it('honors explicit renderer choices on macOS', () => {
-    expect(resolveTerminalRendererEngine('webgl', 'MacIntel')).toBe('webgl');
-    expect(resolveTerminalRendererEngine('dom', 'MacIntel')).toBe('dom');
+  it('toggles between WebGL and DOM and resolves mixed mode to WebGL', () => {
+    expect(nextTerminalRendererPreference('webgl')).toBe('dom');
+    expect(nextTerminalRendererPreference('dom')).toBe('webgl');
+    expect(nextTerminalRendererPreference('mixed')).toBe('webgl');
   });
 });
