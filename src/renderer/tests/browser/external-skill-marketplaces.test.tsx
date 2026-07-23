@@ -7,16 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   openExternal: vi.fn(async () => {}),
-  setLanguage: vi.fn(),
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof ReactI18nextModule>()),
   useTranslation: () => ({ t: (key: string) => key }),
-}));
-
-vi.mock('@renderer/lib/i18n/use-app-language', () => ({
-  useAppLanguage: () => ({ currentLanguage: 'zh-CN', setLanguage: mocks.setLanguage }),
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
@@ -43,7 +38,7 @@ describe('ExternalSkillMarketplaces', () => {
     host.remove();
   });
 
-  it('prioritizes ClawHub and keeps every marketplace plus language in the quick menu', async () => {
+  it('prioritizes ClawHub and keeps every marketplace in the quick menu', async () => {
     const { default: ExternalSkillMarketplaces } = await import(
       '@renderer/features/skills/components/ExternalSkillMarketplaces'
     );
@@ -70,13 +65,7 @@ describe('ExternalSkillMarketplaces', () => {
     ]) {
       expect(document.body.textContent).toContain(marketplace);
     }
-    expect(document.body.textContent).toContain('language.zh-CN');
-    expect(document.body.textContent).toContain('language.en');
-
-    const englishItem = Array.from(
-      document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
-    ).find((item) => item.textContent?.includes('language.en'));
-    await act(async () => englishItem?.click());
-    expect(mocks.setLanguage).toHaveBeenCalledWith('en');
+    expect(document.body.textContent).not.toContain('language.zh-CN');
+    expect(document.body.textContent).not.toContain('language.en');
   });
 });

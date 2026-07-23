@@ -1,16 +1,7 @@
 import { Compass, ExternalLink, MoreHorizontal } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { SUPPORTED_LANGUAGES } from '@renderer/lib/i18n';
-import { useAppLanguage } from '@renderer/lib/i18n/use-app-language';
 import { rpc } from '@renderer/lib/ipc';
-import {
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-} from '@renderer/lib/ui/dropdown-menu';
 import { SplitButton, type SplitButtonAction } from '@renderer/lib/ui/split-button';
 
 const EXTERNAL_SKILL_MARKETPLACES = [
@@ -28,7 +19,6 @@ const EXTERNAL_SKILL_MARKETPLACES = [
 /** Secondary navigation to independent community catalogs outside Yoda. */
 const ExternalSkillMarketplaces: React.FC = () => {
   const { t } = useTranslation();
-  const { currentLanguage, setLanguage } = useAppLanguage();
   const marketplaceActions: SplitButtonAction[] = EXTERNAL_SKILL_MARKETPLACES.map(
     (marketplace) => ({
       value: marketplace.value,
@@ -66,24 +56,6 @@ const ExternalSkillMarketplaces: React.FC = () => {
         icon={<ExternalLink className="size-3.5" aria-hidden="true" />}
         dropdownIcon={<MoreHorizontal className="size-3.5" aria-hidden="true" />}
         dropdownAriaLabel={t('skills.marketplaces.menuAria')}
-        dropdownFooter={
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>{t('language.label')}</DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={currentLanguage}
-                onValueChange={(language) => setLanguage(language)}
-              >
-                {SUPPORTED_LANGUAGES.map((language) => (
-                  <DropdownMenuRadioItem key={language} value={language}>
-                    {t(`language.${language}`)}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuGroup>
-          </>
-        }
       />
     </section>
   );

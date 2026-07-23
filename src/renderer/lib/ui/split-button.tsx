@@ -29,7 +29,6 @@ interface SplitButtonProps {
   icon?: ReactNode;
   dropdownIcon?: ReactNode;
   dropdownAriaLabel?: string;
-  dropdownFooter?: ReactNode;
   variant?: VariantProps<typeof buttonVariants>['variant'];
   size?: SplitButtonSize;
   className?: string;
@@ -52,7 +51,6 @@ export function SplitButton({
   icon,
   dropdownIcon,
   dropdownAriaLabel,
-  dropdownFooter,
   variant = 'default',
   size = 'default',
   className,
@@ -122,7 +120,6 @@ export function SplitButton({
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
-          {dropdownFooter}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

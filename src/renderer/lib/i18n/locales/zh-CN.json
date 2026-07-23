@@ -2338,7 +2338,7 @@
     "marketplaces": {
       "title": "探索社区 Skills",
       "description": "前往独立目录发现更多技能；安装前请检查来源与权限。",
-      "menuAria": "选择 Skill 市场或界面语言"
+      "menuAria": "选择 Skill 市场"
     },
     "source": {
       "openai": "OpenAI",

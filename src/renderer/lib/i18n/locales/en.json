@@ -2338,7 +2338,7 @@
     "marketplaces": {
       "title": "Explore community skills",
       "description": "Browse independent catalogs for more skills. Review the source and permissions before installing.",
-      "menuAria": "Choose a skill marketplace or interface language"
+      "menuAria": "Choose a skill marketplace"
     },
     "source": {
       "openai": "OpenAI",
