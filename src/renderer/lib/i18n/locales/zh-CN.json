@@ -128,7 +128,7 @@
     "settings": "设置",
     "lovStudioAccount": "LovStudio 账户",
     "manageLovStudioAccount": "管理 LovStudio 账户",
-    "accountExpired": "登录已过期",
+    "accountSignInRequired": "需要重新登录",
     "accountLocalMode": "仅本地模式",
     "website": "官网",
     "roadmap": "Roadmap",

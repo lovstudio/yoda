@@ -85,6 +85,8 @@ interface DevicePollPendingResponse {
   error: string;
 }
 
+class SessionRefreshRejectedError extends Error {}
+
 const accountKV = new KV<AccountKVSchema>('account');
 
 function deriveUsernameFromEmail(email: string): string {
@@ -560,7 +562,14 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
       return true;
     } catch (err) {
       if (generation !== this.sessionGeneration || this.signingOut || this.signedOut) return false;
-      log.warn('Session refresh failed; clearing local credentials', err);
+      if (!(err instanceof SessionRefreshRejectedError)) {
+        // Offline, timeout, and server errors must not turn a temporary connectivity
+        // problem into a permanent sign-out. Keep both credentials so the next
+        // authenticated request can retry the refresh automatically.
+        log.warn('Session refresh failed; keeping local credentials for retry', err);
+        return false;
+      }
+      log.warn('Session refresh was rejected; clearing local credentials', err);
       this.signedOut = true;
       try {
         await this.mutateCredentials(async () => {
@@ -655,6 +664,9 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
       signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new SessionRefreshRejectedError('Refresh credential was rejected');
+      }
       throw new Error(`Refresh failed (${response.status})`);
     }
     const json = (await response.json()) as {

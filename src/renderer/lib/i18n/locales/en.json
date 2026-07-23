@@ -128,7 +128,7 @@
     "settings": "Settings",
     "lovStudioAccount": "LovStudio account",
     "manageLovStudioAccount": "Manage LovStudio account",
-    "accountExpired": "Sign-in expired",
+    "accountSignInRequired": "Sign in again",
     "accountLocalMode": "Local-only mode",
     "website": "Website",
     "roadmap": "Roadmap",

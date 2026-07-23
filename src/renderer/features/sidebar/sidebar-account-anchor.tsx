@@ -16,7 +16,7 @@ export function SidebarAccountAnchor() {
     : user
       ? user.email
       : session?.hasAccount
-        ? t('sidebar.accountExpired')
+        ? t('sidebar.accountSignInRequired')
         : t('sidebar.accountLocalMode');
 
   return (

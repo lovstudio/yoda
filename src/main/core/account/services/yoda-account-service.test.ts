@@ -304,6 +304,41 @@ describe('YodaAccountService lifecycle', () => {
     await expect(service.getSession()).resolves.toMatchObject({ isSignedIn: false });
   });
 
+  it('keeps the local session and retries after a temporary refresh failure', async () => {
+    const refreshedAccessToken = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJhY2NvdW50LWEifQ.refreshed';
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(
+        Response.json({
+          accessToken: refreshedAccessToken,
+          refreshToken: 'refresh-b',
+        })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const accountCleared = vi.fn();
+    const service = new YodaAccountService();
+    service.on('accountCleared', accountCleared);
+    await service.loadSessionToken();
+
+    await expect(service.validateSession({ forceRefresh: true })).resolves.toBe(false);
+
+    expect(mocks.accessToken).not.toBeNull();
+    expect(mocks.refreshToken).toBe('refresh-a');
+    expect(mocks.kv.has('signedOut')).toBe(false);
+    expect(mocks.emit).not.toHaveBeenCalledWith(accountSessionChangedChannel, undefined);
+    expect(accountCleared).not.toHaveBeenCalled();
+    await expect(service.getSession()).resolves.toMatchObject({
+      isSignedIn: true,
+      user: { userId: 'account-a' },
+    });
+
+    await expect(service.validateSession({ forceRefresh: true })).resolves.toBe(true);
+    expect(mocks.accessToken).toBe(refreshedAccessToken);
+    expect(mocks.refreshToken).toBe('refresh-b');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('retries a delayed profile read instead of overwriting a newer account generation', async () => {
     const service = new YodaAccountService();
     await service.loadSessionToken();
