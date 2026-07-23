@@ -419,6 +419,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     });
   };
 
+  const openSkillsManagement = () => {
+    setIsSkillPopoverOpen(false);
+    appState.navigation.navigate('skills');
+  };
+
   return (
     <div className="flex h-7 shrink-0 items-center gap-2 border-t border-border bg-background-secondary px-2 text-[11px] text-foreground-muted">
       {runtimeId ? (
@@ -904,7 +909,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           sideOffset={8}
           className="w-[26rem] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
         >
-          <SkillQuickSearchPopover onInstalled={handleSkillInstalled} />
+          <SkillQuickSearchPopover
+            onInstalled={handleSkillInstalled}
+            onManageSkills={openSkillsManagement}
+          />
         </PopoverContent>
       </Popover>
       <button

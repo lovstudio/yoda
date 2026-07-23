@@ -1,5 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Download, ExternalLink, Loader2, Search, Sparkles } from 'lucide-react';
+import {
+  Check,
+  Download,
+  ExternalLink,
+  Loader2,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CatalogSkill, ClawHubSkillSearchResult } from '@shared/skills/types';
@@ -14,6 +22,7 @@ import SkillIconRenderer from './SkillIconRenderer';
 
 interface SkillQuickSearchPopoverProps {
   onInstalled: (skill: CatalogSkill) => void;
+  onManageSkills: () => void;
 }
 
 type ExternalSearchState = {
@@ -21,7 +30,10 @@ type ExternalSearchState = {
   results: ClawHubSkillSearchResult[];
 };
 
-export function SkillQuickSearchPopover({ onInstalled }: SkillQuickSearchPopoverProps) {
+export function SkillQuickSearchPopover({
+  onInstalled,
+  onManageSkills,
+}: SkillQuickSearchPopoverProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -303,6 +315,12 @@ export function SkillQuickSearchPopover({ onInstalled }: SkillQuickSearchPopover
             </p>
           </section>
         ) : null}
+      </div>
+      <div className="border-t border-border p-2">
+        <Button className="w-full" size="sm" type="button" variant="ghost" onClick={onManageSkills}>
+          <SlidersHorizontal className="size-3.5" />
+          {t('skills.quickSearch.manageAll')}
+        </Button>
       </div>
     </div>
   );

@@ -2359,6 +2359,7 @@
       "installLocation": "已安装到共享目录 {{path}}",
       "installFailed": "Skill 安装失败",
       "thirdPartyNotice": "社区 Skill 来自 ClawHub，使用前请检查来源与权限。",
+      "manageAll": "管理全部 Skill",
       "reloadTitle": "重新加载当前会话？",
       "reloadDescription": "{{name}} 已安装。重新加载后，当前会话即可使用这个新 Skill。",
       "reloadConfirm": "重新加载会话"

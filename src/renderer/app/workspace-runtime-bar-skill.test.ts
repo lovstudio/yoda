@@ -11,7 +11,8 @@ describe('workspace Skill placement', () => {
     expect(skillTriggerIndex).toBeGreaterThan(maasTriggerIndex);
     expect(terminalTriggerIndex).toBeGreaterThan(skillTriggerIndex);
     expect(source).toContain('<Popover open={isSkillPopoverOpen}');
-    expect(source).toContain('<SkillQuickSearchPopover onInstalled={handleSkillInstalled} />');
+    expect(source).toContain('onManageSkills={openSkillsManagement}');
+    expect(source).toContain("appState.navigation.navigate('skills');");
     expect(source).not.toContain("onClick={() => appState.navigation.navigate('skills')}");
   });
 });

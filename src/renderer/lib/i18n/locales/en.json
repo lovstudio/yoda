@@ -2359,6 +2359,7 @@
       "installLocation": "Installed to the shared directory {{path}}",
       "installFailed": "Skill installation failed",
       "thirdPartyNotice": "Community skills come from ClawHub. Review their source and permissions before use.",
+      "manageAll": "Manage all skills",
       "reloadTitle": "Reload the current session?",
       "reloadDescription": "{{name}} is installed. Reload this session so it can use the new skill.",
       "reloadConfirm": "Reload session"

@@ -50,6 +50,7 @@ const mocks = vi.hoisted(() => ({
   getCatalog: vi.fn(),
   installClawHub: vi.fn(),
   onInstalled: vi.fn(),
+  onManageSkills: vi.fn(),
   searchClawHub: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -142,7 +143,10 @@ describe('SkillQuickSearchPopover', () => {
         createElement(
           QueryClientProvider,
           { client: queryClient },
-          createElement(SkillQuickSearchPopover, { onInstalled: mocks.onInstalled })
+          createElement(SkillQuickSearchPopover, {
+            onInstalled: mocks.onInstalled,
+            onManageSkills: mocks.onManageSkills,
+          })
         )
       )
     );
@@ -150,6 +154,13 @@ describe('SkillQuickSearchPopover', () => {
 
     expect(host.textContent).toContain('Calendar');
     expect(mocks.searchClawHub).not.toHaveBeenCalled();
+
+    const manageButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('skills.quickSearch.manageAll')
+    );
+    expect(manageButton).not.toBeUndefined();
+    await act(async () => manageButton?.click());
+    expect(mocks.onManageSkills).toHaveBeenCalledOnce();
 
     const input = host.querySelector<HTMLInputElement>('input');
     expect(input).not.toBeNull();
