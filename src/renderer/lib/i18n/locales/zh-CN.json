@@ -3660,6 +3660,7 @@
     "toggleLeftSidebar": "切换左侧边栏"
   },
   "workspaceRuntime": {
+    "skill": "Skill",
     "terminal": "终端",
     "gateway": {
       "title": "Gateway",

@@ -3660,6 +3660,7 @@
     "toggleLeftSidebar": "Toggle left sidebar"
   },
   "workspaceRuntime": {
+    "skill": "Skill",
     "terminal": "Terminal",
     "gateway": {
       "title": "Gateway",

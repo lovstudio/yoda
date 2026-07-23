@@ -7,6 +7,7 @@ import {
   Gauge,
   HardDrive,
   MessageSquare,
+  Sparkles,
   Terminal,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
@@ -63,6 +64,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     count: number;
   } | null>(null);
   const route = appState.navigation.currentViewId;
+  const skillActive = route === 'skills' || route === 'skill' || route === 'skillCompare';
   const params = appState.navigation.viewParamsStore[route] as
     | { projectId?: string; taskId?: string }
     | undefined;
@@ -827,6 +829,20 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           </div>
         </PopoverContent>
       </Popover>
+      <button
+        type="button"
+        title={t('workspaceRuntime.skill')}
+        aria-label={t('workspaceRuntime.skill')}
+        aria-pressed={skillActive}
+        onClick={() => appState.navigation.navigate('skills')}
+        className={cn(
+          'flex h-5 items-center gap-1 rounded px-1.5 transition-colors hover:bg-background-2 hover:text-foreground',
+          skillActive && 'bg-background-2 text-foreground'
+        )}
+      >
+        <Sparkles className="size-3.5" />
+        <span>{t('workspaceRuntime.skill')}</span>
+      </button>
       <button
         type="button"
         title={t('workspaceRuntime.terminal')}
