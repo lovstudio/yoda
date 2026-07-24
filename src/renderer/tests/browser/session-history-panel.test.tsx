@@ -73,6 +73,16 @@ vi.mock('@renderer/features/tasks/conversations/use-archived-conversations', () 
 vi.mock('@renderer/lib/hooks/use-toast', () => ({ toast: vi.fn() }));
 vi.mock('@renderer/utils/logger', () => ({ log: { warn: vi.fn() } }));
 
+async function waitForElementToDisappear(selector: string): Promise<void> {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    if (!document.querySelector(selector)) return;
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+  }
+  throw new Error(`Element did not disappear: ${selector}`);
+}
+
 describe('DockedSessionHistory conversation tree menu', () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -147,6 +157,7 @@ describe('DockedSessionHistory conversation tree menu', () => {
     await act(async () => viewTree?.click());
 
     expect(viewTree?.getAttribute('aria-expanded')).toBe('false');
+    await waitForElementToDisappear('[data-session-prompt-tree]');
     expect(document.querySelector('[data-session-prompt-tree]')).toBeNull();
     expect(mocks.useSessionPromptTree).toHaveBeenLastCalledWith(false);
   });
