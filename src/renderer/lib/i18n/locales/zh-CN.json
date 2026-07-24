@@ -3218,6 +3218,7 @@
     "builtInApps": "开箱即用",
     "pin": "固定到导航栏",
     "unpin": "取消固定",
+    "unpinFromNavigation": "从导航栏取消固定",
     "delete": "删除应用",
     "deleteConfirm": "确定删除「{{name}}」吗？此操作无法撤销。",
     "deleteFailed": "删除应用失败",

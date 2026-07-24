@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { skillIssueAgentLabel } from '@shared/skills/validation';
-import { useAiLabApps } from '@renderer/features/ai-lab/use-ai-lab';
+import { useAiLabApps, useUpdateAiLabApp } from '@renderer/features/ai-lab/use-ai-lab';
 import {
   useSkillValidationIssues,
   type SkillValidationIssueEntry,
@@ -54,6 +54,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const { params: projectParams } = useParams('project');
   const { params: libraryParams } = useParams('library');
   const aiLabApps = useAiLabApps();
+  const updateAiLabApp = useUpdateAiLabApp();
   const pinnedApps = (aiLabApps.data ?? []).filter((app) => app.pinned);
   const currentProjectId =
     currentView === 'task'
@@ -165,6 +166,11 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 viewId="library"
                 params={{ section: 'apps', appId: app.id }}
                 altHeld={altHeld}
+                unpinAction={{
+                  label: t('aiLab.unpinFromNavigation'),
+                  disabled: updateAiLabApp.isPending,
+                  onSelect: () => updateAiLabApp.mutate({ id: app.id, pinned: false }),
+                }}
               >
                 <SidebarMenuButton
                   isActive={
