@@ -28,7 +28,15 @@ function actionsEqual(a: QuickAction[], b: QuickAction[]): boolean {
   for (let i = 0; i < a.length; i += 1) {
     const x = a[i]!;
     const y = b[i]!;
-    if (x.id !== y.id || x.label !== y.label || x.command !== y.command) return false;
+    if (
+      x.id !== y.id ||
+      x.label !== y.label ||
+      x.command !== y.command ||
+      x.kind !== y.kind ||
+      x.sourceIntent !== y.sourceIntent
+    ) {
+      return false;
+    }
   }
   return true;
 }
@@ -78,7 +86,10 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
   const dirty =
     initial === null ? override !== null : override === null || !actionsEqual(override, initial);
 
-  const updateRow = (id: string, patch: Partial<Pick<QuickAction, 'label' | 'command'>>) => {
+  const updateRow = (
+    id: string,
+    patch: Partial<Pick<QuickAction, 'label' | 'command' | 'kind'>>
+  ) => {
     setOverride((prev) => {
       const base = prev ?? globalDefaults;
       return base.map((a) => (a.id === id ? { ...a, ...patch } : a));
@@ -95,7 +106,7 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
   const addRow = () => {
     setOverride((prev) => {
       const base = prev ?? globalDefaults;
-      return [...base, { id: genId(), label: '', command: '' }];
+      return [...base, { id: genId(), label: '', command: '', kind: 'shell' }];
     });
   };
 
@@ -135,13 +146,7 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
         <DialogTitle>{t('projects.quickActions.title')}</DialogTitle>
       </DialogHeader>
       <DialogContentArea>
-        <p className="text-xs text-foreground-muted">
-          {t('projects.quickActions.descriptionBefore')}{' '}
-          <code className="font-mono">$release-via-cicd</code>
-          {' / '}
-          <code className="font-mono">/release-via-cicd</code>{' '}
-          {t('projects.quickActions.descriptionAfter')}
-        </p>
+        <p className="text-xs text-foreground-muted">{t('projects.quickActions.description')}</p>
         {usingDefaults && (
           <p className="text-xs text-foreground-muted">
             {t('projects.quickActions.usingDefaults')}
@@ -157,9 +162,31 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
                 disabled={loading}
                 onChange={(e) => updateRow(action.id, { label: e.target.value })}
               />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-24 shrink-0"
+                disabled={loading}
+                onClick={() =>
+                  updateRow(action.id, {
+                    kind: action.kind === 'shell' ? 'agent' : 'shell',
+                  })
+                }
+              >
+                {t(
+                  action.kind === 'shell'
+                    ? 'projects.quickActions.shellKind'
+                    : 'projects.quickActions.agentKind'
+                )}
+              </Button>
               <Input
                 className="flex-1"
-                placeholder="$release-via-cicd or /release-via-cicd"
+                placeholder={
+                  action.kind === 'shell'
+                    ? t('projects.quickActions.shellPlaceholder')
+                    : t('projects.quickActions.agentPlaceholder')
+                }
                 value={action.command}
                 disabled={loading}
                 onChange={(e) => updateRow(action.id, { command: e.target.value })}

@@ -108,6 +108,7 @@ const savedAction: QuickAction = {
   id: 'saved-action',
   label: 'Start and verify',
   command: 'Start this project and verify the local URL.',
+  kind: 'agent',
 };
 
 function requiredActions() {

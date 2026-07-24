@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { QuickAction } from '@shared/project-settings';
 import { openFeature } from '@renderer/features/features/feature-navigation';
-import { runProjectCommand } from '@renderer/features/projects/run-project-command';
+import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   asMounted,
   getProjectSettingsStore,
@@ -49,18 +49,23 @@ export const QuickActionsCard = observer(function QuickActionsCard({
   };
 
   const handleRun = async (action: QuickAction) => {
-    if (!project || !runtimeId) return;
+    if (!project) return;
     setRunningId(action.id);
     try {
-      const taskId = await runProjectCommand({
+      if (action.kind !== 'shell') {
+        await Promise.all([repo?.localData.load(), repo?.remoteData.load()]);
+      }
+      const result = await runProjectQuickAction({
         project,
         action,
         runtimeId,
         defaultBranch: repo?.defaultBranch,
       });
-      if (taskId) navigate('task', { projectId, taskId });
+      if (result.kind === 'agent') {
+        navigate('task', { projectId, taskId: result.taskId });
+      }
     } catch (err) {
-      log.warn('runProjectCommand failed', { projectId, action, error: String(err) });
+      log.warn('runProjectQuickAction failed', { projectId, action, error: String(err) });
     } finally {
       setRunningId(null);
     }
@@ -90,7 +95,11 @@ export const QuickActionsCard = observer(function QuickActionsCard({
             key={action.id}
             variant="outline"
             size="sm"
-            disabled={!project || !runtimeId || runningId !== null}
+            disabled={
+              !project ||
+              runningId !== null ||
+              (action.kind === 'shell' ? project.data.type !== 'local' : !runtimeId)
+            }
             onClick={() => void handleRun(action)}
           >
             <Play className="size-3.5" />

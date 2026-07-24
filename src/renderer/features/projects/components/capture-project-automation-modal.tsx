@@ -1,4 +1,4 @@
-import { Bot, FileCode2, ListPlus, WandSparkles } from 'lucide-react';
+import { Bot, FileCode2, ListPlus, Loader2, WandSparkles } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -9,16 +9,15 @@ import {
   serializePromptWithTokens,
   type PromptToken,
 } from '@renderer/app/prompt-attachment-tokens';
-import { runProjectCommand } from '@renderer/features/projects/run-project-command';
+import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   asMounted,
   getProjectSettingsStore,
   getProjectStore,
-  getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
-import { useNavigate } from '@renderer/lib/layout/navigation-provider';
+import { rpc } from '@renderer/lib/ipc';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
@@ -40,21 +39,11 @@ type CaptureProjectAutomationModalArgs = {
 type Props = BaseModalProps<void> & CaptureProjectAutomationModalArgs;
 type Target = 'quickAction' | 'runScript' | 'skillDraft';
 
-const fallbackQuickActionPrompt =
+const fallbackSkillWorkflow =
   'Execute this project operation end to end. Infer the exact commands from the current repository, run the required checks, and report the local URL or verification evidence.';
 
 function genId(): string {
   return crypto.randomUUID();
-}
-
-function buildQuickActionCommand(intent: string): string {
-  const trimmed = intent.trim();
-  if (!trimmed) return fallbackQuickActionPrompt;
-  return [
-    trimmed,
-    '',
-    'Treat this as a repeatable project operation: identify repository conventions, run the required commands, and finish with concrete verification evidence.',
-  ].join('\n');
 }
 
 function buildSkillDraft(intent: string, quickActionLabel: string, quickActionCommand: string) {
@@ -70,7 +59,7 @@ function buildSkillDraft(intent: string, quickActionLabel: string, quickActionCo
     '',
     '# Workflow',
     '',
-    quickActionCommand.trim() || fallbackQuickActionPrompt,
+    quickActionCommand.trim() || fallbackSkillWorkflow,
     '',
     '# Verification',
     '',
@@ -86,6 +75,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
 }: Props) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
+  const [compiling, setCompiling] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [intent, setIntent] = useState('');
@@ -93,7 +83,9 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   const [target, setTarget] = useState<Target>('quickAction');
   const [label, setLabel] = useState('');
   const [labelOverridden, setLabelOverridden] = useState(false);
-  const [command, setCommand] = useState(fallbackQuickActionPrompt);
+  const [command, setCommand] = useState('');
+  const [compiledIntent, setCompiledIntent] = useState<string | null>(null);
+  const [explanation, setExplanation] = useState('');
   const [setupScript, setSetupScript] = useState('');
   const [runScript, setRunScript] = useState('');
   const [teardownScript, setTeardownScript] = useState('');
@@ -113,7 +105,6 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     value: runtimeOverrideValue,
     set: ignoreRuntimeOverride,
   });
-  const { navigate } = useNavigate();
   const serializedIntent = useMemo(
     () => serializePromptWithTokens(intent, intentTokens, { imagesAsPaths: true }).text,
     [intent, intentTokens]
@@ -149,10 +140,6 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   );
 
   useEffect(() => {
-    setCommand(buildQuickActionCommand(serializedIntent));
-  }, [serializedIntent]);
-
-  useEffect(() => {
     if (labelOverridden) return;
     setLabel(suggestedLabel);
   }, [labelOverridden, suggestedLabel]);
@@ -160,6 +147,39 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   const handleLabelChange = (next: string) => {
     setLabel(next);
     setLabelOverridden(next.trim().length > 0);
+  };
+
+  const handleCompile = async () => {
+    const cleanedIntent = serializedIntent.trim();
+    if (!cleanedIntent) {
+      setError(t('sidebar.captureAutomation.intentRequired'));
+      return;
+    }
+    if (!runtimeId || createDisabled) {
+      setError(t('sidebar.captureAutomation.compilationUnavailable'));
+      return;
+    }
+    setCompiling(true);
+    setError(null);
+    try {
+      const result = await rpc.quickActions.compile({
+        projectId,
+        intent: cleanedIntent,
+        runtimeId,
+      });
+      setCommand(result.command);
+      setExplanation(result.explanation);
+      setCompiledIntent(cleanedIntent);
+      if (!labelOverridden) setLabel(result.label);
+    } catch (compileError) {
+      setError(
+        t('sidebar.captureAutomation.compileFailed', {
+          error: compileError instanceof Error ? compileError.message : String(compileError),
+        })
+      );
+    } finally {
+      setCompiling(false);
+    }
   };
 
   const saveQuickAction = async (): Promise<QuickAction | null> => {
@@ -180,6 +200,8 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
       id: quickActionId,
       label: cleanedLabel,
       command: cleanedCommand,
+      kind: 'shell',
+      sourceIntent: serializedIntent.trim(),
     };
     const currentActions = currentSettings.quickActions ?? [];
     const nextActions = currentActions.some((item) => item.id === action.id)
@@ -235,16 +257,12 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
       }
 
       const project = asMounted(getProjectStore(projectId));
-      const repository = getRepositoryStore(projectId);
-      if (!project || !repository || !runtimeId || createDisabled) {
+      if (!project) {
         setError(t('sidebar.captureAutomation.executionUnavailable'));
         return;
       }
-
-      await Promise.all([repository.localData.load(), repository.remoteData.load()]);
-      const defaultBranch = repository.defaultBranch;
-      if (!defaultBranch) {
-        setError(t('sidebar.captureAutomation.executionUnavailable'));
+      if (compiledIntent !== serializedIntent.trim() || !command.trim()) {
+        setError(t('sidebar.captureAutomation.generateBeforeSave'));
         return;
       }
 
@@ -252,18 +270,11 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
       if (!action) return;
 
       try {
-        const taskId = await runProjectCommand({
+        await runProjectQuickAction({
           project,
           action,
-          runtimeId,
-          defaultBranch,
         });
-        if (!taskId) {
-          setError(t('sidebar.captureAutomation.savedButExecutionFailed'));
-          return;
-        }
         onSuccess();
-        navigate('task', { projectId, taskId });
       } catch (executionError) {
         setError(
           t('sidebar.captureAutomation.savedButExecutionFailedWithReason', {
@@ -306,6 +317,29 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
               showSubmitButton={false}
             />
             <FieldDescription>{t('sidebar.captureAutomation.intentDescription')}</FieldDescription>
+            {target === 'quickAction' && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="self-start"
+                disabled={
+                  loading || compiling || !serializedIntent.trim() || !runtimeId || createDisabled
+                }
+                onClick={() => void handleCompile()}
+              >
+                {compiling ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <WandSparkles className="size-3.5" />
+                )}
+                {t(
+                  compiling
+                    ? 'sidebar.captureAutomation.generatingCommand'
+                    : 'sidebar.captureAutomation.generateCommand'
+                )}
+              </Button>
+            )}
           </Field>
 
           <div className="grid grid-cols-3 gap-2">
@@ -354,12 +388,18 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
                 <Textarea
                   rows={5}
                   value={command}
-                  disabled={loading}
+                  disabled={loading || compiling}
+                  placeholder={t('sidebar.captureAutomation.actionCommandPlaceholder')}
                   onChange={(e) => setCommand(e.target.value)}
                 />
                 <FieldDescription>
                   {t('sidebar.captureAutomation.quickActionDescription')}
                 </FieldDescription>
+                {explanation ? (
+                  <FieldDescription>
+                    {t('sidebar.captureAutomation.commandEvidence', { explanation })}
+                  </FieldDescription>
+                ) : null}
               </Field>
             </FieldGroup>
           )}
@@ -428,7 +468,16 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
             {t('sidebar.captureAutomation.copySkillDraft')}
           </Button>
         ) : (
-          <ConfirmButton onClick={() => void handleSubmit()} disabled={loading || submitting}>
+          <ConfirmButton
+            onClick={() => void handleSubmit()}
+            disabled={
+              loading ||
+              compiling ||
+              submitting ||
+              (target === 'quickAction' &&
+                (compiledIntent !== serializedIntent.trim() || !command.trim()))
+            }
+          >
             {target === 'quickAction'
               ? t(
                   submitting

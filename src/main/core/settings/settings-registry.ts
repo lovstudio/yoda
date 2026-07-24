@@ -147,7 +147,9 @@ export const SETTINGS_DEFAULTS = {
     attachImagesAsPaths: false,
     promptTokens: [],
     preArchiveCommand: '',
-    defaultQuickActions: [{ id: 'release', label: 'Release', command: '/release-via-cicd' }],
+    defaultQuickActions: [
+      { id: 'release', label: 'Release', command: '/release-via-cicd', kind: 'agent' as const },
+    ],
   },
   statusline: {
     templates: [

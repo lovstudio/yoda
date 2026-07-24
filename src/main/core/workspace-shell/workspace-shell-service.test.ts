@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getDependencyManager: vi.fn(),
   getRuntimeConfig: vi.fn(),
   spawnLocalPty: vi.fn(),
+  registerSession: vi.fn(),
   exitHandlers: [] as Array<(info: { exitCode?: number }) => void>,
 }));
 
@@ -24,7 +25,7 @@ vi.mock('@main/core/pty/local-pty', () => ({
 
 vi.mock('@main/core/pty/pty-session-registry', () => ({
   ptySessionRegistry: {
-    register: vi.fn(),
+    register: mocks.registerSession,
     unregister: vi.fn(),
   },
 }));
@@ -173,5 +174,41 @@ describe('workspace shell runtime actions', () => {
     await Promise.resolve();
 
     expect(mocks.spawnLocalPty).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs an approved quick action command directly and preserves its output', async () => {
+    const service = new WorkspaceShellService();
+    const sessionId = 'workspace-shell:quick-action';
+
+    await service.runCommand(sessionId, {
+      command: 'pnpm run dev',
+      cwd: process.cwd(),
+      initialSize: { cols: 120, rows: 30 },
+    });
+
+    expect(mocks.spawnLocalPty).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: process.cwd(),
+        cols: 120,
+        rows: 30,
+      })
+    );
+    const spawnArgs = mocks.spawnLocalPty.mock.calls[0]?.[0] as { args: string[] };
+    expect(spawnArgs.args.at(-1)).toBe('pnpm run dev');
+    expect(mocks.registerSession).toHaveBeenCalledWith(sessionId, expect.anything(), {
+      preserveBufferOnExit: true,
+    });
+  });
+
+  it('does not fall back to the home directory for a missing command cwd', async () => {
+    const service = new WorkspaceShellService();
+
+    await expect(
+      service.runCommand('workspace-shell:missing-project', {
+        command: 'pnpm run dev',
+        cwd: '/definitely/missing/yoda-project',
+      })
+    ).rejects.toThrow('project directory is unavailable');
+    expect(mocks.spawnLocalPty).not.toHaveBeenCalled();
   });
 });

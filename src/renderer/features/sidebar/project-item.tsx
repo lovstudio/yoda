@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { buildProjectDeepLink } from '@shared/deep-links';
 import type { QuickAction } from '@shared/project-settings';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
-import { runProjectCommand } from '@renderer/features/projects/run-project-command';
+import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   isUnregisteredProject,
   type UnregisteredProject,
@@ -156,17 +156,20 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     async (action: QuickAction) => {
       const mounted = asMounted(getProjectStore(projectId));
       const repository = getRepositoryStore(projectId);
-      if (!mounted || !repository || !expressProviderId) return;
+      if (!mounted || !repository) return;
       try {
-        await Promise.all([repository.localData.load(), repository.remoteData.load()]);
-        const taskId = await runProjectCommand({
+        if (action.kind !== 'shell') {
+          await Promise.all([repository.localData.load(), repository.remoteData.load()]);
+        }
+        const result = await runProjectQuickAction({
           project: mounted,
           action,
           runtimeId: expressProviderId,
           defaultBranch: repository.defaultBranch,
         });
-        if (!taskId) throw new Error(t('sidebar.captureAutomation.executionUnavailable'));
-        navigate('task', { projectId, taskId });
+        if (result.kind === 'agent') {
+          navigate('task', { projectId, taskId: result.taskId });
+        }
       } catch (error) {
         log.warn('sidebar quick action failed', {
           projectId,
@@ -334,7 +337,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         : () => showCaptureAutomation({ projectId, projectName: project.displayName }),
     quickActions,
     onRunQuickAction:
-      project.state === 'mounted' && expressProviderId
+      project.state === 'mounted' &&
+      (expressProviderId || (mountedProject?.data.type === 'local' && quickActions.length > 0))
         ? (action: QuickAction) => void handleRunQuickAction(action)
         : undefined,
     onMenuOpen: prefetchProjectMenuData,

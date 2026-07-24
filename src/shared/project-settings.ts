@@ -33,6 +33,12 @@ export const quickActionSchema = z.object({
   id: z.string(),
   label: z.string(),
   command: z.string(),
+  /**
+   * Legacy quick actions were Agent prompts. Keep them runnable as-is while
+   * making newly compiled operations explicit programmatic shell commands.
+   */
+  kind: z.enum(['agent', 'shell']).default('agent'),
+  sourceIntent: z.string().optional(),
 });
 
 export type QuickAction = z.infer<typeof quickActionSchema>;
