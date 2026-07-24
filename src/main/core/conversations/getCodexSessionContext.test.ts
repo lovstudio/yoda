@@ -261,7 +261,7 @@ describe('getCodexSessionContext', () => {
   });
 
   it.each(['task_started', 'turn_started'] as const)(
-    'exposes an interrupted historical turn once a different %s event starts',
+    'does not expose an interrupted historical turn when a different %s event starts',
     async (startedEventType) => {
       writeFileSync(
         rolloutPath,
@@ -311,7 +311,7 @@ describe('getCodexSessionContext', () => {
 
       expect(context?.prompts.map((prompt) => [prompt.text, prompt.restoreTarget])).toEqual([
         ['Interrupted request', undefined],
-        ['Steer interrupted turn', { kind: 'codex-turn', turnId: 'turn-interrupted' }],
+        ['Steer interrupted turn', undefined],
         ['Still running', undefined],
       ]);
       expect(context?.completedTurnCount).toBe(0);
