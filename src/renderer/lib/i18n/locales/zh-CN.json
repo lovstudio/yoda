@@ -268,7 +268,8 @@
       "saveFailed": "保存项目设置失败。"
     },
     "captureAutomation": {
-      "menuLabel": "快速操作…",
+      "menuLabel": "快速操作",
+      "createLabel": "新建快速操作…",
       "title": "快速操作 — {{name}}",
       "intentLabel": "自然语言操作",
       "intentPlaceholder": "例如：本地启动这个项目，必要时安装依赖，保持 dev server 运行，并验证 localhost URL。",
@@ -291,6 +292,7 @@
       "executionUnavailable": "无法执行快速操作：项目、运行时或默认分支尚未就绪。",
       "savedButExecutionFailed": "快速操作已保存，但未能启动执行。",
       "savedButExecutionFailedWithReason": "快速操作已保存，但执行失败：{{error}}",
+      "runFailed": "快速操作执行失败",
       "submitFailed": "快速操作提交失败：{{error}}"
     },
     "mobileConnection": {

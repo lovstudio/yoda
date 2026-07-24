@@ -7,9 +7,11 @@ import {
   Copy,
   FolderPen,
   Info,
+  ListPlus,
   PencilLine,
   Pin,
   PinOff,
+  Play,
   RotateCcw,
   Settings2,
   Trash2,
@@ -17,6 +19,7 @@ import {
 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import type { QuickAction } from '@shared/project-settings';
 import {
   WorkspaceAssignContextSubmenu,
   WorkspaceAssignDropdownSubmenu,
@@ -32,6 +35,9 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@renderer/lib/ui/context-menu';
 import {
@@ -39,6 +45,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 
@@ -58,6 +67,9 @@ interface ProjectMenuActions {
   onChangeSshConnection?: () => void;
   onConfigureScripts?: () => void;
   onCaptureAutomation?: () => void;
+  quickActions?: QuickAction[];
+  onRunQuickAction?: (action: QuickAction) => void;
+  onMenuOpen?: () => void;
   onRename?: () => void;
   onMovePath?: () => void;
   canArchiveProject: boolean;
@@ -80,7 +92,7 @@ interface MenuItemDescriptor {
   onSelect?: () => void;
   disabled?: boolean;
   variant?: 'default' | 'destructive';
-  kind?: 'action' | 'open-in';
+  kind?: 'action' | 'open-in' | 'quick-actions';
 }
 
 function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
@@ -235,11 +247,10 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   }
   if (actions.onCaptureAutomation) {
     items.push({
-      key: 'capture-automation',
+      key: 'quick-actions',
       group: 5,
-      icon: WandSparkles,
+      kind: 'quick-actions',
       label: t('sidebar.captureAutomation.menuLabel'),
-      onSelect: actions.onCaptureAutomation,
     });
   }
 
@@ -260,6 +271,90 @@ async function copyProjectPath(path: string, t: TFunction) {
   }
 }
 
+function ProjectQuickActionsContextSubmenu({ actions }: { actions: ProjectMenuActions }) {
+  const { t } = useTranslation();
+  const quickActions = actions.quickActions ?? [];
+  return (
+    <ContextMenuSub>
+      <ContextMenuSubTrigger>
+        <WandSparkles className="size-4" />
+        {t('sidebar.captureAutomation.menuLabel')}
+      </ContextMenuSubTrigger>
+      <ContextMenuSubContent className="min-w-48">
+        {quickActions.length === 0 ? (
+          <ContextMenuItem disabled>{t('projects.quickActions.empty')}</ContextMenuItem>
+        ) : (
+          quickActions.map((action) => (
+            <ContextMenuItem
+              key={action.id}
+              disabled={!actions.onRunQuickAction}
+              onClick={(event) => {
+                event.stopPropagation();
+                actions.onRunQuickAction?.(action);
+              }}
+            >
+              <Play className="size-4" />
+              {action.label}
+            </ContextMenuItem>
+          ))
+        )}
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          onClick={(event) => {
+            event.stopPropagation();
+            actions.onCaptureAutomation?.();
+          }}
+        >
+          <ListPlus className="size-4" />
+          {t('sidebar.captureAutomation.createLabel')}
+        </ContextMenuItem>
+      </ContextMenuSubContent>
+    </ContextMenuSub>
+  );
+}
+
+function ProjectQuickActionsDropdownSubmenu({ actions }: { actions: ProjectMenuActions }) {
+  const { t } = useTranslation();
+  const quickActions = actions.quickActions ?? [];
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <WandSparkles className="size-4" />
+        {t('sidebar.captureAutomation.menuLabel')}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="min-w-48">
+        {quickActions.length === 0 ? (
+          <DropdownMenuItem disabled>{t('projects.quickActions.empty')}</DropdownMenuItem>
+        ) : (
+          quickActions.map((action) => (
+            <DropdownMenuItem
+              key={action.id}
+              disabled={!actions.onRunQuickAction}
+              onClick={(event) => {
+                event.stopPropagation();
+                actions.onRunQuickAction?.(action);
+              }}
+            >
+              <Play className="size-4" />
+              {action.label}
+            </DropdownMenuItem>
+          ))
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={(event) => {
+            event.stopPropagation();
+            actions.onCaptureAutomation?.();
+          }}
+        >
+          <ListPlus className="size-4" />
+          {t('sidebar.captureAutomation.createLabel')}
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
 interface ProjectContextMenuProps extends ProjectMenuActions {
   children: React.ReactNode;
 }
@@ -267,7 +362,11 @@ interface ProjectContextMenuProps extends ProjectMenuActions {
 export function ProjectContextMenu({ children, ...actions }: ProjectContextMenuProps) {
   const items = useMenuItems(actions);
   return (
-    <ContextMenu>
+    <ContextMenu
+      onOpenChange={(open) => {
+        if (open) actions.onMenuOpen?.();
+      }}
+    >
       <ContextMenuTrigger className="block w-full min-w-0 overflow-hidden">
         {children}
       </ContextMenuTrigger>
@@ -276,6 +375,14 @@ export function ProjectContextMenu({ children, ...actions }: ProjectContextMenuP
           const prev = items[index - 1];
           const showSeparator = prev && prev.group !== item.group;
           const workspaceAssign = item.key === 'remove-project' ? actions.onAssignWorkspace : null;
+          if (item.kind === 'quick-actions') {
+            return (
+              <React.Fragment key={item.key}>
+                {showSeparator && <ContextMenuSeparator />}
+                <ProjectQuickActionsContextSubmenu actions={actions} />
+              </React.Fragment>
+            );
+          }
           if (item.kind === 'open-in' && actions.projectPath) {
             return (
               <React.Fragment key={item.key}>
@@ -334,13 +441,27 @@ export function ProjectActionsMenu({
 }: ProjectActionsMenuProps) {
   const items = useMenuItems(actions);
   return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) actions.onMenuOpen?.();
+        onOpenChange?.(nextOpen);
+      }}
+    >
       <DropdownMenuTrigger render={trigger} />
       <DropdownMenuContent align={align} className="min-w-44">
         {items.map((item, index) => {
           const prev = items[index - 1];
           const showSeparator = prev && prev.group !== item.group;
           const workspaceAssign = item.key === 'remove-project' ? actions.onAssignWorkspace : null;
+          if (item.kind === 'quick-actions') {
+            return (
+              <React.Fragment key={item.key}>
+                {showSeparator && <DropdownMenuSeparator />}
+                <ProjectQuickActionsDropdownSubmenu actions={actions} />
+              </React.Fragment>
+            );
+          }
           if (item.kind === 'open-in' && actions.projectPath) {
             return (
               <React.Fragment key={item.key}>

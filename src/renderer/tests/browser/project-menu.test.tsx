@@ -1,0 +1,190 @@
+import {
+  act,
+  createElement,
+  type ButtonHTMLAttributes,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { QuickAction } from '@shared/project-settings';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const translations: Record<string, string> = {
+  'sidebar.captureAutomation.menuLabel': 'Quick actions',
+  'sidebar.captureAutomation.createLabel': 'New quick action…',
+  'projects.quickActions.empty': 'No quick actions configured.',
+};
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => translations[key] ?? key,
+  }),
+}));
+
+vi.mock('@renderer/features/workspaces/workspace-assign-submenu', () => ({
+  WorkspaceAssignContextSubmenu: () => null,
+  WorkspaceAssignDropdownSubmenu: () => null,
+}));
+
+vi.mock('@renderer/lib/components/titlebar/open-in-menu', () => ({
+  OpenInContextSubmenu: () => null,
+  OpenInDropdownSubmenu: () => null,
+}));
+
+vi.mock('@renderer/lib/hooks/use-toast', () => ({
+  toast: vi.fn(),
+}));
+
+vi.mock('@renderer/lib/ipc', () => ({
+  rpc: {},
+}));
+
+vi.mock('@renderer/lib/ui/context-menu', async () => {
+  const { createElement: create } = await import('react');
+  const container =
+    (slot: string) =>
+    ({ children }: { children?: ReactNode }) =>
+      create('div', { 'data-slot': slot }, children);
+  const item =
+    (slot: string) =>
+    ({
+      children,
+      variant: _variant,
+      inset: _inset,
+      ...props
+    }: ButtonHTMLAttributes<HTMLButtonElement> & {
+      variant?: string;
+      inset?: boolean;
+    }) =>
+      create('button', { ...props, 'data-slot': slot }, children);
+
+  return {
+    ContextMenu: container('context-menu'),
+    ContextMenuContent: container('context-menu-content'),
+    ContextMenuItem: item('context-menu-item'),
+    ContextMenuSeparator: () => create('hr'),
+    ContextMenuSub: container('context-menu-sub'),
+    ContextMenuSubContent: container('context-menu-sub-content'),
+    ContextMenuSubTrigger: container('context-menu-sub-trigger'),
+    ContextMenuTrigger: container('context-menu-trigger'),
+  };
+});
+
+vi.mock('@renderer/lib/ui/dropdown-menu', async () => {
+  const { createElement: create } = await import('react');
+  const container =
+    (slot: string) =>
+    ({ children }: { children?: ReactNode }) =>
+      create('div', { 'data-slot': slot }, children);
+  const item =
+    (slot: string) =>
+    ({
+      children,
+      variant: _variant,
+      inset: _inset,
+      ...props
+    }: ButtonHTMLAttributes<HTMLButtonElement> & {
+      variant?: string;
+      inset?: boolean;
+    }) =>
+      create('button', { ...props, 'data-slot': slot }, children);
+
+  return {
+    DropdownMenu: container('dropdown-menu'),
+    DropdownMenuContent: container('dropdown-menu-content'),
+    DropdownMenuItem: item('dropdown-menu-item'),
+    DropdownMenuSeparator: () => create('hr'),
+    DropdownMenuSub: container('dropdown-menu-sub'),
+    DropdownMenuSubContent: container('dropdown-menu-sub-content'),
+    DropdownMenuSubTrigger: container('dropdown-menu-sub-trigger'),
+    DropdownMenuTrigger: ({ render }: { render: ReactElement }) =>
+      create('span', { 'data-slot': 'dropdown-menu-trigger' }, render),
+  };
+});
+
+const savedAction: QuickAction = {
+  id: 'saved-action',
+  label: 'Start and verify',
+  command: 'Start this project and verify the local URL.',
+};
+
+function requiredActions() {
+  return {
+    isPinned: false,
+    canPin: false,
+    isSsh: false,
+    canReconnect: false,
+    canArchiveProject: true,
+    canArchiveProjectTasks: false,
+    canRemoveProject: true,
+    onPin: vi.fn(),
+    onUnpin: vi.fn(),
+    onArchiveProject: vi.fn(),
+    onArchiveProjectTasks: vi.fn(),
+    onRemoveProject: vi.fn(),
+  };
+}
+
+describe('ProjectMenu quick actions submenu', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it.each([
+    ['context', 'context-menu-item'],
+    ['dropdown', 'dropdown-menu-item'],
+  ] as const)('shows and reruns saved actions in the %s menu', async (surface, itemSlot) => {
+    const { ProjectActionsMenu, ProjectContextMenu } = await import(
+      '@renderer/features/sidebar/project-menu'
+    );
+    const onRunQuickAction = vi.fn();
+    const onCaptureAutomation = vi.fn();
+    const actions = {
+      ...requiredActions(),
+      quickActions: [savedAction],
+      onRunQuickAction,
+      onCaptureAutomation,
+    };
+
+    await act(async () => {
+      root.render(
+        surface === 'context'
+          ? createElement(ProjectContextMenu, {
+              ...actions,
+              children: createElement('div', null, 'Example project'),
+            })
+          : createElement(ProjectActionsMenu, {
+              ...actions,
+              trigger: createElement('button', null, 'More'),
+            })
+      );
+    });
+
+    expect(host.querySelector('[data-slot$="menu-sub-trigger"]')?.textContent).toContain(
+      'Quick actions'
+    );
+    const items = Array.from(
+      host.querySelectorAll<HTMLButtonElement>(`button[data-slot="${itemSlot}"]`)
+    );
+    const savedActionItem = items.find((item) => item.textContent?.includes(savedAction.label));
+    const createActionItem = items.find((item) => item.textContent?.includes('New quick action'));
+
+    await act(async () => savedActionItem?.click());
+    expect(onRunQuickAction).toHaveBeenCalledWith(savedAction);
+
+    await act(async () => createActionItem?.click());
+    expect(onCaptureAutomation).toHaveBeenCalledTimes(1);
+  });
+});

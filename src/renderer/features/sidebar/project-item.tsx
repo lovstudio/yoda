@@ -11,7 +11,9 @@ import { observer } from 'mobx-react-lite';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildProjectDeepLink } from '@shared/deep-links';
+import type { QuickAction } from '@shared/project-settings';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
+import { runProjectCommand } from '@renderer/features/projects/run-project-command';
 import {
   isUnregisteredProject,
   type UnregisteredProject,
@@ -19,6 +21,7 @@ import {
 import {
   asMounted,
   getProjectManagerStore,
+  getProjectSettingsStore,
   getProjectStore,
   getRepositoryStore,
   projectViewKind,
@@ -30,6 +33,7 @@ import { nextDefaultConversationTitle } from '@renderer/features/tasks/conversat
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { isRegistered } from '@renderer/features/tasks/stores/task';
 import { ConnectionStatusDot } from '@renderer/lib/components/connection-status-dot';
+import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import {
   useNavigate,
@@ -39,6 +43,7 @@ import {
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
+import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
 import { ProjectActionsMenu, ProjectContextMenu } from './project-menu';
 import { SidebarItemMiniButton, SidebarMenuButton, SidebarMenuRow } from './sidebar-primitives';
@@ -78,6 +83,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
 
   const project = getProjectStore(projectId);
   const mountedProject = asMounted(project);
+  const settingsStore = getProjectSettingsStore(projectId);
   const { archiveTask } = useArchiveTask(projectId);
 
   const prefetchRepository = useCallback(() => {
@@ -113,6 +119,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   );
 
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
+  const quickActions =
+    settingsStore?.settings?.quickActions ?? homeDraft?.defaultQuickActions ?? [];
   const expressMode = homeDraft?.expressMode ?? false;
   const expressConnectionId =
     mountedProject?.data?.type === 'ssh' ? mountedProject.data.connectionId : undefined;
@@ -138,6 +146,42 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   }, [isProjectActive, prefetchRepository]);
 
   const isExpanded = sidebarStore.expandedProjectIds.has(projectId);
+
+  const prefetchProjectMenuData = useCallback(() => {
+    prefetchRepository();
+    void settingsStore?.pageData.load();
+  }, [prefetchRepository, settingsStore]);
+
+  const handleRunQuickAction = useCallback(
+    async (action: QuickAction) => {
+      const mounted = asMounted(getProjectStore(projectId));
+      const repository = getRepositoryStore(projectId);
+      if (!mounted || !repository || !expressProviderId) return;
+      try {
+        await Promise.all([repository.localData.load(), repository.remoteData.load()]);
+        const taskId = await runProjectCommand({
+          project: mounted,
+          action,
+          runtimeId: expressProviderId,
+          defaultBranch: repository.defaultBranch,
+        });
+        if (!taskId) throw new Error(t('sidebar.captureAutomation.executionUnavailable'));
+        navigate('task', { projectId, taskId });
+      } catch (error) {
+        log.warn('sidebar quick action failed', {
+          projectId,
+          actionId: action.id,
+          error: String(error),
+        });
+        toast({
+          title: t('sidebar.captureAutomation.runFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+        });
+      }
+    },
+    [expressProviderId, navigate, projectId, t]
+  );
 
   const handleAddTask = useCallback(async () => {
     const mounted = mountedProject;
@@ -288,6 +332,12 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
       project.state === 'unregistered'
         ? undefined
         : () => showCaptureAutomation({ projectId, projectName: project.displayName }),
+    quickActions,
+    onRunQuickAction:
+      project.state === 'mounted' && expressProviderId
+        ? (action: QuickAction) => void handleRunQuickAction(action)
+        : undefined,
+    onMenuOpen: prefetchProjectMenuData,
     onRename: project.state === 'unregistered' ? undefined : () => showRenameProject({ projectId }),
     onMovePath:
       project.state === 'unregistered' ? undefined : () => showMoveProjectPath({ projectId }),
@@ -323,7 +373,10 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
               tabIndex={0}
               aria-expanded={isExpanded}
               onMouseDown={(e) => e.preventDefault()}
-              onMouseEnter={() => setHovered(true)}
+              onMouseEnter={() => {
+                setHovered(true);
+                prefetchProjectMenuData();
+              }}
               onMouseLeave={() => setHovered(false)}
               onClick={(e) => {
                 // Alt/Option pins the project into the global side pane; a plain
