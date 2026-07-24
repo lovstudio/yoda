@@ -616,9 +616,9 @@ function parseCodexRolloutLines(
     if (pendingResponseUser && turnId !== pendingResponseUser.turnId) {
       pendingResponseUser = null;
     }
-    if (currentTurnId && turnId !== currentTurnId) {
-      markTurnRestorable(currentTurnId);
-    }
+    // A different turn can start after an app restart while the provider still
+    // considers the previous turn in progress. Only an explicit completion
+    // event makes a Codex turn safe to use as thread/fork's lastTurnId.
     currentTurnId = turnId;
   };
   const noteUserTurn = (turnId: string | null): void => {
