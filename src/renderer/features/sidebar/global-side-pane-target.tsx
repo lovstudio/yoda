@@ -1,4 +1,4 @@
-import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, PinOff } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@renderer/lib/ui/context-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
@@ -22,6 +23,7 @@ export const GlobalSidePaneTarget = observer(function GlobalSidePaneTarget({
   altHeld,
   tooltipSide = 'right',
   tooltipLabel,
+  unpinAction,
   children,
 }: {
   viewId: ViewId;
@@ -29,6 +31,11 @@ export const GlobalSidePaneTarget = observer(function GlobalSidePaneTarget({
   altHeld: boolean;
   tooltipSide?: 'top' | 'right';
   tooltipLabel?: string;
+  unpinAction?: {
+    label: string;
+    disabled?: boolean;
+    onSelect: () => void;
+  };
   children: React.ReactElement;
 }) {
   const { t } = useTranslation();
@@ -66,6 +73,19 @@ export const GlobalSidePaneTarget = observer(function GlobalSidePaneTarget({
           )}
           {label}
         </ContextMenuItem>
+        {unpinAction ? (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              className="whitespace-nowrap"
+              disabled={unpinAction.disabled}
+              onClick={unpinAction.onSelect}
+            >
+              <PinOff className="size-4" />
+              {unpinAction.label}
+            </ContextMenuItem>
+          </>
+        ) : null}
       </ContextMenuContent>
     </ContextMenu>
   );

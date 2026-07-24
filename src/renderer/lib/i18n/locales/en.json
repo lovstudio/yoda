@@ -3221,6 +3221,7 @@
     "builtInApps": "Ready to use",
     "pin": "Pin to navigation",
     "unpin": "Unpin",
+    "unpinFromNavigation": "Unpin from navigation",
     "delete": "Delete app",
     "deleteConfirm": "Delete “{{name}}”? This cannot be undone.",
     "deleteFailed": "Could not delete app",
