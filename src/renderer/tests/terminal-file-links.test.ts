@@ -8,6 +8,44 @@ import { isTerminalLinkCellInRange } from '@renderer/lib/pty/terminal-link-targe
 import { makeTerminal } from './helpers/mock-terminal';
 
 describe('terminal file links', () => {
+  it('extracts and resolves a workspace-root filename without a directory prefix', () => {
+    const text = 'OPC训练营-两日活动流程与内容大纲.md:1';
+    const line = `• 已完成并写入 ${text}。`;
+    const terminal = makeTerminal([line]);
+    const options = {
+      workspaceRoot: '/Users/mark/yoda/repositories/手工川-ai-创造营第四期',
+      onOpen: (): void => undefined,
+    };
+
+    expect(extractTerminalFileLinkCandidates(line)).toEqual([{ text, index: line.indexOf(text) }]);
+    expect(getTerminalFileLinkMatches(terminal, 1, options)).toEqual([
+      {
+        range: {
+          start: { x: line.indexOf(text) + 1, y: 1 },
+          end: { x: line.indexOf(text) + text.length, y: 1 },
+        },
+        text,
+        target: {
+          originalText: text,
+          filePath: 'OPC训练营-两日活动流程与内容大纲.md',
+          absolutePath:
+            '/Users/mark/yoda/repositories/手工川-ai-创造营第四期/OPC训练营-两日活动流程与内容大纲.md',
+          line: 1,
+          column: undefined,
+        },
+      },
+    ]);
+  });
+
+  it('recognizes common bare filenames without treating domains or versions as files', () => {
+    const line = '检查 README.md、package.json:12；忽略 example.com 和 v1.2.3。';
+
+    expect(extractTerminalFileLinkCandidates(line)).toEqual([
+      { text: 'README.md', index: line.indexOf('README.md') },
+      { text: 'package.json:12', index: line.indexOf('package.json:12') },
+    ]);
+  });
+
   it('extracts generated artifact paths after Chinese labels', () => {
     const line = '  - 可编辑 HTML：poster/product-matrix/index.html';
 

@@ -17,6 +17,26 @@ const PATH_TRAILING = `\\s"')\\]}>,，、。；;!?！？.(（）「」『』【�
 // dot so a trailing sentence period (`foo.md.`) is left out of the link.
 const PATH_EXT = `[^${PATH_SEG_EXCLUDED}\\/]{0,31}[^${PATH_SEG_EXCLUDED}\\/.]`;
 const PATH_SEG_TOKEN = `[^${PATH_SEG_EXCLUDED}\\/]+`;
+// A slash is normally the strongest signal that prose contains a file path.
+// Bare workspace-root filenames do not have that signal, so keep them to
+// common source/document/config/media extensions. This covers outputs such as
+// `README.md` and `report.md:12` without turning domains (`example.com`) or
+// semantic versions (`v1.2.3`) into file links.
+const BARE_FILENAME_EXTENSIONS = [
+  // Source and shell files.
+  'c|cc|cpp|cs|cxx|dart|go|h|hpp|java|js|jsx|mjs|cjs|kt|kts|lua|php|pl|py|pyi|r|rb|rs|scala|swift|ts|tsx',
+  'bash|fish|ps1|sh|zsh',
+  // Web, markup, data, configuration, and generated text artifacts.
+  'css|htm|html|less|sass|scss|svelte|vue',
+  'conf|csv|env|ini|json|jsonc|lock|sql|sqlite|sqlite3|toml|tsv|xml|yaml|yml',
+  'diff|log|markdown|md|mdx|patch|txt',
+  // Documents, images, media, fonts, archives, and binary artifacts.
+  'doc|docx|pdf|ppt|pptx|xls|xlsx',
+  'bmp|gif|ico|jpeg|jpg|png|svg|webp',
+  'avi|mov|mp3|mp4|ogg|wav|webm',
+  'ttf|woff|woff2',
+  '7z|bin|bz2|class|dat|db|dll|dmg|exe|gz|iso|jar|pkg|rar|so|tar|wasm|zip',
+].join('|');
 // Unquoted absolute paths may contain one internal ASCII-space boundary per
 // directory component (`Application Support/`). Keeping the allowance local
 // prevents prose such as `/project and src/main.ts` from becoming one link.
@@ -53,6 +73,10 @@ const TILDE_DIRECTORY_CANDIDATE_REGEX = new RegExp(
   `(^|[${PATH_LEADING}])(@?~\\/(?:${PATH_SEG_TOKEN}\\/)+[^${PATH_SEG_EXCLUDED}\\/.]+)(?!\\.${PATH_SEG_TOKEN})(?=$|[${PATH_TRAILING}])`,
   'gu'
 );
+const BARE_FILE_CANDIDATE_REGEX = new RegExp(
+  `(^|[${PATH_LEADING}])(@?[^${PATH_SEG_EXCLUDED}\\/]+\\.(?:${BARE_FILENAME_EXTENSIONS})(?::\\d+(?::\\d+)?)?)(?=$|[${PATH_TRAILING}])`,
+  'giu'
+);
 const FILE_PATH_CANDIDATE_REGEXES: readonly {
   regex: RegExp;
   requiresSpace: boolean;
@@ -62,6 +86,7 @@ const FILE_PATH_CANDIDATE_REGEXES: readonly {
   { regex: ROOTED_FILE_PATH_CANDIDATE_REGEX, requiresSpace: true },
   { regex: TILDE_DIRECTORY_CANDIDATE_REGEX, requiresSpace: false, isDirectory: true },
   { regex: FILE_PATH_CANDIDATE_REGEX, requiresSpace: false },
+  { regex: BARE_FILE_CANDIDATE_REGEX, requiresSpace: false },
 ];
 
 export interface TerminalFileLinkTarget {
@@ -335,7 +360,10 @@ function hasIndentedPathContinuation(
   if (!/^[\p{L}\p{N}]/u.test(continuation) || continuation.includes('/')) return false;
 
   return !extractTerminalFileLinkCandidates(lowerStripped).some(
-    (candidate) => candidate.index === 0
+    // A bare filename can itself be the wrapped basename continuation
+    // (`terminal-file-` + `links.ts`). Only a separately rooted/path-segmented
+    // candidate proves that the lower row is an independent path.
+    (candidate) => candidate.index === 0 && candidate.text.includes('/')
   );
 }
 
