@@ -9,6 +9,7 @@ import {
 } from '@shared/ai-lab-bridge';
 import { rpc } from '@renderer/lib/ipc';
 import { cn } from '@renderer/utils/utils';
+import { AI_LAB_APP_FRAME_SANDBOX } from '../app-frame-sandbox';
 import { appImageEditRuntime } from '../app-image-edit-runtime';
 import { normalizeAiLabBridgeError } from '../bridge-error';
 import { applySandboxPolicy } from '../sandbox-policy';
@@ -164,7 +165,7 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
         key={app.updatedAt}
         title={app.name}
         srcDoc={source}
-        sandbox="allow-scripts allow-forms allow-modals"
+        sandbox={AI_LAB_APP_FRAME_SANDBOX}
         referrerPolicy="no-referrer"
         className="min-h-0 w-full flex-1 border-0 bg-white"
       />
