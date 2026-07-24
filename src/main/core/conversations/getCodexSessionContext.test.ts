@@ -45,7 +45,7 @@ describe('getCodexSessionContext', () => {
       conversationId,
       conversationTitle,
       conversationCreatedAt,
-      { codexHome }
+      { codexHome, reservedThreadIds: new Set() }
     );
   }
 
@@ -187,6 +187,7 @@ describe('getCodexSessionContext', () => {
     const context = await getCodexSessionContext(cwd, 'conversation-1', undefined, undefined, {
       codexHome,
       transcriptMode: 'harness',
+      reservedThreadIds: new Set(),
     });
 
     expect(context?.baseInstructions).toBe('Base instructions');
@@ -599,6 +600,110 @@ describe('getCodexSessionContext', () => {
     expect(context?.rolloutPath).toBe(rolloutPath);
   });
 
+  it('follows the newest Codex rewind fork for the same Yoda conversation', async () => {
+    const forkedRolloutPath = join(dir, 'forked-rollout.jsonl');
+    writeRollout(rolloutPath, { id: 'root-thread', cwd });
+    writeFileSync(
+      forkedRolloutPath,
+      [
+        {
+          timestamp: '2026-06-02T11:05:00.000Z',
+          type: 'session_meta',
+          payload: {
+            id: 'forked-thread',
+            forked_from_id: 'root-thread',
+            cwd,
+            cli_version: '0.136.0',
+            model_provider: 'openai',
+          },
+        },
+        {
+          timestamp: '2026-06-02T11:05:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'task_started', turn_id: 'forked-turn' },
+        },
+        {
+          timestamp: '2026-06-02T11:05:02.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'Continued after rewind' },
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join('\n')
+    );
+    insertThread(statePath, rolloutPath, {
+      id: 'root-thread',
+      cwd,
+      title: 'Provider thread title',
+      firstUserMessage: 'Implement Codex context',
+      createdAtMs: Date.parse('2026-06-02T11:00:00.000Z'),
+      updatedAtMs: Date.parse('2026-06-02T11:04:00.000Z'),
+    });
+    insertThread(statePath, forkedRolloutPath, {
+      id: 'forked-thread',
+      cwd,
+      title: 'Provider thread title',
+      firstUserMessage: 'Implement Codex context',
+      createdAtMs: Date.parse('2026-06-02T11:05:00.000Z'),
+      updatedAtMs: Date.parse('2026-06-02T11:06:00.000Z'),
+    });
+
+    const context = await getConfiguredCodexSessionContext(
+      cwd,
+      'yoda-conversation-id',
+      'Yoda session title',
+      '2026-06-02 11:00:00'
+    );
+
+    expect(context?.threadId).toBe('forked-thread');
+    expect(context?.rolloutPath).toBe(forkedRolloutPath);
+    expect(context?.prompts.map((prompt) => prompt.text)).toEqual(['Continued after rewind']);
+  });
+
+  it('does not absorb a Codex fork reserved by another Yoda conversation', async () => {
+    const forkedRolloutPath = join(dir, 'reserved-fork-rollout.jsonl');
+    writeRollout(rolloutPath, { id: 'root-thread', cwd });
+    writeFileSync(
+      forkedRolloutPath,
+      JSON.stringify({
+        timestamp: '2026-06-02T11:05:00.000Z',
+        type: 'session_meta',
+        payload: {
+          id: 'reserved-fork',
+          forked_from_id: 'root-thread',
+          cwd,
+        },
+      })
+    );
+    insertThread(statePath, rolloutPath, {
+      id: 'root-thread',
+      cwd,
+      title: 'Provider thread title',
+      firstUserMessage: 'Implement Codex context',
+      createdAtMs: Date.parse('2026-06-02T11:00:00.000Z'),
+      updatedAtMs: Date.parse('2026-06-02T11:04:00.000Z'),
+    });
+    insertThread(statePath, forkedRolloutPath, {
+      id: 'reserved-fork',
+      cwd,
+      title: 'Provider thread title',
+      firstUserMessage: 'Implement Codex context',
+      createdAtMs: Date.parse('2026-06-02T11:05:00.000Z'),
+      updatedAtMs: Date.parse('2026-06-02T11:06:00.000Z'),
+    });
+
+    const context = await getCodexSessionContext(
+      cwd,
+      'yoda-conversation-id',
+      'Yoda session title',
+      '2026-06-02 11:00:00',
+      { codexHome, reservedThreadIds: new Set(['reserved-fork']) }
+    );
+
+    expect(context?.threadId).toBe('root-thread');
+    expect(context?.rolloutPath).toBe(rolloutPath);
+  });
+
   it('can resolve a delayed untitled Codex thread when it is the only later cwd match', async () => {
     writeRollout(rolloutPath, { id: 'delayed-thread', cwd });
     insertThread(statePath, rolloutPath, {
@@ -777,10 +882,12 @@ function insertThread(
     title: string;
     firstUserMessage: string;
     createdAtMs?: number;
+    updatedAtMs?: number;
   }
 ): void {
   const db = new Database(statePath);
   const createdAtMs = args.createdAtMs ?? 1000;
+  const updatedAtMs = args.updatedAtMs ?? createdAtMs;
   try {
     db.prepare(
       `
@@ -819,8 +926,8 @@ function insertThread(
       args.firstUserMessage,
       Math.floor(createdAtMs / 1000),
       createdAtMs,
-      Math.floor(createdAtMs / 1000),
-      createdAtMs
+      Math.floor(updatedAtMs / 1000),
+      updatedAtMs
     );
   } finally {
     db.close();

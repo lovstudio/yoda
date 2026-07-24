@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -315,6 +315,105 @@ describe('resolveCodexThreadIdForConversation', () => {
       })
     ).toEqual({ id: 'archived-codex-thread', title: 'Archived Codex session' });
   });
+
+  it('resumes the latest reachable rewind fork', () => {
+    const rootRolloutPath = join(dir, 'root.jsonl');
+    const forkedRolloutPath = join(dir, 'forked.jsonl');
+    writeFileSync(
+      rootRolloutPath,
+      JSON.stringify({
+        type: 'session_meta',
+        payload: { id: 'root-thread', cwd: '/repo' },
+      })
+    );
+    writeFileSync(
+      forkedRolloutPath,
+      JSON.stringify({
+        type: 'session_meta',
+        payload: {
+          id: 'forked-thread',
+          forked_from_id: 'root-thread',
+          cwd: '/repo',
+        },
+      })
+    );
+    insertThread(statePath, {
+      id: 'root-thread',
+      cwd: '/repo',
+      title: 'Original provider title',
+      createdAtMs: Date.parse('2026-06-04T06:45:37.000Z'),
+      updatedAtMs: Date.parse('2026-06-04T06:50:00.000Z'),
+      rolloutPath: rootRolloutPath,
+    });
+    insertThread(statePath, {
+      id: 'forked-thread',
+      cwd: '/repo',
+      title: 'Original provider title',
+      createdAtMs: Date.parse('2026-06-04T06:51:00.000Z'),
+      updatedAtMs: Date.parse('2026-06-04T07:00:00.000Z'),
+      rolloutPath: forkedRolloutPath,
+    });
+
+    expect(
+      resolveCodexThreadForConversation({
+        conversationId: 'yoda-conversation',
+        cwd: '/repo',
+        title: 'Yoda title',
+        createdAt: '2026-06-04 06:45:37',
+        statePath,
+      })
+    ).toEqual({ id: 'forked-thread', title: 'Original provider title' });
+  });
+
+  it('keeps a provider fork reserved by another Yoda conversation separate', () => {
+    const rootRolloutPath = join(dir, 'reserved-root.jsonl');
+    const forkedRolloutPath = join(dir, 'reserved-fork.jsonl');
+    writeFileSync(
+      rootRolloutPath,
+      JSON.stringify({
+        type: 'session_meta',
+        payload: { id: 'root-thread', cwd: '/repo' },
+      })
+    );
+    writeFileSync(
+      forkedRolloutPath,
+      JSON.stringify({
+        type: 'session_meta',
+        payload: {
+          id: 'reserved-fork',
+          forked_from_id: 'root-thread',
+          cwd: '/repo',
+        },
+      })
+    );
+    insertThread(statePath, {
+      id: 'root-thread',
+      cwd: '/repo',
+      title: 'Original provider title',
+      createdAtMs: Date.parse('2026-06-04T06:45:37.000Z'),
+      updatedAtMs: Date.parse('2026-06-04T06:50:00.000Z'),
+      rolloutPath: rootRolloutPath,
+    });
+    insertThread(statePath, {
+      id: 'reserved-fork',
+      cwd: '/repo',
+      title: 'Original provider title',
+      createdAtMs: Date.parse('2026-06-04T06:51:00.000Z'),
+      updatedAtMs: Date.parse('2026-06-04T07:00:00.000Z'),
+      rolloutPath: forkedRolloutPath,
+    });
+
+    expect(
+      resolveCodexThreadForConversation({
+        conversationId: 'yoda-conversation',
+        cwd: '/repo',
+        title: 'Yoda title',
+        createdAt: '2026-06-04 06:45:37',
+        statePath,
+        reservedThreadIds: new Set(['reserved-fork']),
+      })
+    ).toEqual({ id: 'root-thread', title: 'Original provider title' });
+  });
 });
 
 function createStateDb(statePath: string): void {
@@ -323,6 +422,7 @@ function createStateDb(statePath: string): void {
     db.exec(`
       CREATE TABLE threads (
         id TEXT PRIMARY KEY,
+        rollout_path TEXT NOT NULL DEFAULT '',
         cwd TEXT NOT NULL,
         title TEXT NOT NULL,
         first_user_message TEXT NOT NULL DEFAULT '',
@@ -348,6 +448,7 @@ function insertThread(
     createdAtMs: number;
     updatedAtMs: number;
     archived?: number;
+    rolloutPath?: string;
   }
 ): void {
   const db = new Database(statePath);
@@ -356,6 +457,7 @@ function insertThread(
       `
         INSERT INTO threads (
           id,
+          rollout_path,
           cwd,
           title,
           first_user_message,
@@ -365,10 +467,11 @@ function insertThread(
           updated_at,
           created_at_ms,
           updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
     ).run(
       args.id,
+      args.rolloutPath ?? '',
       args.cwd,
       args.title,
       args.title,

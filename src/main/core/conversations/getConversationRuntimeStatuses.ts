@@ -14,6 +14,7 @@ import { readClaudeTurnVerdictFile } from './claude-run-state-source';
 import { findClaudeTranscriptPathBySessionId } from './claude-transcript-locator';
 import { readCodexTurnVerdict } from './codex-run-state-source';
 import { resolveCodexThreadIdForConversation } from './codex-session-id';
+import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { isInterruptedSinceLastPrompt } from './interrupt-marker';
 
 /**
@@ -117,11 +118,13 @@ async function deriveStatus(args: {
     }
   } else if (provider === 'codex') {
     const startedAtMs = parseTimestampMs(createdAt);
+    const reservedThreadIds = await getReservedCodexThreadIds(conversationId);
     const threadId = resolveCodexThreadIdForConversation({
       conversationId,
       cwd,
       title: title ?? undefined,
       createdAt,
+      reservedThreadIds,
     });
     const verdict = await readCodexTurnVerdict(
       conversationId,

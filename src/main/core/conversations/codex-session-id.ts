@@ -10,6 +10,7 @@ import {
   resolveCodexStatePath,
   type CodexThreadRef,
 } from '@main/core/session-title/codex-title-source';
+import { resolveLatestCodexThreadIdInLineage } from './codex-thread-lineage';
 
 const SQLITE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 const CODEX_CREATED_AT_MATCH_MAX_DISTANCE_MS = 2 * 60_000;
@@ -27,7 +28,8 @@ type ResolvedCodexThread = {
 
 export function resolveAgentResumeSession(
   conversation: Conversation,
-  cwd?: string
+  cwd?: string,
+  options: { reservedThreadIds?: ReadonlySet<string> } = {}
 ): AgentResumeSession {
   if (conversation.runtimeId !== 'codex') {
     return { sessionId: conversation.id, sessionTitle: conversation.title };
@@ -38,6 +40,7 @@ export function resolveAgentResumeSession(
     cwd,
     title: conversation.title,
     createdAt: conversation.createdAt,
+    reservedThreadIds: options.reservedThreadIds,
   });
   return {
     sessionId: thread?.id ?? conversation.id,
@@ -45,8 +48,12 @@ export function resolveAgentResumeSession(
   };
 }
 
-export function resolveAgentResumeSessionId(conversation: Conversation, cwd?: string): string {
-  return resolveAgentResumeSession(conversation, cwd).sessionId;
+export function resolveAgentResumeSessionId(
+  conversation: Conversation,
+  cwd?: string,
+  options: { reservedThreadIds?: ReadonlySet<string> } = {}
+): string {
+  return resolveAgentResumeSession(conversation, cwd, options).sessionId;
 }
 
 export function resolveCodexThreadIdForConversation({
@@ -55,12 +62,14 @@ export function resolveCodexThreadIdForConversation({
   title,
   createdAt,
   statePath = resolveCodexStatePath(),
+  reservedThreadIds,
 }: {
   conversationId: string;
   cwd?: string;
   title?: string;
   createdAt?: string | null;
   statePath?: string;
+  reservedThreadIds?: ReadonlySet<string>;
 }): string | undefined {
   return resolveCodexThreadForConversation({
     conversationId,
@@ -68,6 +77,7 @@ export function resolveCodexThreadIdForConversation({
     title,
     createdAt,
     statePath,
+    reservedThreadIds,
   })?.id;
 }
 
@@ -77,19 +87,23 @@ export function resolveCodexThreadForConversation({
   title,
   createdAt,
   statePath = resolveCodexStatePath(),
+  reservedThreadIds,
 }: {
   conversationId: string;
   cwd?: string;
   title?: string;
   createdAt?: string | null;
   statePath?: string;
+  reservedThreadIds?: ReadonlySet<string>;
 }): ResolvedCodexThread | undefined {
+  const resolveCurrent = (thread: CodexThreadRef | undefined, fallbackId?: string) =>
+    toCurrentResolvedThread(statePath, thread, fallbackId, reservedThreadIds);
   const claimedThreadId = getClaimedCodexThreadId(conversationId);
   if (claimedThreadId)
-    return toResolvedThread(readCodexThreadRef(statePath, claimedThreadId), claimedThreadId);
+    return resolveCurrent(readCodexThreadRef(statePath, claimedThreadId), claimedThreadId);
 
   const direct = readCodexThreadRef(statePath, conversationId);
-  if (direct) return toResolvedThread(direct, conversationId);
+  if (direct) return resolveCurrent(direct, conversationId);
 
   const trimmedCwd = cwd?.trim();
   if (!trimmedCwd) return undefined;
@@ -102,7 +116,7 @@ export function resolveCodexThreadForConversation({
       title: trimmedTitle,
       includeArchived: true,
     });
-    if (byTitle) return toResolvedThread(byTitle);
+    if (byTitle) return resolveCurrent(byTitle);
   }
 
   const createdAtMs = parseTimestampMs(createdAt);
@@ -115,7 +129,7 @@ export function resolveCodexThreadForConversation({
     maxDistanceMs: CODEX_CREATED_AT_MATCH_MAX_DISTANCE_MS,
     includeArchived: true,
   });
-  if (byCreatedAt) return toResolvedThread(byCreatedAt);
+  if (byCreatedAt) return resolveCurrent(byCreatedAt);
 
   if (trimmedTitle) {
     const byMovedPathTitle = findClosestCodexThreadRefByTitleAndCreatedAt({
@@ -125,7 +139,7 @@ export function resolveCodexThreadForConversation({
       maxDistanceMs: CODEX_CREATED_AT_MATCH_MAX_DISTANCE_MS,
       includeArchived: true,
     });
-    if (byMovedPathTitle) return toResolvedThread(byMovedPathTitle);
+    if (byMovedPathTitle) return resolveCurrent(byMovedPathTitle);
   }
 
   const byMovedPathCreatedAt = findUniqueCodexThreadRefByCreatedAt({
@@ -134,7 +148,7 @@ export function resolveCodexThreadForConversation({
     maxDistanceMs: CODEX_MOVED_CWD_CREATED_AT_MATCH_MAX_DISTANCE_MS,
     includeArchived: true,
   });
-  if (byMovedPathCreatedAt) return toResolvedThread(byMovedPathCreatedAt);
+  if (byMovedPathCreatedAt) return resolveCurrent(byMovedPathCreatedAt);
 
   const uniqueLaterThread = findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt({
     statePath,
@@ -142,7 +156,24 @@ export function resolveCodexThreadForConversation({
     minCreatedAtMs: createdAtMs,
     includeArchived: true,
   });
-  return toResolvedThread(uniqueLaterThread);
+  return resolveCurrent(uniqueLaterThread);
+}
+
+function toCurrentResolvedThread(
+  statePath: string,
+  thread: CodexThreadRef | undefined,
+  fallbackId?: string,
+  reservedThreadIds?: ReadonlySet<string>
+): ResolvedCodexThread | undefined {
+  const resolved = toResolvedThread(thread, fallbackId);
+  if (!resolved || !thread) return resolved;
+  const currentThreadId = resolveLatestCodexThreadIdInLineage({
+    statePath,
+    rootThreadId: thread.id,
+    reservedThreadIds,
+  });
+  if (currentThreadId === thread.id) return resolved;
+  return toResolvedThread(readCodexThreadRef(statePath, currentThreadId), currentThreadId);
 }
 
 function toResolvedThread(

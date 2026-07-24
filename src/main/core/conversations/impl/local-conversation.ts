@@ -42,6 +42,7 @@ import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
 import { resolveAgentResumeSessionId } from '../codex-session-id';
+import { getReservedCodexThreadIds } from '../codex-thread-reservations';
 import { ensureCodexThreadUnarchived } from '../codex-unarchive';
 import {
   recordConversationAuthProvider,
@@ -188,8 +189,12 @@ export class LocalConversationProvider implements ConversationProvider {
         warnings: conversation.skillPolicy.warnings,
       });
     }
+    const reservedThreadIds =
+      isResuming && conversation.runtimeId === 'codex'
+        ? await getReservedCodexThreadIds(conversation.id)
+        : undefined;
     const agentSessionId = isResuming
-      ? resolveAgentResumeSessionId(conversation, this.taskPath)
+      ? resolveAgentResumeSessionId(conversation, this.taskPath, { reservedThreadIds })
       : conversation.id;
     if (isResuming) {
       await ensureCodexThreadUnarchived({

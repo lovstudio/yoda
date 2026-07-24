@@ -351,7 +351,11 @@ describe('LocalConversationProvider', () => {
 
     await provider.startSession(codexConversation, { cols: 80, rows: 24 }, true);
 
-    expect(mocks.resolveAgentResumeSessionId).toHaveBeenCalledWith(codexConversation, '/workspace');
+    expect(mocks.resolveAgentResumeSessionId).toHaveBeenCalledWith(
+      codexConversation,
+      '/workspace',
+      { reservedThreadIds: new Set() }
+    );
     expect(mocks.ensureCodexThreadUnarchived).toHaveBeenCalledWith({
       runtimeId: 'codex',
       providerConfig: {

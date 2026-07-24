@@ -19,6 +19,7 @@ import {
 } from '@main/core/session-title/codex-title-source';
 import { log } from '@main/lib/logger';
 import { iterateFileLines, readFirstFileLine } from '@main/utils/file-lines';
+import { resolveLatestCodexThreadIdInLineage } from './codex-thread-lineage';
 import { resolveRuntimeStateDirectory } from './impl/runtime-env';
 import { getCodexInstructionFiles } from './instruction-files';
 import { scanCodexSkills } from './scanCodexSkills';
@@ -81,11 +82,15 @@ export async function getCodexSessionContext(
   conversationId: string,
   conversationTitle?: string,
   conversationCreatedAt?: string | null,
-  options: { codexHome?: string; transcriptMode?: 'full' | 'harness' } = {}
+  options: {
+    codexHome?: string;
+    transcriptMode?: 'full' | 'harness';
+    reservedThreadIds?: ReadonlySet<string>;
+  } = {}
 ): Promise<CodexSessionContext | null> {
   const codexHome = options.codexHome ?? resolveCodexHome();
   const statePath = resolveCodexStatePath(codexHome);
-  const thread =
+  const rootThread =
     resolveCodexThread({
       statePath,
       cwd,
@@ -100,7 +105,21 @@ export async function getCodexSessionContext(
       conversationTitle,
       conversationCreatedAt,
     }));
-  if (!thread) return null;
+  if (!rootThread) return null;
+  const reservedThreadIds =
+    options.reservedThreadIds ??
+    (await import('./codex-thread-reservations').then(({ getReservedCodexThreadIds }) =>
+      getReservedCodexThreadIds(conversationId)
+    ));
+  const currentThreadId = resolveLatestCodexThreadIdInLineage({
+    statePath,
+    rootThreadId: rootThread.id,
+    reservedThreadIds,
+  });
+  const thread =
+    currentThreadId === rootThread.id
+      ? rootThread
+      : (readCodexThreadContext(statePath, currentThreadId) ?? rootThread);
 
   const [parsed, memoryFiles, dbDynamicTools, skills] = await Promise.all([
     loadRolloutContext(
@@ -146,11 +165,11 @@ export async function getCodexSessionModel(
   conversationId: string,
   conversationTitle?: string,
   conversationCreatedAt?: string | null,
-  options: { codexHome?: string } = {}
+  options: { codexHome?: string; reservedThreadIds?: ReadonlySet<string> } = {}
 ): Promise<string | null> {
   const codexHome = options.codexHome ?? resolveCodexHome();
   const statePath = resolveCodexStatePath(codexHome);
-  const thread =
+  const rootThread =
     resolveCodexThread({
       statePath,
       cwd,
@@ -165,6 +184,21 @@ export async function getCodexSessionModel(
       conversationTitle,
       conversationCreatedAt,
     }));
+  if (!rootThread) return null;
+  const reservedThreadIds =
+    options.reservedThreadIds ??
+    (await import('./codex-thread-reservations').then(({ getReservedCodexThreadIds }) =>
+      getReservedCodexThreadIds(conversationId)
+    ));
+  const currentThreadId = resolveLatestCodexThreadIdInLineage({
+    statePath,
+    rootThreadId: rootThread.id,
+    reservedThreadIds,
+  });
+  const thread =
+    currentThreadId === rootThread.id
+      ? rootThread
+      : (readCodexThreadContext(statePath, currentThreadId) ?? rootThread);
   return thread?.model?.trim() || null;
 }
 

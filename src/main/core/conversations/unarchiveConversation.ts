@@ -15,6 +15,7 @@ import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
 import { resolveAgentResumeSessionId } from './codex-session-id';
+import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { ensureCodexThreadUnarchived } from './codex-unarchive';
 import { conversationEvents } from './conversation-events';
 import { mapConversationRowToConversation } from './utils';
@@ -94,7 +95,10 @@ async function unarchiveCodexConversation({
   const cwd = await resolveTaskCwd({ task, project, projectPath });
   const providerConfig = await runtimeOverrideSettings.getItem('codex');
   const mappedConversation = mapConversationRowToConversation(conversation, true);
-  const threadId = resolveAgentResumeSessionId(mappedConversation, cwd);
+  const reservedThreadIds = await getReservedCodexThreadIds(mappedConversation.id);
+  const threadId = resolveAgentResumeSessionId(mappedConversation, cwd, {
+    reservedThreadIds,
+  });
   await ensureCodexThreadUnarchived({
     runtimeId: mappedConversation.runtimeId,
     providerConfig,

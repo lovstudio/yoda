@@ -11,6 +11,7 @@ import { conversations, projects } from '@main/db/schema';
 import { resolveTask } from '../projects/utils';
 import { getClaudeSessionActivity } from './claude-session-activity-source';
 import { resolveAgentResumeSession } from './codex-session-id';
+import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { buildAgentCommand, buildAgentSubcommand } from './impl/agent-command';
 import { mapConversationRowToConversation } from './utils';
 
@@ -43,7 +44,13 @@ export async function getConversationSessionInfo(
 
   const conversation = mapConversationRowToConversation(row.conversation, true);
   const workingDirectory = cwd?.trim() || row.projectPath;
-  const session = resolveAgentResumeSession(conversation, workingDirectory);
+  const reservedThreadIds =
+    conversation.runtimeId === 'codex'
+      ? await getReservedCodexThreadIds(conversation.id)
+      : undefined;
+  const session = resolveAgentResumeSession(conversation, workingDirectory, {
+    reservedThreadIds,
+  });
   const activeSession = resolveTask(projectId, taskId)
     ?.conversations.getActiveSessions()
     .find((item) => item.conversationId === conversationId);
