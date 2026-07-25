@@ -7,6 +7,7 @@
 - `build/`
 - `package.json`
 - `.github/workflows/release-prod.yml`
+- `.github/workflows/release-cn-mirror.yml`
 - `.github/workflows/release-canary.yml`
 - `.github/workflows/windows-beta-build.yml`
 - `.github/workflows/nix-build.yml`
@@ -20,6 +21,7 @@
 ## Current Notes
 
 - macOS and Linux release jobs rebuild native modules for the target Electron version
+- production platform jobs publish canonical GitHub assets first; the China mirror is dispatched afterward through an independently retryable post-CI workflow and must not block the public Release
 - Windows beta builds intentionally use Node 20 in CI for native module stability
 - changelog and auto-update behavior are separate but related surfaces in the app
 - macOS uses the pinned `YodaSparkleUpdater` helper and architecture-specific Sparkle appcasts;

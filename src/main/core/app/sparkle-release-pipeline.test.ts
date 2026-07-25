@@ -5,6 +5,7 @@ const generator = readFileSync('scripts/release/generate-sparkle-appcast.ts', 'u
 const sparkleSmoke = readFileSync('scripts/release/smoke-sparkle-delta.ts', 'utf8');
 const r2Uploader = readFileSync('scripts/release/upload-r2.ts', 'utf8');
 const chinaUploader = readFileSync('scripts/release/upload-cn-mirror.ts', 'utf8');
+const chinaMirrorWorkflow = readFileSync('.github/workflows/release-cn-mirror.yml', 'utf8');
 const productionWorkflow = readFileSync('.github/workflows/release-prod.yml', 'utf8');
 const canaryWorkflow = readFileSync('.github/workflows/release-canary.yml', 'utf8');
 
@@ -47,5 +48,16 @@ describe('Sparkle release pipeline', () => {
     expect(chinaUploader).toContain('const latestAssetUrls = [...installers, ...blockmaps].map');
     expect(chinaUploader).toContain("joinUrl(publicBaseUrl, 'latest', basename(file))");
     expect(chinaUploader).toContain('...latestAssetUrls');
+  });
+
+  it('syncs the China mirror after the public release without blocking the primary DAG', () => {
+    const publishIndex = productionWorkflow.indexOf('gh release edit "$RELEASE_TAG"');
+    const dispatchIndex = productionWorkflow.indexOf('gh workflow run release-cn-mirror.yml');
+
+    expect(productionWorkflow).not.toContain('uses: ./.github/actions/upload-cn-mirror');
+    expect(publishIndex).toBeGreaterThan(-1);
+    expect(dispatchIndex).toBeGreaterThan(publishIndex);
+    expect(chinaMirrorWorkflow).toContain('gh release download "$RELEASE_TAG"');
+    expect(chinaMirrorWorkflow).toContain('uses: ./.github/actions/upload-cn-mirror');
   });
 });

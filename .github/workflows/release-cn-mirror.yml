@@ -1,0 +1,68 @@
+name: Release Post-CI (China Mirror)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published release tag to mirror (e.g. v0.17.3)'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-cn-mirror-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag }}
+
+jobs:
+  sync-cn-mirror:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: ./.github/actions/setup-build
+        with:
+          cn-mirror-base-url: ${{ vars.YODA_CN_MIRROR_PUBLIC_BASE_URL }}
+
+      - name: Check China mirror secrets
+        id: cn-mirror
+        shell: bash
+        env:
+          CN_ENDPOINT: ${{ vars.YODA_CN_MIRROR_ENDPOINT }}
+          CN_PUBLIC_BASE_URL: ${{ vars.YODA_CN_MIRROR_PUBLIC_BASE_URL }}
+          CN_ACCESS_KEY_ID: ${{ secrets.YODA_CN_MIRROR_ACCESS_KEY_ID }}
+          CN_SECRET_ACCESS_KEY: ${{ secrets.YODA_CN_MIRROR_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -n "$CN_ENDPOINT" ] && [ -n "$CN_PUBLIC_BASE_URL" ] && [ -n "$CN_ACCESS_KEY_ID" ] && [ -n "$CN_SECRET_ACCESS_KEY" ]; then
+            echo "has_cn_mirror=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_cn_mirror=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::China mirror secrets or variables not configured. Skipping China mirror upload."
+          fi
+
+      - name: Download published GitHub Release assets
+        if: ${{ steps.cn-mirror.outputs.has_cn_mirror == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          gh release download "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --dir release --clobber
+
+      - name: Upload to China mirror
+        if: ${{ steps.cn-mirror.outputs.has_cn_mirror == 'true' }}
+        uses: ./.github/actions/upload-cn-mirror
+        with:
+          endpoint: ${{ vars.YODA_CN_MIRROR_ENDPOINT }}
+          access-key-id: ${{ secrets.YODA_CN_MIRROR_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.YODA_CN_MIRROR_SECRET_ACCESS_KEY }}
+          public-base-url: ${{ vars.YODA_CN_MIRROR_PUBLIC_BASE_URL }}
+          region: ${{ vars.YODA_CN_MIRROR_REGION || 'auto' }}
+          key-prefix: ${{ vars.YODA_CN_MIRROR_KEY_PREFIX }}

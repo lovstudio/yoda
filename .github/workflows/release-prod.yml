@@ -117,33 +117,6 @@ jobs:
         shell: bash
         run: node --experimental-strip-types scripts/release/pin-feed-urls.ts
 
-      - name: Check China mirror secrets
-        id: cn-mirror
-        shell: bash
-        env:
-          CN_ENDPOINT: ${{ vars.YODA_CN_MIRROR_ENDPOINT }}
-          CN_PUBLIC_BASE_URL: ${{ vars.YODA_CN_MIRROR_PUBLIC_BASE_URL }}
-          CN_ACCESS_KEY_ID: ${{ secrets.YODA_CN_MIRROR_ACCESS_KEY_ID }}
-          CN_SECRET_ACCESS_KEY: ${{ secrets.YODA_CN_MIRROR_SECRET_ACCESS_KEY }}
-        run: |
-          if [ -n "$CN_ENDPOINT" ] && [ -n "$CN_PUBLIC_BASE_URL" ] && [ -n "$CN_ACCESS_KEY_ID" ] && [ -n "$CN_SECRET_ACCESS_KEY" ]; then
-            echo "has_cn_mirror=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_cn_mirror=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::China mirror secrets or variables not configured. Skipping China mirror upload."
-          fi
-
-      - name: Upload to China mirror
-        if: ${{ steps.cn-mirror.outputs.has_cn_mirror == 'true' }}
-        uses: ./.github/actions/upload-cn-mirror
-        with:
-          endpoint: ${{ vars.YODA_CN_MIRROR_ENDPOINT }}
-          access-key-id: ${{ secrets.YODA_CN_MIRROR_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.YODA_CN_MIRROR_SECRET_ACCESS_KEY }}
-          public-base-url: ${{ vars.YODA_CN_MIRROR_PUBLIC_BASE_URL }}
-          region: ${{ vars.YODA_CN_MIRROR_REGION || 'auto' }}
-          key-prefix: ${{ vars.YODA_CN_MIRROR_KEY_PREFIX }}
-
       - name: Upload to GitHub Release (draft)
         shell: bash
         env:
@@ -242,33 +215,6 @@ jobs:
       - name: Pin versioned URLs in update manifests
         shell: bash
         run: node --experimental-strip-types scripts/release/pin-feed-urls.ts
-
-      - name: Check China mirror secrets
-        id: cn-mirror
-        shell: bash
-        env:
-          CN_ENDPOINT: ${{ vars.YODA_CN_MIRROR_ENDPOINT }}
-          CN_PUBLIC_BASE_URL: ${{ vars.YODA_CN_MIRROR_PUBLIC_BASE_URL }}
-          CN_ACCESS_KEY_ID: ${{ secrets.YODA_CN_MIRROR_ACCESS_KEY_ID }}
-          CN_SECRET_ACCESS_KEY: ${{ secrets.YODA_CN_MIRROR_SECRET_ACCESS_KEY }}
-        run: |
-          if [ -n "$CN_ENDPOINT" ] && [ -n "$CN_PUBLIC_BASE_URL" ] && [ -n "$CN_ACCESS_KEY_ID" ] && [ -n "$CN_SECRET_ACCESS_KEY" ]; then
-            echo "has_cn_mirror=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_cn_mirror=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::China mirror secrets or variables not configured. Skipping China mirror upload."
-          fi
-
-      - name: Upload to China mirror
-        if: ${{ steps.cn-mirror.outputs.has_cn_mirror == 'true' }}
-        uses: ./.github/actions/upload-cn-mirror
-        with:
-          endpoint: ${{ vars.YODA_CN_MIRROR_ENDPOINT }}
-          access-key-id: ${{ secrets.YODA_CN_MIRROR_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.YODA_CN_MIRROR_SECRET_ACCESS_KEY }}
-          public-base-url: ${{ vars.YODA_CN_MIRROR_PUBLIC_BASE_URL }}
-          region: ${{ vars.YODA_CN_MIRROR_REGION || 'auto' }}
-          key-prefix: ${{ vars.YODA_CN_MIRROR_KEY_PREFIX }}
 
       - name: Upload to GitHub Release (draft)
         shell: bash
@@ -415,33 +361,6 @@ jobs:
         shell: bash
         run: node --experimental-strip-types scripts/release/pin-feed-urls.ts
 
-      - name: Check China mirror secrets
-        id: cn-mirror
-        shell: bash
-        env:
-          CN_ENDPOINT: ${{ vars.YODA_CN_MIRROR_ENDPOINT }}
-          CN_PUBLIC_BASE_URL: ${{ vars.YODA_CN_MIRROR_PUBLIC_BASE_URL }}
-          CN_ACCESS_KEY_ID: ${{ secrets.YODA_CN_MIRROR_ACCESS_KEY_ID }}
-          CN_SECRET_ACCESS_KEY: ${{ secrets.YODA_CN_MIRROR_SECRET_ACCESS_KEY }}
-        run: |
-          if [ -n "$CN_ENDPOINT" ] && [ -n "$CN_PUBLIC_BASE_URL" ] && [ -n "$CN_ACCESS_KEY_ID" ] && [ -n "$CN_SECRET_ACCESS_KEY" ]; then
-            echo "has_cn_mirror=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_cn_mirror=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::China mirror secrets or variables not configured. Skipping China mirror upload."
-          fi
-
-      - name: Upload to China mirror
-        if: ${{ steps.cn-mirror.outputs.has_cn_mirror == 'true' }}
-        uses: ./.github/actions/upload-cn-mirror
-        with:
-          endpoint: ${{ vars.YODA_CN_MIRROR_ENDPOINT }}
-          access-key-id: ${{ secrets.YODA_CN_MIRROR_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.YODA_CN_MIRROR_SECRET_ACCESS_KEY }}
-          public-base-url: ${{ vars.YODA_CN_MIRROR_PUBLIC_BASE_URL }}
-          region: ${{ vars.YODA_CN_MIRROR_REGION || 'auto' }}
-          key-prefix: ${{ vars.YODA_CN_MIRROR_KEY_PREFIX }}
-
       - name: Upload to GitHub Release (draft)
         shell: bash
         env:
@@ -468,6 +387,7 @@ jobs:
     needs: [create-release, release-linux, release-win, release-mac]
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
     steps:
       - name: Publish release
@@ -477,3 +397,13 @@ jobs:
         run: |
           set -euo pipefail
           gh release edit "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --draft=false --latest
+
+      # 国内镜像属于发布后的派生分发面，单独调度并允许独立失败/重试。
+      - name: Dispatch China mirror post-CI
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh workflow run release-cn-mirror.yml -R "$GITHUB_REPOSITORY" -f tag="$RELEASE_TAG"; then
+            echo "::warning::Failed to dispatch China mirror post-CI. The public GitHub Release remains successful."
+          fi
