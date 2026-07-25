@@ -19,6 +19,11 @@ env:
 
 jobs:
   sync-cn-mirror:
+    name: sync-cn-mirror (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux, windows, macos]
     runs-on: ubuntu-latest
     environment: release
     steps:
@@ -54,7 +59,38 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          gh release download "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --dir release --clobber
+          case "${{ matrix.platform }}" in
+            linux)
+              patterns=(
+                --pattern 'yoda-*.AppImage'
+                --pattern 'yoda-*.AppImage.blockmap'
+                --pattern 'yoda-*.deb'
+                --pattern 'yoda-*.rpm'
+                --pattern 'v1-stable-linux*.yml'
+              )
+              ;;
+            windows)
+              patterns=(
+                --pattern 'yoda-*.exe'
+                --pattern 'yoda-*.exe.blockmap'
+                --pattern 'yoda-*.msi'
+                --pattern 'v1-stable.yml'
+              )
+              ;;
+            macos)
+              patterns=(
+                --pattern 'yoda-*.dmg'
+                --pattern 'yoda-*.dmg.blockmap'
+                --pattern 'yoda-*.zip'
+                --pattern 'yoda-*.zip.blockmap'
+                --pattern '*.delta'
+                --pattern 'appcast-*.xml'
+                --pattern 'v1-stable-mac*.yml'
+              )
+              ;;
+          esac
+          gh release download "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" \
+            --dir release --clobber "${patterns[@]}"
 
       - name: Upload to China mirror
         if: ${{ steps.cn-mirror.outputs.has_cn_mirror == 'true' }}

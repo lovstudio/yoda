@@ -59,5 +59,7 @@ describe('Sparkle release pipeline', () => {
     expect(dispatchIndex).toBeGreaterThan(publishIndex);
     expect(chinaMirrorWorkflow).toContain('gh release download "$RELEASE_TAG"');
     expect(chinaMirrorWorkflow).toContain('uses: ./.github/actions/upload-cn-mirror');
+    expect(chinaMirrorWorkflow).toContain('platform: [linux, windows, macos]');
+    expect(chinaMirrorWorkflow).toContain('fail-fast: false');
   });
 });
