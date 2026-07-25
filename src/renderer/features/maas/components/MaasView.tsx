@@ -19,6 +19,7 @@ import {
   createCustomMaasPlatformId,
   getMaasPlatformDefinition,
   getMaasPlatformTemplateId,
+  hasMaasInferenceCredential,
   isMaasPlatformId,
   MAAS_PLATFORMS,
   type MaasApiKeyKind,
@@ -47,6 +48,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from '@renderer/lib/ui/input-group';
+import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import { getAvailableMaasPlatformIds, getVisibleMaasPlatformIds } from '../maas-platform-list';
@@ -56,8 +58,8 @@ import {
   useMaasConnections,
   useMaasGlobalBinding,
   useMaasPlatformDescriptions,
+  useSetMaasGlobalBinding,
 } from '../useMaas';
-import { MaasGlobalSelector } from './MaasGlobalSelector';
 
 function findConnection(
   connections: MaasConnection[] | undefined,
@@ -115,8 +117,10 @@ export const MaasView: React.FC<{
   showSectionChrome?: boolean;
 }> = ({ embedded = false, showSectionChrome = true }) => {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const { data: connections, isLoading } = useMaasConnections();
   const globalBinding = useMaasGlobalBinding();
+  const setGlobalBinding = useSetMaasGlobalBinding();
   const { data: platformDescriptions } = useMaasPlatformDescriptions();
   const showZenmuxUsage = useShowModal('zenmuxUsageModal');
   const [expandedPlatformId, setExpandedPlatformId] = useState<MaasPlatformId | ''>('');
@@ -161,6 +165,31 @@ export const MaasView: React.FC<{
     setDraftPlatformIds((current) => current.filter((id) => id !== platformId));
   }, []);
 
+  const handlePlatformEnabledChange = useCallback(
+    (connection: MaasConnection, enabled: boolean) => {
+      setGlobalBinding.mutate(
+        { platformId: connection.platformId, enabled },
+        {
+          onSuccess: () => {
+            toast({
+              title: enabled
+                ? t('maas.global.enabledToast', { platform: connection.displayName })
+                : t('maas.global.restoredToast'),
+            });
+          },
+          onError: (error) => {
+            toast({
+              title: t('maas.global.updateFailed'),
+              description: error instanceof Error ? error.message : String(error),
+              variant: 'destructive',
+            });
+          },
+        }
+      );
+    },
+    [setGlobalBinding, t, toast]
+  );
+
   const platformAccordion =
     visiblePlatformIds.length > 0 ? (
       <AccordionPrimitive.Root
@@ -174,6 +203,16 @@ export const MaasView: React.FC<{
           const connection = findConnection(connections, platformId);
           const isDraft = !connection.configured && draftPlatformIds.includes(platformId);
           const templateId = getMaasPlatformTemplateId(platformId);
+          const enabled = Boolean(
+            globalBinding.data?.enabled && globalBinding.data.platformId === platformId
+          );
+          const enableAvailable = Boolean(
+            connection.connected && hasMaasInferenceCredential(connection)
+          );
+          const enablePending = Boolean(
+            setGlobalBinding.isPending &&
+              setGlobalBinding.variables?.platformId === connection.platformId
+          );
           return (
             <PlatformAccordionItem
               key={platformId}
@@ -182,6 +221,11 @@ export const MaasView: React.FC<{
               onOpenUsage={platformId === 'zenmux' ? () => showZenmuxUsage({}) : undefined}
               onCancelDraft={isDraft ? () => handleCancelDraft(platformId) : undefined}
               onConnected={() => handlePlatformConnected(platformId)}
+              enabled={enabled}
+              enableAvailable={enableAvailable}
+              enablePending={enablePending}
+              enableUpdating={setGlobalBinding.isPending}
+              onEnabledChange={(next) => handlePlatformEnabledChange(connection, next)}
               loading={isLoading}
             />
           );
@@ -380,8 +424,25 @@ const PlatformAccordionItem: React.FC<{
   onOpenUsage?: () => void;
   onCancelDraft?: () => void;
   onConnected: () => void;
+  enabled: boolean;
+  enableAvailable: boolean;
+  enablePending: boolean;
+  enableUpdating: boolean;
+  onEnabledChange: (enabled: boolean) => void;
   loading: boolean;
-}> = ({ connection, officialDescription, onOpenUsage, onCancelDraft, onConnected, loading }) => {
+}> = ({
+  connection,
+  officialDescription,
+  onOpenUsage,
+  onCancelDraft,
+  onConnected,
+  enabled,
+  enableAvailable,
+  enablePending,
+  enableUpdating,
+  onEnabledChange,
+  loading,
+}) => {
   const { t } = useTranslation();
   const platform = getMaasPlatformDefinition(connection.platformId);
   const templateId = getMaasPlatformTemplateId(connection.platformId);
@@ -413,6 +474,38 @@ const PlatformAccordionItem: React.FC<{
             {description}
           </span>
         </AccordionPrimitive.Trigger>
+        <div className="flex shrink-0 items-center gap-2 px-1">
+          <span
+            className={cn(
+              'hidden text-[11px] @2xl:inline',
+              enabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground-muted'
+            )}
+          >
+            {enabled ? t('maas.global.enabled') : t('maas.global.disabled')}
+          </span>
+          {enablePending ? (
+            <Loader2 className="size-3.5 animate-spin text-foreground-muted" />
+          ) : (
+            <Switch
+              size="sm"
+              checked={enabled}
+              disabled={enableUpdating || (!enableAvailable && !enabled)}
+              aria-label={
+                enabled
+                  ? t('maas.global.disableAria', { platform: connection.displayName })
+                  : t('maas.global.enableAria', { platform: connection.displayName })
+              }
+              title={
+                !enableAvailable && !enabled
+                  ? t('maas.global.needsConfiguration')
+                  : enabled
+                    ? t('maas.global.disableAria', { platform: connection.displayName })
+                    : t('maas.global.enableAria', { platform: connection.displayName })
+              }
+              onCheckedChange={onEnabledChange}
+            />
+          )}
+        </div>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -887,8 +980,6 @@ const ConnectionPanel: React.FC<{
             {saving ? t('maas.connection.saving') : t('maas.connection.saveChanges')}
           </Button>
         </div>
-
-        <MaasGlobalSelector platformId={connection.platformId} />
       </form>
     </section>
   );

@@ -2,11 +2,20 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MaasConnection, MaasGlobalBindingStatus } from '@shared/maas';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
   showZenmuxUsage: vi.fn(),
+  setGlobalBinding: vi.fn(),
+  connections: [] as MaasConnection[],
+  globalBinding: {
+    platformId: null,
+    enabled: false,
+    effective: false,
+    runtimeIds: [],
+  } as MaasGlobalBindingStatus,
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -17,10 +26,14 @@ vi.mock('react-i18next', async (importOriginal) => ({
 vi.mock('@renderer/features/maas/useMaas', () => ({
   useConnectMaasPlatform: () => ({ isPending: false, mutate: vi.fn() }),
   useDisconnectMaasPlatform: () => ({ isPending: false, mutate: vi.fn() }),
-  useMaasConnections: () => ({ data: [], isLoading: false }),
-  useMaasGlobalBinding: () => ({ data: { enabled: false }, isLoading: false }),
+  useMaasConnections: () => ({ data: mocks.connections, isLoading: false }),
+  useMaasGlobalBinding: () => ({ data: mocks.globalBinding, isLoading: false }),
   useMaasPlatformDescriptions: () => ({ data: [] }),
-  useSetMaasGlobalBinding: () => ({ isPending: false, mutate: vi.fn() }),
+  useSetMaasGlobalBinding: () => ({
+    isPending: false,
+    variables: undefined,
+    mutate: mocks.setGlobalBinding,
+  }),
 }));
 
 vi.mock('@renderer/lib/ipc', () => ({
@@ -37,6 +50,13 @@ describe('MaaS platform menu', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.connections = [];
+    mocks.globalBinding = {
+      platformId: null,
+      enabled: false,
+      effective: false,
+      runtimeIds: [],
+    };
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -91,4 +111,72 @@ describe('MaaS platform menu', () => {
     expect(customDrafts).toHaveLength(2);
     expect(new Set(customDrafts.map((item) => item.dataset.maasPlatformId)).size).toBe(2);
   });
+
+  it('enables and disables a configured platform from its list row', async () => {
+    mocks.connections = [connection({ platformId: 'custom:first', displayName: 'First Custom' })];
+    const { MaasView } = await import('@renderer/features/maas/components/MaasView');
+    await act(async () => root.render(createElement(MaasView, { embedded: true })));
+
+    const enableSwitch = host.querySelector<HTMLElement>(
+      '[data-slot="switch"][aria-label="maas.global.enableAria"]'
+    );
+    expect(enableSwitch).not.toBeNull();
+    expect(enableSwitch?.hasAttribute('data-disabled')).toBe(false);
+    await act(async () => enableSwitch?.click());
+    expect(mocks.setGlobalBinding).toHaveBeenLastCalledWith(
+      { platformId: 'custom:first', enabled: true },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
+
+    mocks.globalBinding = {
+      platformId: 'custom:first',
+      enabled: true,
+      effective: true,
+      runtimeIds: ['codex'],
+    };
+    await act(async () => root.render(createElement(MaasView, { embedded: true })));
+
+    const disableSwitch = host.querySelector<HTMLElement>(
+      '[data-slot="switch"][aria-label="maas.global.disableAria"]'
+    );
+    expect(disableSwitch).not.toBeNull();
+    await act(async () => disableSwitch?.click());
+    expect(mocks.setGlobalBinding).toHaveBeenLastCalledWith(
+      { platformId: 'custom:first', enabled: false },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+    );
+  });
+
+  it('does not enable a saved platform whose local credential is missing', async () => {
+    mocks.connections = [
+      connection({
+        platformId: 'custom:first',
+        displayName: 'First Custom',
+        keyFingerprint: null,
+        inferenceKeyFingerprint: null,
+        connected: false,
+      }),
+    ];
+    const { MaasView } = await import('@renderer/features/maas/components/MaasView');
+    await act(async () => root.render(createElement(MaasView, { embedded: true })));
+
+    const enableSwitch = host.querySelector<HTMLElement>('[data-slot="switch"]');
+    expect(enableSwitch?.hasAttribute('data-disabled')).toBe(true);
+  });
 });
+
+function connection(overrides: Partial<MaasConnection> = {}): MaasConnection {
+  return {
+    platformId: 'zenmux',
+    displayName: 'ZenMux',
+    endpoint: 'https://zenmux.ai/api/v1',
+    keyFingerprint: 'ke...ey',
+    inferenceKeyFingerprint: 'ke...ey',
+    connectedAt: '2026-07-25T00:00:00.000Z',
+    lastCheckedAt: null,
+    configured: true,
+    connected: true,
+    error: null,
+    ...overrides,
+  };
+}
