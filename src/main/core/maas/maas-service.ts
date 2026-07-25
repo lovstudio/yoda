@@ -37,6 +37,7 @@ import { telemetryService } from '@main/lib/telemetry';
 import { encryptedAppSecretsStore } from '../secrets/encrypted-app-secrets-store';
 import { runtimeOverrideSettings } from '../settings/runtime-settings-service';
 import { appSettingsService } from '../settings/settings-service';
+import { migrateLegacyCodexMaasHistoryForConfig } from './codex-history-compat';
 import {
   extractMaasPlatformInfoSnapshot,
   fallbackMaasPlatformInfoSnapshot,
@@ -115,6 +116,16 @@ function keyFingerprint(apiKey: string): string {
   const trimmed = apiKey.trim();
   if (trimmed.length <= 4) return trimmed;
   return `${trimmed.slice(0, 2)}...${trimmed.slice(-2)}`;
+}
+
+function migrateLegacyCodexHistory(providerConfig: RuntimeCustomConfig | undefined): void {
+  const migration = migrateLegacyCodexMaasHistoryForConfig(providerConfig);
+  if (migration.failed) {
+    log.warn('Could not migrate legacy Codex MaaS thread metadata; will retry later', {
+      rows: migration.rows,
+      files: migration.files,
+    });
+  }
 }
 
 function defaultConnection(platformId: MaasPlatformId): MaasConnection {
@@ -496,6 +507,7 @@ export class MaasService {
 
     const settings = await appSettingsService.get('maas');
     const originalRuntimeOverrides = await runtimeOverrideSettings.getOverrides();
+    migrateLegacyCodexHistory(originalRuntimeOverrides.codex);
     const supportedRuntimeIds = RUNTIME_IDS.filter((runtimeId) =>
       supportsMaasRuntimeBinding(runtimeId)
     );
@@ -595,6 +607,9 @@ export class MaasService {
         (binding) => binding.runtimeId === input.runtimeId
       );
       const currentConfig = (await runtimeOverrideSettings.getItem(input.runtimeId)) ?? {};
+      if (input.runtimeId === 'codex') {
+        migrateLegacyCodexHistory(currentConfig);
+      }
 
       if (input.enabled) {
         const activePlatformId = settings.runtimeBindings[0]?.platformId;

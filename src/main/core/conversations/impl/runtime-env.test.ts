@@ -84,6 +84,7 @@ describe('resolveRuntimeEnv', () => {
 
   it('filters inherited official API variables when another auth provider is selected', () => {
     const baseEnv: NodeJS.ProcessEnv = {
+      CODEX_API_KEY: 'codex-secret',
       OPENAI_API_KEY: 'secret',
       OPENAI_BASE_URL: 'https://api.example.test',
       PATH: '/bin',
@@ -97,6 +98,7 @@ describe('resolveRuntimeEnv', () => {
 
   it('resolves inherited API env passthrough by selected auth provider', () => {
     expect(resolveAgentApiEnvVars({ authProvider: 'official-api' }, 'codex')).toEqual([
+      'CODEX_API_KEY',
       'OPENAI_API_KEY',
       'OPENAI_BASE_URL',
       'AZURE_OPENAI_API_KEY',

@@ -15,34 +15,28 @@ describe('MaaS Agent Client runtime environment', () => {
         apiKey: 'secret',
       })
     ).toEqual({
+      CODEX_API_KEY: 'secret',
       OPENAI_API_KEY: 'secret',
       OPENAI_BASE_URL: 'https://maas.example.test/v1',
     });
   });
 
-  it('selects an invocation-scoped Codex provider with the MaaS endpoint and API key env', () => {
-    expect(
-      resolveMaasRuntimeCommandArgs('codex', {
-        platformId: 'zenmux',
-        endpoint: 'https://maas.example.test/v1/',
-        apiKey: 'must-not-appear-in-args',
-      })
-    ).toEqual([
+  it('keeps Codex on its built-in OpenAI provider while overriding the MaaS endpoint', () => {
+    const args = resolveMaasRuntimeCommandArgs('codex', {
+      platformId: 'zenmux',
+      endpoint: 'https://maas.example.test/v1/',
+      apiKey: 'must-not-appear-in-args',
+    });
+
+    expect(args).toEqual([
       '-c',
-      'model_provider="yoda-maas"',
+      'model_provider="openai"',
       '-c',
-      'model_providers.yoda-maas.name="Yoda MaaS (ZenMux)"',
-      '-c',
-      'model_providers.yoda-maas.base_url="https://maas.example.test/v1"',
-      '-c',
-      'model_providers.yoda-maas.env_key="OPENAI_API_KEY"',
-      '-c',
-      'model_providers.yoda-maas.wire_api="responses"',
-      '-c',
-      'model_providers.yoda-maas.requires_openai_auth=false',
-      '-c',
-      'model_providers.yoda-maas.supports_websockets=false',
+      'openai_base_url="https://maas.example.test/v1"',
     ]);
+    expect(args.join(' ')).not.toContain('yoda-maas');
+    expect(args.join(' ')).not.toContain('model_providers.');
+    expect(args.join(' ')).not.toContain('must-not-appear-in-args');
   });
 
   it('does not add Codex provider arguments to other MaaS runtimes', () => {

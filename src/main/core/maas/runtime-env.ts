@@ -1,6 +1,5 @@
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import {
-  getMaasPlatformDefinition,
   supportsMaasPlatformForRuntime,
   type MaasPlatformId,
   type MaasRuntimeBinding,
@@ -18,8 +17,6 @@ export type MaasRuntimeCredentials = {
   apiKey: string;
 };
 
-const CODEX_MAAS_PROVIDER_ID = 'yoda-maas';
-
 function formatTomlString(value: string): string {
   return JSON.stringify(value);
 }
@@ -29,10 +26,9 @@ export function supportsMaasRuntimeBinding(runtimeId: string): runtimeId is Runt
 }
 
 /**
- * Codex no longer reliably applies OPENAI_BASE_URL to its built-in OpenAI
- * provider. Select an invocation-scoped custom provider so the MaaS key and
- * endpoint are always consumed together instead of sending the MaaS key to
- * api.openai.com.
+ * Keep Codex on its built-in `openai` provider so persisted threads remain
+ * readable by the native Codex app. `openai_base_url` is Codex's supported
+ * config override; OPENAI_BASE_URL alone is no longer sufficient.
  */
 export function resolveMaasRuntimeCommandArgs(
   runtimeId: RuntimeId,
@@ -40,16 +36,10 @@ export function resolveMaasRuntimeCommandArgs(
 ): string[] {
   if (runtimeId !== 'codex') return [];
 
-  const providerName = `Yoda MaaS (${getMaasPlatformDefinition(credentials.platformId).name})`;
   const endpoint = credentials.endpoint.replace(/\/+$/, '');
   const overrides = [
-    `model_provider=${formatTomlString(CODEX_MAAS_PROVIDER_ID)}`,
-    `model_providers.${CODEX_MAAS_PROVIDER_ID}.name=${formatTomlString(providerName)}`,
-    `model_providers.${CODEX_MAAS_PROVIDER_ID}.base_url=${formatTomlString(endpoint)}`,
-    `model_providers.${CODEX_MAAS_PROVIDER_ID}.env_key=${formatTomlString('OPENAI_API_KEY')}`,
-    `model_providers.${CODEX_MAAS_PROVIDER_ID}.wire_api=${formatTomlString('responses')}`,
-    `model_providers.${CODEX_MAAS_PROVIDER_ID}.requires_openai_auth=false`,
-    `model_providers.${CODEX_MAAS_PROVIDER_ID}.supports_websockets=false`,
+    `model_provider=${formatTomlString('openai')}`,
+    `openai_base_url=${formatTomlString(endpoint)}`,
   ];
   return overrides.flatMap((override) => ['-c', override]);
 }
@@ -73,6 +63,11 @@ export function resolveMaasRuntimeEnv(
     ...spec.apiKeyEnvVars.map((key) => [key, credentials.apiKey] as const),
     ...spec.baseUrlEnvVars.map((key) => [key, endpoint] as const),
   ]);
+  if (runtimeId === 'codex') {
+    // Codex gives CODEX_API_KEY precedence over credentials persisted in
+    // auth.json. OPENAI_API_KEY alone does not override an existing login.
+    env.CODEX_API_KEY = credentials.apiKey;
+  }
   if (runtimeId === 'claude') {
     env.ANTHROPIC_API_KEY = '';
   }

@@ -890,6 +890,7 @@ export const RUNTIMES: RuntimeDefinition[] = [
 ];
 
 const OPENAI_API_ENV = [
+  'CODEX_API_KEY',
   'OPENAI_API_KEY',
   'OPENAI_BASE_URL',
   'AZURE_OPENAI_API_KEY',

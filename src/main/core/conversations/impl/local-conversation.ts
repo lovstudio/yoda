@@ -26,6 +26,7 @@ import type {
 } from '@main/core/conversations/types';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { LocalFileSystem } from '@main/core/fs/impl/local-fs';
+import { migrateLegacyCodexMaasHistoryForConfig } from '@main/core/maas/codex-history-compat';
 import { resolveMaasRuntimeCommandArgs, resolveMaasRuntimeEnv } from '@main/core/maas/runtime-env';
 import { spawnLocalPty } from '@main/core/pty/local-pty';
 import type { Pty } from '@main/core/pty/pty';
@@ -158,6 +159,15 @@ export class LocalConversationProvider implements ConversationProvider {
     );
 
     const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
+    if (conversation.runtimeId === 'codex') {
+      const migration = migrateLegacyCodexMaasHistoryForConfig(providerConfig);
+      if (migration.failed) {
+        log.warn('Could not migrate legacy Codex MaaS thread metadata; will retry next launch', {
+          rows: migration.rows,
+          files: migration.files,
+        });
+      }
+    }
     const authProvider = providerConfig?.authProvider ?? 'official-subscription';
     const maasCredentials =
       authProvider === 'yoda-maas'

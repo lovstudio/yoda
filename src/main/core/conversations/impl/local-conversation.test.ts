@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getHookToken: vi.fn(),
   getProviderConfig: vi.fn(),
   getRuntimeInferenceCredentials: vi.fn(),
+  migrateLegacyCodexMaasHistory: vi.fn(),
   logDebug: vi.fn(),
   logError: vi.fn(),
   logInfo: vi.fn(),
@@ -112,6 +113,10 @@ vi.mock('@main/core/maas/maas-service', () => ({
   maasService: {
     getRuntimeInferenceCredentials: mocks.getRuntimeInferenceCredentials,
   },
+}));
+
+vi.mock('@main/core/maas/codex-history-compat', () => ({
+  migrateLegacyCodexMaasHistoryForConfig: mocks.migrateLegacyCodexMaasHistory,
 }));
 
 vi.mock('@main/core/pty/local-pty', () => ({
@@ -256,6 +261,7 @@ describe('LocalConversationProvider', () => {
     mocks.getHookPort.mockReturnValue(0);
     mocks.getHookToken.mockReturnValue('token');
     mocks.buildAgentEnv.mockReturnValue({});
+    mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'claude',
       resumeFlag: '--resume',
@@ -412,7 +418,7 @@ describe('LocalConversationProvider', () => {
     expect(spawned[0].options.args.slice(2)).toEqual(['Fix this']);
   });
 
-  it('launches Codex with a matching MaaS provider, endpoint, and API key env', async () => {
+  it('launches Codex through MaaS without creating a custom provider identity', async () => {
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'codex',
       resumeFlag: 'resume',
@@ -436,29 +442,56 @@ describe('LocalConversationProvider', () => {
 
     expect(spawned[0].options.args).toEqual([
       '-c',
-      'model_provider="yoda-maas"',
+      'model_provider="openai"',
       '-c',
-      'model_providers.yoda-maas.name="Yoda MaaS (ZenMux)"',
-      '-c',
-      'model_providers.yoda-maas.base_url="https://zenmux.example.test/v1"',
-      '-c',
-      'model_providers.yoda-maas.env_key="OPENAI_API_KEY"',
-      '-c',
-      'model_providers.yoda-maas.wire_api="responses"',
-      '-c',
-      'model_providers.yoda-maas.requires_openai_auth=false',
-      '-c',
-      'model_providers.yoda-maas.supports_websockets=false',
+      'openai_base_url="https://zenmux.example.test/v1"',
       'Fix this',
     ]);
+    expect(spawned[0].options.args.join(' ')).not.toContain('yoda-maas');
     expect(spawned[0].options.args).not.toContain('zenmux-secret');
+    expect(mocks.migrateLegacyCodexMaasHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ authProvider: 'yoda-maas', maasPlatformId: 'zenmux' })
+    );
     expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
       expect.objectContaining({
         agentApiVars: false,
         providerVars: {
+          CODEX_API_KEY: 'zenmux-secret',
           OPENAI_API_KEY: 'zenmux-secret',
           OPENAI_BASE_URL: 'https://zenmux.example.test/v1',
         },
+      })
+    );
+  });
+
+  it('removes every MaaS routing override after Codex is switched back', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+      authProvider: 'official-api',
+    });
+    const codexConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+    };
+    const provider = createProvider();
+
+    await provider.startSession(codexConversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(spawned[0].options.args).toEqual(['Fix this']);
+    expect(mocks.getRuntimeInferenceCredentials).not.toHaveBeenCalled();
+    expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentApiVars: [
+          'CODEX_API_KEY',
+          'OPENAI_API_KEY',
+          'OPENAI_BASE_URL',
+          'AZURE_OPENAI_API_KEY',
+          'AZURE_OPENAI_API_ENDPOINT',
+        ],
+        providerVars: undefined,
       })
     );
   });

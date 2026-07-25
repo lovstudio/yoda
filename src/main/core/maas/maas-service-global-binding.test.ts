@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   failRuntimeId: null as string | null,
   secrets: {} as Record<string, string>,
   clipboardWriteText: vi.fn(),
+  migrateLegacyCodexMaasHistory: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
@@ -67,6 +68,10 @@ vi.mock('./platform-info-store', () => ({
   setMaasPlatformInfoSnapshot: vi.fn(),
 }));
 
+vi.mock('./codex-history-compat', () => ({
+  migrateLegacyCodexMaasHistoryForConfig: mocks.migrateLegacyCodexMaasHistory,
+}));
+
 describe('global MaaS binding', () => {
   beforeEach(() => {
     mocks.settings = {
@@ -85,6 +90,7 @@ describe('global MaaS binding', () => {
     mocks.failRuntimeId = null;
     mocks.secrets = {};
     vi.clearAllMocks();
+    mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
   });
 
   it('backs up every compatible Client, switches platforms, and restores the originals', async () => {
@@ -100,6 +106,10 @@ describe('global MaaS binding', () => {
     expect(mocks.runtimeConfigs.codex).toMatchObject({
       authProvider: 'yoda-maas',
       maasPlatformId: 'zenmux',
+      defaultModel: 'gpt-5',
+    });
+    expect(mocks.migrateLegacyCodexMaasHistory).toHaveBeenCalledWith({
+      authProvider: 'official-api',
       defaultModel: 'gpt-5',
     });
     expect(mocks.runtimeConfigs.claude).toMatchObject({
