@@ -7,18 +7,14 @@ import {
 } from './runtime-env';
 
 describe('MaaS Agent Client runtime environment', () => {
-  it('maps an OpenAI-compatible MaaS into Codex environment variables', () => {
+  it('never exposes the MaaS API key to the Codex process', () => {
     expect(
       resolveMaasRuntimeEnv('codex', {
         platformId: 'zenmux',
         endpoint: 'https://maas.example.test/v1/',
         apiKey: 'secret',
       })
-    ).toEqual({
-      CODEX_API_KEY: 'secret',
-      OPENAI_API_KEY: 'secret',
-      OPENAI_BASE_URL: 'https://maas.example.test/v1',
-    });
+    ).toBeUndefined();
   });
 
   it('keeps Codex on its built-in OpenAI provider while overriding the MaaS endpoint', () => {

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getHookPort: vi.fn(),
   getHookToken: vi.fn(),
   getProviderConfig: vi.fn(),
+  getCodexMaasProxyBaseUrl: vi.fn(),
   getRuntimeInferenceCredentials: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
   logDebug: vi.fn(),
@@ -117,6 +118,12 @@ vi.mock('@main/core/maas/maas-service', () => ({
 
 vi.mock('@main/core/maas/codex-history-compat', () => ({
   migrateLegacyCodexMaasHistoryForConfig: mocks.migrateLegacyCodexMaasHistory,
+}));
+
+vi.mock('@main/core/maas/codex-maas-proxy', () => ({
+  codexMaasProxy: {
+    getBaseUrl: mocks.getCodexMaasProxyBaseUrl,
+  },
 }));
 
 vi.mock('@main/core/pty/local-pty', () => ({
@@ -261,6 +268,7 @@ describe('LocalConversationProvider', () => {
     mocks.getHookPort.mockReturnValue(0);
     mocks.getHookToken.mockReturnValue('token');
     mocks.buildAgentEnv.mockReturnValue({});
+    mocks.getCodexMaasProxyBaseUrl.mockResolvedValue('http://127.0.0.1:43123/opaque/v1');
     mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'claude',
@@ -444,22 +452,23 @@ describe('LocalConversationProvider', () => {
       '-c',
       'model_provider="openai"',
       '-c',
-      'openai_base_url="https://zenmux.example.test/v1"',
+      'openai_base_url="http://127.0.0.1:43123/opaque/v1"',
       'Fix this',
     ]);
     expect(spawned[0].options.args.join(' ')).not.toContain('yoda-maas');
     expect(spawned[0].options.args).not.toContain('zenmux-secret');
+    expect(mocks.getCodexMaasProxyBaseUrl).toHaveBeenCalledWith({
+      platformId: 'zenmux',
+      endpoint: 'https://zenmux.example.test/v1/',
+      apiKey: 'zenmux-secret',
+    });
     expect(mocks.migrateLegacyCodexMaasHistory).toHaveBeenCalledWith(
       expect.objectContaining({ authProvider: 'yoda-maas', maasPlatformId: 'zenmux' })
     );
     expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
       expect.objectContaining({
         agentApiVars: false,
-        providerVars: {
-          CODEX_API_KEY: 'zenmux-secret',
-          OPENAI_API_KEY: 'zenmux-secret',
-          OPENAI_BASE_URL: 'https://zenmux.example.test/v1',
-        },
+        providerVars: undefined,
       })
     );
   });

@@ -27,6 +27,7 @@ import type {
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { LocalFileSystem } from '@main/core/fs/impl/local-fs';
 import { migrateLegacyCodexMaasHistoryForConfig } from '@main/core/maas/codex-history-compat';
+import { codexMaasProxy } from '@main/core/maas/codex-maas-proxy';
 import { resolveMaasRuntimeCommandArgs, resolveMaasRuntimeEnv } from '@main/core/maas/runtime-env';
 import { spawnLocalPty } from '@main/core/pty/local-pty';
 import type { Pty } from '@main/core/pty/pty';
@@ -183,12 +184,21 @@ export class LocalConversationProvider implements ConversationProvider {
         `MaaS is selected for ${conversation.runtimeId}, but no compatible connected platform is available.`
       );
     }
+    const commandCredentials =
+      maasCredentials && conversation.runtimeId === 'codex'
+        ? {
+            ...maasCredentials,
+            endpoint: await codexMaasProxy.getBaseUrl(maasCredentials),
+          }
+        : maasCredentials;
     const maasRuntimeEnv = maasCredentials
       ? resolveMaasRuntimeEnv(conversation.runtimeId, maasCredentials)
       : undefined;
     interactiveTurnLogger.setSessionContext(conversation.id, {
       authProvider,
-      maasEffective: maasCredentials !== undefined && maasRuntimeEnv !== undefined,
+      maasEffective:
+        maasCredentials !== undefined &&
+        (conversation.runtimeId === 'codex' || maasRuntimeEnv !== undefined),
       ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
     });
     recordConversationAuthProvider(conversation.id, providerConfig);
@@ -243,8 +253,8 @@ export class LocalConversationProvider implements ConversationProvider {
       terminalThemeMode: await resolveTerminalThemeMode(),
       skillPolicy: conversation.skillPolicy,
     });
-    const maasRuntimeCommandArgs = maasCredentials
-      ? resolveMaasRuntimeCommandArgs(conversation.runtimeId, maasCredentials)
+    const maasRuntimeCommandArgs = commandCredentials
+      ? resolveMaasRuntimeCommandArgs(conversation.runtimeId, commandCredentials)
       : [];
     const argsWithNotify = withCodexRuntimeNotifyArgs(
       conversation.runtimeId,

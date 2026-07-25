@@ -51,6 +51,11 @@ export function resolveMaasRuntimeEnv(
   const spec = getRuntimeAccountProfile(runtimeId).maas.runtimeEnv;
   if (!spec || !supportsMaasPlatformForRuntime(runtimeId, credentials.platformId)) return undefined;
 
+  // Codex TUI deliberately ignores CODEX_API_KEY as a transient auth override.
+  // Its MaaS key is therefore held by the loopback proxy instead of entering
+  // the Codex process and potentially replacing the Codex App login.
+  if (runtimeId === 'codex') return undefined;
+
   let endpoint = credentials.endpoint.replace(/\/+$/, '');
   if (runtimeId === 'claude' && credentials.platformId === 'zenmux') {
     endpoint = endpoint.replace(/\/api\/v1$/, '/api/anthropic');
@@ -63,11 +68,6 @@ export function resolveMaasRuntimeEnv(
     ...spec.apiKeyEnvVars.map((key) => [key, credentials.apiKey] as const),
     ...spec.baseUrlEnvVars.map((key) => [key, endpoint] as const),
   ]);
-  if (runtimeId === 'codex') {
-    // Codex gives CODEX_API_KEY precedence over credentials persisted in
-    // auth.json. OPENAI_API_KEY alone does not override an existing login.
-    env.CODEX_API_KEY = credentials.apiKey;
-  }
   if (runtimeId === 'claude') {
     env.ANTHROPIC_API_KEY = '';
   }
