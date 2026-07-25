@@ -34,8 +34,13 @@ export function resolveCodexMaasProviderSpec(
 ): CodexMaasProviderSpec {
   const templateId = getMaasPlatformTemplateId(platformId);
   const metadata = CODEX_MAAS_PROVIDER_METADATA[templateId];
+  const fallbackName = getMaasPlatformDefinition(platformId).name;
+  const requestedName = displayName?.trim() || fallbackName;
   return {
     ...metadata,
-    name: displayName?.trim() || getMaasPlatformDefinition(platformId).name,
+    // Codex identifies its first-party provider by the display name "OpenAI".
+    // Never let a third-party connection accidentally opt into OpenAI-only
+    // request fields such as reasoning_summary_delivery=sequential_cutoff.
+    name: requestedName.toLowerCase() === 'openai' ? fallbackName : requestedName,
   };
 }

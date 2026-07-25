@@ -410,6 +410,55 @@ export class MaasService {
     ZENMUX_MODEL_CATALOG_CACHE_TTL_MS
   );
 
+  /**
+   * Re-apply native Codex files for a persisted MaaS binding.
+   *
+   * This is intentionally run at startup: earlier Yoda versions routed ZenMux
+   * through the built-in OpenAI provider, and an already-enabled binding would
+   * otherwise never pass through enable() again to receive the corrected
+   * provider-specific configuration.
+   */
+  async reconcileActiveBindings(): Promise<void> {
+    const settings = await appSettingsService.get('maas');
+    const binding = settings.runtimeBindings.find((item) => item.runtimeId === 'codex');
+    if (!binding) return;
+    if (!supportsMaasPlatformForRuntime('codex', binding.platformId)) {
+      throw new Error('The active MaaS platform is not compatible with Codex.');
+    }
+
+    const inferenceCredentials = await this.getInferenceCredentials(binding.platformId);
+    if (!inferenceCredentials) {
+      throw new Error(
+        'The active Codex MaaS binding is missing its inference credential; reconnect the platform.'
+      );
+    }
+
+    const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
+    const rollbackCodexAuth = await codexMaasAuthSwitch.enable({
+      codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+      platformId: binding.platformId,
+      displayName: inferenceCredentials.displayName,
+      endpoint: inferenceCredentials.endpoint,
+      apiKey: inferenceCredentials.apiKey,
+    });
+
+    try {
+      if (
+        currentConfig.authProvider !== 'yoda-maas' ||
+        currentConfig.maasPlatformId !== binding.platformId
+      ) {
+        await runtimeOverrideSettings.updateItem('codex', {
+          ...currentConfig,
+          authProvider: 'yoda-maas',
+          maasPlatformId: binding.platformId,
+        });
+      }
+    } catch (error) {
+      await rollbackCodexAuth();
+      throw error;
+    }
+  }
+
   async listConnections(): Promise<MaasConnection[]> {
     const settings = await appSettingsService.get('maas');
     const fixedPlatformIds = MAAS_PLATFORM_IDS.filter(

@@ -105,6 +105,95 @@ describe('global MaaS binding', () => {
     mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
   });
 
+  it('replays an active Codex binding at startup so legacy native files are upgraded', async () => {
+    mocks.settings.runtimeBindings = [
+      {
+        runtimeId: 'codex',
+        platformId: 'zenmux',
+        previousAuthProvider: 'official-api',
+        previousMaasPlatformId: null,
+        previousConfig: { authProvider: 'official-api', defaultModel: 'gpt-5' },
+        enabledAt: '2026-07-25T00:00:00.000Z',
+      },
+    ];
+    mocks.runtimeConfigs.codex = {
+      authProvider: 'yoda-maas',
+      maasPlatformId: 'zenmux',
+      defaultModel: 'gpt-5',
+    };
+    const service = new MaasService();
+    vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      displayName: 'ZenMux',
+      endpoint: 'https://zenmux.ai/api/v1',
+      apiKey: 'inference-secret',
+    });
+
+    await expect(service.reconcileActiveBindings()).resolves.toBeUndefined();
+
+    expect(mocks.codexAuthEnable).toHaveBeenCalledOnce();
+    expect(mocks.codexAuthEnable).toHaveBeenCalledWith({
+      codexHome: expect.any(String),
+      platformId: 'zenmux',
+      displayName: 'ZenMux',
+      endpoint: 'https://zenmux.ai/api/v1',
+      apiKey: 'inference-secret',
+    });
+  });
+
+  it('does not touch Codex native files when no MaaS binding is active', async () => {
+    const service = new MaasService();
+
+    await expect(service.reconcileActiveBindings()).resolves.toBeUndefined();
+
+    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
+  });
+
+  it('repairs a split runtime binding and rolls native files back if persistence fails', async () => {
+    mocks.settings.runtimeBindings = [
+      {
+        runtimeId: 'codex',
+        platformId: 'zenmux',
+        previousAuthProvider: 'official-api',
+        previousMaasPlatformId: null,
+        previousConfig: { authProvider: 'official-api' },
+        enabledAt: '2026-07-25T00:00:00.000Z',
+      },
+    ];
+    const service = new MaasService();
+    vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      displayName: 'ZenMux',
+      endpoint: 'https://zenmux.ai/api/v1',
+      apiKey: 'inference-secret',
+    });
+    mocks.failRuntimeId = 'codex';
+
+    await expect(service.reconcileActiveBindings()).rejects.toThrow('failed codex');
+
+    expect(mocks.codexAuthEnable).toHaveBeenCalledOnce();
+    expect(mocks.codexAuthRollback).toHaveBeenCalledOnce();
+  });
+
+  it('leaves a persisted binding untouched when its inference credential is missing', async () => {
+    mocks.settings.runtimeBindings = [
+      {
+        runtimeId: 'codex',
+        platformId: 'zenmux',
+        previousAuthProvider: 'official-api',
+        previousMaasPlatformId: null,
+        previousConfig: { authProvider: 'official-api' },
+        enabledAt: '2026-07-25T00:00:00.000Z',
+      },
+    ];
+    const service = new MaasService();
+    vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue(undefined);
+
+    await expect(service.reconcileActiveBindings()).rejects.toThrow(
+      'missing its inference credential'
+    );
+    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
+    expect(mocks.settings.runtimeBindings).toHaveLength(1);
+  });
+
   it('backs up every compatible Client, switches platforms, and restores the originals', async () => {
     const service = new MaasService();
     vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({

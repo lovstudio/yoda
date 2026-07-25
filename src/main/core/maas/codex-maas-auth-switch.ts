@@ -6,9 +6,11 @@ import type { MaasPlatformId } from '@shared/maas';
 import { encryptedAppSecretsStore } from '@main/core/secrets/encrypted-app-secrets-store';
 import { resolveCodexMaasProviderSpec, type CodexMaasProviderSpec } from './codex-maas-provider';
 
-const SNAPSHOT_VERSION = 1;
+const SNAPSHOT_VERSION = 2;
+const LEGACY_SNAPSHOT_VERSION = 1;
 const SECRET_PREFIX = 'yoda-maas-codex-native-files';
 const YODA_CONFIG_MARKER = '# Auto-injected by Yoda MaaS';
+const YODA_PROVIDER_TOKEN_FILENAME = '.yoda-maas-provider-token';
 
 type FileSnapshot =
   | { exists: false }
@@ -23,6 +25,7 @@ type CodexNativeFilesSnapshot = {
   codexHome: string;
   auth: FileSnapshot;
   config: FileSnapshot;
+  token: FileSnapshot;
 };
 
 type SecretStore = Pick<
@@ -48,6 +51,8 @@ export class CodexMaasAuthSwitch {
     endpoint: string;
     apiKey: string;
   }): Promise<CodexMaasAuthRollback> {
+    const token = apiKey.trim();
+    if (!token) throw new Error('A non-empty MaaS API key is required.');
     const paths = resolveCodexPaths(codexHome);
     const before = await readNativeFiles(paths);
     const secretKey = snapshotSecretKey(paths.codexHome);
@@ -55,26 +60,35 @@ export class CodexMaasAuthSwitch {
     const originalSnapshot = storedSnapshot?.snapshot ?? before;
     const snapshotCreated = !storedSnapshot;
 
-    if (snapshotCreated) {
-      await this.secretStore.setSecret(secretKey, JSON.stringify(originalSnapshot));
-    }
-
     const baseConfig = originalSnapshot.config;
     const provider = resolveCodexMaasProviderSpec(platformId, displayName);
     const active: CodexNativeFilesSnapshot = {
       version: SNAPSHOT_VERSION,
       codexHome: paths.codexHome,
-      auth: {
-        exists: true,
-        content: `${JSON.stringify({ auth_mode: 'apikey', OPENAI_API_KEY: apiKey }, null, 2)}\n`,
-        mode: 0o600,
-      },
+      // A custom provider has its own authentication. Keep the user's OpenAI /
+      // ChatGPT account intact instead of rewriting auth.json into OpenAI API-key
+      // mode, which makes Codex App misidentify the active provider.
+      auth: originalSnapshot.auth,
       config: {
         exists: true,
-        content: buildMaasConfig(baseConfig.exists ? baseConfig.content : '', provider, endpoint),
+        content: buildMaasConfig(
+          baseConfig.exists ? baseConfig.content : '',
+          provider,
+          endpoint,
+          paths.tokenPath
+        ),
+        mode: 0o600,
+      },
+      token: {
+        exists: true,
+        content: `${token}\n`,
         mode: 0o600,
       },
     };
+
+    if (snapshotCreated) {
+      await this.secretStore.setSecret(secretKey, JSON.stringify(originalSnapshot));
+    }
 
     try {
       await applyNativeFiles(paths, active);
@@ -129,12 +143,14 @@ function resolveCodexPaths(codexHome: string): {
   codexHome: string;
   authPath: string;
   configPath: string;
+  tokenPath: string;
 } {
   const resolvedHome = resolve(codexHome);
   return {
     codexHome: resolvedHome,
     authPath: join(resolvedHome, 'auth.json'),
     configPath: join(resolvedHome, 'config.toml'),
+    tokenPath: join(resolvedHome, YODA_PROVIDER_TOKEN_FILENAME),
   };
 }
 
@@ -147,12 +163,14 @@ async function readNativeFiles(paths: {
   codexHome: string;
   authPath: string;
   configPath: string;
+  tokenPath: string;
 }): Promise<CodexNativeFilesSnapshot> {
-  const [auth, config] = await Promise.all([
+  const [auth, config, token] = await Promise.all([
     readFileSnapshot(paths.authPath),
     readFileSnapshot(paths.configPath),
+    readFileSnapshot(paths.tokenPath),
   ]);
-  return { version: SNAPSHOT_VERSION, codexHome: paths.codexHome, auth, config };
+  return { version: SNAPSHOT_VERSION, codexHome: paths.codexHome, auth, config, token };
 }
 
 async function readFileSnapshot(path: string): Promise<FileSnapshot> {
@@ -166,11 +184,14 @@ async function readFileSnapshot(path: string): Promise<FileSnapshot> {
 }
 
 async function applyNativeFiles(
-  paths: { authPath: string; configPath: string },
+  paths: { authPath: string; configPath: string; tokenPath: string },
   snapshot: CodexNativeFilesSnapshot
 ): Promise<void> {
-  await applyFileSnapshot(paths.configPath, snapshot.config);
+  // Publish credentials before the config that references them. This keeps a
+  // concurrently running Codex App from observing a half-applied provider.
+  await applyFileSnapshot(paths.tokenPath, snapshot.token);
   await applyFileSnapshot(paths.authPath, snapshot.auth);
+  await applyFileSnapshot(paths.configPath, snapshot.config);
 }
 
 async function applyFileSnapshot(path: string, snapshot: FileSnapshot): Promise<void> {
@@ -197,24 +218,21 @@ async function applyFileSnapshot(path: string, snapshot: FileSnapshot): Promise<
 function buildMaasConfig(
   content: string,
   provider: CodexMaasProviderSpec,
-  endpoint: string
+  endpoint: string,
+  tokenPath: string
 ): string {
   const eol = content.includes('\r\n') ? '\r\n' : '\n';
   let lines = content.replace(/\r\n/g, '\n').split('\n');
-  lines = removeRootAssignments(lines, [
-    'model_provider',
-    'openai_base_url',
-    'cli_auth_credentials_store',
-  ]);
+  lines = removeRootAssignments(lines, ['model_provider', 'openai_base_url']);
   lines = removeTable(lines, modelProviderTablePattern(provider.providerId));
   lines = trimTrailingBlankLines(lines);
 
   lines.unshift(
     YODA_CONFIG_MARKER,
     `model_provider = ${formatTomlString(provider.providerId)}`,
-    'cli_auth_credentials_store = "file"',
     ''
   );
+  const authCommand = resolveProviderAuthCommand(tokenPath);
   lines.push(
     '',
     YODA_CONFIG_MARKER,
@@ -222,11 +240,17 @@ function buildMaasConfig(
     `name = ${formatTomlString(provider.name)}`,
     `base_url = ${formatTomlString(endpoint.replace(/\/+$/, ''))}`,
     'wire_api = "responses"',
-    'requires_openai_auth = true'
+    '',
+    YODA_CONFIG_MARKER,
+    `[model_providers.${provider.providerId}.auth]`,
+    `command = ${formatTomlString(authCommand.command)}`,
+    `args = ${formatTomlStringArray(authCommand.args)}`,
+    'timeout_ms = 5000',
+    'refresh_interval_ms = 0'
   );
 
   const result = `${trimTrailingBlankLines(lines).join('\n')}\n`.replace(/\n/g, eol);
-  validateMaasConfig(result, provider);
+  validateMaasConfig(result, provider, authCommand);
   return result;
 }
 
@@ -258,25 +282,59 @@ function removeTable(lines: string[], tablePattern: RegExp): string[] {
 function modelProviderTablePattern(providerId: string): RegExp {
   const escaped = escapeRegExp(providerId);
   return new RegExp(
-    `^\\s*\\[\\s*model_providers\\s*\\.\\s*(?:${escaped}|"${escaped}"|'${escaped}')\\s*\\]\\s*(?:#.*)?$`
+    `^\\s*\\[\\s*model_providers\\s*\\.\\s*(?:${escaped}|"${escaped}"|'${escaped}')(?:\\s*\\.[^\\]]+)?\\s*\\]\\s*(?:#.*)?$`
   );
 }
 
-function validateMaasConfig(content: string, provider: CodexMaasProviderSpec): void {
+function validateMaasConfig(
+  content: string,
+  provider: CodexMaasProviderSpec,
+  authCommand: { command: string; args: string[] }
+): void {
   const parsed = parseToml(content) as Record<string, unknown>;
   const modelProviders = asRecord(parsed.model_providers);
   const providerConfig = asRecord(modelProviders?.[provider.providerId]);
+  const providerAuth = asRecord(providerConfig?.auth);
   if (
     parsed.model_provider !== provider.providerId ||
-    parsed.cli_auth_credentials_store !== 'file' ||
     providerConfig?.name !== provider.name ||
+    provider.name === 'OpenAI' ||
     typeof providerConfig?.base_url !== 'string' ||
     providerConfig?.wire_api !== 'responses' ||
-    providerConfig?.requires_openai_auth !== true ||
-    providerConfig?.env_key !== undefined
+    providerConfig?.requires_openai_auth !== undefined ||
+    providerConfig?.env_key !== undefined ||
+    providerConfig?.experimental_bearer_token !== undefined ||
+    providerAuth?.command !== authCommand.command ||
+    !stringArraysEqual(providerAuth?.args, authCommand.args) ||
+    providerAuth?.timeout_ms !== 5000 ||
+    providerAuth?.refresh_interval_ms !== 0
   ) {
     throw new Error('Generated Codex MaaS provider config is invalid.');
   }
+}
+
+function resolveProviderAuthCommand(tokenPath: string): { command: string; args: string[] } {
+  if (process.platform === 'win32') {
+    return {
+      command: 'powershell.exe',
+      args: [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        '[Console]::Out.Write((Get-Content -Raw -LiteralPath $args[0]).Trim())',
+        tokenPath,
+      ],
+    };
+  }
+  return { command: '/bin/cat', args: [tokenPath] };
+}
+
+function stringArraysEqual(value: unknown, expected: string[]): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === expected.length &&
+    value.every((item, index) => item === expected[index])
+  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -295,6 +353,10 @@ function formatTomlString(value: string): string {
   return JSON.stringify(value);
 }
 
+function formatTomlStringArray(values: string[]): string {
+  return `[${values.map(formatTomlString).join(', ')}]`;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -304,11 +366,22 @@ function parseSnapshot(serialized: string): CodexNativeFilesSnapshot {
   if (!parsed || typeof parsed !== 'object') throw new Error('Invalid Codex MaaS snapshot.');
   const record = parsed as Record<string, unknown>;
   if (
-    record.version !== SNAPSHOT_VERSION ||
     typeof record.codexHome !== 'string' ||
     !isFileSnapshot(record.auth) ||
     !isFileSnapshot(record.config)
   ) {
+    throw new Error('Invalid Codex MaaS snapshot.');
+  }
+  if (record.version === LEGACY_SNAPSHOT_VERSION) {
+    return {
+      version: SNAPSHOT_VERSION,
+      codexHome: record.codexHome,
+      auth: record.auth,
+      config: record.config,
+      token: { exists: false },
+    };
+  }
+  if (record.version !== SNAPSHOT_VERSION || !isFileSnapshot(record.token)) {
     throw new Error('Invalid Codex MaaS snapshot.');
   }
   return record as CodexNativeFilesSnapshot;

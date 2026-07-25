@@ -22,6 +22,7 @@ import { localDependencyManager } from './core/dependencies/dependency-manager';
 import { knownBinDirs } from './core/dependencies/probe';
 import { editorBufferService } from './core/editor/editor-buffer-service';
 import { gitWatcherRegistry } from './core/git/git-watcher-registry';
+import { maasService } from './core/maas/maas-service';
 import { mobileGatewayService } from './core/mobile-gateway/mobile-gateway-service';
 import { mobileRelayService } from './core/mobile-gateway/mobile-relay-service';
 import { ensureInternalProject } from './core/projects/operations/ensureInternalProject';
@@ -169,6 +170,10 @@ void app.whenReady().then(async () => {
   await appSettingsService.initialize();
   ptySessionRegistry.setScrollbackLines((await appSettingsService.get('terminal')).scrollbackLines);
   __bootMark('appSettingsService.initialize done');
+  await maasService.reconcileActiveBindings().catch((error: unknown) => {
+    log.warn('Failed to reconcile the active MaaS provider configuration:', error);
+  });
+  __bootMark('maasService.reconcileActiveBindings done');
 
   // Bootstrap the internal "Drafts" project (hosts no-project agent sessions).
   // Must run before RPC so the renderer's first project list query sees it.
