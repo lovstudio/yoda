@@ -31,6 +31,7 @@ import {
   type MaasUsageSummaryInput,
 } from '@shared/maas';
 import { isValidRuntimeId, RUNTIME_IDS, type RuntimeId } from '@shared/runtime-registry';
+import { resolveRuntimeStateDirectory } from '@main/core/conversations/impl/runtime-env';
 import { TTLCache } from '@main/core/utils/ttl-cache';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
@@ -38,6 +39,7 @@ import { encryptedAppSecretsStore } from '../secrets/encrypted-app-secrets-store
 import { runtimeOverrideSettings } from '../settings/runtime-settings-service';
 import { appSettingsService } from '../settings/settings-service';
 import { migrateLegacyCodexMaasHistoryForConfig } from './codex-history-compat';
+import { codexMaasAuthSwitch, type CodexMaasAuthRollback } from './codex-maas-auth-switch';
 import {
   extractMaasPlatformInfoSnapshot,
   fallbackMaasPlatformInfoSnapshot,
@@ -528,7 +530,10 @@ export class MaasService {
     if (!isMaasPlatformId(input.platformId)) {
       return { success: false, error: 'Unsupported MaaS platform.' };
     }
-    if (input.enabled && !(await this.getInferenceCredentials(input.platformId))) {
+    const inferenceCredentials = input.enabled
+      ? await this.getInferenceCredentials(input.platformId)
+      : undefined;
+    if (input.enabled && !inferenceCredentials) {
       return {
         success: false,
         error: 'Connect the MaaS platform and save an API key before enabling it.',
@@ -541,12 +546,18 @@ export class MaasService {
     const supportedRuntimeIds = RUNTIME_IDS.filter((runtimeId) =>
       supportsMaasRuntimeBinding(runtimeId)
     );
+    let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
 
     try {
       if (!input.enabled) {
         for (const runtimeId of supportedRuntimeIds) {
           const currentConfig = (await runtimeOverrideSettings.getItem(runtimeId)) ?? {};
           const binding = settings.runtimeBindings.find((item) => item.runtimeId === runtimeId);
+          if (runtimeId === 'codex') {
+            rollbackCodexAuth = await codexMaasAuthSwitch.disable({
+              codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+            });
+          }
           if (binding || currentConfig.authProvider === 'yoda-maas') {
             await runtimeOverrideSettings.updateItem(
               runtimeId,
@@ -568,6 +579,11 @@ export class MaasService {
 
         if (!supportsMaasPlatformForRuntime(runtimeId, input.platformId)) {
           if (existingBinding || currentConfig.authProvider === 'yoda-maas') {
+            if (runtimeId === 'codex') {
+              rollbackCodexAuth = await codexMaasAuthSwitch.disable({
+                codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+              });
+            }
             await runtimeOverrideSettings.updateItem(
               runtimeId,
               resolveRestoredMaasRuntimeConfig(currentConfig, existingBinding)
@@ -584,6 +600,13 @@ export class MaasService {
           enabledAt,
         });
         nextBindings.push(binding);
+        if (runtimeId === 'codex' && inferenceCredentials) {
+          rollbackCodexAuth = await codexMaasAuthSwitch.enable({
+            codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+            endpoint: inferenceCredentials.endpoint,
+            apiKey: inferenceCredentials.apiKey,
+          });
+        }
         await runtimeOverrideSettings.updateItem(runtimeId, {
           ...currentConfig,
           authProvider: 'yoda-maas',
@@ -599,9 +622,18 @@ export class MaasService {
     } catch (error) {
       try {
         await runtimeOverrideSettings.replaceOverrides(originalRuntimeOverrides);
+      } catch (rollbackError) {
+        log.error('Failed to roll back global MaaS runtime settings:', rollbackError);
+      }
+      try {
         await appSettingsService.update('maas', settings);
       } catch (rollbackError) {
-        log.error('Failed to roll back global MaaS binding:', rollbackError);
+        log.error('Failed to roll back global MaaS app settings:', rollbackError);
+      }
+      try {
+        await rollbackCodexAuth?.();
+      } catch (rollbackError) {
+        log.error('Failed to roll back global MaaS Codex authentication:', rollbackError);
       }
       log.error('Failed to update global MaaS binding:', error);
       return {
@@ -614,6 +646,11 @@ export class MaasService {
   async setRuntimeBinding(
     input: MaasSetRuntimeBindingInput
   ): Promise<{ success: boolean; error?: string }> {
+    let settingsToRestore: MaasSettings | undefined;
+    let runtimeOverridesToRestore:
+      | Awaited<ReturnType<typeof runtimeOverrideSettings.getOverrides>>
+      | undefined;
+    let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
     try {
       if (!isValidRuntimeId(input.runtimeId) || !supportsMaasRuntimeBinding(input.runtimeId)) {
         return { success: false, error: 'This Agent Client does not support MaaS switching.' };
@@ -629,6 +666,8 @@ export class MaasService {
       }
 
       const settings = await appSettingsService.get('maas');
+      settingsToRestore = settings;
+      runtimeOverridesToRestore = await runtimeOverrideSettings.getOverrides();
       const existingBinding = settings.runtimeBindings.find(
         (binding) => binding.runtimeId === input.runtimeId
       );
@@ -645,7 +684,8 @@ export class MaasService {
             error: 'Only one MaaS platform can be active at a time.',
           };
         }
-        if (!(await this.getInferenceCredentials(input.platformId))) {
+        const inferenceCredentials = await this.getInferenceCredentials(input.platformId);
+        if (!inferenceCredentials) {
           return {
             success: false,
             error: 'Connect the MaaS platform and save an API key before enabling a Client.',
@@ -659,6 +699,13 @@ export class MaasService {
           existingBinding,
           enabledAt: new Date().toISOString(),
         });
+        if (input.runtimeId === 'codex') {
+          rollbackCodexAuth = await codexMaasAuthSwitch.enable({
+            codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+            endpoint: inferenceCredentials.endpoint,
+            apiKey: inferenceCredentials.apiKey,
+          });
+        }
         await runtimeOverrideSettings.updateItem(input.runtimeId, {
           ...currentConfig,
           authProvider: 'yoda-maas',
@@ -678,6 +725,11 @@ export class MaasService {
         return { success: true };
       }
 
+      if (input.runtimeId === 'codex') {
+        rollbackCodexAuth = await codexMaasAuthSwitch.disable({
+          codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+        });
+      }
       await this.restoreRuntimeConfig(
         input.runtimeId,
         currentConfig,
@@ -691,6 +743,25 @@ export class MaasService {
       });
       return { success: true };
     } catch (error) {
+      if (runtimeOverridesToRestore) {
+        try {
+          await runtimeOverrideSettings.replaceOverrides(runtimeOverridesToRestore);
+        } catch (rollbackError) {
+          log.error('Failed to roll back MaaS runtime settings:', rollbackError);
+        }
+      }
+      if (settingsToRestore) {
+        try {
+          await appSettingsService.update('maas', settingsToRestore);
+        } catch (rollbackError) {
+          log.error('Failed to roll back MaaS app settings:', rollbackError);
+        }
+      }
+      try {
+        await rollbackCodexAuth?.();
+      } catch (rollbackError) {
+        log.error('Failed to roll back MaaS Codex authentication:', rollbackError);
+      }
       log.error('Failed to update MaaS runtime binding:', error);
       return {
         success: false,

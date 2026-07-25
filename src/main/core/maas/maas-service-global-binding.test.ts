@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   failRuntimeId: null as string | null,
   secrets: {} as Record<string, string>,
   clipboardWriteText: vi.fn(),
+  codexAuthDisable: vi.fn(),
+  codexAuthEnable: vi.fn(),
+  codexAuthRollback: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
 }));
 
@@ -72,6 +75,13 @@ vi.mock('./codex-history-compat', () => ({
   migrateLegacyCodexMaasHistoryForConfig: mocks.migrateLegacyCodexMaasHistory,
 }));
 
+vi.mock('./codex-maas-auth-switch', () => ({
+  codexMaasAuthSwitch: {
+    enable: mocks.codexAuthEnable,
+    disable: mocks.codexAuthDisable,
+  },
+}));
+
 describe('global MaaS binding', () => {
   beforeEach(() => {
     mocks.settings = {
@@ -90,6 +100,8 @@ describe('global MaaS binding', () => {
     mocks.failRuntimeId = null;
     mocks.secrets = {};
     vi.clearAllMocks();
+    mocks.codexAuthEnable.mockResolvedValue(mocks.codexAuthRollback);
+    mocks.codexAuthDisable.mockResolvedValue(mocks.codexAuthRollback);
     mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
   });
 
@@ -108,6 +120,12 @@ describe('global MaaS binding', () => {
       maasPlatformId: 'zenmux',
       defaultModel: 'gpt-5',
     });
+    expect(mocks.codexAuthEnable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: 'https://maas.example.test/v1',
+        apiKey: 'secret',
+      })
+    );
     expect(mocks.migrateLegacyCodexMaasHistory).toHaveBeenCalledWith({
       authProvider: 'official-api',
       defaultModel: 'gpt-5',
@@ -185,6 +203,12 @@ describe('global MaaS binding', () => {
     expect(new Set(mocks.settings.runtimeBindings.map((binding) => binding.platformId))).toEqual(
       new Set(['openrouter'])
     );
+    expect(mocks.codexAuthEnable).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        endpoint: 'https://maas.example.test/v1',
+        apiKey: 'secret',
+      })
+    );
 
     await expect(
       service.setGlobalBinding({ platformId: 'openrouter', enabled: false })
@@ -198,6 +222,7 @@ describe('global MaaS binding', () => {
       env: { KEEP_ME: '1' },
     });
     expect(mocks.settings.runtimeBindings).toEqual([]);
+    expect(mocks.codexAuthDisable).toHaveBeenCalledTimes(1);
   });
 
   it('rolls back every Client when a global switch fails midway', async () => {
@@ -215,6 +240,7 @@ describe('global MaaS binding', () => {
     expect(result).toEqual({ success: false, error: 'failed claude' });
     expect(mocks.runtimeConfigs).toEqual(originalConfigs);
     expect(mocks.settings).toEqual(originalSettings);
+    expect(mocks.codexAuthRollback).toHaveBeenCalledTimes(1);
   });
 
   it('keeps zero or one Custom instance globally active when switching instances', async () => {
@@ -295,6 +321,8 @@ describe('global MaaS binding', () => {
 
     expect(mocks.runtimeConfigs.codex).toEqual(beforeMaas);
     expect(mocks.settings.runtimeBindings).toEqual([]);
+    expect(mocks.codexAuthEnable).toHaveBeenCalledOnce();
+    expect(mocks.codexAuthDisable).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -7,7 +7,7 @@ import {
 } from './runtime-env';
 
 describe('MaaS Agent Client runtime environment', () => {
-  it('never exposes the MaaS API key to the Codex process', () => {
+  it('uses the persisted Codex MaaS login instead of an ignored env override', () => {
     expect(
       resolveMaasRuntimeEnv('codex', {
         platformId: 'zenmux',

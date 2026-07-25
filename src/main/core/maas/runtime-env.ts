@@ -52,8 +52,8 @@ export function resolveMaasRuntimeEnv(
   if (!spec || !supportsMaasPlatformForRuntime(runtimeId, credentials.platformId)) return undefined;
 
   // Codex TUI deliberately ignores CODEX_API_KEY as a transient auth override.
-  // Its MaaS key is therefore held by the loopback proxy instead of entering
-  // the Codex process and potentially replacing the Codex App login.
+  // The MaaS switch updates auth.json and config.toml as one reversible operation,
+  // so newly started Codex processes use the same active login and endpoint.
   if (runtimeId === 'codex') return undefined;
 
   let endpoint = credentials.endpoint.replace(/\/+$/, '');
