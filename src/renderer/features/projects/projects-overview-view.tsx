@@ -33,6 +33,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
@@ -379,16 +380,18 @@ function ProjectColumnsMenu({
         }
       />
       <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuLabel>{t('projectsOverview.configureColumns')}</DropdownMenuLabel>
-        {PROJECT_OVERVIEW_COLUMNS.map((column) => (
-          <DropdownMenuCheckboxItem
-            key={column}
-            checked={visible.has(column)}
-            onCheckedChange={(checked) => onColumnVisibleChange(column, checked === true)}
-          >
-            {t(`projectsOverview.columns.${column}`)}
-          </DropdownMenuCheckboxItem>
-        ))}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('projectsOverview.configureColumns')}</DropdownMenuLabel>
+          {PROJECT_OVERVIEW_COLUMNS.map((column) => (
+            <DropdownMenuCheckboxItem
+              key={column}
+              checked={visible.has(column)}
+              onCheckedChange={(checked) => onColumnVisibleChange(column, checked === true)}
+            >
+              {t(`projectsOverview.columns.${column}`)}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

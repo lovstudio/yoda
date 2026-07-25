@@ -31,6 +31,7 @@ import { Button } from '@renderer/lib/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -227,25 +228,27 @@ export const MaasView: React.FC<{
                     }
                   />
                   <DropdownMenuContent align="end" className="w-72">
-                    <DropdownMenuLabel>{t('maas.selectPlatform')}</DropdownMenuLabel>
-                    {availablePlatformIds.map((platformId) => {
-                      const platform = MAAS_PLATFORMS[platformId];
-                      return (
-                        <DropdownMenuItem
-                          key={platformId}
-                          className="items-start py-2"
-                          onClick={() => handleAddPlatform(platformId)}
-                        >
-                          <Layers className="mt-0.5 h-4 w-4" />
-                          <span className="min-w-0">
-                            <span className="block text-sm text-foreground">{platform.name}</span>
-                            <span className="mt-0.5 block line-clamp-2 text-xs leading-relaxed text-foreground-muted">
-                              {t(`maas.platforms.${platformId}.description`)}
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>{t('maas.selectPlatform')}</DropdownMenuLabel>
+                      {availablePlatformIds.map((platformId) => {
+                        const platform = MAAS_PLATFORMS[platformId];
+                        return (
+                          <DropdownMenuItem
+                            key={platformId}
+                            className="items-start py-2"
+                            onClick={() => handleAddPlatform(platformId)}
+                          >
+                            <Layers className="mt-0.5 h-4 w-4" />
+                            <span className="min-w-0">
+                              <span className="block text-sm text-foreground">{platform.name}</span>
+                              <span className="mt-0.5 block line-clamp-2 text-xs leading-relaxed text-foreground-muted">
+                                {t(`maas.platforms.${platformId}.description`)}
+                              </span>
                             </span>
-                          </span>
-                        </DropdownMenuItem>
-                      );
-                    })}
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuGroup>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
