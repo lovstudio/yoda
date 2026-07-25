@@ -27,7 +27,7 @@ import type {
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { LocalFileSystem } from '@main/core/fs/impl/local-fs';
 import { migrateLegacyCodexMaasHistoryForConfig } from '@main/core/maas/codex-history-compat';
-import { resolveMaasRuntimeCommandArgs, resolveMaasRuntimeEnv } from '@main/core/maas/runtime-env';
+import { resolveMaasRuntimeEnv } from '@main/core/maas/runtime-env';
 import { spawnLocalPty } from '@main/core/pty/local-pty';
 import type { Pty } from '@main/core/pty/pty';
 import { buildAgentEnv } from '@main/core/pty/pty-env';
@@ -246,14 +246,7 @@ export class LocalConversationProvider implements ConversationProvider {
       terminalThemeMode: await resolveTerminalThemeMode(),
       skillPolicy: conversation.skillPolicy,
     });
-    const maasRuntimeCommandArgs = maasCredentials
-      ? resolveMaasRuntimeCommandArgs(conversation.runtimeId, maasCredentials)
-      : [];
-    const argsWithNotify = withCodexRuntimeNotifyArgs(
-      conversation.runtimeId,
-      [...maasRuntimeCommandArgs, ...baseArgs],
-      port
-    );
+    const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 
     const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
     const configuredRuntimeEnv = resolveRuntimeEnv(providerConfig, {

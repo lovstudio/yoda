@@ -10,38 +10,17 @@ import {
   supportsRuntimeMaasSwitch,
   type RuntimeId,
 } from '@shared/runtime-registry';
+import { resolveCodexMaasProviderSpec } from './codex-maas-provider';
 
 export type MaasRuntimeCredentials = {
   platformId: MaasPlatformId;
+  displayName?: string;
   endpoint: string;
   apiKey: string;
 };
 
-function formatTomlString(value: string): string {
-  return JSON.stringify(value);
-}
-
 export function supportsMaasRuntimeBinding(runtimeId: string): runtimeId is RuntimeId {
   return isValidRuntimeId(runtimeId) && supportsRuntimeMaasSwitch(runtimeId);
-}
-
-/**
- * Keep Codex on its built-in `openai` provider so persisted threads remain
- * readable by the native Codex app. `openai_base_url` is Codex's supported
- * config override; OPENAI_BASE_URL alone is no longer sufficient.
- */
-export function resolveMaasRuntimeCommandArgs(
-  runtimeId: RuntimeId,
-  credentials: MaasRuntimeCredentials
-): string[] {
-  if (runtimeId !== 'codex') return [];
-
-  const endpoint = credentials.endpoint.replace(/\/+$/, '');
-  const overrides = [
-    `model_provider=${formatTomlString('openai')}`,
-    `openai_base_url=${formatTomlString(endpoint)}`,
-  ];
-  return overrides.flatMap((override) => ['-c', override]);
 }
 
 export function resolveMaasRuntimeEnv(
@@ -51,10 +30,10 @@ export function resolveMaasRuntimeEnv(
   const spec = getRuntimeAccountProfile(runtimeId).maas.runtimeEnv;
   if (!spec || !supportsMaasPlatformForRuntime(runtimeId, credentials.platformId)) return undefined;
 
-  // Codex TUI deliberately ignores CODEX_API_KEY as a transient auth override.
-  // The MaaS switch updates auth.json and config.toml as one reversible operation,
-  // so newly started Codex processes use the same active login and endpoint.
-  if (runtimeId === 'codex') return undefined;
+  if (runtimeId === 'codex') {
+    const provider = resolveCodexMaasProviderSpec(credentials.platformId, credentials.displayName);
+    return { [provider.envKey]: credentials.apiKey };
+  }
 
   let endpoint = credentials.endpoint.replace(/\/+$/, '');
   if (runtimeId === 'claude' && credentials.platformId === 'zenmux') {

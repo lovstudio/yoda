@@ -603,6 +603,8 @@ export class MaasService {
         if (runtimeId === 'codex' && inferenceCredentials) {
           rollbackCodexAuth = await codexMaasAuthSwitch.enable({
             codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+            platformId: input.platformId,
+            displayName: inferenceCredentials.displayName,
             endpoint: inferenceCredentials.endpoint,
             apiKey: inferenceCredentials.apiKey,
           });
@@ -702,6 +704,8 @@ export class MaasService {
         if (input.runtimeId === 'codex') {
           rollbackCodexAuth = await codexMaasAuthSwitch.enable({
             codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+            platformId: input.platformId,
+            displayName: inferenceCredentials.displayName,
             endpoint: inferenceCredentials.endpoint,
             apiKey: inferenceCredentials.apiKey,
           });
@@ -773,7 +777,10 @@ export class MaasService {
   async getRuntimeInferenceCredentials(
     runtimeId: RuntimeId,
     platformId?: MaasPlatformId
-  ): Promise<{ platformId: MaasPlatformId; endpoint: string; apiKey: string } | undefined> {
+  ): Promise<
+    | { platformId: MaasPlatformId; displayName: string; endpoint: string; apiKey: string }
+    | undefined
+  > {
     if (!supportsMaasRuntimeBinding(runtimeId)) return undefined;
     const settings = await appSettingsService.get('maas');
     const selectedPlatformId =
@@ -839,7 +846,7 @@ export class MaasService {
    */
   async getInferenceCredentials(
     platformId: MaasPlatformId
-  ): Promise<{ endpoint: string; apiKey: string } | undefined> {
+  ): Promise<{ displayName: string; endpoint: string; apiKey: string } | undefined> {
     const settings = await appSettingsService.get('maas');
     const connection = getConnectedPlatform(settings, platformId);
     if (!connection) return undefined;
@@ -847,7 +854,7 @@ export class MaasService {
       platformId === 'zenmux' ? inferenceSecretKey(platformId) : secretKey(platformId)
     );
     if (!apiKey) return undefined;
-    return { endpoint: connection.endpoint, apiKey };
+    return { displayName: connection.displayName, endpoint: connection.endpoint, apiKey };
   }
 
   async copyStoredApiKeyToClipboard(

@@ -66,6 +66,7 @@ describe('Codex MaaS native authentication switch', () => {
   it('switches Codex App to the MaaS key and restores the exact native files', async () => {
     await authSwitch.enable({
       codexHome,
+      platformId: 'zenmux',
       endpoint: 'https://maas.example.test/v1/',
       apiKey: 'maas-secret',
     });
@@ -76,9 +77,15 @@ describe('Codex MaaS native authentication switch', () => {
     });
     const activeConfig = await readFile(configPath, 'utf8');
     expect(activeConfig).toContain('# Auto-injected by Yoda MaaS\r\n');
-    expect(activeConfig).toContain('model_provider = "openai"\r\n');
-    expect(activeConfig).toContain('openai_base_url = "https://maas.example.test/v1"\r\n');
+    expect(activeConfig).toContain('model_provider = "zenmux"\r\n');
+    expect(activeConfig).toContain('[model_providers.zenmux]\r\n');
+    expect(activeConfig).toContain('name = "ZenMux"\r\n');
+    expect(activeConfig).toContain('base_url = "https://maas.example.test/v1"\r\n');
+    expect(activeConfig).toContain('env_key = "ZENMUX_API_KEY"\r\n');
+    expect(activeConfig).toContain('[shell_environment_policy.set]\r\n');
+    expect(activeConfig).toContain('ZENMUX_API_KEY = "maas-secret"\r\n');
     expect(activeConfig).toContain('[features]\r\nfast_mode = true\r\n');
+    expect((await stat(configPath)).mode & 0o777).toBe(0o600);
     expect(secrets.secrets.size).toBe(1);
 
     await authSwitch.disable({ codexHome });
@@ -93,11 +100,14 @@ describe('Codex MaaS native authentication switch', () => {
   it('updates the active platform without replacing the first snapshot', async () => {
     await authSwitch.enable({
       codexHome,
+      platformId: 'zenmux',
       endpoint: 'https://first.example.test/v1',
       apiKey: 'first-secret',
     });
     await authSwitch.enable({
       codexHome,
+      platformId: 'openrouter',
+      displayName: 'OpenRouter',
       endpoint: 'https://second.example.test/v1',
       apiKey: 'second-secret',
     });
@@ -106,7 +116,12 @@ describe('Codex MaaS native authentication switch', () => {
       auth_mode: 'apikey',
       OPENAI_API_KEY: 'second-secret',
     });
-    expect(await readFile(configPath, 'utf8')).toContain('https://second.example.test/v1');
+    const activeConfig = await readFile(configPath, 'utf8');
+    expect(activeConfig).toContain('model_provider = "openrouter"');
+    expect(activeConfig).toContain('[model_providers.openrouter]');
+    expect(activeConfig).toContain('env_key = "OPENROUTER_API_KEY"');
+    expect(activeConfig).toContain('OPENROUTER_API_KEY = "second-secret"');
+    expect(activeConfig).toContain('https://second.example.test/v1');
 
     await authSwitch.disable({ codexHome });
     expect(await readFile(authPath, 'utf8')).toBe(originalAuth);
@@ -116,6 +131,7 @@ describe('Codex MaaS native authentication switch', () => {
   it('rolls an enable operation back without leaving a stale snapshot', async () => {
     const rollback = await authSwitch.enable({
       codexHome,
+      platformId: 'zenmux',
       endpoint: 'https://maas.example.test/v1',
       apiKey: 'maas-secret',
     });
@@ -130,6 +146,7 @@ describe('Codex MaaS native authentication switch', () => {
   it('can roll a disable operation back when the surrounding settings update fails', async () => {
     await authSwitch.enable({
       codexHome,
+      platformId: 'zenmux',
       endpoint: 'https://maas.example.test/v1',
       apiKey: 'maas-secret',
     });
@@ -142,5 +159,43 @@ describe('Codex MaaS native authentication switch', () => {
     expect(await readFile(authPath, 'utf8')).toBe(activeAuth);
     expect(await readFile(configPath, 'utf8')).toBe(activeConfig);
     expect(secrets.secrets.size).toBe(1);
+  });
+
+  it('replaces an existing provider table while preserving other shell variables', async () => {
+    const configWithExistingProvider = [
+      'model_provider = "zenmux"',
+      '',
+      '[model_providers.zenmux]',
+      'name = "Old ZenMux"',
+      'base_url = "https://old.example.test/v1"',
+      'env_key = "ZENMUX_API_KEY"',
+      '',
+      '[shell_environment_policy.set]',
+      'KEEP_ME = "yes"',
+      'ZENMUX_API_KEY = "old-secret"',
+      '',
+      '[features]',
+      'fast_mode = true',
+      '',
+    ].join('\n');
+    await writeFile(configPath, configWithExistingProvider, { mode: 0o640 });
+
+    await authSwitch.enable({
+      codexHome,
+      platformId: 'zenmux',
+      endpoint: 'https://zenmux.ai/api/v1/',
+      apiKey: 'new-secret',
+    });
+
+    const activeConfig = await readFile(configPath, 'utf8');
+    expect(activeConfig.match(/\[model_providers\.zenmux\]/g)).toHaveLength(1);
+    expect(activeConfig.match(/^ZENMUX_API_KEY\s*=/gm)).toHaveLength(1);
+    expect(activeConfig).toContain('base_url = "https://zenmux.ai/api/v1"');
+    expect(activeConfig).toContain('KEEP_ME = "yes"');
+    expect(activeConfig).not.toContain('old-secret');
+
+    await authSwitch.disable({ codexHome });
+    expect(await readFile(configPath, 'utf8')).toBe(configWithExistingProvider);
+    expect((await stat(configPath)).mode & 0o777).toBe(0o640);
   });
 });

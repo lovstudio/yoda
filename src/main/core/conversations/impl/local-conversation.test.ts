@@ -421,7 +421,7 @@ describe('LocalConversationProvider', () => {
     expect(spawned[0].options.args.slice(2)).toEqual(['Fix this']);
   });
 
-  it('launches Codex through MaaS without creating a custom provider identity', async () => {
+  it('launches Codex through the persisted MaaS provider without overriding its identity', async () => {
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'codex',
       resumeFlag: 'resume',
@@ -432,6 +432,7 @@ describe('LocalConversationProvider', () => {
     });
     mocks.getRuntimeInferenceCredentials.mockResolvedValue({
       platformId: 'zenmux',
+      displayName: 'ZenMux',
       endpoint: 'https://zenmux.example.test/v1/',
       apiKey: 'zenmux-secret',
     });
@@ -443,14 +444,9 @@ describe('LocalConversationProvider', () => {
 
     await provider.startSession(codexConversation, { cols: 80, rows: 24 }, false, 'Fix this');
 
-    expect(spawned[0].options.args).toEqual([
-      '-c',
-      'model_provider="openai"',
-      '-c',
-      'openai_base_url="https://zenmux.example.test/v1"',
-      'Fix this',
-    ]);
+    expect(spawned[0].options.args).toEqual(['Fix this']);
     expect(spawned[0].options.args.join(' ')).not.toContain('yoda-maas');
+    expect(spawned[0].options.args.join(' ')).not.toContain('model_provider');
     expect(spawned[0].options.args).not.toContain('zenmux-secret');
     expect(mocks.migrateLegacyCodexMaasHistory).toHaveBeenCalledWith(
       expect.objectContaining({ authProvider: 'yoda-maas', maasPlatformId: 'zenmux' })
@@ -458,7 +454,9 @@ describe('LocalConversationProvider', () => {
     expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
       expect.objectContaining({
         agentApiVars: false,
-        providerVars: undefined,
+        providerVars: {
+          ZENMUX_API_KEY: 'zenmux-secret',
+        },
       })
     );
     expect(mocks.setInteractiveSessionContext).toHaveBeenCalledWith(

@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { parse as parseToml } from 'smol-toml';
+import type { MaasPlatformId } from '@shared/maas';
 import { encryptedAppSecretsStore } from '@main/core/secrets/encrypted-app-secrets-store';
+import { resolveCodexMaasProviderSpec, type CodexMaasProviderSpec } from './codex-maas-provider';
 
 const SNAPSHOT_VERSION = 1;
 const SECRET_PREFIX = 'yoda-maas-codex-native-files';
@@ -34,10 +37,14 @@ export class CodexMaasAuthSwitch {
 
   async enable({
     codexHome,
+    platformId,
+    displayName,
     endpoint,
     apiKey,
   }: {
     codexHome: string;
+    platformId: MaasPlatformId;
+    displayName?: string;
     endpoint: string;
     apiKey: string;
   }): Promise<CodexMaasAuthRollback> {
@@ -53,6 +60,7 @@ export class CodexMaasAuthSwitch {
     }
 
     const baseConfig = originalSnapshot.config;
+    const provider = resolveCodexMaasProviderSpec(platformId, displayName);
     const active: CodexNativeFilesSnapshot = {
       version: SNAPSHOT_VERSION,
       codexHome: paths.codexHome,
@@ -63,8 +71,13 @@ export class CodexMaasAuthSwitch {
       },
       config: {
         exists: true,
-        content: buildMaasConfig(baseConfig.exists ? baseConfig.content : '', endpoint),
-        mode: baseConfig.exists ? baseConfig.mode : 0o600,
+        content: buildMaasConfig(
+          baseConfig.exists ? baseConfig.content : '',
+          provider,
+          endpoint,
+          apiKey
+        ),
+        mode: 0o600,
       },
     };
 
@@ -186,25 +199,130 @@ async function applyFileSnapshot(path: string, snapshot: FileSnapshot): Promise<
   }
 }
 
-function buildMaasConfig(content: string, endpoint: string): string {
+function buildMaasConfig(
+  content: string,
+  provider: CodexMaasProviderSpec,
+  endpoint: string,
+  apiKey: string
+): string {
   const eol = content.includes('\r\n') ? '\r\n' : '\n';
-  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  let lines = content.replace(/\r\n/g, '\n').split('\n');
+  lines = removeRootAssignments(lines, ['model_provider', 'openai_base_url']);
+  lines = removeTable(lines, modelProviderTablePattern(provider.providerId));
+  lines = trimTrailingBlankLines(lines);
+
+  lines.unshift(
+    YODA_CONFIG_MARKER,
+    `model_provider = ${formatTomlString(provider.providerId)}`,
+    ''
+  );
+  lines.push(
+    '',
+    YODA_CONFIG_MARKER,
+    `[model_providers.${provider.providerId}]`,
+    `name = ${formatTomlString(provider.name)}`,
+    `base_url = ${formatTomlString(endpoint.replace(/\/+$/, ''))}`,
+    `env_key = ${formatTomlString(provider.envKey)}`
+  );
+  lines = upsertShellEnvironmentVariable(lines, provider.envKey, apiKey);
+
+  const result = `${trimTrailingBlankLines(lines).join('\n')}\n`.replace(/\n/g, eol);
+  validateMaasConfig(result, provider);
+  return result;
+}
+
+function removeRootAssignments(lines: string[], keys: string[]): string[] {
+  const keyPattern = keys.map(escapeRegExp).join('|');
+  const assignmentPattern = new RegExp(`^\\s*(?:${keyPattern})\\s*=`);
   let atRoot = true;
-  const preserved = lines.filter((line) => {
+  return lines.filter((line) => {
     const trimmed = line.trim();
     if (atRoot && /^\[/.test(trimmed)) atRoot = false;
     if (!atRoot) return true;
     if (trimmed === YODA_CONFIG_MARKER) return false;
-    return !/^\s*(?:model_provider|openai_base_url)\s*=/.test(line);
+    return !assignmentPattern.test(line);
   });
-  const injected = [
-    YODA_CONFIG_MARKER,
-    'model_provider = "openai"',
-    `openai_base_url = ${JSON.stringify(endpoint.replace(/\/+$/, ''))}`,
-    '',
-    ...preserved,
-  ];
-  return injected.join('\n').replace(/\n/g, eol);
+}
+
+function removeTable(lines: string[], tablePattern: RegExp): string[] {
+  const result: string[] = [];
+  let skipping = false;
+  for (const line of lines) {
+    if (/^\s*\[/.test(line)) {
+      skipping = tablePattern.test(line);
+    }
+    if (!skipping) result.push(line);
+  }
+  return result;
+}
+
+function upsertShellEnvironmentVariable(lines: string[], envKey: string, apiKey: string): string[] {
+  const result = [...lines];
+  const headerPattern = /^\s*\[\s*shell_environment_policy\s*\.\s*set\s*\]\s*(?:#.*)?$/;
+  const headerIndex = result.findIndex((line) => headerPattern.test(line));
+  const assignmentPattern = new RegExp(
+    `^\\s*(?:${escapeRegExp(envKey)}|"${escapeRegExp(envKey)}"|'${escapeRegExp(envKey)}')\\s*=`
+  );
+  const assignment = `${envKey} = ${formatTomlString(apiKey)}`;
+
+  if (headerIndex < 0) {
+    result.push('', '[shell_environment_policy.set]', assignment);
+    return result;
+  }
+
+  let tableEnd = headerIndex + 1;
+  while (tableEnd < result.length && !/^\s*\[/.test(result[tableEnd]!)) {
+    tableEnd += 1;
+  }
+  const existingLines = result
+    .slice(headerIndex + 1, tableEnd)
+    .filter((line) => !assignmentPattern.test(line));
+  result.splice(headerIndex + 1, tableEnd - headerIndex - 1, assignment, ...existingLines);
+  return result;
+}
+
+function modelProviderTablePattern(providerId: string): RegExp {
+  const escaped = escapeRegExp(providerId);
+  return new RegExp(
+    `^\\s*\\[\\s*model_providers\\s*\\.\\s*(?:${escaped}|"${escaped}"|'${escaped}')\\s*\\]\\s*(?:#.*)?$`
+  );
+}
+
+function validateMaasConfig(content: string, provider: CodexMaasProviderSpec): void {
+  const parsed = parseToml(content) as Record<string, unknown>;
+  const modelProviders = asRecord(parsed.model_providers);
+  const providerConfig = asRecord(modelProviders?.[provider.providerId]);
+  const shellPolicy = asRecord(parsed.shell_environment_policy);
+  const shellVariables = asRecord(shellPolicy?.set);
+  if (
+    parsed.model_provider !== provider.providerId ||
+    providerConfig?.name !== provider.name ||
+    providerConfig?.env_key !== provider.envKey ||
+    typeof providerConfig?.base_url !== 'string' ||
+    typeof shellVariables?.[provider.envKey] !== 'string'
+  ) {
+    throw new Error('Generated Codex MaaS provider config is invalid.');
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function trimTrailingBlankLines(lines: string[]): string[] {
+  const result = [...lines];
+  while (result.at(-1)?.trim() === '') result.pop();
+  return result;
+}
+
+function formatTomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function parseSnapshot(serialized: string): CodexNativeFilesSnapshot {

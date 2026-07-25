@@ -108,6 +108,7 @@ describe('global MaaS binding', () => {
   it('backs up every compatible Client, switches platforms, and restores the originals', async () => {
     const service = new MaasService();
     vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      displayName: 'MaaS Test',
       endpoint: 'https://maas.example.test/v1',
       apiKey: 'secret',
     });
@@ -122,6 +123,8 @@ describe('global MaaS binding', () => {
     });
     expect(mocks.codexAuthEnable).toHaveBeenCalledWith(
       expect.objectContaining({
+        platformId: 'zenmux',
+        displayName: 'MaaS Test',
         endpoint: 'https://maas.example.test/v1',
         apiKey: 'secret',
       })
@@ -205,6 +208,8 @@ describe('global MaaS binding', () => {
     );
     expect(mocks.codexAuthEnable).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        platformId: 'openrouter',
+        displayName: 'MaaS Test',
         endpoint: 'https://maas.example.test/v1',
         apiKey: 'secret',
       })
@@ -228,6 +233,7 @@ describe('global MaaS binding', () => {
   it('rolls back every Client when a global switch fails midway', async () => {
     const service = new MaasService();
     vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      displayName: 'MaaS Test',
       endpoint: 'https://maas.example.test/v1',
       apiKey: 'secret',
     });
@@ -246,6 +252,7 @@ describe('global MaaS binding', () => {
   it('keeps zero or one Custom instance globally active when switching instances', async () => {
     const service = new MaasService();
     vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      displayName: 'Custom Test',
       endpoint: 'https://custom.example.test/v1',
       apiKey: 'secret',
     });
@@ -273,6 +280,7 @@ describe('global MaaS binding', () => {
   it('rejects activating a second platform through the per-Client RPC', async () => {
     const service = new MaasService();
     vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      displayName: 'MaaS Test',
       endpoint: 'https://maas.example.test/v1',
       apiKey: 'secret',
     });
@@ -294,6 +302,7 @@ describe('global MaaS binding', () => {
   it('restores one Client to its exact pre-MaaS snapshot', async () => {
     const service = new MaasService();
     vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      displayName: 'MaaS Test',
       endpoint: 'https://maas.example.test/v1',
       apiKey: 'secret',
     });
