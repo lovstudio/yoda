@@ -128,6 +128,36 @@ function migrateLegacyCodexHistory(providerConfig: RuntimeCustomConfig | undefin
   }
 }
 
+function createRuntimeBinding({
+  runtimeId,
+  platformId,
+  currentConfig,
+  existingBinding,
+  enabledAt,
+}: {
+  runtimeId: RuntimeId;
+  platformId: MaasPlatformId;
+  currentConfig: RuntimeCustomConfig;
+  existingBinding: MaasRuntimeBinding | undefined;
+  enabledAt: string;
+}): MaasRuntimeBinding {
+  const previousConfig =
+    existingBinding?.previousConfig !== undefined
+      ? structuredClone(existingBinding.previousConfig)
+      : existingBinding || currentConfig.authProvider === 'yoda-maas'
+        ? resolveRestoredMaasRuntimeConfig(currentConfig, existingBinding)
+        : structuredClone(currentConfig);
+
+  return {
+    runtimeId,
+    platformId,
+    previousAuthProvider: previousConfig.authProvider ?? null,
+    previousMaasPlatformId: previousConfig.maasPlatformId ?? null,
+    previousConfig,
+    enabledAt: existingBinding?.enabledAt ?? enabledAt,
+  };
+}
+
 function defaultConnection(platformId: MaasPlatformId): MaasConnection {
   const platform = getMaasPlatformDefinition(platformId);
   return {
@@ -546,17 +576,13 @@ export class MaasService {
           continue;
         }
 
-        const binding: MaasRuntimeBinding = {
+        const binding = createRuntimeBinding({
           runtimeId,
           platformId: input.platformId,
-          previousAuthProvider: existingBinding
-            ? existingBinding.previousAuthProvider
-            : (currentConfig.authProvider ?? null),
-          previousMaasPlatformId: existingBinding
-            ? existingBinding.previousMaasPlatformId
-            : (currentConfig.maasPlatformId ?? null),
-          enabledAt: existingBinding?.enabledAt ?? enabledAt,
-        };
+          currentConfig,
+          existingBinding,
+          enabledAt,
+        });
         nextBindings.push(binding);
         await runtimeOverrideSettings.updateItem(runtimeId, {
           ...currentConfig,
@@ -626,17 +652,13 @@ export class MaasService {
           };
         }
 
-        const binding: MaasRuntimeBinding = {
+        const binding = createRuntimeBinding({
           runtimeId: input.runtimeId,
           platformId: input.platformId,
-          previousAuthProvider: existingBinding
-            ? existingBinding.previousAuthProvider
-            : (currentConfig.authProvider ?? null),
-          previousMaasPlatformId: existingBinding
-            ? existingBinding.previousMaasPlatformId
-            : (currentConfig.maasPlatformId ?? null),
-          enabledAt: existingBinding?.enabledAt ?? new Date().toISOString(),
-        };
+          currentConfig,
+          existingBinding,
+          enabledAt: new Date().toISOString(),
+        });
         await runtimeOverrideSettings.updateItem(input.runtimeId, {
           ...currentConfig,
           authProvider: 'yoda-maas',

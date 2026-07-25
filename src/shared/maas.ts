@@ -1,3 +1,4 @@
+import type { RuntimeCustomConfig } from './app-settings';
 import type { AgentAccountProviderId, RuntimeId } from './runtime-registry';
 
 export const MAAS_PLATFORM_IDS = ['zenmux', 'openrouter', 'siliconflow', 'custom'] as const;
@@ -100,6 +101,7 @@ export type MaasRuntimeBinding = {
   platformId: MaasPlatformId;
   previousAuthProvider: AgentAccountProviderId | null;
   previousMaasPlatformId: MaasPlatformId | null;
+  previousConfig?: RuntimeCustomConfig;
   enabledAt: string;
 };
 

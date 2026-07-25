@@ -43,4 +43,41 @@ describe('MaaS settings schema', () => {
       }).success
     ).toBe(false);
   });
+
+  it('persists a complete pre-MaaS Client snapshot and accepts legacy bindings', () => {
+    const parsed = maasSettingsSchema.parse({
+      selectedPlatformId: 'zenmux',
+      connections: [],
+      runtimeBindings: [
+        {
+          runtimeId: 'codex',
+          platformId: 'zenmux',
+          previousAuthProvider: 'official-api',
+          previousMaasPlatformId: null,
+          previousConfig: {
+            authProvider: 'official-api',
+            defaultModel: 'gpt-5',
+            extraArgs: '--original',
+            env: { ORIGINAL: '1' },
+          },
+          enabledAt: '2026-07-25T00:00:00.000Z',
+        },
+        {
+          runtimeId: 'claude',
+          platformId: 'zenmux',
+          previousAuthProvider: 'official-subscription',
+          previousMaasPlatformId: null,
+          enabledAt: '2026-07-24T00:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(parsed.runtimeBindings[0]?.previousConfig).toEqual({
+      authProvider: 'official-api',
+      defaultModel: 'gpt-5',
+      extraArgs: '--original',
+      env: { ORIGINAL: '1' },
+    });
+    expect(parsed.runtimeBindings[1]).not.toHaveProperty('previousConfig');
+  });
 });

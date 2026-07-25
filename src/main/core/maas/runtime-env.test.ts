@@ -117,4 +117,36 @@ describe('MaaS Agent Client runtime environment', () => {
       env: { CUSTOM_RUNTIME_FLAG: '1' },
     });
   });
+
+  it('restores the exact pre-MaaS Client snapshot when one is available', () => {
+    expect(
+      resolveRestoredMaasRuntimeConfig(
+        {
+          authProvider: 'yoda-maas',
+          maasPlatformId: 'openrouter',
+          defaultModel: 'changed-while-enabled',
+          extraArgs: '--temporary',
+          env: { TEMPORARY: '1' },
+        },
+        {
+          runtimeId: 'codex',
+          platformId: 'openrouter',
+          previousAuthProvider: 'official-subscription',
+          previousMaasPlatformId: null,
+          previousConfig: {
+            authProvider: 'official-subscription',
+            defaultModel: 'before-maas',
+            extraArgs: '--original',
+            env: { ORIGINAL: '1' },
+          },
+          enabledAt: '2026-07-16T00:00:00.000Z',
+        }
+      )
+    ).toEqual({
+      authProvider: 'official-subscription',
+      defaultModel: 'before-maas',
+      extraArgs: '--original',
+      env: { ORIGINAL: '1' },
+    });
+  });
 });

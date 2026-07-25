@@ -83,6 +83,10 @@ export function resolveRestoredMaasRuntimeConfig(
   currentConfig: RuntimeCustomConfig,
   binding: MaasRuntimeBinding | undefined
 ): RuntimeCustomConfig {
+  if (binding?.previousConfig !== undefined) {
+    return structuredClone(binding.previousConfig);
+  }
+
   const restored = { ...currentConfig };
   if (binding?.previousAuthProvider) {
     restored.authProvider = binding.previousAuthProvider;

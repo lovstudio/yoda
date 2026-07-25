@@ -124,10 +124,18 @@ describe('global MaaS binding', () => {
         expect.objectContaining({
           runtimeId: 'codex',
           previousAuthProvider: 'official-api',
+          previousConfig: {
+            authProvider: 'official-api',
+            defaultModel: 'gpt-5',
+          },
         }),
         expect.objectContaining({
           runtimeId: 'claude',
           previousAuthProvider: 'official-subscription',
+          previousConfig: {
+            authProvider: 'official-subscription',
+            env: { KEEP_ME: '1' },
+          },
         }),
       ])
     );
@@ -138,6 +146,17 @@ describe('global MaaS binding', () => {
       runtimeIds: expect.arrayContaining(['codex', 'claude']),
     });
 
+    mocks.runtimeConfigs.codex = {
+      ...mocks.runtimeConfigs.codex,
+      defaultModel: 'changed-while-enabled',
+      env: { TEMPORARY: '1' },
+    };
+    mocks.runtimeConfigs.claude = {
+      ...mocks.runtimeConfigs.claude,
+      extraArgs: '--temporary',
+      env: { TEMPORARY: '1' },
+    };
+
     await expect(
       service.setGlobalBinding({ platformId: 'openrouter', enabled: true })
     ).resolves.toEqual({ success: true });
@@ -147,11 +166,19 @@ describe('global MaaS binding', () => {
           runtimeId: 'codex',
           platformId: 'openrouter',
           previousAuthProvider: 'official-api',
+          previousConfig: {
+            authProvider: 'official-api',
+            defaultModel: 'gpt-5',
+          },
         }),
         expect.objectContaining({
           runtimeId: 'claude',
           platformId: 'openrouter',
           previousAuthProvider: 'official-subscription',
+          previousConfig: {
+            authProvider: 'official-subscription',
+            env: { KEEP_ME: '1' },
+          },
         }),
       ])
     );
@@ -236,6 +263,38 @@ describe('global MaaS binding', () => {
     expect(new Set(mocks.settings.runtimeBindings.map((binding) => binding.platformId))).toEqual(
       new Set(['zenmux'])
     );
+  });
+
+  it('restores one Client to its exact pre-MaaS snapshot', async () => {
+    const service = new MaasService();
+    vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      endpoint: 'https://maas.example.test/v1',
+      apiKey: 'secret',
+    });
+    const beforeMaas = {
+      authProvider: 'official-api' as const,
+      defaultModel: 'gpt-5',
+      extraArgs: '--original',
+      env: { ORIGINAL: '1' },
+    };
+    mocks.runtimeConfigs.codex = structuredClone(beforeMaas);
+
+    await expect(
+      service.setRuntimeBinding({ runtimeId: 'codex', platformId: 'zenmux', enabled: true })
+    ).resolves.toEqual({ success: true });
+    mocks.runtimeConfigs.codex = {
+      ...mocks.runtimeConfigs.codex,
+      defaultModel: 'changed-while-enabled',
+      extraArgs: '--temporary',
+      env: { TEMPORARY: '1' },
+    };
+
+    await expect(
+      service.setRuntimeBinding({ runtimeId: 'codex', platformId: 'zenmux', enabled: false })
+    ).resolves.toEqual({ success: true });
+
+    expect(mocks.runtimeConfigs.codex).toEqual(beforeMaas);
+    expect(mocks.settings.runtimeBindings).toEqual([]);
   });
 });
 

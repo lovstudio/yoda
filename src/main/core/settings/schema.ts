@@ -174,6 +174,27 @@ export const maasPlatformIdSchema = z.custom<MaasPlatformId>(isMaasPlatformId, {
   message: 'Invalid MaaS platform ID',
 });
 
+export const runtimeCustomConfigEntrySchema = z.object({
+  /** Disabled runtimes stay installed but cannot start new Yoda sessions. */
+  disabled: z.boolean().optional(),
+  authProvider: z.enum(AGENT_ACCOUNT_PROVIDER_IDS).optional(),
+  maasPlatformId: maasPlatformIdSchema.optional(),
+  cli: z.string().optional(),
+  resumeFlag: z.string().optional(),
+  resumeSessionIdArg: z.boolean().optional(),
+  defaultArgs: z.array(z.string()).optional(),
+  autoApproveFlag: z.string().optional(),
+  initialPromptFlag: z.string().optional(),
+  sessionIdFlag: z.string().optional(),
+  sessionIdOnResumeOnly: z.boolean().optional(),
+  extraArgs: z.string().optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  /** Default model for new sessions when an Agent/slot does not override it. */
+  defaultModel: z.string().optional(),
+  namingModel: z.string().optional(),
+  namingCommand: z.string().optional(),
+});
+
 export const maasConnectionSchema = z.object({
   platformId: maasPlatformIdSchema,
   displayName: z.string(),
@@ -189,6 +210,7 @@ export const maasRuntimeBindingSchema = z.object({
   platformId: maasPlatformIdSchema,
   previousAuthProvider: z.enum(AGENT_ACCOUNT_PROVIDER_IDS).nullable(),
   previousMaasPlatformId: maasPlatformIdSchema.nullable(),
+  previousConfig: runtimeCustomConfigEntrySchema.optional(),
   enabledAt: z.string(),
 });
 
@@ -346,27 +368,6 @@ export const keyboardSettingsSchema = z
     })
   )
   .default({});
-
-export const runtimeCustomConfigEntrySchema = z.object({
-  /** Disabled runtimes stay installed but cannot start new Yoda sessions. */
-  disabled: z.boolean().optional(),
-  authProvider: z.enum(AGENT_ACCOUNT_PROVIDER_IDS).optional(),
-  maasPlatformId: maasPlatformIdSchema.optional(),
-  cli: z.string().optional(),
-  resumeFlag: z.string().optional(),
-  resumeSessionIdArg: z.boolean().optional(),
-  defaultArgs: z.array(z.string()).optional(),
-  autoApproveFlag: z.string().optional(),
-  initialPromptFlag: z.string().optional(),
-  sessionIdFlag: z.string().optional(),
-  sessionIdOnResumeOnly: z.boolean().optional(),
-  extraArgs: z.string().optional(),
-  env: z.record(z.string(), z.string()).optional(),
-  /** Default model for new sessions when an Agent/slot does not override it. */
-  defaultModel: z.string().optional(),
-  namingModel: z.string().optional(),
-  namingCommand: z.string().optional(),
-});
 
 export const runtimeConfigDefaults = Object.fromEntries(
   RUNTIMES.filter(
