@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolveMaasRuntimeCommandArgs,
   resolveMaasRuntimeEnv,
   resolveRestoredMaasRuntimeConfig,
   supportsMaasRuntimeBinding,
@@ -17,6 +18,41 @@ describe('MaaS Agent Client runtime environment', () => {
       OPENAI_API_KEY: 'secret',
       OPENAI_BASE_URL: 'https://maas.example.test/v1',
     });
+  });
+
+  it('selects an invocation-scoped Codex provider with the MaaS endpoint and API key env', () => {
+    expect(
+      resolveMaasRuntimeCommandArgs('codex', {
+        platformId: 'zenmux',
+        endpoint: 'https://maas.example.test/v1/',
+        apiKey: 'must-not-appear-in-args',
+      })
+    ).toEqual([
+      '-c',
+      'model_provider="yoda-maas"',
+      '-c',
+      'model_providers.yoda-maas.name="Yoda MaaS (ZenMux)"',
+      '-c',
+      'model_providers.yoda-maas.base_url="https://maas.example.test/v1"',
+      '-c',
+      'model_providers.yoda-maas.env_key="OPENAI_API_KEY"',
+      '-c',
+      'model_providers.yoda-maas.wire_api="responses"',
+      '-c',
+      'model_providers.yoda-maas.requires_openai_auth=false',
+      '-c',
+      'model_providers.yoda-maas.supports_websockets=false',
+    ]);
+  });
+
+  it('does not add Codex provider arguments to other MaaS runtimes', () => {
+    expect(
+      resolveMaasRuntimeCommandArgs('claude', {
+        platformId: 'zenmux',
+        endpoint: 'https://maas.example.test/v1',
+        apiKey: 'secret',
+      })
+    ).toEqual([]);
   });
 
   it('maps an Anthropic-compatible MaaS into Claude environment variables', () => {

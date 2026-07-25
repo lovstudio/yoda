@@ -8,11 +8,13 @@ import { LocalConversationProvider } from './local-conversation';
 
 const mocks = vi.hoisted(() => ({
   appSettingsGet: vi.fn(),
+  buildAgentEnv: vi.fn(),
   captureTelemetry: vi.fn(),
   emitEvent: vi.fn(),
   getHookPort: vi.fn(),
   getHookToken: vi.fn(),
   getProviderConfig: vi.fn(),
+  getRuntimeInferenceCredentials: vi.fn(),
   logDebug: vi.fn(),
   logError: vi.fn(),
   logInfo: vi.fn(),
@@ -106,12 +108,18 @@ vi.mock('@main/core/fs/impl/local-fs', () => ({
   LocalFileSystem: class {},
 }));
 
+vi.mock('@main/core/maas/maas-service', () => ({
+  maasService: {
+    getRuntimeInferenceCredentials: mocks.getRuntimeInferenceCredentials,
+  },
+}));
+
 vi.mock('@main/core/pty/local-pty', () => ({
   spawnLocalPty: mocks.spawnLocalPty,
 }));
 
 vi.mock('@main/core/pty/pty-env', () => ({
-  buildAgentEnv: () => ({}),
+  buildAgentEnv: mocks.buildAgentEnv,
 }));
 
 vi.mock('@main/core/pty/pty-spawn-platform', () => ({
@@ -247,6 +255,7 @@ describe('LocalConversationProvider', () => {
     vi.clearAllMocks();
     mocks.getHookPort.mockReturnValue(0);
     mocks.getHookToken.mockReturnValue('token');
+    mocks.buildAgentEnv.mockReturnValue({});
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'claude',
       resumeFlag: '--resume',
@@ -401,6 +410,57 @@ describe('LocalConversationProvider', () => {
     }
     expect(spawned[0].options.args[1]).not.toContain('YODA_HOOK_PORT');
     expect(spawned[0].options.args.slice(2)).toEqual(['Fix this']);
+  });
+
+  it('launches Codex with a matching MaaS provider, endpoint, and API key env', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+      authProvider: 'yoda-maas',
+      maasPlatformId: 'zenmux',
+    });
+    mocks.getRuntimeInferenceCredentials.mockResolvedValue({
+      platformId: 'zenmux',
+      endpoint: 'https://zenmux.example.test/v1/',
+      apiKey: 'zenmux-secret',
+    });
+    const codexConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+    };
+    const provider = createProvider();
+
+    await provider.startSession(codexConversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(spawned[0].options.args).toEqual([
+      '-c',
+      'model_provider="yoda-maas"',
+      '-c',
+      'model_providers.yoda-maas.name="Yoda MaaS (ZenMux)"',
+      '-c',
+      'model_providers.yoda-maas.base_url="https://zenmux.example.test/v1"',
+      '-c',
+      'model_providers.yoda-maas.env_key="OPENAI_API_KEY"',
+      '-c',
+      'model_providers.yoda-maas.wire_api="responses"',
+      '-c',
+      'model_providers.yoda-maas.requires_openai_auth=false',
+      '-c',
+      'model_providers.yoda-maas.supports_websockets=false',
+      'Fix this',
+    ]);
+    expect(spawned[0].options.args).not.toContain('zenmux-secret');
+    expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentApiVars: false,
+        providerVars: {
+          OPENAI_API_KEY: 'zenmux-secret',
+          OPENAI_BASE_URL: 'https://zenmux.example.test/v1',
+        },
+      })
+    );
   });
 
   it('passes an available tmux session name to the PTY spawn resolver', async () => {
