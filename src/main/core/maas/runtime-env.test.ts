@@ -6,14 +6,14 @@ import {
 } from './runtime-env';
 
 describe('MaaS Agent Client runtime environment', () => {
-  it('exposes the platform key expected by the persisted Codex MaaS provider', () => {
+  it('uses the persisted Codex API login instead of a process-only provider key', () => {
     expect(
       resolveMaasRuntimeEnv('codex', {
         platformId: 'zenmux',
         endpoint: 'https://maas.example.test/v1/',
         apiKey: 'secret',
       })
-    ).toEqual({ ZENMUX_API_KEY: 'secret' });
+    ).toBeUndefined();
   });
 
   it('maps an Anthropic-compatible MaaS into Claude environment variables', () => {

@@ -38,6 +38,7 @@ export const MaasGlobalSelector: React.FC<{
                   platform: platformName,
                 })
               : t('maas.global.restoredToast'),
+            description: t('maas.global.codexRestartNotice'),
           });
         },
         onError: (error) => {

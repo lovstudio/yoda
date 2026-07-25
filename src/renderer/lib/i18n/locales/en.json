@@ -3450,6 +3450,7 @@
       "manage": "Configure {{platform}}",
       "enabledToast": "{{platform}} is active for every compatible Agent CLI",
       "restoredToast": "MaaS disabled and Agent CLI configurations restored",
+      "codexRestartNotice": "If Codex App is open, reopen it to refresh the login mode.",
       "updateFailed": "Could not update global MaaS configuration"
     },
     "clients": {

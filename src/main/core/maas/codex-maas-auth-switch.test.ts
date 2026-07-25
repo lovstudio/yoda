@@ -78,12 +78,15 @@ describe('Codex MaaS native authentication switch', () => {
     const activeConfig = await readFile(configPath, 'utf8');
     expect(activeConfig).toContain('# Auto-injected by Yoda MaaS\r\n');
     expect(activeConfig).toContain('model_provider = "zenmux"\r\n');
+    expect(activeConfig).toContain('cli_auth_credentials_store = "file"\r\n');
     expect(activeConfig).toContain('[model_providers.zenmux]\r\n');
     expect(activeConfig).toContain('name = "ZenMux"\r\n');
     expect(activeConfig).toContain('base_url = "https://maas.example.test/v1"\r\n');
-    expect(activeConfig).toContain('env_key = "ZENMUX_API_KEY"\r\n');
-    expect(activeConfig).toContain('[shell_environment_policy.set]\r\n');
-    expect(activeConfig).toContain('ZENMUX_API_KEY = "maas-secret"\r\n');
+    expect(activeConfig).toContain('wire_api = "responses"\r\n');
+    expect(activeConfig).toContain('requires_openai_auth = true\r\n');
+    expect(activeConfig).not.toContain('env_key = "ZENMUX_API_KEY"\r\n');
+    expect(activeConfig).not.toContain('maas-secret');
+    expect(activeConfig).not.toContain('[shell_environment_policy.set]\r\n');
     expect(activeConfig).toContain('[features]\r\nfast_mode = true\r\n');
     expect((await stat(configPath)).mode & 0o777).toBe(0o600);
     expect(secrets.secrets.size).toBe(1);
@@ -119,8 +122,9 @@ describe('Codex MaaS native authentication switch', () => {
     const activeConfig = await readFile(configPath, 'utf8');
     expect(activeConfig).toContain('model_provider = "openrouter"');
     expect(activeConfig).toContain('[model_providers.openrouter]');
-    expect(activeConfig).toContain('env_key = "OPENROUTER_API_KEY"');
-    expect(activeConfig).toContain('OPENROUTER_API_KEY = "second-secret"');
+    expect(activeConfig).toContain('requires_openai_auth = true');
+    expect(activeConfig).not.toContain('env_key = "OPENROUTER_API_KEY"');
+    expect(activeConfig).not.toContain('second-secret');
     expect(activeConfig).toContain('https://second.example.test/v1');
 
     await authSwitch.disable({ codexHome });
@@ -161,7 +165,7 @@ describe('Codex MaaS native authentication switch', () => {
     expect(secrets.secrets.size).toBe(1);
   });
 
-  it('replaces an existing provider table while preserving other shell variables', async () => {
+  it('replaces an existing provider table without rewriting the user shell policy', async () => {
     const configWithExistingProvider = [
       'model_provider = "zenmux"',
       '',
@@ -191,11 +195,39 @@ describe('Codex MaaS native authentication switch', () => {
     expect(activeConfig.match(/\[model_providers\.zenmux\]/g)).toHaveLength(1);
     expect(activeConfig.match(/^ZENMUX_API_KEY\s*=/gm)).toHaveLength(1);
     expect(activeConfig).toContain('base_url = "https://zenmux.ai/api/v1"');
+    expect(activeConfig).not.toContain('env_key = "ZENMUX_API_KEY"');
     expect(activeConfig).toContain('KEEP_ME = "yes"');
-    expect(activeConfig).not.toContain('old-secret');
+    expect(activeConfig).toContain('ZENMUX_API_KEY = "old-secret"');
+    expect(activeConfig).not.toContain('new-secret');
 
     await authSwitch.disable({ codexHome });
     expect(await readFile(configPath, 'utf8')).toBe(configWithExistingProvider);
     expect((await stat(configPath)).mode & 0o777).toBe(0o640);
+  });
+
+  it('temporarily forces file-based API auth and restores the original credential store', async () => {
+    const keyringConfig = [
+      'model = "gpt-5"',
+      'cli_auth_credentials_store = "keyring"',
+      '',
+      '[features]',
+      'fast_mode = true',
+      '',
+    ].join('\n');
+    await writeFile(configPath, keyringConfig, { mode: 0o640 });
+
+    await authSwitch.enable({
+      codexHome,
+      platformId: 'zenmux',
+      endpoint: 'https://zenmux.ai/api/v1',
+      apiKey: 'maas-secret',
+    });
+
+    const activeConfig = await readFile(configPath, 'utf8');
+    expect(activeConfig.match(/^cli_auth_credentials_store\s*=/gm)).toHaveLength(1);
+    expect(activeConfig).toContain('cli_auth_credentials_store = "file"');
+
+    await authSwitch.disable({ codexHome });
+    expect(await readFile(configPath, 'utf8')).toBe(keyringConfig);
   });
 });

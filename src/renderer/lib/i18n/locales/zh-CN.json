@@ -3450,6 +3450,7 @@
       "manage": "配置 {{platform}}",
       "enabledToast": "{{platform}} 已对所有兼容 Agent CLI 生效",
       "restoredToast": "已停用 MaaS，并复原 Agent CLI 配置",
+      "codexRestartNotice": "如 Codex App 已打开，请重新打开它以刷新登录模式。",
       "updateFailed": "无法更新全局 MaaS 配置"
     },
     "clients": {

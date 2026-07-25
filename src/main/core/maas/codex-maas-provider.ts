@@ -7,25 +7,20 @@ import {
 
 type CodexMaasProviderMetadata = {
   providerId: string;
-  envKey: string;
 };
 
 const CODEX_MAAS_PROVIDER_METADATA: Record<MaasPlatformTemplateId, CodexMaasProviderMetadata> = {
   zenmux: {
     providerId: 'zenmux',
-    envKey: 'ZENMUX_API_KEY',
   },
   openrouter: {
     providerId: 'openrouter',
-    envKey: 'OPENROUTER_API_KEY',
   },
   siliconflow: {
     providerId: 'siliconflow',
-    envKey: 'SILICONFLOW_API_KEY',
   },
   custom: {
     providerId: 'custom',
-    envKey: 'CUSTOM_API_KEY',
   },
 };
 

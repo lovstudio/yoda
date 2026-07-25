@@ -175,6 +175,7 @@ export const MaasView: React.FC<{
               title: enabled
                 ? t('maas.global.enabledToast', { platform: connection.displayName })
                 : t('maas.global.restoredToast'),
+              description: t('maas.global.codexRestartNotice'),
             });
           },
           onError: (error) => {

@@ -71,12 +71,7 @@ export class CodexMaasAuthSwitch {
       },
       config: {
         exists: true,
-        content: buildMaasConfig(
-          baseConfig.exists ? baseConfig.content : '',
-          provider,
-          endpoint,
-          apiKey
-        ),
+        content: buildMaasConfig(baseConfig.exists ? baseConfig.content : '', provider, endpoint),
         mode: 0o600,
       },
     };
@@ -202,18 +197,22 @@ async function applyFileSnapshot(path: string, snapshot: FileSnapshot): Promise<
 function buildMaasConfig(
   content: string,
   provider: CodexMaasProviderSpec,
-  endpoint: string,
-  apiKey: string
+  endpoint: string
 ): string {
   const eol = content.includes('\r\n') ? '\r\n' : '\n';
   let lines = content.replace(/\r\n/g, '\n').split('\n');
-  lines = removeRootAssignments(lines, ['model_provider', 'openai_base_url']);
+  lines = removeRootAssignments(lines, [
+    'model_provider',
+    'openai_base_url',
+    'cli_auth_credentials_store',
+  ]);
   lines = removeTable(lines, modelProviderTablePattern(provider.providerId));
   lines = trimTrailingBlankLines(lines);
 
   lines.unshift(
     YODA_CONFIG_MARKER,
     `model_provider = ${formatTomlString(provider.providerId)}`,
+    'cli_auth_credentials_store = "file"',
     ''
   );
   lines.push(
@@ -222,9 +221,9 @@ function buildMaasConfig(
     `[model_providers.${provider.providerId}]`,
     `name = ${formatTomlString(provider.name)}`,
     `base_url = ${formatTomlString(endpoint.replace(/\/+$/, ''))}`,
-    `env_key = ${formatTomlString(provider.envKey)}`
+    'wire_api = "responses"',
+    'requires_openai_auth = true'
   );
-  lines = upsertShellEnvironmentVariable(lines, provider.envKey, apiKey);
 
   const result = `${trimTrailingBlankLines(lines).join('\n')}\n`.replace(/\n/g, eol);
   validateMaasConfig(result, provider);
@@ -256,31 +255,6 @@ function removeTable(lines: string[], tablePattern: RegExp): string[] {
   return result;
 }
 
-function upsertShellEnvironmentVariable(lines: string[], envKey: string, apiKey: string): string[] {
-  const result = [...lines];
-  const headerPattern = /^\s*\[\s*shell_environment_policy\s*\.\s*set\s*\]\s*(?:#.*)?$/;
-  const headerIndex = result.findIndex((line) => headerPattern.test(line));
-  const assignmentPattern = new RegExp(
-    `^\\s*(?:${escapeRegExp(envKey)}|"${escapeRegExp(envKey)}"|'${escapeRegExp(envKey)}')\\s*=`
-  );
-  const assignment = `${envKey} = ${formatTomlString(apiKey)}`;
-
-  if (headerIndex < 0) {
-    result.push('', '[shell_environment_policy.set]', assignment);
-    return result;
-  }
-
-  let tableEnd = headerIndex + 1;
-  while (tableEnd < result.length && !/^\s*\[/.test(result[tableEnd]!)) {
-    tableEnd += 1;
-  }
-  const existingLines = result
-    .slice(headerIndex + 1, tableEnd)
-    .filter((line) => !assignmentPattern.test(line));
-  result.splice(headerIndex + 1, tableEnd - headerIndex - 1, assignment, ...existingLines);
-  return result;
-}
-
 function modelProviderTablePattern(providerId: string): RegExp {
   const escaped = escapeRegExp(providerId);
   return new RegExp(
@@ -292,14 +266,14 @@ function validateMaasConfig(content: string, provider: CodexMaasProviderSpec): v
   const parsed = parseToml(content) as Record<string, unknown>;
   const modelProviders = asRecord(parsed.model_providers);
   const providerConfig = asRecord(modelProviders?.[provider.providerId]);
-  const shellPolicy = asRecord(parsed.shell_environment_policy);
-  const shellVariables = asRecord(shellPolicy?.set);
   if (
     parsed.model_provider !== provider.providerId ||
+    parsed.cli_auth_credentials_store !== 'file' ||
     providerConfig?.name !== provider.name ||
-    providerConfig?.env_key !== provider.envKey ||
     typeof providerConfig?.base_url !== 'string' ||
-    typeof shellVariables?.[provider.envKey] !== 'string'
+    providerConfig?.wire_api !== 'responses' ||
+    providerConfig?.requires_openai_auth !== true ||
+    providerConfig?.env_key !== undefined
   ) {
     throw new Error('Generated Codex MaaS provider config is invalid.');
   }

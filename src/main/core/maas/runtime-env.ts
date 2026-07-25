@@ -10,7 +10,6 @@ import {
   supportsRuntimeMaasSwitch,
   type RuntimeId,
 } from '@shared/runtime-registry';
-import { resolveCodexMaasProviderSpec } from './codex-maas-provider';
 
 export type MaasRuntimeCredentials = {
   platformId: MaasPlatformId;
@@ -30,10 +29,7 @@ export function resolveMaasRuntimeEnv(
   const spec = getRuntimeAccountProfile(runtimeId).maas.runtimeEnv;
   if (!spec || !supportsMaasPlatformForRuntime(runtimeId, credentials.platformId)) return undefined;
 
-  if (runtimeId === 'codex') {
-    const provider = resolveCodexMaasProviderSpec(credentials.platformId, credentials.displayName);
-    return { [provider.envKey]: credentials.apiKey };
-  }
+  if (runtimeId === 'codex') return undefined;
 
   let endpoint = credentials.endpoint.replace(/\/+$/, '');
   if (runtimeId === 'claude' && credentials.platformId === 'zenmux') {

@@ -454,9 +454,7 @@ describe('LocalConversationProvider', () => {
     expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
       expect.objectContaining({
         agentApiVars: false,
-        providerVars: {
-          ZENMUX_API_KEY: 'zenmux-secret',
-        },
+        providerVars: undefined,
       })
     );
     expect(mocks.setInteractiveSessionContext).toHaveBeenCalledWith(
