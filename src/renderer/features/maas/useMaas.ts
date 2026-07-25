@@ -136,7 +136,11 @@ export function useConnectMaasPlatform() {
       if (connection) {
         queryClient.setQueryData<MaasConnection[]>(maasQueryKeys.connections, (current) =>
           current
-            ? current.map((item) => (item.platformId === connection.platformId ? connection : item))
+            ? current.some((item) => item.platformId === connection.platformId)
+              ? current.map((item) =>
+                  item.platformId === connection.platformId ? connection : item
+                )
+              : [...current, connection]
             : [connection]
         );
       }

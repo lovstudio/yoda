@@ -2,9 +2,8 @@ import { Loader2, Settings2 } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  getMaasPlatformDefinition,
   hasMaasInferenceCredential,
-  MAAS_PLATFORM_IDS,
-  MAAS_PLATFORMS,
   type MaasPlatformId,
 } from '@shared/maas';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -22,9 +21,13 @@ export const MaasGlobalSelector: React.FC<{
   const connections = useMaasConnections();
   const binding = useMaasGlobalBinding();
   const setBinding = useSetMaasGlobalBinding();
-  const platformIds = platformId ? [platformId] : MAAS_PLATFORM_IDS;
+  const platformIds = platformId
+    ? [platformId]
+    : (connections.data?.map((connection) => connection.platformId) ?? []);
 
   const updateBinding = (nextPlatformId: MaasPlatformId, enabled: boolean) => {
+    const connection = connections.data?.find((item) => item.platformId === nextPlatformId);
+    const platformName = connection?.displayName ?? getMaasPlatformDefinition(nextPlatformId).name;
     setBinding.mutate(
       { platformId: nextPlatformId, enabled },
       {
@@ -32,7 +35,7 @@ export const MaasGlobalSelector: React.FC<{
           toast({
             title: enabled
               ? t('maas.global.enabledToast', {
-                  platform: MAAS_PLATFORMS[nextPlatformId].name,
+                  platform: platformName,
                 })
               : t('maas.global.restoredToast'),
           });
@@ -67,8 +70,9 @@ export const MaasGlobalSelector: React.FC<{
       ) : (
         <div className="divide-y divide-border/50 overflow-hidden rounded-lg border border-border/60">
           {platformIds.map((nextPlatformId) => {
-            const platform = MAAS_PLATFORMS[nextPlatformId];
+            const platform = getMaasPlatformDefinition(nextPlatformId);
             const connection = connections.data?.find((item) => item.platformId === nextPlatformId);
+            const platformName = connection?.displayName ?? platform.name;
             const available = Boolean(
               connection?.connected && hasMaasInferenceCredential(connection)
             );
@@ -84,13 +88,11 @@ export const MaasGlobalSelector: React.FC<{
                 <Checkbox
                   checked={checked}
                   disabled={setBinding.isPending || (!available && !checked)}
-                  aria-label={t('maas.global.toggleAria', { platform: platform.name })}
+                  aria-label={t('maas.global.toggleAria', { platform: platformName })}
                   onCheckedChange={(next) => updateBinding(nextPlatformId, next === true)}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium text-foreground">
-                    {platform.name}
-                  </div>
+                  <div className="truncate text-xs font-medium text-foreground">{platformName}</div>
                   <div
                     className={cn(
                       'truncate text-[11px]',
@@ -119,8 +121,8 @@ export const MaasGlobalSelector: React.FC<{
                     type="button"
                     variant="ghost"
                     size="icon-xs"
-                    title={t('maas.global.manage', { platform: platform.name })}
-                    aria-label={t('maas.global.manage', { platform: platform.name })}
+                    title={t('maas.global.manage', { platform: platformName })}
+                    aria-label={t('maas.global.manage', { platform: platformName })}
                     onClick={() => onManagePlatform(nextPlatformId)}
                   >
                     <Settings2 className="size-3.5" />

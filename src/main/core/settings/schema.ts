@@ -10,7 +10,7 @@ import {
   normalizeLlmSettings,
 } from '@shared/global-llm';
 import { KANBAN_STATUSES } from '@shared/kanban';
-import { MAAS_PLATFORM_IDS } from '@shared/maas';
+import { isMaasPlatformId, type MaasPlatformId } from '@shared/maas';
 import { openInAppIdSchema } from '@shared/openInApps';
 import {
   promptPrincipleSchema,
@@ -170,7 +170,9 @@ export const kanbanSettingsSchema = z.object({
   hooksByStatus: z.partialRecord(z.enum(KANBAN_STATUSES), z.array(kanbanColumnHookSchema)),
 });
 
-export const maasPlatformIdSchema = z.enum(MAAS_PLATFORM_IDS);
+export const maasPlatformIdSchema = z.custom<MaasPlatformId>(isMaasPlatformId, {
+  message: 'Invalid MaaS platform ID',
+});
 
 export const maasConnectionSchema = z.object({
   platformId: maasPlatformIdSchema,

@@ -3,7 +3,7 @@ import { Loader2, Settings2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { MAAS_PLATFORMS, type MaasRuntimeBindingStatus } from '@shared/maas';
+import { getMaasPlatformDefinition, type MaasRuntimeBindingStatus } from '@shared/maas';
 import {
   getRuntime,
   getRuntimeAccountProfile,
@@ -31,12 +31,9 @@ import {
 } from '@renderer/lib/ui/select';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
+import { parseGatewaySelection, type GatewaySelection } from '../gateway-selection';
 import { resolveDefaultGatewaySource } from '../gateway-source';
 import { useRuntimeGatewaySource } from '../use-runtime-gateway-source';
-
-type GatewaySelection =
-  | Exclude<AgentAccountProviderId, 'yoda-maas'>
-  | `yoda-maas:${MaasRuntimeBindingStatus['platformId'] & string}`;
 
 export const GatewayRuntimeSources: React.FC<{
   currentRuntimeId?: RuntimeId | null;
@@ -100,6 +97,7 @@ const GatewayRuntimeSourceRow: React.FC<{
     providerConfig,
     providerSettingsLoading,
     connectedMaasConnections,
+    selectedMaasConnection,
     selectAuthProvider,
     isSaving,
   } = useRuntimeGatewaySource(runtimeId);
@@ -135,7 +133,8 @@ const GatewayRuntimeSourceRow: React.FC<{
   const selectedLabel = gatewaySourceLabel(
     t,
     selectedAuthProvider,
-    providerConfig?.maasPlatformId ?? null
+    providerConfig?.maasPlatformId ?? null,
+    selectedMaasConnection?.displayName
   );
   const ready =
     selectedAuthProvider === 'yoda-maas'
@@ -147,12 +146,9 @@ const GatewayRuntimeSourceRow: React.FC<{
           : false;
 
   const updateSelection = (value: GatewaySelection | null) => {
-    if (!value) return;
-    const [authProvider, platformId] = value.split(':') as [
-      AgentAccountProviderId,
-      MaasRuntimeBindingStatus['platformId']?,
-    ];
-    selectAuthProvider(authProvider, platformId ?? undefined, {
+    const parsed = parseGatewaySelection(value);
+    if (!parsed) return;
+    selectAuthProvider(parsed.authProvider, parsed.maasPlatformId, {
       onSuccess: () =>
         toast({
           title: t('workspaceRuntime.gateway.updated', {
@@ -224,7 +220,7 @@ const GatewayRuntimeSourceRow: React.FC<{
                 key={connection.platformId}
                 value={`yoda-maas:${connection.platformId}` as GatewaySelection}
               >
-                {MAAS_PLATFORMS[connection.platformId].name}
+                {connection.displayName}
               </SelectItem>
             ))}
             {connectedMaasConnections.length === 0 ? (
@@ -256,10 +252,13 @@ const GatewayRuntimeSourceRow: React.FC<{
 function gatewaySourceLabel(
   t: (key: string) => string,
   authProvider: AgentAccountProviderId | null,
-  platformId: MaasRuntimeBindingStatus['platformId']
+  platformId: MaasRuntimeBindingStatus['platformId'],
+  displayName?: string
 ): string {
   if (authProvider === 'yoda-maas') {
-    return platformId ? MAAS_PLATFORMS[platformId].name : t('workspaceRuntime.gateway.maas');
+    return platformId
+      ? (displayName ?? getMaasPlatformDefinition(platformId).name)
+      : t('workspaceRuntime.gateway.maas');
   }
   if (authProvider === 'official-api') return t('workspaceRuntime.gateway.apiKey');
   if (authProvider === 'official-subscription') return t('workspaceRuntime.gateway.subscription');

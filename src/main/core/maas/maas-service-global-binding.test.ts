@@ -45,8 +45,12 @@ vi.mock('../settings/settings-service', () => ({
 vi.mock('../secrets/encrypted-app-secrets-store', () => ({
   encryptedAppSecretsStore: {
     getSecret: vi.fn(async (key: string) => mocks.secrets[key]),
-    setSecret: vi.fn(),
-    deleteSecret: vi.fn(),
+    setSecret: vi.fn(async (key: string, value: string) => {
+      mocks.secrets[key] = value;
+    }),
+    deleteSecret: vi.fn(async (key: string) => {
+      delete mocks.secrets[key];
+    }),
   },
 }));
 
@@ -175,6 +179,54 @@ describe('global MaaS binding', () => {
     expect(mocks.runtimeConfigs).toEqual(originalConfigs);
     expect(mocks.settings).toEqual(originalSettings);
   });
+
+  it('keeps zero or one Custom instance globally active when switching instances', async () => {
+    const service = new MaasService();
+    vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      endpoint: 'https://custom.example.test/v1',
+      apiKey: 'secret',
+    });
+
+    await expect(
+      service.setGlobalBinding({ platformId: 'custom:first', enabled: true })
+    ).resolves.toEqual({ success: true });
+    expect(new Set(mocks.settings.runtimeBindings.map((binding) => binding.platformId))).toEqual(
+      new Set(['custom:first'])
+    );
+
+    await expect(
+      service.setGlobalBinding({ platformId: 'custom:second', enabled: true })
+    ).resolves.toEqual({ success: true });
+    expect(new Set(mocks.settings.runtimeBindings.map((binding) => binding.platformId))).toEqual(
+      new Set(['custom:second'])
+    );
+
+    await expect(
+      service.setGlobalBinding({ platformId: 'custom:second', enabled: false })
+    ).resolves.toEqual({ success: true });
+    expect(mocks.settings.runtimeBindings).toEqual([]);
+  });
+
+  it('rejects activating a second platform through the per-Client RPC', async () => {
+    const service = new MaasService();
+    vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      endpoint: 'https://maas.example.test/v1',
+      apiKey: 'secret',
+    });
+
+    await expect(
+      service.setRuntimeBinding({ runtimeId: 'codex', platformId: 'zenmux', enabled: true })
+    ).resolves.toEqual({ success: true });
+    await expect(
+      service.setRuntimeBinding({ runtimeId: 'claude', platformId: 'openrouter', enabled: true })
+    ).resolves.toEqual({
+      success: false,
+      error: 'Only one MaaS platform can be active at a time.',
+    });
+    expect(new Set(mocks.settings.runtimeBindings.map((binding) => binding.platformId))).toEqual(
+      new Set(['zenmux'])
+    );
+  });
 });
 
 describe('stored MaaS keys', () => {
@@ -228,5 +280,86 @@ describe('stored MaaS keys', () => {
       service.copyStoredApiKeyToClipboard({ platformId: 'zenmux', kind: 'primary' })
     ).resolves.toEqual({ success: true });
     expect(mocks.clipboardWriteText).toHaveBeenLastCalledWith('management-secret');
+  });
+
+  it('saves and lists multiple Custom connections with isolated keys', async () => {
+    mocks.settings = {
+      selectedPlatformId: 'zenmux',
+      connections: [],
+      runtimeBindings: [],
+    };
+    mocks.secrets = {};
+    const service = new MaasService();
+
+    await expect(
+      service.connectPlatform({
+        platformId: 'custom:first',
+        displayName: 'First Custom',
+        endpoint: 'https://first.example.test/v1',
+        apiKey: 'first-secret',
+      })
+    ).resolves.toMatchObject({ success: true });
+    await expect(
+      service.connectPlatform({
+        platformId: 'custom:second',
+        displayName: 'Second Custom',
+        endpoint: 'https://second.example.test/v1',
+        apiKey: 'second-secret',
+      })
+    ).resolves.toMatchObject({ success: true });
+
+    expect(mocks.secrets).toMatchObject({
+      'yoda-maas-token:custom:first': 'first-secret',
+      'yoda-maas-token:custom:second': 'second-secret',
+    });
+    expect(mocks.settings.connections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ platformId: 'custom:first', displayName: 'First Custom' }),
+        expect.objectContaining({ platformId: 'custom:second', displayName: 'Second Custom' }),
+      ])
+    );
+
+    const connections = await service.listConnections();
+    expect(connections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          platformId: 'custom:first',
+          displayName: 'First Custom',
+          connected: true,
+        }),
+        expect.objectContaining({
+          platformId: 'custom:second',
+          displayName: 'Second Custom',
+          connected: true,
+        }),
+      ])
+    );
+  });
+
+  it('loads a legacy fixed Custom connection under the new Custom name', async () => {
+    mocks.settings = {
+      selectedPlatformId: 'custom',
+      connections: [
+        {
+          platformId: 'custom',
+          displayName: 'Custom OpenAI',
+          endpoint: 'https://legacy.example.test/v1',
+          keyFingerprint: 'le...cy',
+          inferenceKeyFingerprint: 'le...cy',
+          connectedAt: '2026-07-16T00:00:00.000Z',
+          lastCheckedAt: null,
+        },
+      ],
+      runtimeBindings: [],
+    };
+    mocks.secrets = { 'yoda-maas-token:custom': 'legacy-secret' };
+
+    const connections = await new MaasService().listConnections();
+
+    expect(connections.find((connection) => connection.platformId === 'custom')).toMatchObject({
+      displayName: 'Custom',
+      configured: true,
+      connected: true,
+    });
   });
 });

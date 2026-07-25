@@ -2,7 +2,36 @@ import type { AgentAccountProviderId, RuntimeId } from './runtime-registry';
 
 export const MAAS_PLATFORM_IDS = ['zenmux', 'openrouter', 'siliconflow', 'custom'] as const;
 
-export type MaasPlatformId = (typeof MAAS_PLATFORM_IDS)[number];
+export type MaasPlatformTemplateId = (typeof MAAS_PLATFORM_IDS)[number];
+export type CustomMaasPlatformId = `custom:${string}`;
+export type MaasPlatformId = MaasPlatformTemplateId | CustomMaasPlatformId;
+
+const CUSTOM_MAAS_PLATFORM_PREFIX = 'custom:';
+
+export function isMaasPlatformId(value: unknown): value is MaasPlatformId {
+  if (typeof value !== 'string') return false;
+  if ((MAAS_PLATFORM_IDS as readonly string[]).includes(value)) return true;
+  return (
+    value.startsWith(CUSTOM_MAAS_PLATFORM_PREFIX) &&
+    value.length > CUSTOM_MAAS_PLATFORM_PREFIX.length
+  );
+}
+
+export function isCustomMaasPlatformId(
+  platformId: MaasPlatformId
+): platformId is 'custom' | CustomMaasPlatformId {
+  return platformId === 'custom' || platformId.startsWith(CUSTOM_MAAS_PLATFORM_PREFIX);
+}
+
+export function getMaasPlatformTemplateId(platformId: MaasPlatformId): MaasPlatformTemplateId {
+  return isCustomMaasPlatformId(platformId) ? 'custom' : platformId;
+}
+
+export function createCustomMaasPlatformId(
+  uuid: string = globalThis.crypto.randomUUID()
+): CustomMaasPlatformId {
+  return `${CUSTOM_MAAS_PLATFORM_PREFIX}${uuid}`;
+}
 
 export const MAAS_INVOCATION_KINDS = ['text', 'image', 'embedding', 'video'] as const;
 
@@ -103,7 +132,7 @@ export type MaasSetGlobalBindingInput = {
 };
 
 export type MaasPlatformDefinition = {
-  id: MaasPlatformId;
+  id: MaasPlatformTemplateId;
   name: string;
   description: string;
   defaultEndpoint: string;
@@ -185,7 +214,7 @@ export type MaasUsageSummary = {
   period: MaasInvocationPage['period'];
 };
 
-export const MAAS_PLATFORMS: Record<MaasPlatformId, MaasPlatformDefinition> = {
+export const MAAS_PLATFORMS: Record<MaasPlatformTemplateId, MaasPlatformDefinition> = {
   zenmux: {
     id: 'zenmux',
     name: 'ZenMux',
@@ -216,11 +245,15 @@ export const MAAS_PLATFORMS: Record<MaasPlatformId, MaasPlatformDefinition> = {
   },
   custom: {
     id: 'custom',
-    name: 'Custom OpenAI',
-    description: 'Creates a model response for the given chat conversation.',
+    name: 'Custom',
+    description: 'Connect a custom OpenAI-compatible model platform.',
     defaultEndpoint: 'https://api.example.com/v1',
     docsUrl: 'https://platform.openai.com/docs/api-reference',
     officialDescriptionUrl: 'https://platform.openai.com/docs/api-reference',
     capabilities: ['text', 'image', 'embedding'],
   },
 };
+
+export function getMaasPlatformDefinition(platformId: MaasPlatformId): MaasPlatformDefinition {
+  return MAAS_PLATFORMS[getMaasPlatformTemplateId(platformId)];
+}

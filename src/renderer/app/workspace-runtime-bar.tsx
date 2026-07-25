@@ -14,7 +14,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MAAS_PLATFORMS } from '@shared/maas';
+import { getMaasPlatformDefinition } from '@shared/maas';
 import {
   getRuntime,
   getRuntimeAccountProfile,
@@ -25,7 +25,7 @@ import {
 import { DEFAULT_TERMINAL_RENDERER } from '@shared/terminal-settings';
 import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
 import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
-import { useMaasGlobalBinding } from '@renderer/features/maas/useMaas';
+import { useMaasConnections, useMaasGlobalBinding } from '@renderer/features/maas/useMaas';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { SkillQuickSearchPopover } from '@renderer/features/skills/components/SkillQuickSearchPopover';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
@@ -211,11 +211,15 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     next: nextRendererLabel,
   });
   const globalMaasBinding = useMaasGlobalBinding();
+  const { data: maasConnections } = useMaasConnections();
   const selectedMaasPlatformId = globalMaasBinding.data?.enabled
     ? globalMaasBinding.data.platformId
     : null;
+  const selectedMaasConnection = maasConnections?.find(
+    (connection) => connection.platformId === selectedMaasPlatformId
+  );
   const selectedMaasLabel = selectedMaasPlatformId
-    ? `MaaS (${MAAS_PLATFORMS[selectedMaasPlatformId].name})`
+    ? `MaaS (${selectedMaasConnection?.displayName ?? getMaasPlatformDefinition(selectedMaasPlatformId).name})`
     : 'MaaS';
   const { data: resourceSnapshot } = useQuery({
     queryKey: ['app', 'resourceSnapshot'],

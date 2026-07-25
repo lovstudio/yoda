@@ -16,12 +16,16 @@ import {
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  MAAS_PLATFORM_IDS,
+  createCustomMaasPlatformId,
+  getMaasPlatformDefinition,
+  getMaasPlatformTemplateId,
+  isMaasPlatformId,
   MAAS_PLATFORMS,
   type MaasApiKeyKind,
   type MaasConnection,
   type MaasPlatformId,
   type MaasPlatformOfficialDescription,
+  type MaasPlatformTemplateId,
 } from '@shared/maas';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -59,11 +63,12 @@ function findConnection(
   connections: MaasConnection[] | undefined,
   platformId: MaasPlatformId
 ): MaasConnection {
+  const platform = getMaasPlatformDefinition(platformId);
   return (
     connections?.find((connection) => connection.platformId === platformId) ?? {
       platformId,
-      displayName: MAAS_PLATFORMS[platformId].name,
-      endpoint: MAAS_PLATFORMS[platformId].defaultEndpoint,
+      displayName: platform.name,
+      endpoint: platform.defaultEndpoint,
       keyFingerprint: null,
       inferenceKeyFingerprint: null,
       connectedAt: null,
@@ -73,10 +78,6 @@ function findConnection(
       error: null,
     }
   );
-}
-
-function isMaasPlatformId(value: string): value is MaasPlatformId {
-  return (MAAS_PLATFORM_IDS as readonly string[]).includes(value);
 }
 
 function formatDateTime(value: string | null): string {
@@ -145,10 +146,9 @@ export const MaasView: React.FC<{
     setExpandedPlatformId(value);
   }, []);
 
-  const handleAddPlatform = useCallback((platformId: MaasPlatformId) => {
-    setDraftPlatformIds((current) =>
-      current.includes(platformId) ? current : [...current, platformId]
-    );
+  const handleAddPlatform = useCallback((templateId: MaasPlatformTemplateId) => {
+    const platformId = templateId === 'custom' ? createCustomMaasPlatformId() : templateId;
+    setDraftPlatformIds((current) => [...current, platformId]);
     setExpandedPlatformId(platformId);
   }, []);
 
@@ -173,11 +173,12 @@ export const MaasView: React.FC<{
         {visiblePlatformIds.map((platformId) => {
           const connection = findConnection(connections, platformId);
           const isDraft = !connection.configured && draftPlatformIds.includes(platformId);
+          const templateId = getMaasPlatformTemplateId(platformId);
           return (
             <PlatformAccordionItem
               key={platformId}
               connection={connection}
-              officialDescription={platformDescriptionById.get(platformId)}
+              officialDescription={platformDescriptionById.get(templateId)}
               onOpenUsage={platformId === 'zenmux' ? () => showZenmuxUsage({}) : undefined}
               onCancelDraft={isDraft ? () => handleCancelDraft(platformId) : undefined}
               onConnected={() => handlePlatformConnected(platformId)}
@@ -382,16 +383,18 @@ const PlatformAccordionItem: React.FC<{
   loading: boolean;
 }> = ({ connection, officialDescription, onOpenUsage, onCancelDraft, onConnected, loading }) => {
   const { t } = useTranslation();
-  const platform = MAAS_PLATFORMS[connection.platformId];
+  const platform = getMaasPlatformDefinition(connection.platformId);
+  const templateId = getMaasPlatformTemplateId(connection.platformId);
   const statusLabel = connection.connected ? t('maas.connected') : t('maas.notConnected');
   const description =
     officialDescription?.source === 'fallback' || !officialDescription
-      ? t(`maas.platforms.${connection.platformId}.description`)
+      ? t(`maas.platforms.${templateId}.description`)
       : officialDescription.description;
 
   return (
     <AccordionPrimitive.Item
       value={connection.platformId}
+      data-maas-platform-id={connection.platformId}
       className="border-b border-border/50 transition-colors last:border-b-0 data-[state=open]:bg-background-1/40"
     >
       <AccordionPrimitive.Header className="flex items-center gap-1 pr-2.5">
@@ -404,7 +407,7 @@ const PlatformAccordionItem: React.FC<{
             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
           </span>
           <span className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="truncate text-sm text-foreground">{platform.name}</span>
+            <span className="truncate text-sm text-foreground">{connection.displayName}</span>
           </span>
           <span className="hidden min-w-0 max-w-64 truncate text-xs text-muted-foreground @4xl:block">
             {description}
@@ -454,7 +457,7 @@ const PlatformAccordionItem: React.FC<{
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  aria-label={t('maas.cancelAddPlatform', { platform: platform.name })}
+                  aria-label={t('maas.cancelAddPlatform', { platform: connection.displayName })}
                   onClick={onCancelDraft}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -462,7 +465,7 @@ const PlatformAccordionItem: React.FC<{
               }
             />
             <TooltipContent>
-              {t('maas.cancelAddPlatform', { platform: platform.name })}
+              {t('maas.cancelAddPlatform', { platform: connection.displayName })}
             </TooltipContent>
           </Tooltip>
         )}
@@ -684,7 +687,7 @@ const ConnectionPanel: React.FC<{
       : t('maas.connection.apiKeyPlaceholder');
   const platformDescription =
     officialDescription?.source === 'fallback' || !officialDescription
-      ? t(`maas.platforms.${connection.platformId}.description`)
+      ? t(`maas.platforms.${getMaasPlatformTemplateId(connection.platformId)}.description`)
       : officialDescription.description;
 
   const handleSubmit = (event: React.FormEvent) => {

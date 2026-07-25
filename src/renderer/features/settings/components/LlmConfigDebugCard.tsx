@@ -28,7 +28,7 @@ import {
   type LlmProfile,
   type LlmReasoningEffort,
 } from '@shared/global-llm';
-import { MAAS_PLATFORMS, type MaasPlatformId } from '@shared/maas';
+import { getMaasPlatformDefinition, type MaasPlatformId } from '@shared/maas';
 import {
   AGENT_ACCOUNT_PROVIDER_IDS,
   getDefaultPermissionModeId,
@@ -100,9 +100,14 @@ export const LlmProfilesCard: React.FC = () => {
   const accountProfile = getRuntimeAccountProfile(selectedProfile.runtimeId);
   const connectedMaasCount =
     maasConnections?.filter((connection) => connection.connected).length ?? 0;
+  const configuredMaasConnections =
+    maasConnections?.filter((connection) => connection.configured) ?? [];
   const selectedMaasConnection = maasConnections?.find(
     (connection) => connection.platformId === selectedProfile.maasPlatformId
   );
+  const selectedMaasLabel =
+    selectedMaasConnection?.displayName ??
+    getMaasPlatformDefinition(selectedProfile.maasPlatformId).name;
   const modelDiscoveryQuery = useQuery<GlobalLlmModelDiscoveryResult>({
     queryKey: [
       'llm',
@@ -312,14 +317,12 @@ export const LlmProfilesCard: React.FC = () => {
                 disabled={disabled || selectedProfile.authProvider !== 'yoda-maas'}
               >
                 <SelectTrigger className="h-8 w-56 max-w-full">
-                  <SelectValue>
-                    {() => MAAS_PLATFORMS[selectedProfile.maasPlatformId].name}
-                  </SelectValue>
+                  <SelectValue>{() => selectedMaasLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.values(MAAS_PLATFORMS).map((platform) => (
-                    <SelectItem key={platform.id} value={platform.id}>
-                      {platform.name}
+                  {configuredMaasConnections.map((connection) => (
+                    <SelectItem key={connection.platformId} value={connection.platformId}>
+                      {connection.displayName}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -3,7 +3,7 @@ import { CheckCircle2, ChevronDown, ExternalLink, LogIn, RefreshCw, XCircle } fr
 import { observer } from 'mobx-react-lite';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MAAS_PLATFORMS, type MaasConnection } from '@shared/maas';
+import { getMaasPlatformDefinition, type MaasConnection } from '@shared/maas';
 import {
   AGENT_ACCOUNT_PROVIDER_IDS,
   getRuntime,
@@ -38,11 +38,12 @@ function findConnection(
   connections: MaasConnection[] | undefined,
   platformId: MaasConnection['platformId']
 ): MaasConnection {
+  const platform = getMaasPlatformDefinition(platformId);
   return (
     connections?.find((connection) => connection.platformId === platformId) ?? {
       platformId,
-      displayName: MAAS_PLATFORMS[platformId].name,
-      endpoint: MAAS_PLATFORMS[platformId].defaultEndpoint,
+      displayName: platform.name,
+      endpoint: platform.defaultEndpoint,
       keyFingerprint: null,
       inferenceKeyFingerprint: null,
       connectedAt: null,

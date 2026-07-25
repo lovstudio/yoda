@@ -65,4 +65,30 @@ describe('MaaS platform menu', () => {
     expect(menu?.textContent).toContain('maas.selectPlatform');
     expect(menu?.textContent).toContain('ZenMux');
   });
+
+  it('can add more than one independent Custom platform draft', async () => {
+    const { MaasView } = await import('@renderer/features/maas/components/MaasView');
+    await act(async () => root.render(createElement(MaasView, { embedded: true })));
+
+    const addCustomDraft = async () => {
+      const addButton = Array.from(host.querySelectorAll('button')).find(
+        (button) => button.textContent === 'maas.addPlatform'
+      );
+      await act(async () => addButton?.click());
+      const customItem = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+      ).find((item) => item.textContent?.includes('Custom'));
+      expect(customItem).toBeDefined();
+      await act(async () => customItem?.click());
+    };
+
+    await addCustomDraft();
+    await addCustomDraft();
+
+    const customDrafts = Array.from(
+      host.querySelectorAll<HTMLElement>('[data-maas-platform-id^="custom:"]')
+    );
+    expect(customDrafts).toHaveLength(2);
+    expect(new Set(customDrafts.map((item) => item.dataset.maasPlatformId)).size).toBe(2);
+  });
 });

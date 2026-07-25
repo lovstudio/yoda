@@ -1,6 +1,6 @@
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import {
-  MAAS_PLATFORMS,
+  getMaasPlatformDefinition,
   supportsMaasPlatformForRuntime,
   type MaasPlatformId,
   type MaasRuntimeBinding,
@@ -40,7 +40,7 @@ export function resolveMaasRuntimeCommandArgs(
 ): string[] {
   if (runtimeId !== 'codex') return [];
 
-  const providerName = `Yoda MaaS (${MAAS_PLATFORMS[credentials.platformId].name})`;
+  const providerName = `Yoda MaaS (${getMaasPlatformDefinition(credentials.platformId).name})`;
   const endpoint = credentials.endpoint.replace(/\/+$/, '');
   const overrides = [
     `model_provider=${formatTomlString(CODEX_MAAS_PROVIDER_ID)}`,

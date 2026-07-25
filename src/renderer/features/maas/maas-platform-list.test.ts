@@ -35,6 +35,21 @@ describe('MaaS platform list', () => {
     expect(getAvailableMaasPlatformIds(['zenmux', 'custom'])).toEqual([
       'openrouter',
       'siliconflow',
+      'custom',
     ]);
+  });
+
+  it('keeps every Custom instance visible and always offers another one', () => {
+    const connections = [
+      connection({ platformId: 'custom:first', configured: true }),
+      connection({ platformId: 'custom:second', configured: true }),
+    ];
+
+    expect(getVisibleMaasPlatformIds(connections, ['custom:third'])).toEqual([
+      'custom:first',
+      'custom:second',
+      'custom:third',
+    ]);
+    expect(getAvailableMaasPlatformIds(['custom:first', 'custom:second'])).toContain('custom');
   });
 });

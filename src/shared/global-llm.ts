@@ -1,4 +1,4 @@
-import { MAAS_PLATFORM_IDS, type MaasPlatformId } from './maas';
+import { isMaasPlatformId, type MaasPlatformId } from './maas';
 import {
   AGENT_ACCOUNT_PROVIDER_IDS,
   getDefaultPermissionModeId,
@@ -269,10 +269,6 @@ function isAgentAccountProviderId(value: unknown): value is AgentAccountProvider
     typeof value === 'string' &&
     AGENT_ACCOUNT_PROVIDER_IDS.includes(value as AgentAccountProviderId)
   );
-}
-
-function isMaasPlatformId(value: unknown): value is MaasPlatformId {
-  return typeof value === 'string' && MAAS_PLATFORM_IDS.includes(value as MaasPlatformId);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,6 +1,10 @@
 import { clipboard, net } from 'electron';
 import type { MaasSettings, RuntimeCustomConfig } from '@shared/app-settings';
 import {
+  getMaasPlatformDefinition,
+  getMaasPlatformTemplateId,
+  isCustomMaasPlatformId,
+  isMaasPlatformId,
   MAAS_PLATFORM_IDS,
   MAAS_PLATFORMS,
   supportsMaasPlatformForRuntime,
@@ -14,9 +18,11 @@ import {
   type MaasInvocationPage,
   type MaasInvocationRecord,
   type MaasPlatformConnection,
+  type MaasPlatformDefinition,
   type MaasPlatformId,
   type MaasPlatformInfoSnapshot,
   type MaasPlatformOfficialDescription,
+  type MaasPlatformTemplateId,
   type MaasRuntimeBinding,
   type MaasRuntimeBindingStatus,
   type MaasSetGlobalBindingInput,
@@ -97,10 +103,6 @@ type RealRecordsResult = Pick<MaasInvocationPage, 'source' | 'fetchedAt' | 'peri
   records: MaasInvocationRecord[];
 };
 
-function isMaasPlatformId(value: string): value is MaasPlatformId {
-  return (MAAS_PLATFORM_IDS as readonly string[]).includes(value);
-}
-
 function secretKey(platformId: MaasPlatformId): string {
   return `${SECRET_PREFIX}:${platformId}`;
 }
@@ -116,7 +118,7 @@ function keyFingerprint(apiKey: string): string {
 }
 
 function defaultConnection(platformId: MaasPlatformId): MaasConnection {
-  const platform = MAAS_PLATFORMS[platformId];
+  const platform = getMaasPlatformDefinition(platformId);
   return {
     platformId,
     displayName: platform.name,
@@ -136,8 +138,13 @@ function toConnection(
   platformId: MaasPlatformId
 ): MaasConnection {
   if (!saved) return defaultConnection(platformId);
+  const platform = getMaasPlatformDefinition(platformId);
   return {
     ...saved,
+    displayName:
+      isCustomMaasPlatformId(platformId) && saved.displayName === 'Custom OpenAI'
+        ? platform.name
+        : saved.displayName,
     configured: true,
     connected: true,
     error: null,
@@ -339,7 +346,7 @@ function sumNullable(
 
 function isFreshPlatformInfoSnapshot(
   snapshot: MaasPlatformInfoSnapshot,
-  platform: (typeof MAAS_PLATFORMS)[MaasPlatformId]
+  platform: MaasPlatformDefinition
 ): boolean {
   if (snapshot.version !== MAAS_PLATFORM_INFO_SNAPSHOT_VERSION) return false;
   if (snapshot.sourceUrl !== (platform.officialDescriptionUrl || platform.docsUrl)) return false;
@@ -353,7 +360,7 @@ function isFreshPlatformInfoSnapshot(
 export class MaasService {
   private readonly recordsCacheByConnection = new Map<string, TTLCache<RealRecordsResult>>();
   private readonly platformInfoCacheById = new Map<
-    MaasPlatformId,
+    MaasPlatformTemplateId,
     TTLCache<MaasPlatformInfoSnapshot>
   >();
   private readonly zenmuxModelCatalogCache = new TTLCache<string[]>(
@@ -362,9 +369,23 @@ export class MaasService {
 
   async listConnections(): Promise<MaasConnection[]> {
     const settings = await appSettingsService.get('maas');
+    const fixedPlatformIds = MAAS_PLATFORM_IDS.filter(
+      (platformId): platformId is Exclude<MaasPlatformTemplateId, 'custom'> =>
+        platformId !== 'custom'
+    );
+    const customConnections = settings.connections.filter((connection) =>
+      isCustomMaasPlatformId(connection.platformId)
+    );
+    const connectionEntries: Array<readonly [MaasPlatformId, MaasPlatformConnection | undefined]> =
+      [
+        ...fixedPlatformIds.map(
+          (platformId) => [platformId, getConnectedPlatform(settings, platformId)] as const
+        ),
+        ...customConnections.map((connection) => [connection.platformId, connection] as const),
+      ];
+
     return Promise.all(
-      MAAS_PLATFORM_IDS.map(async (platformId) => {
-        const saved = getConnectedPlatform(settings, platformId);
+      connectionEntries.map(async ([platformId, saved]) => {
         if (!saved) return defaultConnection(platformId);
 
         const apiKey = await encryptedAppSecretsStore.getSecret(secretKey(platformId));
@@ -373,6 +394,10 @@ export class MaasService {
         );
         const connection = {
           ...saved,
+          displayName:
+            isCustomMaasPlatformId(platformId) && saved.displayName === 'Custom OpenAI'
+              ? getMaasPlatformDefinition(platformId).name
+              : saved.displayName,
           keyFingerprint: apiKey ? keyFingerprint(apiKey) : saved.keyFingerprint,
           inferenceKeyFingerprint: inferenceApiKey
             ? keyFingerprint(inferenceApiKey)
@@ -572,6 +597,13 @@ export class MaasService {
       const currentConfig = (await runtimeOverrideSettings.getItem(input.runtimeId)) ?? {};
 
       if (input.enabled) {
+        const activePlatformId = settings.runtimeBindings[0]?.platformId;
+        if (activePlatformId && activePlatformId !== input.platformId) {
+          return {
+            success: false,
+            error: 'Only one MaaS platform can be active at a time.',
+          };
+        }
         if (!(await this.getInferenceCredentials(input.platformId))) {
           return {
             success: false,
@@ -679,17 +711,18 @@ export class MaasService {
     if (!isMaasPlatformId(platformId)) {
       throw new Error('Unsupported MaaS platform.');
     }
+    const templateId = getMaasPlatformTemplateId(platformId);
 
-    let cache = this.platformInfoCacheById.get(platformId);
+    let cache = this.platformInfoCacheById.get(templateId);
     if (!cache) {
       cache = new TTLCache<MaasPlatformInfoSnapshot>(PLATFORM_INFO_CACHE_TTL_MS);
-      this.platformInfoCacheById.set(platformId, cache);
+      this.platformInfoCacheById.set(templateId, cache);
     }
     if (forceRefresh) {
       cache.invalidate();
     }
 
-    return cache.get(() => this.loadPlatformInfoSnapshot(platformId, forceRefresh));
+    return cache.get(() => this.loadPlatformInfoSnapshot(templateId, forceRefresh));
   }
 
   /**
@@ -760,7 +793,7 @@ export class MaasService {
         return { success: false, error: 'Unsupported MaaS platform.' };
       }
 
-      const platform = MAAS_PLATFORMS[input.platformId];
+      const platform = getMaasPlatformDefinition(input.platformId);
       const settings = await appSettingsService.get('maas');
       const existing = getConnectedPlatform(settings, input.platformId);
       const apiKey = input.apiKey?.trim() ?? '';
@@ -853,7 +886,7 @@ export class MaasService {
       if (platformId !== 'zenmux') {
         return {
           ok: false,
-          error: `${MAAS_PLATFORMS[platformId].name} connectivity checks are not available yet.`,
+          error: `${getMaasPlatformDefinition(platformId).name} connectivity checks are not available yet.`,
           checkedAt,
         };
       }
@@ -1039,7 +1072,7 @@ export class MaasService {
 
     if (platformId !== 'zenmux') {
       throw new Error(
-        `${MAAS_PLATFORMS[platformId].name} real usage history is not available yet. ZenMux usage data is loaded from its Management API.`
+        `${getMaasPlatformDefinition(platformId).name} real usage history is not available yet. ZenMux usage data is loaded from its Management API.`
       );
     }
 
@@ -1057,10 +1090,10 @@ export class MaasService {
   }
 
   private async loadPlatformInfoSnapshot(
-    platformId: MaasPlatformId,
+    platformId: MaasPlatformTemplateId,
     forceRefresh: boolean
   ): Promise<MaasPlatformInfoSnapshot> {
-    const platform = MAAS_PLATFORMS[platformId];
+    const platform = getMaasPlatformDefinition(platformId);
     const stored = await getMaasPlatformInfoSnapshot(platformId);
     if (!forceRefresh && stored && isFreshPlatformInfoSnapshot(stored, platform)) {
       return stored;
@@ -1076,7 +1109,7 @@ export class MaasService {
   }
 
   private async fetchPlatformInfoSnapshot(
-    platform: (typeof MAAS_PLATFORMS)[MaasPlatformId]
+    platform: MaasPlatformDefinition
   ): Promise<{ snapshot: MaasPlatformInfoSnapshot; persist: boolean }> {
     const sourceUrl = platform.officialDescriptionUrl || platform.docsUrl;
     try {
