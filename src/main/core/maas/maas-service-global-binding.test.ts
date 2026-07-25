@@ -141,6 +141,9 @@ describe('global MaaS binding', () => {
         }),
       ])
     );
+    expect(new Set(mocks.settings.runtimeBindings.map((binding) => binding.platformId))).toEqual(
+      new Set(['openrouter'])
+    );
 
     await expect(
       service.setGlobalBinding({ platformId: 'openrouter', enabled: false })
@@ -196,6 +199,21 @@ describe('stored MaaS keys', () => {
       'yoda-maas-inference-token:zenmux': 'inference-secret',
     };
     vi.clearAllMocks();
+  });
+
+  it('distinguishes saved platforms from built-in platforms that have not been added', async () => {
+    const service = new MaasService();
+
+    const connections = await service.listConnections();
+
+    expect(connections.find((connection) => connection.platformId === 'zenmux')).toMatchObject({
+      configured: true,
+      connected: true,
+    });
+    expect(connections.find((connection) => connection.platformId === 'openrouter')).toMatchObject({
+      configured: false,
+      connected: false,
+    });
   });
 
   it('copies the selected key kind without exposing the other stored key', async () => {

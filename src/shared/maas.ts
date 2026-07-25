@@ -21,6 +21,7 @@ export type MaasPlatformConnection = {
 };
 
 export type MaasConnection = MaasPlatformConnection & {
+  configured: boolean;
   connected: boolean;
   error: string | null;
 };

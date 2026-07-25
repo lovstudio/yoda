@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { useCallback, useState } from 'react';
 import type {
   MaasConnectInput,
+  MaasConnection,
   MaasGlobalBindingStatus,
   MaasInvocationFilterKind,
   MaasPlatformId,
@@ -131,7 +132,14 @@ export function useConnectMaasPlatform() {
       }
       return result.connection;
     },
-    onSuccess: () => {
+    onSuccess: (connection) => {
+      if (connection) {
+        queryClient.setQueryData<MaasConnection[]>(maasQueryKeys.connections, (current) =>
+          current
+            ? current.map((item) => (item.platformId === connection.platformId ? connection : item))
+            : [connection]
+        );
+      }
       void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
       void queryClient.invalidateQueries({ queryKey: ['maas', 'records'] });
     },
@@ -148,9 +156,29 @@ export function useDisconnectMaasPlatform() {
         throw new Error(result.error ?? 'Failed to disconnect MaaS platform.');
       }
     },
-    onSuccess: () => {
+    onSuccess: (_result, platformId) => {
+      queryClient.setQueryData<MaasConnection[]>(maasQueryKeys.connections, (current) =>
+        current?.map((connection) =>
+          connection.platformId === platformId
+            ? {
+                ...connection,
+                keyFingerprint: null,
+                inferenceKeyFingerprint: null,
+                connectedAt: null,
+                lastCheckedAt: null,
+                configured: false,
+                connected: false,
+                error: null,
+              }
+            : connection
+        )
+      );
       void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.globalBinding });
+      void queryClient.invalidateQueries({ queryKey: ['maas', 'runtime-bindings'] });
       void queryClient.invalidateQueries({ queryKey: ['maas', 'records'] });
+      void queryClient.invalidateQueries({ queryKey: ['runtimeSettings'] });
+      void queryClient.invalidateQueries({ queryKey: ['runtimeSnapshot'] });
     },
   });
 }

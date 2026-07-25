@@ -47,6 +47,7 @@ function findConnection(
       inferenceKeyFingerprint: null,
       connectedAt: null,
       lastCheckedAt: null,
+      configured: false,
       connected: false,
       error: null,
     }

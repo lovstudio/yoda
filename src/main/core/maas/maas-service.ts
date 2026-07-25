@@ -125,6 +125,7 @@ function defaultConnection(platformId: MaasPlatformId): MaasConnection {
     inferenceKeyFingerprint: null,
     connectedAt: null,
     lastCheckedAt: null,
+    configured: false,
     connected: false,
     error: null,
   };
@@ -137,6 +138,7 @@ function toConnection(
   if (!saved) return defaultConnection(platformId);
   return {
     ...saved,
+    configured: true,
     connected: true,
     error: null,
   };
@@ -379,6 +381,7 @@ export class MaasService {
         const hasCredential = Boolean(apiKey || inferenceApiKey);
         return {
           ...connection,
+          configured: true,
           connected: hasCredential,
           error: hasCredential
             ? null
