@@ -1021,7 +1021,7 @@
       "description": "The client that will be selected by default when creating a new task."
     },
     "resetToDefaultWithLabel": "Reset to default: {{label}}",
-    "serverUnavailable": "{{product}} server is currently unavailable. Please try again later.",
+    "serverUnavailable": "The LovStudio availability check failed. You can still try to connect.",
     "keyboard": {
       "shortcutUpdated": "Shortcut updated",
       "shortcutUpdatedDescription": "{{label}} is now {{hotkey}}",

@@ -1021,7 +1021,7 @@
       "description": "创建新任务时默认选中的客户端。"
     },
     "resetToDefaultWithLabel": "重置为默认值：{{label}}",
-    "serverUnavailable": "{{product}} 服务器当前不可用，请稍后重试。",
+    "serverUnavailable": "LovStudio 可用性检测失败，你仍可尝试连接。",
     "keyboard": {
       "shortcutUpdated": "快捷键已更新",
       "shortcutUpdatedDescription": "{{label}} 现在是 {{hotkey}}",

@@ -490,9 +490,9 @@ export class YodaAccountService implements Hookable<AccountServiceHooks> {
   async checkServerHealth(): Promise<boolean> {
     const { baseUrl } = ACCOUNT_CONFIG.authServer;
     try {
-      const response = await fetch(baseUrl, {
+      const response = await fetch(`${baseUrl}/api/cli/auth/start`, {
         method: 'HEAD',
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(5000),
       });
       return response.ok || response.status < 500;
     } catch {

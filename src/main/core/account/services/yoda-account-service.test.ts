@@ -122,6 +122,19 @@ describe('YodaAccountService lifecycle', () => {
     vi.unstubAllGlobals();
   });
 
+  it('checks the auth route used by sign-in instead of the marketing homepage', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 405 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const service = new YodaAccountService();
+
+    await expect(service.checkServerHealth()).resolves.toBe(true);
+
+    expect(fetchMock).toHaveBeenCalledWith('https://lovstudio.test/api/cli/auth/start', {
+      method: 'HEAD',
+      signal: expect.any(AbortSignal),
+    });
+  });
+
   it('blocks refresh and new account requests for the entire sign-out transaction', async () => {
     const hookGate = deferred();
     const hookStarted = deferred();

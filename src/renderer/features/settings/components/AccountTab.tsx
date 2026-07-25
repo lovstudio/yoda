@@ -126,21 +126,18 @@ export function AccountTab() {
           </p>
         </div>
         {error && <p className="text-xs text-destructive">{error}</p>}
-        {serverAvailable === false ? (
-          <ServerUnavailableMessage />
-        ) : (
-          <Button
-            type="button"
-            className="w-fit"
-            onClick={handleSignIn}
-            disabled={signInMutation.isPending}
-          >
-            <LogIn className="h-3.5 w-3.5" />
-            {signInMutation.isPending
-              ? t('settings.account.signingIn')
-              : t('settings.account.signIn')}
-          </Button>
-        )}
+        {serverAvailable === false && <ServerUnavailableMessage />}
+        <Button
+          type="button"
+          className="w-fit"
+          onClick={handleSignIn}
+          disabled={signInMutation.isPending}
+        >
+          <LogIn className="h-3.5 w-3.5" />
+          {signInMutation.isPending
+            ? t('settings.account.signingIn')
+            : t('settings.account.signIn')}
+        </Button>
       </div>
     );
   }
@@ -152,21 +149,18 @@ export function AccountTab() {
         <p className="text-xs text-muted-foreground">{t('settings.account.createAccountHint')}</p>
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
-      {serverAvailable === false ? (
-        <ServerUnavailableMessage />
-      ) : (
-        <Button
-          type="button"
-          className="w-fit"
-          onClick={handleSignIn}
-          disabled={signInMutation.isPending}
-        >
-          <LogIn className="h-3.5 w-3.5" />
-          {signInMutation.isPending
-            ? t('settings.account.creatingAccount')
-            : t('settings.account.createAccount')}
-        </Button>
-      )}
+      {serverAvailable === false && <ServerUnavailableMessage />}
+      <Button
+        type="button"
+        className="w-fit"
+        onClick={handleSignIn}
+        disabled={signInMutation.isPending}
+      >
+        <LogIn className="h-3.5 w-3.5" />
+        {signInMutation.isPending
+          ? t('settings.account.creatingAccount')
+          : t('settings.account.createAccount')}
+      </Button>
     </div>
   );
 }
