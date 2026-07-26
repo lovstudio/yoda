@@ -56,6 +56,12 @@ describe('Sparkle release feed', () => {
     ).toThrow('full archive is unsigned');
   });
 
+  it('allows a signed full DMG fallback when no compatible delta history exists', () => {
+    const withoutDeltas = appcast.replace(/\s*<sparkle:deltas>[\s\S]*?<\/sparkle:deltas>/, '');
+
+    expect(() => validateGeneratedSparkleAppcast(withoutDeltas, '0.16.0', [])).not.toThrow();
+  });
+
   it('publishes architecture-qualified delta names without changing signatures', () => {
     const collisionProneAppcast = appcast.replace(
       'yoda-0.15.3-to-0.16.0-arm64.delta',
