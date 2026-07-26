@@ -62,10 +62,10 @@ Layout Rules:
 **Type**: Content
 **Filename**: 09-slide-traction.png
 
-Headline: 两个月完成产品闭环，已有使用信号，商业验证尚未开始
+Headline: 约两个半月完成产品闭环，已有使用信号，商业验证尚未开始
 Chart: 证据成熟度阶梯
-- Build：1,645 次 main 提交 / 73 个公开 Release / 31 种 Agent Client
-- Use：126 个 14 天独立 Cloner / 73 个独立授权用户
+- Build：1,709 次 main 提交 / 76 个公开 Release / 31 种 Agent Client
+- Use：141 个 14 天独立 Cloner / 73 个独立授权用户
 - Pay：3 个 Relay 试用 / 0 付费
 Conclusion: 产品完成度与执行力已验证；留存、付费和机构年约是本轮融资后的核心问题。
 Layout: evidence-ladder

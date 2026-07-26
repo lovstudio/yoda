@@ -76,11 +76,12 @@ const slides = [
     filename: '01-slide-cover.png',
     html: `<section class="slide">
       <div style="position:absolute;left:0;right:0;top:278px;height:304px;background:var(--deep);display:flex;flex-direction:column;align-items:center;justify-content:center">
-        <h1 style="font-size:64px;line-height:1.12;font-weight:750;letter-spacing:-.035em;text-align:center;color:white">Agent 时代的集成委托环境</h1>
-        <img src="${yodaLogo}" alt="Yoda" style="display:block;width:232px;height:auto;margin-top:42px;filter:brightness(0) invert(1)">
+        <h1 style="font-size:60px;line-height:1.12;font-weight:750;letter-spacing:-.035em;text-align:center;color:white">让创造者敢把工作，真正交给 AI</h1>
+        <img src="${yodaLogo}" alt="Yoda" style="display:block;width:212px;height:auto;margin-top:36px;filter:brightness(0) invert(1)">
       </div>
-      <div style="position:absolute;left:0;right:0;top:654px;text-align:center;color:var(--deep);font-size:20px;font-weight:700;letter-spacing:.12em">融资商业计划书</div>
-      <div style="position:absolute;left:0;right:0;top:710px;text-align:center;color:#777c78;font-size:17px;font-weight:560">2026 年 7 月</div>
+      <div style="position:absolute;left:0;right:0;top:646px;text-align:center;color:var(--deep);font-size:21px;font-weight:720;letter-spacing:.08em">AGENT 时代的集成委托环境</div>
+      <div style="position:absolute;left:0;right:0;top:694px;text-align:center;color:#575d59;font-size:17px;font-weight:650;letter-spacing:.12em">融资商业计划书</div>
+      <div style="position:absolute;left:0;right:0;top:738px;text-align:center;color:#777c78;font-size:16px;font-weight:560">2026 年 7 月</div>
     </section>`,
   },
   {
@@ -283,13 +284,13 @@ const slides = [
   {
     filename: '09-slide-traction.png',
     html: `<section class="slide">${miniBrand()}
-      <div class="eyebrow">Traction</div><h2>两个月完成产品闭环，已有使用信号，商业验证尚未开始</h2>
+      <div class="eyebrow">Traction</div><h2>约两个半月完成产品闭环，已有使用信号，商业验证尚未开始</h2>
       <div style="position:absolute;left:90px;right:90px;top:280px">
-        <div style="display:grid;grid-template-columns:180px 1fr;align-items:stretch;margin-bottom:18px"><div style="font-size:21px;font-weight:760;padding-top:22px">BUILD</div><div style="height:126px;background:var(--deep);color:white;padding:22px 30px;display:grid;grid-template-columns:repeat(3,1fr)"><div><div class="metric-sm">1,645</div><div style="font-size:17px;color:#cce7d7;margin-top:8px">main 提交</div></div><div><div class="metric-sm">73</div><div style="font-size:17px;color:#cce7d7;margin-top:8px">公开 Release</div></div><div><div class="metric-sm">31</div><div style="font-size:17px;color:#cce7d7;margin-top:8px">Agent Client</div></div></div></div>
-        <div style="display:grid;grid-template-columns:180px 75% 1fr;align-items:stretch;margin-bottom:18px"><div style="font-size:21px;font-weight:760;padding-top:22px">USE</div><div style="height:116px;background:#dce8e0;padding:21px 30px;display:grid;grid-template-columns:1fr 1fr"><div><div class="metric-sm">126</div><div class="label" style="margin-top:7px">14 天独立 Cloner</div></div><div><div class="metric-sm">73</div><div class="label" style="margin-top:7px">独立授权用户</div></div></div><div></div></div>
+        <div style="display:grid;grid-template-columns:180px 1fr;align-items:stretch;margin-bottom:18px"><div style="font-size:21px;font-weight:760;padding-top:22px">BUILD</div><div style="height:126px;background:var(--deep);color:white;padding:22px 30px;display:grid;grid-template-columns:repeat(3,1fr)"><div><div class="metric-sm">1,709</div><div style="font-size:17px;color:#cce7d7;margin-top:8px">main 提交</div></div><div><div class="metric-sm">76</div><div style="font-size:17px;color:#cce7d7;margin-top:8px">公开 Release</div></div><div><div class="metric-sm">31</div><div style="font-size:17px;color:#cce7d7;margin-top:8px">Agent Client</div></div></div></div>
+        <div style="display:grid;grid-template-columns:180px 75% 1fr;align-items:stretch;margin-bottom:18px"><div style="font-size:21px;font-weight:760;padding-top:22px">USE</div><div style="height:116px;background:#dce8e0;padding:21px 30px;display:grid;grid-template-columns:1fr 1fr"><div><div class="metric-sm">141</div><div class="label" style="margin-top:7px">14 天独立 Cloner</div></div><div><div class="metric-sm">73</div><div class="label" style="margin-top:7px">独立授权用户</div></div></div><div></div></div>
         <div style="display:grid;grid-template-columns:180px 42% 1fr;align-items:stretch"><div style="font-size:21px;font-weight:760;padding-top:22px">PAY</div><div style="height:110px;background:#1b1c1b;color:white;padding:20px 30px;display:grid;grid-template-columns:1fr 1fr"><div><div class="metric-sm">3</div><div style="font-size:17px;color:#bbb;margin-top:7px">Relay 试用</div></div><div><div class="metric-sm">0</div><div style="font-size:17px;color:#bbb;margin-top:7px">付费</div></div></div><div style="padding:24px 0 0 28px;font-size:19px;line-height:1.45;color:var(--muted)">留存、个人付费和机构年约<br>是本轮融资后的核心验证</div></div>
       </div>
-      <div class="foot">GitHub 数据截至 2026-07-22；账号与 Relay 数据截至 2026-07-21。不同指标口径不同，不构成转化漏斗。提交数包含合并与协作者贡献。</div>
+      <div class="foot">GitHub 数据查询于 2026-07-26，14 天流量窗截至 2026-07-24；账号与 Relay 数据截至 2026-07-21。不同指标口径不同，不构成转化漏斗。提交数包含合并与协作者贡献。</div>
     </section>`,
   },
   {
@@ -364,7 +365,7 @@ const slides = [
       <p class="sub">个人为“离开电脑仍能继续”付费，团队为治理、证据和可追责协作付费</p>
       <div style="position:absolute;left:90px;right:90px;top:315px;height:420px;border-bottom:2px solid #9b9e99">
         ${[
-          ['OPEN SOURCE', '本地核心', '工作区 · 数据 · 选择权', '0', 0, 220, '#cfd1cc'],
+          ['OPEN SOURCE', '本地核心', '工作区 · 数据 · 选择权', '免费', 0, 220, '#cfd1cc'],
           ['RELAY', '连接连续性', '跨网络 · 设备状态', '个人', 220, 250, '#b4cbbd'],
           ['CREATOR PRO', '个人效率', '同步 · 自动化 · 备份', '个人', 470, 270, '#83b695'],
           ['EDUCATION / TEAM', '协作秩序', '共享资产 · 权限 · 审计', '机构', 740, 300, '#4f8767'],
@@ -372,7 +373,7 @@ const slides = [
         ]
           .map(
             ([tag, title, desc, buyer, left, width, color], i) =>
-              `<div style="position:absolute;left:${left}px;bottom:0;width:${width}px;height:${110 + i * 52}px;background:${color};color:${i >= 3 ? 'white' : '#111'};padding:20px 22px;border-right:1px solid rgba(255,255,255,.45)"><div style="font-size:13px;letter-spacing:.1em;color:${i >= 3 ? '#d2e7da' : '#59605b'}">${tag}</div><div style="font-size:24px;font-weight:780;margin-top:12px">${title}</div><div style="font-size:17px;line-height:1.4;margin-top:10px;color:${i >= 3 ? '#e2eee6' : '#4f5551'}">${desc}</div><div style="position:absolute;bottom:18px;left:22px;font-size:16px;font-weight:720">付费者：${buyer}</div></div>`
+              `<div style="position:absolute;left:${left}px;bottom:0;width:${width}px;height:${190 + i * 52}px;background:${color};color:${i >= 3 ? 'white' : '#111'};padding:20px 22px;border-right:1px solid rgba(255,255,255,.45)"><div style="font-size:13px;letter-spacing:.1em;color:${i >= 3 ? '#d2e7da' : '#59605b'}">${tag}</div><div style="font-size:24px;font-weight:780;margin-top:12px">${title}</div><div style="font-size:17px;line-height:1.4;margin-top:10px;color:${i >= 3 ? '#e2eee6' : '#4f5551'}">${desc}</div><div style="position:absolute;bottom:18px;left:22px;font-size:16px;font-weight:720">付费者：${buyer}</div></div>`
           )
           .join('')}
       </div>
@@ -416,7 +417,7 @@ const slides = [
           <div class="eyebrow">Founder–Product Fit</div><h2 style="font-size:50px">Yoda 是被真实工作流“撞”出来的</h2>
           <p class="sub" style="font-size:24px">创始人同时是第一重度用户、产品经理、开发者与首批渠道</p>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:44px;border-top:1px solid var(--grid);padding-top:28px">
-            <div><div class="metric-sm">1,645</div><div class="label" style="margin-top:8px">main 提交</div></div><div><div class="metric-sm">73</div><div class="label" style="margin-top:8px">公开 Release</div></div><div><div class="metric-sm">31</div><div class="label" style="margin-top:8px">Agent Client</div></div>
+            <div><div class="metric-sm">1,709</div><div class="label" style="margin-top:8px">main 提交</div></div><div><div class="metric-sm">76</div><div class="label" style="margin-top:8px">公开 Release</div></div><div><div class="metric-sm">31</div><div class="label" style="margin-top:8px">Agent Client</div></div>
           </div>
           <div style="margin-top:38px;border-top:1px solid var(--grid)">${['开发工具 × 内容创作 × AI 产品化', '用 Yoda 开发 Yoda，形成高频反馈闭环', '高校、商学院、开发者社区与训练营触点'].map((x) => `<div style="padding:15px 0;border-bottom:1px solid var(--grid);font-size:20px;font-weight:650">${x}</div>`).join('')}</div>
         </div>
@@ -427,7 +428,7 @@ const slides = [
   {
     filename: '15-slide-fundraise.png',
     html: `<section class="slide">${miniBrand()}
-      <div class="eyebrow">Financing</div><h2 style="font-size:52px">融资 200 万元，<br>验证“集成委托环境”能否形成可重复增长</h2>
+      <div class="eyebrow">Financing</div><h2 style="font-size:52px">融资 200 万元，<br>把“产品闭环”推进为“可重复增长”</h2>
       <p class="sub">或 30 万美元，出让 10% 股权；购买 18–24 个月验证窗口</p>
       <div style="position:absolute;left:90px;right:90px;top:315px;bottom:58px;display:grid;grid-template-columns:35% 65%;gap:70px">
         <div style="border-top:1px solid var(--grid);padding-top:22px">
@@ -461,12 +462,12 @@ const slides = [
             )
             .join('')}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:38px;margin-top:28px;padding-top:24px;border-top:1px solid var(--grid)">
-            <div style="display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:center">
-              <img src="${yodaWebsiteQr}" alt="Yoda 官网二维码" style="display:block;width:150px;height:150px;background:white;border:1px solid var(--grid);padding:6px">
+            <div style="display:grid;grid-template-columns:190px 1fr;gap:20px;align-items:center">
+              <img src="${yodaWebsiteQr}" alt="Yoda 官网二维码" style="display:block;width:190px;height:190px;background:white;border:1px solid var(--grid);padding:6px">
               <div><div style="font-size:21px;font-weight:750">Yoda 官网</div><div style="margin-top:8px;font-size:16px;line-height:1.45;color:var(--muted)">产品、文档与下载<br>yoda.lovstudio.ai</div></div>
             </div>
-            <div style="display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:center">
-              <img src="${personalWechatQr}" alt="个人微信二维码" style="display:block;width:150px;height:150px;object-fit:cover;background:white;border:1px solid var(--grid);padding:6px">
+            <div style="display:grid;grid-template-columns:190px 1fr;gap:20px;align-items:center">
+              <img src="${personalWechatQr}" alt="个人微信二维码" style="display:block;width:190px;height:190px;object-fit:cover;background:white;border:1px solid var(--grid);padding:6px">
               <div><div style="font-size:21px;font-weight:750">个人微信</div><div style="margin-top:8px;font-size:16px;line-height:1.45;color:var(--muted)">项目交流<br>与合作联系</div></div>
             </div>
           </div>
