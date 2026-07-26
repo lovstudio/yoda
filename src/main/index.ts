@@ -31,6 +31,7 @@ import { ptySessionRegistry } from './core/pty/pty-session-registry';
 import { prSyncScheduler } from './core/pull-requests/pr-sync-scheduler';
 import { reviewOrchestrator } from './core/review-orchestration/orchestrator';
 import { searchService } from './core/search/search-service';
+import { promptPrincipleSourceService } from './core/settings/prompt-principle-source-service';
 import { runtimeModelCandidatesService } from './core/settings/runtime-model-candidates-service';
 import { appSettingsService } from './core/settings/settings-service';
 import { resumePendingTaskArchives } from './core/tasks/operations/archiveTask';
@@ -168,6 +169,7 @@ void app.whenReady().then(async () => {
 
   // App settings must be ready before the renderer queries them on first paint.
   await appSettingsService.initialize();
+  await promptPrincipleSourceService.initialize();
   ptySessionRegistry.setScrollbackLines((await appSettingsService.get('terminal')).scrollbackLines);
   __bootMark('appSettingsService.initialize done');
   await maasService.reconcileActiveBindings().catch((error: unknown) => {
@@ -317,6 +319,7 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
       mobileRelayService.dispose();
       updateService.dispose();
       prSyncScheduler.dispose();
+      promptPrincipleSourceService.dispose();
       const [gitWatcherResult, projectManagerResult] = await Promise.allSettled([
         gitWatcherRegistry.dispose(),
         projectManager.dispose({ mode }),

@@ -1,5 +1,6 @@
 import { createRPCController } from '@/shared/ipc/rpc';
 import { ptySessionRegistry } from '../pty/pty-session-registry';
+import { promptPrincipleSourceService } from './prompt-principle-source-service';
 import { appSettingsService, type AppSettings, type AppSettingsKey } from './settings-service';
 
 async function syncTerminalPtySettings(): Promise<void> {
@@ -28,6 +29,16 @@ export const appSettingsController = createRPCController({
 
   resetField: <T extends AppSettingsKey>(key: T, field: string): Promise<void> =>
     resetSettingField(key, field as keyof AppSettings[T]),
+
+  selectPromptPrincipleFile: () => promptPrincipleSourceService.selectFile(),
+
+  loadPromptPrincipleUrl: (input: {
+    refreshIntervalMinutes?: number;
+    timeoutSeconds?: number;
+    url: string;
+  }) => promptPrincipleSourceService.loadUrl(input),
+
+  refreshPromptPrincipleSource: (id: string) => promptPrincipleSourceService.refresh(id),
 });
 
 async function updateSetting<T extends AppSettingsKey>(
@@ -36,11 +47,13 @@ async function updateSetting<T extends AppSettingsKey>(
 ): Promise<void> {
   await appSettingsService.update(key, value);
   if (key === 'terminal') await syncTerminalPtySettings();
+  if (key === 'promptPrinciples') await promptPrincipleSourceService.reconcile();
 }
 
 async function resetSetting<T extends AppSettingsKey>(key: T): Promise<void> {
   await appSettingsService.reset(key);
   if (key === 'terminal') await syncTerminalPtySettings();
+  if (key === 'promptPrinciples') await promptPrincipleSourceService.reconcile();
 }
 
 async function resetSettingField<T extends AppSettingsKey>(
@@ -49,4 +62,5 @@ async function resetSettingField<T extends AppSettingsKey>(
 ): Promise<void> {
   await appSettingsService.resetField(key, field);
   if (key === 'terminal') await syncTerminalPtySettings();
+  if (key === 'promptPrinciples') await promptPrincipleSourceService.reconcile();
 }

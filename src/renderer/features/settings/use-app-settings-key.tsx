@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import type { AppSettings, AppSettingsKey } from '@shared/app-settings';
-import { rpc } from '@renderer/lib/ipc';
+import { promptPrinciplesUpdatedChannel } from '@shared/events/appEvents';
+import { events, rpc } from '@renderer/lib/ipc';
 
 type SettingsMeta<K extends AppSettingsKey> = {
   value: AppSettings[K];
@@ -25,6 +27,14 @@ function mergeValue<K extends AppSettingsKey>(
 
 export function useAppSettingsKey<K extends AppSettingsKey>(key: K) {
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (key !== 'promptPrinciples') return;
+    return events.on(promptPrinciplesUpdatedChannel, () => {
+      void queryClient.invalidateQueries({ queryKey: ['appSettings', 'promptPrinciples', 'meta'] });
+      void queryClient.invalidateQueries({ queryKey: ['appSettings', 'all'] });
+    });
+  }, [key, queryClient]);
 
   const { data, isLoading } = useQuery<SettingsMeta<K>>({
     queryKey: ['appSettings', key, 'meta'] as const,

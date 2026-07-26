@@ -120,6 +120,9 @@ export const promptsUpdatedChannel = defineEvent<void>('prompts:updated');
 /** Emitted after the leaked-system-prompts reference gallery revalidates against GitHub. */
 export const leakedPromptsUpdatedChannel = defineEvent<void>('leaked-prompts:updated');
 
+/** Emitted when a file- or URL-backed prompt principle is refreshed in main. */
+export const promptPrinciplesUpdatedChannel = defineEvent<void>('prompt-principles:updated');
+
 /** Emitted after each dependency probe completes (path resolution or version check). */
 export const dependencyStatusUpdatedChannel = defineEvent<DependencyStatusUpdatedEvent>(
   'dependency:status-updated'
