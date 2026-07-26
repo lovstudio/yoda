@@ -18,6 +18,30 @@ describe('handoffInstallRestart', () => {
     expect(calls).toEqual(['prepare:start', 'prepare:done', 'quitAndInstall']);
   });
 
+  it('keeps the application alive until an asynchronous updater handoff completes', async () => {
+    let finishHandoff: (() => void) | undefined;
+    let restartReady = false;
+    const handoffToUpdater = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishHandoff = resolve;
+        })
+    );
+
+    const restart = handoffInstallRestart(async () => {}, handoffToUpdater).then(() => {
+      restartReady = true;
+    });
+
+    await vi.waitFor(() => expect(handoffToUpdater).toHaveBeenCalledOnce());
+    expect(restartReady).toBe(false);
+
+    if (!finishHandoff) throw new Error('Updater handoff did not start');
+    finishHandoff();
+    await restart;
+
+    expect(restartReady).toBe(true);
+  });
+
   it('does not invoke the updater when cleanup fails', async () => {
     const error = new Error('cleanup failed');
     const quitAndInstall = vi.fn();
