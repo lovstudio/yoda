@@ -18,6 +18,7 @@ import {
   pinSparkleAssetUrls,
   qualifySparkleDeltaArtifacts,
   removeSparkleDeltaEligibilityHints,
+  retainExistingSparkleHistoryItems,
   sparkleHistoryFallbackUrl,
   validateGeneratedSparkleAppcast,
   type SparkleArchiveHistoryItem,
@@ -69,11 +70,14 @@ async function generateForArch(arch: string): Promise<void> {
   const sourceArchive = join('release', `${artifactPrefix}-${arch}.dmg`);
   const versionedArchiveName = `${artifactPrefix}-${currentVersion}-${arch}.dmg`;
   const workDir = resolve('.cache', 'sparkle-appcast', variant, arch);
+  const historyDownloadDir = resolve('.cache', 'sparkle-history', variant, arch);
   const appcastName = `appcast-${arch}.xml`;
   const appcastPath = join(workDir, appcastName);
 
   rmSync(workDir, { recursive: true, force: true });
+  rmSync(historyDownloadDir, { recursive: true, force: true });
   mkdirSync(workDir, { recursive: true });
+  mkdirSync(historyDownloadDir, { recursive: true });
   copyFileSync(sourceArchive, join(workDir, versionedArchiveName));
   writeReleaseNotes(join(workDir, replaceExtension(versionedArchiveName, '.md')));
 
@@ -86,7 +90,7 @@ async function generateForArch(arch: string): Promise<void> {
 
   if (existingAppcast) writeFileSync(appcastPath, existingAppcast);
   for (const item of history) {
-    await downloadArchive(item, join(workDir, item.fileName));
+    await stageHistoryAsDmg(item, workDir, historyDownloadDir);
   }
 
   runGenerateAppcast(workDir, appcastPath);
@@ -99,10 +103,13 @@ async function generateForArch(arch: string): Promise<void> {
   // These generated size and locale hints are only heuristics. Some real DMG installs can
   // fail them and make Sparkle select the full DMG even when the signed delta is applicable.
   const withoutEligibilityHints = removeSparkleDeltaEligibilityHints(qualified.content);
+  const withOriginalHistory = existingAppcast
+    ? retainExistingSparkleHistoryItems(withoutEligibilityHints, existingAppcast, currentVersion)
+    : withoutEligibilityHints;
   const generated =
     variant === 'stable'
-      ? pinSparkleAssetUrls(withoutEligibilityHints, repository)
-      : withoutEligibilityHints;
+      ? pinSparkleAssetUrls(withOriginalHistory, repository)
+      : withOriginalHistory;
   writeFileSync(appcastPath, generated);
   validateGeneratedSparkleAppcast(
     generated,
@@ -186,6 +193,63 @@ async function downloadArchive(
     fail(`Sparkle history ${item.version} is not a valid ZIP or DMG archive`);
   }
   writeFileSync(destination, bytes);
+}
+
+async function stageHistoryAsDmg(
+  item: SparkleArchiveHistoryItem,
+  workDir: string,
+  downloadDir: string
+): Promise<void> {
+  if (item.fileName.endsWith('.dmg')) {
+    await downloadArchive(item, join(workDir, item.fileName));
+    return;
+  }
+
+  const sourcePath = join(downloadDir, item.fileName);
+  await downloadArchive(item, sourcePath);
+  const extractionDir = join(downloadDir, basename(item.fileName, extname(item.fileName)));
+  rmSync(extractionDir, { recursive: true, force: true });
+  mkdirSync(extractionDir, { recursive: true });
+  runCommand('ditto', ['-x', '-k', sourcePath, extractionDir], `extract ${item.fileName}`);
+
+  const convertedName = replaceExtension(item.fileName, '.dmg');
+  const convertedPath = join(workDir, convertedName);
+  runCommand(
+    'hdiutil',
+    [
+      'create',
+      '-quiet',
+      '-fs',
+      'HFS+',
+      '-format',
+      'UDZO',
+      '-volname',
+      `${artifactPrefix} ${item.version} ${archLabel(item.fileName)}`,
+      '-srcfolder',
+      extractionDir,
+      convertedPath,
+    ],
+    `convert ${item.fileName} to ${convertedName}`
+  );
+  if (!existsSync(convertedPath) || statSync(convertedPath).size <= 0) {
+    fail(`Sparkle history conversion produced no DMG: ${convertedName}`);
+  }
+  info(`Converted Sparkle history ${item.version} to temporary DMG`);
+}
+
+function runCommand(command: string, args: string[], label: string): void {
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    const details = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim().slice(-12_000);
+    fail(`${label} failed (${result.status ?? result.signal ?? 'unknown'}): ${details}`);
+  }
+}
+
+function archLabel(fileName: string): string {
+  return fileName.includes('arm64') ? 'arm64' : fileName.includes('x64') ? 'x64' : 'macOS';
 }
 
 function hasExpectedArchiveSignature(fileName: string, bytes: Uint8Array): boolean {

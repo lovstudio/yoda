@@ -4,6 +4,7 @@ import {
   pinSparkleAssetUrls,
   qualifySparkleDeltaArtifacts,
   removeSparkleDeltaEligibilityHints,
+  retainExistingSparkleHistoryItems,
   sparkleHistoryFallbackUrl,
   validateGeneratedSparkleAppcast,
 } from '@root/scripts/release/lib/sparkle-feed';
@@ -86,6 +87,22 @@ describe('Sparkle release feed', () => {
     expect(result).not.toContain('deltaFromSparkleLocales');
     expect(result).toContain('sparkle:deltaFrom="0.15.3"');
     expect(result).toContain('sparkle:edSignature="delta-signature"');
+  });
+
+  it('keeps the generated current DMG item while restoring original mixed-format history', () => {
+    const generated = appcast
+      .split('0.16.0')
+      .join('0.17.0')
+      .split('https://releases.test/')
+      .join('https://temporary.test/')
+      .replace('yoda-0.15.3-arm64.zip', 'yoda-0.15.3-arm64.dmg');
+
+    const result = retainExistingSparkleHistoryItems(generated, appcast, '0.17.0');
+
+    expect(result).toContain('https://temporary.test/yoda-0.17.0-arm64.dmg');
+    expect(result).toContain('https://releases.test/yoda-0.16.0-arm64.dmg');
+    expect(result).toContain('https://releases.test/yoda-0.15.3-arm64.zip');
+    expect(result).not.toContain('https://temporary.test/yoda-0.15.3-arm64.dmg');
   });
 
   it('falls back to the matching GitHub release when a history mirror is stale', () => {

@@ -56,11 +56,35 @@ export function removeSparkleDeltaEligibilityHints(content: string): string {
   );
 }
 
+export function retainExistingSparkleHistoryItems(
+  generatedContent: string,
+  existingContent: string,
+  currentVersion: string
+): string {
+  const generatedItems = sparkleItems(generatedContent);
+  const currentItem = generatedItems.find((item) => item.version === currentVersion);
+  if (!currentItem) {
+    throw new Error(`Generated appcast has no item for ${currentVersion}`);
+  }
+
+  const historyItems = sparkleItems(existingContent).filter(
+    (item) => item.version !== currentVersion
+  );
+  const withoutGeneratedItems = generatedContent.replace(/<item\b[^>]*>[\s\S]*?<\/item>/gi, '');
+  const channelClose = withoutGeneratedItems.lastIndexOf('</channel>');
+  if (channelClose === -1) {
+    throw new Error('Generated appcast has no closing channel element');
+  }
+
+  const mergedItems = [currentItem.content, ...historyItems.map((item) => item.content)].join('\n');
+  return `${withoutGeneratedItems.slice(0, channelClose).trimEnd()}\n${mergedItems}\n${withoutGeneratedItems.slice(channelClose)}`;
+}
+
 export function parseSparkleArchiveHistory(content: string): SparkleArchiveHistoryItem[] {
   const history: SparkleArchiveHistoryItem[] = [];
-  for (const itemMatch of content.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {
-    const item = itemMatch[1];
-    const version = elementText(item, 'sparkle:version');
+  for (const rawItem of sparkleItems(content)) {
+    const item = rawItem.body;
+    const version = rawItem.version;
     if (!version) continue;
 
     const withoutDeltas = item.replace(/<sparkle:deltas\b[^>]*>[\s\S]*?<\/sparkle:deltas>/gi, '');
@@ -80,6 +104,14 @@ export function parseSparkleArchiveHistory(content: string): SparkleArchiveHisto
     history.push({ version, url, fileName: basename(parsed.pathname) });
   }
   return history;
+}
+
+function sparkleItems(content: string): Array<{ content: string; body: string; version: string }> {
+  return [...content.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].map((match) => ({
+    content: match[0],
+    body: match[1],
+    version: elementText(match[1], 'sparkle:version'),
+  }));
 }
 
 export function validateGeneratedSparkleAppcast(
