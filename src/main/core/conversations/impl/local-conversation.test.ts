@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
 import { makePtySessionId } from '@shared/ptySessionId';
 import type { IExecutionContext } from '@main/core/execution-context/types';
+import { CODEX_MAAS_API_KEY_ENV } from '@main/core/maas/codex-maas-user-environment';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { LocalConversationProvider } from './local-conversation';
@@ -421,7 +422,7 @@ describe('LocalConversationProvider', () => {
     expect(spawned[0].options.args.slice(2)).toEqual(['Fix this']);
   });
 
-  it('launches Codex through the persisted MaaS provider without overriding its identity', async () => {
+  it('launches Codex through the persisted MaaS provider and its user-session key', async () => {
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'codex',
       resumeFlag: 'resume',
@@ -454,7 +455,9 @@ describe('LocalConversationProvider', () => {
     expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
       expect.objectContaining({
         agentApiVars: false,
-        providerVars: undefined,
+        providerVars: {
+          [CODEX_MAAS_API_KEY_ENV]: 'zenmux-secret',
+        },
       })
     );
     expect(mocks.setInteractiveSessionContext).toHaveBeenCalledWith(

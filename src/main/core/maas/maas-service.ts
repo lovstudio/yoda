@@ -952,6 +952,9 @@ export class MaasService {
   async connectPlatform(
     input: MaasConnectInput
   ): Promise<{ success: boolean; connection?: MaasConnection; error?: string }> {
+    let settingsToRestore: MaasSettings | undefined;
+    const secretsToRestore = new Map<string, string | null>();
+    let rollbackCodexAuth: CodexMaasAuthRollback | undefined;
     try {
       if (!isMaasPlatformId(input.platformId)) {
         return { success: false, error: 'Unsupported MaaS platform.' };
@@ -959,6 +962,7 @@ export class MaasService {
 
       const platform = getMaasPlatformDefinition(input.platformId);
       const settings = await appSettingsService.get('maas');
+      settingsToRestore = settings;
       const existing = getConnectedPlatform(settings, input.platformId);
       const apiKey = input.apiKey?.trim() ?? '';
       const inferenceApiKey = input.inferenceApiKey?.trim() ?? '';
@@ -1008,24 +1012,81 @@ export class MaasService {
       };
 
       if (apiKey) {
-        await encryptedAppSecretsStore.setSecret(secretKey(input.platformId), apiKey);
+        const key = secretKey(input.platformId);
+        secretsToRestore.set(key, await encryptedAppSecretsStore.getSecret(key));
+        await encryptedAppSecretsStore.setSecret(key, apiKey);
       }
       if (input.platformId === 'zenmux' && inferenceApiKey) {
-        await encryptedAppSecretsStore.setSecret(
-          inferenceSecretKey(input.platformId),
-          inferenceApiKey
-        );
+        const key = inferenceSecretKey(input.platformId);
+        secretsToRestore.set(key, await encryptedAppSecretsStore.getSecret(key));
+        await encryptedAppSecretsStore.setSecret(key, inferenceApiKey);
       }
 
       await appSettingsService.update('maas', {
         selectedPlatformId: input.platformId,
         connections: upsertConnection(settings.connections, connection),
       });
+
+      const activeCodexBinding = settings.runtimeBindings.some(
+        (binding) => binding.runtimeId === 'codex' && binding.platformId === input.platformId
+      );
+      if (activeCodexBinding) {
+        const activeApiKey =
+          input.platformId === 'zenmux'
+            ? await encryptedAppSecretsStore.getSecret(inferenceSecretKey(input.platformId))
+            : await encryptedAppSecretsStore.getSecret(secretKey(input.platformId));
+        if (!activeApiKey) {
+          throw new Error(
+            'The active Codex MaaS binding is missing its inference credential; reconnect the platform.'
+          );
+        }
+        const currentConfig = (await runtimeOverrideSettings.getItem('codex')) ?? {};
+        rollbackCodexAuth = await codexMaasAuthSwitch.enable({
+          codexHome: resolveRuntimeStateDirectory('codex', currentConfig),
+          platformId: input.platformId,
+          displayName: connection.displayName,
+          endpoint: connection.endpoint,
+          apiKey: activeApiKey,
+        });
+      }
+
       this.recordsCacheByConnection.clear();
       telemetryService.capture('maas_platform_connected', { platform: input.platformId });
 
       return { success: true, connection: toConnection(connection, input.platformId) };
     } catch (error) {
+      try {
+        await rollbackCodexAuth?.();
+      } catch (rollbackError) {
+        log.error(
+          'Failed to roll back Codex authentication after reconnecting MaaS:',
+          rollbackError
+        );
+      }
+      if (settingsToRestore) {
+        try {
+          await appSettingsService.update('maas', settingsToRestore);
+        } catch (rollbackError) {
+          log.error(
+            'Failed to roll back MaaS settings after reconnecting a platform:',
+            rollbackError
+          );
+        }
+      }
+      for (const [key, value] of secretsToRestore) {
+        try {
+          if (value === null) {
+            await encryptedAppSecretsStore.deleteSecret(key);
+          } else {
+            await encryptedAppSecretsStore.setSecret(key, value);
+          }
+        } catch (rollbackError) {
+          log.error(
+            'Failed to roll back a MaaS secret after reconnecting a platform:',
+            rollbackError
+          );
+        }
+      }
       log.error('Failed to connect MaaS platform:', error);
       return {
         success: false,

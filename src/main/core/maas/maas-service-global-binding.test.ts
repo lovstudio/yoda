@@ -445,7 +445,13 @@ describe('stored MaaS keys', () => {
       'yoda-maas-token:zenmux': 'management-secret',
       'yoda-maas-inference-token:zenmux': 'inference-secret',
     };
+    mocks.runtimeConfigs = {
+      codex: { authProvider: 'official-api', defaultModel: 'gpt-5' },
+    };
+    mocks.failRuntimeId = null;
     vi.clearAllMocks();
+    mocks.codexAuthEnable.mockResolvedValue(mocks.codexAuthRollback);
+    mocks.codexAuthDisable.mockResolvedValue(mocks.codexAuthRollback);
   });
 
   it('distinguishes saved platforms from built-in platforms that have not been added', async () => {
@@ -475,6 +481,71 @@ describe('stored MaaS keys', () => {
       service.copyStoredApiKeyToClipboard({ platformId: 'zenmux', kind: 'primary' })
     ).resolves.toEqual({ success: true });
     expect(mocks.clipboardWriteText).toHaveBeenLastCalledWith('management-secret');
+  });
+
+  it('immediately republishes an edited endpoint and key for an active Codex binding', async () => {
+    mocks.settings.runtimeBindings = [
+      {
+        runtimeId: 'codex',
+        platformId: 'zenmux',
+        previousAuthProvider: 'official-api',
+        previousMaasPlatformId: null,
+        previousConfig: { authProvider: 'official-api', defaultModel: 'gpt-5' },
+        enabledAt: '2026-07-25T00:00:00.000Z',
+      },
+    ];
+    mocks.runtimeConfigs.codex = {
+      authProvider: 'yoda-maas',
+      maasPlatformId: 'zenmux',
+      defaultModel: 'gpt-5',
+    };
+
+    const result = await new MaasService().connectPlatform({
+      platformId: 'zenmux',
+      displayName: 'ZenMux Production',
+      endpoint: 'https://new.zenmux.example/v1',
+      inferenceApiKey: 'new-inference-secret',
+    });
+
+    expect(result).toMatchObject({ success: true });
+    expect(mocks.codexAuthEnable).toHaveBeenCalledWith({
+      codexHome: expect.any(String),
+      platformId: 'zenmux',
+      displayName: 'ZenMux Production',
+      endpoint: 'https://new.zenmux.example/v1',
+      apiKey: 'new-inference-secret',
+    });
+    expect(mocks.secrets['yoda-maas-inference-token:zenmux']).toBe('new-inference-secret');
+  });
+
+  it('rolls the key and connection back when active Codex environment publication fails', async () => {
+    mocks.settings.runtimeBindings = [
+      {
+        runtimeId: 'codex',
+        platformId: 'zenmux',
+        previousAuthProvider: 'official-api',
+        previousMaasPlatformId: null,
+        previousConfig: { authProvider: 'official-api', defaultModel: 'gpt-5' },
+        enabledAt: '2026-07-25T00:00:00.000Z',
+      },
+    ];
+    mocks.runtimeConfigs.codex = {
+      authProvider: 'yoda-maas',
+      maasPlatformId: 'zenmux',
+      defaultModel: 'gpt-5',
+    };
+    const originalSettings = structuredClone(mocks.settings);
+    mocks.codexAuthEnable.mockRejectedValueOnce(new Error('environment publication failed'));
+
+    const result = await new MaasService().connectPlatform({
+      platformId: 'zenmux',
+      endpoint: 'https://broken.example/v1',
+      inferenceApiKey: 'replacement-secret',
+    });
+
+    expect(result).toEqual({ success: false, error: 'environment publication failed' });
+    expect(mocks.settings).toEqual(originalSettings);
+    expect(mocks.secrets['yoda-maas-inference-token:zenmux']).toBe('inference-secret');
   });
 
   it('saves and lists multiple Custom connections with isolated keys', async () => {

@@ -10,6 +10,7 @@ import {
   supportsRuntimeMaasSwitch,
   type RuntimeId,
 } from '@shared/runtime-registry';
+import { CODEX_MAAS_API_KEY_ENV } from './codex-maas-user-environment';
 
 export type MaasRuntimeCredentials = {
   platformId: MaasPlatformId;
@@ -29,7 +30,9 @@ export function resolveMaasRuntimeEnv(
   const spec = getRuntimeAccountProfile(runtimeId).maas.runtimeEnv;
   if (!spec || !supportsMaasPlatformForRuntime(runtimeId, credentials.platformId)) return undefined;
 
-  if (runtimeId === 'codex') return undefined;
+  if (runtimeId === 'codex') {
+    return { [CODEX_MAAS_API_KEY_ENV]: credentials.apiKey };
+  }
 
   let endpoint = credentials.endpoint.replace(/\/+$/, '');
   if (runtimeId === 'claude' && credentials.platformId === 'zenmux') {

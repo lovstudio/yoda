@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CODEX_MAAS_API_KEY_ENV } from './codex-maas-user-environment';
 import {
   resolveMaasRuntimeEnv,
   resolveRestoredMaasRuntimeConfig,
@@ -6,14 +7,14 @@ import {
 } from './runtime-env';
 
 describe('MaaS Agent Client runtime environment', () => {
-  it('uses the persisted Codex API login instead of a process-only provider key', () => {
+  it('passes the same user-session MaaS key to Codex child processes', () => {
     expect(
       resolveMaasRuntimeEnv('codex', {
         platformId: 'zenmux',
         endpoint: 'https://maas.example.test/v1/',
         apiKey: 'secret',
       })
-    ).toBeUndefined();
+    ).toEqual({ [CODEX_MAAS_API_KEY_ENV]: 'secret' });
   });
 
   it('maps an Anthropic-compatible MaaS into Claude environment variables', () => {

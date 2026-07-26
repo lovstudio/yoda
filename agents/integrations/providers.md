@@ -33,6 +33,12 @@ Each provider has a terminal output classifier in `src/main/core/conversations/i
 ## Provider Runtime Notes
 
 - Claude uses deterministic `--session-id` values for conversation isolation.
+- Codex MaaS providers use `env_key = "YODA_MAAS_API_KEY"` in the user-level
+  Codex config. On macOS, Yoda publishes that key to the current user's
+  `launchd` environment so Finder/Dock-launched Codex App processes inherit it;
+  an already-running Codex App must be fully quit and reopened.
+- Never store a third-party MaaS key in Codex `auth.json`. That file belongs to
+  the user's native OpenAI/ChatGPT login.
 - Agents with no CLI prompt flag (e.g., Amp, OpenCode) use keystroke injection — Yoda types the prompt into the TUI after startup.
 - `src/main/core/agent-hooks/service.ts` forwards hook events to renderer windows and can show OS notifications. Also writes hook config files (`.claude/settings.local.json`, `.codex/config.toml`) into worktrees.
 
