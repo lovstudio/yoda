@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.17.4
+
+### Patch Changes
+
+- MaaS 支持统一管理多个内置或自定义平台，并可按平台独立启用、停用与切换。
+- 7691a94: 修复 Codex 切换 MaaS 后原生 Codex App 无法读取线程的问题，并自动迁移旧线程的 Provider 标记。
+- def25c1: 停用 MaaS 时精确恢复每个 Agent Client 在启用前的完整配置快照。
+- 6374aff: 启用 MaaS 时通过 `auth.json` 将 Codex App 切换到平台对应的第三方 Provider 与文件型 API Key 登录，且不在 `config.toml` 中写入密钥；停用时精确恢复原始登录、凭据存储方式和配置。
+- 发布流程将中国镜像改为公开 Release 之后独立、并行且可重试的 post-CI 同步，镜像失败不再阻塞权威发布。
+
 ## 0.17.3
 
 ### Patch Changes
