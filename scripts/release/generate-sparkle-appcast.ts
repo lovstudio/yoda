@@ -54,10 +54,10 @@ if (!existsSync(generateAppcast)) {
 }
 
 const arches = ['arm64', 'x64'].filter((arch) =>
-  existsSync(join('release', `${artifactPrefix}-${arch}.zip`))
+  existsSync(join('release', `${artifactPrefix}-${arch}.dmg`))
 );
 if (arches.length === 0) {
-  fail(`No ${artifactPrefix}-<arch>.zip artifacts found in release/`);
+  fail(`No ${artifactPrefix}-<arch>.dmg artifacts found in release/`);
 }
 
 for (const arch of arches) {
@@ -66,8 +66,8 @@ for (const arch of arches) {
 
 async function generateForArch(arch: string): Promise<void> {
   step(`Generating signed Sparkle appcast for ${variant} ${arch}`);
-  const sourceArchive = join('release', `${artifactPrefix}-${arch}.zip`);
-  const versionedArchiveName = `${artifactPrefix}-${currentVersion}-${arch}.zip`;
+  const sourceArchive = join('release', `${artifactPrefix}-${arch}.dmg`);
+  const versionedArchiveName = `${artifactPrefix}-${currentVersion}-${arch}.dmg`;
   const workDir = resolve('.cache', 'sparkle-appcast', variant, arch);
   const appcastName = `appcast-${arch}.xml`;
   const appcastPath = join(workDir, appcastName);
@@ -97,7 +97,7 @@ async function generateForArch(arch: string): Promise<void> {
     deltaFileNames
   );
   // These generated size and locale hints are only heuristics. Some real DMG installs can
-  // fail them and make Sparkle select the full ZIP even when the signed delta is applicable.
+  // fail them and make Sparkle select the full DMG even when the signed delta is applicable.
   const withoutEligibilityHints = removeSparkleDeltaEligibilityHints(qualified.content);
   const generated =
     variant === 'stable'
@@ -182,10 +182,27 @@ async function downloadArchive(
     fail(`Failed to download Sparkle history ${item.version}: HTTP ${response.status}`);
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
-    fail(`Sparkle history ${item.version} is not a ZIP archive`);
+  if (!hasExpectedArchiveSignature(item.fileName, bytes)) {
+    fail(`Sparkle history ${item.version} is not a valid ZIP or DMG archive`);
   }
   writeFileSync(destination, bytes);
+}
+
+function hasExpectedArchiveSignature(fileName: string, bytes: Uint8Array): boolean {
+  if (fileName.endsWith('.zip')) {
+    return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
+  }
+  if (fileName.endsWith('.dmg')) {
+    const trailerOffset = bytes.length - 512;
+    return (
+      trailerOffset >= 0 &&
+      bytes[trailerOffset] === 0x6b &&
+      bytes[trailerOffset + 1] === 0x6f &&
+      bytes[trailerOffset + 2] === 0x6c &&
+      bytes[trailerOffset + 3] === 0x79
+    );
+  }
+  return false;
 }
 
 function uniqueHistory(history: SparkleArchiveHistoryItem[]): SparkleArchiveHistoryItem[] {

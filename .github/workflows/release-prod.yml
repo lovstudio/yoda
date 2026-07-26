@@ -294,7 +294,7 @@ jobs:
 
       - run: echo "NODE_OPTIONS=${NODE_OPTIONS:-not set}" && node --version
 
-      - name: Build macOS DMGs + ZIPs
+      - name: Build macOS DMGs
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ steps.apple.outputs.has_signing == 'true' && 'true' || 'false' }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -303,7 +303,7 @@ jobs:
           YODA_DISABLE_MAC_SIGNING: ${{ steps.apple.outputs.has_signing == 'true' && '0' || '1' }}
         run: >
           node --experimental-strip-types scripts/release/build.ts
-          --platform mac --arch ${{ github.event.inputs.arch || 'both' }} --targets dmg,zip
+          --platform mac --arch ${{ github.event.inputs.arch || 'both' }} --targets dmg
 
       - name: Verify macOS bundle
         if: ${{ steps.apple.outputs.has_signing == 'true' }}
@@ -371,8 +371,6 @@ jobs:
           gh release upload "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --clobber \
             release/*.dmg \
             release/*.dmg.blockmap \
-            release/*.zip \
-            release/*.zip.blockmap \
             release/*.delta \
             release/appcast-*.xml \
             release/v1-stable-mac*.yml

@@ -77,6 +77,42 @@ sha512: stale
     expect(parsed.sha512).toBe('refreshed');
   });
 
+  it('refreshes a DMG-only release without requiring ZIP artifacts', async () => {
+    const releaseDir = createReleaseDirectory();
+    const manifestPath = join(releaseDir, 'v1-stable-mac.yml');
+    const manifest = `version: 1.0.0
+files:
+  - url: yoda-x64.dmg
+    sha512: stale-x64
+    size: 10
+  - url: yoda-arm64.dmg
+    sha512: stale-arm64
+    size: 10
+path: yoda-x64.dmg
+sha512: stale-x64
+`;
+    writeFileSync(manifestPath, manifest);
+    writeFileSync(join(releaseDir, 'yoda-x64.dmg'), 'x64-dmg');
+    writeFileSync(join(releaseDir, 'yoda-arm64.dmg'), 'arm64-dmg');
+    const generateBlockmap = vi.fn(async (inputPath: string, outputPath: string) => {
+      writeFileSync(outputPath, `blockmap-${basename(inputPath)}`);
+      return {
+        sha512: `sha512-${basename(inputPath)}`,
+        size: readFileSync(inputPath).byteLength,
+      };
+    });
+
+    await refreshMacUpdateMetadata({ releaseDir, generateBlockmap });
+    const parsed = parse(readFileSync(manifestPath, 'utf8'));
+
+    expect(parsed.files).toEqual([
+      { url: 'yoda-x64.dmg', sha512: 'sha512-yoda-x64.dmg', size: 7 },
+      { url: 'yoda-arm64.dmg', sha512: 'sha512-yoda-arm64.dmg', size: 9 },
+    ]);
+    expect(parsed.path).toBe('yoda-x64.dmg');
+    expect(parsed.sha512).toBe('sha512-yoda-x64.dmg');
+  });
+
   it('rejects ambiguous basenames and unmatched primary paths', () => {
     const duplicate = `version: 1.0.0
 files:

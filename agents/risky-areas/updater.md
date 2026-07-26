@@ -26,6 +26,8 @@
 - changelog and auto-update behavior are separate but related surfaces in the app
 - macOS uses the pinned `YodaSparkleUpdater` helper and architecture-specific Sparkle appcasts;
   the in-app path is delta-only and must never fall back to a complete ZIP
+- stable and canary macOS releases publish DMGs only; Sparkle appcasts and deltas must use the
+  versioned DMGs as their full archives instead of reintroducing ZIP release assets
 - update checks must have a hard deadline; proxy diagnostics must not block the request, and the
   macOS appcast fetch must receive the deadline's `AbortSignal` so a stalled check remains retryable
 - the closed local Sparkle proxy URL must retain the `.delta` extension because Sparkle chooses

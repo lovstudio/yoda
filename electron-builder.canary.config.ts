@@ -51,10 +51,7 @@ const config: Configuration = {
     hardenedRuntime: true,
     entitlements: 'build/entitlements.mac.plist',
     entitlementsInherit: 'build/entitlements.mac.plist',
-    target: [
-      { target: 'dmg', arch: ['arm64'] },
-      { target: 'zip', arch: ['arm64'] },
-    ],
+    target: [{ target: 'dmg', arch: ['arm64'] }],
     icon: 'src/assets/images/yoda/yoda-canary.icns',
     notarize: false,
     extendInfo: {

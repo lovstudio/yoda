@@ -71,8 +71,11 @@ export function parseSparkleArchiveHistory(content: string): SparkleArchiveHisto
     if (!url) continue;
 
     const parsed = new URL(url);
-    if (parsed.protocol !== 'https:' || !parsed.pathname.endsWith('.zip')) {
-      throw new Error(`Sparkle full archive must be an HTTPS ZIP: ${url}`);
+    if (
+      parsed.protocol !== 'https:' ||
+      (!parsed.pathname.endsWith('.zip') && !parsed.pathname.endsWith('.dmg'))
+    ) {
+      throw new Error(`Sparkle full archive must be an HTTPS ZIP or DMG: ${url}`);
     }
     history.push({ version, url, fileName: basename(parsed.pathname) });
   }

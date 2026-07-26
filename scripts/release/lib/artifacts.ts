@@ -17,7 +17,7 @@ export function findManifests(channel = UPDATE_CHANNEL): string[] {
 }
 
 export function findInstallers(prefix = ARTIFACT_PREFIX): string[] {
-  return matchFiles(new RegExp(`^${prefix}-.*\\.(dmg|zip|exe|msi|AppImage|deb|rpm)$`));
+  return matchFiles(new RegExp(`^${prefix}-.*\\.(dmg|exe|msi|AppImage|deb|rpm)$`));
 }
 
 export function findBlockmaps(): string[] {

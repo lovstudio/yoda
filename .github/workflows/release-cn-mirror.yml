@@ -81,8 +81,6 @@ jobs:
               patterns=(
                 --pattern 'yoda-*.dmg'
                 --pattern 'yoda-*.dmg.blockmap'
-                --pattern 'yoda-*.zip'
-                --pattern 'yoda-*.zip.blockmap'
                 --pattern '*.delta'
                 --pattern 'appcast-*.xml'
                 --pattern 'v1-stable-mac*.yml'

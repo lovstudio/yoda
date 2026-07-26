@@ -9,6 +9,7 @@
 - def25c1: 停用 MaaS 时精确恢复每个 Agent Client 在启用前的完整配置快照。
 - 6374aff: 启用 MaaS 时通过 `auth.json` 将 Codex App 切换到平台对应的第三方 Provider 与文件型 API Key 登录，且不在 `config.toml` 中写入密钥；停用时精确恢复原始登录、凭据存储方式和配置。
 - 发布流程将中国镜像改为公开 Release 之后独立、并行且可重试的 post-CI 同步，镜像失败不再阻塞权威发布。
+- macOS 正式版与 Canary 仅产出 DMG，Sparkle appcast 与增量更新改用签名、公证后的版本化 DMG，不再发布 ZIP 资产。
 
 ## 0.17.3
 

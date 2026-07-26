@@ -8,6 +8,9 @@ const chinaUploader = readFileSync('scripts/release/upload-cn-mirror.ts', 'utf8'
 const chinaMirrorWorkflow = readFileSync('.github/workflows/release-cn-mirror.yml', 'utf8');
 const productionWorkflow = readFileSync('.github/workflows/release-prod.yml', 'utf8');
 const canaryWorkflow = readFileSync('.github/workflows/release-canary.yml', 'utf8');
+const productionBuilderConfig = readFileSync('electron-builder.config.ts', 'utf8');
+const canaryBuilderConfig = readFileSync('electron-builder.canary.config.ts', 'utf8');
+const releaseBuild = readFileSync('scripts/release/build.ts', 'utf8');
 
 describe('Sparkle release pipeline', () => {
   it('requires signing and retains enough history for skipped releases', () => {
@@ -42,6 +45,22 @@ describe('Sparkle release pipeline', () => {
     }
     expect(productionWorkflow).toContain('release/appcast-*.xml');
     expect(productionWorkflow).toContain('release/*.delta');
+  });
+
+  it('publishes DMGs as the only macOS full archive for stable and canary releases', () => {
+    for (const workflow of [productionWorkflow, canaryWorkflow]) {
+      expect(workflow).toContain('--targets dmg');
+      expect(workflow).not.toContain('--targets dmg,zip');
+    }
+    for (const config of [productionBuilderConfig, canaryBuilderConfig]) {
+      expect(config).toContain("target: 'dmg'");
+      expect(config).not.toContain("target: 'zip'");
+    }
+    expect(releaseBuild).toContain("mac: 'dmg'");
+    expect(generator).toContain('`${artifactPrefix}-${arch}.dmg`');
+    expect(generator).not.toContain('`${artifactPrefix}-${arch}.zip`');
+    expect(productionWorkflow).not.toContain('release/*.zip');
+    expect(chinaMirrorWorkflow).not.toContain("--pattern 'yoda-*.zip'");
   });
 
   it('refreshes stable manifests, appcasts, and overwritten latest binaries on Qiniu', () => {

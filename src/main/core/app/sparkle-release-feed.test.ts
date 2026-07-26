@@ -13,7 +13,7 @@ const appcast = `<?xml version="1.0"?>
   <channel>
     <item>
       <sparkle:version>0.16.0</sparkle:version>
-      <enclosure url="https://releases.test/yoda-0.16.0-arm64.zip" length="1000" sparkle:edSignature="full-signature" />
+      <enclosure url="https://releases.test/yoda-0.16.0-arm64.dmg" length="1000" sparkle:edSignature="full-signature" />
       <sparkle:deltas>
         <enclosure url="https://releases.test/yoda-0.15.3-to-0.16.0-arm64.delta" length="100" sparkle:deltaFrom="0.15.3" sparkle:edSignature="delta-signature" />
       </sparkle:deltas>
@@ -26,12 +26,12 @@ const appcast = `<?xml version="1.0"?>
 </rss>`;
 
 describe('Sparkle release feed', () => {
-  it('extracts versioned full archives without confusing deltas for archives', () => {
+  it('extracts mixed DMG and legacy ZIP history without confusing deltas for archives', () => {
     expect(parseSparkleArchiveHistory(appcast)).toEqual([
       {
         version: '0.16.0',
-        url: 'https://releases.test/yoda-0.16.0-arm64.zip',
-        fileName: 'yoda-0.16.0-arm64.zip',
+        url: 'https://releases.test/yoda-0.16.0-arm64.dmg',
+        fileName: 'yoda-0.16.0-arm64.dmg',
       },
       {
         version: '0.15.3',
@@ -102,7 +102,7 @@ describe('Sparkle release feed', () => {
     const result = pinSparkleAssetUrls(appcast, 'lovstudio/yoda');
 
     expect(result).toContain(
-      'url="https://github.com/lovstudio/yoda/releases/download/v0.16.0/yoda-0.16.0-arm64.zip"'
+      'url="https://github.com/lovstudio/yoda/releases/download/v0.16.0/yoda-0.16.0-arm64.dmg"'
     );
     expect(result).toContain(
       'url="https://github.com/lovstudio/yoda/releases/download/v0.16.0/yoda-0.15.3-to-0.16.0-arm64.delta"'

@@ -32,7 +32,7 @@ const { values } = parseArgs({
 const platform = values.platform;
 if (!platform || !['mac', 'linux', 'win'].includes(platform)) {
   fail(
-    'Usage: build.ts --platform mac|linux|win [--arch arm64|x64|both] [--targets dmg,zip] [--config electron-builder.config.ts]'
+    'Usage: build.ts --platform mac|linux|win [--arch arm64|x64|both] [--targets dmg] [--config electron-builder.config.ts]'
   );
 }
 
@@ -41,7 +41,7 @@ const archs: string[] = archInput === 'both' ? ['x64', 'arm64'] : [archInput];
 const manifests: UpdateManifest[] = [];
 
 const defaultTargets: Record<string, string> = {
-  mac: 'dmg zip',
+  mac: 'dmg',
   linux: 'AppImage deb rpm',
   win: 'nsis msi',
 };
