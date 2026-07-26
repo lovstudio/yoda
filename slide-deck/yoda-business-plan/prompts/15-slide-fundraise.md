@@ -62,14 +62,15 @@ Layout Rules:
 **Type**: Closing
 **Filename**: 15-slide-fundraise.png
 
-Headline: 融资 200 万元，验证“集成委托环境”能否形成可重复增长
+Headline: 融资 200 万元，把“产品闭环”推进为“可重复增长”
 Sub-headline: 或 30 万美元，出让 10% 股权；购买 18–24 个月验证窗口
 Chart: 资金用途环形图
 - 60% 技术研发与产品体验
 - 30% 市场推广
 - 10% 基础设施与运营
 Milestones: 留存成立 / 个人付费成立 / 机构年约成立 / 增长效率可测量
-Layout: closing-ask
+Visual: 资金用途环形图 + 四项验证问题 + Yoda 官网与个人微信双二维码。
+Layout: closing-ask-with-contact
 
 ## Production Note
 

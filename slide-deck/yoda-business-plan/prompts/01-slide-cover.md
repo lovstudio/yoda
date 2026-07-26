@@ -62,11 +62,10 @@ Layout Rules:
 **Type**: Cover
 **Filename**: 01-slide-cover.png
 
-Headline: Yoda｜Agent 时代的集成委托环境
-Sub-headline: 面向超级开发者与 AI 原生团队的开源桌面工作区
-Key line: 让人管理意图、委托、证据与交付，而不只是编辑代码
-Visual: 用一条细轨道连接 Intention → Delegation → Evidence → Delivery；右侧标注 Integrated Delegation Environment。
-Layout: title-hero
+Headline: 让创造者敢把工作，真正交给 AI
+Sub-headline: Yoda · Agent 时代的集成委托环境
+Visual: 以 Yoda 深绿色横向色带承载白色主标题与 Logo；色带下方居中放产品类别、融资材料类型和日期。
+Layout: branded-horizontal-band-cover
 
 ## Production Note
 

@@ -6,7 +6,7 @@
 **Language**: 中文
 **Slide Count**: 15 slides
 **Presentation Time**: 8–10 minutes
-**Updated**: 2026-07-23
+**Updated**: 2026-07-26
 
 ---
 
@@ -52,8 +52,9 @@ Layout Rules:
 **Type**: Cover
 **Filename**: 01-slide-cover.png
 
-Headline: Agent 时代的集成委托环境
-Visual: 参考今日头条融资材料封面结构，以 Yoda 深绿色横向色带承载白色主标题与横向 Logo；色带下方居中放融资材料类型和日期。
+Headline: 让创造者敢把工作，真正交给 AI
+Sub-headline: Yoda · Agent 时代的集成委托环境
+Visual: 以 Yoda 深绿色横向色带承载白色主标题与 Logo；色带下方居中放产品类别、融资材料类型和日期。
 Layout: branded-horizontal-band-cover
 
 ---
@@ -173,10 +174,10 @@ Layout: multi-line-chart
 **Type**: Content
 **Filename**: 09-slide-traction.png
 
-Headline: 两个月完成产品闭环，已有使用信号，商业验证尚未开始
+Headline: 约两个半月完成产品闭环，已有使用信号，商业验证尚未开始
 Chart: 证据成熟度阶梯
-- Build：1,645 次 main 提交 / 73 个公开 Release / 31 种 Agent Client
-- Use：126 个 14 天独立 Cloner / 73 个独立授权用户
+- Build：1,709 次 main 提交 / 76 个公开 Release / 31 种 Agent Client
+- Use：141 个 14 天独立 Cloner / 73 个独立授权用户
 - Pay：3 个 Relay 试用 / 0 付费
 Conclusion: 产品完成度与执行力已验证；留存、付费和机构年约是本轮融资后的核心问题。
 Layout: evidence-ladder
@@ -259,7 +260,7 @@ Evidence:
 - 长期横跨开发工具、内容创作、培训与 AI 产品化
 - 用 Yoda 开发 Yoda，形成高频反馈闭环
 - 高校、商学院、开发者社区与训练营触点
-Visual: 真实分享现场照片 + 1,645 commits / 73 releases / 31 clients。
+Visual: 真实分享现场照片 + 1,709 commits / 76 releases / 31 clients。
 Layout: founder-evidence
 
 ---
@@ -269,7 +270,7 @@ Layout: founder-evidence
 **Type**: Closing
 **Filename**: 15-slide-fundraise.png
 
-Headline: 融资 200 万元，验证“集成委托环境”能否形成可重复增长
+Headline: 融资 200 万元，把“产品闭环”推进为“可重复增长”
 Sub-headline: 或 30 万美元，出让 10% 股权；购买 18–24 个月验证窗口
 Chart: 资金用途环形图
 - 60% 技术研发与产品体验

@@ -4,13 +4,14 @@
 
 - 产品思想主来源：`/Users/mark/lovstudio/vault/Agent 时代，我们需要怎样的 IDE.md`
 - 商业与数据来源：`docs/plans/2026-07-21-yoda-business-plan-outline.md` v0.8
+- 当前证据与叙事源：`business-plan/evidence-ledger.md`、`business-plan/outline.md`（2026-07-26）
 - 真实产品素材：文章中的 Yoda Task、Feature、Harness 与 Team 界面截图
 
 ## 重新定义 What
 
-Yoda 不是“多 Agent 编程工作台”，也不是“把多个终端放到一起”。
+Yoda 不是“多 Agent 编程工作台”，也不是“把多个终端放到一起”。对外第一句话也不从新类别名词起笔，而先讲创造者得到的结果：**Yoda 让创造者敢把工作，真正交给 AI。**
 
-它是 **Agent 时代的集成委托环境（Integrated Delegation Environment）**：把人的意图、Agent 的执行、工程证据与最终责任组织进同一个工作空间。
+第二层再解释产品类别：它是 **Agent 时代的集成委托环境（Integrated Delegation Environment）**，把人的意图、Agent 的执行、工程证据与最终责任组织进同一个工作空间。
 
 这个定义来自 IDE 三次中心迁移：
 
@@ -21,12 +22,13 @@ Yoda 不是“多 Agent 编程工作台”，也不是“把多个终端放到�
 
 ## 投资叙事主线
 
-1. 代码正在廉价化，可靠委托正在升值。
+1. 让创造者敢把工作真正交给 AI；代码正在廉价化，可靠委托正在升值。
 2. Agent 能跑起来只是执行问题，敢不敢委托才是工程问题。
 3. Yoda 用 Task、Feature、Harness、Library 和多端控制构成完整委托系统。
 4. 产品壁垒不是单一 Agent，而是“自由、稳健、进化”的系统能力。
 5. 从超级开发者切入，扩展到 AI 原生创作者与小型团队。
 6. 本地核心开源，个人为连续性付费，团队为协作秩序付费。
+7. 公开承认 0 付费与留存证据缺口，让融资用途直接对应四个验证门。
 
 ## 图表策略
 

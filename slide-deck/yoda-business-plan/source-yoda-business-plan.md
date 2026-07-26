@@ -7,6 +7,9 @@
 商业计划与数据口径：
 
 - `docs/plans/2026-07-21-yoda-business-plan-outline.md` v0.8
+- `business-plan/brief.md` v1.0
+- `business-plan/evidence-ledger.md`（数据截至 2026-07-26）
+- `business-plan/outline.md`（15 页投资人叙事源文件）
 
 产品素材：
 

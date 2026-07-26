@@ -1,0 +1,20 @@
+<svg width="679" height="140" viewBox="0 0 679.44 140" xmlns="http://www.w3.org/2000/svg">
+  <!-- Yoda lockup — v17 "The Hood" mark + YODA wordmark (Poppins Medium outlines).
+       Mark height = 1.4x cap height; gap = 0.37x mark height. -->
+  <defs>
+    <mask id="cowlD">
+      <rect x="-60" y="-60" width="360" height="380" fill="#fff"/>
+      <path fill="#000" d="M 167.2 120.4 A 50 50 0 1 0 72.8 120.4 L 120 256 Z"/>
+    </mask>
+  </defs>
+  <g transform="translate(-3.93 -1.31) scale(0.65421)">
+    <path mask="url(#cowlD)" fill="#1a3b2a" d="M 156.4 21.3 L 228.2 162.9 A 34 34 0 0 1 200 216 L 40 216 A 34 34 0 0 1 11.8 162.9 L 83.6 21.3 A 44 44 0 0 1 156.4 21.3 Z"/>
+    <circle cx="120" cy="104" r="13" fill="#2fa56e"/>
+  </g>
+  <g fill="#1a3b2a" transform="translate(200.96 20.00) scale(0.14347) translate(0 697) scale(1 -1)">
+      <path transform="translate(0 0)" d="M590 695 360 252V0H246V252L15 695H142L303 354L464 695Z"/>
+      <path transform="translate(785 0)" d="M37 349Q37 451 84.5 532.0Q132 613 213.5 658.5Q295 704 392 704Q490 704 571.5 658.5Q653 613 700.0 532.0Q747 451 747 349Q747 247 700.0 165.5Q653 84 571.5 38.5Q490 -7 392 -7Q295 -7 213.5 38.5Q132 84 84.5 165.5Q37 247 37 349ZM630 349Q630 426 599.5 484.0Q569 542 515.0 573.0Q461 604 392 604Q323 604 269.0 573.0Q215 542 184.5 484.0Q154 426 154 349Q154 272 184.5 213.5Q215 155 269.0 123.5Q323 92 392 92Q461 92 515.0 123.5Q569 155 599.5 213.5Q630 272 630 349Z"/>
+      <path transform="translate(1749 0)" d="M671 345Q671 239 625.5 161.0Q580 83 496.5 41.5Q413 0 302 0H75V695H302Q413 695 496.5 652.5Q580 610 625.5 530.5Q671 451 671 345ZM554 345Q554 466 489.0 534.0Q424 602 302 602H189V93H302Q424 93 489.0 159.0Q554 225 554 345Z"/>
+      <path transform="translate(2638 0)" d="M494 142H203L153 0H34L283 696H415L664 0H544ZM462 235 349 558 235 235Z"/>
+  </g>
+</svg>

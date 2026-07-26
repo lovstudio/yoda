@@ -68,7 +68,7 @@ Evidence:
 - 长期横跨开发工具、内容创作、培训与 AI 产品化
 - 用 Yoda 开发 Yoda，形成高频反馈闭环
 - 高校、商学院、开发者社区与训练营触点
-Visual: 真实分享现场照片 + 1,645 commits / 73 releases / 31 clients。
+Visual: 真实分享现场照片 + 1,709 commits / 76 releases / 31 clients。
 Layout: founder-evidence
 
 ## Production Note
