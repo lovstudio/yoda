@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getHookToken: vi.fn(),
   getProviderConfig: vi.fn(),
   getRuntimeInferenceCredentials: vi.fn(),
+  ensureCodexResumeProviderCompatible: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
   logDebug: vi.fn(),
   logError: vi.fn(),
@@ -119,6 +120,7 @@ vi.mock('@main/core/maas/maas-service', () => ({
 }));
 
 vi.mock('@main/core/maas/codex-history-compat', () => ({
+  ensureCodexResumeProviderCompatibleForConfig: mocks.ensureCodexResumeProviderCompatible,
   migrateLegacyCodexMaasHistoryForConfig: mocks.migrateLegacyCodexMaasHistory,
 }));
 
@@ -265,6 +267,7 @@ describe('LocalConversationProvider', () => {
     mocks.getHookToken.mockReturnValue('token');
     mocks.aiLogStart.mockResolvedValue('ai-log-id');
     mocks.buildAgentEnv.mockReturnValue({});
+    mocks.ensureCodexResumeProviderCompatible.mockReturnValue({ status: 'unchanged' });
     mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'claude',
@@ -385,6 +388,12 @@ describe('LocalConversationProvider', () => {
       },
       threadId: 'codex-thread-1',
       ctx: expect.anything(),
+    });
+    expect(mocks.ensureCodexResumeProviderCompatible).toHaveBeenCalledWith('codex-thread-1', {
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
     });
     expect(spawned).toHaveLength(2);
     expect(spawned[1].options.args).toEqual(['resume', '--cd', '/workspace', 'codex-thread-1']);

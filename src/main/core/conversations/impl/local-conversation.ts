@@ -26,7 +26,10 @@ import type {
 } from '@main/core/conversations/types';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import { LocalFileSystem } from '@main/core/fs/impl/local-fs';
-import { migrateLegacyCodexMaasHistoryForConfig } from '@main/core/maas/codex-history-compat';
+import {
+  ensureCodexResumeProviderCompatibleForConfig,
+  migrateLegacyCodexMaasHistoryForConfig,
+} from '@main/core/maas/codex-history-compat';
 import { resolveMaasRuntimeEnv } from '@main/core/maas/runtime-env';
 import { spawnLocalPty } from '@main/core/pty/local-pty';
 import type { Pty } from '@main/core/pty/pty';
@@ -209,6 +212,26 @@ export class LocalConversationProvider implements ConversationProvider {
     const agentSessionId = isResuming
       ? resolveAgentResumeSessionId(conversation, this.taskPath, { reservedThreadIds })
       : conversation.id;
+    if (isResuming && conversation.runtimeId === 'codex') {
+      const compatibility = ensureCodexResumeProviderCompatibleForConfig(
+        agentSessionId,
+        providerConfig
+      );
+      if (compatibility.status === 'repaired') {
+        log.info('LocalConversationProvider: repaired stale Codex resume provider', {
+          conversationId: conversation.id,
+          threadId: agentSessionId,
+          fromProviderId: compatibility.fromProviderId,
+          toProviderId: compatibility.toProviderId,
+        });
+      } else if (compatibility.status === 'failed') {
+        log.warn('LocalConversationProvider: could not repair stale Codex resume provider', {
+          conversationId: conversation.id,
+          threadId: agentSessionId,
+          ...compatibility,
+        });
+      }
+    }
     if (isResuming) {
       await ensureCodexThreadUnarchived({
         runtimeId: conversation.runtimeId,
