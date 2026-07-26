@@ -1,5 +1,7 @@
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeSync } from 'node:fs';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
+import { parse as parseToml } from 'smol-toml';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import { resolveCodexStatePath } from '@main/core/session-title/codex-title-source';
 import { resolveRuntimeStateDirectory } from '../conversations/impl/runtime-env';
@@ -8,9 +10,10 @@ const LEGACY_PROVIDER_ID = 'yoda-maas';
 const NATIVE_PROVIDER_ID = 'openai';
 const CODEX_STATE_BUSY_TIMEOUT_MS = 5_000;
 
-type LegacyThreadRow = {
+type CodexThreadProviderRow = {
   id: string;
   rolloutPath: string;
+  modelProvider: string;
 };
 
 type SessionMeta = {
@@ -25,6 +28,16 @@ export type CodexMaasHistoryMigrationResult = {
   failed?: true;
 };
 
+export type CodexResumeProviderCompatibilityResult =
+  | { status: 'unchanged'; providerId?: string }
+  | { status: 'repaired'; fromProviderId: string; toProviderId: string }
+  | {
+      status: 'failed';
+      fromProviderId?: string;
+      toProviderId?: string;
+      reason: string;
+    };
+
 /**
  * One-time compatibility migration for threads created by the previous MaaS
  * launcher. OpenCodex's Design B keeps routed threads on the native `openai`
@@ -37,11 +50,11 @@ export function migrateLegacyCodexMaasHistory({
 } = {}): CodexMaasHistoryMigrationResult {
   if (!existsSync(statePath)) return { rows: 0, files: 0 };
 
-  const legacyRows = readLegacyThreadRows(statePath);
+  const legacyRows = readThreadRowsByProvider(statePath, LEGACY_PROVIDER_ID);
   if (!legacyRows) return { rows: 0, files: 0, failed: true };
   if (legacyRows.length === 0) return { rows: 0, files: 0 };
 
-  const compatibleRows: LegacyThreadRow[] = [];
+  const compatibleRows: CodexThreadProviderRow[] = [];
   let files = 0;
   let failed = false;
   for (const row of legacyRows) {
@@ -50,7 +63,7 @@ export function migrateLegacyCodexMaasHistory({
       continue;
     }
     try {
-      if (migrateRolloutProvider(row.rolloutPath, row.id)) {
+      if (migrateRolloutProvider(row.rolloutPath, row.id, LEGACY_PROVIDER_ID, NATIVE_PROVIDER_ID)) {
         compatibleRows.push(row);
         files += 1;
       } else {
@@ -72,7 +85,7 @@ export function migrateLegacyCodexMaasHistory({
     const update = db.prepare(
       'UPDATE threads SET model_provider = ? WHERE id = ? AND model_provider = ?'
     );
-    const migrateRows = db.transaction((rows: LegacyThreadRow[]) =>
+    const migrateRows = db.transaction((rows: CodexThreadProviderRow[]) =>
       rows.reduce(
         (count, row) => count + update.run(NATIVE_PROVIDER_ID, row.id, LEGACY_PROVIDER_ID).changes,
         0
@@ -94,20 +107,173 @@ export function migrateLegacyCodexMaasHistoryForConfig(
   return migrateLegacyCodexMaasHistory({ statePath: resolveCodexStatePath(codexHome) });
 }
 
-function readLegacyThreadRows(statePath: string): LegacyThreadRow[] | undefined {
+/**
+ * Codex persists the model provider in each thread. If Yoda switches MaaS
+ * providers or returns to the native account, an older thread can reference a
+ * provider table that no longer exists in config.toml. Codex then exits during
+ * TUI bootstrap before the user can continue.
+ *
+ * Repair only the requested thread, and only when its historical provider is
+ * unavailable. The replacement is the currently active, available provider.
+ */
+export function ensureCodexResumeProviderCompatibleForConfig(
+  threadId: string,
+  providerConfig: RuntimeCustomConfig | undefined
+): CodexResumeProviderCompatibilityResult {
+  const codexHome = resolveRuntimeStateDirectory('codex', providerConfig);
+  return ensureCodexResumeProviderCompatible({
+    threadId,
+    statePath: resolveCodexStatePath(codexHome),
+    configPath: join(codexHome, 'config.toml'),
+  });
+}
+
+export function ensureCodexResumeProviderCompatible({
+  threadId,
+  statePath,
+  configPath,
+}: {
+  threadId: string;
+  statePath: string;
+  configPath: string;
+}): CodexResumeProviderCompatibilityResult {
+  if (!existsSync(statePath)) return { status: 'unchanged' };
+
+  const row = readThreadProviderRow(statePath, threadId);
+  if (!row) return { status: 'unchanged' };
+
+  const configured = readConfiguredProviders(configPath);
+  if (!configured) {
+    return {
+      status: 'failed',
+      fromProviderId: row.modelProvider,
+      reason: 'Codex config could not be parsed.',
+    };
+  }
+  if (configured.availableProviderIds.has(row.modelProvider)) {
+    return { status: 'unchanged', providerId: row.modelProvider };
+  }
+
+  const targetProviderId = configured.activeProviderId;
+  if (!configured.availableProviderIds.has(targetProviderId)) {
+    return {
+      status: 'failed',
+      fromProviderId: row.modelProvider,
+      toProviderId: targetProviderId,
+      reason: 'The active Codex model provider is unavailable.',
+    };
+  }
+  if (!row.rolloutPath || !existsSync(row.rolloutPath)) {
+    return {
+      status: 'failed',
+      fromProviderId: row.modelProvider,
+      toProviderId: targetProviderId,
+      reason: 'The Codex rollout file is missing.',
+    };
+  }
+
+  try {
+    if (!migrateRolloutProvider(row.rolloutPath, row.id, row.modelProvider, targetProviderId)) {
+      return {
+        status: 'failed',
+        fromProviderId: row.modelProvider,
+        toProviderId: targetProviderId,
+        reason: 'The Codex rollout metadata could not be updated safely.',
+      };
+    }
+
+    const db = new Database(statePath, { fileMustExist: true });
+    try {
+      db.pragma(`busy_timeout = ${CODEX_STATE_BUSY_TIMEOUT_MS}`);
+      const changes = db
+        .prepare('UPDATE threads SET model_provider = ? WHERE id = ? AND model_provider = ?')
+        .run(targetProviderId, row.id, row.modelProvider).changes;
+      if (changes !== 1) {
+        const current = db
+          .prepare('SELECT model_provider AS modelProvider FROM threads WHERE id = ? LIMIT 1')
+          .get(row.id) as { modelProvider?: unknown } | undefined;
+        if (current?.modelProvider !== targetProviderId) {
+          return {
+            status: 'failed',
+            fromProviderId: row.modelProvider,
+            toProviderId: targetProviderId,
+            reason: 'The Codex thread index changed during provider repair.',
+          };
+        }
+      }
+    } finally {
+      db.close();
+    }
+  } catch {
+    return {
+      status: 'failed',
+      fromProviderId: row.modelProvider,
+      toProviderId: targetProviderId,
+      reason: 'The Codex thread provider repair failed.',
+    };
+  }
+
+  return {
+    status: 'repaired',
+    fromProviderId: row.modelProvider,
+    toProviderId: targetProviderId,
+  };
+}
+
+function readConfiguredProviders(
+  configPath: string
+): { activeProviderId: string; availableProviderIds: Set<string> } | undefined {
+  if (!existsSync(configPath)) {
+    return {
+      activeProviderId: NATIVE_PROVIDER_ID,
+      availableProviderIds: new Set([NATIVE_PROVIDER_ID]),
+    };
+  }
+  try {
+    const parsed = parseToml(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+    const activeProviderId =
+      typeof parsed.model_provider === 'string' && parsed.model_provider.trim()
+        ? parsed.model_provider.trim()
+        : NATIVE_PROVIDER_ID;
+    const availableProviderIds = new Set([NATIVE_PROVIDER_ID]);
+    if (parsed.model_providers && typeof parsed.model_providers === 'object') {
+      for (const providerId of Object.keys(parsed.model_providers)) {
+        availableProviderIds.add(providerId);
+      }
+    }
+    return { activeProviderId, availableProviderIds };
+  } catch {
+    return undefined;
+  }
+}
+
+function readThreadRowsByProvider(
+  statePath: string,
+  providerId: string
+): CodexThreadProviderRow[] | undefined {
   let db: Database.Database | undefined;
   try {
     db = new Database(statePath, { readonly: true, fileMustExist: true });
     db.pragma('query_only = ON');
     db.pragma(`busy_timeout = ${CODEX_STATE_BUSY_TIMEOUT_MS}`);
     const rows = db
-      .prepare('SELECT id, rollout_path AS rolloutPath FROM threads WHERE model_provider = ?')
-      .all(LEGACY_PROVIDER_ID);
+      .prepare(
+        'SELECT id, rollout_path AS rolloutPath, model_provider AS modelProvider FROM threads WHERE model_provider = ?'
+      )
+      .all(providerId);
     return rows.flatMap((row) => {
       if (!row || typeof row !== 'object') return [];
       const record = row as Record<string, unknown>;
-      return typeof record.id === 'string' && typeof record.rolloutPath === 'string'
-        ? [{ id: record.id, rolloutPath: record.rolloutPath }]
+      return typeof record.id === 'string' &&
+        typeof record.rolloutPath === 'string' &&
+        typeof record.modelProvider === 'string'
+        ? [
+            {
+              id: record.id,
+              rolloutPath: record.rolloutPath,
+              modelProvider: record.modelProvider,
+            },
+          ]
         : [];
     });
   } catch {
@@ -117,23 +283,68 @@ function readLegacyThreadRows(statePath: string): LegacyThreadRow[] | undefined 
   }
 }
 
-function migrateRolloutProvider(path: string, expectedId: string): boolean {
+function readThreadProviderRow(
+  statePath: string,
+  threadId: string
+): CodexThreadProviderRow | undefined {
+  let db: Database.Database | undefined;
+  try {
+    db = new Database(statePath, { readonly: true, fileMustExist: true });
+    db.pragma('query_only = ON');
+    db.pragma(`busy_timeout = ${CODEX_STATE_BUSY_TIMEOUT_MS}`);
+    const row = db
+      .prepare(
+        'SELECT id, rollout_path AS rolloutPath, model_provider AS modelProvider FROM threads WHERE id = ? LIMIT 1'
+      )
+      .get(threadId);
+    if (!row || typeof row !== 'object') return undefined;
+    const record = row as Record<string, unknown>;
+    if (
+      typeof record.id !== 'string' ||
+      typeof record.rolloutPath !== 'string' ||
+      typeof record.modelProvider !== 'string'
+    ) {
+      return undefined;
+    }
+    return {
+      id: record.id,
+      rolloutPath: record.rolloutPath,
+      modelProvider: record.modelProvider,
+    };
+  } catch {
+    return undefined;
+  } finally {
+    db?.close();
+  }
+}
+
+function migrateRolloutProvider(
+  path: string,
+  expectedId: string,
+  fromProviderId: string,
+  toProviderId: string
+): boolean {
   const content = readFileSync(path, 'utf8');
   const lines = content.split('\n');
   const latest = findLatestSessionMeta(lines);
   if (!latest || latest.payload.id !== expectedId) return false;
   if (
-    latest.payload.model_provider !== LEGACY_PROVIDER_ID &&
-    latest.payload.model_provider !== NATIVE_PROVIDER_ID
+    latest.payload.model_provider !== fromProviderId &&
+    latest.payload.model_provider !== toProviderId
   ) {
     return false;
   }
 
   const firstLine = lines[0];
-  if (!firstLine || !patchFirstLineProvider(path, firstLine, expectedId)) return false;
-  if (latest.payload.model_provider === NATIVE_PROVIDER_ID) return true;
+  if (
+    !firstLine ||
+    !patchFirstLineProvider(path, firstLine, expectedId, fromProviderId, toProviderId)
+  ) {
+    return false;
+  }
+  if (latest.payload.model_provider === toProviderId) return true;
 
-  latest.payload.model_provider = NATIVE_PROVIDER_ID;
+  latest.payload.model_provider = toProviderId;
   latest.timestamp = new Date().toISOString();
   appendRolloutLine(path, JSON.stringify(latest));
   return true;
@@ -162,15 +373,25 @@ function parseSessionMeta(line: string | undefined): SessionMeta | undefined {
   }
 }
 
-function patchFirstLineProvider(path: string, firstLine: string, expectedId: string): boolean {
+function patchFirstLineProvider(
+  path: string,
+  firstLine: string,
+  expectedId: string,
+  fromProviderId: string,
+  toProviderId: string
+): boolean {
   const firstMeta = parseSessionMeta(firstLine);
   if (!firstMeta || firstMeta.payload.id !== expectedId) return false;
-  if (firstMeta.payload.model_provider === NATIVE_PROVIDER_ID) return true;
-  if (firstMeta.payload.model_provider !== LEGACY_PROVIDER_ID) return false;
+  if (firstMeta.payload.model_provider === toProviderId) return true;
+  if (firstMeta.payload.model_provider !== fromProviderId) return false;
 
-  const match = firstLine.match(/("model_provider"\s*:\s*)"yoda-maas"/);
+  const encodedFromProvider = JSON.stringify(fromProviderId);
+  const providerPattern = new RegExp(
+    `("model_provider"\\s*:\\s*)${escapeRegExp(encodedFromProvider)}`
+  );
+  const match = firstLine.match(providerPattern);
   if (!match || match.index === undefined) return false;
-  const replacementCore = `${match[1]}"${NATIVE_PROVIDER_ID}"`;
+  const replacementCore = `${match[1]}${JSON.stringify(toProviderId)}`;
   const paddingBytes =
     Buffer.byteLength(match[0], 'utf8') - Buffer.byteLength(replacementCore, 'utf8');
   if (paddingBytes < 0) return false;
@@ -178,7 +399,7 @@ function patchFirstLineProvider(path: string, firstLine: string, expectedId: str
   const patched =
     firstLine.slice(0, match.index) + replacement + firstLine.slice(match.index + match[0].length);
   if (Buffer.byteLength(patched, 'utf8') !== Buffer.byteLength(firstLine, 'utf8')) return false;
-  if (parseSessionMeta(patched)?.payload.model_provider !== NATIVE_PROVIDER_ID) return false;
+  if (parseSessionMeta(patched)?.payload.model_provider !== toProviderId) return false;
 
   const fd = openSync(path, 'r+');
   try {
@@ -192,6 +413,10 @@ function patchFirstLineProvider(path: string, firstLine: string, expectedId: str
     closeSync(fd);
   }
   return true;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function appendRolloutLine(path: string, line: string): void {
