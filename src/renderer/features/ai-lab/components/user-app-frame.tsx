@@ -9,6 +9,7 @@ import {
 } from '@shared/ai-lab-bridge';
 import { rpc } from '@renderer/lib/ipc';
 import { cn } from '@renderer/utils/utils';
+import { appUsesImageEditBridge } from '../app-capabilities';
 import { AI_LAB_APP_FRAME_SANDBOX } from '../app-frame-sandbox';
 import { appImageEditRuntime } from '../app-image-edit-runtime';
 import { normalizeAiLabBridgeError } from '../bridge-error';
@@ -18,6 +19,7 @@ import { AppImageEditActivity } from './app-image-edit-activity';
 export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?: string }) {
   const { t } = useTranslation();
   const source = useMemo(() => applySandboxPolicy(app.html), [app.html]);
+  const usesImageEditBridge = useMemo(() => appUsesImageEditBridge(app.html), [app.html]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const generationNoteRef = useRef('');
   const [generationNote, setGenerationNote] = useState('');
@@ -155,11 +157,13 @@ export function UserAppFrame({ app, className }: { app: AiLabUserApp; className?
 
   return (
     <div className={cn('flex h-full min-h-[420px] w-full flex-col overflow-hidden', className)}>
-      <AppImageEditActivity
-        app={app}
-        generationNote={generationNote}
-        onGenerationNoteChange={updateGenerationNote}
-      />
+      {usesImageEditBridge && (
+        <AppImageEditActivity
+          app={app}
+          generationNote={generationNote}
+          onGenerationNoteChange={updateGenerationNote}
+        />
+      )}
       <iframe
         ref={iframeRef}
         key={app.updatedAt}
