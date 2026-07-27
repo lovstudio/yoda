@@ -42,24 +42,38 @@ Views use a registry + parameterized navigation pattern.
 - MainPanel is required; RightPanel and WrapView are optional
 - Add new views to `registry.ts`
 
-## PTY Frontend (`src/renderer/core/pty/`)
+## PTY Frontend (`src/renderer/lib/pty/`)
 
-Terminal sessions use a registry + pool pattern.
+Each live entity owns one `PtySession`, but its `FrontendPty`/xterm instance is
+created lazily only after a real terminal surface explicitly requests it.
+`PtySession.connect()` prepares xterm and settings; `usePty` subscribes output
+only after mount, real-size measurement, and flush-gate activation. Observing
+`status` is passive, so inactive terminals and status-only panels do not
+allocate scrollback buffers or subscribe as flow-control consumers.
 
-- `pty.ts` — `FrontendPty` class with `FrontendPtyRegistry` (module-level singleton, survives React unmounts)
-- `pty-pool.ts` — `TerminalPool` managing up to 16 reusable xterm.js instances
-- `use-pty.ts` — React hook integrating FrontendPty + TerminalPool
-- `pty-session-context.tsx` — context for session registration
-- `pty-pane.tsx` — terminal component (forwardRef)
+- `pty-session.ts` — single-flight connection state and deferred backend-ready gate
+- `pty.ts` — persistent xterm instance, ordered output handshake, renderer lifecycle
+- `use-pty.ts` — visible host, input, font, resize, links, and settings integration
+- `pane-sizing-context.tsx` — active-session-only dimension reporting
+- `pty-pane.tsx` — shared terminal component
 
-**Lifecycle:** register → attach → detach → unregister
+**Lifecycle:** active surface requests preparation → backend-ready gate → create/configure
+xterm → mount lease → measure + flush gate → subscribe listener-first → apply snapshot
+watermark → unmount/off-screen with subscription retained → dispose
 
 **Rules:**
-- `registerSession()` must happen BEFORE RPC starts the PTY to avoid missing output
-- `FrontendPty` buffers output (max 1 MB) when no xterm is attached, drains on `attach()`
-- Terminal instances are never disposed — they're parked off-screen and reused from the pool
-- `sessionId` format: `makePtySessionId(projectId, taskId, conversationId)` — deterministic
-- Panel drag pauses resizing to avoid jank (`panelDragStore`)
+- Output uses `{ generation, sequence }`; never revert to snapshot-first or
+  listener-first without watermark deduplication.
+- `term.write(..., callback)` acknowledgement drives main-process PTY
+  pause/resume. Do not add a second renderer-side frame batch in front of
+  xterm's own write queue.
+- Only the active session receives live pane resizes. A background xterm and
+  its backend PTY must never parse the same stream at different grids.
+- `mount()` returns a lease. React cleanup must pass that lease to `unmount()`
+  and mount-scoped handlers so an older cleanup cannot detach a newer host.
+- WebGL exists only while mounted; off-screen sessions use the DOM renderer.
+- `sessionId` format is
+  `makePtySessionId(projectId, taskId, conversationId)` and is deterministic.
 
 ## React Query Context Pattern
 

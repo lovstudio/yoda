@@ -1,4 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import type { PtyExitEvent } from '@shared/events/ptyEvents';
 import { rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
@@ -13,7 +14,7 @@ type Props = {
    * Deterministic PTY session ID: `makePtySessionId(projectId, scopeId, leafId)`.
    */
   sessionId: string;
-  /** Pre-connected FrontendPty owned by the entity's PtySession store. */
+  /** Prepared FrontendPty owned by the entity's PtySession store. */
   pty: FrontendPty;
   className?: string;
   contentFilter?: string;
@@ -22,7 +23,7 @@ type Props = {
   remoteConnectionId?: string;
   themeOverride?: SessionTheme['override'];
   onActivity?: () => void;
-  onExit?: (info: { exitCode: number | undefined; signal?: number }) => void;
+  onExit?: (info: PtyExitEvent) => void;
   onFirstMessage?: (message: string) => void;
   onEnterPress?: (message: string) => void;
   onSubmittedInput?: (message: string, isTaskInput: boolean) => void;

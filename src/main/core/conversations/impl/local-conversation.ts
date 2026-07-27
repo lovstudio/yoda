@@ -148,358 +148,378 @@ export class LocalConversationProvider implements ConversationProvider {
     );
     this.knownSessionIds.add(sessionId);
     if (this.sessions.has(sessionId)) return;
+    const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    let registrationCompleted = false;
 
-    await claudeTrustService.maybeAutoTrustLocal({
-      runtimeId: conversation.runtimeId,
-      cwd: this.taskPath,
-      homedir: homedir(),
-    });
-    await this.prepareHookConfig(
-      conversation.runtimeId,
-      makePtyId(conversation.runtimeId, conversation.id)
-    );
-    await applyHookOverrides(
-      this.taskPath,
-      conversation.runtimeId,
-      await hookOverridesStore.get(conversation.taskId)
-    );
-
-    const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
-    const runtimeStateRoot = conversation.sessionSource
-      ? getConversationRuntimeStateRoot(conversation, providerConfig)
-      : undefined;
-    const sessionProviderConfig =
-      runtimeStateRoot &&
-      (conversation.runtimeId === 'codex' || conversation.runtimeId === 'claude')
-        ? withRuntimeStateRoot(conversation.runtimeId, providerConfig, runtimeStateRoot)
-        : providerConfig;
-    if (isResuming && conversation.runtimeId === 'codex' && runtimeStateRoot) {
-      await import('@main/core/maas/maas-service').then(({ maasService }) =>
-        maasService.reconcileCodexStateRoot(runtimeStateRoot)
-      );
-    }
-    if (conversation.runtimeId === 'codex') {
-      const migration = migrateLegacyCodexMaasHistoryForConfig(sessionProviderConfig);
-      if (migration.failed) {
-        log.warn('Could not migrate legacy Codex MaaS thread metadata; will retry next launch', {
-          rows: migration.rows,
-          files: migration.files,
-        });
-      }
-    }
-    const authProvider = providerConfig?.authProvider ?? 'official-subscription';
-    const maasCredentials =
-      authProvider === 'yoda-maas'
-        ? await import('@main/core/maas/maas-service').then(({ maasService }) =>
-            maasService.getRuntimeInferenceCredentials(
-              conversation.runtimeId,
-              providerConfig?.maasPlatformId
-            )
-          )
-        : undefined;
-    if (authProvider === 'yoda-maas' && !maasCredentials) {
-      throw new Error(
-        `MaaS is selected for ${conversation.runtimeId}, but no compatible connected platform is available.`
-      );
-    }
-    const maasRuntimeEnv = maasCredentials
-      ? resolveMaasRuntimeEnv(conversation.runtimeId, maasCredentials)
-      : undefined;
-    const maasEffective =
-      maasCredentials !== undefined &&
-      (conversation.runtimeId === 'codex' || maasRuntimeEnv !== undefined);
-    interactiveTurnLogger.setSessionContext(conversation.id, {
-      authProvider,
-      maasEffective,
-      ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
-    });
-    recordConversationAuthProvider(conversation.id, providerConfig);
-    if (conversation.skillPolicy?.warnings.length) {
-      log.warn('Agent skill profile has runtime limitations', {
-        conversationId: conversation.id,
+    try {
+      await claudeTrustService.maybeAutoTrustLocal({
         runtimeId: conversation.runtimeId,
-        warnings: conversation.skillPolicy.warnings,
+        cwd: this.taskPath,
+        homedir: homedir(),
       });
-    }
-    const reservedThreadIds =
-      isResuming && conversation.runtimeId === 'codex'
-        ? await getReservedCodexThreadIds(conversation.id)
-        : undefined;
-    const agentSessionId = isResuming
-      ? resolveAgentResumeSessionId(conversation, this.taskPath, { reservedThreadIds })
-      : conversation.id;
-    if (isResuming && conversation.runtimeId === 'codex') {
-      const compatibility = ensureCodexResumeProviderCompatibleForConfig(
-        agentSessionId,
-        sessionProviderConfig
+      await this.prepareHookConfig(
+        conversation.runtimeId,
+        makePtyId(conversation.runtimeId, conversation.id)
       );
-      if (compatibility.status === 'repaired') {
-        log.info('LocalConversationProvider: repaired stale Codex resume provider', {
+      await applyHookOverrides(
+        this.taskPath,
+        conversation.runtimeId,
+        await hookOverridesStore.get(conversation.taskId)
+      );
+
+      const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
+      const runtimeStateRoot = conversation.sessionSource
+        ? getConversationRuntimeStateRoot(conversation, providerConfig)
+        : undefined;
+      const sessionProviderConfig =
+        runtimeStateRoot &&
+        (conversation.runtimeId === 'codex' || conversation.runtimeId === 'claude')
+          ? withRuntimeStateRoot(conversation.runtimeId, providerConfig, runtimeStateRoot)
+          : providerConfig;
+      if (isResuming && conversation.runtimeId === 'codex' && runtimeStateRoot) {
+        await import('@main/core/maas/maas-service').then(({ maasService }) =>
+          maasService.reconcileCodexStateRoot(runtimeStateRoot)
+        );
+      }
+      if (conversation.runtimeId === 'codex') {
+        const migration = migrateLegacyCodexMaasHistoryForConfig(sessionProviderConfig);
+        if (migration.failed) {
+          log.warn('Could not migrate legacy Codex MaaS thread metadata; will retry next launch', {
+            rows: migration.rows,
+            files: migration.files,
+          });
+        }
+      }
+      const authProvider = providerConfig?.authProvider ?? 'official-subscription';
+      const maasCredentials =
+        authProvider === 'yoda-maas'
+          ? await import('@main/core/maas/maas-service').then(({ maasService }) =>
+              maasService.getRuntimeInferenceCredentials(
+                conversation.runtimeId,
+                providerConfig?.maasPlatformId
+              )
+            )
+          : undefined;
+      if (authProvider === 'yoda-maas' && !maasCredentials) {
+        throw new Error(
+          `MaaS is selected for ${conversation.runtimeId}, but no compatible connected platform is available.`
+        );
+      }
+      const maasRuntimeEnv = maasCredentials
+        ? resolveMaasRuntimeEnv(conversation.runtimeId, maasCredentials)
+        : undefined;
+      const maasEffective =
+        maasCredentials !== undefined &&
+        (conversation.runtimeId === 'codex' || maasRuntimeEnv !== undefined);
+      interactiveTurnLogger.setSessionContext(conversation.id, {
+        authProvider,
+        maasEffective,
+        ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
+      });
+      recordConversationAuthProvider(conversation.id, providerConfig);
+      if (conversation.skillPolicy?.warnings.length) {
+        log.warn('Agent skill profile has runtime limitations', {
           conversationId: conversation.id,
-          threadId: agentSessionId,
-          fromProviderId: compatibility.fromProviderId,
-          toProviderId: compatibility.toProviderId,
-        });
-      } else if (compatibility.status === 'failed') {
-        log.warn('LocalConversationProvider: could not repair stale Codex resume provider', {
-          conversationId: conversation.id,
-          threadId: agentSessionId,
-          ...compatibility,
+          runtimeId: conversation.runtimeId,
+          warnings: conversation.skillPolicy.warnings,
         });
       }
-    }
-    if (isResuming) {
-      await ensureCodexThreadUnarchived({
+      const reservedThreadIds =
+        isResuming && conversation.runtimeId === 'codex'
+          ? await getReservedCodexThreadIds(conversation.id)
+          : undefined;
+      const agentSessionId = isResuming
+        ? resolveAgentResumeSessionId(conversation, this.taskPath, { reservedThreadIds })
+        : conversation.id;
+      if (isResuming && conversation.runtimeId === 'codex') {
+        const compatibility = ensureCodexResumeProviderCompatibleForConfig(
+          agentSessionId,
+          sessionProviderConfig
+        );
+        if (compatibility.status === 'repaired') {
+          log.info('LocalConversationProvider: repaired stale Codex resume provider', {
+            conversationId: conversation.id,
+            threadId: agentSessionId,
+            fromProviderId: compatibility.fromProviderId,
+            toProviderId: compatibility.toProviderId,
+          });
+        } else if (compatibility.status === 'failed') {
+          log.warn('LocalConversationProvider: could not repair stale Codex resume provider', {
+            conversationId: conversation.id,
+            threadId: agentSessionId,
+            ...compatibility,
+          });
+        }
+      }
+      if (isResuming) {
+        await ensureCodexThreadUnarchived({
+          runtimeId: conversation.runtimeId,
+          providerConfig: sessionProviderConfig,
+          threadId: agentSessionId,
+          ctx: this.ctx,
+          ...(runtimeStateRoot ? { statePath: resolveCodexStatePath(runtimeStateRoot) } : {}),
+        });
+      }
+      const port = agentHookService.getPort();
+      const token = agentHookService.getToken();
+      const providerDef = getRuntime(conversation.runtimeId);
+      // Image attachments: runtimes with clipboard paste get them injected as
+      // native pastes after the TUI boots (so the prompt must NOT go through the
+      // CLI arg, or the turn would start before the images land). Everyone else
+      // gets @path mentions appended to the prompt.
+      const pendingImagePaths = !isResuming && imagePaths?.length ? imagePaths : undefined;
+      const useClipboardImagePaste = Boolean(pendingImagePaths && providerDef?.clipboardImagePaste);
+      const effectiveInitialPrompt =
+        pendingImagePaths && !useClipboardImagePaste
+          ? substituteImageMentions(initialPrompt, pendingImagePaths)
+          : initialPrompt;
+      const { command, args: baseArgs } = buildAgentCommand({
         runtimeId: conversation.runtimeId,
         providerConfig: sessionProviderConfig,
-        threadId: agentSessionId,
-        ctx: this.ctx,
-        ...(runtimeStateRoot ? { statePath: resolveCodexStatePath(runtimeStateRoot) } : {}),
+        autoApprove: conversation.autoApprove,
+        permissionMode: conversation.permissionMode,
+        sessionId: agentSessionId,
+        isResuming,
+        initialPrompt: useClipboardImagePaste ? undefined : effectiveInitialPrompt,
+        workingDirectory: this.taskPath,
+        appendSystemPrompt: await getEnabledPromptPrinciplesText(
+          await this.resolveProjectPromptPrinciples?.()
+        ),
+        model,
+        terminalThemeMode: await resolveTerminalThemeMode(),
+        skillPolicy: conversation.skillPolicy,
       });
-    }
-    const port = agentHookService.getPort();
-    const token = agentHookService.getToken();
-    const providerDef = getRuntime(conversation.runtimeId);
-    // Image attachments: runtimes with clipboard paste get them injected as
-    // native pastes after the TUI boots (so the prompt must NOT go through the
-    // CLI arg, or the turn would start before the images land). Everyone else
-    // gets @path mentions appended to the prompt.
-    const pendingImagePaths = !isResuming && imagePaths?.length ? imagePaths : undefined;
-    const useClipboardImagePaste = Boolean(pendingImagePaths && providerDef?.clipboardImagePaste);
-    const effectiveInitialPrompt =
-      pendingImagePaths && !useClipboardImagePaste
-        ? substituteImageMentions(initialPrompt, pendingImagePaths)
-        : initialPrompt;
-    const { command, args: baseArgs } = buildAgentCommand({
-      runtimeId: conversation.runtimeId,
-      providerConfig: sessionProviderConfig,
-      autoApprove: conversation.autoApprove,
-      permissionMode: conversation.permissionMode,
-      sessionId: agentSessionId,
-      isResuming,
-      initialPrompt: useClipboardImagePaste ? undefined : effectiveInitialPrompt,
-      workingDirectory: this.taskPath,
-      appendSystemPrompt: await getEnabledPromptPrinciplesText(
-        await this.resolveProjectPromptPrinciples?.()
-      ),
-      model,
-      terminalThemeMode: await resolveTerminalThemeMode(),
-      skillPolicy: conversation.skillPolicy,
-    });
-    const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
+      const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 
-    const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
-    const configuredRuntimeEnv = resolveRuntimeEnv(sessionProviderConfig, {
-      runtimeId: conversation.runtimeId,
-      tmuxEnabled: Boolean(tmuxSessionName),
-    });
-    const providerEnv =
-      configuredRuntimeEnv || maasRuntimeEnv
-        ? { ...configuredRuntimeEnv, ...maasRuntimeEnv }
-        : undefined;
+      const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
+      const configuredRuntimeEnv = resolveRuntimeEnv(sessionProviderConfig, {
+        runtimeId: conversation.runtimeId,
+        tmuxEnabled: Boolean(tmuxSessionName),
+      });
+      const providerEnv =
+        configuredRuntimeEnv || maasRuntimeEnv
+          ? { ...configuredRuntimeEnv, ...maasRuntimeEnv }
+          : undefined;
 
-    const preparedSettings = prepareWindowsClaudeSettings(conversation.runtimeId, argsWithNotify);
-    const args = preparedSettings.args;
-    const ptyId = makePtyId(conversation.runtimeId, conversation.id);
-    const sessionStartedAtMs = Date.now();
-    const pty = (() => {
+      const preparedSettings = prepareWindowsClaudeSettings(conversation.runtimeId, argsWithNotify);
+      const args = preparedSettings.args;
+      const ptyId = makePtyId(conversation.runtimeId, conversation.id);
+
+      // Log the logical agent command, not the resolved PTY spawn (the tmux
+      // wrapper around it is launch plumbing, useless for debugging the run).
+      // The initial prompt arg is dropped — it's recorded in the prompt field.
+      let invocationLogId: string;
       try {
-        const resolved = resolveLocalPtySpawn({
-          platform: process.platform,
-          env: process.env,
-          intent: {
-            kind: 'run-command',
-            cwd: this.taskPath,
-            command: { kind: 'argv', command, args },
-            shellSetup: this.shellSetup,
-            tmuxSessionName,
-            tmuxSize: initialSize,
-            tmuxEnv: resolveRuntimeTmuxEnv(providerEnv),
+        invocationLogId = await aiLogService.start({
+          purpose: 'interactive-session',
+          mode: 'interactive',
+          runtime: conversation.runtimeId,
+          command: [command, ...args.filter((arg) => arg !== effectiveInitialPrompt)].join(' '),
+          prompt: effectiveInitialPrompt ?? null,
+          metadata: {
+            projectId: conversation.projectId,
+            taskId: conversation.taskId,
+            conversationId: conversation.id,
+            resuming: String(isResuming),
+            authProvider,
+            maasEffective: String(maasEffective),
+            ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
           },
-        });
-
-        logLocalPtySpawnWarnings('LocalConversationProvider', resolved.warnings, {
-          conversationId: conversation.id,
-          sessionId,
-        });
-
-        return spawnLocalPty({
-          id: sessionId,
-          command: resolved.command,
-          args: resolved.args,
-          cwd: resolved.cwd,
-          env: {
-            ...buildAgentEnv({
-              agentApiVars: resolveAgentApiEnvVars(sessionProviderConfig, conversation.runtimeId),
-              hook: port > 0 ? { port, ptyId, token } : undefined,
-              providerVars: providerEnv,
-            }),
-            ...this.taskEnvVars,
-          },
-          cols: initialSize.cols,
-          rows: initialSize.rows,
         });
       } catch (error) {
         preparedSettings.cleanup?.();
         throw error;
       }
-    })();
 
-    if (preparedSettings.cleanup) {
-      this.sessionArtifactCleanups.set(sessionId, {
-        pty,
-        cleanup: preparedSettings.cleanup,
-      });
-      pty.onExit(() => this.cleanupSessionArtifacts(sessionId, pty));
-    }
+      const sessionStartedAtMs = Date.now();
+      const pty = (() => {
+        try {
+          const resolved = resolveLocalPtySpawn({
+            platform: process.platform,
+            env: process.env,
+            intent: {
+              kind: 'run-command',
+              cwd: this.taskPath,
+              command: { kind: 'argv', command, args },
+              shellSetup: this.shellSetup,
+              tmuxSessionName,
+              tmuxSize: initialSize,
+              tmuxEnv: resolveRuntimeTmuxEnv(providerEnv),
+            },
+          });
 
-    // Log the logical agent command, not the resolved PTY spawn (the tmux
-    // wrapper around it is launch plumbing, useless for debugging the run).
-    // The initial prompt arg is dropped — it's recorded in the prompt field.
-    const invocationLogId = await aiLogService.start({
-      purpose: 'interactive-session',
-      mode: 'interactive',
-      runtime: conversation.runtimeId,
-      command: [command, ...args.filter((arg) => arg !== effectiveInitialPrompt)].join(' '),
-      prompt: effectiveInitialPrompt ?? null,
-      metadata: {
-        projectId: conversation.projectId,
-        taskId: conversation.taskId,
-        conversationId: conversation.id,
-        resuming: String(isResuming),
-        authProvider,
-        maasEffective: String(maasEffective),
-        ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
-      },
-    });
+          logLocalPtySpawnWarnings('LocalConversationProvider', resolved.warnings, {
+            conversationId: conversation.id,
+            sessionId,
+          });
 
-    const hookActive = port > 0;
-    const useHooksOnly = hookActive && providerDef?.supportsHooks;
-    // Skip the heuristic PTY classifier when an authoritative run-state source
-    // exists: hooks (useHooksOnly), OR a deterministic transcript/rollout tailer
-    // (Claude/Codex). See RUNTIMES_WITH_DETERMINISTIC_RUN_STATE — wiring the
-    // classifier for those pins a false `awaiting-input` after a finished turn.
-    const hasAuthoritativeRunState =
-      useHooksOnly || RUNTIMES_WITH_DETERMINISTIC_RUN_STATE.has(conversation.runtimeId);
+          return spawnLocalPty({
+            id: sessionId,
+            command: resolved.command,
+            args: resolved.args,
+            cwd: resolved.cwd,
+            env: {
+              ...buildAgentEnv({
+                agentApiVars: resolveAgentApiEnvVars(sessionProviderConfig, conversation.runtimeId),
+                hook: port > 0 ? { port, ptyId, token } : undefined,
+                providerVars: providerEnv,
+              }),
+              ...this.taskEnvVars,
+            },
+            cols: initialSize.cols,
+            rows: initialSize.rows,
+          });
+        } catch (error) {
+          preparedSettings.cleanup?.();
+          void aiLogService.finish(invocationLogId, {
+            status: 'failed',
+            error: `PTY spawn failed: ${String(error)}`,
+          });
+          throw error;
+        }
+      })();
 
-    if (!hasAuthoritativeRunState) {
-      wireAgentClassifier({
-        pty,
-        runtimeId: conversation.runtimeId,
-        projectId: conversation.projectId,
-        taskId: conversation.taskId,
-        conversationId: conversation.id,
-      });
-    }
+      if (preparedSettings.cleanup) {
+        this.sessionArtifactCleanups.set(sessionId, {
+          pty,
+          cleanup: preparedSettings.cleanup,
+        });
+        pty.onExit(() => this.cleanupSessionArtifacts(sessionId, pty));
+      }
 
-    const detachSilenceReconciler = agentSilenceReconciler.attach(sessionId, {
-      projectId: conversation.projectId,
-      taskId: conversation.taskId,
-      conversationId: conversation.id,
-    });
-    pty.onData(() => agentSilenceReconciler.noteOutput(sessionId));
-    if (conversation.runtimeId === 'claude') {
-      // Sub-second Esc-interrupt detection from the TUI's "Interrupted" line.
-      pty.onData(
-        createClaudeInterruptSniffer({
+      const hookActive = port > 0;
+      const useHooksOnly = hookActive && providerDef?.supportsHooks;
+      // Skip the heuristic PTY classifier when an authoritative run-state source
+      // exists: hooks (useHooksOnly), OR a deterministic transcript/rollout tailer
+      // (Claude/Codex). See RUNTIMES_WITH_DETERMINISTIC_RUN_STATE — wiring the
+      // classifier for those pins a false `awaiting-input` after a finished turn.
+      const hasAuthoritativeRunState =
+        useHooksOnly || RUNTIMES_WITH_DETERMINISTIC_RUN_STATE.has(conversation.runtimeId);
+
+      if (!hasAuthoritativeRunState) {
+        wireAgentClassifier({
+          pty,
+          runtimeId: conversation.runtimeId,
           projectId: conversation.projectId,
           taskId: conversation.taskId,
           conversationId: conversation.id,
-        })
-      );
-    }
+        });
+      }
 
-    pty.onExit(({ exitCode }) => {
-      if (this.sessions.get(sessionId) !== pty) return;
-      void aiLogService.finish(invocationLogId, {
-        status: typeof exitCode === 'number' && exitCode !== 0 ? 'failed' : 'succeeded',
-        error: typeof exitCode === 'number' && exitCode !== 0 ? `Exit code ${exitCode}` : undefined,
-      });
-      void interactiveTurnLogger.onSessionExit(conversation.id);
-      detachSilenceReconciler();
-      ptySessionRegistry.unregister(sessionId);
-      this.sessions.delete(sessionId);
-      this.sessionInfos.delete(sessionId);
-      this.stopRunStateWatcher(conversation.id);
-      markRuntimeSessionExited({
+      const detachSilenceReconciler = agentSilenceReconciler.attach(sessionId, {
         projectId: conversation.projectId,
         taskId: conversation.taskId,
         conversationId: conversation.id,
       });
-      telemetryService.capture('agent_run_finished', {
+      pty.onData(() => agentSilenceReconciler.noteOutput(sessionId));
+      if (conversation.runtimeId === 'claude') {
+        // Sub-second Esc-interrupt detection from the TUI's "Interrupted" line.
+        pty.onData(
+          createClaudeInterruptSniffer({
+            projectId: conversation.projectId,
+            taskId: conversation.taskId,
+            conversationId: conversation.id,
+          })
+        );
+      }
+
+      pty.onExit(({ exitCode }) => {
+        if (this.sessions.get(sessionId) !== pty) return;
+        void aiLogService.finish(invocationLogId, {
+          status: typeof exitCode === 'number' && exitCode !== 0 ? 'failed' : 'succeeded',
+          error:
+            typeof exitCode === 'number' && exitCode !== 0 ? `Exit code ${exitCode}` : undefined,
+        });
+        void interactiveTurnLogger.onSessionExit(conversation.id);
+        detachSilenceReconciler();
+        this.sessions.delete(sessionId);
+        this.sessionInfos.delete(sessionId);
+        this.stopRunStateWatcher(conversation.id);
+        markRuntimeSessionExited({
+          projectId: conversation.projectId,
+          taskId: conversation.taskId,
+          conversationId: conversation.id,
+        });
+        telemetryService.capture('agent_run_finished', {
+          provider: conversation.runtimeId,
+          exit_code: typeof exitCode === 'number' ? exitCode : -1,
+          project_id: conversation.projectId,
+          task_id: conversation.taskId,
+          conversation_id: conversation.id,
+        });
+        events.emit(agentSessionExitedChannel, {
+          sessionId,
+          projectId: conversation.projectId,
+          conversationId: conversation.id,
+          taskId: conversation.taskId,
+          exitCode,
+        });
+        snapshotTaskDiffOnSessionExit(conversation.taskId);
+      });
+
+      ptySessionRegistry.register(sessionId, pty, { registrationEpoch });
+      registrationCompleted = true;
+      this.sessions.set(sessionId, pty);
+      this.sessionInfos.set(sessionId, {
+        sessionId,
+        conversationId: conversation.id,
+        projectId: conversation.projectId,
+        taskId: conversation.taskId,
+        ...(pty.pid === undefined ? {} : { pid: pty.pid }),
+        runtimeId: conversation.runtimeId,
+        title: conversation.title,
+      });
+      agentSessionRuntimeStore.setStatus(
+        {
+          projectId: conversation.projectId,
+          taskId: conversation.taskId,
+          conversationId: conversation.id,
+        },
+        initialPrompt?.trim() || pendingImagePaths ? 'working' : 'idle'
+      );
+      if (useClipboardImagePaste && pendingImagePaths) {
+        void injectClipboardImagesAndPrompt({
+          pty,
+          runtimeId: conversation.runtimeId,
+          imagePaths: pendingImagePaths,
+          prompt: initialPrompt,
+        }).catch((error) => {
+          log.warn('LocalConversationProvider: clipboard image injection failed', {
+            conversationId: conversation.id,
+            error: String(error),
+          });
+        });
+      }
+      if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+      sessionTitleManager.start({
+        runtimeId: conversation.runtimeId,
+        conversationId: conversation.id,
+        projectId: conversation.projectId,
+        taskId: conversation.taskId,
+        cwd: this.taskPath,
+        startedAtMs: sessionStartedAtMs,
+        isResuming,
+        agentSessionId: isResuming ? agentSessionId : undefined,
+        stateRoot: runtimeStateRoot,
+      });
+      this.startRunStateWatcher(
+        conversation,
+        sessionStartedAtMs,
+        isResuming,
+        agentSessionId,
+        runtimeStateRoot
+      );
+      telemetryService.capture('agent_run_started', {
         provider: conversation.runtimeId,
-        exit_code: typeof exitCode === 'number' ? exitCode : -1,
         project_id: conversation.projectId,
         task_id: conversation.taskId,
         conversation_id: conversation.id,
       });
-      events.emit(agentSessionExitedChannel, {
-        sessionId,
-        projectId: conversation.projectId,
-        conversationId: conversation.id,
-        taskId: conversation.taskId,
-        exitCode,
-      });
-      snapshotTaskDiffOnSessionExit(conversation.taskId);
-    });
-
-    ptySessionRegistry.register(sessionId, pty);
-    this.sessions.set(sessionId, pty);
-    this.sessionInfos.set(sessionId, {
-      sessionId,
-      conversationId: conversation.id,
-      projectId: conversation.projectId,
-      taskId: conversation.taskId,
-      ...(pty.pid === undefined ? {} : { pid: pty.pid }),
-      runtimeId: conversation.runtimeId,
-      title: conversation.title,
-    });
-    agentSessionRuntimeStore.setStatus(
-      {
-        projectId: conversation.projectId,
-        taskId: conversation.taskId,
-        conversationId: conversation.id,
-      },
-      initialPrompt?.trim() || pendingImagePaths ? 'working' : 'idle'
-    );
-    if (useClipboardImagePaste && pendingImagePaths) {
-      void injectClipboardImagesAndPrompt({
-        pty,
-        runtimeId: conversation.runtimeId,
-        imagePaths: pendingImagePaths,
-        prompt: initialPrompt,
-      }).catch((error) => {
-        log.warn('LocalConversationProvider: clipboard image injection failed', {
-          conversationId: conversation.id,
-          error: String(error),
-        });
-      });
+    } finally {
+      if (!registrationCompleted) {
+        ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
+      }
     }
-    if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
-    sessionTitleManager.start({
-      runtimeId: conversation.runtimeId,
-      conversationId: conversation.id,
-      projectId: conversation.projectId,
-      taskId: conversation.taskId,
-      cwd: this.taskPath,
-      startedAtMs: sessionStartedAtMs,
-      isResuming,
-      agentSessionId: isResuming ? agentSessionId : undefined,
-      stateRoot: runtimeStateRoot,
-    });
-    this.startRunStateWatcher(
-      conversation,
-      sessionStartedAtMs,
-      isResuming,
-      agentSessionId,
-      runtimeStateRoot
-    );
-    telemetryService.capture('agent_run_started', {
-      provider: conversation.runtimeId,
-      project_id: conversation.projectId,
-      task_id: conversation.taskId,
-      conversation_id: conversation.id,
-    });
   }
 
   /**

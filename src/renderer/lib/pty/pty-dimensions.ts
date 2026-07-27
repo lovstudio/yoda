@@ -69,7 +69,13 @@ export function getCellMetrics(terminal: Terminal): { width: number; height: num
 
 export function getTerminalFitScrollbarWidth(terminal: Terminal): number {
   if (terminal.options.scrollback === 0) return 0;
-  const width = terminal.options.overviewRuler?.width;
+  // xterm 6.1 moved overviewRuler under scrollbar. Read both shapes so live
+  // terminals survive HMR/version transitions without a fit regression.
+  const options = terminal.options as typeof terminal.options & {
+    overviewRuler?: { width?: number };
+    scrollbar?: { width?: number };
+  };
+  const width = options.scrollbar?.width ?? options.overviewRuler?.width;
   return typeof width === 'number' && Number.isFinite(width) && width > 0
     ? width
     : DEFAULT_XTERM_SCROLLBAR_WIDTH;

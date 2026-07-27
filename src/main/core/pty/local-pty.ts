@@ -76,6 +76,14 @@ export class LocalPtySession implements Pty {
     }
   }
 
+  pause(): void {
+    this.proc.pause();
+  }
+
+  resume(): void {
+    this.proc.resume();
+  }
+
   kill(): void {
     this.proc.kill();
   }

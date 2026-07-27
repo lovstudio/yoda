@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
+import { ptyDataChannel, ptyExitChannel } from '@shared/events/ptyEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
@@ -8,6 +9,7 @@ import { LocalConversationProvider } from './local-conversation';
 
 const mocks = vi.hoisted(() => ({
   appSettingsGet: vi.fn(),
+  aiLogFinish: vi.fn(),
   aiLogStart: vi.fn(),
   buildAgentEnv: vi.fn(),
   captureTelemetry: vi.fn(),
@@ -57,7 +59,7 @@ vi.mock('@main/core/agent-hooks/classifier-wiring', () => ({
 vi.mock('@main/core/ai-logs/ai-log-service', () => ({
   aiLogService: {
     start: mocks.aiLogStart,
-    finish: vi.fn().mockResolvedValue(undefined),
+    finish: mocks.aiLogFinish,
   },
 }));
 
@@ -217,6 +219,7 @@ type SpawnOptions = {
 };
 
 class FakePty implements Pty {
+  private readonly dataHandlers: Array<(data: string) => void> = [];
   private readonly exitHandlers: Array<(info: PtyExitInfo) => void> = [];
   readonly pid = 4321;
   readonly writes: string[] = [];
@@ -229,10 +232,18 @@ class FakePty implements Pty {
 
   kill(): void {}
 
-  onData(): void {}
+  onData(handler: (data: string) => void): void {
+    this.dataHandlers.push(handler);
+  }
 
   onExit(handler: (info: PtyExitInfo) => void): void {
     this.exitHandlers.push(handler);
+  }
+
+  emitData(data: string): void {
+    for (const handler of this.dataHandlers) {
+      handler(data);
+    }
   }
 
   emitExit(info: PtyExitInfo = { exitCode: 0 }): void {
@@ -273,6 +284,7 @@ describe('LocalConversationProvider', () => {
     vi.clearAllMocks();
     mocks.getHookPort.mockReturnValue(0);
     mocks.getHookToken.mockReturnValue('token');
+    mocks.aiLogFinish.mockResolvedValue(undefined);
     mocks.aiLogStart.mockResolvedValue('ai-log-id');
     mocks.buildAgentEnv.mockReturnValue({});
     mocks.ensureCodexResumeProviderCompatible.mockReturnValue({ status: 'unchanged' });
@@ -343,6 +355,72 @@ describe('LocalConversationProvider', () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(spawned).toHaveLength(1);
+  });
+
+  it('accepts optimistic input while async startup is still preparing the PTY', async () => {
+    let finishTrust!: () => void;
+    mocks.maybeAutoTrustLocal.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishTrust = resolve;
+      })
+    );
+    const provider = createProvider();
+
+    const startPromise = provider.startSession(
+      conversation,
+      { cols: 80, rows: 24 },
+      false,
+      'Fix this'
+    );
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'early input')).toBe('queued');
+
+    finishTrust();
+    await startPromise;
+
+    expect(spawned[0].pty.writes).toEqual(['early input']);
+  });
+
+  it('lets the registry flush final output and emit exit after provider cleanup', async () => {
+    const provider = createProvider();
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    spawned[0].pty.emitData('final output');
+    spawned[0].pty.emitExit({ exitCode: 7 });
+
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      ptyDataChannel,
+      expect.objectContaining({ data: 'final output' }),
+      sessionId
+    );
+    expect(mocks.emitEvent).toHaveBeenCalledWith(ptyExitChannel, { exitCode: 7 }, sessionId);
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+  });
+
+  it('registers the PTY before immediate post-spawn output and exit can run', async () => {
+    mocks.spawnLocalPty.mockImplementationOnce((options: SpawnOptions) => {
+      const pty = new FakePty();
+      spawned.push({ pty, options });
+      void Promise.resolve().then(() => {
+        pty.emitData('immediate output');
+        pty.emitExit({ exitCode: 9, signal: 'SIGTERM' });
+      });
+      return pty;
+    });
+    const provider = createProvider();
+
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      ptyDataChannel,
+      expect.objectContaining({ data: 'immediate output' }),
+      sessionId
+    );
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      ptyExitChannel,
+      { exitCode: 9, signal: 'SIGTERM' },
+      sessionId
+    );
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
   });
 
   it('uses provider resume arguments when explicitly resumed after exit', async () => {
@@ -724,6 +802,11 @@ describe('LocalConversationProvider', () => {
       provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this')
     ).rejects.toThrow('spawn failed');
     expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(mocks.aiLogFinish).toHaveBeenCalledWith('ai-log-id', {
+      status: 'failed',
+      error: 'PTY spawn failed: Error: spawn failed',
+    });
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'late input')).toBe('unavailable');
   });
 
   it('cleans prepared settings when a session is stopped', async () => {

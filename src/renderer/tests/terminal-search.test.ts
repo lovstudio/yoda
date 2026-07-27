@@ -48,6 +48,22 @@ describe('terminal-search', () => {
     ]);
   });
 
+  it('scans a production-sized scrollback without materializing all rows first', () => {
+    const length = 200_000;
+    const buffer: TerminalSearchBufferLike = {
+      length,
+      getLine: (index) =>
+        new MockBufferLine(index % 50_000 === 0 ? `needle-${index}` : `row-${index}`),
+    };
+
+    expect(collectTerminalSearchMatches(buffer, 'needle')).toEqual([
+      { row: 0, col: 0, length: 6 },
+      { row: 50_000, col: 0, length: 6 },
+      { row: 100_000, col: 0, length: 6 },
+      { row: 150_000, col: 0, length: 6 },
+    ]);
+  });
+
   it('cycles forward and backward through matches', () => {
     const matches: TerminalSearchMatch[] = [
       { row: 0, col: 1, length: 3 },

@@ -1,4 +1,6 @@
 import { and, eq } from 'drizzle-orm';
+import { makePtySessionId } from '@shared/ptySessionId';
+import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import { resolveTask } from '../projects/utils';
@@ -15,31 +17,38 @@ export async function resumeConversation(
   const sessionKey = `${projectId}:${taskId}:${conversationId}`;
   const existing = inFlightResumes.get(sessionKey);
   if (existing) return existing;
+  const registrationEpoch = ptySessionRegistry.beginRegistration(
+    makePtySessionId(projectId, taskId, conversationId)
+  );
 
   const promise = (async () => {
-    const [row] = await db
-      .select()
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.id, conversationId),
-          eq(conversations.projectId, projectId),
-          eq(conversations.taskId, taskId)
+    try {
+      const [row] = await db
+        .select()
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.projectId, projectId),
+            eq(conversations.taskId, taskId)
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    if (!row) {
-      throw new Error(`Conversation not found: ${conversationId}`);
+      if (!row) {
+        throw new Error(`Conversation not found: ${conversationId}`);
+      }
+
+      const task = resolveTask(projectId, taskId);
+      if (!task) {
+        throw new Error(`Task not provisioned: ${taskId}`);
+      }
+
+      const conversation = mapConversationRowToConversation(row, true);
+      await task.conversations.startSession(conversation, initialSize, true);
+    } finally {
+      ptySessionRegistry.cancelRegistration(sessionKey, registrationEpoch);
     }
-
-    const task = resolveTask(projectId, taskId);
-    if (!task) {
-      throw new Error(`Task not provisioned: ${taskId}`);
-    }
-
-    const conversation = mapConversationRowToConversation(row, true);
-    await task.conversations.startSession(conversation, initialSize, true);
   })();
 
   inFlightResumes.set(sessionKey, promise);

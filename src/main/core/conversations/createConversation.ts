@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { type Conversation, type CreateConversationParams } from '@shared/conversations';
+import { makePtySessionId } from '@shared/ptySessionId';
 import { isDangerPermissionMode, resolveRuntimePermissionModeId } from '@shared/runtime-registry';
 import { normalizeSkillSelection } from '@shared/skills/selection';
+import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { skillsService } from '@main/core/skills/SkillsService';
@@ -51,101 +53,111 @@ async function resolveConversationPermission(
 
 export async function createConversation(params: CreateConversationParams): Promise<Conversation> {
   const id = params.id ?? randomUUID();
-  const task = resolveTask(params.projectId, params.taskId);
-  if (!task) throw new Error('Task not found');
-  const discoveredSession = params.sessionSource
-    ? await localAgentSessionCatalog.validateSource(params.sessionSource)
-    : undefined;
-  if (params.sessionSource && !discoveredSession) {
-    throw new Error('The selected local agent session is no longer available.');
-  }
-  if (discoveredSession && discoveredSession.runtimeId !== params.runtime) {
-    throw new Error('The selected local agent session runtime does not match the conversation.');
-  }
-  const sessionSource = discoveredSession
-    ? {
-        catalogId: discoveredSession.catalogId,
-        runtimeId: discoveredSession.runtimeId,
-        sessionId: discoveredSession.sessionId,
-        stateRoot: discoveredSession.stateRoot,
-        providerId: discoveredSession.providerId,
-      }
-    : undefined;
-  const runtimeConfig = await runtimeOverrideSettings.getItem(params.runtime);
-  if (runtimeConfig?.disabled) {
-    throw new Error(`${params.runtime} is disabled in Yoda.`);
-  }
-  const [existingConversation] = await db
-    .select({ id: conversations.id })
-    .from(conversations)
-    .where(eq(conversations.taskId, params.taskId))
-    .limit(1);
+  const sessionId = makePtySessionId(params.projectId, params.taskId, id);
+  const registrationEpoch = params.sessionSource
+    ? undefined
+    : ptySessionRegistry.beginRegistration(sessionId);
+  try {
+    const task = resolveTask(params.projectId, params.taskId);
+    if (!task) throw new Error('Task not found');
+    const discoveredSession = params.sessionSource
+      ? await localAgentSessionCatalog.validateSource(params.sessionSource)
+      : undefined;
+    if (params.sessionSource && !discoveredSession) {
+      throw new Error('The selected local agent session is no longer available.');
+    }
+    if (discoveredSession && discoveredSession.runtimeId !== params.runtime) {
+      throw new Error('The selected local agent session runtime does not match the conversation.');
+    }
+    const sessionSource = discoveredSession
+      ? {
+          catalogId: discoveredSession.catalogId,
+          runtimeId: discoveredSession.runtimeId,
+          sessionId: discoveredSession.sessionId,
+          stateRoot: discoveredSession.stateRoot,
+          providerId: discoveredSession.providerId,
+        }
+      : undefined;
+    const runtimeConfig = await runtimeOverrideSettings.getItem(params.runtime);
+    if (runtimeConfig?.disabled) {
+      throw new Error(`${params.runtime} is disabled in Yoda.`);
+    }
+    const [existingConversation] = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.taskId, params.taskId))
+      .limit(1);
 
-  const { permissionMode, autoApprove } = await resolveConversationPermission(params);
-  const skillSelection = normalizeSkillSelection(params.skillSelection);
-  const skillPolicy = skillSelection
-    ? await skillsService.resolveSessionPolicy(
-        skillSelection,
-        task.conversations.taskPath,
-        params.runtime
-      )
-    : undefined;
-  const config =
-    autoApprove === undefined &&
-    permissionMode === undefined &&
-    skillPolicy === undefined &&
-    sessionSource === undefined
-      ? undefined
-      : JSON.stringify({
-          autoApprove,
-          permissionMode,
-          skillPolicy,
-          sessionSource,
-        });
-  const lastInteractedAt = new Date().toISOString();
+    const { permissionMode, autoApprove } = await resolveConversationPermission(params);
+    const skillSelection = normalizeSkillSelection(params.skillSelection);
+    const skillPolicy = skillSelection
+      ? await skillsService.resolveSessionPolicy(
+          skillSelection,
+          task.conversations.taskPath,
+          params.runtime
+        )
+      : undefined;
+    const config =
+      autoApprove === undefined &&
+      permissionMode === undefined &&
+      skillPolicy === undefined &&
+      sessionSource === undefined
+        ? undefined
+        : JSON.stringify({
+            autoApprove,
+            permissionMode,
+            skillPolicy,
+            sessionSource,
+          });
+    const lastInteractedAt = new Date().toISOString();
 
-  const [row] = await db
-    .insert(conversations)
-    .values({
-      id,
-      projectId: params.projectId,
-      taskId: params.taskId,
-      title: params.title,
+    const [row] = await db
+      .insert(conversations)
+      .values({
+        id,
+        projectId: params.projectId,
+        taskId: params.taskId,
+        title: params.title,
+        runtime: params.runtime,
+        config,
+        isInitialConversation: params.isInitialConversation ?? false,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+        lastInteractedAt,
+      })
+      .returning();
+
+    await db.update(tasks).set({ lastInteractedAt }).where(eq(tasks.id, params.taskId));
+
+    const conversation = mapConversationRowToConversation(row);
+
+    conversationEvents._emit('conversation:created', conversation);
+
+    if (!sessionSource) {
+      const sessionInitialPrompt = params.deferInitialPrompt ? undefined : params.initialPrompt;
+      const sessionImagePaths = params.deferInitialPrompt ? undefined : params.imagePaths;
+      await task.conversations.startSession(
+        conversation,
+        params.initialSize,
+        false,
+        sessionInitialPrompt,
+        undefined,
+        sessionImagePaths,
+        params.model
+      );
+    }
+    telemetryService.capture('conversation_created', {
       runtime: params.runtime,
-      config,
-      isInitialConversation: params.isInitialConversation ?? false,
-      createdAt: sql`CURRENT_TIMESTAMP`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
-      lastInteractedAt,
-    })
-    .returning();
+      is_first_in_task: existingConversation === undefined,
+      project_id: params.projectId,
+      task_id: params.taskId,
+      conversation_id: id,
+    });
 
-  await db.update(tasks).set({ lastInteractedAt }).where(eq(tasks.id, params.taskId));
-
-  const conversation = mapConversationRowToConversation(row);
-
-  conversationEvents._emit('conversation:created', conversation);
-
-  if (!sessionSource) {
-    const sessionInitialPrompt = params.deferInitialPrompt ? undefined : params.initialPrompt;
-    const sessionImagePaths = params.deferInitialPrompt ? undefined : params.imagePaths;
-    await task.conversations.startSession(
-      conversation,
-      params.initialSize,
-      false,
-      sessionInitialPrompt,
-      undefined,
-      sessionImagePaths,
-      params.model
-    );
+    return mapConversationRowToConversation(row);
+  } finally {
+    if (registrationEpoch !== undefined) {
+      ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
+    }
   }
-  telemetryService.capture('conversation_created', {
-    runtime: params.runtime,
-    is_first_in_task: existingConversation === undefined,
-    project_id: params.projectId,
-    task_id: params.taskId,
-    conversation_id: id,
-  });
-
-  return mapConversationRowToConversation(row);
 }

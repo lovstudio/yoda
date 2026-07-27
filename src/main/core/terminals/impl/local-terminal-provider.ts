@@ -112,84 +112,91 @@ export class LocalTerminalProvider implements TerminalProvider {
     const sessionId = makePtySessionId(terminal.projectId, terminal.taskId, terminal.id);
     this.knownSessionIds.add(sessionId);
     if (this.sessions.has(sessionId)) return;
-    const tmuxSessionName = await this.resolveTmuxSessionName(sessionId);
+    const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    let registrationCompleted = false;
+    try {
+      const tmuxSessionName = await this.resolveTmuxSessionName(sessionId);
 
-    const intent: PtySpawnIntent = command
-      ? {
-          kind: 'run-command',
-          cwd: this.taskPath,
-          command,
-          shellSetup: this.shellSetup,
-          tmuxSessionName,
-          tmuxSize: initialSize,
-        }
-      : {
-          kind: 'interactive-shell',
-          cwd: this.taskPath,
-          shellSetup: this.shellSetup,
-          tmuxSessionName,
-          tmuxSize: initialSize,
-        };
-    const resolved = resolveLocalPtySpawn({
-      platform: process.platform,
-      env: process.env,
-      intent,
-    });
+      const intent: PtySpawnIntent = command
+        ? {
+            kind: 'run-command',
+            cwd: this.taskPath,
+            command,
+            shellSetup: this.shellSetup,
+            tmuxSessionName,
+            tmuxSize: initialSize,
+          }
+        : {
+            kind: 'interactive-shell',
+            cwd: this.taskPath,
+            shellSetup: this.shellSetup,
+            tmuxSessionName,
+            tmuxSize: initialSize,
+          };
+      const resolved = resolveLocalPtySpawn({
+        platform: process.platform,
+        env: process.env,
+        intent,
+      });
 
-    logLocalPtySpawnWarnings('LocalTerminalProvider', resolved.warnings, {
-      terminalId: terminal.id,
-      sessionId,
-    });
+      logLocalPtySpawnWarnings('LocalTerminalProvider', resolved.warnings, {
+        terminalId: terminal.id,
+        sessionId,
+      });
 
-    const pty = spawnLocalPty({
-      id: sessionId,
-      command: resolved.command,
-      args: resolved.args,
-      cwd: resolved.cwd,
-      env: { ...buildTerminalEnv(), ...this.taskEnvVars },
-      cols: initialSize.cols,
-      rows: initialSize.rows,
-    });
+      const pty = spawnLocalPty({
+        id: sessionId,
+        command: resolved.command,
+        args: resolved.args,
+        cwd: resolved.cwd,
+        env: { ...buildTerminalEnv(), ...this.taskEnvVars },
+        cols: initialSize.cols,
+        rows: initialSize.rows,
+      });
 
-    if (policy.watchDevServer) {
-      wireTerminalDevServerWatcher({ pty, scopeId: this.scopeId, terminalId: terminal.id });
-    }
-
-    pty.onExit(() => {
-      const shouldRespawn = policy.respawnOnExit && this.sessions.has(sessionId);
-      this.sessions.delete(sessionId);
-      if (!policy.preserveBufferOnExit) {
-        ptySessionRegistry.unregister(sessionId);
+      if (policy.watchDevServer) {
+        wireTerminalDevServerWatcher({ pty, scopeId: this.scopeId, terminalId: terminal.id });
       }
-      if (shouldRespawn && !this.tmux) {
-        const count = (this.respawnCounts.get(sessionId) ?? 0) + 1;
-        this.respawnCounts.set(sessionId, count);
 
-        if (count > MAX_RESPAWNS) {
-          log.error('LocalTerminalProvider: respawn limit reached, giving up', {
-            terminalId: terminal.id,
-            respawnCount: count,
-          });
-          this.respawnCounts.delete(sessionId);
-          return;
-        }
+      pty.onExit(() => {
+        const shouldRespawn = policy.respawnOnExit && this.sessions.has(sessionId);
+        this.sessions.delete(sessionId);
+        if (shouldRespawn && !this.tmux) {
+          const count = (this.respawnCounts.get(sessionId) ?? 0) + 1;
+          this.respawnCounts.set(sessionId, count);
 
-        setTimeout(() => {
-          this.spawnWithPolicy(terminal, initialSize, command, policy).catch((e) => {
-            log.error('LocalTerminalProvider: respawn failed', {
+          if (count > MAX_RESPAWNS) {
+            log.error('LocalTerminalProvider: respawn limit reached, giving up', {
               terminalId: terminal.id,
-              error: String(e),
+              respawnCount: count,
             });
-          });
-        }, 500);
-      }
-    });
+            this.respawnCounts.delete(sessionId);
+            return;
+          }
 
-    ptySessionRegistry.register(sessionId, pty, {
-      preserveBufferOnExit: policy.preserveBufferOnExit,
-    });
-    this.sessions.set(sessionId, pty);
-    if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+          setTimeout(() => {
+            this.spawnWithPolicy(terminal, initialSize, command, policy).catch((e) => {
+              log.error('LocalTerminalProvider: respawn failed', {
+                terminalId: terminal.id,
+                error: String(e),
+              });
+            });
+          }, 500);
+        }
+      });
+
+      ptySessionRegistry.register(sessionId, pty, {
+        preserveBufferOnExit: policy.preserveBufferOnExit,
+        registrationEpoch,
+      });
+      registrationCompleted = true;
+      this.sessions.set(sessionId, pty);
+      if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+    } finally {
+      if (!registrationCompleted) {
+        ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
+      }
+    }
   }
 
   private resolveTmuxSessionName(sessionId: string): Promise<string | undefined> {

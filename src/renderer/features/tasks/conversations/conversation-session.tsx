@@ -86,6 +86,13 @@ export const ConversationSession = observer(function ConversationSession({
   const focusPendingRef = useRef(false);
   const lastAutoResumePtyRef = useRef<FrontendPty | null>(null);
 
+  // Visibility, not generic status observation, owns connection demand. Split
+  // panes pass isVisible=true even when they are not the routed active task.
+  useEffect(() => {
+    if (!isVisible || !session) return;
+    void session.connect();
+  }, [isVisible, session]);
+
   const {
     isSearchOpen,
     searchQuery,

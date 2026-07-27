@@ -108,164 +108,172 @@ export class SshConversationProvider implements ConversationProvider {
     this.knownSessionIds.add(sessionId);
 
     if (this.sessions.has(sessionId)) return;
+    const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    let registrationCompleted = false;
 
-    await claudeTrustService.maybeAutoTrustSsh({
-      runtimeId: conversation.runtimeId,
-      cwd: this.taskPath,
-      ctx: this.ctx,
-      remoteFs: new SshFileSystem(this.proxy, '/'),
-    });
+    try {
+      await claudeTrustService.maybeAutoTrustSsh({
+        runtimeId: conversation.runtimeId,
+        cwd: this.taskPath,
+        ctx: this.ctx,
+        remoteFs: new SshFileSystem(this.proxy, '/'),
+      });
 
-    const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
-    recordConversationAuthProvider(conversation.id, providerConfig);
-    if (conversation.skillPolicy) {
-      log.warn('Skipping local Agent skill profile for SSH conversation', {
+      const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
+      recordConversationAuthProvider(conversation.id, providerConfig);
+      if (conversation.skillPolicy) {
+        log.warn('Skipping local Agent skill profile for SSH conversation', {
+          conversationId: conversation.id,
+          runtimeId: conversation.runtimeId,
+        });
+      }
+      const { command, args } = buildAgentCommand({
+        runtimeId: conversation.runtimeId,
+        providerConfig,
+        autoApprove: conversation.autoApprove,
+        permissionMode: conversation.permissionMode,
+        sessionId: conversation.id,
+        isResuming,
+        // Clipboard paste is local-only; remote sessions get @path mentions.
+        initialPrompt: isResuming
+          ? initialPrompt
+          : substituteImageMentions(initialPrompt, imagePaths ?? []),
+        appendSystemPrompt: await getEnabledPromptPrinciplesText(
+          await this.resolveProjectPromptPrinciples?.()
+        ),
+        model,
+        terminalThemeMode: await resolveTerminalThemeMode(),
+      });
+
+      const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
+      const providerEnv = resolveRuntimeEnv(providerConfig, {
+        runtimeId: conversation.runtimeId,
+        tmuxEnabled: Boolean(tmuxSessionName),
+      });
+
+      const cfg: AgentSessionConfig = {
+        taskId: this.taskId,
         conversationId: conversation.id,
         runtimeId: conversation.runtimeId,
-      });
-    }
-    const { command, args } = buildAgentCommand({
-      runtimeId: conversation.runtimeId,
-      providerConfig,
-      autoApprove: conversation.autoApprove,
-      permissionMode: conversation.permissionMode,
-      sessionId: conversation.id,
-      isResuming,
-      // Clipboard paste is local-only; remote sessions get @path mentions.
-      initialPrompt: isResuming
-        ? initialPrompt
-        : substituteImageMentions(initialPrompt, imagePaths ?? []),
-      appendSystemPrompt: await getEnabledPromptPrinciplesText(
-        await this.resolveProjectPromptPrinciples?.()
-      ),
-      model,
-      terminalThemeMode: await resolveTerminalThemeMode(),
-    });
+        command,
+        args,
+        cwd: this.taskPath,
+        shellSetup: this.shellSetup,
+        tmuxSessionName,
+        tmuxEnv: resolveRuntimeTmuxEnv(providerEnv),
+        autoApprove: conversation.autoApprove ?? false,
+        resume: isResuming,
+      };
 
-    const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
-    const providerEnv = resolveRuntimeEnv(providerConfig, {
-      runtimeId: conversation.runtimeId,
-      tmuxEnabled: Boolean(tmuxSessionName),
-    });
-
-    const cfg: AgentSessionConfig = {
-      taskId: this.taskId,
-      conversationId: conversation.id,
-      runtimeId: conversation.runtimeId,
-      command,
-      args,
-      cwd: this.taskPath,
-      shellSetup: this.shellSetup,
-      tmuxSessionName,
-      tmuxEnv: resolveRuntimeTmuxEnv(providerEnv),
-      autoApprove: conversation.autoApprove ?? false,
-      resume: isResuming,
-    };
-
-    const profile = await this.proxy.getRemoteShellProfile();
-    const sshCommand = resolveSshCommand(
-      'agent',
-      cfg,
-      { ...providerEnv, ...this.taskEnvVars },
-      profile
-    );
-
-    const result = await openSsh2Pty(this.proxy.client, {
-      id: sessionId,
-      command: sshCommand,
-      cols: initialSize.cols,
-      rows: initialSize.rows,
-    });
-
-    if (!result.success) {
-      log.error('SshConversationProvider: failed to open SSH channel', {
-        sessionId,
-        error: result.error.message,
-      });
-      return;
-    }
-
-    const pty = result.data;
-
-    // hooks not supported yet, rely on classifier for visual indicator
-    wireAgentClassifier({
-      pty,
-      runtimeId: conversation.runtimeId,
-      projectId: conversation.projectId,
-      taskId: conversation.taskId,
-      conversationId: conversation.id,
-    });
-
-    const detachSilenceReconciler = agentSilenceReconciler.attach(sessionId, {
-      projectId: conversation.projectId,
-      taskId: conversation.taskId,
-      conversationId: conversation.id,
-    });
-    pty.onData(() => agentSilenceReconciler.noteOutput(sessionId));
-    if (conversation.runtimeId === 'claude') {
-      // Sub-second Esc-interrupt detection from the TUI's "Interrupted" line.
-      pty.onData(
-        createClaudeInterruptSniffer({
-          projectId: conversation.projectId,
-          taskId: conversation.taskId,
-          conversationId: conversation.id,
-        })
+      const profile = await this.proxy.getRemoteShellProfile();
+      const sshCommand = resolveSshCommand(
+        'agent',
+        cfg,
+        { ...providerEnv, ...this.taskEnvVars },
+        profile
       );
-    }
 
-    pty.onExit(({ exitCode }) => {
-      if (this.sessions.get(sessionId) !== pty) return;
-      detachSilenceReconciler();
-      ptySessionRegistry.unregister(sessionId);
-      this.sessions.delete(sessionId);
-      this.sessionInfos.delete(sessionId);
-      markRuntimeSessionExited({
+      const result = await openSsh2Pty(this.proxy.client, {
+        id: sessionId,
+        command: sshCommand,
+        cols: initialSize.cols,
+        rows: initialSize.rows,
+      });
+
+      if (!result.success) {
+        log.error('SshConversationProvider: failed to open SSH channel', {
+          sessionId,
+          error: result.error.message,
+        });
+        return;
+      }
+
+      const pty = result.data;
+
+      // hooks not supported yet, rely on classifier for visual indicator
+      wireAgentClassifier({
+        pty,
+        runtimeId: conversation.runtimeId,
         projectId: conversation.projectId,
         taskId: conversation.taskId,
         conversationId: conversation.id,
       });
-      telemetryService.capture('agent_run_finished', {
+
+      const detachSilenceReconciler = agentSilenceReconciler.attach(sessionId, {
+        projectId: conversation.projectId,
+        taskId: conversation.taskId,
+        conversationId: conversation.id,
+      });
+      pty.onData(() => agentSilenceReconciler.noteOutput(sessionId));
+      if (conversation.runtimeId === 'claude') {
+        // Sub-second Esc-interrupt detection from the TUI's "Interrupted" line.
+        pty.onData(
+          createClaudeInterruptSniffer({
+            projectId: conversation.projectId,
+            taskId: conversation.taskId,
+            conversationId: conversation.id,
+          })
+        );
+      }
+
+      pty.onExit(({ exitCode }) => {
+        if (this.sessions.get(sessionId) !== pty) return;
+        detachSilenceReconciler();
+        this.sessions.delete(sessionId);
+        this.sessionInfos.delete(sessionId);
+        markRuntimeSessionExited({
+          projectId: conversation.projectId,
+          taskId: conversation.taskId,
+          conversationId: conversation.id,
+        });
+        telemetryService.capture('agent_run_finished', {
+          provider: conversation.runtimeId,
+          exit_code: typeof exitCode === 'number' ? exitCode : -1,
+          project_id: conversation.projectId,
+          task_id: conversation.taskId,
+          conversation_id: conversation.id,
+        });
+        events.emit(agentSessionExitedChannel, {
+          sessionId,
+          projectId: conversation.projectId,
+          conversationId: conversation.id,
+          taskId: conversation.taskId,
+          exitCode,
+        });
+        snapshotTaskDiffOnSessionExit(conversation.taskId);
+      });
+
+      ptySessionRegistry.register(sessionId, pty, { registrationEpoch });
+      registrationCompleted = true;
+      this.sessions.set(sessionId, pty);
+      this.sessionInfos.set(sessionId, {
+        sessionId,
+        conversationId: conversation.id,
+        projectId: conversation.projectId,
+        taskId: conversation.taskId,
+        runtimeId: conversation.runtimeId,
+        title: conversation.title,
+      });
+      agentSessionRuntimeStore.setStatus(
+        {
+          projectId: conversation.projectId,
+          taskId: conversation.taskId,
+          conversationId: conversation.id,
+        },
+        initialPrompt?.trim() ? 'working' : 'idle'
+      );
+      if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+      telemetryService.capture('agent_run_started', {
         provider: conversation.runtimeId,
-        exit_code: typeof exitCode === 'number' ? exitCode : -1,
         project_id: conversation.projectId,
         task_id: conversation.taskId,
         conversation_id: conversation.id,
       });
-      events.emit(agentSessionExitedChannel, {
-        sessionId,
-        projectId: conversation.projectId,
-        conversationId: conversation.id,
-        taskId: conversation.taskId,
-        exitCode,
-      });
-      snapshotTaskDiffOnSessionExit(conversation.taskId);
-    });
-
-    ptySessionRegistry.register(sessionId, pty);
-    this.sessions.set(sessionId, pty);
-    this.sessionInfos.set(sessionId, {
-      sessionId,
-      conversationId: conversation.id,
-      projectId: conversation.projectId,
-      taskId: conversation.taskId,
-      runtimeId: conversation.runtimeId,
-      title: conversation.title,
-    });
-    agentSessionRuntimeStore.setStatus(
-      {
-        projectId: conversation.projectId,
-        taskId: conversation.taskId,
-        conversationId: conversation.id,
-      },
-      initialPrompt?.trim() ? 'working' : 'idle'
-    );
-    if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
-    telemetryService.capture('agent_run_started', {
-      provider: conversation.runtimeId,
-      project_id: conversation.projectId,
-      task_id: conversation.taskId,
-      conversation_id: conversation.id,
-    });
+    } finally {
+      if (!registrationCompleted) {
+        ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
+      }
+    }
   }
 
   private resolveTmuxSessionName(

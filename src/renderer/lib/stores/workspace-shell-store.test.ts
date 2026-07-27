@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   sessions: [] as Array<{
     sessionId: string;
     pty: { lastSentDims: { cols: number; rows: number } | null };
+    enableConnection: ReturnType<typeof vi.fn>;
     connect: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
   }>,
@@ -29,6 +30,7 @@ vi.mock('@renderer/lib/pty/pty-session', () => ({
   PtySession: class MockPtySession {
     status = 'disconnected';
     pty = { lastSentDims: null as { cols: number; rows: number } | null };
+    enableConnection = vi.fn();
     connect = vi.fn(async () => {
       this.status = 'ready';
     });
@@ -57,6 +59,12 @@ describe('WorkspaceShellStore', () => {
       cwd: '/repo',
       initialSize: undefined,
     });
+    const mockSession = mocks.sessions[0];
+    expect(mockSession.enableConnection).toHaveBeenCalledOnce();
+    expect(mockSession.connect).toHaveBeenCalledOnce();
+    expect(mocks.start.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSession.connect.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+    );
 
     await store.toggleShell('/repo');
     expect(store.isOpen).toBe(false);

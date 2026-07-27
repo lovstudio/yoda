@@ -1,3 +1,4 @@
+import { StringDecoder } from 'node:string_decoder';
 import type { Client, ClientChannel } from 'ssh2';
 import { err, ok, type Result } from '@shared/result';
 import { log } from '@main/lib/logger';
@@ -40,6 +41,14 @@ export class Ssh2PtySession implements Pty {
     }
   }
 
+  pause(): void {
+    this.channel.pause();
+  }
+
+  resume(): void {
+    this.channel.resume();
+  }
+
   kill(): void {
     try {
       this.channel.close();
@@ -47,9 +56,32 @@ export class Ssh2PtySession implements Pty {
   }
 
   onData(handler: (data: string) => void): void {
-    this.channel.on('data', (chunk: Buffer) => {
-      handler(chunk.toString('utf-8'));
-    });
+    const decoder = new StringDecoder('utf8');
+    let finished = false;
+
+    const onChunk = (chunk: Buffer): void => {
+      const data = decoder.write(chunk);
+      if (data.length > 0) {
+        handler(data);
+      }
+    };
+    const finish = (): void => {
+      if (finished) return;
+      finished = true;
+
+      this.channel.off('data', onChunk);
+      this.channel.off('end', finish);
+      this.channel.off('close', finish);
+
+      const remaining = decoder.end();
+      if (remaining.length > 0) {
+        handler(remaining);
+      }
+    };
+
+    this.channel.on('data', onChunk);
+    this.channel.once('end', finish);
+    this.channel.once('close', finish);
   }
 
   onExit(handler: (info: PtyExitInfo) => void): void {

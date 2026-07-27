@@ -138,80 +138,87 @@ export class SshTerminalProvider implements TerminalProvider {
     if (policy.trackForRehydrate) {
       this.terminals.set(terminal.id, terminal);
     }
-    const tmuxSessionName = await this.resolveTmuxSessionName(sessionId);
+    const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    let registrationCompleted = false;
+    try {
+      const tmuxSessionName = await this.resolveTmuxSessionName(sessionId);
 
-    const cfg: GeneralSessionConfig = {
-      taskId: this.scopeId,
-      cwd: this.taskPath,
-      shellSetup: this.shellSetup,
-      tmuxSessionName,
-      command: command?.command,
-      args: command?.args,
-    };
+      const cfg: GeneralSessionConfig = {
+        taskId: this.scopeId,
+        cwd: this.taskPath,
+        shellSetup: this.shellSetup,
+        tmuxSessionName,
+        command: command?.command,
+        args: command?.args,
+      };
 
-    const profile = await this.proxy.getRemoteShellProfile();
-    const sshCommand = resolveSshCommand('general', cfg, this.taskEnvVars, profile);
+      const profile = await this.proxy.getRemoteShellProfile();
+      const sshCommand = resolveSshCommand('general', cfg, this.taskEnvVars, profile);
 
-    const result = await openSsh2Pty(this.proxy.client, {
-      id: sessionId,
-      command: sshCommand,
-      cols: initialSize.cols,
-      rows: initialSize.rows,
-    });
-
-    if (!result.success) {
-      log.error('SshTerminalProvider: failed to open SSH channel', {
-        sessionId,
-        error: result.error.message,
+      const result = await openSsh2Pty(this.proxy.client, {
+        id: sessionId,
+        command: sshCommand,
+        cols: initialSize.cols,
+        rows: initialSize.rows,
       });
-      return;
-    }
-    const pty = result.data;
 
-    if (policy.watchDevServer) {
-      wireTerminalDevServerWatcher({
-        pty,
-        scopeId: this.scopeId,
-        terminalId: terminal.id,
-        probe: false,
-      });
-    }
-
-    pty.onExit(() => {
-      const shouldRespawn = policy.respawnOnExit && this.sessions.has(sessionId);
-      this.sessions.delete(sessionId);
-      if (!policy.preserveBufferOnExit) {
-        ptySessionRegistry.unregister(sessionId);
+      if (!result.success) {
+        log.error('SshTerminalProvider: failed to open SSH channel', {
+          sessionId,
+          error: result.error.message,
+        });
+        return;
       }
-      if (shouldRespawn && !this.tmux) {
-        const count = (this.respawnCounts.get(sessionId) ?? 0) + 1;
-        this.respawnCounts.set(sessionId, count);
+      const pty = result.data;
 
-        if (count > MAX_RESPAWNS) {
-          log.error('SshTerminalProvider: respawn limit reached, giving up', {
-            terminalId: terminal.id,
-            respawnCount: count,
-          });
-          this.respawnCounts.delete(sessionId);
-          return;
-        }
+      if (policy.watchDevServer) {
+        wireTerminalDevServerWatcher({
+          pty,
+          scopeId: this.scopeId,
+          terminalId: terminal.id,
+          probe: false,
+        });
+      }
 
-        setTimeout(() => {
-          this.spawnWithPolicy(terminal, initialSize, command, policy).catch((e) => {
-            log.error('SshTerminalProvider: respawn failed', {
+      pty.onExit(() => {
+        const shouldRespawn = policy.respawnOnExit && this.sessions.has(sessionId);
+        this.sessions.delete(sessionId);
+        if (shouldRespawn && !this.tmux) {
+          const count = (this.respawnCounts.get(sessionId) ?? 0) + 1;
+          this.respawnCounts.set(sessionId, count);
+
+          if (count > MAX_RESPAWNS) {
+            log.error('SshTerminalProvider: respawn limit reached, giving up', {
               terminalId: terminal.id,
-              error: String(e),
+              respawnCount: count,
             });
-          });
-        }, 500);
-      }
-    });
+            this.respawnCounts.delete(sessionId);
+            return;
+          }
 
-    ptySessionRegistry.register(sessionId, pty, {
-      preserveBufferOnExit: policy.preserveBufferOnExit,
-    });
-    this.sessions.set(sessionId, pty);
-    if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+          setTimeout(() => {
+            this.spawnWithPolicy(terminal, initialSize, command, policy).catch((e) => {
+              log.error('SshTerminalProvider: respawn failed', {
+                terminalId: terminal.id,
+                error: String(e),
+              });
+            });
+          }, 500);
+        }
+      });
+
+      ptySessionRegistry.register(sessionId, pty, {
+        preserveBufferOnExit: policy.preserveBufferOnExit,
+        registrationEpoch,
+      });
+      registrationCompleted = true;
+      this.sessions.set(sessionId, pty);
+      if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+    } finally {
+      if (!registrationCompleted) {
+        ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
+      }
+    }
   }
 
   private resolveTmuxSessionName(sessionId: string): Promise<string | undefined> {

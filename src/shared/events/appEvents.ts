@@ -83,13 +83,6 @@ export type PlanEvent = {
 
 export const planEventChannel = defineEvent<PlanEvent>('plan:event');
 
-export const ptyDataChannel = defineEvent<string>('pty:data');
-
-export const ptyExitChannel = defineEvent<{
-  exitCode: number;
-  signal?: number;
-}>('pty:exit');
-
 /** Emitted by main process when a PTY is definitively killed (e.g. on deleteTask/deleteConversation). */
 export const ptyKilledChannel = defineEvent<{ id: string }>('pty:killed');
 

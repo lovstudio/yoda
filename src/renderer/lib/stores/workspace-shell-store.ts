@@ -57,6 +57,8 @@ export class WorkspaceShellStore {
         cwd: normalizedCwd,
         initialSize: this.currentSize() ?? previousSize,
       });
+      session.enableConnection();
+      await session.connect();
     } catch (error) {
       this.recordError(operation, error);
       throw error;
@@ -89,6 +91,8 @@ export class WorkspaceShellStore {
         cwd: normalizedCwd,
         initialSize: this.currentSize() ?? previousSize,
       });
+      session.enableConnection();
+      await session.connect();
     } catch (error) {
       this.recordError(operation, error);
       throw error;
@@ -109,6 +113,8 @@ export class WorkspaceShellStore {
         cwd: normalizedCwd,
         initialSize: this.currentSize() ?? previousSize,
       });
+      session.enableConnection();
+      await session.connect();
     } catch (error) {
       this.recordError(operation, error);
       throw error;
@@ -167,11 +173,12 @@ export class WorkspaceShellStore {
     }
     if (operation !== this.operationVersion) return null;
 
-    const session = new PtySession(`workspace-shell:${crypto.randomUUID()}`);
+    const session = new PtySession(`workspace-shell:${crypto.randomUUID()}`, {
+      deferConnection: true,
+    });
     runInAction(() => {
       this.session = session;
     });
-    await session.connect();
     if (operation === this.operationVersion) return session;
 
     session.dispose();

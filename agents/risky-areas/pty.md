@@ -23,3 +23,10 @@
 - do not weaken quoting or spawn behavior casually
 - validate both direct spawn and shell-wrapped spawn cases when changing PTY startup logic
 - confirm renderer event flow if hook payload or notification behavior changes
+- preserve the output contract: generation isolates respawns, sequence joins
+  snapshot/live data exactly once, and xterm write ACKs release PTY backpressure
+- decode byte streams incrementally; never call `Buffer.toString('utf8')`
+  independently on arbitrary SSH/network chunks
+- keep replay buffers bounded by UTF-8 bytes without slicing inside a code point
+- resize only the mounted active session, and update frontend/backend to the same
+  dimension tuple

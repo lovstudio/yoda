@@ -78,4 +78,12 @@ describe('getTerminalFitScrollbarWidth', () => {
 
     expect(getTerminalFitScrollbarWidth(terminal)).toBe(8);
   });
+
+  it('uses the xterm 6.1 scrollbar width when available', () => {
+    const terminal = asTerminal({
+      options: { scrollback: 1000, scrollbar: { width: 9 } },
+    });
+
+    expect(getTerminalFitScrollbarWidth(terminal)).toBe(9);
+  });
 });
