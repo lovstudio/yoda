@@ -333,26 +333,44 @@ export class TaskManagerStore {
       this._loadPromise = rpc.tasks
         .getTasks(this.projectId)
         .then((tasks) => {
-          runInAction(() => {
-            for (const t of tasks) {
-              this.tasks.set(t.id, createUnprovisionedTask(t));
-              // An archive in flight in the main process (requested but not
-              // finished, e.g. across a renderer reload) — show the spinner;
-              // the task:archived event completes it.
-              if (t.archiveRequestedAt && !t.archivedAt) this.archivingTaskIds.add(t.id);
-            }
-          });
-          const reloadPromises = tasks.flatMap((t) => {
-            const store = this.tasks.get(t.id);
-            return store && isRegistered(store) ? [this._reloadPrsForTask(store)] : [];
-          });
-          void Promise.all(reloadPromises);
+          this._mergeLoadedTasks(tasks);
         })
         .catch((e) => {
           console.error('Error loading tasks', e);
         });
     }
     return this._loadPromise;
+  }
+
+  /**
+   * Reconciles a task inserted after the initial project load, such as a
+   * session imported by another local app immediately before a deep link.
+   */
+  async ensureTaskLoaded(taskId: string): Promise<boolean> {
+    if (this.tasks.has(taskId)) return true;
+    this._mergeLoadedTasks(await rpc.tasks.getTasks(this.projectId));
+    return this.tasks.has(taskId);
+  }
+
+  private _mergeLoadedTasks(tasks: Task[]): void {
+    const addedTaskIds: string[] = [];
+    runInAction(() => {
+      for (const task of tasks) {
+        if (!this.tasks.has(task.id)) {
+          this.tasks.set(task.id, createUnprovisionedTask(task));
+          addedTaskIds.push(task.id);
+        }
+        // An archive in flight in the main process (requested but not
+        // finished, e.g. across a renderer reload) — show the spinner;
+        // the task:archived event completes it.
+        if (task.archiveRequestedAt && !task.archivedAt) this.archivingTaskIds.add(task.id);
+      }
+    });
+    const reloadPromises = addedTaskIds.flatMap((taskId) => {
+      const store = this.tasks.get(taskId);
+      return store && isRegistered(store) ? [this._reloadPrsForTask(store)] : [];
+    });
+    void Promise.all(reloadPromises);
   }
 
   async createTask(params: CreateTaskParams) {
