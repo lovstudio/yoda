@@ -168,7 +168,10 @@ export const ProjectSelector = observer(function ProjectSelector({
         return;
       }
       if (status.existingProject) {
-        onChange(status.existingProject.id);
+        const projectId = status.existingProject.id;
+        await projectManager.ensureProjectLoaded(projectId, status.existingProject);
+        await projectManager.mountProject(projectId);
+        onChange(projectId);
         setOpen(false);
         return;
       }

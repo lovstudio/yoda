@@ -86,6 +86,27 @@ export class ProjectManagerStore {
     await Promise.allSettled(toMount.map((id) => this.mountProject(id)));
   }
 
+  /**
+   * Reconciles a project that may have been registered outside the current
+   * renderer lifecycle (for example immediately before opening a deep link).
+   */
+  async ensureProjectLoaded(
+    projectId: string,
+    knownProject?: LocalProject | SshProject
+  ): Promise<boolean> {
+    if (this.projects.has(projectId)) return true;
+
+    const project = knownProject ?? (await rpc.projects.getProject(projectId));
+    if (!project) return false;
+
+    runInAction(() => {
+      if (this.projects.has(project.id)) return;
+      this.projects.set(project.id, createUnmountedProject(project, 'idle'));
+      if (!project.isInternal) appState.sidebar.prependProjectOrder(project.id);
+    });
+    return this.projects.has(projectId);
+  }
+
   async createProject(
     projectType: ProjectType,
     data: ModeData,
