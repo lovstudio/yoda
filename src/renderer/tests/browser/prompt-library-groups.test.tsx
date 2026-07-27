@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   updatePrompt: vi.fn(),
   deletePrompt: vi.fn(),
   prompts: [] as Prompt[],
+  refreshPrompt: vi.fn(),
+  reorderPrompts: vi.fn(),
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -21,23 +23,28 @@ vi.mock('react-i18next', async (importOriginal) => ({
   }),
 }));
 
-vi.mock('@renderer/features/settings/components/PromptsSettingsCard', () => ({
-  default: () => null,
-}));
-
-vi.mock('@renderer/features/prompt-library/leaked-prompts-reference', () => ({
-  LeakedPromptsReference: () => null,
-}));
-
 vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   usePrompts: () => ({ data: mocks.prompts, isLoading: false }),
-  useCreatePrompt: () => ({ mutate: mocks.createPrompt }),
-  useUpdatePrompt: () => ({ mutate: mocks.updatePrompt }),
+  useCreatePrompt: () => ({ mutate: mocks.createPrompt, isPending: false }),
+  useUpdatePrompt: () => ({ mutate: mocks.updatePrompt, isPending: false }),
   useDeletePrompt: () => ({ mutate: mocks.deletePrompt }),
+  useReorderInjectedPrompts: () => ({ mutate: mocks.reorderPrompts, isPending: false }),
+  useRefreshPromptSource: () => ({ mutate: mocks.refreshPrompt, isPending: false }),
 }));
 
 vi.mock('@renderer/lib/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
+}));
+
+vi.mock('@renderer/lib/ipc', () => ({
+  rpc: {
+    app: { openExternal: vi.fn() },
+    promptLibrary: {
+      loadGit: vi.fn(),
+      loadUrl: vi.fn(),
+      selectFile: vi.fn(),
+    },
+  },
 }));
 
 vi.mock('@renderer/lib/modal/modal-provider', () => ({
@@ -51,6 +58,9 @@ function prompt(id: string, groupName: string): Prompt {
     description: `${id} description`,
     content: `${id} content`,
     groupName,
+    extraInfo: '',
+    injectionEnabled: false,
+    injectionOrder: 0,
     createdAt: '2026-07-27T00:00:00.000Z',
     updatedAt: '2026-07-27T00:00:00.000Z',
   };
@@ -122,7 +132,7 @@ describe('PromptLibraryPanel groups', () => {
     await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
 
     const newPromptButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
-      (button) => button.textContent?.includes('promptLibrary.new')
+      (button) => button.textContent?.includes('promptLibrary.source.manual')
     );
     await act(async () => newPromptButton?.click());
 
@@ -159,8 +169,41 @@ describe('PromptLibraryPanel groups', () => {
         description: '',
         content: 'Write a concise release note.',
         groupName: 'Writing',
+        extraInfo: '',
+        injectionEnabled: false,
+        source: undefined,
       },
-      expect.objectContaining({ onError: expect.any(Function) })
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      })
     );
+  });
+
+  it('sorts dynamically injected prompts independently of their groups', async () => {
+    mocks.prompts = [
+      { ...prompt('second', 'Review'), injectionEnabled: true, injectionOrder: 20 },
+      { ...prompt('first', 'Build'), injectionEnabled: true, injectionOrder: 10 },
+    ];
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const injectionHeading = Array.from(host.querySelectorAll('h2')).find((heading) =>
+      heading.textContent?.includes('promptLibrary.injection.title')
+    );
+    const injectionSection = injectionHeading?.closest('section');
+    const rows = Array.from(injectionSection?.querySelectorAll('li') ?? []);
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining('first'),
+      expect.stringContaining('second'),
+    ]);
+
+    const moveDown = injectionSection?.querySelector<HTMLButtonElement>(
+      'button[aria-label="promptLibrary.injection.moveDown"]'
+    );
+    await act(async () => moveDown?.click());
+    expect(mocks.reorderPrompts).toHaveBeenCalledWith(['second', 'first']);
   });
 });

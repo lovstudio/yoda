@@ -1,4 +1,19 @@
 import z from 'zod';
+import {
+  PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES,
+  PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS,
+  PROMPT_SOURCE_MAX_REFRESH_MINUTES,
+  PROMPT_SOURCE_MAX_TIMEOUT_SECONDS,
+  PROMPT_SOURCE_MIN_REFRESH_MINUTES,
+  PROMPT_SOURCE_MIN_TIMEOUT_SECONDS,
+  promptSourceErrorCodeSchema,
+  promptSourceErrorSchema,
+  promptSourceSchema,
+  type PromptSource,
+  type PromptSourceError,
+  type PromptSourceLoadResult,
+  type PromptSourceRefreshResult,
+} from './prompt-library';
 import { RUNTIME_IDS } from './runtime-registry';
 
 export const PROJECT_CONFIG_FILE = '.yoda.json';
@@ -44,90 +59,25 @@ export const quickActionSchema = z.object({
 export type QuickAction = z.infer<typeof quickActionSchema>;
 
 /**
- * An atomic, user-defined operating principle appended after the runtime's
- * system prompt at spawn. The canonical source of truth for this shape — the
- * app-global `promptPrinciples` setting reuses it, and projects layer on top.
+ * Legacy project-local prompt shape. App-global entries are migrated to the
+ * prompt library; this remains for `.yoda.json` compatibility.
  */
-export const promptPrincipleSourceErrorCodeSchema = z.enum([
-  'empty_content',
-  'file_read_failed',
-  'http_error',
-  'invalid_url',
-  'request_failed',
-  'request_timeout',
-  'source_not_found',
-  'too_large',
-  'unsupported_url',
-]);
-
+export const promptPrincipleSourceErrorCodeSchema = promptSourceErrorCodeSchema;
 export type PromptPrincipleSourceErrorCode = z.infer<typeof promptPrincipleSourceErrorCodeSchema>;
-
-export const promptPrincipleSourceErrorSchema = z.object({
-  code: promptPrincipleSourceErrorCodeSchema,
-  detail: z.string().optional(),
-});
-
-export type PromptPrincipleSourceError = z.infer<typeof promptPrincipleSourceErrorSchema>;
-
-export const PROMPT_PRINCIPLE_SOURCE_DEFAULT_REFRESH_MINUTES = 60;
-export const PROMPT_PRINCIPLE_SOURCE_MIN_REFRESH_MINUTES = 1;
-export const PROMPT_PRINCIPLE_SOURCE_MAX_REFRESH_MINUTES = 43_200;
-export const PROMPT_PRINCIPLE_SOURCE_DEFAULT_TIMEOUT_SECONDS = 10;
-export const PROMPT_PRINCIPLE_SOURCE_MIN_TIMEOUT_SECONDS = 1;
-export const PROMPT_PRINCIPLE_SOURCE_MAX_TIMEOUT_SECONDS = 120;
-
-const promptPrincipleSourceStatusSchema = z.object({
-  lastAttemptedAt: z.string().datetime().optional(),
-  lastSyncedAt: z.string().datetime().optional(),
-  lastError: promptPrincipleSourceErrorSchema.optional(),
-});
-
-export const promptPrincipleSourceSchema = z.discriminatedUnion('type', [
-  promptPrincipleSourceStatusSchema.extend({
-    type: z.literal('file'),
-    path: z.string().min(1),
-  }),
-  promptPrincipleSourceStatusSchema.extend({
-    type: z.literal('url'),
-    url: z.string(),
-    refreshIntervalMinutes: z
-      .number()
-      .int()
-      .min(PROMPT_PRINCIPLE_SOURCE_MIN_REFRESH_MINUTES)
-      .max(PROMPT_PRINCIPLE_SOURCE_MAX_REFRESH_MINUTES),
-    timeoutSeconds: z
-      .number()
-      .int()
-      .min(PROMPT_PRINCIPLE_SOURCE_MIN_TIMEOUT_SECONDS)
-      .max(PROMPT_PRINCIPLE_SOURCE_MAX_TIMEOUT_SECONDS),
-  }),
-]);
-
-export type PromptPrincipleSource = z.infer<typeof promptPrincipleSourceSchema>;
-
-export type PromptPrincipleSourceLoadResult =
-  | { status: 'cancelled' }
-  | {
-      status: 'error';
-      error: PromptPrincipleSourceError;
-    }
-  | {
-      status: 'success';
-      name: string;
-      source: PromptPrincipleSource;
-      text: string;
-    };
-
-export type PromptPrincipleSourceRefreshResult =
-  | {
-      status: 'error';
-      error: PromptPrincipleSourceError;
-    }
-  | {
-      status: 'success';
-      source: PromptPrincipleSource;
-      text: string;
-    };
+export const promptPrincipleSourceErrorSchema = promptSourceErrorSchema;
+export type PromptPrincipleSourceError = PromptSourceError;
+export const PROMPT_PRINCIPLE_SOURCE_DEFAULT_REFRESH_MINUTES =
+  PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES;
+export const PROMPT_PRINCIPLE_SOURCE_MIN_REFRESH_MINUTES = PROMPT_SOURCE_MIN_REFRESH_MINUTES;
+export const PROMPT_PRINCIPLE_SOURCE_MAX_REFRESH_MINUTES = PROMPT_SOURCE_MAX_REFRESH_MINUTES;
+export const PROMPT_PRINCIPLE_SOURCE_DEFAULT_TIMEOUT_SECONDS =
+  PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS;
+export const PROMPT_PRINCIPLE_SOURCE_MIN_TIMEOUT_SECONDS = PROMPT_SOURCE_MIN_TIMEOUT_SECONDS;
+export const PROMPT_PRINCIPLE_SOURCE_MAX_TIMEOUT_SECONDS = PROMPT_SOURCE_MAX_TIMEOUT_SECONDS;
+export const promptPrincipleSourceSchema = promptSourceSchema;
+export type PromptPrincipleSource = PromptSource;
+export type PromptPrincipleSourceLoadResult = PromptSourceLoadResult;
+export type PromptPrincipleSourceRefreshResult = PromptSourceRefreshResult;
 
 export const promptPrincipleSchema = z.object({
   id: z.string(),

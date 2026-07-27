@@ -79,6 +79,7 @@ import {
   getRepositoryStore,
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
+import { usePrompts, useUpdatePrompt } from '@renderer/features/prompt-library/use-prompts';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
 import { ContextItem, memoryFileLabel } from '@renderer/features/tasks/components/context-item';
@@ -943,20 +944,26 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [updateDraft]
   );
-  const { value: promptPrinciplesValue, update: updatePromptPrinciples } =
-    useAppSettingsKey('promptPrinciples');
-  const promptPrinciples = promptPrinciplesValue?.items ?? [];
+  const { data: promptLibraryItems } = usePrompts();
+  const updateLibraryPrompt = useUpdatePrompt();
+  const promptPrinciples = useMemo(
+    () =>
+      (promptLibraryItems ?? []).slice().sort((left, right) => {
+        if (left.injectionEnabled !== right.injectionEnabled) {
+          return left.injectionEnabled ? -1 : 1;
+        }
+        return left.injectionOrder - right.injectionOrder;
+      }),
+    [promptLibraryItems]
+  );
   // Run-defaults section is collapsed by default — it is rarely changed and its
   // eight rows otherwise dominate the popover.
   const [runDefaultsOpen, setRunDefaultsOpen] = useState(false);
   const setPromptPrincipleEnabled = useCallback(
     (id: string, enabled: boolean) => {
-      const items = promptPrinciplesValue?.items ?? [];
-      updatePromptPrinciples({
-        items: items.map((item) => (item.id === id ? { ...item, enabled } : item)),
-      });
+      updateLibraryPrompt.mutate({ id, patch: { injectionEnabled: enabled } });
     },
-    [promptPrinciplesValue, updatePromptPrinciples]
+    [updateLibraryPrompt]
   );
   // When a project is selected, prompt-principle toggles operate on the
   // project's layer (override globals + its own items) stored in project
@@ -1000,7 +1007,7 @@ export const HomeComposer = observer(function HomeComposer({
     hasProject: hasProjectOverrideTarget,
   });
   const setGlobalPrincipleProjectOverride = useCallback(
-    (principle: { id: string; enabled: boolean }, enabled: boolean) => {
+    (principle: { id: string; injectionEnabled: boolean }, enabled: boolean) => {
       saveProjectPromptPrinciples(setGlobalOverride(projectPromptPrinciples, principle, enabled));
     },
     [projectPromptPrinciples, saveProjectPromptPrinciples]
@@ -2038,16 +2045,16 @@ export const HomeComposer = observer(function HomeComposer({
         {promptPrinciples.length === 0 ? (
           <p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>
         ) : (
-          promptPrinciples.map((principle) => (
-            <div key={principle.id} className="flex items-center justify-between gap-3">
+          promptPrinciples.map((prompt) => (
+            <div key={prompt.id} className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-1.5">
                 <span className="min-w-0 truncate text-xs text-foreground">
-                  {principle.name || t('home.promptPrincipleUnnamed')}
+                  {prompt.title || t('home.promptPrincipleUnnamed')}
                 </span>
-                {principle.text ? (
+                {prompt.content ? (
                   <InfoTooltip
-                    label={principle.name || t('home.promptPrincipleUnnamed')}
-                    content={<span className="whitespace-pre-wrap">{principle.text}</span>}
+                    label={prompt.title || t('home.promptPrincipleUnnamed')}
+                    content={<span className="whitespace-pre-wrap">{prompt.content}</span>}
                   />
                 ) : null}
               </div>
@@ -2055,13 +2062,13 @@ export const HomeComposer = observer(function HomeComposer({
                 size="sm"
                 checked={
                   selectedProjectId
-                    ? effectiveGlobalEnabled(projectPromptPrinciples, principle)
-                    : principle.enabled
+                    ? effectiveGlobalEnabled(projectPromptPrinciples, prompt)
+                    : prompt.injectionEnabled
                 }
                 onCheckedChange={(checked) =>
                   selectedProjectId
-                    ? setGlobalPrincipleProjectOverride(principle, checked)
-                    : setPromptPrincipleEnabled(principle.id, checked)
+                    ? setGlobalPrincipleProjectOverride(prompt, checked)
+                    : setPromptPrincipleEnabled(prompt.id, checked)
                 }
                 aria-label={t('settings.prompts.toggle')}
               />

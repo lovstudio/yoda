@@ -19,7 +19,6 @@ import { githubController } from './core/github/controller';
 import { gitlabController } from './core/gitlab/controller';
 import { issueController } from './core/issues/controller';
 import { jiraController } from './core/jira/controller';
-import { leakedPromptsController } from './core/leaked-prompts/controller';
 import { linearController } from './core/linear/controller';
 import { llmController } from './core/llm/controller';
 import { lovcodeController } from './core/lovcode/controller';
@@ -85,7 +84,6 @@ export const rpcRouter = createRPCRouter({
   plugins: pluginsController,
   promptLibrary: promptLibraryController,
   quickActions: quickActionsController,
-  leakedPrompts: leakedPromptsController,
   skills: skillsController,
   ssh: sshController,
   projects: projectController,

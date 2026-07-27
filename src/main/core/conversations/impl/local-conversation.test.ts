@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   maybeAutoTrustLocal: vi.fn(),
   prepareHookConfig: vi.fn(),
   prepareWindowsClaudeSettings: vi.fn(),
+  promptLibraryList: vi.fn(),
   ensureCodexThreadUnarchived: vi.fn(),
   resolveAvailableTmuxSessionName: vi.fn(),
   resolveAgentResumeSessionId: vi.fn(),
@@ -126,6 +127,12 @@ vi.mock('@main/core/maas/codex-history-compat', () => ({
 
 vi.mock('@main/core/pty/local-pty', () => ({
   spawnLocalPty: mocks.spawnLocalPty,
+}));
+
+vi.mock('@main/core/prompt-library/prompt-library-service', () => ({
+  promptLibraryService: {
+    list: mocks.promptLibraryList,
+  },
 }));
 
 vi.mock('@main/core/pty/pty-env', () => ({
@@ -281,6 +288,7 @@ describe('LocalConversationProvider', () => {
     );
     mocks.maybeAutoTrustLocal.mockResolvedValue(undefined);
     mocks.prepareHookConfig.mockResolvedValue(undefined);
+    mocks.promptLibraryList.mockResolvedValue([]);
     mocks.prepareWindowsClaudeSettings.mockImplementation((_runtimeId: string, args: string[]) => ({
       args,
     }));

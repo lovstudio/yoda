@@ -51,3 +51,23 @@ export function useDeletePrompt() {
     },
   });
 }
+
+export function useReorderInjectedPrompts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => rpc.promptLibrary.reorderInjection(ids),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: promptsQueryKey });
+    },
+  });
+}
+
+export function useRefreshPromptSource() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => rpc.promptLibrary.refreshSource(id),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: promptsQueryKey });
+    },
+  });
+}
