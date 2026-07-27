@@ -1,5 +1,11 @@
+import { promises as nodeFs } from 'node:fs';
+import path from 'node:path';
 import { eq, sql } from 'drizzle-orm';
-import type { MoveProjectPathParams, Project } from '@shared/projects';
+import {
+  MAX_PROJECT_ALIAS_LENGTH,
+  type MoveProjectPathParams,
+  type Project,
+} from '@shared/projects';
 import { GitHubAuthExecutionContext } from '@main/core/execution-context/github-auth-execution-context';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { SshExecutionContext } from '@main/core/execution-context/ssh-execution-context';
@@ -10,6 +16,7 @@ import { githubConnectionService } from '@main/core/github/services/github-conne
 import { projectEvents } from '@main/core/projects/project-events';
 import { projectManager } from '@main/core/projects/project-manager';
 import { prSyncEngine } from '@main/core/pull-requests/pr-sync-engine';
+import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { sshConnectionManager } from '@main/core/ssh/ssh-connection-manager';
 import { viewStateService } from '@main/core/view-state/view-state-service';
 import { db, sqlite } from '@main/db/client';
@@ -29,6 +36,13 @@ import {
 import { log } from '@main/lib/logger';
 import { checkIsValidDirectory } from '../path-utils';
 import { resolveProjectBaseRef } from './create-project-utils';
+import {
+  assertProjectMoveTarget,
+  localPathExists,
+  moveLocalProjectDirectory,
+  normalizeLocalProjectPath,
+  type MovedProjectDirectory,
+} from './move-project-directory';
 import { syncAgentProjectPathArtifacts } from './sync-agent-project-path-artifacts';
 
 type ProjectRow = typeof projects.$inferSelect;
@@ -38,65 +52,254 @@ type ResolvedMoveTarget = {
   baseRef: string;
 };
 
+type MoveTargetPlan =
+  | { kind: 'existing'; target: ResolvedMoveTarget }
+  | { kind: 'new-local'; sourcePath: string; targetPath: string }
+  | {
+      kind: 'new-ssh';
+      sourcePath: string;
+      targetPath: string;
+      proxy: SshClientProxy;
+    };
+
 export async function moveProjectPath(
   projectId: string,
   params: MoveProjectPathParams
 ): Promise<Project> {
-  const name = params.name.trim();
+  const displayName = params.name.trim();
   const requestedPath = params.path.trim();
 
-  if (!name) throw new Error('Project name is required');
+  if (!displayName) throw new Error('Project name is required');
+  if (displayName.length > MAX_PROJECT_ALIAS_LENGTH) {
+    throw new Error(`Project name exceeds ${MAX_PROJECT_ALIAS_LENGTH} characters`);
+  }
   if (!requestedPath) throw new Error('Project path is required');
 
   const [row] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
   if (!row) throw new Error(`Project ${projectId} not found`);
   if (row.isInternal === 1) throw new Error('Internal projects cannot be moved');
 
-  const target =
+  const plan =
     row.workspaceProvider === 'ssh'
-      ? await resolveSshTarget(requestedPath, row.sshConnectionId)
-      : await resolveLocalTarget(requestedPath);
+      ? await planSshTarget(row.path, requestedPath, row.sshConnectionId)
+      : await planLocalTarget(row.path, requestedPath);
+  const plannedPath = plan.kind === 'existing' ? plan.target.rootPath : plan.targetPath;
 
-  const [existing] = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.path, target.rootPath))
-    .limit(1);
+  const existing = await findProjectAtPath(plannedPath);
 
   if (existing && existing.id !== projectId) {
     if (params.mergeExistingProjectId !== existing.id) {
-      throw new Error(`A project at ${target.rootPath} already exists.`);
+      throw new Error(`A project at ${plannedPath} already exists.`);
     }
     return mergeProjectIntoExisting(row, existing);
   }
 
+  const alias = displayName === row.name ? null : displayName;
+  const target = plan.kind === 'existing' ? plan.target : null;
   if (
-    row.name === name &&
+    row.alias === alias &&
+    target &&
     row.path === target.rootPath &&
     (row.baseRef ?? 'main') === target.baseRef
   ) {
     return mapProjectRow(row);
   }
 
-  await stopProjectAgentsBeforePathChange(projectId, 'move');
+  const pathIsChanging =
+    plan.kind !== 'existing' ||
+    row.path !== plan.target.rootPath ||
+    (row.baseRef ?? 'main') !== plan.target.baseRef;
+  let projectClosed = false;
+  let movedDirectory: MovedProjectDirectory | null = null;
 
-  const [updated] = await db
-    .update(projects)
-    .set({
-      name,
-      path: target.rootPath,
-      baseRef: target.baseRef,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
-    })
-    .where(eq(projects.id, projectId))
-    .returning();
-  if (!updated) throw new Error(`Project ${projectId} not found`);
+  try {
+    if (pathIsChanging) {
+      await stopProjectAgentsBeforePathChange(projectId, 'move');
+      projectClosed = true;
+    }
 
-  if (row.path !== target.rootPath) {
-    await syncAgentProjectPathArtifacts(row.path, target.rootPath);
+    if (plan.kind === 'new-local') {
+      movedDirectory = await moveLocalProjectDirectory(plan.sourcePath, plan.targetPath);
+      await repairLocalGitWorktrees(movedDirectory.targetPath);
+    } else if (plan.kind === 'new-ssh') {
+      movedDirectory = await moveSshProjectDirectory(plan);
+      await repairSshGitWorktrees(plan.proxy, movedDirectory.targetPath);
+    }
+
+    const resolvedTarget =
+      plan.kind === 'existing'
+        ? plan.target
+        : row.workspaceProvider === 'ssh'
+          ? await resolveSshTarget(movedDirectory!.targetPath, row.sshConnectionId)
+          : await resolveLocalTarget(movedDirectory!.targetPath);
+    const finalExisting =
+      resolvedTarget.rootPath === plannedPath
+        ? existing
+        : await findProjectAtPath(resolvedTarget.rootPath);
+    if (finalExisting && finalExisting.id !== projectId) {
+      throw new Error(`A project at ${resolvedTarget.rootPath} already exists.`);
+    }
+
+    const [updated] = await db
+      .update(projects)
+      .set({
+        alias,
+        path: resolvedTarget.rootPath,
+        baseRef: resolvedTarget.baseRef,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(projects.id, projectId))
+      .returning();
+    if (!updated) throw new Error(`Project ${projectId} not found`);
+
+    if (row.path !== resolvedTarget.rootPath) {
+      await syncAgentProjectPathArtifacts(row.path, resolvedTarget.rootPath);
+    }
+    await movedDirectory?.finalize();
+    return mapProjectRow(updated);
+  } catch (error) {
+    if (movedDirectory) {
+      try {
+        await movedDirectory.rollback();
+        if (row.workspaceProvider === 'ssh') {
+          if (plan.kind === 'new-ssh') await repairSshGitWorktrees(plan.proxy, row.path);
+        } else {
+          await repairLocalGitWorktrees(row.path);
+        }
+      } catch (rollbackError) {
+        log.error('moveProjectPath: failed to roll back project directory move', {
+          projectId,
+          oldPath: row.path,
+          newPath: movedDirectory.targetPath,
+          error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+        });
+      }
+    }
+    if (projectClosed) {
+      await reopenProjectAfterMoveFailure(row);
+    }
+    throw error;
+  }
+}
+
+async function findProjectAtPath(projectPath: string): Promise<ProjectRow | undefined> {
+  const [existing] = await db
+    .select()
+    .from(projects)
+    .where(eq(projects.path, projectPath))
+    .limit(1);
+  return existing;
+}
+
+async function planLocalTarget(sourcePath: string, requestedPath: string): Promise<MoveTargetPlan> {
+  const targetPath = normalizeLocalProjectPath(requestedPath);
+  if (await localPathExists(targetPath)) {
+    if (!(await nodeFs.stat(targetPath)).isDirectory()) {
+      throw new Error('The target project path is not a directory');
+    }
+    return { kind: 'existing', target: await resolveLocalTarget(targetPath) };
   }
 
-  return mapProjectRow(updated);
+  const source = await resolveLocalTarget(sourcePath);
+  assertProjectMoveTarget(source.rootPath, targetPath);
+  return { kind: 'new-local', sourcePath: source.rootPath, targetPath };
+}
+
+async function planSshTarget(
+  sourcePath: string,
+  requestedPath: string,
+  connectionId: string | null
+): Promise<MoveTargetPlan> {
+  if (!connectionId) throw new Error('SSH connection is required');
+  const targetPath = path.posix.normalize(requestedPath);
+  if (!path.posix.isAbsolute(targetPath)) {
+    throw new Error('The SSH project path must be absolute');
+  }
+
+  const proxy = await sshConnectionManager.connect(connectionId);
+  const targetFs = new SshFileSystem(proxy, targetPath);
+  const targetEntry = await targetFs.stat('');
+  if (targetEntry) {
+    if (targetEntry.type !== 'dir') {
+      throw new Error('The target project path is not a directory');
+    }
+    return { kind: 'existing', target: await resolveSshTarget(targetPath, connectionId) };
+  }
+
+  const source = await resolveSshTarget(sourcePath, connectionId);
+  assertProjectMoveTarget(source.rootPath, targetPath, path.posix);
+  return {
+    kind: 'new-ssh',
+    sourcePath: source.rootPath,
+    targetPath,
+    proxy,
+  };
+}
+
+async function moveSshProjectDirectory(
+  plan: Extract<MoveTargetPlan, { kind: 'new-ssh' }>
+): Promise<MovedProjectDirectory> {
+  const rootFs = new SshFileSystem(plan.proxy, '/');
+  await rootFs.mkdir(path.posix.dirname(plan.targetPath), { recursive: true });
+  const ctx = new SshExecutionContext(plan.proxy);
+  try {
+    await ctx.exec('mv', [plan.sourcePath, plan.targetPath]);
+  } catch (error) {
+    ctx.dispose();
+    throw error;
+  }
+  return {
+    targetPath: plan.targetPath,
+    rollback: async () => {
+      try {
+        await ctx.exec('mv', [plan.targetPath, plan.sourcePath]);
+      } finally {
+        ctx.dispose();
+      }
+    },
+    finalize: async () => {
+      ctx.dispose();
+    },
+  };
+}
+
+async function repairLocalGitWorktrees(projectPath: string): Promise<void> {
+  const ctx = new LocalExecutionContext({ root: projectPath });
+  try {
+    await ctx.exec('git', ['worktree', 'repair']);
+  } catch (error) {
+    log.warn('moveProjectPath: failed to repair local git worktrees', {
+      projectPath,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    ctx.dispose();
+  }
+}
+
+async function repairSshGitWorktrees(proxy: SshClientProxy, projectPath: string): Promise<void> {
+  const ctx = new SshExecutionContext(proxy, { root: projectPath });
+  try {
+    await ctx.exec('git', ['worktree', 'repair']);
+  } catch (error) {
+    log.warn('moveProjectPath: failed to repair SSH git worktrees', {
+      projectPath,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    ctx.dispose();
+  }
+}
+
+async function reopenProjectAfterMoveFailure(row: ProjectRow): Promise<void> {
+  try {
+    await projectManager.openProject(mapProjectRow(row));
+  } catch (error) {
+    log.warn('moveProjectPath: failed to reopen project after move rollback', {
+      projectId: row.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function mergeProjectIntoExisting(source: ProjectRow, target: ProjectRow): Promise<Project> {
