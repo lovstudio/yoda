@@ -6,6 +6,7 @@ import type {
   SidebarTaskGroupBy,
   SidebarTaskSortBy,
 } from '@shared/view-state';
+import { DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
 import {
   type ProjectStore,
   type UnregisteredProject,
@@ -751,6 +752,47 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
 
   ensureProjectExpanded(projectId: string): void {
     this.expandedProjectIds.add(projectId);
+  }
+
+  /**
+   * Reveals the routed project/task in the sidebar without fighting subsequent
+   * manual collapses. Call when the navigation selection itself changes or
+   * when an asynchronously loaded target first becomes available.
+   */
+  revealSelection(projectId: string, taskId?: string): void {
+    const project = this.projectManager.projects.get(projectId);
+    if (!project) return;
+
+    const mountedProject = project.mountedProject;
+    const task = taskId ? mountedProject?.taskManager.tasks.get(taskId) : undefined;
+    const projectWorkspaceId =
+      project.state === 'unregistered'
+        ? (project.pendingWorkspaceId ?? null)
+        : (project.data?.workspaceId ?? null);
+    const taskWorkspaceId =
+      task && 'sidebarWorkspaceId' in task.data ? task.data.sidebarWorkspaceId : undefined;
+    const targetWorkspaceId = taskWorkspaceId ?? projectWorkspaceId;
+    if (this.workspaceStore.isFiltering && !this.workspaceStore.matchesActive(targetWorkspaceId)) {
+      this.workspaceStore.setActiveWorkspaceId(targetWorkspaceId ?? DEFAULT_WORKSPACE_ID);
+    }
+
+    const targetIsPinned = this.isProjectPinned(projectId) || task?.data.isPinned === true;
+    if (targetIsPinned) {
+      this.pinnedCollapsed = false;
+    } else {
+      this.projectsCollapsed = false;
+    }
+
+    this.ensureProjectExpanded(projectId);
+    if (!task || !mountedProject) return;
+
+    const tasks = mountedProject.taskManager.tasks;
+    let parentTaskId = registeredTaskData(task)?.parentTaskId;
+    for (let steps = 0; steps <= tasks.size && parentTaskId; steps += 1) {
+      this.collapsedTaskIds.delete(parentTaskId);
+      const parent = tasks.get(parentTaskId);
+      parentTaskId = parent ? registeredTaskData(parent)?.parentTaskId : undefined;
+    }
   }
 
   setTaskSortBy(sortBy: SidebarTaskSortBy): void {

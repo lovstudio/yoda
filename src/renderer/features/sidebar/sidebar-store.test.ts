@@ -2,6 +2,7 @@ import { observable, runInAction } from 'mobx';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LocalProject } from '@shared/projects';
 import type { Task } from '@shared/tasks';
+import { DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
 import type { ProjectStore } from '@renderer/features/projects/stores/project';
 import type { ProjectManagerStore } from '@renderer/features/projects/stores/project-manager';
 import { createUnprovisionedTask, type TaskStore } from '@renderer/features/tasks/stores/task';
@@ -286,6 +287,53 @@ describe('SidebarStore subtask tree rows', () => {
     store.setChildTaskOrder('parent', ['c1', 'c2']);
     expect(taskIds(store.sidebarRows)).toEqual(['parent', 'c1', 'c2']);
   });
+
+  it('reveals the selected task and expands its collapsed ancestors', () => {
+    const parent = makeTask('parent', { createdAt: '2026-06-02T10:00:00.000Z' });
+    const child = makeTask('child', {
+      createdAt: '2026-06-02T11:00:00.000Z',
+      parentTaskId: 'parent',
+    });
+    const store = makeSidebarStore([makeProject('project-1', [parent, child])]);
+    store.projectsCollapsed = true;
+    store.collapsedTaskIds.add('parent');
+
+    store.revealSelection('project-1', 'child');
+
+    expect(store.projectsCollapsed).toBe(false);
+    expect(store.expandedProjectIds.has('project-1')).toBe(true);
+    expect(store.collapsedTaskIds.has('parent')).toBe(false);
+  });
+
+  it('opens the pinned section when the selected task is pinned', () => {
+    const pinned = makeTask('pinned', {
+      createdAt: '2026-06-02T10:00:00.000Z',
+      isPinned: true,
+    });
+    const store = makeSidebarStore([makeProject('project-1', [pinned])]);
+    store.pinnedCollapsed = true;
+    store.projectsCollapsed = true;
+
+    store.revealSelection('project-1', 'pinned');
+
+    expect(store.pinnedCollapsed).toBe(false);
+    expect(store.projectsCollapsed).toBe(true);
+    expect(store.expandedProjectIds.has('project-1')).toBe(true);
+  });
+
+  it('follows a selected project into its workspace when filtering', () => {
+    const setActiveWorkspaceId = vi.fn();
+    const store = makeSidebarStore([makeProject('project-1', [])], {
+      activeWorkspaceId: 'workspace-1',
+      isFiltering: true,
+      matchesActive: () => false,
+      setActiveWorkspaceId,
+    });
+
+    store.revealSelection('project-1');
+
+    expect(setActiveWorkspaceId).toHaveBeenCalledWith(DEFAULT_WORKSPACE_ID);
+  });
 });
 
 function makeTask(
@@ -357,7 +405,10 @@ function makeProject(
   } as ProjectStore;
 }
 
-function makeSidebarStore(projects: ProjectStore[]): SidebarStore {
+function makeSidebarStore(
+  projects: ProjectStore[],
+  workspaceOverrides: Partial<WorkspaceStore> = {}
+): SidebarStore {
   return new SidebarStore(
     {
       projects: observable.map(projects.map((project) => [project.id, project])),
@@ -366,6 +417,7 @@ function makeSidebarStore(projects: ProjectStore[]): SidebarStore {
       activeWorkspaceId: 'all',
       isFiltering: false,
       matchesActive: () => true,
+      ...workspaceOverrides,
     } as unknown as WorkspaceStore
   );
 }

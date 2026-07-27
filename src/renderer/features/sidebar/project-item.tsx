@@ -376,6 +376,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
                 isDropTarget && 'ring-2 ring-inset ring-primary bg-primary/10'
               )}
               data-active={isProjectActive || undefined}
+              data-sidebar-entity="project"
+              data-sidebar-project-id={projectId}
               isActive={isProjectActive}
               role="button"
               tabIndex={0}
