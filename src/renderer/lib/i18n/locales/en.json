@@ -2265,6 +2265,14 @@
     "copied": "Prompt copied to clipboard",
     "saveFailed": "Failed to save prompt",
     "groups": {
+      "create": "New group",
+      "createAndMove": "New group and move",
+      "createAndMoveAction": "Create and move",
+      "createFailed": "Failed to create group",
+      "namePlaceholder": "e.g. Development & debugging",
+      "empty": "No prompts in this group yet. Use the move action on a prompt to add one.",
+      "move": "Move {{name}} to another group",
+      "moveTo": "Move to group",
       "ungrouped": "Ungrouped",
       "count": "{{count}}"
     },

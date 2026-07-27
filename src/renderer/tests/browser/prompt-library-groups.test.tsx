@@ -7,9 +7,11 @@ import type { Prompt } from '@shared/prompt-library';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
+  createGroup: vi.fn(),
   createPrompt: vi.fn(),
   updatePrompt: vi.fn(),
   deletePrompt: vi.fn(),
+  promptGroups: [] as string[],
   prompts: [] as Prompt[],
   refreshPrompt: vi.fn(),
   reorderPrompts: vi.fn(),
@@ -25,6 +27,8 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
 vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   usePrompts: () => ({ data: mocks.prompts, isLoading: false }),
+  usePromptGroups: () => ({ data: mocks.promptGroups, isLoading: false }),
+  useCreatePromptGroup: () => ({ mutate: mocks.createGroup, isPending: false }),
   useCreatePrompt: () => ({ mutate: mocks.createPrompt, isPending: false }),
   useUpdatePrompt: () => ({ mutate: mocks.updatePrompt, isPending: false }),
   useDeletePrompt: () => ({ mutate: mocks.deletePrompt }),
@@ -88,6 +92,7 @@ describe('PromptLibraryPanel groups', () => {
       prompt('ungrouped-first', ''),
       prompt('review-second', 'Review'),
     ];
+    mocks.promptGroups = ['Build', 'Review'];
     host = document.createElement('div');
     host.style.width = '440px';
     document.body.appendChild(host);
@@ -178,6 +183,70 @@ describe('PromptLibraryPanel groups', () => {
         onError: expect.any(Function),
       })
     );
+  });
+
+  it('creates an empty persisted group from the collection header', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const createGroupButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes('promptLibrary.groups.create')
+    );
+    await act(async () => createGroupButton?.click());
+
+    const groupNameInput = host.querySelector<HTMLInputElement>(
+      'input[placeholder="promptLibrary.groups.namePlaceholder"]'
+    );
+    expect(groupNameInput).not.toBeNull();
+    await act(async () => {
+      if (groupNameInput) setFormValue(groupNameInput, 'Writing');
+    });
+
+    const groupForm = host.querySelector<HTMLFormElement>('form[data-slot="prompt-group-form"]');
+    await act(async () => groupForm?.requestSubmit());
+
+    expect(mocks.createGroup).toHaveBeenCalledWith(
+      'Writing',
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      })
+    );
+  });
+
+  it('moves a prompt to another persisted group', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const moveButtons = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('button[aria-label="promptLibrary.groups.move"]')
+    );
+    expect(moveButtons.length).toBeGreaterThan(0);
+    await act(async () => moveButtons[0]?.click());
+
+    const reviewItem = Array.from(
+      document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-radio-item"]')
+    ).find((item) => item.textContent?.includes('Review'));
+    expect(reviewItem).toBeDefined();
+    await act(async () => reviewItem?.click());
+
+    expect(mocks.updatePrompt).toHaveBeenCalledWith(
+      { id: 'build-first', patch: { groupName: 'Review' } },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+  });
+
+  it('keeps bottom breathing room in the full panel', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel)));
+
+    expect(host.querySelector('.pb-24')).not.toBeNull();
   });
 
   it('sorts dynamically injected prompts independently of their groups', async () => {

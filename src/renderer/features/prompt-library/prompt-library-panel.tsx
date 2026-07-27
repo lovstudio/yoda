@@ -6,6 +6,8 @@ import {
   ExternalLink,
   FileText,
   Folder,
+  FolderInput,
+  FolderPlus,
   GitBranch,
   Link,
   Loader2,
@@ -31,6 +33,17 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { Input } from '@renderer/lib/ui/input';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
@@ -38,7 +51,9 @@ import { cn } from '@renderer/utils/utils';
 import { getNamedPromptGroups, groupPrompts, UNGROUPED_PROMPT_GROUP } from './prompt-groups';
 import {
   useCreatePrompt,
+  useCreatePromptGroup,
   useDeletePrompt,
+  usePromptGroups,
   usePrompts,
   useRefreshPromptSource,
   useReorderInjectedPrompts,
@@ -77,6 +92,7 @@ const EMPTY_DRAFT: PromptDraft = {
 
 const DEFAULT_REFRESH = String(PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES);
 const DEFAULT_TIMEOUT = String(PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS);
+const UNGROUPED_MENU_VALUE = 'prompt-library:ungrouped';
 
 function draftFromEntry(entry: Prompt): PromptDraft {
   return {
@@ -127,6 +143,8 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const { toast } = useToast();
   const showConfirm = useShowModal('confirmActionModal');
   const { data, isLoading } = usePrompts();
+  const { data: persistedGroupNames, isLoading: groupsLoading } = usePromptGroups();
+  const createGroup = useCreatePromptGroup();
   const createPrompt = useCreatePrompt();
   const updatePrompt = useUpdatePrompt();
   const deletePrompt = useDeletePrompt();
@@ -137,12 +155,21 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const [draft, setDraft] = useState<PromptDraft>(EMPTY_DRAFT);
   const [sourceForm, setSourceForm] = useState<SourceForm | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
+  const [groupFormOpen, setGroupFormOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [moveAfterCreateId, setMoveAfterCreateId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
 
   const items = useMemo(() => data ?? [], [data]);
-  const groups = useMemo(() => groupPrompts(items), [items]);
-  const namedGroups = useMemo(() => getNamedPromptGroups(items), [items]);
+  const groups = useMemo(
+    () => groupPrompts(items, persistedGroupNames ?? []),
+    [items, persistedGroupNames]
+  );
+  const namedGroups = useMemo(
+    () => getNamedPromptGroups(items, persistedGroupNames ?? []),
+    [items, persistedGroupNames]
+  );
   const injectedPrompts = useMemo(
     () =>
       items
@@ -152,6 +179,9 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   );
   const editorOpen = editingId !== null;
   const canSave = draft.title.trim().length > 0 && draft.content.trim().length > 0;
+  const normalizedNewGroupName = newGroupName.trim();
+  const canCreateGroup =
+    normalizedNewGroupName.length > 0 && !namedGroups.includes(normalizedNewGroupName);
 
   const closeEditor = () => {
     setEditingId(null);
@@ -174,6 +204,63 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
     setSourceForm(null);
     setEditingId(entry.id);
     setDraft(draftFromEntry(entry));
+  };
+
+  const openGroupCreator = (promptId: string | null = null) => {
+    setMoveAfterCreateId(promptId);
+    setNewGroupName('');
+    setGroupFormOpen(true);
+  };
+
+  const closeGroupCreator = () => {
+    setGroupFormOpen(false);
+    setNewGroupName('');
+    setMoveAfterCreateId(null);
+  };
+
+  const movePromptToGroup = (entry: Prompt, groupName: string) => {
+    if (entry.groupName.trim() === groupName) return;
+    updatePrompt.mutate(
+      { id: entry.id, patch: { groupName } },
+      {
+        onSuccess: () => {
+          setCollapsedGroups((current) => {
+            const next = new Set(current);
+            next.delete(groupName);
+            return next;
+          });
+          if (editingId === entry.id) {
+            setDraft((current) => ({ ...current, groupName }));
+          }
+        },
+      }
+    );
+  };
+
+  const handleCreateGroup = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canCreateGroup) return;
+    const groupName = normalizedNewGroupName;
+    const promptToMove = moveAfterCreateId
+      ? items.find((entry) => entry.id === moveAfterCreateId)
+      : undefined;
+    createGroup.mutate(groupName, {
+      onSuccess: () => {
+        setCollapsedGroups((current) => {
+          const next = new Set(current);
+          next.delete(groupName);
+          return next;
+        });
+        if (promptToMove) movePromptToGroup(promptToMove, groupName);
+        closeGroupCreator();
+      },
+      onError: (error) =>
+        toast({
+          title: t('promptLibrary.groups.createFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+        }),
+    });
   };
 
   const showSourceError = (error: PromptSourceError) => {
@@ -299,7 +386,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
     reorderPrompts.mutate(next);
   };
 
-  if (isLoading) {
+  if (isLoading || groupsLoading) {
     return (
       <div
         className={cn(
@@ -320,7 +407,10 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
       )}
     >
       <div
-        className={cn('flex w-full flex-col', !embedded && 'mx-auto max-w-[1060px] px-10 py-12')}
+        className={cn(
+          'flex w-full flex-col',
+          embedded ? 'pb-8' : 'mx-auto max-w-[1060px] px-10 pt-12 pb-24'
+        )}
       >
         {!embedded && (
           <h1 className="text-4xl font-normal tracking-normal">{t('promptLibrary.title')}</h1>
@@ -723,11 +813,49 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
         </section>
 
         <section className="mt-10">
-          <h2 className="text-sm font-medium text-foreground">
-            {t('promptLibrary.collection.all')}
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-medium text-foreground">
+              {t('promptLibrary.collection.all')}
+            </h2>
+            <Button type="button" variant="outline" size="sm" onClick={() => openGroupCreator()}>
+              <FolderPlus className="size-4" />
+              {t('promptLibrary.groups.create')}
+            </Button>
+          </div>
+
+          {groupFormOpen && (
+            <form
+              data-slot="prompt-group-form"
+              onSubmit={handleCreateGroup}
+              className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-background-secondary p-3"
+            >
+              <label className="grid min-w-48 flex-1 gap-1.5">
+                <span className="text-xs font-medium text-foreground">
+                  {moveAfterCreateId
+                    ? t('promptLibrary.groups.createAndMove')
+                    : t('promptLibrary.groups.create')}
+                </span>
+                <Input
+                  value={newGroupName}
+                  onChange={(event) => setNewGroupName(event.target.value)}
+                  placeholder={t('promptLibrary.groups.namePlaceholder')}
+                  autoFocus
+                />
+              </label>
+              <Button type="button" variant="ghost" size="sm" onClick={closeGroupCreator}>
+                {t('common.cancel')}
+              </Button>
+              <Button type="submit" size="sm" disabled={!canCreateGroup || createGroup.isPending}>
+                <FolderPlus className="size-4" />
+                {moveAfterCreateId
+                  ? t('promptLibrary.groups.createAndMoveAction')
+                  : t('common.create')}
+              </Button>
+            </form>
+          )}
+
           <div className="mt-3">
-            {items.length === 0 ? (
+            {groups.length === 0 ? (
               <p className="text-sm text-foreground-muted">{t('promptLibrary.empty')}</p>
             ) : (
               <ul className="grid gap-3">
@@ -763,151 +891,215 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                         </span>
                       </button>
 
-                      {groupIsOpen && (
-                        <ul className="border-t border-border">
-                          {group.prompts.map((entry) => {
-                            const isOpen = expandedIds.has(entry.id);
-                            return (
-                              <li
-                                key={entry.id}
-                                className="group/prompt border-t border-border first:border-t-0"
-                              >
-                                <div className="flex items-center gap-2 px-3 py-2.5 pl-8">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleExpanded(entry.id)}
-                                    aria-expanded={isOpen}
-                                    className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-border"
-                                  >
-                                    <ChevronRight
-                                      className={cn(
-                                        'size-4 shrink-0 text-foreground-muted transition-transform',
-                                        isOpen && 'rotate-90'
-                                      )}
-                                    />
-                                    <span className="min-w-0 flex-1">
-                                      <span className="flex items-center gap-2">
-                                        <span className="truncate text-sm font-medium text-foreground">
-                                          {entry.title}
+                      {groupIsOpen &&
+                        (group.prompts.length === 0 ? (
+                          <p className="border-t border-border px-8 py-4 text-xs text-foreground-muted">
+                            {t('promptLibrary.groups.empty')}
+                          </p>
+                        ) : (
+                          <ul className="border-t border-border">
+                            {group.prompts.map((entry) => {
+                              const isOpen = expandedIds.has(entry.id);
+                              return (
+                                <li
+                                  key={entry.id}
+                                  className="group/prompt border-t border-border first:border-t-0"
+                                >
+                                  <div className="flex items-center gap-2 px-3 py-2.5 pl-8">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpanded(entry.id)}
+                                      aria-expanded={isOpen}
+                                      className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-border"
+                                    >
+                                      <ChevronRight
+                                        className={cn(
+                                          'size-4 shrink-0 text-foreground-muted transition-transform',
+                                          isOpen && 'rotate-90'
+                                        )}
+                                      />
+                                      <span className="min-w-0 flex-1">
+                                        <span className="flex items-center gap-2">
+                                          <span className="truncate text-sm font-medium text-foreground">
+                                            {entry.title}
+                                          </span>
+                                          {entry.source && (
+                                            <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] text-foreground-muted">
+                                              {t(`promptLibrary.source.type.${entry.source.type}`)}
+                                            </span>
+                                          )}
                                         </span>
-                                        {entry.source && (
-                                          <span className="shrink-0 rounded bg-background-1 px-1.5 py-0.5 text-[10px] text-foreground-muted">
-                                            {t(`promptLibrary.source.type.${entry.source.type}`)}
+                                        {entry.description && (
+                                          <span className="mt-0.5 block truncate text-xs text-foreground-muted">
+                                            {entry.description}
                                           </span>
                                         )}
                                       </span>
-                                      {entry.description && (
-                                        <span className="mt-0.5 block truncate text-xs text-foreground-muted">
-                                          {entry.description}
-                                        </span>
+                                    </button>
+                                    <Switch
+                                      size="sm"
+                                      checked={entry.injectionEnabled}
+                                      aria-label={t('promptLibrary.injection.toggle', {
+                                        name: entry.title,
+                                      })}
+                                      onCheckedChange={(checked) =>
+                                        setInjectionEnabled(entry, checked)
+                                      }
+                                    />
+                                    <div className="flex shrink-0 items-center gap-1 opacity-70 transition-opacity group-hover/prompt:opacity-100 group-focus-within/prompt:opacity-100">
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger
+                                          render={
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="icon-sm"
+                                              aria-label={t('promptLibrary.groups.move', {
+                                                name: entry.title,
+                                              })}
+                                              title={t('promptLibrary.groups.move', {
+                                                name: entry.title,
+                                              })}
+                                              disabled={updatePrompt.isPending}
+                                            >
+                                              <FolderInput className="size-4" />
+                                            </Button>
+                                          }
+                                        />
+                                        <DropdownMenuContent align="end" className="w-56">
+                                          <DropdownMenuGroup>
+                                            <DropdownMenuLabel>
+                                              {t('promptLibrary.groups.moveTo')}
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuRadioGroup
+                                              value={entry.groupName.trim() || UNGROUPED_MENU_VALUE}
+                                            >
+                                              <DropdownMenuRadioItem
+                                                value={UNGROUPED_MENU_VALUE}
+                                                closeOnClick
+                                                onClick={() =>
+                                                  movePromptToGroup(entry, UNGROUPED_PROMPT_GROUP)
+                                                }
+                                              >
+                                                {t('promptLibrary.groups.ungrouped')}
+                                              </DropdownMenuRadioItem>
+                                              {namedGroups.map((groupName) => (
+                                                <DropdownMenuRadioItem
+                                                  key={groupName}
+                                                  value={groupName}
+                                                  closeOnClick
+                                                  onClick={() =>
+                                                    movePromptToGroup(entry, groupName)
+                                                  }
+                                                >
+                                                  {groupName}
+                                                </DropdownMenuRadioItem>
+                                              ))}
+                                            </DropdownMenuRadioGroup>
+                                          </DropdownMenuGroup>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem
+                                            onClick={() => openGroupCreator(entry.id)}
+                                          >
+                                            <FolderPlus className="size-4" />
+                                            {t('promptLibrary.groups.createAndMove')}
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                      {entry.source && (
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          aria-label={t('promptLibrary.source.refresh')}
+                                          disabled={refreshSource.isPending}
+                                          onClick={() =>
+                                            refreshSource.mutate(entry.id, {
+                                              onSuccess: (result) => {
+                                                if (result.status === 'error') {
+                                                  showSourceError(result.error);
+                                                }
+                                              },
+                                            })
+                                          }
+                                        >
+                                          <RefreshCw
+                                            className={cn(
+                                              'size-4',
+                                              refreshSource.isPending && 'animate-spin'
+                                            )}
+                                          />
+                                        </Button>
                                       )}
-                                    </span>
-                                  </button>
-                                  <Switch
-                                    size="sm"
-                                    checked={entry.injectionEnabled}
-                                    aria-label={t('promptLibrary.injection.toggle', {
-                                      name: entry.title,
-                                    })}
-                                    onCheckedChange={(checked) =>
-                                      setInjectionEnabled(entry, checked)
-                                    }
-                                  />
-                                  <div className="flex shrink-0 items-center gap-1 opacity-70 transition-opacity group-hover/prompt:opacity-100 group-focus-within/prompt:opacity-100">
-                                    {entry.source && (
                                       <Button
                                         type="button"
                                         variant="ghost"
                                         size="icon-sm"
-                                        aria-label={t('promptLibrary.source.refresh')}
-                                        disabled={refreshSource.isPending}
-                                        onClick={() =>
-                                          refreshSource.mutate(entry.id, {
-                                            onSuccess: (result) => {
-                                              if (result.status === 'error') {
-                                                showSourceError(result.error);
-                                              }
-                                            },
-                                          })
-                                        }
+                                        aria-label={t('promptLibrary.copy')}
+                                        onClick={() => handleCopy(entry)}
                                       >
-                                        <RefreshCw
-                                          className={cn(
-                                            'size-4',
-                                            refreshSource.isPending && 'animate-spin'
-                                          )}
-                                        />
+                                        <Copy className="size-4" />
                                       </Button>
-                                    )}
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      aria-label={t('promptLibrary.copy')}
-                                      onClick={() => handleCopy(entry)}
-                                    >
-                                      <Copy className="size-4" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      aria-label={t('common.edit')}
-                                      onClick={() => openEdit(entry)}
-                                    >
-                                      <Pencil className="size-4" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      aria-label={t('common.delete')}
-                                      onClick={() => handleDelete(entry)}
-                                    >
-                                      <Trash2 className="size-4" />
-                                    </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        aria-label={t('common.edit')}
+                                        onClick={() => openEdit(entry)}
+                                      >
+                                        <Pencil className="size-4" />
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        aria-label={t('common.delete')}
+                                        onClick={() => handleDelete(entry)}
+                                      >
+                                        <Trash2 className="size-4" />
+                                      </Button>
+                                    </div>
                                   </div>
-                                </div>
-                                {isOpen && (
-                                  <div className="grid gap-3 border-t border-border px-3 py-3 pl-14">
-                                    {entry.source && (
-                                      <p className="truncate text-xs text-foreground-passive">
-                                        {sourceTarget(entry.source)}
-                                      </p>
-                                    )}
-                                    <pre className="min-w-0 whitespace-pre-wrap break-words font-mono text-xs text-foreground-passive">
-                                      {entry.content}
-                                    </pre>
-                                    {entry.extraInfo && (
-                                      <div className="rounded-md border border-border bg-background px-3 py-2 text-xs leading-5 text-foreground-muted">
-                                        <span className="mr-2 font-medium text-foreground">
-                                          {t('promptLibrary.form.extraInfo')}
-                                        </span>
-                                        {isExternalUrl(entry.extraInfo) ? (
-                                          <button
-                                            type="button"
-                                            className="inline-flex items-center gap-1 text-foreground underline underline-offset-2"
-                                            onClick={() =>
-                                              void rpc.app.openExternal(entry.extraInfo.trim())
-                                            }
-                                          >
-                                            {entry.extraInfo.trim()}
-                                            <ExternalLink className="size-3" />
-                                          </button>
-                                        ) : (
-                                          <span className="whitespace-pre-wrap">
-                                            {entry.extraInfo}
+                                  {isOpen && (
+                                    <div className="grid gap-3 border-t border-border px-3 py-3 pl-14">
+                                      {entry.source && (
+                                        <p className="truncate text-xs text-foreground-passive">
+                                          {sourceTarget(entry.source)}
+                                        </p>
+                                      )}
+                                      <pre className="min-w-0 whitespace-pre-wrap break-words font-mono text-xs text-foreground-passive">
+                                        {entry.content}
+                                      </pre>
+                                      {entry.extraInfo && (
+                                        <div className="rounded-md border border-border bg-background px-3 py-2 text-xs leading-5 text-foreground-muted">
+                                          <span className="mr-2 font-medium text-foreground">
+                                            {t('promptLibrary.form.extraInfo')}
                                           </span>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
+                                          {isExternalUrl(entry.extraInfo) ? (
+                                            <button
+                                              type="button"
+                                              className="inline-flex items-center gap-1 text-foreground underline underline-offset-2"
+                                              onClick={() =>
+                                                void rpc.app.openExternal(entry.extraInfo.trim())
+                                              }
+                                            >
+                                              {entry.extraInfo.trim()}
+                                              <ExternalLink className="size-3" />
+                                            </button>
+                                          ) : (
+                                            <span className="whitespace-pre-wrap">
+                                              {entry.extraInfo}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ))}
                     </li>
                   );
                 })}

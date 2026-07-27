@@ -309,6 +309,13 @@
       "when": 1785120138966,
       "tag": "0043_green_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1785124007615,
+      "tag": "0044_woozy_bastion",
+      "breakpoints": true
     }
   ]
 }

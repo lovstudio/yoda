@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, eq, ne, sql } from 'drizzle-orm';
 import { promptsUpdatedChannel } from '@shared/events/appEvents';
 import {
   promptCreateInputSchema,
+  promptGroupNameSchema,
   promptSourceSchema,
   promptUpdateInputSchema,
   type Prompt,
@@ -12,7 +13,7 @@ import {
 } from '@shared/prompt-library';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { db } from '@main/db/client';
-import { prompts } from '@main/db/schema';
+import { promptGroups, prompts } from '@main/db/schema';
 import { events } from '@main/lib/events';
 
 type PromptRow = typeof prompts.$inferSelect;
@@ -50,40 +51,51 @@ function toPrompt(row: PromptRow): Prompt {
 export class PromptLibraryService {
   async initialize(): Promise<void> {
     const legacy = await appSettingsService.get('promptPrinciples');
-    if (legacy.items.length === 0) return;
+    if (legacy.items.length > 0) {
+      const [{ nextSortOrder }] = await db
+        .select({ nextSortOrder: sql<number>`coalesce(max(${prompts.sortOrder}), -1) + 1` })
+        .from(prompts);
+      const [{ nextInjectionOrder }] = await db
+        .select({
+          nextInjectionOrder: sql<number>`coalesce(max(${prompts.injectionOrder}), -1) + 1`,
+        })
+        .from(prompts);
+      const now = new Date().toISOString();
 
-    const [{ nextSortOrder }] = await db
-      .select({ nextSortOrder: sql<number>`coalesce(max(${prompts.sortOrder}), -1) + 1` })
-      .from(prompts);
-    const [{ nextInjectionOrder }] = await db
-      .select({
-        nextInjectionOrder: sql<number>`coalesce(max(${prompts.injectionOrder}), -1) + 1`,
-      })
-      .from(prompts);
-    const now = new Date().toISOString();
+      await db
+        .insert(prompts)
+        .values(
+          legacy.items.map((item, index) => ({
+            id: item.id,
+            title: item.name,
+            description: '',
+            content: item.text,
+            groupName: '',
+            extraInfo: '',
+            injectionEnabled: item.enabled,
+            injectionOrder: (nextInjectionOrder ?? 0) + index,
+            sourceJson: item.source ? JSON.stringify(item.source) : null,
+            sortOrder: (nextSortOrder ?? 0) + index,
+            createdAt: now,
+            updatedAt: now,
+          }))
+        )
+        .onConflictDoNothing();
 
-    await db
-      .insert(prompts)
-      .values(
-        legacy.items.map((item, index) => ({
-          id: item.id,
-          title: item.name,
-          description: '',
-          content: item.text,
-          groupName: '',
-          extraInfo: '',
-          injectionEnabled: item.enabled,
-          injectionOrder: (nextInjectionOrder ?? 0) + index,
-          sourceJson: item.source ? JSON.stringify(item.source) : null,
-          sortOrder: (nextSortOrder ?? 0) + index,
-          createdAt: now,
-          updatedAt: now,
-        }))
-      )
-      .onConflictDoNothing();
+      await appSettingsService.update('promptPrinciples', { items: [] });
+      events.emit(promptsUpdatedChannel, undefined);
+    }
 
-    await appSettingsService.update('promptPrinciples', { items: [] });
-    events.emit(promptsUpdatedChannel, undefined);
+    const existingGroupNames = await db
+      .selectDistinct({ name: prompts.groupName })
+      .from(prompts)
+      .where(ne(prompts.groupName, ''));
+    if (existingGroupNames.length > 0) {
+      await db
+        .insert(promptGroups)
+        .values(existingGroupNames)
+        .onConflictDoNothing({ target: promptGroups.name });
+    }
   }
 
   async list(): Promise<Prompt[]> {
@@ -94,8 +106,30 @@ export class PromptLibraryService {
     return rows.map(toPrompt);
   }
 
+  async listGroups(): Promise<string[]> {
+    const rows = await db.select().from(promptGroups).orderBy(asc(promptGroups.name));
+    return rows.map((row) => row.name);
+  }
+
+  async createGroup(name: string): Promise<string> {
+    const parsed = promptGroupNameSchema.parse(name);
+    await this.ensureGroup(parsed);
+    events.emit(promptsUpdatedChannel, undefined);
+    return parsed;
+  }
+
+  private async ensureGroup(name: string): Promise<void> {
+    const normalized = name.trim();
+    if (!normalized) return;
+    await db
+      .insert(promptGroups)
+      .values({ name: promptGroupNameSchema.parse(normalized) })
+      .onConflictDoNothing({ target: promptGroups.name });
+  }
+
   async create(input: PromptCreateInput): Promise<Prompt> {
     const parsed = promptCreateInputSchema.parse(input);
+    await this.ensureGroup(parsed.groupName);
     const now = new Date().toISOString();
     // Prepend new entries (smallest sortOrder sorts first).
     const [{ next }] = await db
@@ -127,6 +161,7 @@ export class PromptLibraryService {
 
   async update(id: string, patch: PromptUpdateInput): Promise<Prompt | null> {
     const parsed = promptUpdateInputSchema.parse(patch);
+    if (parsed.groupName !== undefined) await this.ensureGroup(parsed.groupName);
     if (Object.keys(parsed).length > 0) {
       const { source, ...fields } = parsed;
       let injectionOrder: number | undefined;

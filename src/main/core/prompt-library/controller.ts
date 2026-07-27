@@ -5,6 +5,8 @@ import { promptSourceService } from './prompt-source-service';
 
 export const promptLibraryController = createRPCController({
   list: () => promptLibraryService.list(),
+  listGroups: () => promptLibraryService.listGroups(),
+  createGroup: (name: string) => promptLibraryService.createGroup(name),
   create: async (input: PromptCreateInput) => {
     const prompt = await promptLibraryService.create(input);
     await promptSourceService.reconcile();

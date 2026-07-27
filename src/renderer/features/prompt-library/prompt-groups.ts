@@ -7,8 +7,12 @@ export type PromptGroup = {
   prompts: Prompt[];
 };
 
-export function groupPrompts(prompts: Prompt[]): PromptGroup[] {
-  const promptsByGroup = new Map<string, Prompt[]>();
+export function groupPrompts(prompts: Prompt[], persistedGroups: string[] = []): PromptGroup[] {
+  const promptsByGroup = new Map<string, Prompt[]>(
+    persistedGroups
+      .map((name): [string, Prompt[]] => [name.trim(), []])
+      .filter(([name]) => name.length > 0)
+  );
 
   for (const prompt of prompts) {
     const groupName = prompt.groupName.trim();
@@ -27,8 +31,8 @@ export function groupPrompts(prompts: Prompt[]): PromptGroup[] {
   });
 }
 
-export function getNamedPromptGroups(prompts: Prompt[]): string[] {
-  return groupPrompts(prompts)
+export function getNamedPromptGroups(prompts: Prompt[], persistedGroups: string[] = []): string[] {
+  return groupPrompts(prompts, persistedGroups)
     .map((group) => group.name)
     .filter((name) => name !== UNGROUPED_PROMPT_GROUP);
 }

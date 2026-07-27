@@ -5,6 +5,7 @@ import type { PromptCreateInput, PromptUpdateInput } from '@shared/prompt-librar
 import { events, rpc } from '@renderer/lib/ipc';
 
 export const promptsQueryKey = ['prompts'] as const;
+export const promptGroupsQueryKey = ['promptGroups'] as const;
 
 export function usePrompts() {
   const queryClient = useQueryClient();
@@ -18,6 +19,31 @@ export function usePrompts() {
   return useQuery({
     queryKey: promptsQueryKey,
     queryFn: () => rpc.promptLibrary.list(),
+  });
+}
+
+export function usePromptGroups() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    return events.on(promptsUpdatedChannel, () => {
+      void queryClient.invalidateQueries({ queryKey: promptGroupsQueryKey });
+    });
+  }, [queryClient]);
+
+  return useQuery({
+    queryKey: promptGroupsQueryKey,
+    queryFn: () => rpc.promptLibrary.listGroups(),
+  });
+}
+
+export function useCreatePromptGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => rpc.promptLibrary.createGroup(name),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: promptGroupsQueryKey });
+    },
   });
 }
 

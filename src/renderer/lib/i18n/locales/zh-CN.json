@@ -2265,6 +2265,14 @@
     "copied": "已复制到剪贴板",
     "saveFailed": "保存提示词失败",
     "groups": {
+      "create": "新建分组",
+      "createAndMove": "新建分组并移动",
+      "createAndMoveAction": "新建并移动",
+      "createFailed": "新建分组失败",
+      "namePlaceholder": "例如：开发与调试",
+      "empty": "这个分组还没有提示词。可通过提示词右侧的移动按钮加入。",
+      "move": "移动「{{name}}」到其他分组",
+      "moveTo": "移动到分组",
       "ungrouped": "未分组",
       "count": "{{count}} 条"
     },

@@ -32,11 +32,18 @@ describe('prompt groups', () => {
 
   it('returns reusable named groups without the ungrouped bucket', () => {
     expect(
-      getNamedPromptGroups([
-        prompt('ungrouped', ''),
-        prompt('review', 'Review'),
-        prompt('build', 'Build'),
-      ])
-    ).toEqual(['Build', 'Review']);
+      getNamedPromptGroups(
+        [prompt('ungrouped', ''), prompt('review', 'Review'), prompt('build', 'Build')],
+        ['Writing']
+      )
+    ).toEqual(['Build', 'Review', 'Writing']);
+  });
+
+  it('keeps persisted groups visible when they do not contain prompts', () => {
+    const groups = groupPrompts([prompt('review', 'Review')], ['Build', 'Review']);
+
+    expect(groups.map((group) => group.name)).toEqual(['Build', 'Review']);
+    expect(groups[0]?.prompts).toEqual([]);
+    expect(groups[1]?.prompts.map((entry) => entry.id)).toEqual(['review']);
   });
 });

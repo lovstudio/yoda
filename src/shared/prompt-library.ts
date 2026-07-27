@@ -98,6 +98,9 @@ export type PromptSourceRefreshResult =
       text: string;
     };
 
+export const promptGroupNameSchema = z.string().trim().min(1).max(80);
+export type PromptGroupName = z.infer<typeof promptGroupNameSchema>;
+
 export const promptSchema = z.object({
   id: z.string(),
   title: z.string(),

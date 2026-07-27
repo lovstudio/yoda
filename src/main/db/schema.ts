@@ -180,6 +180,14 @@ export const automationRuns = sqliteTable(
   })
 );
 
+/** Persisted prompt groups, including groups that do not contain prompts yet. */
+export const promptGroups = sqliteTable('prompt_groups', {
+  name: text('name').primaryKey(),
+  createdAt: text('created_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
 /** Canonical user prompt store, including grouping, sources and injection. */
 export const prompts = sqliteTable('prompts', {
   id: text('id').primaryKey(),
