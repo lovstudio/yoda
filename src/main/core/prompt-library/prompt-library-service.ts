@@ -198,6 +198,48 @@ export class PromptLibraryService {
     events.emit(promptsUpdatedChannel, undefined);
   }
 
+  async setGroupInjectionEnabled(groupName: string, enabled: boolean): Promise<void> {
+    const normalized = groupName.trim();
+    const groupRows = await db
+      .select({
+        id: prompts.id,
+        injectionEnabled: prompts.injectionEnabled,
+      })
+      .from(prompts)
+      .where(sql`trim(${prompts.groupName}) = ${normalized}`)
+      .orderBy(asc(prompts.injectionOrder), asc(prompts.sortOrder));
+    if (groupRows.length === 0) return;
+
+    if (!enabled) {
+      await db
+        .update(prompts)
+        .set({ injectionEnabled: false })
+        .where(sql`trim(${prompts.groupName}) = ${normalized}`);
+    } else {
+      const disabledRows = groupRows.filter((row) => !row.injectionEnabled);
+      if (disabledRows.length > 0) {
+        const [{ next }] = await db
+          .select({
+            next: sql<number>`coalesce(max(${prompts.injectionOrder}), -1) + 1`,
+          })
+          .from(prompts)
+          .where(eq(prompts.injectionEnabled, true));
+        db.transaction((tx) => {
+          disabledRows.forEach((row, index) => {
+            tx.update(prompts)
+              .set({
+                injectionEnabled: true,
+                injectionOrder: (next ?? 0) + index,
+              })
+              .where(eq(prompts.id, row.id))
+              .run();
+          });
+        });
+      }
+    }
+    events.emit(promptsUpdatedChannel, undefined);
+  }
+
   async reorderInjection(ids: string[]): Promise<void> {
     const uniqueIds = [...new Set(ids)];
     if (uniqueIds.length !== ids.length)

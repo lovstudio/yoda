@@ -7,6 +7,12 @@ export type PromptGroup = {
   prompts: Prompt[];
 };
 
+export type PromptGroupInjectionState = {
+  state: 'all' | 'none' | 'partial';
+  enabledCount: number;
+  totalCount: number;
+};
+
 export function groupPrompts(prompts: Prompt[], persistedGroups: string[] = []): PromptGroup[] {
   const promptsByGroup = new Map<string, Prompt[]>(
     persistedGroups
@@ -35,4 +41,32 @@ export function getNamedPromptGroups(prompts: Prompt[], persistedGroups: string[
   return groupPrompts(prompts, persistedGroups)
     .map((group) => group.name)
     .filter((name) => name !== UNGROUPED_PROMPT_GROUP);
+}
+
+export function getInjectionOrderedPromptGroups(prompts: Prompt[]): PromptGroup[] {
+  return groupPrompts(
+    prompts.slice().sort((left, right) => left.injectionOrder - right.injectionOrder)
+  );
+}
+
+export function getPromptGroupInjectionState(
+  prompts: Prompt[],
+  isEnabled: (prompt: Prompt) => boolean
+): PromptGroupInjectionState {
+  const enabledCount = prompts.filter(isEnabled).length;
+  return {
+    enabledCount,
+    totalCount: prompts.length,
+    state: enabledCount === 0 ? 'none' : enabledCount === prompts.length ? 'all' : 'partial',
+  };
+}
+
+export function reorderPromptIds(ids: string[], activeId: string, overId: string): string[] {
+  const fromIndex = ids.indexOf(activeId);
+  const toIndex = ids.indexOf(overId);
+  if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return ids;
+  const next = ids.slice();
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
 }

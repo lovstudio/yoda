@@ -7,6 +7,8 @@ export const promptLibraryController = createRPCController({
   list: () => promptLibraryService.list(),
   listGroups: () => promptLibraryService.listGroups(),
   createGroup: (name: string) => promptLibraryService.createGroup(name),
+  setGroupInjectionEnabled: (groupName: string, enabled: boolean) =>
+    promptLibraryService.setGroupInjectionEnabled(groupName, enabled),
   create: async (input: PromptCreateInput) => {
     const prompt = await promptLibraryService.create(input);
     await promptSourceService.reconcile();

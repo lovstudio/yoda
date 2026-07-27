@@ -70,6 +70,7 @@ import { createAiLabProject } from '@renderer/features/ai-lab/create-ai-lab-proj
 import {
   effectiveGlobalEnabled,
   setGlobalOverride,
+  setGlobalOverrides,
   setProjectItems,
 } from '@renderer/features/projects/project-prompt-principles';
 import {
@@ -79,7 +80,12 @@ import {
   getRepositoryStore,
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
-import { usePrompts, useUpdatePrompt } from '@renderer/features/prompt-library/use-prompts';
+import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
+import {
+  usePrompts,
+  useSetPromptGroupInjectionEnabled,
+  useUpdatePrompt,
+} from '@renderer/features/prompt-library/use-prompts';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
 import { ContextItem, memoryFileLabel } from '@renderer/features/tasks/components/context-item';
@@ -964,14 +970,12 @@ export const HomeComposer = observer(function HomeComposer({
   );
   const { data: promptLibraryItems } = usePrompts();
   const updateLibraryPrompt = useUpdatePrompt();
+  const setLibraryPromptGroup = useSetPromptGroupInjectionEnabled();
   const promptPrinciples = useMemo(
     () =>
-      (promptLibraryItems ?? []).slice().sort((left, right) => {
-        if (left.injectionEnabled !== right.injectionEnabled) {
-          return left.injectionEnabled ? -1 : 1;
-        }
-        return left.injectionOrder - right.injectionOrder;
-      }),
+      (promptLibraryItems ?? [])
+        .slice()
+        .sort((left, right) => left.injectionOrder - right.injectionOrder),
     [promptLibraryItems]
   );
   // Run-defaults section is collapsed by default — it is rarely changed and its
@@ -1027,6 +1031,12 @@ export const HomeComposer = observer(function HomeComposer({
   const setGlobalPrincipleProjectOverride = useCallback(
     (principle: { id: string; injectionEnabled: boolean }, enabled: boolean) => {
       saveProjectPromptPrinciples(setGlobalOverride(projectPromptPrinciples, principle, enabled));
+    },
+    [projectPromptPrinciples, saveProjectPromptPrinciples]
+  );
+  const setGlobalPrincipleGroupProjectOverride = useCallback(
+    (principles: Array<{ id: string; injectionEnabled: boolean }>, enabled: boolean) => {
+      saveProjectPromptPrinciples(setGlobalOverrides(projectPromptPrinciples, principles, enabled));
     },
     [projectPromptPrinciples, saveProjectPromptPrinciples]
   );
@@ -2066,39 +2076,26 @@ export const HomeComposer = observer(function HomeComposer({
             </button>
           }
         />
-        {promptPrinciples.length === 0 ? (
-          <p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>
-        ) : (
-          promptPrinciples.map((prompt) => (
-            <div key={prompt.id} className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span className="min-w-0 truncate text-xs text-foreground">
-                  {prompt.title || t('home.promptPrincipleUnnamed')}
-                </span>
-                {prompt.content ? (
-                  <InfoTooltip
-                    label={prompt.title || t('home.promptPrincipleUnnamed')}
-                    content={<span className="whitespace-pre-wrap">{prompt.content}</span>}
-                  />
-                ) : null}
-              </div>
-              <Switch
-                size="sm"
-                checked={
-                  selectedProjectId
-                    ? effectiveGlobalEnabled(projectPromptPrinciples, prompt)
-                    : prompt.injectionEnabled
-                }
-                onCheckedChange={(checked) =>
-                  selectedProjectId
-                    ? setGlobalPrincipleProjectOverride(prompt, checked)
-                    : setPromptPrincipleEnabled(prompt.id, checked)
-                }
-                aria-label={t('settings.prompts.toggle')}
-              />
-            </div>
-          ))
-        )}
+        <PromptInjectionControls
+          prompts={promptPrinciples}
+          isPromptEnabled={(prompt) =>
+            selectedProjectId
+              ? effectiveGlobalEnabled(projectPromptPrinciples, prompt)
+              : prompt.injectionEnabled
+          }
+          onPromptEnabledChange={(prompt, checked) =>
+            selectedProjectId
+              ? setGlobalPrincipleProjectOverride(prompt, checked)
+              : setPromptPrincipleEnabled(prompt.id, checked)
+          }
+          onGroupEnabledChange={(groupName, principles, enabled) =>
+            selectedProjectId
+              ? setGlobalPrincipleGroupProjectOverride(principles, enabled)
+              : setLibraryPromptGroup.mutate({ groupName, enabled })
+          }
+          disabled={updateLibraryPrompt.isPending || setLibraryPromptGroup.isPending}
+          empty={<p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>}
+        />
         {selectedProjectId && projectPrincipleItems.length > 0 ? (
           <>
             <div className="mt-1 text-[10px] font-medium uppercase tracking-wide text-foreground-passive">

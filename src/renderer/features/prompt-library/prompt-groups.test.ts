@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Prompt } from '@shared/prompt-library';
-import { getNamedPromptGroups, groupPrompts, UNGROUPED_PROMPT_GROUP } from './prompt-groups';
+import {
+  getInjectionOrderedPromptGroups,
+  getNamedPromptGroups,
+  getPromptGroupInjectionState,
+  groupPrompts,
+  reorderPromptIds,
+  UNGROUPED_PROMPT_GROUP,
+} from './prompt-groups';
 
 function prompt(id: string, groupName: string): Prompt {
   return {
@@ -45,5 +52,34 @@ describe('prompt groups', () => {
     expect(groups.map((group) => group.name)).toEqual(['Build', 'Review']);
     expect(groups[0]?.prompts).toEqual([]);
     expect(groups[1]?.prompts.map((entry) => entry.id)).toEqual(['review']);
+  });
+
+  it('reports all, partial, and empty group injection states', () => {
+    const first = { ...prompt('first', 'Brand'), injectionEnabled: true };
+    const second = prompt('second', 'Brand');
+
+    expect(
+      getPromptGroupInjectionState([first, second], (entry) => entry.injectionEnabled)
+    ).toEqual({ state: 'partial', enabledCount: 1, totalCount: 2 });
+    expect(getPromptGroupInjectionState([first], (entry) => entry.injectionEnabled).state).toBe(
+      'all'
+    );
+    expect(getPromptGroupInjectionState([second], (entry) => entry.injectionEnabled).state).toBe(
+      'none'
+    );
+  });
+
+  it('keeps injection order within each group and reorders ids by drag target', () => {
+    const groups = getInjectionOrderedPromptGroups([
+      { ...prompt('second', 'Brand'), injectionOrder: 20 },
+      { ...prompt('first', 'Brand'), injectionOrder: 10 },
+    ]);
+
+    expect(groups[0]?.prompts.map((entry) => entry.id)).toEqual(['first', 'second']);
+    expect(reorderPromptIds(['first', 'second', 'third'], 'first', 'third')).toEqual([
+      'second',
+      'third',
+      'first',
+    ]);
   });
 });

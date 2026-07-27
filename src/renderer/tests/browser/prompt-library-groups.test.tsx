@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   prompts: [] as Prompt[],
   refreshPrompt: vi.fn(),
   reorderPrompts: vi.fn(),
+  setGroupInjection: vi.fn(),
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -33,6 +34,10 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   useUpdatePrompt: () => ({ mutate: mocks.updatePrompt, isPending: false }),
   useDeletePrompt: () => ({ mutate: mocks.deletePrompt }),
   useReorderInjectedPrompts: () => ({ mutate: mocks.reorderPrompts, isPending: false }),
+  useSetPromptGroupInjectionEnabled: () => ({
+    mutate: mocks.setGroupInjection,
+    isPending: false,
+  }),
   useRefreshPromptSource: () => ({ mutate: mocks.refreshPrompt, isPending: false }),
 }));
 
@@ -240,6 +245,26 @@ describe('PromptLibraryPanel groups', () => {
     );
   });
 
+  it('toggles dynamic injection for a whole group', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const groupToggles = Array.from(
+      host.querySelectorAll<HTMLElement>(
+        '[data-slot="checkbox"][aria-label="promptLibrary.groups.toggleInjection"]'
+      )
+    );
+    expect(groupToggles).toHaveLength(3);
+    await act(async () => groupToggles[0]?.click());
+
+    expect(mocks.setGroupInjection).toHaveBeenCalledWith({
+      groupName: 'Build',
+      enabled: true,
+    });
+  });
+
   it('keeps bottom breathing room in the full panel', async () => {
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'
@@ -249,7 +274,7 @@ describe('PromptLibraryPanel groups', () => {
     expect(host.querySelector('[data-slot="prompt-library-bottom-space"].h-24')).not.toBeNull();
   });
 
-  it('sorts dynamically injected prompts independently of their groups', async () => {
+  it('sorts and keyboard-drags dynamically injected prompts independently of groups', async () => {
     mocks.prompts = [
       { ...prompt('second', 'Review'), injectionEnabled: true, injectionOrder: 20 },
       { ...prompt('first', 'Build'), injectionEnabled: true, injectionOrder: 10 },
@@ -269,10 +294,28 @@ describe('PromptLibraryPanel groups', () => {
       expect.stringContaining('second'),
     ]);
 
-    const moveDown = injectionSection?.querySelector<HTMLButtonElement>(
-      'button[aria-label="promptLibrary.injection.moveDown"]'
+    const dragHandles = Array.from(
+      injectionSection?.querySelectorAll<HTMLButtonElement>(
+        'button[aria-label="promptLibrary.injection.reorder"]'
+      ) ?? []
     );
-    await act(async () => moveDown?.click());
+    expect(dragHandles).toHaveLength(2);
+    dragHandles[0]?.focus();
+    await act(async () => {
+      dragHandles[0]?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true })
+      );
+    });
+    await act(async () => {
+      dragHandles[0]?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true })
+      );
+    });
+    await act(async () => {
+      dragHandles[0]?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true })
+      );
+    });
     expect(mocks.reorderPrompts).toHaveBeenCalledWith(['second', 'first']);
   });
 });

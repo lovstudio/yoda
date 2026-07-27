@@ -5,8 +5,10 @@ import type { PromptPrinciple } from '@shared/project-settings';
 import {
   effectiveGlobalEnabled,
   setGlobalOverride,
+  setGlobalOverrides,
   setProjectItems,
 } from '@renderer/features/projects/project-prompt-principles';
+import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
 import { usePrompts } from '@renderer/features/prompt-library/use-prompts';
 import { Button } from '@renderer/lib/ui/button';
 import { Field, FieldDescription, FieldTitle } from '@renderer/lib/ui/field';
@@ -27,10 +29,9 @@ export const PromptPrinciplesSection = observer(function PromptPrinciplesSection
 }: PromptPrinciplesSectionProps) {
   const { t } = useTranslation();
   const { data: prompts } = usePrompts();
-  const globalItems = (prompts ?? []).slice().sort((left, right) => {
-    if (left.injectionEnabled !== right.injectionEnabled) return left.injectionEnabled ? -1 : 1;
-    return left.injectionOrder - right.injectionOrder;
-  });
+  const globalItems = (prompts ?? [])
+    .slice()
+    .sort((left, right) => left.injectionOrder - right.injectionOrder);
   const project = form.promptPrinciples;
   const items = project?.items ?? [];
 
@@ -63,26 +64,16 @@ export const PromptPrinciplesSection = observer(function PromptPrinciplesSection
               {t('projects.settings.promptPrinciples.globalEmpty')}
             </FieldDescription>
           ) : (
-            <div className="flex flex-col gap-2">
-              {globalItems.map((prompt) => (
-                <div
-                  key={prompt.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/10 px-2.5 py-2"
-                >
-                  <span className="min-w-0 truncate text-xs text-foreground">
-                    {prompt.title || t('projects.settings.promptPrinciples.unnamed')}
-                  </span>
-                  <Switch
-                    size="sm"
-                    checked={effectiveGlobalEnabled(project, prompt)}
-                    onCheckedChange={(checked) =>
-                      update('promptPrinciples', setGlobalOverride(project, prompt, checked))
-                    }
-                    aria-label={t('projects.settings.promptPrinciples.toggleGlobal')}
-                  />
-                </div>
-              ))}
-            </div>
+            <PromptInjectionControls
+              prompts={globalItems}
+              isPromptEnabled={(prompt) => effectiveGlobalEnabled(project, prompt)}
+              onPromptEnabledChange={(prompt, checked) =>
+                update('promptPrinciples', setGlobalOverride(project, prompt, checked))
+              }
+              onGroupEnabledChange={(_groupName, groupPrompts, enabled) =>
+                update('promptPrinciples', setGlobalOverrides(project, groupPrompts, enabled))
+              }
+            />
           )}
         </Field>
 

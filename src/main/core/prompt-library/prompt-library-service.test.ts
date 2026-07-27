@@ -111,4 +111,54 @@ describe('PromptLibraryService groups', () => {
 
     expect(await service.listGroups()).toEqual(['Imported']);
   });
+
+  it('toggles a whole group while appending newly enabled prompts in stable order', async () => {
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+    const biography = await service.create({
+      title: 'Biography',
+      description: '',
+      content: 'Biography',
+      groupName: 'Brand',
+      extraInfo: '',
+      injectionEnabled: true,
+    });
+    const assets = await service.create({
+      title: 'Assets',
+      description: '',
+      content: 'Assets',
+      groupName: 'Brand',
+      extraInfo: '',
+      injectionEnabled: false,
+    });
+    const language = await service.create({
+      title: 'Language',
+      description: '',
+      content: 'Language',
+      groupName: 'General',
+      extraInfo: '',
+      injectionEnabled: true,
+    });
+    state.emit.mockReset();
+
+    await service.setGroupInjectionEnabled(' Brand ', true);
+
+    const enabled = (await service.list()).filter((prompt) => prompt.injectionEnabled);
+    expect(enabled.map((prompt) => prompt.id)).toEqual(
+      expect.arrayContaining([biography.id, assets.id, language.id])
+    );
+    expect(enabled.find((prompt) => prompt.id === assets.id)?.injectionOrder).toBeGreaterThan(
+      enabled.find((prompt) => prompt.id === language.id)?.injectionOrder ?? -1
+    );
+    expect(state.emit).toHaveBeenCalledTimes(1);
+
+    state.emit.mockReset();
+    await service.setGroupInjectionEnabled('Brand', false);
+    expect(
+      (await service.list())
+        .filter((prompt) => prompt.groupName === 'Brand')
+        .every((prompt) => !prompt.injectionEnabled)
+    ).toBe(true);
+    expect(state.emit).toHaveBeenCalledTimes(1);
+  });
 });

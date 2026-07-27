@@ -1,6 +1,20 @@
 import {
-  ArrowDown,
-  ArrowUp,
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   ChevronRight,
   Copy,
   ExternalLink,
@@ -9,6 +23,7 @@ import {
   FolderInput,
   FolderPlus,
   GitBranch,
+  GripVertical,
   Link,
   Loader2,
   Pencil,
@@ -48,7 +63,13 @@ import { Input } from '@renderer/lib/ui/input';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
-import { getNamedPromptGroups, groupPrompts, UNGROUPED_PROMPT_GROUP } from './prompt-groups';
+import {
+  getNamedPromptGroups,
+  groupPrompts,
+  reorderPromptIds,
+  UNGROUPED_PROMPT_GROUP,
+} from './prompt-groups';
+import { PromptGroupInjectionToggle } from './prompt-injection-controls';
 import {
   useCreatePrompt,
   useCreatePromptGroup,
@@ -57,6 +78,7 @@ import {
   usePrompts,
   useRefreshPromptSource,
   useReorderInjectedPrompts,
+  useSetPromptGroupInjectionEnabled,
   useUpdatePrompt,
 } from './use-prompts';
 
@@ -138,6 +160,68 @@ function isExternalUrl(value: string): boolean {
   }
 }
 
+function SortableInjectedPromptRow({
+  entry,
+  index,
+  disabled,
+  onEnabledChange,
+}: {
+  entry: Prompt;
+  index: number;
+  disabled: boolean;
+  onEnabledChange: (checked: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: entry.id,
+    disabled,
+  });
+
+  return (
+    <li
+      ref={setNodeRef}
+      data-slot="prompt-injection-order-row"
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.45 : 1,
+        zIndex: isDragging ? 1 : 'auto',
+      }}
+      className="relative flex items-center gap-2 border-t border-border px-3 py-2.5 first:border-t-0"
+    >
+      <button
+        type="button"
+        className="flex size-7 shrink-0 cursor-grab items-center justify-center rounded-md text-foreground-passive outline-none transition-colors hover:bg-background-1 hover:text-foreground active:cursor-grabbing focus-visible:ring-1 focus-visible:ring-ring"
+        aria-label={t('promptLibrary.injection.reorder', { name: entry.title })}
+        title={t('promptLibrary.injection.reorder', { name: entry.title })}
+        disabled={disabled}
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="size-3.5" />
+      </button>
+      <span className="w-5 shrink-0 text-center text-xs tabular-nums text-foreground-passive">
+        {index + 1}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm text-foreground">{entry.title}</span>
+        {entry.groupName.trim() ? (
+          <span className="mt-0.5 block truncate text-[11px] text-foreground-passive">
+            {entry.groupName.trim()}
+          </span>
+        ) : null}
+      </span>
+      <Switch
+        size="sm"
+        checked
+        disabled={disabled}
+        aria-label={t('promptLibrary.injection.disable')}
+        onCheckedChange={onEnabledChange}
+      />
+    </li>
+  );
+}
+
 export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -149,7 +233,12 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const updatePrompt = useUpdatePrompt();
   const deletePrompt = useDeletePrompt();
   const reorderPrompts = useReorderInjectedPrompts();
+  const setGroupInjection = useSetPromptGroupInjectionEnabled();
   const refreshSource = useRefreshPromptSource();
+  const injectionSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
   const groupOptionsId = useId();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<PromptDraft>(EMPTY_DRAFT);
@@ -378,12 +467,11 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
     updatePrompt.mutate({ id: entry.id, patch: { injectionEnabled: checked } });
   };
 
-  const moveInjectedPrompt = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= injectedPrompts.length) return;
-    const next = injectedPrompts.map((item) => item.id);
-    [next[index], next[target]] = [next[target], next[index]];
-    reorderPrompts.mutate(next);
+  const handleInjectionDragEnd = (event: DragEndEvent) => {
+    if (!event.over) return;
+    const ids = injectedPrompts.map((item) => item.id);
+    const next = reorderPromptIds(ids, String(event.active.id), String(event.over.id));
+    if (next !== ids) reorderPrompts.mutate(next);
   };
 
   if (isLoading || groupsLoading) {
@@ -765,47 +853,28 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
               {t('promptLibrary.injection.empty')}
             </p>
           ) : (
-            <ol>
-              {injectedPrompts.map((entry, index) => (
-                <li
-                  key={entry.id}
-                  className="flex items-center gap-3 border-t border-border px-4 py-2.5 first:border-t-0"
-                >
-                  <span className="w-5 shrink-0 text-center text-xs tabular-nums text-foreground-passive">
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                    {entry.title}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={t('promptLibrary.injection.moveUp')}
-                    disabled={index === 0 || reorderPrompts.isPending}
-                    onClick={() => moveInjectedPrompt(index, -1)}
-                  >
-                    <ArrowUp className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={t('promptLibrary.injection.moveDown')}
-                    disabled={index === injectedPrompts.length - 1 || reorderPrompts.isPending}
-                    onClick={() => moveInjectedPrompt(index, 1)}
-                  >
-                    <ArrowDown className="size-3.5" />
-                  </Button>
-                  <Switch
-                    size="sm"
-                    checked
-                    aria-label={t('promptLibrary.injection.disable')}
-                    onCheckedChange={(checked) => setInjectionEnabled(entry, checked)}
-                  />
-                </li>
-              ))}
-            </ol>
+            <DndContext
+              sensors={injectionSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleInjectionDragEnd}
+            >
+              <SortableContext
+                items={injectedPrompts.map((entry) => entry.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <ol>
+                  {injectedPrompts.map((entry, index) => (
+                    <SortableInjectedPromptRow
+                      key={entry.id}
+                      entry={entry}
+                      index={index}
+                      disabled={reorderPrompts.isPending}
+                      onEnabledChange={(checked) => setInjectionEnabled(entry, checked)}
+                    />
+                  ))}
+                </ol>
+              </SortableContext>
+            </DndContext>
           )}
         </section>
 
@@ -867,26 +936,35 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                       key={group.name || 'ungrouped'}
                       className="overflow-hidden rounded-lg border border-border bg-background-secondary"
                     >
-                      <button
-                        type="button"
-                        onClick={() => toggleGroup(group.name)}
-                        aria-expanded={groupIsOpen}
-                        className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left outline-none transition-colors hover:bg-background-1 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
-                      >
-                        <ChevronRight
-                          className={cn(
-                            'size-4 shrink-0 text-foreground-muted transition-transform',
-                            groupIsOpen && 'rotate-90'
-                          )}
+                      <div className="flex min-w-0 items-center">
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(group.name)}
+                          aria-expanded={groupIsOpen}
+                          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left outline-none transition-colors hover:bg-background-1 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+                        >
+                          <ChevronRight
+                            className={cn(
+                              'size-4 shrink-0 text-foreground-muted transition-transform',
+                              groupIsOpen && 'rotate-90'
+                            )}
+                          />
+                          <Folder className="size-4 shrink-0 text-foreground-muted" />
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                            {groupLabel}
+                          </span>
+                        </button>
+                        <PromptGroupInjectionToggle
+                          groupName={group.name}
+                          prompts={group.prompts}
+                          isPromptEnabled={(prompt) => prompt.injectionEnabled}
+                          disabled={setGroupInjection.isPending}
+                          className="pr-3"
+                          onEnabledChange={(enabled) =>
+                            setGroupInjection.mutate({ groupName: group.name, enabled })
+                          }
                         />
-                        <Folder className="size-4 shrink-0 text-foreground-muted" />
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                          {groupLabel}
-                        </span>
-                        <span className="shrink-0 text-xs tabular-nums text-foreground-passive">
-                          {t('promptLibrary.groups.count', { count: group.prompts.length })}
-                        </span>
-                      </button>
+                      </div>
 
                       {groupIsOpen &&
                         (group.prompts.length === 0 ? (
@@ -936,6 +1014,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                     <Switch
                                       size="sm"
                                       checked={entry.injectionEnabled}
+                                      disabled={setGroupInjection.isPending}
                                       aria-label={t('promptLibrary.injection.toggle', {
                                         name: entry.title,
                                       })}
