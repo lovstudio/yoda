@@ -7,7 +7,6 @@ import {
   Menu,
   Plug,
   Puzzle,
-  Store,
   Users,
   Workflow,
   type LucideIcon,
@@ -18,7 +17,6 @@ import { AgentTeamsMainPanel } from '@renderer/features/agent-teams/agent-teams-
 import { AgentManagerMainPanel } from '@renderer/features/agents-config/agent-manager-view';
 import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
-import { ExtensionMarketplaceView } from '@renderer/features/extensions/ExtensionMarketplaceView';
 import { McpMainPanel } from '@renderer/features/mcp/mcp-view';
 import PluginsView from '@renderer/features/plugins/PluginsView';
 import { PromptLibraryPanel } from '@renderer/features/prompt-library/prompt-library-panel';
@@ -40,7 +38,6 @@ export type LibrarySection =
   | 'agents'
   | 'agentTeams'
   | 'skills'
-  | 'marketplace'
   | 'plugins'
   | 'mcp'
   | 'automation';
@@ -55,7 +52,6 @@ const SECTIONS: {
   { id: 'agents', icon: Bot, labelKey: 'library.sections.agents' },
   { id: 'agentTeams', icon: Users, labelKey: 'library.sections.agentTeams' },
   { id: 'skills', icon: Boxes, labelKey: 'library.sections.skills' },
-  { id: 'marketplace', icon: Store, labelKey: 'library.sections.marketplace' },
   { id: 'plugins', icon: Puzzle, labelKey: 'library.sections.plugins' },
   { id: 'mcp', icon: Plug, labelKey: 'library.sections.mcp' },
   { id: 'automation', icon: Workflow, labelKey: 'library.sections.automation' },
@@ -78,9 +74,10 @@ export function LibraryViewWrapper({
   appId?: string;
 }) {
   const { setParams } = useParams('library');
-  // Navigation snapshots from the earlier AI Lab placement may still carry
-  // `aiLab`; migrate that hidden legacy value into the user-facing Apps shelf.
-  const resolvedSection = (section as string) === 'aiLab' ? 'apps' : section;
+  // Navigation snapshots from earlier placements may still carry `aiLab` or
+  // `marketplace`; migrate those hidden legacy values into the Apps shelf.
+  const resolvedSection =
+    (section as string) === 'aiLab' || (section as string) === 'marketplace' ? 'apps' : section;
   const onSectionChange = useCallback(
     (next: LibrarySection) => setParams({ section: next }),
     [setParams]
@@ -126,8 +123,6 @@ function LibrarySectionContent({
       return <AgentTeamsMainPanel />;
     case 'skills':
       return <SkillsMainPanel />;
-    case 'marketplace':
-      return <ExtensionMarketplaceView />;
     case 'plugins':
       return <PluginsView />;
     case 'mcp':

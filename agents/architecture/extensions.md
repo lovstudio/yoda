@@ -2,8 +2,9 @@
 
 ## Product Boundary
 
-Yoda Marketplace is the product-level extension catalog. It is separate from
-`src/main/core/plugins/`, which manages Claude Code plugins.
+Yoda Marketplace is a top-level product surface alongside Library. It is the
+product-level extension catalog and is separate from `src/main/core/plugins/`,
+which manages Claude Code plugins inside Library.
 
 The extension contract is defined in `src/shared/extensions.ts`. Supported
 extension kinds are:

@@ -72,6 +72,22 @@ describe('Extension Marketplace service', () => {
     );
   });
 
+  it('publishes Yoda MaaS Gateway in the built-in Marketplace catalog', async () => {
+    const marketplace = await service.listMarketplace();
+
+    expect(marketplace).toEqual([
+      expect.objectContaining({
+        manifest: expect.objectContaining({
+          id: MAAS_GATEWAY_EXTENSION_ID,
+          name: 'Yoda MaaS Gateway',
+          kind: 'background-service',
+        }),
+        installation: null,
+        supported: true,
+      }),
+    ]);
+  });
+
   it('installs an extension only with its complete declared capability set', async () => {
     const [listing] = await service.listMarketplace();
     if (!listing) throw new Error('Expected the built-in Gateway listing.');
