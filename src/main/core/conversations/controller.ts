@@ -11,6 +11,7 @@ import {
   getConversationNamingPreview,
   getConversationNamingSnapshot,
 } from './generateConversationTitle';
+import { getActiveRuntimeStatuses } from './getActiveRuntimeStatuses';
 import { getArchivedConversationsForTask } from './getArchivedConversationsForTask';
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getClaudeSessionMetadata } from './getClaudeSessionMetadata';
@@ -100,6 +101,7 @@ export const conversationController = createRPCController({
   rewritePrompt,
   resumeConversation,
   interruptConversation,
+  getActiveRuntimeStatuses,
   listLocalAgentSessions,
   getLocalAgentSessionTranscript,
   moveConversation,

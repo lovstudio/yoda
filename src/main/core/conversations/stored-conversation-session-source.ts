@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { AgentSessionSource } from '@shared/conversations';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
-import type { ConversationConfig } from './types';
+import { parseConversationSessionSource } from './conversation-session-source';
 
 export async function getStoredConversationSessionSource(
   conversationId: string
@@ -12,10 +12,5 @@ export async function getStoredConversationSessionSource(
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .limit(1);
-  if (!row?.config) return undefined;
-  try {
-    return (JSON.parse(row.config) as ConversationConfig).sessionSource;
-  } catch {
-    return undefined;
-  }
+  return parseConversationSessionSource(row?.config);
 }

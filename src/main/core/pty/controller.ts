@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { and, eq } from 'drizzle-orm';
 import { createRPCController } from '@shared/ipc/rpc';
+import { parsePtySessionId } from '@shared/ptySessionId';
 import { err, ok } from '@shared/result';
 import { loadCodexRolloutTerminalHistoryForConversation } from '@main/core/conversations/codex-rollout-terminal-history';
 import { mapConversationRowToConversation } from '@main/core/conversations/utils';
@@ -102,7 +103,7 @@ export const ptyController = createRPCController({
 });
 
 async function loadHistoricalConversationBuffer(sessionId: string): Promise<string> {
-  const parsed = parseConversationSessionId(sessionId);
+  const parsed = parsePtySessionId(sessionId);
   if (!parsed) return '';
 
   const [row] = await db
@@ -116,8 +117,8 @@ async function loadHistoricalConversationBuffer(sessionId: string): Promise<stri
     .where(
       and(
         eq(conversations.projectId, parsed.projectId),
-        eq(conversations.taskId, parsed.taskId),
-        eq(conversations.id, parsed.conversationId)
+        eq(conversations.taskId, parsed.scopeId),
+        eq(conversations.id, parsed.leafId)
       )
     )
     .limit(1);
@@ -127,7 +128,7 @@ async function loadHistoricalConversationBuffer(sessionId: string): Promise<stri
   const conversation = mapConversationRowToConversation(row.conversation);
   if (conversation.runtimeId !== 'codex') return '';
 
-  const workspaceId = taskManager.getWorkspaceId(parsed.taskId);
+  const workspaceId = taskManager.getWorkspaceId(parsed.scopeId);
   const cwd = (workspaceId ? workspaceRegistry.get(workspaceId)?.path : null) ?? row.projectPath;
 
   try {
@@ -140,18 +141,9 @@ async function loadHistoricalConversationBuffer(sessionId: string): Promise<stri
   } catch (error) {
     log.warn('ptyController.subscribe: failed to load Codex rollout history', {
       sessionId,
-      conversationId: parsed.conversationId,
+      conversationId: parsed.leafId,
       error: String(error),
     });
     return '';
   }
-}
-
-function parseConversationSessionId(
-  sessionId: string
-): { projectId: string; taskId: string; conversationId: string } | null {
-  const [projectId, taskId, ...conversationParts] = sessionId.split(':');
-  const conversationId = conversationParts.join(':');
-  if (!projectId || !taskId || !conversationId) return null;
-  return { projectId, taskId, conversationId };
 }

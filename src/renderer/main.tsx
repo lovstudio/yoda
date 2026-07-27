@@ -23,7 +23,10 @@ import { modelRegistry } from '@renderer/lib/monaco/monaco-model-registry';
 import { wirePrCacheInvalidation } from '@renderer/lib/pr-cache-invalidation';
 import type { AgentRuntimeSnapshot } from '@renderer/lib/stores/agent-runtime-store';
 import { viewStateCache } from '@renderer/lib/stores/view-state-cache';
-import { getTaskWindowLaunchTarget } from '@renderer/lib/task-window-launch-target';
+import {
+  getTaskWindowLaunchTarget,
+  isTaskWindowLaunch,
+} from '@renderer/lib/task-window-launch-target';
 import { log } from '@renderer/utils/logger';
 import { initSoundPlayer } from '@renderer/utils/soundPlayer';
 import { appState } from './lib/stores/app-state';
@@ -36,6 +39,13 @@ async function bootstrap() {
 
   appState.update.start();
   initSoundPlayer();
+  const isPrimaryAppWindow =
+    !isTaskWindowLaunch && !isComparisonWindowLaunch && !isAiLabWindowLaunch;
+  if (isPrimaryAppWindow) {
+    // Subscribe happens during AppState construction. Hydrate the primary shell
+    // immediately, but keep warm/detached windows from duplicating the scan.
+    void appState.agentRuntime.hydrateActiveSessions();
+  }
 
   // Warm Monaco in the background WITHOUT blocking first paint — `loader.init()`
   // costs ~1s and a window may not even show a code/diff tab. Editor consumers
@@ -100,6 +110,14 @@ async function bootstrap() {
     appState.sidebar.restoreSnapshot(sidebarResult as Partial<SidebarSnapshot>);
   } else {
     appState.sidebar.expandAllProjects();
+  }
+  if (isPrimaryAppWindow) {
+    for (const project of appState.projects.projects.values()) {
+      const projectData = project.data;
+      if (projectData?.type === 'ssh') {
+        void appState.agentRuntime.hydrateProject(projectData.id);
+      }
+    }
   }
 
   // Avoid double-mount in dev which can duplicate PTY sessions

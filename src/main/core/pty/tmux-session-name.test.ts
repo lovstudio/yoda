@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildTmuxShellLine, killTmuxSession } from './tmux-session-name';
+import {
+  buildTmuxShellLine,
+  decodeTmuxSessionName,
+  killTmuxSession,
+  listTmuxSessionMarkers,
+  makeTmuxSessionName,
+} from './tmux-session-name';
 
 describe('buildTmuxShellLine', () => {
   it('uses an isolated Yoda tmux server without reading the user tmux config', () => {
@@ -83,5 +89,51 @@ describe('killTmuxSession', () => {
       '-t',
       'agent-session',
     ]);
+  });
+});
+
+describe('tmux session discovery', () => {
+  it('round-trips canonical Yoda session names', () => {
+    const sessionId = 'project-1:task-1:conversation:with-colon';
+    const sessionName = makeTmuxSessionName(sessionId);
+
+    expect(decodeTmuxSessionName(sessionName)).toBe(sessionId);
+    expect(decodeTmuxSessionName('user-owned-session')).toBeUndefined();
+    expect(decodeTmuxSessionName('yoda-***')).toBeUndefined();
+  });
+
+  it('lists and deduplicates markers from the isolated Yoda server', async () => {
+    const sessionName = makeTmuxSessionName('project-1:task-1:conversation-1');
+    const ctx = {
+      root: undefined,
+      supportsLocalSpawn: true,
+      exec: vi.fn().mockResolvedValue({
+        stdout: `${sessionName}\\037/repo/worktree\n${sessionName}\\037/repo/worktree\nforeign\\037/tmp\n`,
+        stderr: '',
+      }),
+      execStreaming: vi.fn(),
+      dispose: vi.fn(),
+    };
+
+    await expect(listTmuxSessionMarkers(ctx)).resolves.toEqual([
+      { sessionName, cwd: '/repo/worktree' },
+    ]);
+    expect(ctx.exec).toHaveBeenCalledWith(
+      'tmux',
+      ['-L', 'yoda', '-f', '/dev/null', 'list-panes', '-a', '-F', expect.any(String)],
+      { timeout: 2_000, maxBuffer: 128 * 1024 }
+    );
+  });
+
+  it('treats a missing tmux server as an empty marker set', async () => {
+    const ctx = {
+      root: undefined,
+      supportsLocalSpawn: true,
+      exec: vi.fn().mockRejectedValue(new Error('no server running')),
+      execStreaming: vi.fn(),
+      dispose: vi.fn(),
+    };
+
+    await expect(listTmuxSessionMarkers(ctx)).resolves.toEqual([]);
   });
 });

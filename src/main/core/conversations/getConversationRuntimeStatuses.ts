@@ -17,8 +17,8 @@ import { findClaudeTranscriptPathBySessionId } from './claude-transcript-locator
 import { readCodexTurnVerdict } from './codex-run-state-source';
 import { resolveCodexThreadIdForConversation } from './codex-session-id';
 import { getReservedCodexThreadIds } from './codex-thread-reservations';
+import { parseConversationSessionSource } from './conversation-session-source';
 import { isInterruptedSinceLastPrompt } from './interrupt-marker';
-import type { ConversationConfig } from './types';
 
 /**
  * Stateless run-state for a task's conversations.
@@ -240,17 +240,8 @@ async function loadConversationRows(conversationIds: string[]): Promise<
         runtime: r.runtime,
         createdAt: r.createdAt,
         title: r.title,
-        sessionSource: parseSessionSource(r.config),
+        sessionSource: parseConversationSessionSource(r.config),
       },
     ])
   );
-}
-
-function parseSessionSource(config: string | null): AgentSessionSource | undefined {
-  if (!config) return undefined;
-  try {
-    return (JSON.parse(config) as ConversationConfig).sessionSource;
-  } catch {
-    return undefined;
-  }
 }
