@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makePtySessionId } from '@shared/ptySessionId';
+import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { resumeConversation } from './resumeConversation';
 
 const mocks = vi.hoisted(() => ({
@@ -30,6 +32,8 @@ vi.mock('./utils', () => ({
 }));
 
 describe('resumeConversation', () => {
+  const sessionId = makePtySessionId('project-1', 'task-1', 'conv-1');
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.resolveTask.mockReturnValue({
@@ -49,6 +53,10 @@ describe('resumeConversation', () => {
     mocks.startSession.mockResolvedValue(undefined);
   });
 
+  afterEach(() => {
+    ptySessionRegistry.unregister(sessionId);
+  });
+
   it('coalesces concurrent resume requests for the same conversation', async () => {
     await Promise.all([
       resumeConversation('project-1', 'task-1', 'conv-1'),
@@ -56,5 +64,27 @@ describe('resumeConversation', () => {
     ]);
 
     expect(mocks.startSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not restart after stop cancels registration during the database lookup', async () => {
+    let finishLookup!: (rows: unknown[]) => void;
+    mocks.selectChain.limit.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishLookup = resolve;
+      })
+    );
+
+    const resumePromise = resumeConversation('project-1', 'task-1', 'conv-1');
+    ptySessionRegistry.unregister(sessionId);
+    finishLookup([
+      {
+        id: 'conv-1',
+        projectId: 'project-1',
+        taskId: 'task-1',
+      },
+    ]);
+    await resumePromise;
+
+    expect(mocks.startSession).not.toHaveBeenCalled();
   });
 });

@@ -223,14 +223,19 @@ class FakePty implements Pty {
   private readonly exitHandlers: Array<(info: PtyExitInfo) => void> = [];
   readonly pid = 4321;
   readonly writes: string[] = [];
+  killCalls = 0;
+  writeError: Error | null = null;
 
   write(data: string): void {
+    if (this.writeError) throw this.writeError;
     this.writes.push(data);
   }
 
   resize(): void {}
 
-  kill(): void {}
+  kill(): void {
+    this.killCalls += 1;
+  }
 
   onData(handler: (data: string) => void): void {
     this.dataHandlers.push(handler);
@@ -378,6 +383,75 @@ describe('LocalConversationProvider', () => {
     await startPromise;
 
     expect(spawned[0].pty.writes).toEqual(['early input']);
+  });
+
+  it('does not revive a session stopped while async startup is pending', async () => {
+    let finishTrust!: () => void;
+    mocks.maybeAutoTrustLocal.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishTrust = resolve;
+      })
+    );
+    const provider = createProvider();
+
+    const startPromise = provider.startSession(
+      conversation,
+      { cols: 80, rows: 24 },
+      false,
+      'Fix this'
+    );
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'stale input')).toBe('queued');
+
+    await provider.stopSession(conversation.id);
+    finishTrust();
+    await startPromise;
+
+    expect(spawned).toHaveLength(0);
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'late input')).toBe('unavailable');
+  });
+
+  it('single-flights concurrent starts for the same conversation', async () => {
+    let finishTrust!: () => void;
+    mocks.maybeAutoTrustLocal.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishTrust = resolve;
+      })
+    );
+    const provider = createProvider();
+
+    const first = provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    const second = provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.maybeAutoTrustLocal).toHaveBeenCalledTimes(1);
+    finishTrust();
+    await Promise.all([first, second]);
+
+    expect(spawned).toHaveLength(1);
+    expect(ptySessionRegistry.get(sessionId)).toBe(spawned[0].pty);
+  });
+
+  it('rolls back a partially registered PTY when queued input delivery throws', async () => {
+    const pty = new FakePty();
+    pty.writeError = new Error('write failed');
+    mocks.spawnLocalPty.mockImplementationOnce((options: SpawnOptions) => {
+      spawned.push({ pty, options });
+      return pty;
+    });
+    const provider = createProvider();
+
+    const startPromise = provider.startSession(
+      conversation,
+      { cols: 80, rows: 24 },
+      false,
+      'Fix this'
+    );
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'early input')).toBe('queued');
+
+    await expect(startPromise).rejects.toThrow('write failed');
+    expect(pty.killCalls).toBe(1);
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'late input')).toBe('unavailable');
   });
 
   it('lets the registry flush final output and emit exit after provider cleanup', async () => {

@@ -30,3 +30,6 @@
 - keep replay buffers bounded by UTF-8 bytes without slicing inside a code point
 - resize only the mounted active session, and update frontend/backend to the same
   dimension tuple
+- provider startup is single-flight per session; stop/delete/detach must
+  invalidate an in-flight start before unregistering, and any stale or failed
+  spawn must kill its own PTY without touching a newer generation

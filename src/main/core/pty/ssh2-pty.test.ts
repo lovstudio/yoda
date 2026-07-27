@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
-import type { ClientChannel } from 'ssh2';
-import { describe, expect, it } from 'vitest';
-import { Ssh2PtySession } from './ssh2-pty';
+import type { Client, ClientChannel } from 'ssh2';
+import { describe, expect, it, vi } from 'vitest';
+import { openSsh2Pty, Ssh2PtySession } from './ssh2-pty';
 
 function createSession(): { channel: EventEmitter; session: Ssh2PtySession } {
   const channel = new EventEmitter();
@@ -70,5 +70,63 @@ describe('Ssh2PtySession.onData', () => {
     channel.emit('close');
 
     expect(received).toEqual(['\uFFFD']);
+  });
+});
+
+describe('openSsh2Pty startup ordering', () => {
+  it('replays data and exit emitted after resolve but before the await continuation', async () => {
+    const channel = new EventEmitter();
+    const text = '短命 SSH 输出 😀';
+    const encoded = Buffer.from(text, 'utf8');
+    const client = {
+      exec: vi.fn(
+        (
+          _command: string,
+          _options: unknown,
+          callback: (error: Error | undefined, openedChannel: ClientChannel) => void
+        ) => {
+          callback(undefined, channel as unknown as ClientChannel);
+          channel.emit('data', encoded.subarray(0, encoded.length - 2));
+          channel.emit('data', encoded.subarray(encoded.length - 2));
+          channel.emit('close', 7, 'SIGTERM');
+        }
+      ),
+    } as unknown as Client;
+
+    const result = await openSsh2Pty(client, {
+      id: 'short-lived-session',
+      command: 'COMMAND',
+      cols: 120,
+      rows: 32,
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error('Expected SSH PTY to open');
+
+    const firstData: string[] = [];
+    const secondData: string[] = [];
+    const firstExit = vi.fn();
+    const secondExit = vi.fn();
+    const order: string[] = [];
+    result.data.onData((data) => {
+      firstData.push(data);
+      order.push(`data:${data}`);
+    });
+    result.data.onData((data) => secondData.push(data));
+    result.data.onExit((info) => {
+      firstExit(info);
+      order.push(`exit:${info.exitCode}`);
+    });
+    result.data.onExit(secondExit);
+
+    await Promise.resolve();
+
+    expect(firstData.join('')).toBe(text);
+    expect(secondData.join('')).toBe(text);
+    expect(firstData.join('')).not.toContain('\uFFFD');
+    expect(firstExit).toHaveBeenCalledOnce();
+    expect(firstExit).toHaveBeenCalledWith({ exitCode: 7, signal: 'SIGTERM' });
+    expect(secondExit).toHaveBeenCalledOnce();
+    expect(secondExit).toHaveBeenCalledWith({ exitCode: 7, signal: 'SIGTERM' });
+    expect(order.at(-1)).toBe('exit:7');
   });
 });

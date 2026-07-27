@@ -41,6 +41,7 @@ const DEFAULT_ROWS = 24;
 export class SshConversationProvider implements ConversationProvider {
   private sessions = new Map<string, Pty>();
   private knownSessionIds = new Set<string>();
+  private readonly pendingStarts = new Map<string, { token: symbol; completion: Promise<void> }>();
   private readonly projectId: string;
   readonly taskPath: string;
   private readonly taskId: string;
@@ -108,8 +109,26 @@ export class SshConversationProvider implements ConversationProvider {
     this.knownSessionIds.add(sessionId);
 
     if (this.sessions.has(sessionId)) return;
+    const existingStart = this.pendingStarts.get(sessionId);
+    if (existingStart) return existingStart.completion;
+
+    const startToken = Symbol(sessionId);
+    let resolveCompletion!: () => void;
+    let rejectCompletion!: (error: unknown) => void;
+    const completion = new Promise<void>((resolve, reject) => {
+      resolveCompletion = resolve;
+      rejectCompletion = reject;
+    });
+    void completion.catch(() => {});
+    this.pendingStarts.set(sessionId, { token: startToken, completion });
+
     const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    let registrationAttempted = false;
     let registrationCompleted = false;
+    let startCommitted = false;
+    let startFailed = false;
+    let spawnedPty: Pty | undefined;
+    let detachSilenceReconcilerForRollback: (() => void) | undefined;
 
     try {
       await claudeTrustService.maybeAutoTrustSsh({
@@ -118,8 +137,10 @@ export class SshConversationProvider implements ConversationProvider {
         ctx: this.ctx,
         remoteFs: new SshFileSystem(this.proxy, '/'),
       });
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
 
       const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
       recordConversationAuthProvider(conversation.id, providerConfig);
       if (conversation.skillPolicy) {
         log.warn('Skipping local Agent skill profile for SSH conversation', {
@@ -127,6 +148,12 @@ export class SshConversationProvider implements ConversationProvider {
           runtimeId: conversation.runtimeId,
         });
       }
+      const appendSystemPrompt = await getEnabledPromptPrinciplesText(
+        await this.resolveProjectPromptPrinciples?.()
+      );
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
+      const terminalThemeMode = await resolveTerminalThemeMode();
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
       const { command, args } = buildAgentCommand({
         runtimeId: conversation.runtimeId,
         providerConfig,
@@ -138,14 +165,13 @@ export class SshConversationProvider implements ConversationProvider {
         initialPrompt: isResuming
           ? initialPrompt
           : substituteImageMentions(initialPrompt, imagePaths ?? []),
-        appendSystemPrompt: await getEnabledPromptPrinciplesText(
-          await this.resolveProjectPromptPrinciples?.()
-        ),
+        appendSystemPrompt,
         model,
-        terminalThemeMode: await resolveTerminalThemeMode(),
+        terminalThemeMode,
       });
 
       const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
       const providerEnv = resolveRuntimeEnv(providerConfig, {
         runtimeId: conversation.runtimeId,
         tmuxEnabled: Boolean(tmuxSessionName),
@@ -166,6 +192,7 @@ export class SshConversationProvider implements ConversationProvider {
       };
 
       const profile = await this.proxy.getRemoteShellProfile();
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
       const sshCommand = resolveSshCommand(
         'agent',
         cfg,
@@ -180,6 +207,14 @@ export class SshConversationProvider implements ConversationProvider {
         rows: initialSize.rows,
       });
 
+      if (!this.ownsPendingStart(sessionId, startToken)) {
+        if (result.success) {
+          try {
+            result.data.kill();
+          } catch {}
+        }
+        return;
+      }
       if (!result.success) {
         log.error('SshConversationProvider: failed to open SSH channel', {
           sessionId,
@@ -189,6 +224,7 @@ export class SshConversationProvider implements ConversationProvider {
       }
 
       const pty = result.data;
+      spawnedPty = pty;
 
       // hooks not supported yet, rely on classifier for visual indicator
       wireAgentClassifier({
@@ -204,6 +240,7 @@ export class SshConversationProvider implements ConversationProvider {
         taskId: conversation.taskId,
         conversationId: conversation.id,
       });
+      detachSilenceReconcilerForRollback = detachSilenceReconciler;
       pty.onData(() => agentSilenceReconciler.noteOutput(sessionId));
       if (conversation.runtimeId === 'claude') {
         // Sub-second Esc-interrupt detection from the TUI's "Interrupted" line.
@@ -243,8 +280,14 @@ export class SshConversationProvider implements ConversationProvider {
         snapshotTaskDiffOnSessionExit(conversation.taskId);
       });
 
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
+      registrationAttempted = true;
       ptySessionRegistry.register(sessionId, pty, { registrationEpoch });
       registrationCompleted = true;
+      if (!this.ownsPendingStart(sessionId, startToken)) {
+        ptySessionRegistry.unregister(sessionId);
+        return;
+      }
       this.sessions.set(sessionId, pty);
       this.sessionInfos.set(sessionId, {
         sessionId,
@@ -269,10 +312,30 @@ export class SshConversationProvider implements ConversationProvider {
         task_id: conversation.taskId,
         conversation_id: conversation.id,
       });
+      startCommitted = true;
+    } catch (error) {
+      startFailed = true;
+      rejectCompletion(error);
+      throw error;
     } finally {
+      const ownsStart = this.ownsPendingStart(sessionId, startToken);
+      if (!startCommitted && spawnedPty) {
+        if (this.sessions.get(sessionId) === spawnedPty) {
+          this.sessions.delete(sessionId);
+        }
+        detachSilenceReconcilerForRollback?.();
+        try {
+          spawnedPty.kill();
+        } catch {}
+        if (ownsStart && registrationAttempted) {
+          ptySessionRegistry.unregister(sessionId);
+        }
+      }
       if (!registrationCompleted) {
         ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
       }
+      if (ownsStart) this.pendingStarts.delete(sessionId);
+      if (!startFailed) resolveCompletion();
     }
   }
 
@@ -325,9 +388,21 @@ export class SshConversationProvider implements ConversationProvider {
     return true;
   }
 
+  private ownsPendingStart(sessionId: string, token: symbol): boolean {
+    return this.pendingStarts.get(sessionId)?.token === token;
+  }
+
+  private cancelAllPendingStarts(): void {
+    for (const sessionId of this.pendingStarts.keys()) {
+      this.pendingStarts.delete(sessionId);
+      ptySessionRegistry.unregister(sessionId);
+    }
+  }
+
   async stopSession(conversationId: string): Promise<void> {
     const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
     this.knownSessionIds.delete(sessionId);
+    this.pendingStarts.delete(sessionId);
     const pty = this.sessions.get(sessionId);
     if (pty) {
       try {
@@ -336,8 +411,8 @@ export class SshConversationProvider implements ConversationProvider {
         log.warn('SshConversation: error killing PTY', { sessionId, error: String(e) });
       }
       this.sessions.delete(sessionId);
-      ptySessionRegistry.unregister(sessionId);
     }
+    ptySessionRegistry.unregister(sessionId);
     this.sessionInfos.delete(sessionId);
     markRuntimeSessionExited({
       projectId: this.projectId,
@@ -365,6 +440,7 @@ export class SshConversationProvider implements ConversationProvider {
   }
 
   async detachAll(): Promise<void> {
+    this.cancelAllPendingStarts();
     for (const [sessionId, pty] of this.sessions) {
       try {
         pty.kill();

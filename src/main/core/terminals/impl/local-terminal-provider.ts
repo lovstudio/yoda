@@ -27,10 +27,18 @@ type SpawnPolicy = {
   watchDevServer: boolean;
 };
 
+type StartOperation = {
+  readonly token: symbol;
+  readonly registrationEpoch: number;
+  promise: Promise<void>;
+};
+
 export class LocalTerminalProvider implements TerminalProvider {
   private sessions = new Map<string, Pty>();
   private knownSessionIds = new Set<string>();
   private respawnCounts = new Map<string, number>();
+  private readonly startOperations = new Map<string, StartOperation>();
+  private readonly respawnTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly projectId: string;
   private readonly scopeId: string;
   private readonly taskPath: string;
@@ -103,7 +111,7 @@ export class LocalTerminalProvider implements TerminalProvider {
     );
   }
 
-  private async spawnWithPolicy(
+  private spawnWithPolicy(
     terminal: Terminal,
     initialSize: { cols: number; rows: number },
     command: PtyCommandSpec | undefined,
@@ -111,11 +119,46 @@ export class LocalTerminalProvider implements TerminalProvider {
   ): Promise<void> {
     const sessionId = makePtySessionId(terminal.projectId, terminal.taskId, terminal.id);
     this.knownSessionIds.add(sessionId);
-    if (this.sessions.has(sessionId)) return;
+    this.clearRespawnTimer(sessionId);
+    const existingOperation = this.startOperations.get(sessionId);
+    if (existingOperation) return existingOperation.promise;
+    if (this.sessions.has(sessionId)) return Promise.resolve();
+
     const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    const operation: StartOperation = {
+      token: Symbol(sessionId),
+      registrationEpoch,
+      promise: Promise.resolve(),
+    };
+    this.startOperations.set(sessionId, operation);
+    operation.promise = this.performSpawn(
+      sessionId,
+      terminal,
+      initialSize,
+      command,
+      policy,
+      operation
+    ).finally(() => {
+      if (this.startOperations.get(sessionId) === operation) {
+        this.startOperations.delete(sessionId);
+      }
+    });
+    return operation.promise;
+  }
+
+  private async performSpawn(
+    sessionId: string,
+    terminal: Terminal,
+    initialSize: { cols: number; rows: number },
+    command: PtyCommandSpec | undefined,
+    policy: SpawnPolicy,
+    operation: StartOperation
+  ): Promise<void> {
+    let pty: Pty | undefined;
     let registrationCompleted = false;
     try {
       const tmuxSessionName = await this.resolveTmuxSessionName(sessionId);
+      if (!this.isCurrentStart(sessionId, operation)) return;
 
       const intent: PtySpawnIntent = command
         ? {
@@ -144,7 +187,8 @@ export class LocalTerminalProvider implements TerminalProvider {
         sessionId,
       });
 
-      const pty = spawnLocalPty({
+      if (!this.isCurrentStart(sessionId, operation)) return;
+      pty = spawnLocalPty({
         id: sessionId,
         command: resolved.command,
         args: resolved.args,
@@ -153,50 +197,127 @@ export class LocalTerminalProvider implements TerminalProvider {
         cols: initialSize.cols,
         rows: initialSize.rows,
       });
+      if (!this.isCurrentStart(sessionId, operation)) {
+        this.rollbackSpawn(sessionId, pty, operation);
+        return;
+      }
 
+      this.sessions.set(sessionId, pty);
+      pty.onExit(() => {
+        if (this.sessions.get(sessionId) !== pty) return;
+        this.sessions.delete(sessionId);
+        const shouldRespawn =
+          policy.respawnOnExit && this.knownSessionIds.has(sessionId) && !this.tmux;
+        if (!shouldRespawn) return;
+
+        const count = (this.respawnCounts.get(sessionId) ?? 0) + 1;
+        this.respawnCounts.set(sessionId, count);
+
+        if (count > MAX_RESPAWNS) {
+          log.error('LocalTerminalProvider: respawn limit reached, giving up', {
+            terminalId: terminal.id,
+            respawnCount: count,
+          });
+          this.respawnCounts.delete(sessionId);
+          return;
+        }
+
+        this.scheduleRespawn(sessionId, terminal, initialSize, command, policy);
+      });
       if (policy.watchDevServer) {
         wireTerminalDevServerWatcher({ pty, scopeId: this.scopeId, terminalId: terminal.id });
       }
-
-      pty.onExit(() => {
-        const shouldRespawn = policy.respawnOnExit && this.sessions.has(sessionId);
-        this.sessions.delete(sessionId);
-        if (shouldRespawn && !this.tmux) {
-          const count = (this.respawnCounts.get(sessionId) ?? 0) + 1;
-          this.respawnCounts.set(sessionId, count);
-
-          if (count > MAX_RESPAWNS) {
-            log.error('LocalTerminalProvider: respawn limit reached, giving up', {
-              terminalId: terminal.id,
-              respawnCount: count,
-            });
-            this.respawnCounts.delete(sessionId);
-            return;
-          }
-
-          setTimeout(() => {
-            this.spawnWithPolicy(terminal, initialSize, command, policy).catch((e) => {
-              log.error('LocalTerminalProvider: respawn failed', {
-                terminalId: terminal.id,
-                error: String(e),
-              });
-            });
-          }, 500);
-        }
-      });
+      if (!this.isCurrentStart(sessionId, operation)) {
+        this.rollbackSpawn(sessionId, pty, operation);
+        return;
+      }
 
       ptySessionRegistry.register(sessionId, pty, {
         preserveBufferOnExit: policy.preserveBufferOnExit,
-        registrationEpoch,
+        registrationEpoch: operation.registrationEpoch,
       });
       registrationCompleted = true;
-      this.sessions.set(sessionId, pty);
-      if (tmuxSessionName) this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+      if (!this.isCurrentStart(sessionId, operation)) {
+        this.rollbackSpawn(sessionId, pty, operation);
+        return;
+      }
+      if (this.sessions.get(sessionId) === pty && tmuxSessionName) {
+        this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+      }
+    } catch (error) {
+      if (pty) this.rollbackSpawn(sessionId, pty, operation);
+      throw error;
     } finally {
       if (!registrationCompleted) {
-        ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
+        ptySessionRegistry.cancelRegistration(sessionId, operation.registrationEpoch);
       }
     }
+  }
+
+  private isCurrentStart(sessionId: string, operation: StartOperation): boolean {
+    return (
+      this.startOperations.get(sessionId)?.token === operation.token &&
+      this.knownSessionIds.has(sessionId)
+    );
+  }
+
+  private cancelPendingStart(sessionId: string): void {
+    const operation = this.startOperations.get(sessionId);
+    if (!operation) return;
+    this.startOperations.delete(sessionId);
+    ptySessionRegistry.cancelRegistration(sessionId, operation.registrationEpoch);
+  }
+
+  private rollbackSpawn(sessionId: string, pty: Pty, operation: StartOperation): void {
+    if (this.sessions.get(sessionId) === pty) {
+      this.sessions.delete(sessionId);
+    }
+    try {
+      pty.kill();
+    } catch {}
+    const currentOperation = this.startOperations.get(sessionId);
+    const hasReplacementStart =
+      currentOperation !== undefined && currentOperation.token !== operation.token;
+    if (!this.sessions.has(sessionId) && !hasReplacementStart) {
+      ptySessionRegistry.unregister(sessionId);
+    }
+    ptySessionRegistry.cancelRegistration(sessionId, operation.registrationEpoch);
+  }
+
+  private scheduleRespawn(
+    sessionId: string,
+    terminal: Terminal,
+    initialSize: { cols: number; rows: number },
+    command: PtyCommandSpec | undefined,
+    policy: SpawnPolicy
+  ): void {
+    this.clearRespawnTimer(sessionId);
+    const timer = setTimeout(() => {
+      if (this.respawnTimers.get(sessionId) !== timer) return;
+      this.respawnTimers.delete(sessionId);
+      if (
+        !this.knownSessionIds.has(sessionId) ||
+        this.sessions.has(sessionId) ||
+        this.startOperations.has(sessionId)
+      ) {
+        return;
+      }
+      this.spawnWithPolicy(terminal, initialSize, command, policy).catch((e) => {
+        log.error('LocalTerminalProvider: respawn failed', {
+          terminalId: terminal.id,
+          error: String(e),
+        });
+      });
+    }, 500);
+    timer.unref?.();
+    this.respawnTimers.set(sessionId, timer);
+  }
+
+  private clearRespawnTimer(sessionId: string): void {
+    const timer = this.respawnTimers.get(sessionId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.respawnTimers.delete(sessionId);
   }
 
   private resolveTmuxSessionName(sessionId: string): Promise<string | undefined> {
@@ -212,13 +333,15 @@ export class LocalTerminalProvider implements TerminalProvider {
   async killTerminal(terminalId: string): Promise<void> {
     const sessionId = makePtySessionId(this.projectId, this.scopeId, terminalId);
     this.knownSessionIds.delete(sessionId);
+    this.clearRespawnTimer(sessionId);
+    this.cancelPendingStart(sessionId);
     const pty = this.sessions.get(sessionId);
+    this.sessions.delete(sessionId);
+    ptySessionRegistry.unregister(sessionId);
     if (pty) {
       try {
         pty.kill();
       } catch {}
-      this.sessions.delete(sessionId);
-      ptySessionRegistry.unregister(sessionId);
     }
     const tmuxSessionName = this.tmuxSessionNames.get(sessionId);
     this.tmuxSessionNames.delete(sessionId);
@@ -240,12 +363,25 @@ export class LocalTerminalProvider implements TerminalProvider {
   }
 
   async detachAll(): Promise<void> {
-    for (const [sessionId, pty] of this.sessions) {
+    const sessionIds = new Set([
+      ...this.knownSessionIds,
+      ...this.startOperations.keys(),
+      ...this.sessions.keys(),
+      ...this.respawnTimers.keys(),
+    ]);
+    this.knownSessionIds.clear();
+    for (const sessionId of sessionIds) {
+      this.clearRespawnTimer(sessionId);
+      this.cancelPendingStart(sessionId);
+      const pty = this.sessions.get(sessionId);
+      this.sessions.delete(sessionId);
+      ptySessionRegistry.unregister(sessionId);
+      if (!pty) continue;
       try {
         pty.kill();
       } catch {}
-      ptySessionRegistry.unregister(sessionId);
     }
     this.sessions.clear();
+    this.respawnCounts.clear();
   }
 }

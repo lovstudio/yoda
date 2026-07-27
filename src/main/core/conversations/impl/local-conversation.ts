@@ -85,6 +85,7 @@ type RunStateWatcher = { stop(): void };
 export class LocalConversationProvider implements ConversationProvider {
   private sessions = new Map<string, Pty>();
   private knownSessionIds = new Set<string>();
+  private readonly pendingStarts = new Map<string, { token: symbol; completion: Promise<void> }>();
   private readonly projectId: string;
   readonly taskPath: string;
   private readonly taskId: string;
@@ -148,8 +149,32 @@ export class LocalConversationProvider implements ConversationProvider {
     );
     this.knownSessionIds.add(sessionId);
     if (this.sessions.has(sessionId)) return;
+    const existingStart = this.pendingStarts.get(sessionId);
+    if (existingStart) return existingStart.completion;
+
+    const startToken = Symbol(sessionId);
+    let resolveCompletion!: () => void;
+    let rejectCompletion!: (error: unknown) => void;
+    const completion = new Promise<void>((resolve, reject) => {
+      resolveCompletion = resolve;
+      rejectCompletion = reject;
+    });
+    // The initiating caller receives errors through startSession itself. This
+    // side promise exists so concurrent callers join the same attempt.
+    void completion.catch(() => {});
+    this.pendingStarts.set(sessionId, { token: startToken, completion });
+
     const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    let registrationAttempted = false;
     let registrationCompleted = false;
+    let startCommitted = false;
+    let startFailed = false;
+    let spawnedPty: Pty | undefined;
+    let invocationLogIdForRollback: string | undefined;
+    let invocationLogFinished = false;
+    let preparedSettingsCleanup: (() => void) | undefined;
+    let artifactCleanupRegistered = false;
+    let detachSilenceReconcilerForRollback: (() => void) | undefined;
 
     try {
       await claudeTrustService.maybeAutoTrustLocal({
@@ -157,17 +182,19 @@ export class LocalConversationProvider implements ConversationProvider {
         cwd: this.taskPath,
         homedir: homedir(),
       });
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
       await this.prepareHookConfig(
         conversation.runtimeId,
         makePtyId(conversation.runtimeId, conversation.id)
       );
-      await applyHookOverrides(
-        this.taskPath,
-        conversation.runtimeId,
-        await hookOverridesStore.get(conversation.taskId)
-      );
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
+      const hookOverrides = await hookOverridesStore.get(conversation.taskId);
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
+      await applyHookOverrides(this.taskPath, conversation.runtimeId, hookOverrides);
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
 
       const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
       const runtimeStateRoot = conversation.sessionSource
         ? getConversationRuntimeStateRoot(conversation, providerConfig)
         : undefined;
@@ -180,6 +207,7 @@ export class LocalConversationProvider implements ConversationProvider {
         await import('@main/core/maas/maas-service').then(({ maasService }) =>
           maasService.reconcileCodexStateRoot(runtimeStateRoot)
         );
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
       }
       if (conversation.runtimeId === 'codex') {
         const migration = migrateLegacyCodexMaasHistoryForConfig(sessionProviderConfig);
@@ -200,6 +228,7 @@ export class LocalConversationProvider implements ConversationProvider {
               )
             )
           : undefined;
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
       if (authProvider === 'yoda-maas' && !maasCredentials) {
         throw new Error(
           `MaaS is selected for ${conversation.runtimeId}, but no compatible connected platform is available.`
@@ -228,6 +257,7 @@ export class LocalConversationProvider implements ConversationProvider {
         isResuming && conversation.runtimeId === 'codex'
           ? await getReservedCodexThreadIds(conversation.id)
           : undefined;
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
       const agentSessionId = isResuming
         ? resolveAgentResumeSessionId(conversation, this.taskPath, { reservedThreadIds })
         : conversation.id;
@@ -259,6 +289,7 @@ export class LocalConversationProvider implements ConversationProvider {
           ctx: this.ctx,
           ...(runtimeStateRoot ? { statePath: resolveCodexStatePath(runtimeStateRoot) } : {}),
         });
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
       }
       const port = agentHookService.getPort();
       const token = agentHookService.getToken();
@@ -273,6 +304,12 @@ export class LocalConversationProvider implements ConversationProvider {
         pendingImagePaths && !useClipboardImagePaste
           ? substituteImageMentions(initialPrompt, pendingImagePaths)
           : initialPrompt;
+      const appendSystemPrompt = await getEnabledPromptPrinciplesText(
+        await this.resolveProjectPromptPrinciples?.()
+      );
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
+      const terminalThemeMode = await resolveTerminalThemeMode();
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
       const { command, args: baseArgs } = buildAgentCommand({
         runtimeId: conversation.runtimeId,
         providerConfig: sessionProviderConfig,
@@ -282,16 +319,15 @@ export class LocalConversationProvider implements ConversationProvider {
         isResuming,
         initialPrompt: useClipboardImagePaste ? undefined : effectiveInitialPrompt,
         workingDirectory: this.taskPath,
-        appendSystemPrompt: await getEnabledPromptPrinciplesText(
-          await this.resolveProjectPromptPrinciples?.()
-        ),
+        appendSystemPrompt,
         model,
-        terminalThemeMode: await resolveTerminalThemeMode(),
+        terminalThemeMode,
         skillPolicy: conversation.skillPolicy,
       });
       const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 
       const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
       const configuredRuntimeEnv = resolveRuntimeEnv(sessionProviderConfig, {
         runtimeId: conversation.runtimeId,
         tmuxEnabled: Boolean(tmuxSessionName),
@@ -302,6 +338,7 @@ export class LocalConversationProvider implements ConversationProvider {
           : undefined;
 
       const preparedSettings = prepareWindowsClaudeSettings(conversation.runtimeId, argsWithNotify);
+      preparedSettingsCleanup = preparedSettings.cleanup;
       const args = preparedSettings.args;
       const ptyId = makePtyId(conversation.runtimeId, conversation.id);
 
@@ -326,10 +363,13 @@ export class LocalConversationProvider implements ConversationProvider {
             ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
           },
         });
+        invocationLogIdForRollback = invocationLogId;
       } catch (error) {
         preparedSettings.cleanup?.();
+        preparedSettingsCleanup = undefined;
         throw error;
       }
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
 
       const sessionStartedAtMs = Date.now();
       const pty = (() => {
@@ -371,19 +411,23 @@ export class LocalConversationProvider implements ConversationProvider {
           });
         } catch (error) {
           preparedSettings.cleanup?.();
+          preparedSettingsCleanup = undefined;
           void aiLogService.finish(invocationLogId, {
             status: 'failed',
             error: `PTY spawn failed: ${String(error)}`,
           });
+          invocationLogFinished = true;
           throw error;
         }
       })();
+      spawnedPty = pty;
 
       if (preparedSettings.cleanup) {
         this.sessionArtifactCleanups.set(sessionId, {
           pty,
           cleanup: preparedSettings.cleanup,
         });
+        artifactCleanupRegistered = true;
         pty.onExit(() => this.cleanupSessionArtifacts(sessionId, pty));
       }
 
@@ -411,6 +455,7 @@ export class LocalConversationProvider implements ConversationProvider {
         taskId: conversation.taskId,
         conversationId: conversation.id,
       });
+      detachSilenceReconcilerForRollback = detachSilenceReconciler;
       pty.onData(() => agentSilenceReconciler.noteOutput(sessionId));
       if (conversation.runtimeId === 'claude') {
         // Sub-second Esc-interrupt detection from the TUI's "Interrupted" line.
@@ -457,8 +502,14 @@ export class LocalConversationProvider implements ConversationProvider {
         snapshotTaskDiffOnSessionExit(conversation.taskId);
       });
 
+      if (!this.ownsPendingStart(sessionId, startToken)) return;
+      registrationAttempted = true;
       ptySessionRegistry.register(sessionId, pty, { registrationEpoch });
       registrationCompleted = true;
+      if (!this.ownsPendingStart(sessionId, startToken)) {
+        ptySessionRegistry.unregister(sessionId);
+        return;
+      }
       this.sessions.set(sessionId, pty);
       this.sessionInfos.set(sessionId, {
         sessionId,
@@ -515,10 +566,49 @@ export class LocalConversationProvider implements ConversationProvider {
         task_id: conversation.taskId,
         conversation_id: conversation.id,
       });
+      startCommitted = true;
+    } catch (error) {
+      startFailed = true;
+      rejectCompletion(error);
+      throw error;
     } finally {
+      const ownsStart = this.ownsPendingStart(sessionId, startToken);
+      if (!startCommitted && spawnedPty) {
+        if (this.sessions.get(sessionId) === spawnedPty) {
+          this.sessions.delete(sessionId);
+        }
+        detachSilenceReconcilerForRollback?.();
+        if (artifactCleanupRegistered) {
+          this.cleanupSessionArtifacts(sessionId, spawnedPty);
+        } else {
+          preparedSettingsCleanup?.();
+        }
+        try {
+          spawnedPty.kill();
+        } catch {}
+        if (ownsStart && registrationAttempted) {
+          ptySessionRegistry.unregister(sessionId);
+        }
+        if (invocationLogIdForRollback && !invocationLogFinished) {
+          void aiLogService.finish(invocationLogIdForRollback, {
+            status: 'failed',
+            error: startFailed ? 'PTY startup failed' : 'PTY startup cancelled',
+          });
+        }
+      } else if (!startCommitted) {
+        preparedSettingsCleanup?.();
+        if (invocationLogIdForRollback && !invocationLogFinished) {
+          void aiLogService.finish(invocationLogIdForRollback, {
+            status: 'failed',
+            error: startFailed ? 'PTY startup failed' : 'PTY startup cancelled',
+          });
+        }
+      }
       if (!registrationCompleted) {
         ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
       }
+      if (ownsStart) this.pendingStarts.delete(sessionId);
+      if (!startFailed) resolveCompletion();
     }
   }
 
@@ -685,9 +775,25 @@ export class LocalConversationProvider implements ConversationProvider {
     }
   }
 
+  private ownsPendingStart(sessionId: string, token: symbol): boolean {
+    return this.pendingStarts.get(sessionId)?.token === token;
+  }
+
+  private cancelPendingStart(sessionId: string): void {
+    this.pendingStarts.delete(sessionId);
+  }
+
+  private cancelAllPendingStarts(): void {
+    for (const sessionId of this.pendingStarts.keys()) {
+      this.pendingStarts.delete(sessionId);
+      ptySessionRegistry.unregister(sessionId);
+    }
+  }
+
   async stopSession(conversationId: string): Promise<void> {
     const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
     this.knownSessionIds.delete(sessionId);
+    this.cancelPendingStart(sessionId);
     sessionTitleManager.stop(conversationId);
     this.stopRunStateWatcher(conversationId);
     const pty = this.sessions.get(sessionId);
@@ -698,8 +804,10 @@ export class LocalConversationProvider implements ConversationProvider {
         log.warn('LocalConversation: error killing PTY', { sessionId, error: String(e) });
       }
       this.sessions.delete(sessionId);
-      ptySessionRegistry.unregister(sessionId);
     }
+    // Also cancels a registration/input epoch when stop races startup before
+    // the provider has inserted a PTY into this.sessions.
+    ptySessionRegistry.unregister(sessionId);
     this.cleanupSessionArtifacts(sessionId, pty);
     this.sessionInfos.delete(sessionId);
     markRuntimeSessionExited({
@@ -728,6 +836,7 @@ export class LocalConversationProvider implements ConversationProvider {
   }
 
   async detachAll(): Promise<void> {
+    this.cancelAllPendingStarts();
     for (const [sessionId, pty] of this.sessions) {
       const conversationId = sessionId.split(':').pop();
       if (conversationId) {

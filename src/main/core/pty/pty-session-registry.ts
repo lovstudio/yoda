@@ -249,6 +249,11 @@ export class PtySessionRegistry {
     return epoch;
   }
 
+  isRegistrationCurrent(sessionId: string, epoch: number): boolean {
+    const intent = this.registrationIntents.get(sessionId);
+    return intent?.epoch === epoch && intent.expiresAt > Date.now();
+  }
+
   cancelRegistration(sessionId: string, epoch: number): void {
     const intent = this.registrationIntents.get(sessionId);
     if (!intent || intent.epoch !== epoch) return;

@@ -164,6 +164,20 @@ describe('PtySessionRegistry', () => {
     expect(pty.writes).toEqual(['first', '-second', '-live']);
   });
 
+  it('exposes whether an outer creation registration is still current', () => {
+    const registry = new PtySessionRegistry();
+    const epoch = registry.beginRegistration('session');
+
+    expect(registry.isRegistrationCurrent('session', epoch)).toBe(true);
+    registry.unregister('session');
+    expect(registry.isRegistrationCurrent('session', epoch)).toBe(false);
+
+    const nextEpoch = registry.beginRegistration('session');
+    expect(nextEpoch).toBeGreaterThan(epoch);
+    expect(registry.isRegistrationCurrent('session', epoch)).toBe(false);
+    expect(registry.isRegistrationCurrent('session', nextEpoch)).toBe(true);
+  });
+
   it('expires input instead of replaying stale keystrokes into a later process', () => {
     const registry = new PtySessionRegistry();
     registry.beginRegistration('session');

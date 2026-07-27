@@ -57,6 +57,9 @@ export async function createConversation(params: CreateConversationParams): Prom
   const registrationEpoch = params.sessionSource
     ? undefined
     : ptySessionRegistry.beginRegistration(sessionId);
+  const registrationIsCurrent = () =>
+    registrationEpoch === undefined ||
+    ptySessionRegistry.isRegistrationCurrent(sessionId, registrationEpoch);
   try {
     const task = resolveTask(params.projectId, params.taskId);
     if (!task) throw new Error('Task not found');
@@ -111,6 +114,9 @@ export async function createConversation(params: CreateConversationParams): Prom
           });
     const lastInteractedAt = new Date().toISOString();
 
+    if (!registrationIsCurrent()) {
+      throw new Error('Conversation creation was cancelled before persistence.');
+    }
     const [row] = await db
       .insert(conversations)
       .values({
@@ -129,6 +135,10 @@ export async function createConversation(params: CreateConversationParams): Prom
 
     await db.update(tasks).set({ lastInteractedAt }).where(eq(tasks.id, params.taskId));
 
+    if (!registrationIsCurrent()) {
+      await db.delete(conversations).where(eq(conversations.id, id));
+      throw new Error('Conversation creation was cancelled during persistence.');
+    }
     const conversation = mapConversationRowToConversation(row);
 
     conversationEvents._emit('conversation:created', conversation);

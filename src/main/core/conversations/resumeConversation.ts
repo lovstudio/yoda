@@ -44,6 +44,7 @@ export async function resumeConversation(
         throw new Error(`Task not provisioned: ${taskId}`);
       }
 
+      if (!ptySessionRegistry.isRegistrationCurrent(sessionKey, registrationEpoch)) return;
       const conversation = mapConversationRowToConversation(row, true);
       await task.conversations.startSession(conversation, initialSize, true);
     } finally {
