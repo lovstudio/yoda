@@ -38,6 +38,7 @@ import {
   getProjectStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { usePrompts } from '@renderer/features/prompt-library/use-prompts';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
   ContextItem,
   MarkdownContextContent,

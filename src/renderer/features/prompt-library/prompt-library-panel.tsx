@@ -796,7 +796,10 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                           </span>
                                         )}
                                         {entry.injectionEnabled && (
-                                          <span className="shrink-0 rounded bg-background-neutral px-1.5 py-0.5 text-[10px] text-foreground">
+                                          <span
+                                            data-slot="prompt-injection-badge"
+                                            className="shrink-0 rounded bg-background-neutral px-1.5 py-0.5 text-[10px] text-foreground-neutral"
+                                          >
                                             {t('promptLibrary.injection.badge')}
                                           </span>
                                         )}
