@@ -364,6 +364,12 @@ export class ProjectManagerStore {
             taskManager.provisionTask(navTaskId).catch(() => {});
           }
         }
+        // The primary app window enables runtime hydration; warm/detached
+        // windows keep this call passive. Re-running after every successful SSH
+        // mount also covers a project that reconnects after startup.
+        if (project.data.type === 'ssh') {
+          void appState.agentRuntime.hydrateProject(projectId);
+        }
       })
       .catch((err: unknown) => {
         runInAction(() => {
