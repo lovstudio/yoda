@@ -2263,6 +2263,10 @@
     "copy": "Copy",
     "copied": "Prompt copied to clipboard",
     "saveFailed": "Failed to save prompt",
+    "groups": {
+      "ungrouped": "Ungrouped",
+      "count": "{{count}}"
+    },
     "delete": {
       "title": "Delete prompt",
       "description": "Delete \"{{name}}\"? This cannot be undone.",
@@ -2273,6 +2277,9 @@
       "titlePlaceholder": "e.g. Bug triage",
       "description": "Description",
       "descriptionPlaceholder": "Optional short note about when to use this prompt",
+      "group": "Group",
+      "groupPlaceholder": "e.g. Development & debugging",
+      "groupHint": "Choose an existing group or enter a new one. Leave blank for Ungrouped.",
       "content": "Prompt",
       "contentPlaceholder": "The prompt text to reuse…"
     },

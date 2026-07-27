@@ -11,6 +11,7 @@ export const promptSchema = z.object({
   title: z.string(),
   description: z.string(),
   content: z.string(),
+  groupName: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -20,6 +21,7 @@ export const promptCreateInputSchema = z.object({
   title: z.string(),
   description: z.string().default(''),
   content: z.string(),
+  groupName: z.string().default(''),
 });
 export type PromptCreateInput = z.infer<typeof promptCreateInputSchema>;
 
@@ -28,6 +30,7 @@ export const promptUpdateInputSchema = z
     title: z.string(),
     description: z.string(),
     content: z.string(),
+    groupName: z.string(),
   })
   .partial();
 export type PromptUpdateInput = z.infer<typeof promptUpdateInputSchema>;

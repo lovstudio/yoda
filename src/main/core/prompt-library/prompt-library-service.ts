@@ -20,6 +20,7 @@ function toPrompt(row: PromptRow): Prompt {
     title: row.title,
     description: row.description,
     content: row.content,
+    groupName: row.groupName,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -50,6 +51,7 @@ export class PromptLibraryService {
       title: parsed.title,
       description: parsed.description,
       content: parsed.content,
+      groupName: parsed.groupName,
       sortOrder: next ?? 0,
       createdAt: now,
       updatedAt: now,

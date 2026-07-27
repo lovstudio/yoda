@@ -1,5 +1,5 @@
-import { ChevronRight, Copy, Loader2, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import { ChevronRight, Copy, Folder, Loader2, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
+import React, { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Prompt, PromptCreateInput } from '@shared/prompt-library';
 import PromptsSettingsCard from '@renderer/features/settings/components/PromptsSettingsCard';
@@ -10,18 +10,25 @@ import { Input } from '@renderer/lib/ui/input';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 import { LeakedPromptsReference } from './leaked-prompts-reference';
+import { getNamedPromptGroups, groupPrompts, UNGROUPED_PROMPT_GROUP } from './prompt-groups';
 import { useCreatePrompt, useDeletePrompt, usePrompts, useUpdatePrompt } from './use-prompts';
 
 type PromptDraft = {
   title: string;
   description: string;
   content: string;
+  groupName: string;
 };
 
-const EMPTY_DRAFT: PromptDraft = { title: '', description: '', content: '' };
+const EMPTY_DRAFT: PromptDraft = { title: '', description: '', content: '', groupName: '' };
 
 function draftFromEntry(entry: Prompt): PromptDraft {
-  return { title: entry.title, description: entry.description, content: entry.content };
+  return {
+    title: entry.title,
+    description: entry.description,
+    content: entry.content,
+    groupName: entry.groupName,
+  };
 }
 
 function draftToInput(draft: PromptDraft): PromptCreateInput {
@@ -29,6 +36,7 @@ function draftToInput(draft: PromptDraft): PromptCreateInput {
     title: draft.title.trim(),
     description: draft.description.trim(),
     content: draft.content.trim(),
+    groupName: draft.groupName.trim(),
   };
 }
 
@@ -40,11 +48,15 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const createPrompt = useCreatePrompt();
   const updatePrompt = useUpdatePrompt();
   const deletePrompt = useDeletePrompt();
+  const groupOptionsId = useId();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<PromptDraft>(EMPTY_DRAFT);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
 
   const items = useMemo(() => data ?? [], [data]);
+  const groups = useMemo(() => groupPrompts(items), [items]);
+  const namedGroups = useMemo(() => getNamedPromptGroups(items), [items]);
   const editorOpen = editingId !== null;
   const canSave = draft.title.trim().length > 0 && draft.content.trim().length > 0;
 
@@ -98,6 +110,15 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleGroup = (groupName: string) => {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupName)) next.delete(groupName);
+      else next.add(groupName);
       return next;
     });
   };
@@ -190,6 +211,27 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
               </label>
               <label className="grid gap-1.5">
                 <span className="text-xs text-foreground-muted">
+                  {t('promptLibrary.form.group')}
+                </span>
+                <Input
+                  list={groupOptionsId}
+                  value={draft.groupName}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, groupName: event.target.value }))
+                  }
+                  placeholder={t('promptLibrary.form.groupPlaceholder')}
+                />
+                <datalist id={groupOptionsId}>
+                  {namedGroups.map((groupName) => (
+                    <option key={groupName} value={groupName} />
+                  ))}
+                </datalist>
+                <span className="text-xs text-foreground-passive">
+                  {t('promptLibrary.form.groupHint')}
+                </span>
+              </label>
+              <label className="grid gap-1.5">
+                <span className="text-xs text-foreground-muted">
                   {t('promptLibrary.form.content')}
                 </span>
                 <Textarea
@@ -218,74 +260,113 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
             {items.length === 0 ? (
               <p className="text-sm text-foreground-muted">{t('promptLibrary.empty')}</p>
             ) : (
-              <ul className="grid gap-2">
-                {items.map((entry) => {
-                  const isOpen = expandedIds.has(entry.id);
+              <ul className="grid gap-3">
+                {groups.map((group) => {
+                  const groupIsOpen = !collapsedGroups.has(group.name);
+                  const groupLabel =
+                    group.name === UNGROUPED_PROMPT_GROUP
+                      ? t('promptLibrary.groups.ungrouped')
+                      : group.name;
                   return (
                     <li
-                      key={entry.id}
-                      className="group overflow-hidden rounded-lg border border-border bg-background-secondary"
+                      key={group.name || 'ungrouped'}
+                      className="overflow-hidden rounded-lg border border-border bg-background-secondary"
                     >
-                      <div className="flex items-center gap-2 px-3 py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => toggleExpanded(entry.id)}
-                          aria-expanded={isOpen}
-                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                        >
-                          <ChevronRight
-                            className={cn(
-                              'size-4 shrink-0 text-foreground-muted transition-transform',
-                              isOpen && 'rotate-90'
-                            )}
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium text-foreground">
-                              {entry.title}
-                            </span>
-                            {entry.description && (
-                              <span className="mt-0.5 block truncate text-xs text-foreground-muted">
-                                {entry.description}
-                              </span>
-                            )}
-                          </span>
-                        </button>
-                        <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={t('promptLibrary.copy')}
-                            onClick={() => handleCopy(entry)}
-                          >
-                            <Copy className="size-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={t('common.edit')}
-                            onClick={() => openEdit(entry)}
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={t('common.delete')}
-                            onClick={() => handleDelete(entry)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      {isOpen && (
-                        <div className="border-t border-border px-3 py-2.5 pl-9">
-                          <pre className="min-w-0 whitespace-pre-wrap break-words font-mono text-xs text-foreground-passive">
-                            {entry.content}
-                          </pre>
-                        </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(group.name)}
+                        aria-expanded={groupIsOpen}
+                        className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left outline-none transition-colors hover:bg-background-1 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+                      >
+                        <ChevronRight
+                          className={cn(
+                            'size-4 shrink-0 text-foreground-muted transition-transform',
+                            groupIsOpen && 'rotate-90'
+                          )}
+                        />
+                        <Folder className="size-4 shrink-0 text-foreground-muted" />
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                          {groupLabel}
+                        </span>
+                        <span className="shrink-0 text-xs tabular-nums text-foreground-passive">
+                          {t('promptLibrary.groups.count', { count: group.prompts.length })}
+                        </span>
+                      </button>
+
+                      {groupIsOpen && (
+                        <ul className="border-t border-border">
+                          {group.prompts.map((entry) => {
+                            const isOpen = expandedIds.has(entry.id);
+                            return (
+                              <li
+                                key={entry.id}
+                                className="group/prompt border-t border-border first:border-t-0"
+                              >
+                                <div className="flex items-center gap-2 px-3 py-2.5 pl-8">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpanded(entry.id)}
+                                    aria-expanded={isOpen}
+                                    className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-border"
+                                  >
+                                    <ChevronRight
+                                      className={cn(
+                                        'size-4 shrink-0 text-foreground-muted transition-transform',
+                                        isOpen && 'rotate-90'
+                                      )}
+                                    />
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate text-sm font-medium text-foreground">
+                                        {entry.title}
+                                      </span>
+                                      {entry.description && (
+                                        <span className="mt-0.5 block truncate text-xs text-foreground-muted">
+                                          {entry.description}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </button>
+                                  <div className="flex shrink-0 items-center gap-1 opacity-70 transition-opacity group-hover/prompt:opacity-100 group-focus-within/prompt:opacity-100">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      aria-label={t('promptLibrary.copy')}
+                                      onClick={() => handleCopy(entry)}
+                                    >
+                                      <Copy className="size-4" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      aria-label={t('common.edit')}
+                                      onClick={() => openEdit(entry)}
+                                    >
+                                      <Pencil className="size-4" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      aria-label={t('common.delete')}
+                                      onClick={() => handleDelete(entry)}
+                                    >
+                                      <Trash2 className="size-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                                {isOpen && (
+                                  <div className="border-t border-border px-3 py-2.5 pl-14">
+                                    <pre className="min-w-0 whitespace-pre-wrap break-words font-mono text-xs text-foreground-passive">
+                                      {entry.content}
+                                    </pre>
+                                  </div>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
                       )}
                     </li>
                   );

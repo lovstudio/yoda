@@ -2263,6 +2263,10 @@
     "copy": "复制",
     "copied": "已复制到剪贴板",
     "saveFailed": "保存提示词失败",
+    "groups": {
+      "ungrouped": "未分组",
+      "count": "{{count}} 条"
+    },
     "delete": {
       "title": "删除提示词",
       "description": "确定删除「{{name}}」？此操作无法撤销。",
@@ -2273,6 +2277,9 @@
       "titlePlaceholder": "例如：Bug 排查",
       "description": "描述",
       "descriptionPlaceholder": "可选：简述何时使用这个提示词",
+      "group": "分组",
+      "groupPlaceholder": "例如：开发与调试",
+      "groupHint": "可输入已有分组或新分组；留空则归入“未分组”。",
       "content": "提示词内容",
       "contentPlaceholder": "要复用的提示词文本…"
     },

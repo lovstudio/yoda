@@ -190,6 +190,7 @@ export const prompts = sqliteTable('prompts', {
   title: text('title').notNull(),
   description: text('description').notNull().default(''),
   content: text('content').notNull(),
+  groupName: text('group_name').notNull().default(''),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: text('created_at')
     .notNull()
