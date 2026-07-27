@@ -50,6 +50,26 @@ describe('moveLocalProjectDirectory', () => {
     expect(fs.readFileSync(path.join(source, 'keep.txt'), 'utf8')).toBe('keep me');
   });
 
+  it('uses an existing empty directory as the move destination', async () => {
+    const root = makeTemporaryRoot();
+    const source = path.join(root, 'current-project');
+    const target = path.join(root, 'empty-target');
+    fs.mkdirSync(source, { recursive: true });
+    fs.mkdirSync(target, { recursive: true });
+    fs.writeFileSync(path.join(source, 'keep.txt'), 'keep me');
+
+    const moved = await moveLocalProjectDirectory(source, target);
+
+    expect(fs.existsSync(source)).toBe(false);
+    expect(fs.readFileSync(path.join(target, 'keep.txt'), 'utf8')).toBe('keep me');
+
+    await moved.rollback();
+
+    expect(fs.readFileSync(path.join(source, 'keep.txt'), 'utf8')).toBe('keep me');
+    expect(fs.statSync(target).isDirectory()).toBe(true);
+    expect(fs.readdirSync(target)).toEqual([]);
+  });
+
   it('keeps an existing target untouched', async () => {
     const root = makeTemporaryRoot();
     const source = path.join(root, 'current-project');
