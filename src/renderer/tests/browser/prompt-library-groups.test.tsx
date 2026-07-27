@@ -206,18 +206,4 @@ describe('PromptLibraryPanel groups', () => {
     await act(async () => moveDown?.click());
     expect(mocks.reorderPrompts).toHaveBeenCalledWith(['second', 'first']);
   });
-
-  it('uses the neutral foreground color for dynamic injection badges', async () => {
-    mocks.prompts = [{ ...prompt('enabled', 'Build'), injectionEnabled: true, injectionOrder: 10 }];
-    const { PromptLibraryPanel } = await import(
-      '@renderer/features/prompt-library/prompt-library-panel'
-    );
-    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
-
-    const badge = host.querySelector<HTMLElement>('[data-slot="prompt-injection-badge"]');
-    expect(badge?.textContent).toBe('promptLibrary.injection.badge');
-    expect(badge?.classList.contains('bg-background-neutral')).toBe(true);
-    expect(badge?.classList.contains('text-foreground-neutral')).toBe(true);
-    expect(badge?.classList.contains('text-foreground')).toBe(false);
-  });
 });

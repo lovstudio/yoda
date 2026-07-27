@@ -795,14 +795,6 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                             {t(`promptLibrary.source.type.${entry.source.type}`)}
                                           </span>
                                         )}
-                                        {entry.injectionEnabled && (
-                                          <span
-                                            data-slot="prompt-injection-badge"
-                                            className="shrink-0 rounded bg-background-neutral px-1.5 py-0.5 text-[10px] text-foreground-neutral"
-                                          >
-                                            {t('promptLibrary.injection.badge')}
-                                          </span>
-                                        )}
                                       </span>
                                       {entry.description && (
                                         <span className="mt-0.5 block truncate text-xs text-foreground-muted">
