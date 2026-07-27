@@ -193,6 +193,8 @@
     "creatingWorkspace": "Creating task workspace…",
     "openPendingSession": "Open next pending session",
     "loading": "Loading",
+    "loadingProjectSessions": "Loading project and sessions…",
+    "loadingSessions": "Loading sessions…",
     "projectNotFound": "Project not found at path",
     "reconnect": "Reconnect",
     "changeSshConnection": "Change SSH connection",

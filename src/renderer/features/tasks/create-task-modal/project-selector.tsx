@@ -8,6 +8,7 @@ import { getProjectManagerStore } from '@renderer/features/projects/stores/proje
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import { appState } from '@renderer/lib/stores/app-state';
 import {
   Combobox,
   ComboboxCollection,
@@ -119,6 +120,15 @@ export const ProjectSelector = observer(function ProjectSelector({
     (allowProjectless && !value ? projectlessOption : null);
   const isProjectlessSelected = allowProjectless && !value;
 
+  function selectAndLoadProject(projectId: string) {
+    appState.sidebar.ensureProjectExpanded(projectId);
+    onChange(projectId);
+    setOpen(false);
+    void projectManager.mountProject(projectId).catch((error: unknown) => {
+      log.error('Failed to load selected project:', error);
+    });
+  }
+
   function handleValueChange(item: ProjectSelectorOption | null) {
     if (!item) {
       onChange(undefined);
@@ -134,7 +144,7 @@ export const ProjectSelector = observer(function ProjectSelector({
       setOpen(false);
       showExpressCreateModal({
         defaultName: trimmedQuery,
-        onSuccess: (projectId) => onChange(projectId),
+        onSuccess: selectAndLoadProject,
       });
       return;
     }
@@ -143,9 +153,7 @@ export const ProjectSelector = observer(function ProjectSelector({
       setOpen(false);
       return;
     }
-    void projectManager.mountProject(item.value).catch(() => {});
-    onChange(item.value);
-    setOpen(false);
+    selectAndLoadProject(item.value);
   }
 
   async function handleBrowse() {
@@ -169,10 +177,9 @@ export const ProjectSelector = observer(function ProjectSelector({
       }
       if (status.existingProject) {
         const projectId = status.existingProject.id;
-        await projectManager.ensureProjectLoaded(projectId, status.existingProject);
-        await projectManager.mountProject(projectId);
-        onChange(projectId);
-        setOpen(false);
+        const loaded = await projectManager.ensureProjectLoaded(projectId, status.existingProject);
+        if (!loaded) throw new Error(`Project ${projectId} could not be loaded`);
+        selectAndLoadProject(projectId);
         return;
       }
       if (!status.isGitRepo && !initializeGitRepositoryOnPick) {
@@ -194,8 +201,7 @@ export const ProjectSelector = observer(function ProjectSelector({
         }
       );
       if (projectId) {
-        onChange(projectId);
-        setOpen(false);
+        selectAndLoadProject(projectId);
       }
     } catch (err) {
       log.error('Failed to add project from picker:', err);

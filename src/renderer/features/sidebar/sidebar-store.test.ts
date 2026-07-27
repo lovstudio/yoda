@@ -147,6 +147,23 @@ describe('SidebarStore task recency ordering', () => {
 
     expect(restored.navSectionHidden).toBe(false);
   });
+
+  it('keeps a project visible while its sessions load when empty projects are hidden', () => {
+    const project = makeProject('loading-project', [], 'loading');
+    const store = makeSidebarStore([project]);
+    store.setHideProjectsWithoutActiveTasks(true);
+
+    expect(projectIds(store.orderedProjects)).toEqual(['loading-project']);
+
+    const taskManager = project.mountedProject?.taskManager;
+    expect(taskManager).toBeDefined();
+    if (!taskManager) return;
+    runInAction(() => {
+      taskManager.taskLoadState = 'loaded';
+    });
+
+    expect(store.orderedProjects).toEqual([]);
+  });
 });
 
 describe('SidebarStore subtask tree rows', () => {
@@ -304,7 +321,11 @@ function makeTask(
   return createUnprovisionedTask(task);
 }
 
-function makeProject(projectId: string, tasks: TaskStore[]): ProjectStore {
+function makeProject(
+  projectId: string,
+  tasks: TaskStore[],
+  taskLoadState: 'idle' | 'loading' | 'loaded' | 'error' = 'loaded'
+): ProjectStore {
   const data: LocalProject = {
     type: 'local',
     id: projectId,
@@ -328,9 +349,10 @@ function makeProject(projectId: string, tasks: TaskStore[]): ProjectStore {
     errorCode: undefined,
     mode: null,
     mountedProject: {
-      taskManager: {
+      taskManager: observable({
         tasks: observable.map(tasks.map((task) => [task.data.id, task])),
-      },
+        taskLoadState,
+      }),
     },
   } as ProjectStore;
 }

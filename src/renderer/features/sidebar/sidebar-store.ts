@@ -942,6 +942,9 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       // they don't pop in after their tasks load.
       return project.mode === null;
     }
+    if (project.mountedProject.taskManager.taskLoadState !== 'loaded') {
+      return project.mode === null;
+    }
     // Uses the full visibility predicate so the two hide filters compose: a
     // project whose remaining tasks are all conversation-less hides too.
     return Array.from(project.mountedProject.taskManager.tasks.values()).some((task) =>

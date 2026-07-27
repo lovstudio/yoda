@@ -158,6 +158,27 @@ describe('TaskManagerStore external task reconciliation', () => {
     expect(manager.tasks.get('task-1')?.data.name).toBe('Imported session');
     manager.dispose();
   });
+
+  it('reports task loading while imported sessions are being read', async () => {
+    const manager = createManager();
+    let resolveTasks: ((tasks: Task[]) => void) | undefined;
+    mocks.getTasks.mockReturnValue(
+      new Promise<Task[]>((resolve) => {
+        resolveTasks = resolve;
+      })
+    );
+    mocks.getPullRequestsForTask.mockResolvedValue({ success: false });
+
+    const loading = manager.loadTasks();
+
+    expect(manager.taskLoadState).toBe('loading');
+    resolveTasks?.([makeTask('Imported session')]);
+    await loading;
+
+    expect(manager.taskLoadState).toBe('loaded');
+    expect(manager.tasks.get('task-1')?.data.name).toBe('Imported session');
+    manager.dispose();
+  });
 });
 
 function createManager(): TaskManagerStore {

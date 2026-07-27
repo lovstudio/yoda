@@ -247,20 +247,24 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const projectPath =
     project.data?.path ?? (project.errorCode === 'path-not-found' ? project.error : undefined);
   const ProjectIcon = isSshProject ? FolderInput : FolderClosed;
+  const isLoadingProjectSessions =
+    projectViewKind(project) === 'bootstrapping' ||
+    mountedProject?.taskManager.taskLoadState === 'loading';
 
   const renderSpinnerWithTooltip = () => {
-    if (!isUnregisteredProject(project)) return null;
-    const labelKey = UNREGISTERED_PHASE_KEY[project.phase] ?? 'sidebar.phase.loading';
+    const label = isUnregisteredProject(project)
+      ? t(UNREGISTERED_PHASE_KEY[project.phase] ?? 'sidebar.phase.loading')
+      : t('sidebar.loadingProjectSessions');
     return (
       <Tooltip>
         <TooltipTrigger
           render={
-            <SidebarItemMiniButton type="button" disabled aria-label={t('sidebar.loading')}>
+            <SidebarItemMiniButton type="button" disabled aria-label={label}>
               <Loader2 className="h-4 w-4 animate-spin text-foreground/60" />
             </SidebarItemMiniButton>
           }
         />
-        <TooltipContent>{t(labelKey)}</TooltipContent>
+        <TooltipContent>{label}</TooltipContent>
       </Tooltip>
     );
   };
@@ -376,6 +380,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
               role="button"
               tabIndex={0}
               aria-expanded={isExpanded}
+              aria-busy={project.state === 'unregistered' || isLoadingProjectSessions}
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => {
                 setHovered(true);
@@ -394,7 +399,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
               onKeyDown={handleRowKeyDown}
             >
               <div className="flex items-center gap-1 flex-1 min-w-0">
-                {project.state === 'unregistered' ? (
+                {project.state === 'unregistered' || isLoadingProjectSessions ? (
                   renderSpinnerWithTooltip()
                 ) : (
                   <SidebarItemMiniButton
@@ -424,11 +429,21 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
                   {isSshProject ? (
                     <span className="min-w-0 flex items-center gap-2 overflow-hidden">
                       <span className="truncate">{project.displayName}</span>
+                      {isLoadingProjectSessions && (
+                        <span className="shrink-0 text-xs text-foreground-tertiary-muted">
+                          {t('sidebar.loadingSessions')}
+                        </span>
+                      )}
                       <ConnectionStatusDot state={sshConnectionState} />
                     </span>
                   ) : (
                     <span className="min-w-0 flex items-center gap-1.5 overflow-hidden">
                       <span className="truncate">{project.displayName}</span>
+                      {isLoadingProjectSessions && (
+                        <span className="shrink-0 text-xs text-foreground-tertiary-muted">
+                          {t('sidebar.loadingSessions')}
+                        </span>
+                      )}
                       {projectViewKind(project) === 'path_not_found' && (
                         <Tooltip>
                           <TooltipTrigger>

@@ -183,6 +183,7 @@ export class TaskManagerStore {
   private _disposeRepositoryReaction: (() => void) | null = null;
 
   tasks = observable.map<string, TaskStore>();
+  taskLoadState: 'idle' | 'loading' | 'loaded' | 'error' = 'idle';
   /**
    * Tasks whose archive flow (pre-archive commands + conversation archives) is
    * in flight. Rows observe this to render a loading state while the task is
@@ -200,7 +201,11 @@ export class TaskManagerStore {
     this._repository = repository;
     this._settingsStore = settingsStore;
     this._baseRef = baseRef;
-    makeObservable(this, { tasks: observable, archivingTaskIds: observable });
+    makeObservable(this, {
+      tasks: observable,
+      taskLoadState: observable,
+      archivingTaskIds: observable,
+    });
 
     events.on(taskStatusUpdatedChannel, ({ taskId, projectId: evtProjectId, status }) => {
       if (evtProjectId !== this.projectId) return;
@@ -330,12 +335,21 @@ export class TaskManagerStore {
 
   loadTasks(): Promise<void> {
     if (!this._loadPromise) {
+      runInAction(() => {
+        this.taskLoadState = 'loading';
+      });
       this._loadPromise = rpc.tasks
         .getTasks(this.projectId)
         .then((tasks) => {
           this._mergeLoadedTasks(tasks);
+          runInAction(() => {
+            this.taskLoadState = 'loaded';
+          });
         })
         .catch((e) => {
+          runInAction(() => {
+            this.taskLoadState = 'error';
+          });
           console.error('Error loading tasks', e);
         });
     }
@@ -348,7 +362,23 @@ export class TaskManagerStore {
    */
   async ensureTaskLoaded(taskId: string): Promise<boolean> {
     if (this.tasks.has(taskId)) return true;
-    this._mergeLoadedTasks(await rpc.tasks.getTasks(this.projectId));
+    await this.loadTasks();
+    if (this.tasks.has(taskId)) return true;
+
+    runInAction(() => {
+      this.taskLoadState = 'loading';
+    });
+    try {
+      this._mergeLoadedTasks(await rpc.tasks.getTasks(this.projectId));
+      runInAction(() => {
+        this.taskLoadState = 'loaded';
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.taskLoadState = 'error';
+      });
+      throw error;
+    }
     return this.tasks.has(taskId);
   }
 
