@@ -99,6 +99,12 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
     if (params !== undefined) {
       this.viewParamsStore = { ...this.viewParamsStore, [viewId]: params };
     }
+    if (viewId === 'project' || viewId === 'task') {
+      const projectParams = params as WrapParams<'project'> | WrapParams<'task'> | undefined;
+      if (projectParams?.projectId) {
+        appState.sidebar.recordProjectActivity(projectParams.projectId);
+      }
+    }
     if (viewId === 'task') {
       const taskParams = params as WrapParams<'task'> | undefined;
       if (taskParams?.projectId && taskParams.taskId) {

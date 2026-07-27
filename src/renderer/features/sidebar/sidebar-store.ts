@@ -229,11 +229,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
         runInAction(() => {
           for (const [id, instant] of instants) {
             if (!instant) continue;
-            const current = this.projectActivityById[id] ?? '';
-            // compareSidebarInstantsDesc < 0 means `instant` is newer than `current`.
-            if (compareSidebarInstantsDesc(instant, current) < 0) {
-              this.projectActivityById[id] = instant;
-            }
+            this.recordProjectActivity(id, instant);
           }
         });
       },
@@ -755,6 +751,19 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   }
 
   /**
+   * Advances a project's monotonic "last used" stamp. Explicit project/task
+   * navigation calls this even before the project has loaded, so an async
+   * deep-link target moves to the front as soon as it appears in the sidebar.
+   */
+  recordProjectActivity(projectId: string, instant: string = new Date().toISOString()): void {
+    const current = this.projectActivityById[projectId] ?? '';
+    // compareSidebarInstantsDesc < 0 means `instant` is newer than `current`.
+    if (compareSidebarInstantsDesc(instant, current) < 0) {
+      this.projectActivityById[projectId] = instant;
+    }
+  }
+
+  /**
    * Reveals the routed project/task in the sidebar without fighting subsequent
    * manual collapses. Call when the navigation selection itself changes or
    * when an asynchronously loaded target first becomes available.
@@ -970,7 +979,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     for (const task of project.mountedProject.taskManager.tasks.values()) {
       if (!isActiveSidebarTask(task)) continue;
       const instant = getSortInstant(task, 'updated');
-      if (instant && instant > best) best = instant;
+      if (instant && (!best || compareSidebarInstantsDesc(instant, best) < 0)) best = instant;
     }
     return best;
   }

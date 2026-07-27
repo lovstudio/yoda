@@ -108,6 +108,70 @@ describe('SidebarStore task recency ordering', () => {
     expect(projectIds(store.orderedProjects)).toEqual(['project-late', 'project-early']);
   });
 
+  it('moves an explicitly opened project to the front in updated-at order', () => {
+    const lateTask = makeTask('late-task', {
+      createdAt: '2026-06-02T10:00:00.000Z',
+      lastInteractedAt: '2026-06-02T10:00:00.000Z',
+      projectId: 'project-late',
+    });
+    const earlyTask = makeTask('early-task', {
+      createdAt: '2026-06-02T08:00:00.000Z',
+      lastInteractedAt: '2026-06-02T08:00:00.000Z',
+      projectId: 'project-early',
+    });
+    const store = makeSidebarStore([
+      makeProject('project-early', [earlyTask]),
+      makeProject('project-late', [lateTask]),
+    ]);
+
+    store.recordProjectActivity('project-early', '2026-06-02T11:00:00.000Z');
+
+    expect(projectIds(store.orderedProjects)).toEqual(['project-early', 'project-late']);
+
+    store.recordProjectActivity('project-early', '2026-06-02T07:00:00.000Z');
+
+    expect(store.projectActivityById['project-early']).toBe('2026-06-02T11:00:00.000Z');
+  });
+
+  it('moves a project to the front when one of its tasks is touched', () => {
+    const target = makeTask('target', {
+      createdAt: '2026-06-02T08:00:00.000Z',
+      lastInteractedAt: '2026-06-02T08:00:00.000Z',
+      projectId: 'project-early',
+    });
+    const leading = makeTask('leading', {
+      createdAt: '2026-06-02T10:00:00.000Z',
+      lastInteractedAt: '2026-06-02T10:00:00.000Z',
+      projectId: 'project-late',
+    });
+    const store = makeSidebarStore([
+      makeProject('project-early', [target]),
+      makeProject('project-late', [leading]),
+    ]);
+
+    expect(projectIds(store.orderedProjects)).toEqual(['project-late', 'project-early']);
+
+    runInAction(() => {
+      target.data.lastInteractedAt = '2026-06-02T11:00:00.000Z';
+    });
+
+    expect(projectIds(store.orderedProjects)).toEqual(['project-early', 'project-late']);
+  });
+
+  it('uses parsed time to find a project latest task across timestamp formats', () => {
+    const newDbTask = makeTask('new-db-task', {
+      createdAt: '2026-06-02 10:00:00',
+      lastInteractedAt: '2026-06-02 10:00:00',
+    });
+    const olderIsoTask = makeTask('older-iso-task', {
+      createdAt: '2026-06-02T09:59:59.000Z',
+      lastInteractedAt: '2026-06-02T09:59:59.000Z',
+    });
+    const store = makeSidebarStore([makeProject('project-1', [olderIsoTask, newDbTask])]);
+
+    expect(store.projectActivityById['project-1']).toBe('2026-06-02 10:00:00');
+  });
+
   it('groups activity rows by last interaction even when created-at sort is selected', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-02T12:00:00.000Z'));
