@@ -38,6 +38,7 @@ import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { logLocalPtySpawnWarnings, resolveLocalPtySpawn } from '@main/core/pty/pty-spawn-platform';
 import { resolveAvailableTmuxSessionName } from '@main/core/pty/tmux-availability';
 import { killTmuxSession, sendLiteralToTmuxSession } from '@main/core/pty/tmux-session-name';
+import { resolveCodexStatePath } from '@main/core/session-title/codex-title-source';
 import { sessionTitleManager } from '@main/core/session-title/session-title-manager';
 import { resolveTerminalThemeMode } from '@main/core/settings/resolve-terminal-theme-mode';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
@@ -48,6 +49,8 @@ import { telemetryService } from '@main/lib/telemetry';
 import { resolveAgentResumeSessionId } from '../codex-session-id';
 import { getReservedCodexThreadIds } from '../codex-thread-reservations';
 import { ensureCodexThreadUnarchived } from '../codex-unarchive';
+import { getConversationRuntimeStateRoot } from '../conversation-session-source';
+import { withRuntimeStateRoot } from '../session-state-roots';
 import {
   recordConversationAuthProvider,
   snapshotTaskDiffOnSessionExit,
@@ -162,8 +165,21 @@ export class LocalConversationProvider implements ConversationProvider {
     );
 
     const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
+    const runtimeStateRoot = conversation.sessionSource
+      ? getConversationRuntimeStateRoot(conversation, providerConfig)
+      : undefined;
+    const sessionProviderConfig =
+      runtimeStateRoot &&
+      (conversation.runtimeId === 'codex' || conversation.runtimeId === 'claude')
+        ? withRuntimeStateRoot(conversation.runtimeId, providerConfig, runtimeStateRoot)
+        : providerConfig;
+    if (isResuming && conversation.runtimeId === 'codex' && runtimeStateRoot) {
+      await import('@main/core/maas/maas-service').then(({ maasService }) =>
+        maasService.reconcileCodexStateRoot(runtimeStateRoot)
+      );
+    }
     if (conversation.runtimeId === 'codex') {
-      const migration = migrateLegacyCodexMaasHistoryForConfig(providerConfig);
+      const migration = migrateLegacyCodexMaasHistoryForConfig(sessionProviderConfig);
       if (migration.failed) {
         log.warn('Could not migrate legacy Codex MaaS thread metadata; will retry next launch', {
           rows: migration.rows,
@@ -215,7 +231,7 @@ export class LocalConversationProvider implements ConversationProvider {
     if (isResuming && conversation.runtimeId === 'codex') {
       const compatibility = ensureCodexResumeProviderCompatibleForConfig(
         agentSessionId,
-        providerConfig
+        sessionProviderConfig
       );
       if (compatibility.status === 'repaired') {
         log.info('LocalConversationProvider: repaired stale Codex resume provider', {
@@ -235,9 +251,10 @@ export class LocalConversationProvider implements ConversationProvider {
     if (isResuming) {
       await ensureCodexThreadUnarchived({
         runtimeId: conversation.runtimeId,
-        providerConfig,
+        providerConfig: sessionProviderConfig,
         threadId: agentSessionId,
         ctx: this.ctx,
+        ...(runtimeStateRoot ? { statePath: resolveCodexStatePath(runtimeStateRoot) } : {}),
       });
     }
     const port = agentHookService.getPort();
@@ -255,7 +272,7 @@ export class LocalConversationProvider implements ConversationProvider {
         : initialPrompt;
     const { command, args: baseArgs } = buildAgentCommand({
       runtimeId: conversation.runtimeId,
-      providerConfig,
+      providerConfig: sessionProviderConfig,
       autoApprove: conversation.autoApprove,
       permissionMode: conversation.permissionMode,
       sessionId: agentSessionId,
@@ -272,7 +289,7 @@ export class LocalConversationProvider implements ConversationProvider {
     const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 
     const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);
-    const configuredRuntimeEnv = resolveRuntimeEnv(providerConfig, {
+    const configuredRuntimeEnv = resolveRuntimeEnv(sessionProviderConfig, {
       runtimeId: conversation.runtimeId,
       tmuxEnabled: Boolean(tmuxSessionName),
     });
@@ -313,7 +330,7 @@ export class LocalConversationProvider implements ConversationProvider {
           cwd: resolved.cwd,
           env: {
             ...buildAgentEnv({
-              agentApiVars: resolveAgentApiEnvVars(providerConfig, conversation.runtimeId),
+              agentApiVars: resolveAgentApiEnvVars(sessionProviderConfig, conversation.runtimeId),
               hook: port > 0 ? { port, ptyId, token } : undefined,
               providerVars: providerEnv,
             }),
@@ -467,8 +484,16 @@ export class LocalConversationProvider implements ConversationProvider {
       cwd: this.taskPath,
       startedAtMs: sessionStartedAtMs,
       isResuming,
+      agentSessionId: isResuming ? agentSessionId : undefined,
+      stateRoot: runtimeStateRoot,
     });
-    this.startRunStateWatcher(conversation, sessionStartedAtMs, isResuming, agentSessionId);
+    this.startRunStateWatcher(
+      conversation,
+      sessionStartedAtMs,
+      isResuming,
+      agentSessionId,
+      runtimeStateRoot
+    );
     telemetryService.capture('agent_run_started', {
       provider: conversation.runtimeId,
       project_id: conversation.projectId,
@@ -488,7 +513,8 @@ export class LocalConversationProvider implements ConversationProvider {
     conversation: Conversation,
     startedAtMs: number,
     isResuming: boolean,
-    agentSessionId: string
+    agentSessionId: string,
+    stateRoot?: string
   ): void {
     this.stopRunStateWatcher(conversation.id);
     const session = {
@@ -505,7 +531,8 @@ export class LocalConversationProvider implements ConversationProvider {
           isResuming,
           threadId: agentSessionId,
         },
-        (event) => agentSessionRuntimeStore.dispatch(session, event, 'codex-rollout')
+        (event) => agentSessionRuntimeStore.dispatch(session, event, 'codex-rollout'),
+        stateRoot ? { statePath: resolveCodexStatePath(stateRoot) } : undefined
       );
       this.runStateWatchers.set(conversation.id, [watcher]);
       return;
@@ -520,9 +547,13 @@ export class LocalConversationProvider implements ConversationProvider {
         watchClaudeRunState(
           { conversationId: conversation.id, cwd: this.taskPath },
           (event) => agentSessionRuntimeStore.dispatch(session, event, 'claude-transcript'),
-          () => agentSessionRuntimeStore.getStatus(session)
+          () => agentSessionRuntimeStore.getStatus(session),
+          {
+            sessionId: agentSessionId,
+            claudeConfigDir: stateRoot,
+          }
         ),
-        watchClaudeSessionActivity(activityContext, (event) =>
+        watchClaudeSessionActivity({ ...activityContext, claudeHomeDir: stateRoot }, (event) =>
           agentSessionRuntimeStore.dispatch(session, event, 'claude-session-activity')
         ),
       ]);

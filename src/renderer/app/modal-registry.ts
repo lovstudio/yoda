@@ -16,6 +16,7 @@ import { ManageRunScriptsModal } from '@renderer/features/projects/components/ma
 import { MoveProjectPathModal } from '@renderer/features/projects/components/move-project-path-modal';
 import { ManageQuickActionsModal } from '@renderer/features/projects/components/overview-view/manage-quick-actions-modal';
 import { RenameProjectModal } from '@renderer/features/projects/components/rename-project-modal';
+import { LocalAgentSessionModal } from '@renderer/features/projects/components/sessions-view/local-agent-session-modal';
 import { ShareProjectConfigModal } from '@renderer/features/projects/components/settings-view/share-project-config-modal';
 import { DreamSkinEditorModal } from '@renderer/features/settings/components/DreamSkinEditorModal';
 import { CreateSkillModal } from '@renderer/features/skills/components/CreateSkillModal';
@@ -99,6 +100,7 @@ export const modalRegistry = {
   projectWorkspaceConflictModal: createModal(ProjectWorkspaceConflictModal, { size: 'sm' }),
   archiveTaskWithNoteModal: createModal(ArchiveTaskWithNoteModal, { size: 'sm' }),
   archivedSessionTranscriptModal: createModal(ArchivedSessionTranscriptModal, { size: 'lg' }),
+  localAgentSessionModal: createModal(LocalAgentSessionModal, { size: 'lg' }),
   shareProjectConfigModal: createModal(ShareProjectConfigModal, { size: 'md' }),
   captureProjectAutomationModal: createModal(CaptureProjectAutomationModal, { size: 'lg' }),
   manageRunScriptsModal: createModal(ManageRunScriptsModal, { size: 'md' }),

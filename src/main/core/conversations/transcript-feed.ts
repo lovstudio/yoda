@@ -2,7 +2,11 @@ import { watch, type FSWatcher } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { eq } from 'drizzle-orm';
 import { conversationTranscriptChangedChannel } from '@shared/events/conversationEvents';
-import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
+import {
+  resolveClaudeTranscriptPath,
+  resolveClaudeTranscriptPathFromConfigDir,
+} from '@main/core/session-title/claude-title-source';
+import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import { events } from '@main/lib/events';
@@ -10,6 +14,7 @@ import { log } from '@main/lib/logger';
 import { iterateLines } from '@main/utils/text-lines';
 import { resolveTask } from '../projects/utils';
 import { findClaudeTranscriptPathBySessionId } from './claude-transcript-locator';
+import { getConversationRuntimeStateRoot } from './conversation-session-source';
 import { getCodexSessionContext } from './getCodexSessionContext';
 import { mapConversationRowToConversation } from './utils';
 
@@ -264,15 +269,27 @@ async function resolveTranscriptPath(
   if (conversation.projectId !== projectId || conversation.taskId !== taskId) return null;
 
   if (conversation.runtimeId === 'claude') {
-    if (cwd) return resolveClaudeTranscriptPath(cwd, conversationId);
-    return (await findClaudeTranscriptPathBySessionId(conversationId)) ?? null;
+    const providerConfig = await runtimeOverrideSettings.getItem('claude');
+    const stateRoot = getConversationRuntimeStateRoot(conversation, providerConfig);
+    const sessionId = conversation.sessionSource?.sessionId ?? conversationId;
+    if (conversation.sessionSource && stateRoot) {
+      return (
+        (await findClaudeTranscriptPathBySessionId(sessionId, stateRoot)) ??
+        (cwd ? resolveClaudeTranscriptPathFromConfigDir(cwd, sessionId, stateRoot) : null)
+      );
+    }
+    if (cwd) return resolveClaudeTranscriptPath(cwd, sessionId);
+    return (await findClaudeTranscriptPathBySessionId(sessionId, stateRoot)) ?? null;
   }
   if (conversation.runtimeId === 'codex' && cwd) {
+    const providerConfig = await runtimeOverrideSettings.getItem('codex');
+    const stateRoot = getConversationRuntimeStateRoot(conversation, providerConfig);
     const context = await getCodexSessionContext(
       cwd,
-      conversation.id,
+      conversation.sessionSource?.sessionId ?? conversation.id,
       conversation.title,
-      conversation.createdAt ?? null
+      conversation.createdAt ?? null,
+      stateRoot ? { codexHome: stateRoot } : undefined
     ).catch(() => null);
     return context?.rolloutPath ?? null;
   }

@@ -1,3 +1,4 @@
+import type { RuntimeCustomConfig } from '@shared/app-settings';
 import { requestCodexAppServer } from '@main/core/settings/codex-app-server-client';
 
 const CODEX_FORK_TIMEOUT_MS = 30_000;
@@ -6,10 +7,12 @@ export async function forkCodexThread({
   threadId,
   lastTurnId,
   cwd,
+  providerConfig,
 }: {
   threadId: string;
   lastTurnId: string;
   cwd: string;
+  providerConfig?: RuntimeCustomConfig;
 }): Promise<string> {
   const result = await requestCodexAppServer(
     'thread/fork',
@@ -19,7 +22,7 @@ export async function forkCodexThread({
       cwd,
       excludeTurns: true,
     },
-    { experimentalApi: true, timeoutMs: CODEX_FORK_TIMEOUT_MS }
+    { experimentalApi: true, timeoutMs: CODEX_FORK_TIMEOUT_MS, providerConfig }
   );
   const forkedThreadId = readForkedThreadId(result);
   if (!forkedThreadId) {
@@ -31,11 +34,14 @@ export async function forkCodexThread({
   return forkedThreadId;
 }
 
-export async function deleteCodexThread(threadId: string): Promise<void> {
+export async function deleteCodexThread(
+  threadId: string,
+  providerConfig?: RuntimeCustomConfig
+): Promise<void> {
   await requestCodexAppServer(
     'thread/delete',
     { threadId },
-    { experimentalApi: true, timeoutMs: CODEX_FORK_TIMEOUT_MS }
+    { experimentalApi: true, timeoutMs: CODEX_FORK_TIMEOUT_MS, providerConfig }
   );
 }
 

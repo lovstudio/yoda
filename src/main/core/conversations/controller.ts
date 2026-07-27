@@ -28,6 +28,10 @@ import { resolveRuntimeStateDirectory } from './impl/runtime-env';
 import { injectConversationPrompt } from './injectConversationPrompt';
 import { getInstructionFiles, getRuntimeInstructionFiles } from './instruction-files';
 import { interruptConversation } from './interruptConversation';
+import {
+  getLocalAgentSessionTranscript,
+  listLocalAgentSessions,
+} from './local-agent-session-operations';
 import { moveConversation } from './moveConversation';
 import { renameConversation } from './renameConversation';
 import { restartConversation } from './restartConversation';
@@ -35,6 +39,7 @@ import { resumeConversation } from './resumeConversation';
 import { rewritePrompt } from './rewritePrompt';
 import { getProjectDeliverySummaries } from './session-summary-context';
 import { getSessionSummarySnapshot } from './session-summary-snapshot';
+import { getStoredConversationSessionSource } from './stored-conversation-session-source';
 import { touchConversation } from './touchConversation';
 import {
   getConversationTranscript,
@@ -45,8 +50,12 @@ import { unarchiveConversation } from './unarchiveConversation';
 
 async function getConfiguredClaudeSessionContext(cwd: string, sessionId: string) {
   const providerConfig = await runtimeOverrideSettings.getItem('claude');
-  return getClaudeSessionContext(cwd, sessionId, {
-    claudeConfigDir: resolveRuntimeStateDirectory('claude', providerConfig),
+  const source = await getStoredConversationSessionSource(sessionId);
+  return getClaudeSessionContext(cwd, source?.sessionId ?? sessionId, {
+    claudeConfigDir:
+      source?.runtimeId === 'claude'
+        ? source.stateRoot
+        : resolveRuntimeStateDirectory('claude', providerConfig),
   });
 }
 
@@ -58,10 +67,20 @@ async function getConfiguredCodexSessionContext(
   transcriptMode: 'full' | 'harness' = 'full'
 ) {
   const providerConfig = await runtimeOverrideSettings.getItem('codex');
-  return getCodexSessionContext(cwd, conversationId, conversationTitle, conversationCreatedAt, {
-    codexHome: resolveRuntimeStateDirectory('codex', providerConfig),
-    transcriptMode,
-  });
+  const source = await getStoredConversationSessionSource(conversationId);
+  return getCodexSessionContext(
+    cwd,
+    source?.runtimeId === 'codex' ? source.sessionId : conversationId,
+    conversationTitle,
+    conversationCreatedAt,
+    {
+      codexHome:
+        source?.runtimeId === 'codex'
+          ? source.stateRoot
+          : resolveRuntimeStateDirectory('codex', providerConfig),
+      transcriptMode,
+    }
+  );
 }
 
 export const conversationController = createRPCController({
@@ -81,6 +100,8 @@ export const conversationController = createRPCController({
   rewritePrompt,
   resumeConversation,
   interruptConversation,
+  listLocalAgentSessions,
+  getLocalAgentSessionTranscript,
   moveConversation,
   getConversationRuntimeStatuses,
   getConversationsForTask,

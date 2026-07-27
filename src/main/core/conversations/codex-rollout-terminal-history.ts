@@ -5,6 +5,7 @@ import {
   resolveCodexStatePath,
 } from '@main/core/session-title/codex-title-source';
 import { resolveCodexThreadForConversation } from './codex-session-id';
+import { getConversationAgentSessionId } from './conversation-session-source';
 import { getCodexSessionContext } from './getCodexSessionContext';
 
 const MAX_COMMAND_OUTPUT_CHARS = 16 * 1024;
@@ -107,9 +108,10 @@ export async function loadCodexRolloutTranscriptForConversation({
 
   const context = await getCodexSessionContext(
     cwd,
-    conversation.id,
+    getConversationAgentSessionId(conversation),
     conversation.title,
-    conversation.createdAt
+    conversation.createdAt,
+    conversation.sessionSource ? { codexHome: conversation.sessionSource.stateRoot } : undefined
   );
   if (!context?.rolloutPath) return null;
 
@@ -222,14 +224,17 @@ async function readRolloutTail(rolloutPath: string, size: number): Promise<strin
 
 async function resolveCodexRolloutContext(conversation: Conversation, cwd: string) {
   if (conversation.runtimeId !== 'codex') return null;
-  const statePath = resolveCodexStatePath();
-  const thread = resolveCodexThreadForConversation({
-    conversationId: conversation.id,
-    cwd,
-    title: conversation.title,
-    createdAt: conversation.createdAt,
-    statePath,
-  });
+  const source = conversation.sessionSource;
+  const statePath = resolveCodexStatePath(source?.stateRoot);
+  const thread = source
+    ? { id: source.sessionId, title: conversation.title }
+    : resolveCodexThreadForConversation({
+        conversationId: conversation.id,
+        cwd,
+        title: conversation.title,
+        createdAt: conversation.createdAt,
+        statePath,
+      });
   if (thread) {
     const rolloutPath = readCodexThreadRolloutPath(statePath, thread.id);
     if (rolloutPath) {
@@ -246,10 +251,13 @@ async function resolveCodexRolloutContext(conversation: Conversation, cwd: strin
   // loading transcript messages just to locate the rollout.
   const fallback = await getCodexSessionContext(
     cwd,
-    conversation.id,
+    getConversationAgentSessionId(conversation),
     conversation.title,
     conversation.createdAt,
-    { transcriptMode: 'harness' }
+    {
+      ...(source ? { codexHome: source.stateRoot } : {}),
+      transcriptMode: 'harness',
+    }
   ).catch(() => null);
   if (!fallback?.rolloutPath) return null;
   return {

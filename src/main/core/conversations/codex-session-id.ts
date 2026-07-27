@@ -11,6 +11,7 @@ import {
   type CodexThreadRef,
 } from '@main/core/session-title/codex-title-source';
 import { resolveLatestCodexThreadIdInLineage } from './codex-thread-lineage';
+import { getConversationAgentSessionId } from './conversation-session-source';
 
 const SQLITE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 const CODEX_CREATED_AT_MATCH_MAX_DISTANCE_MS = 2 * 60_000;
@@ -32,7 +33,17 @@ export function resolveAgentResumeSession(
   options: { reservedThreadIds?: ReadonlySet<string> } = {}
 ): AgentResumeSession {
   if (conversation.runtimeId !== 'codex') {
-    return { sessionId: conversation.id, sessionTitle: conversation.title };
+    return {
+      sessionId: getConversationAgentSessionId(conversation),
+      sessionTitle: conversation.title,
+    };
+  }
+
+  if (conversation.sessionSource?.runtimeId === 'codex') {
+    return {
+      sessionId: conversation.sessionSource.sessionId,
+      sessionTitle: conversation.title,
+    };
   }
 
   const thread = resolveCodexThreadForConversation({

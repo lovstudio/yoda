@@ -12,6 +12,7 @@ import {
   sessionSummaryTopic,
 } from '@shared/events/sessionSummaryEvents';
 import type { RuntimeId } from '@shared/runtime-registry';
+import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { agentSessionRuntimeStore } from './agent-session-runtime';
@@ -22,6 +23,7 @@ import {
 } from './generateSessionSummary';
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getCodexSessionContext } from './getCodexSessionContext';
+import { resolveRuntimeStateDirectory } from './impl/runtime-env';
 import { buildSummaryDraft } from './session-summary-prompt';
 import {
   createSessionSummarySnapshot,
@@ -35,6 +37,7 @@ import {
   setStoredSummary,
   type StoredSummary,
 } from './session-summary-store';
+import { getStoredConversationSessionSource } from './stored-conversation-session-source';
 
 /** Number of trailing transcript messages a `recent` summary covers. */
 const RECENT_MESSAGE_COUNT = 10;
@@ -336,7 +339,16 @@ async function loadContext(
   messages: SessionTranscriptMessage[];
 } | null> {
   if (runtimeId === 'claude') {
-    const context = await getClaudeSessionContext(cwd, conversationId);
+    const [source, providerConfig] = await Promise.all([
+      getStoredConversationSessionSource(conversationId),
+      runtimeOverrideSettings.getItem('claude'),
+    ]);
+    const context = await getClaudeSessionContext(cwd, source?.sessionId ?? conversationId, {
+      claudeConfigDir:
+        source?.runtimeId === 'claude'
+          ? source.stateRoot
+          : resolveRuntimeStateDirectory('claude', providerConfig),
+    });
     return {
       summary: context?.summary ?? null,
       prompts: context?.prompts ?? [],
@@ -344,11 +356,21 @@ async function loadContext(
     };
   }
   if (runtimeId === 'codex') {
+    const [source, providerConfig] = await Promise.all([
+      getStoredConversationSessionSource(conversationId),
+      runtimeOverrideSettings.getItem('codex'),
+    ]);
     const context = await getCodexSessionContext(
       cwd,
-      conversationId,
+      source?.sessionId ?? conversationId,
       conversationTitle,
-      conversationCreatedAt
+      conversationCreatedAt,
+      {
+        codexHome:
+          source?.runtimeId === 'codex'
+            ? source.stateRoot
+            : resolveRuntimeStateDirectory('codex', providerConfig),
+      }
     );
     return {
       summary: context?.summary ?? null,

@@ -158,6 +158,10 @@ describe('forkConversationAtPrompt', () => {
       threadId: 'source-thread',
       lastTurnId: 'turn-1',
       cwd: '/repo',
+      providerConfig: {
+        cli: 'codex',
+        env: { CODEX_HOME: '/state/codex' },
+      },
     });
     expect(mocks.insertChain.values).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -344,7 +348,10 @@ describe('forkConversationAtPrompt', () => {
       })
     ).rejects.toThrow('database unavailable');
 
-    expect(mocks.deleteCodexThread).toHaveBeenCalledWith('forked-thread');
+    expect(mocks.deleteCodexThread).toHaveBeenCalledWith('forked-thread', {
+      cli: 'codex',
+      env: { CODEX_HOME: '/state/codex' },
+    });
     expect(mocks.startSession).not.toHaveBeenCalled();
     expect(mocks.emit).not.toHaveBeenCalled();
   });

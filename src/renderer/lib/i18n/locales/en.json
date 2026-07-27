@@ -4555,7 +4555,12 @@
       "emptyTitle": "No sessions",
       "emptyDescription": "Open a task session to see it here.",
       "openSession": "Open {{title}}",
-      "taskFallback": "Task {{id}}"
+      "taskFallback": "Task {{id}}",
+      "localBadge": "Local",
+      "localAgentSession": "Agent-native session found on this device",
+      "previewLocalSession": "Preview local session {{title}}",
+      "addAndContinue": "Add to Yoda and continue",
+      "addFailed": "Failed to add the local session to Yoda"
     },
     "harness": {
       "label": "Harness",
