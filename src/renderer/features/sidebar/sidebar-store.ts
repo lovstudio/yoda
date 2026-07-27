@@ -750,11 +750,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     this.expandedProjectIds.add(projectId);
   }
 
-  /**
-   * Advances a project's monotonic "last used" stamp. Explicit project/task
-   * navigation calls this even before the project has loaded, so an async
-   * deep-link target moves to the front as soon as it appears in the sidebar.
-   */
+  /** Advances a project's monotonic task-activity stamp. */
   recordProjectActivity(projectId: string, instant: string = new Date().toISOString()): void {
     const current = this.projectActivityById[projectId] ?? '';
     // compareSidebarInstantsDesc < 0 means `instant` is newer than `current`.

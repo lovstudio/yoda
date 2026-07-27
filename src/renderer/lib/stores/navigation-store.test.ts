@@ -38,33 +38,25 @@ vi.mock('@renderer/utils/telemetryClient', () => ({
   captureTelemetry: vi.fn(),
 }));
 
-describe('NavigationStore project activity', () => {
+describe('NavigationStore navigation side effects', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('records project navigation as recent activity', () => {
+  it('does not treat opening a project as recent activity', () => {
     const store = new NavigationStore();
 
     store.navigate('project', { projectId: 'project-1' });
 
-    expect(mocks.recordProjectActivity).toHaveBeenCalledWith('project-1');
+    expect(mocks.recordProjectActivity).not.toHaveBeenCalled();
   });
 
-  it('records task navigation as project activity and marks the task seen', () => {
+  it('marks an opened task as seen without changing project activity', () => {
     const store = new NavigationStore();
 
     store.navigate('task', { projectId: 'project-1', taskId: 'task-1' });
 
-    expect(mocks.recordProjectActivity).toHaveBeenCalledWith('project-1');
-    expect(mocks.markTaskSeen).toHaveBeenCalledWith('project-1', 'task-1');
-  });
-
-  it('does not record non-project navigation as project activity', () => {
-    const store = new NavigationStore();
-
-    store.navigate('settings', { tab: 'general' });
-
     expect(mocks.recordProjectActivity).not.toHaveBeenCalled();
+    expect(mocks.markTaskSeen).toHaveBeenCalledWith('project-1', 'task-1');
   });
 });
