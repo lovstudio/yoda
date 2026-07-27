@@ -122,6 +122,7 @@
     "newTask": "New task",
     "searchTasks": "Search tasks",
     "library": "Library",
+    "marketplace": "Marketplace",
     "skills": "Skills",
     "skillIssues": "{{count}} skill issue(s)",
     "automation": "Automation",
@@ -2114,7 +2115,6 @@
       "agents": "Agents",
       "agentTeams": "Agent Teams",
       "skills": "Skills",
-      "marketplace": "Marketplace",
       "plugins": "Plugins",
       "mcp": "MCP",
       "automation": "Automation"

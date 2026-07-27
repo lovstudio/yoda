@@ -24,6 +24,7 @@ import {
   Settings,
   Smartphone,
   SquareKanban,
+  Store,
   Terminal,
   Workflow,
   X,
@@ -80,6 +81,7 @@ import { cn } from '@renderer/utils/utils';
  */
 const VIEW_ICONS: Partial<Record<ViewId, LucideIcon>> = {
   library: LibraryIcon,
+  marketplace: Store,
   aiLab: FlaskConical,
   settings: Settings,
   skills: Puzzle,
