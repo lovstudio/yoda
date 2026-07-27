@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { CODEX_MAAS_API_KEY_ENV } from '@main/core/maas/codex-maas-user-environment';
 import {
   resolveAgentApiEnvVars,
   resolveRuntimeBaseEnv,
@@ -65,20 +64,10 @@ describe('resolveRuntimeEnv', () => {
     });
   });
 
-  it('forwards the published user-session key to every Codex MaaS process', () => {
-    const previous = process.env[CODEX_MAAS_API_KEY_ENV];
-    process.env[CODEX_MAAS_API_KEY_ENV] = 'maas-secret';
-    try {
-      expect(resolveRuntimeEnv({ authProvider: 'yoda-maas' }, { runtimeId: 'codex' })).toEqual({
-        [CODEX_MAAS_API_KEY_ENV]: 'maas-secret',
-      });
-    } finally {
-      if (previous === undefined) {
-        delete process.env[CODEX_MAAS_API_KEY_ENV];
-      } else {
-        process.env[CODEX_MAAS_API_KEY_ENV] = previous;
-      }
-    }
+  it('does not forward a process-global credential to Codex MaaS processes', () => {
+    expect(
+      resolveRuntimeEnv({ authProvider: 'yoda-maas' }, { runtimeId: 'codex' })
+    ).toBeUndefined();
   });
 
   it('keeps official API variables when official API auth is selected', () => {

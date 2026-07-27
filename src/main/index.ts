@@ -21,6 +21,7 @@ import { sessionSummaryAutoRefreshService } from './core/conversations/session-s
 import { localDependencyManager } from './core/dependencies/dependency-manager';
 import { knownBinDirs } from './core/dependencies/probe';
 import { editorBufferService } from './core/editor/editor-buffer-service';
+import { extensionMarketplaceService } from './core/extensions/extension-marketplace-service';
 import { gitWatcherRegistry } from './core/git/git-watcher-registry';
 import { maasService } from './core/maas/maas-service';
 import { mobileGatewayService } from './core/mobile-gateway/mobile-gateway-service';
@@ -170,6 +171,10 @@ void app.whenReady().then(async () => {
   await appSettingsService.initialize();
   ptySessionRegistry.setScrollbackLines((await appSettingsService.get('terminal')).scrollbackLines);
   __bootMark('appSettingsService.initialize done');
+  await extensionMarketplaceService.initialize().catch((error: unknown) => {
+    log.warn('Failed to initialize the Yoda Extension Marketplace:', error);
+  });
+  __bootMark('extensionMarketplaceService.initialize done');
   await maasService.reconcileActiveBindings().catch((error: unknown) => {
     log.warn('Failed to reconcile the active MaaS provider configuration:', error);
   });
@@ -317,10 +322,14 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
       mobileRelayService.dispose();
       updateService.dispose();
       prSyncScheduler.dispose();
-      const [gitWatcherResult, projectManagerResult] = await Promise.allSettled([
+      const [extensionResult, gitWatcherResult, projectManagerResult] = await Promise.allSettled([
+        extensionMarketplaceService.dispose(),
         gitWatcherRegistry.dispose(),
         projectManager.dispose({ mode }),
       ]);
+      if (extensionResult.status === 'rejected') {
+        log.error('Failed to shutdown extension runtimes:', extensionResult.reason);
+      }
       if (gitWatcherResult.status === 'rejected') {
         log.error('Failed to shutdown git watcher registry:', gitWatcherResult.reason);
       }

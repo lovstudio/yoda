@@ -1,6 +1,7 @@
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useState } from 'react';
+import { MAAS_GATEWAY_EXTENSION_ID } from '@shared/extensions';
 import { AccountSessionEvents } from './app/account-session-events';
 import { AiLabBuildEvents } from './app/ai-lab-build-events';
 import { AppMenuEvents } from './app/app-menu-events';
@@ -20,6 +21,7 @@ import {
   isComparisonWindowLaunch,
 } from './lib/comparison-window-launch-target';
 import { useAccountSession } from './lib/hooks/useAccount';
+import { rpc } from './lib/ipc';
 import { WorkspaceLayoutContextProvider } from './lib/layout/layout-provider';
 import { WorkspaceViewProvider } from './lib/layout/provider';
 import { FeatureFlagProvider } from './lib/providers/feature-flag-override-context';
@@ -34,7 +36,7 @@ import { TooltipProvider } from './lib/ui/tooltip';
 export const HAS_SEEN_ONBOARDING = 'yoda:has-seen-onboarding:v1';
 
 type AppView = 'onboarding' | 'welcome' | 'workspace';
-type OnboardingStep = 'sign-in';
+type OnboardingStep = 'sign-in' | 'maas-gateway';
 
 const AppContent = observer(function AppContent() {
   const [view, setView] = useState<AppView>(() =>
@@ -42,8 +44,13 @@ const AppContent = observer(function AppContent() {
   );
 
   const { data: session, isLoading: sessionLoading } = useAccountSession();
+  const { data: extensions = [], isLoading: extensionsLoading } = useQuery({
+    queryKey: ['extensions', 'marketplace'],
+    queryFn: () => rpc.extensions.listMarketplace(),
+    enabled: view === 'onboarding',
+  });
 
-  const isLoading = sessionLoading;
+  const isLoading = sessionLoading || (view === 'onboarding' && extensionsLoading);
 
   // Boot splash: main/full-app windows only — detached task/comparison/AI Lab windows
   // pop open instantly without the kernel boot screen.
@@ -60,9 +67,14 @@ const AppContent = observer(function AppContent() {
     if (!isLoading && view === 'onboarding' && frozenSteps === null) {
       const computed: OnboardingStep[] = [];
       if (!session?.isSignedIn) computed.push('sign-in');
+      const gatewayInstalled = extensions.some(
+        (extension) =>
+          extension.manifest.id === MAAS_GATEWAY_EXTENSION_ID && extension.installation !== null
+      );
+      if (!gatewayInstalled) computed.push('maas-gateway');
       setFrozenSteps(computed);
     }
-  }, [view, isLoading, frozenSteps, session]);
+  }, [view, isLoading, frozenSteps, session, extensions]);
 
   const stepsNeeded = frozenSteps ?? [];
 

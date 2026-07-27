@@ -33,10 +33,14 @@ Each provider has a terminal output classifier in `src/main/core/conversations/i
 ## Provider Runtime Notes
 
 - Claude uses deterministic `--session-id` values for conversation isolation.
-- Codex MaaS providers use `env_key = "YODA_MAAS_API_KEY"` in the user-level
-  Codex config. On macOS, Yoda publishes that key to the current user's
-  `launchd` environment so Finder/Dock-launched Codex App processes inherit it;
-  an already-running Codex App must be fully quit and reopened.
+- Codex MaaS providers point at the loopback endpoint exposed by the optional
+  `lovstudio.maas-gateway` Marketplace extension. Codex receives only a local
+  admission token through `experimental_bearer_token`; the upstream endpoint
+  and API key are delivered to the utility-process Gateway over IPC.
+- Keep `codex-maas-user-environment.ts` until all v3 snapshots have migrated.
+  It restores or removes the old `YODA_MAAS_API_KEY` login-session value, but
+  the new Gateway path must never publish an upstream credential to the process
+  environment.
 - Never store a third-party MaaS key in Codex `auth.json`. That file belongs to
   the user's native OpenAI/ChatGPT login.
 - Agents with no CLI prompt flag (e.g., Amp, OpenCode) use keystroke injection — Yoda types the prompt into the TUI after startup.

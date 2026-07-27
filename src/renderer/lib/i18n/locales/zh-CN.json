@@ -1105,6 +1105,16 @@
     "signInToLovstudio": "登录 LovStudio",
     "signInDescription": "LovStudio 账户统一承载身份、积分、Relay 和 GitHub OAuth；不登录也可继续使用本地功能。",
     "connectedAs": "已登录为 {{name}}",
+    "maasGateway": {
+      "stepTitle": "MaaS Gateway",
+      "title": "安装 Yoda MaaS Gateway？",
+      "description": "这是扩展市场中的可选后台服务。安装后，Codex 可通过本机代理使用和热切换第三方 MaaS，真实 API Key 不会写入 Codex 配置。",
+      "security": "Gateway 只监听 127.0.0.1；Provider 密钥保存在 Yoda 加密密钥库，并仅通过进程 IPC 注入运行时内存。",
+      "install": "安装 Gateway",
+      "skip": "暂不需要",
+      "unavailable": "MaaS Gateway 当前不在扩展市场中。",
+      "installFailed": "MaaS Gateway 安装失败。"
+    },
     "import": {
       "importing": "导入中…",
       "importData": "导入数据",
@@ -2070,9 +2080,48 @@
       "agents": "智能体",
       "agentTeams": "智能体团队",
       "skills": "技能",
+      "marketplace": "扩展市场",
       "plugins": "插件",
       "mcp": "MCP",
       "automation": "自动化"
+    }
+  },
+  "extensions": {
+    "title": "Yoda 扩展市场",
+    "subtitle": "发现并管理由 Yoda 托管的第三方扩展与后台服务",
+    "searchPlaceholder": "搜索扩展…",
+    "refreshAria": "刷新扩展市场",
+    "verified": "已认证",
+    "running": "运行中",
+    "installed": "已安装",
+    "install": "安装",
+    "uninstall": "卸载",
+    "unsupported": "当前平台不可用",
+    "toggleAria": "切换 {{name}}",
+    "backgroundService": "后台服务扩展",
+    "localEndpoint": "本地端点：{{endpoint}}",
+    "noMatches": "没有匹配的扩展。",
+    "errors": {
+      "install": "扩展安装失败",
+      "update": "扩展更新失败",
+      "remove": "扩展卸载失败"
+    },
+    "capabilities": {
+      "network": {
+        "loopback": "监听本机端口",
+        "outbound": "访问模型服务"
+      },
+      "secrets": {
+        "provider": "使用 Provider 密钥"
+      },
+      "client": {
+        "codex": {
+          "configure": "配置 Codex"
+        }
+      },
+      "autostart": {
+        "yoda": "随 Yoda 启动"
+      }
     }
   },
   "agentTeams": {
@@ -3450,7 +3499,7 @@
       "manage": "配置 {{platform}}",
       "enabledToast": "{{platform}} 已对所有兼容 Agent CLI 生效",
       "restoredToast": "已停用 MaaS，并复原 Agent CLI 配置",
-      "codexRestartNotice": "如 Codex App 已打开，请完全退出后重新打开，以继承新的 MaaS 环境变量。",
+      "codexRestartNotice": "如 Codex App 已打开，请完全退出后重新打开，以重新加载本地 MaaS Gateway Provider；上游 API Key 不会进入 App 环境变量。",
       "updateFailed": "无法更新全局 MaaS 配置"
     },
     "clients": {

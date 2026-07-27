@@ -10,6 +10,7 @@ import { automationController } from './core/automation/controller';
 import { conversationController } from './core/conversations/controller';
 import { dependenciesController } from './core/dependencies/controller';
 import { editorBufferController } from './core/editor/controller';
+import { extensionsController } from './core/extensions/controller';
 import { featurebaseController } from './core/featurebase/controller';
 import { featureController } from './core/features/controller';
 import { forgejoController } from './core/forgejo/controller';
@@ -99,6 +100,7 @@ export const rpcRouter = createRPCRouter({
   dependencies: dependenciesController,
   mcp: mcpController,
   editorBuffer: editorBufferController,
+  extensions: extensionsController,
   telemetry: telemetryController,
   pullRequests: pullRequestController,
   viewState: viewStateController,

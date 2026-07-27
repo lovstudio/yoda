@@ -2,7 +2,6 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import { getRuntimeAccountProfile, type RuntimeId } from '@shared/runtime-registry';
-import { CODEX_MAAS_API_KEY_ENV } from '@main/core/maas/codex-maas-user-environment';
 
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const CLAUDE_DISABLE_ALTERNATE_SCREEN_ENV = 'CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN';
@@ -67,14 +66,6 @@ export function resolveRuntimeEnv(
       if (!forwardOfficialApiEnv && officialApiEnvVars.has(key)) continue;
       if (ENV_NAME_PATTERN.test(key)) env[key] = value;
     }
-  }
-
-  if (
-    options.runtimeId === 'codex' &&
-    providerConfig?.authProvider === 'yoda-maas' &&
-    process.env[CODEX_MAAS_API_KEY_ENV]
-  ) {
-    env[CODEX_MAAS_API_KEY_ENV] = process.env[CODEX_MAAS_API_KEY_ENV];
   }
 
   // Pin Claude-compatible runtimes (GLM) to their endpoint unless the user

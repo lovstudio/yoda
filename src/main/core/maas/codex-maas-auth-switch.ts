@@ -6,14 +6,13 @@ import type { MaasPlatformId } from '@shared/maas';
 import { encryptedAppSecretsStore } from '@main/core/secrets/encrypted-app-secrets-store';
 import { resolveCodexMaasProviderSpec, type CodexMaasProviderSpec } from './codex-maas-provider';
 import {
-  CODEX_MAAS_API_KEY_ENV,
   codexMaasUserEnvironment,
   type CodexMaasEnvironmentPublisher,
   type EnvironmentVariableSnapshot,
 } from './codex-maas-user-environment';
 
-const SNAPSHOT_VERSION = 3;
-const LEGACY_SNAPSHOT_VERSIONS = new Set([1, 2]);
+const SNAPSHOT_VERSION = 4;
+const LEGACY_SNAPSHOT_VERSIONS = new Set([1, 2, 3]);
 const SECRET_PREFIX = 'yoda-maas-codex-native-files';
 const YODA_CONFIG_MARKER = '# Auto-injected by Yoda MaaS';
 const YODA_PROVIDER_TOKEN_FILENAME = '.yoda-maas-provider-token';
@@ -32,7 +31,6 @@ type CodexNativeFilesSnapshot = {
   auth: FileSnapshot;
   config: FileSnapshot;
   token: FileSnapshot;
-  environment: EnvironmentVariableSnapshot;
 };
 
 type SecretStore = Pick<
@@ -52,21 +50,24 @@ export class CodexMaasAuthSwitch {
     codexHome,
     platformId,
     displayName,
-    endpoint,
-    apiKey,
+    gatewayBaseUrl,
+    gatewayToken,
   }: {
     codexHome: string;
     platformId: MaasPlatformId;
     displayName?: string;
-    endpoint: string;
-    apiKey: string;
+    gatewayBaseUrl: string;
+    gatewayToken: string;
   }): Promise<CodexMaasAuthRollback> {
-    const token = apiKey.trim();
-    if (!token) throw new Error('A non-empty MaaS API key is required.');
+    const token = gatewayToken.trim();
+    if (!token) throw new Error('A non-empty MaaS Gateway token is required.');
     const paths = resolveCodexPaths(codexHome);
-    const before = await readNativeState(paths, this.userEnvironment);
+    const before = await readNativeFiles(paths);
     const secretKey = snapshotSecretKey(paths.codexHome);
-    const storedSnapshot = await this.loadSnapshot(secretKey, paths.codexHome, before.environment);
+    const storedSnapshot = await this.loadSnapshot(secretKey, paths.codexHome);
+    const environmentBefore = storedSnapshot?.environmentToRestore
+      ? await this.userEnvironment.read()
+      : undefined;
     const originalSnapshot = storedSnapshot?.snapshot ?? before;
     const snapshotCreated = !storedSnapshot;
     const snapshotMigrated = storedSnapshot?.migrated ?? false;
@@ -82,13 +83,17 @@ export class CodexMaasAuthSwitch {
       auth: originalSnapshot.auth,
       config: {
         exists: true,
-        content: buildMaasConfig(baseConfig.exists ? baseConfig.content : '', provider, endpoint),
+        content: buildMaasConfig(
+          baseConfig.exists ? baseConfig.content : '',
+          provider,
+          gatewayBaseUrl,
+          token
+        ),
         mode: 0o600,
       },
-      // v2 used this file for command-auth. Restore the pre-Yoda state while
-      // env_key reads the credential from the GUI login-session environment.
+      // v2 used this file for command-auth. The Gateway keeps the real upstream
+      // credential in Yoda's encrypted store and receives it over process IPC.
       token: originalSnapshot.token,
-      environment: { exists: true, value: token },
     };
 
     if (snapshotCreated || snapshotMigrated) {
@@ -96,9 +101,17 @@ export class CodexMaasAuthSwitch {
     }
 
     try {
-      await applyNativeState(paths, active, this.userEnvironment);
+      if (storedSnapshot?.environmentToRestore) {
+        // v3 published the upstream credential through the GUI login-session
+        // environment. Restore the user's pre-Yoda value once during migration.
+        await this.userEnvironment.restore(storedSnapshot.environmentToRestore);
+      }
+      await applyNativeFiles(paths, active);
     } catch (error) {
-      await applyNativeState(paths, before, this.userEnvironment).catch(() => undefined);
+      await applyNativeFiles(paths, before).catch(() => undefined);
+      if (environmentBefore) {
+        await this.userEnvironment.restore(environmentBefore).catch(() => undefined);
+      }
       if (snapshotCreated) {
         await this.secretStore.deleteSecret(secretKey).catch(() => undefined);
       } else if (snapshotMigrated && storedSnapshot) {
@@ -110,7 +123,10 @@ export class CodexMaasAuthSwitch {
     }
 
     return async () => {
-      await applyNativeState(paths, before, this.userEnvironment);
+      await applyNativeFiles(paths, before);
+      if (environmentBefore) {
+        await this.userEnvironment.restore(environmentBefore);
+      }
       if (snapshotCreated) {
         await this.secretStore.deleteSecret(secretKey);
       } else if (snapshotMigrated && storedSnapshot) {
@@ -122,44 +138,61 @@ export class CodexMaasAuthSwitch {
   async disable({ codexHome }: { codexHome: string }): Promise<CodexMaasAuthRollback> {
     const paths = resolveCodexPaths(codexHome);
     const secretKey = snapshotSecretKey(paths.codexHome);
-    const before = await readNativeState(paths, this.userEnvironment);
-    const storedSnapshot = await this.loadSnapshot(secretKey, paths.codexHome, before.environment);
+    const before = await readNativeFiles(paths);
+    const storedSnapshot = await this.loadSnapshot(secretKey, paths.codexHome);
     if (!storedSnapshot) return async () => undefined;
+    const environmentBefore = storedSnapshot.environmentToRestore
+      ? await this.userEnvironment.read()
+      : undefined;
 
     try {
-      await applyNativeState(paths, storedSnapshot.snapshot, this.userEnvironment);
+      if (storedSnapshot.environmentToRestore) {
+        await this.userEnvironment.restore(storedSnapshot.environmentToRestore);
+      }
+      await applyNativeFiles(paths, storedSnapshot.snapshot);
       await this.secretStore.deleteSecret(secretKey);
     } catch (error) {
-      await applyNativeState(paths, before, this.userEnvironment).catch(() => undefined);
+      await applyNativeFiles(paths, before).catch(() => undefined);
+      if (environmentBefore) {
+        await this.userEnvironment.restore(environmentBefore).catch(() => undefined);
+      }
       throw error;
     }
 
     return async () => {
       await this.secretStore.setSecret(secretKey, storedSnapshot.serialized);
-      await applyNativeState(paths, before, this.userEnvironment);
+      await applyNativeFiles(paths, before);
+      if (environmentBefore) {
+        await this.userEnvironment.restore(environmentBefore);
+      }
     };
   }
 
   private async loadSnapshot(
     secretKey: string,
-    codexHome: string,
-    legacyEnvironment: EnvironmentVariableSnapshot
+    codexHome: string
   ): Promise<
     | {
         serialized: string;
         snapshot: CodexNativeFilesSnapshot;
         migrated: boolean;
+        environmentToRestore?: EnvironmentVariableSnapshot;
       }
     | undefined
   > {
     const serialized = await this.secretStore.getSecret(secretKey);
     if (!serialized) return undefined;
-    const parsed = parseSnapshot(serialized, legacyEnvironment);
+    const parsed = parseSnapshot(serialized);
     const snapshot = parsed.snapshot;
     if (snapshot.codexHome !== codexHome) {
       throw new Error('Stored Codex MaaS snapshot belongs to a different CODEX_HOME.');
     }
-    return { serialized, snapshot, migrated: parsed.migrated };
+    return {
+      serialized,
+      snapshot,
+      migrated: parsed.migrated,
+      environmentToRestore: parsed.environmentToRestore,
+    };
   }
 }
 
@@ -197,19 +230,6 @@ async function readNativeFiles(paths: {
   return { version: SNAPSHOT_VERSION, codexHome: paths.codexHome, auth, config, token };
 }
 
-async function readNativeState(
-  paths: {
-    codexHome: string;
-    authPath: string;
-    configPath: string;
-    tokenPath: string;
-  },
-  userEnvironment: CodexMaasEnvironmentPublisher
-): Promise<CodexNativeFilesSnapshot> {
-  const [files, environment] = await Promise.all([readNativeFiles(paths), userEnvironment.read()]);
-  return { ...files, environment };
-}
-
 async function readFileSnapshot(path: string): Promise<FileSnapshot> {
   try {
     const [content, metadata] = await Promise.all([readFile(path, 'utf8'), stat(path)]);
@@ -220,14 +240,10 @@ async function readFileSnapshot(path: string): Promise<FileSnapshot> {
   }
 }
 
-async function applyNativeState(
+async function applyNativeFiles(
   paths: { authPath: string; configPath: string; tokenPath: string },
-  snapshot: CodexNativeFilesSnapshot,
-  userEnvironment: CodexMaasEnvironmentPublisher
+  snapshot: CodexNativeFilesSnapshot
 ): Promise<void> {
-  // Publish credentials before the config that references them. Finder/Dock
-  // apps launched after this point inherit the value from the user session.
-  await userEnvironment.restore(snapshot.environment);
   await applyFileSnapshot(paths.tokenPath, snapshot.token);
   // MaaS providers own their authentication. Never rewrite auth.json: Codex
   // may have refreshed or replaced the user's OpenAI login while MaaS was on.
@@ -258,7 +274,8 @@ async function applyFileSnapshot(path: string, snapshot: FileSnapshot): Promise<
 function buildMaasConfig(
   content: string,
   provider: CodexMaasProviderSpec,
-  endpoint: string
+  gatewayBaseUrl: string,
+  gatewayToken: string
 ): string {
   const eol = content.includes('\r\n') ? '\r\n' : '\n';
   let lines = content.replace(/\r\n/g, '\n').split('\n');
@@ -276,9 +293,9 @@ function buildMaasConfig(
     YODA_CONFIG_MARKER,
     `[model_providers.${provider.providerId}]`,
     `name = ${formatTomlString(provider.name)}`,
-    `base_url = ${formatTomlString(endpoint.replace(/\/+$/, ''))}`,
+    `base_url = ${formatTomlString(gatewayBaseUrl.replace(/\/+$/, ''))}`,
     'wire_api = "responses"',
-    `env_key = ${formatTomlString(CODEX_MAAS_API_KEY_ENV)}`
+    `experimental_bearer_token = ${formatTomlString(gatewayToken)}`
   );
 
   const result = `${trimTrailingBlankLines(lines).join('\n')}\n`.replace(/\n/g, eol);
@@ -329,8 +346,8 @@ function validateMaasConfig(content: string, provider: CodexMaasProviderSpec): v
     typeof providerConfig?.base_url !== 'string' ||
     providerConfig?.wire_api !== 'responses' ||
     providerConfig?.requires_openai_auth !== undefined ||
-    providerConfig?.env_key !== CODEX_MAAS_API_KEY_ENV ||
-    providerConfig?.experimental_bearer_token !== undefined ||
+    providerConfig?.env_key !== undefined ||
+    typeof providerConfig?.experimental_bearer_token !== 'string' ||
     providerConfig?.auth !== undefined
   ) {
     throw new Error('Generated Codex MaaS provider config is invalid.');
@@ -357,10 +374,11 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function parseSnapshot(
-  serialized: string,
-  legacyEnvironment: EnvironmentVariableSnapshot
-): { snapshot: CodexNativeFilesSnapshot; migrated: boolean } {
+function parseSnapshot(serialized: string): {
+  snapshot: CodexNativeFilesSnapshot;
+  migrated: boolean;
+  environmentToRestore?: EnvironmentVariableSnapshot;
+} {
   const parsed = JSON.parse(serialized) as unknown;
   if (!parsed || typeof parsed !== 'object') throw new Error('Invalid Codex MaaS snapshot.');
   const record = parsed as Record<string, unknown>;
@@ -372,6 +390,10 @@ function parseSnapshot(
     throw new Error('Invalid Codex MaaS snapshot.');
   }
   if (typeof record.version === 'number' && LEGACY_SNAPSHOT_VERSIONS.has(record.version)) {
+    const environmentToRestore =
+      record.version === 3 && isEnvironmentVariableSnapshot(record.environment)
+        ? record.environment
+        : undefined;
     return {
       snapshot: {
         version: SNAPSHOT_VERSION,
@@ -379,17 +401,13 @@ function parseSnapshot(
         auth: record.auth,
         config: record.config,
         token:
-          record.version === 2 && isFileSnapshot(record.token) ? record.token : { exists: false },
-        environment: legacyEnvironment,
+          record.version >= 2 && isFileSnapshot(record.token) ? record.token : { exists: false },
       },
       migrated: true,
+      environmentToRestore,
     };
   }
-  if (
-    record.version !== SNAPSHOT_VERSION ||
-    !isFileSnapshot(record.token) ||
-    !isEnvironmentVariableSnapshot(record.environment)
-  ) {
+  if (record.version !== SNAPSHOT_VERSION || !isFileSnapshot(record.token)) {
     throw new Error('Invalid Codex MaaS snapshot.');
   }
   return { snapshot: record as CodexNativeFilesSnapshot, migrated: false };

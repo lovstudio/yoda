@@ -1105,6 +1105,16 @@
     "signInToLovstudio": "Sign in to LovStudio",
     "signInDescription": "Your LovStudio account provides identity, credits, Relay, and GitHub OAuth. You can still use local features without signing in.",
     "connectedAs": "Connected as {{name}}",
+    "maasGateway": {
+      "stepTitle": "MaaS Gateway",
+      "title": "Install Yoda MaaS Gateway?",
+      "description": "This optional Marketplace background service lets Codex use and hot-switch third-party MaaS providers through localhost without writing upstream API keys into Codex configuration.",
+      "security": "The Gateway listens only on 127.0.0.1. Provider secrets remain in Yoda encrypted storage and enter the helper memory only through process IPC.",
+      "install": "Install Gateway",
+      "skip": "Not now",
+      "unavailable": "MaaS Gateway is not currently available in the Marketplace.",
+      "installFailed": "MaaS Gateway installation failed."
+    },
     "import": {
       "importing": "Importing…",
       "importData": "Import data",
@@ -2070,9 +2080,48 @@
       "agents": "Agents",
       "agentTeams": "Agent Teams",
       "skills": "Skills",
+      "marketplace": "Marketplace",
       "plugins": "Plugins",
       "mcp": "MCP",
       "automation": "Automation"
+    }
+  },
+  "extensions": {
+    "title": "Yoda Extension Marketplace",
+    "subtitle": "Discover and manage third-party extensions and background services hosted by Yoda",
+    "searchPlaceholder": "Search extensions…",
+    "refreshAria": "Refresh extension marketplace",
+    "verified": "Verified",
+    "running": "Running",
+    "installed": "Installed",
+    "install": "Install",
+    "uninstall": "Uninstall",
+    "unsupported": "Unavailable on this platform",
+    "toggleAria": "Toggle {{name}}",
+    "backgroundService": "Background service extension",
+    "localEndpoint": "Local endpoint: {{endpoint}}",
+    "noMatches": "No extensions match your search.",
+    "errors": {
+      "install": "Extension installation failed",
+      "update": "Extension update failed",
+      "remove": "Extension removal failed"
+    },
+    "capabilities": {
+      "network": {
+        "loopback": "Listen on localhost",
+        "outbound": "Access model services"
+      },
+      "secrets": {
+        "provider": "Use provider secrets"
+      },
+      "client": {
+        "codex": {
+          "configure": "Configure Codex"
+        }
+      },
+      "autostart": {
+        "yoda": "Start with Yoda"
+      }
     }
   },
   "agentTeams": {
@@ -3450,7 +3499,7 @@
       "manage": "Configure {{platform}}",
       "enabledToast": "{{platform}} is active for every compatible Agent CLI",
       "restoredToast": "MaaS disabled and Agent CLI configurations restored",
-      "codexRestartNotice": "If Codex App is open, quit it completely and reopen it to inherit the new MaaS environment variable.",
+      "codexRestartNotice": "If Codex App is open, quit it completely and reopen it to reload the local MaaS Gateway provider. The upstream API key is not placed in the app environment.",
       "updateFailed": "Could not update global MaaS configuration"
     },
     "clients": {

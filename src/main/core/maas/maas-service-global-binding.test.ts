@@ -15,6 +15,11 @@ const mocks = vi.hoisted(() => ({
   codexAuthDisable: vi.fn(),
   codexAuthEnable: vi.fn(),
   codexAuthRollback: vi.fn(),
+  extensionEnsureInstalled: vi.fn(),
+  gatewayClear: vi.fn(),
+  gatewayConfigure: vi.fn(),
+  gatewayProviderId: null as string | null,
+  gatewayRollback: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
 }));
 
@@ -82,6 +87,27 @@ vi.mock('./codex-maas-auth-switch', () => ({
   },
 }));
 
+vi.mock('../extensions/extension-marketplace-service', () => ({
+  extensionMarketplaceService: {
+    ensureInstalled: mocks.extensionEnsureInstalled,
+  },
+}));
+
+vi.mock('../extensions/maas-gateway/runtime', () => ({
+  maasGatewayExtensionRuntime: {
+    clear: mocks.gatewayClear,
+    configure: mocks.gatewayConfigure,
+    getConnection: vi.fn(() => ({
+      baseUrl: 'http://127.0.0.1:15721/v1',
+      admissionToken: 'local-gateway-token',
+    })),
+    getStatus: vi.fn(() => ({
+      state: 'running',
+      configuredProviderId: mocks.gatewayProviderId,
+    })),
+  },
+}));
+
 describe('global MaaS binding', () => {
   beforeEach(() => {
     mocks.settings = {
@@ -102,6 +128,13 @@ describe('global MaaS binding', () => {
     vi.clearAllMocks();
     mocks.codexAuthEnable.mockResolvedValue(mocks.codexAuthRollback);
     mocks.codexAuthDisable.mockResolvedValue(mocks.codexAuthRollback);
+    mocks.extensionEnsureInstalled.mockResolvedValue(undefined);
+    mocks.gatewayClear.mockResolvedValue(undefined);
+    mocks.gatewayProviderId = null;
+    mocks.gatewayConfigure.mockImplementation(async (configuration: { providerId: string }) => {
+      mocks.gatewayProviderId = configuration.providerId;
+      return mocks.gatewayRollback;
+    });
     mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
   });
 
@@ -135,6 +168,11 @@ describe('global MaaS binding', () => {
       codexHome: expect.any(String),
       platformId: 'zenmux',
       displayName: 'ZenMux',
+      gatewayBaseUrl: 'http://127.0.0.1:15721/v1',
+      gatewayToken: 'local-gateway-token',
+    });
+    expect(mocks.gatewayConfigure).toHaveBeenCalledWith({
+      providerId: 'zenmux',
       endpoint: 'https://zenmux.ai/api/v1',
       apiKey: 'inference-secret',
     });
@@ -214,8 +252,8 @@ describe('global MaaS binding', () => {
       expect.objectContaining({
         platformId: 'zenmux',
         displayName: 'MaaS Test',
-        endpoint: 'https://maas.example.test/v1',
-        apiKey: 'secret',
+        gatewayBaseUrl: 'http://127.0.0.1:15721/v1',
+        gatewayToken: 'local-gateway-token',
       })
     );
     expect(mocks.migrateLegacyCodexMaasHistory).toHaveBeenCalledWith({
@@ -299,8 +337,8 @@ describe('global MaaS binding', () => {
       expect.objectContaining({
         platformId: 'openrouter',
         displayName: 'MaaS Test',
-        endpoint: 'https://maas.example.test/v1',
-        apiKey: 'secret',
+        gatewayBaseUrl: 'http://127.0.0.1:15721/v1',
+        gatewayToken: 'local-gateway-token',
       })
     );
 
@@ -452,6 +490,13 @@ describe('stored MaaS keys', () => {
     vi.clearAllMocks();
     mocks.codexAuthEnable.mockResolvedValue(mocks.codexAuthRollback);
     mocks.codexAuthDisable.mockResolvedValue(mocks.codexAuthRollback);
+    mocks.extensionEnsureInstalled.mockResolvedValue(undefined);
+    mocks.gatewayClear.mockResolvedValue(undefined);
+    mocks.gatewayProviderId = null;
+    mocks.gatewayConfigure.mockImplementation(async (configuration: { providerId: string }) => {
+      mocks.gatewayProviderId = configuration.providerId;
+      return mocks.gatewayRollback;
+    });
   });
 
   it('distinguishes saved platforms from built-in platforms that have not been added', async () => {
@@ -512,6 +557,11 @@ describe('stored MaaS keys', () => {
       codexHome: expect.any(String),
       platformId: 'zenmux',
       displayName: 'ZenMux Production',
+      gatewayBaseUrl: 'http://127.0.0.1:15721/v1',
+      gatewayToken: 'local-gateway-token',
+    });
+    expect(mocks.gatewayConfigure).toHaveBeenCalledWith({
+      providerId: 'zenmux',
       endpoint: 'https://new.zenmux.example/v1',
       apiKey: 'new-inference-secret',
     });
