@@ -52,9 +52,19 @@ type ResolvedMoveTarget = {
   baseRef: string;
 };
 
+type ResolvedLocalMoveSource = ResolvedMoveTarget & {
+  isGitRepo: boolean;
+};
+
 type MoveTargetPlan =
   | { kind: 'existing'; target: ResolvedMoveTarget }
-  | { kind: 'new-local'; sourcePath: string; targetPath: string }
+  | {
+      kind: 'new-local';
+      sourcePath: string;
+      targetPath: string;
+      sourceIsGitRepo: boolean;
+      baseRef: string;
+    }
   | {
       kind: 'new-ssh';
       sourcePath: string;
@@ -82,7 +92,7 @@ export async function moveProjectPath(
   const plan =
     row.workspaceProvider === 'ssh'
       ? await planSshTarget(row.path, requestedPath, row.sshConnectionId)
-      : await planLocalTarget(row.path, requestedPath);
+      : await planLocalTarget(row.path, requestedPath, row.baseRef ?? 'main');
   const plannedPath = plan.kind === 'existing' ? plan.target.rootPath : plan.targetPath;
 
   const existing = await findProjectAtPath(plannedPath);
@@ -120,7 +130,9 @@ export async function moveProjectPath(
 
     if (plan.kind === 'new-local') {
       movedDirectory = await moveLocalProjectDirectory(plan.sourcePath, plan.targetPath);
-      await repairLocalGitWorktrees(movedDirectory.targetPath);
+      if (plan.sourceIsGitRepo) {
+        await repairLocalGitWorktrees(movedDirectory.targetPath);
+      }
     } else if (plan.kind === 'new-ssh') {
       movedDirectory = await moveSshProjectDirectory(plan);
       await repairSshGitWorktrees(plan.proxy, movedDirectory.targetPath);
@@ -131,7 +143,9 @@ export async function moveProjectPath(
         ? plan.target
         : row.workspaceProvider === 'ssh'
           ? await resolveSshTarget(movedDirectory!.targetPath, row.sshConnectionId)
-          : await resolveLocalTarget(movedDirectory!.targetPath);
+          : plan.kind === 'new-local' && !plan.sourceIsGitRepo
+            ? { rootPath: movedDirectory!.targetPath, baseRef: plan.baseRef }
+            : await resolveLocalTarget(movedDirectory!.targetPath);
     const finalExisting =
       resolvedTarget.rootPath === plannedPath
         ? existing
@@ -163,7 +177,7 @@ export async function moveProjectPath(
         await movedDirectory.rollback();
         if (row.workspaceProvider === 'ssh') {
           if (plan.kind === 'new-ssh') await repairSshGitWorktrees(plan.proxy, row.path);
-        } else {
+        } else if (plan.kind === 'new-local' && plan.sourceIsGitRepo) {
           await repairLocalGitWorktrees(row.path);
         }
       } catch (rollbackError) {
@@ -191,18 +205,38 @@ async function findProjectAtPath(projectPath: string): Promise<ProjectRow | unde
   return existing;
 }
 
-async function planLocalTarget(sourcePath: string, requestedPath: string): Promise<MoveTargetPlan> {
+async function planLocalTarget(
+  sourcePath: string,
+  requestedPath: string,
+  fallbackBaseRef: string
+): Promise<MoveTargetPlan> {
+  const source = await resolveLocalMoveSource(sourcePath, fallbackBaseRef);
   const targetPath = normalizeLocalProjectPath(requestedPath);
+  if (source.rootPath === targetPath) {
+    return { kind: 'existing', target: source };
+  }
+
+  assertProjectMoveTarget(source.rootPath, targetPath);
   if (await localPathExists(targetPath)) {
     if (!(await nodeFs.stat(targetPath)).isDirectory()) {
       throw new Error('The target project path is not a directory');
     }
-    return { kind: 'existing', target: await resolveLocalTarget(targetPath) };
+    const target = await resolveLocalMoveSource(targetPath, fallbackBaseRef);
+    if (target.isGitRepo) {
+      return { kind: 'existing', target };
+    }
+    if ((await nodeFs.readdir(targetPath)).length > 0) {
+      throw new Error('The target project directory must be empty or a Git repository');
+    }
   }
 
-  const source = await resolveLocalTarget(sourcePath);
-  assertProjectMoveTarget(source.rootPath, targetPath);
-  return { kind: 'new-local', sourcePath: source.rootPath, targetPath };
+  return {
+    kind: 'new-local',
+    sourcePath: source.rootPath,
+    targetPath,
+    sourceIsGitRepo: source.isGitRepo,
+    baseRef: source.baseRef,
+  };
 }
 
 async function planSshTarget(
@@ -398,21 +432,43 @@ function reassignSearchIndex(sourceProjectId: string, targetProjectId: string): 
   }
 }
 
-async function resolveLocalTarget(path: string): Promise<ResolvedMoveTarget> {
-  if (!checkIsValidDirectory(path)) {
+async function resolveLocalMoveSource(
+  projectPath: string,
+  fallbackBaseRef: string
+): Promise<ResolvedLocalMoveSource> {
+  const normalizedPath = normalizeLocalProjectPath(projectPath);
+  if (!checkIsValidDirectory(normalizedPath)) {
     throw new Error('Invalid directory');
   }
 
-  const fs = new LocalFileSystem(path);
-  const baseCtx = new LocalExecutionContext({ root: path });
+  const fs = new LocalFileSystem(normalizedPath);
+  const baseCtx = new LocalExecutionContext({ root: normalizedPath });
   const authCtx = new GitHubAuthExecutionContext(baseCtx, () => githubConnectionService.getToken());
   const git = new GitService(baseCtx, authCtx, fs);
-  const gitInfo = await git.detectInfo();
-  if (!gitInfo.isGitRepo) throw new Error('Directory is not a git repository');
-  return {
-    rootPath: gitInfo.rootPath,
-    baseRef: await resolveProjectBaseRef(git, gitInfo.baseRef),
-  };
+  try {
+    const gitInfo = await git.detectInfo();
+    if (!gitInfo.isGitRepo) {
+      return {
+        isGitRepo: false,
+        rootPath: normalizedPath,
+        baseRef: fallbackBaseRef,
+      };
+    }
+    return {
+      isGitRepo: true,
+      rootPath: gitInfo.rootPath,
+      baseRef: await resolveProjectBaseRef(git, gitInfo.baseRef),
+    };
+  } finally {
+    git.dispose();
+    baseCtx.dispose();
+  }
+}
+
+async function resolveLocalTarget(projectPath: string): Promise<ResolvedMoveTarget> {
+  const target = await resolveLocalMoveSource(projectPath, 'main');
+  if (!target.isGitRepo) throw new Error('Directory is not a git repository');
+  return target;
 }
 
 async function resolveSshTarget(

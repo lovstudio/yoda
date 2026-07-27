@@ -26,6 +26,7 @@ vi.mock('@main/core/git/impl/git-service', () => ({
       detectInfo: mocks.detectInfo,
       getBranches: vi.fn(),
       getDefaultBranch: vi.fn(),
+      dispose: vi.fn(),
     };
   }),
 }));
@@ -118,6 +119,63 @@ afterEach(() => {
 });
 
 describe('moveProjectPath', () => {
+  it('moves a non-git local project into a missing path', async () => {
+    const { source, target } = makeRepository();
+    fs.rmSync(path.join(source, '.git'), { recursive: true, force: true });
+    const row = makeProjectRow(source);
+    const updated = { ...row, path: target };
+    mocks.limit.mockResolvedValueOnce([row]).mockResolvedValueOnce([]);
+    mocks.detectInfo.mockResolvedValueOnce({
+      isGitRepo: false,
+      rootPath: source,
+      baseRef: 'main',
+    });
+    mocks.returning.mockResolvedValue([updated]);
+
+    const result = await moveProjectPath('project-1', {
+      name: '重命名后的项目',
+      path: target,
+    });
+
+    expect(fs.existsSync(source)).toBe(false);
+    expect(fs.readFileSync(path.join(target, 'README.md'), 'utf8')).toBe('project contents');
+    expect(mocks.detectInfo).toHaveBeenCalledTimes(1);
+    expect(mocks.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        alias: '重命名后的项目',
+        path: target,
+        baseRef: 'main',
+      })
+    );
+    expect(result).toMatchObject({
+      id: 'project-1',
+      path: target,
+      baseRef: 'main',
+    });
+  });
+
+  it('moves a non-git local project into an existing empty directory', async () => {
+    const { source, target } = makeRepository();
+    fs.rmSync(path.join(source, '.git'), { recursive: true, force: true });
+    fs.mkdirSync(target, { recursive: true });
+    const row = makeProjectRow(source);
+    const updated = { ...row, path: target };
+    mocks.limit.mockResolvedValueOnce([row]).mockResolvedValueOnce([]);
+    mocks.detectInfo
+      .mockResolvedValueOnce({ isGitRepo: false, rootPath: source, baseRef: 'main' })
+      .mockResolvedValueOnce({ isGitRepo: false, rootPath: target, baseRef: 'main' });
+    mocks.returning.mockResolvedValue([updated]);
+
+    const result = await moveProjectPath('project-1', {
+      name: '重命名后的项目',
+      path: target,
+    });
+
+    expect(fs.existsSync(source)).toBe(false);
+    expect(fs.readFileSync(path.join(target, 'README.md'), 'utf8')).toBe('project contents');
+    expect(result.path).toBe(target);
+  });
+
   it('moves a local repository into a missing path while preserving the latest alias', async () => {
     const { source, target } = makeRepository();
     const row = makeProjectRow(source);
