@@ -411,6 +411,40 @@ export class MaasService {
   );
 
   /**
+   * Reconcile one Codex account/profile root with Yoda's current MaaS route.
+   *
+   * Session discovery can surface threads from several CODEX_HOME roots. Each
+   * root keeps its own Codex config, while the Yoda MaaS selection is global.
+   * Apply (or restore) the binding lazily before resuming a thread from that
+   * root so historical visibility never depends on which account root is
+   * currently active.
+   */
+  async reconcileCodexStateRoot(codexHome: string): Promise<void> {
+    const settings = await appSettingsService.get('maas');
+    const binding = settings.runtimeBindings.find((item) => item.runtimeId === 'codex');
+    if (!binding) {
+      await codexMaasAuthSwitch.disable({ codexHome });
+      return;
+    }
+    if (!supportsMaasPlatformForRuntime('codex', binding.platformId)) {
+      throw new Error('The active MaaS platform is not compatible with Codex.');
+    }
+    const credentials = await this.getInferenceCredentials(binding.platformId);
+    if (!credentials) {
+      throw new Error(
+        'The active Codex MaaS binding is missing its inference credential; reconnect the platform.'
+      );
+    }
+    await codexMaasAuthSwitch.enable({
+      codexHome,
+      platformId: binding.platformId,
+      displayName: credentials.displayName,
+      endpoint: credentials.endpoint,
+      apiKey: credentials.apiKey,
+    });
+  }
+
+  /**
    * Re-apply native Codex files for a persisted MaaS binding.
    *
    * This is intentionally run at startup: earlier Yoda versions routed ZenMux

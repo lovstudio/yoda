@@ -4557,7 +4557,12 @@
       "emptyTitle": "没有会话",
       "emptyDescription": "打开一个任务会话后会显示在这里。",
       "openSession": "打开 {{title}}",
-      "taskFallback": "任务 {{id}}"
+      "taskFallback": "任务 {{id}}",
+      "localBadge": "本机",
+      "localAgentSession": "在本机发现的 Agent 原生会话",
+      "previewLocalSession": "预览本机会话 {{title}}",
+      "addAndContinue": "加入 Yoda 并继续",
+      "addFailed": "本机会话加入 Yoda 失败"
     },
     "harness": {
       "label": "Harness",

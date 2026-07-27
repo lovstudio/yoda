@@ -11,6 +11,7 @@ import { conversations, tasks } from '@main/db/schema';
 import { telemetryService } from '@main/lib/telemetry';
 import { resolveTask } from '../projects/utils';
 import { conversationEvents } from './conversation-events';
+import { localAgentSessionCatalog } from './local-agent-session-catalog-instance';
 import { mapConversationRowToConversation } from './utils';
 
 /**
@@ -52,6 +53,24 @@ export async function createConversation(params: CreateConversationParams): Prom
   const id = params.id ?? randomUUID();
   const task = resolveTask(params.projectId, params.taskId);
   if (!task) throw new Error('Task not found');
+  const discoveredSession = params.sessionSource
+    ? await localAgentSessionCatalog.validateSource(params.sessionSource)
+    : undefined;
+  if (params.sessionSource && !discoveredSession) {
+    throw new Error('The selected local agent session is no longer available.');
+  }
+  if (discoveredSession && discoveredSession.runtimeId !== params.runtime) {
+    throw new Error('The selected local agent session runtime does not match the conversation.');
+  }
+  const sessionSource = discoveredSession
+    ? {
+        catalogId: discoveredSession.catalogId,
+        runtimeId: discoveredSession.runtimeId,
+        sessionId: discoveredSession.sessionId,
+        stateRoot: discoveredSession.stateRoot,
+        providerId: discoveredSession.providerId,
+      }
+    : undefined;
   const runtimeConfig = await runtimeOverrideSettings.getItem(params.runtime);
   if (runtimeConfig?.disabled) {
     throw new Error(`${params.runtime} is disabled in Yoda.`);
@@ -72,9 +91,17 @@ export async function createConversation(params: CreateConversationParams): Prom
       )
     : undefined;
   const config =
-    autoApprove === undefined && permissionMode === undefined && skillPolicy === undefined
+    autoApprove === undefined &&
+    permissionMode === undefined &&
+    skillPolicy === undefined &&
+    sessionSource === undefined
       ? undefined
-      : JSON.stringify({ autoApprove, permissionMode, skillPolicy });
+      : JSON.stringify({
+          autoApprove,
+          permissionMode,
+          skillPolicy,
+          sessionSource,
+        });
   const lastInteractedAt = new Date().toISOString();
 
   const [row] = await db
@@ -99,17 +126,19 @@ export async function createConversation(params: CreateConversationParams): Prom
 
   conversationEvents._emit('conversation:created', conversation);
 
-  const sessionInitialPrompt = params.deferInitialPrompt ? undefined : params.initialPrompt;
-  const sessionImagePaths = params.deferInitialPrompt ? undefined : params.imagePaths;
-  await task.conversations.startSession(
-    conversation,
-    params.initialSize,
-    false,
-    sessionInitialPrompt,
-    undefined,
-    sessionImagePaths,
-    params.model
-  );
+  if (!sessionSource) {
+    const sessionInitialPrompt = params.deferInitialPrompt ? undefined : params.initialPrompt;
+    const sessionImagePaths = params.deferInitialPrompt ? undefined : params.imagePaths;
+    await task.conversations.startSession(
+      conversation,
+      params.initialSize,
+      false,
+      sessionInitialPrompt,
+      undefined,
+      sessionImagePaths,
+      params.model
+    );
+  }
   telemetryService.capture('conversation_created', {
     runtime: params.runtime,
     is_first_in_task: existingConversation === undefined,

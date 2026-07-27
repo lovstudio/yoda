@@ -18,11 +18,37 @@ export type Conversation = {
   permissionMode?: string;
   /** Immutable effective skill set captured when this session was created. */
   skillPolicy?: SkillSessionPolicy;
+  /**
+   * Provider-native session backing this Yoda conversation. Yoda owns the
+   * stable conversation id; the external id/root are provenance and resume
+   * coordinates, not visibility or account-partition keys.
+   */
+  sessionSource?: AgentSessionSource;
   isInitialConversation: boolean | null;
   /** Direct parent when this conversation was created from an earlier checkpoint. */
   forkedFromConversationId?: string;
   /** Zero-based prompt index in the direct parent conversation. */
   forkedFromPromptIndex?: number;
+};
+
+export type AgentSessionSource = {
+  /** Opaque stable id issued by Yoda's local session catalog. */
+  catalogId: string;
+  runtimeId: Extract<RuntimeId, 'claude' | 'codex'>;
+  sessionId: string;
+  /** Absolute provider state root (`CLAUDE_CONFIG_DIR` / `CODEX_HOME`). */
+  stateRoot: string;
+  /** Provider recorded when the session was discovered, for display only. */
+  providerId?: string | null;
+};
+
+export type LocalAgentSession = AgentSessionSource & {
+  cwd: string;
+  title: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  transcriptPath: string;
+  archived: boolean;
 };
 
 export type ConversationSessionInfo = {
@@ -332,4 +358,9 @@ export type CreateConversationParams = {
   model?: string | null;
   /** Agent profile selection; resolved to concrete paths by the main process. */
   skillSelection?: SkillSelectionInput;
+  /**
+   * Adopt an existing provider-native session without starting a fresh agent.
+   * Opening the resulting Yoda conversation resumes this source on demand.
+   */
+  sessionSource?: AgentSessionSource;
 };
