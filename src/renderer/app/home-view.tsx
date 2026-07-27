@@ -67,6 +67,7 @@ import { FeatureWorkflowPreview } from '@renderer/features/agent-room/feature-wo
 import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import { createAiLabProject } from '@renderer/features/ai-lab/create-ai-lab-project';
+import { startAiLabBuildTask } from '@renderer/features/ai-lab/start-ai-lab-build-task';
 import {
   effectiveGlobalEnabled,
   setGlobalOverride,
@@ -1254,8 +1255,6 @@ export const HomeComposer = observer(function HomeComposer({
         if (!slot.provider) return;
         const resolvedRequirement = deferInitialPrompt ? await requirementPromise : requirement;
         if (!resolvedRequirement) return;
-        const taskId = crypto.randomUUID();
-        const conversationId = crypto.randomUUID();
         const projectName =
           taskNameFromPrompt(resolvedRequirement) || t('home.defaultAppProjectName');
         try {
@@ -1264,47 +1263,27 @@ export const HomeComposer = observer(function HomeComposer({
             t('home.buildTaskName'),
             Array.from(appProject.taskManager.tasks.values(), (task) => task.data.name)
           );
-          const plan = await rpc.aiLab.prepareBuildTask({
+          const launch = await startAiLabBuildTask({
             prompt: resolvedRequirement,
-            projectId: appProject.data.id,
-            taskId,
-            conversationId,
+            project: appProject,
+            taskName,
             runtimeId: slot.provider,
             model: slot.agent?.model,
             systemPrompt: slot.systemPrompt,
+            imagePaths,
+            skillSelection: agentSkillSelection(slot.agent),
           });
-          const createPromise = appProject.taskManager.createTask({
-            id: taskId,
-            projectId: appProject.data.id,
-            name: taskName,
-            sourceBranch: { type: 'local', branch: appProject.data.baseRef },
-            strategy: { kind: 'no-worktree' },
-            initialConversation: {
-              id: conversationId,
-              projectId: appProject.data.id,
-              taskId,
-              runtime: slot.provider,
-              title: initialConversationTitle(slot.provider, resolvedRequirement, []),
-              initialPrompt: plan.initialPrompt,
-              imagePaths,
-              model: slot.agent?.model,
-              skillSelection: agentSkillSelection(slot.agent),
-            },
-          });
-          void createPromise.catch((error: unknown) => {
-            void rpc.aiLab.cancelBuildTask(taskId);
+          void launch.promise.catch((error: unknown) => {
             toast.error(t('home.buildFailed'), {
               description: error instanceof Error ? error.message : t('common.unknownError'),
             });
           });
-          navigate('library', { section: 'apps' });
-          onSubmitted?.({ kind: 'task', projectId: appProject.data.id, taskId });
+          goToTask(appProject.data.id, launch.taskId);
           toast.success(t('home.buildStarted'), {
             description: t('home.buildStartedDescription'),
           });
           resetComposer();
         } catch (error) {
-          void rpc.aiLab.cancelBuildTask(taskId);
           toast.error(t('home.buildFailed'), {
             description: error instanceof Error ? error.message : t('common.unknownError'),
           });

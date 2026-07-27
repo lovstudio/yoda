@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { AiLabProjectKind, AiLabUserApp } from '@shared/ai-lab';
+import {
+  AI_LAB_APP_CAPABILITIES,
+  AI_LAB_APP_RUNTIME_KINDS,
+  type AiLabAppProjectBuild,
+  type AiLabProjectKind,
+  type AiLabUserApp,
+} from '@shared/ai-lab';
 import { isValidRuntimeId } from '@shared/runtime-registry';
-
-type GeneratedAppUpdate = Pick<AiLabUserApp, 'name' | 'description' | 'html'> & {
-  prompt?: string;
-};
 
 export class AiLabAppStore {
   private mutationQueue: Promise<void> = Promise.resolve();
@@ -28,7 +30,10 @@ export class AiLabAppStore {
     name: string;
     description: string;
     prompt: string;
-    html: string;
+    html?: string;
+    runtimeKind?: AiLabUserApp['runtimeKind'];
+    templateVersion?: number;
+    capabilities?: AiLabUserApp['capabilities'];
     projectKind?: AiLabProjectKind;
     projectId?: string;
     taskId?: string;
@@ -42,6 +47,7 @@ export class AiLabAppStore {
       const app: AiLabUserApp = {
         id: randomUUID(),
         ...input,
+        html: input.html ?? '',
         pinned: false,
         createdAt: now,
         updatedAt: now,
@@ -87,9 +93,14 @@ export class AiLabAppStore {
     });
   }
 
-  async replaceGenerated(
+  async replaceProjectBuild(
     id: string,
-    update: GeneratedAppUpdate
+    update: AiLabAppProjectBuild & {
+      taskId: string;
+      conversationId: string;
+      runtimeId: AiLabUserApp['runtimeId'];
+      model?: string | null;
+    }
   ): Promise<{ app: AiLabUserApp; changed: boolean }> {
     return this.enqueue(async () => {
       const apps = await this.list();
@@ -99,17 +110,23 @@ export class AiLabAppStore {
       const changed =
         current.name !== update.name ||
         current.description !== update.description ||
-        current.html !== update.html ||
-        (update.prompt !== undefined && current.prompt !== update.prompt);
-      if (!changed) return { app: current, changed: false };
+        current.runtimeKind !== update.runtimeKind ||
+        current.templateVersion !== update.templateVersion ||
+        JSON.stringify(current.capabilities ?? []) !== JSON.stringify(update.capabilities) ||
+        current.taskId !== update.taskId ||
+        current.conversationId !== update.conversationId ||
+        current.runtimeId !== update.runtimeId ||
+        current.model !== update.model ||
+        current.html !== '';
       const next: AiLabUserApp = {
         ...current,
         ...update,
+        html: '',
         updatedAt: nextTimestamp(current.updatedAt),
       };
       apps[index] = next;
       await this.write(apps);
-      return { app: next, changed: true };
+      return { app: next, changed };
     });
   }
 
@@ -156,6 +173,14 @@ function isStoredApp(value: unknown): value is AiLabUserApp {
     typeof app.description === 'string' &&
     typeof app.prompt === 'string' &&
     typeof app.html === 'string' &&
+    (app.runtimeKind === undefined ||
+      AI_LAB_APP_RUNTIME_KINDS.some((runtimeKind) => runtimeKind === app.runtimeKind)) &&
+    (app.templateVersion === undefined || typeof app.templateVersion === 'number') &&
+    (app.capabilities === undefined ||
+      (Array.isArray(app.capabilities) &&
+        app.capabilities.every((value) =>
+          AI_LAB_APP_CAPABILITIES.some((capability) => capability === value)
+        ))) &&
     (app.projectKind === undefined || app.projectKind === 'app') &&
     (app.projectId === undefined || typeof app.projectId === 'string') &&
     (app.taskId === undefined || typeof app.taskId === 'string') &&

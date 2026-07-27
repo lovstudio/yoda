@@ -317,6 +317,7 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
       agentHookService.dispose();
       sessionSummaryAutoRefreshService.dispose();
       agentSessionRuntimeStore.dispose();
+      aiLabService.dispose();
       mobileGatewayService.dispose();
       mobileRelayService.dispose();
       updateService.dispose();

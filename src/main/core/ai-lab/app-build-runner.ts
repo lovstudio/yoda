@@ -4,21 +4,12 @@ import {
   aiLabBuildFailedChannel,
 } from '@shared/events/aiLabEvents';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
-import { loadClaudeTranscript } from '@main/core/conversations/claude-transcript';
-import { loadCodexRolloutTranscriptForConversation } from '@main/core/conversations/codex-rollout-terminal-history';
-import { getConversationsForTask } from '@main/core/conversations/getConversationsForTask';
 import { projectManager } from '@main/core/projects/project-manager';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
-import {
-  extractGeneratedAppFromTranscript,
-  type GeneratedAiLabApp,
-} from './app-generation-contract';
-import { writeAiLabProjectHtml } from './app-project-files';
+import { readAiLabAppProjectBuild } from './app-project-files';
 import type { AiLabAppStore } from './app-store';
 import type { AiLabBuildJob, AiLabBuildJobStore } from './build-job-store';
-
-const TRANSCRIPT_RETRY_DELAYS_MS = [250, 500, 1_000, 1_500, 2_000];
 
 export class AiLabAppBuildRunner {
   private initialized = false;
@@ -32,34 +23,9 @@ export class AiLabAppBuildRunner {
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    const [pending, apps] = await Promise.all([this.jobs.list(), this.apps.list()]);
-    const jobsByTaskId = new Map(pending.map((job) => [job.taskId, job]));
-    for (const app of apps) {
-      if (
-        !app.projectId ||
-        !app.taskId ||
-        !app.conversationId ||
-        (app.runtimeId !== 'codex' && app.runtimeId !== 'claude') ||
-        jobsByTaskId.has(app.taskId)
-      ) {
-        continue;
-      }
-      const recovered: AiLabBuildJob = {
-        appId: app.id,
-        projectKind: app.projectKind,
-        projectId: app.projectId,
-        taskId: app.taskId,
-        conversationId: app.conversationId,
-        prompt: app.prompt,
-        runtimeId: app.runtimeId,
-        model: app.model,
-        createdAt: app.createdAt,
-      };
-      jobsByTaskId.set(app.taskId, recovered);
-      await this.jobs.put(recovered);
-    }
+    const pending = await this.jobs.list();
     this.initialized = true;
-    for (const job of jobsByTaskId.values()) this.track(job);
+    for (const job of pending) this.track(job);
   }
 
   async prepare(job: AiLabBuildJob): Promise<void> {
@@ -104,27 +70,27 @@ export class AiLabAppBuildRunner {
     if (this.processing.has(job.taskId)) return;
     this.processing.add(job.taskId);
     try {
-      const generated = await this.readGeneratedAppWithRetry(job);
-      if (job.projectKind === 'app') {
-        await this.writeProjectSource(job.projectId, generated.html);
-      }
+      const generated = await this.readProjectBuild(job.projectId, job.createdAt);
       const target = await this.resolveTargetApp(job);
       if (target) {
-        const result = await this.apps.replaceGenerated(target.id, generated);
-        const trackedJob = { ...job, appId: target.id };
-        await this.jobs.put(trackedJob);
-        if (result.changed) {
-          events.emit(aiLabAppUpdatedChannel, {
-            appId: result.app.id,
-            appName: result.app.name,
-            projectId: result.app.projectId,
-            appProject: result.app.projectKind === 'app',
-          });
-        }
+        const result = await this.apps.replaceProjectBuild(target.id, {
+          ...generated,
+          taskId: job.taskId,
+          conversationId: job.conversationId,
+          runtimeId: job.runtimeId,
+          model: job.model,
+        });
+        events.emit(aiLabAppUpdatedChannel, {
+          appId: result.app.id,
+          appName: result.app.name,
+          projectId: result.app.projectId,
+          appProject: result.app.projectKind === 'app',
+        });
       } else {
         const app = await this.apps.create({
           ...generated,
           prompt: job.prompt,
+          html: '',
           projectKind: job.projectKind,
           projectId: job.projectId,
           taskId: job.taskId,
@@ -142,9 +108,11 @@ export class AiLabAppBuildRunner {
           appProject: app.projectKind === 'app',
         });
       }
+      this.untrack(job.taskId);
+      await this.jobs.delete(job.taskId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      log.warn('[ai-lab] failed to collect Yoda Build task output', {
+      log.warn('[ai-lab] failed to validate Yoda Build project output', {
         projectId: job.projectId,
         taskId: job.taskId,
         conversationId: job.conversationId,
@@ -170,45 +138,9 @@ export class AiLabAppBuildRunner {
     );
   }
 
-  private async readGeneratedAppWithRetry(job: AiLabBuildJob): Promise<GeneratedAiLabApp> {
-    let lastError: unknown = new Error('The Yoda Build transcript is not ready.');
-    for (const delayMs of TRANSCRIPT_RETRY_DELAYS_MS) {
-      await sleep(delayMs);
-      try {
-        return await this.readGeneratedApp(job);
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError;
-  }
-
-  private async readGeneratedApp(job: AiLabBuildJob): Promise<GeneratedAiLabApp> {
-    const project = projectManager.getProject(job.projectId);
-    if (!project) throw new Error('The source project is not available.');
-    const conversation = (await getConversationsForTask(job.projectId, job.taskId)).find(
-      (candidate) => candidate.id === job.conversationId
-    );
-    if (!conversation) throw new Error('The Yoda Build conversation is not available.');
-
-    const blocks =
-      job.runtimeId === 'claude'
-        ? await loadClaudeTranscript({ cwd: project.repoPath, sessionId: job.conversationId })
-        : await loadCodexRolloutTranscriptForConversation({
-            conversation,
-            cwd: project.repoPath,
-          });
-    if (!blocks?.length) throw new Error('The Yoda Build transcript is empty.');
-    return extractGeneratedAppFromTranscript(blocks);
-  }
-
-  private async writeProjectSource(projectId: string, html: string): Promise<void> {
+  private async readProjectBuild(projectId: string, builtAfter: string) {
     const project = projectManager.getProject(projectId);
     if (!project) throw new Error('The App project is not available.');
-    await writeAiLabProjectHtml(project.repoPath, html);
+    return readAiLabAppProjectBuild(project.repoPath, builtAfter);
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

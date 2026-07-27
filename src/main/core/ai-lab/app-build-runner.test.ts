@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunState } from '@shared/events/agent-run-state';
 import { AiLabAppBuildRunner } from './app-build-runner';
+import { scaffoldAiLabAppProject } from './app-project-files';
 import { AiLabAppStore } from './app-store';
 import { AiLabBuildJobStore } from './build-job-store';
 
@@ -12,14 +13,6 @@ const mocks = vi.hoisted(() => ({
   emit: vi.fn(),
   projectPath: '/project',
   status: 'idle' as RunState['status'],
-  transcript: [
-    { role: 'user', content: 'Build a timer' },
-    {
-      role: 'assistant',
-      content:
-        '---YODA_APP_MANIFEST---\n{"name":"Timer","description":"A focused timer"}\n---YODA_APP_HTML---\n<!doctype html><html><body>Timer</body></html>',
-    },
-  ],
 }));
 
 vi.mock('@main/core/conversations/agent-session-runtime', () => ({
@@ -30,22 +23,6 @@ vi.mock('@main/core/conversations/agent-session-runtime', () => ({
     }),
     getStatus: vi.fn(() => mocks.status),
   },
-}));
-vi.mock('@main/core/conversations/claude-transcript', () => ({
-  loadClaudeTranscript: vi.fn(async () => mocks.transcript),
-}));
-vi.mock('@main/core/conversations/codex-rollout-terminal-history', () => ({
-  loadCodexRolloutTranscriptForConversation: vi.fn(),
-}));
-vi.mock('@main/core/conversations/getConversationsForTask', () => ({
-  getConversationsForTask: vi.fn(async () => [
-    {
-      id: 'conversation-1',
-      projectId: 'project-1',
-      taskId: 'task-1',
-      runtimeId: 'claude',
-    },
-  ]),
 }));
 vi.mock('@main/core/projects/project-manager', () => ({
   projectManager: { getProject: vi.fn(() => ({ repoPath: mocks.projectPath })) },
@@ -59,14 +36,6 @@ beforeEach(() => {
   mocks.emit.mockReset();
   mocks.projectPath = '/project';
   mocks.status = 'idle';
-  mocks.transcript = [
-    { role: 'user', content: 'Build a timer' },
-    {
-      role: 'assistant',
-      content:
-        '---YODA_APP_MANIFEST---\n{"name":"Timer","description":"A focused timer"}\n---YODA_APP_HTML---\n<!doctype html><html><body>Timer</body></html>',
-    },
-  ];
 });
 
 afterEach(async () => {
@@ -76,10 +45,11 @@ afterEach(async () => {
 });
 
 describe('AiLabAppBuildRunner', () => {
-  it('persists the completed task output with source navigation metadata', async () => {
+  it('registers the checked project artifact without reading Agent chat output', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'yoda-ai-lab-runner-'));
     directories.push(directory);
     mocks.projectPath = directory;
+    await writeReadyBuild(directory, 'Timer', 'A focused timer');
     const jobs = new AiLabBuildJobStore(join(directory, 'jobs.json'));
     const apps = new AiLabAppStore(join(directory, 'apps.json'));
     const runner = new AiLabAppBuildRunner(jobs, apps);
@@ -90,55 +60,47 @@ describe('AiLabAppBuildRunner', () => {
       taskId: 'task-1',
       conversationId: 'conversation-1',
       prompt: 'Build a timer',
-      runtimeId: 'claude',
+      runtimeId: 'amp',
       model: null,
       createdAt: '2026-07-18T00:00:00.000Z',
     });
-    expect(mocks.listener).not.toBeNull();
-    mocks.listener?.({
-      status: 'completed',
-      seen: false,
-      pendingAction: null,
-      lastForceWorkingAt: 0,
-      updatedAt: 1,
-    });
-    await vi.waitFor(() => expect(mocks.emit).toHaveBeenCalled(), { timeout: 1_000 });
-
-    expect(await apps.list()).toEqual([
-      expect.objectContaining({
-        name: 'Timer',
-        projectKind: 'app',
-        projectId: 'project-1',
-        taskId: 'task-1',
-        conversationId: 'conversation-1',
-      }),
-    ]);
-    await expect(readFile(join(directory, 'index.html'), 'utf8')).resolves.toContain('Timer');
-    expect(await jobs.list()).toEqual([
-      expect.objectContaining({ taskId: 'task-1', appId: expect.any(String) }),
-    ]);
-    expect(mocks.emit).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'ai-lab:app-created' }),
-      expect.objectContaining({ taskId: 'task-1', appName: 'Timer' })
+    completeAgentTurn();
+    await vi.waitFor(
+      () =>
+        expect(mocks.emit).toHaveBeenCalledWith(
+          expect.objectContaining({ name: 'ai-lab:app-created' }),
+          expect.objectContaining({ taskId: 'task-1', appName: 'Timer' })
+        ),
+      { timeout: 1_000 }
     );
 
-    mocks.emit.mockReset();
-    mocks.transcript = [
-      ...mocks.transcript,
-      { role: 'user', content: 'Add laps' },
-      {
-        role: 'assistant',
-        content:
-          '---YODA_APP_MANIFEST---\n{"name":"Timer Plus","description":"A timer with laps"}\n---YODA_APP_HTML---\n<!doctype html><html><body>Timer with laps</body></html>',
-      },
-    ];
-    mocks.listener?.({
-      status: 'completed',
-      seen: false,
-      pendingAction: null,
-      lastForceWorkingAt: 0,
-      updatedAt: 2,
+    const [created] = await apps.list();
+    expect(created).toMatchObject({
+      name: 'Timer',
+      html: '',
+      runtimeKind: 'react-vite',
+      projectKind: 'app',
+      projectId: 'project-1',
+      taskId: 'task-1',
+      conversationId: 'conversation-1',
+      runtimeId: 'amp',
     });
+    expect(await jobs.list()).toEqual([]);
+
+    await writeReadyBuild(directory, 'Timer Plus', 'A timer with laps');
+    mocks.emit.mockReset();
+    await runner.prepare({
+      appId: created?.id,
+      projectKind: 'app',
+      projectId: 'project-1',
+      taskId: 'task-2',
+      conversationId: 'conversation-2',
+      prompt: 'Add laps',
+      runtimeId: 'amp',
+      model: null,
+      createdAt: '2026-07-18T01:00:00.000Z',
+    });
+    completeAgentTurn();
     await vi.waitFor(
       () =>
         expect(mocks.emit).toHaveBeenCalledWith(
@@ -148,48 +110,78 @@ describe('AiLabAppBuildRunner', () => {
       { timeout: 1_000 }
     );
     expect(await apps.list()).toEqual([
-      expect.objectContaining({ name: 'Timer Plus', html: expect.stringContaining('laps') }),
+      expect.objectContaining({
+        id: created?.id,
+        name: 'Timer Plus',
+        taskId: 'task-2',
+        conversationId: 'conversation-2',
+      }),
     ]);
   });
 
-  it('recovers an existing app binding after restart', async () => {
+  it('restores persisted pending build tracking after restart', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'yoda-ai-lab-runner-'));
     directories.push(directory);
     mocks.projectPath = directory;
+    await writeReadyBuild(directory, 'Recovered', 'Recovered from a pending build');
     const jobs = new AiLabBuildJobStore(join(directory, 'jobs.json'));
-    const apps = new AiLabAppStore(join(directory, 'apps.json'));
-    const existing = await apps.create({
-      name: 'Timer',
-      description: 'A focused timer',
-      prompt: 'Build a timer',
-      html: '<!doctype html><html><body>Old</body></html>',
+    await jobs.put({
       projectKind: 'app',
       projectId: 'project-1',
       taskId: 'task-1',
       conversationId: 'conversation-1',
+      prompt: 'Build a timer',
       runtimeId: 'claude',
+      createdAt: '2026-07-18T00:00:00.000Z',
     });
-    mocks.transcript[1] = {
-      role: 'assistant',
-      content:
-        '---YODA_APP_MANIFEST---\n{"name":"Recovered","description":"Recovered update"}\n---YODA_APP_HTML---\n<!doctype html><html><body>New</body></html>',
-    };
+    const apps = new AiLabAppStore(join(directory, 'apps.json'));
 
     const runner = new AiLabAppBuildRunner(jobs, apps);
     await runner.initialize();
-    expect(await jobs.list()).toEqual([
-      expect.objectContaining({ appId: existing.id, taskId: 'task-1' }),
-    ]);
-    mocks.listener?.({
-      status: 'completed',
-      seen: false,
-      pendingAction: null,
-      lastForceWorkingAt: 0,
-      updatedAt: 3,
-    });
+    expect(mocks.listener).not.toBeNull();
+    completeAgentTurn();
+
     await vi.waitFor(() => expect(mocks.emit).toHaveBeenCalled(), { timeout: 1_000 });
     expect(await apps.list()).toEqual([
-      expect.objectContaining({ id: existing.id, name: 'Recovered' }),
+      expect.objectContaining({ name: 'Recovered', runtimeKind: 'react-vite' }),
     ]);
+    expect(await jobs.list()).toEqual([]);
   });
 });
+
+function completeAgentTurn(): void {
+  mocks.listener?.({
+    status: 'completed',
+    seen: false,
+    pendingAction: null,
+    lastForceWorkingAt: 0,
+    updatedAt: Date.now(),
+  });
+}
+
+async function writeReadyBuild(
+  directory: string,
+  name: string,
+  description: string
+): Promise<void> {
+  await scaffoldAiLabAppProject(directory, name);
+  await writeFile(
+    join(directory, '.yoda', 'app.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        template: 'react-vite',
+        templateVersion: 1,
+        status: 'ready',
+        name,
+        description,
+        capabilities: [],
+      },
+      null,
+      2
+    )}\n`,
+    'utf8'
+  );
+  await mkdir(join(directory, 'dist'), { recursive: true });
+  await writeFile(join(directory, 'dist', 'index.html'), '<!doctype html>', 'utf8');
+}

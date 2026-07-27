@@ -1,6 +1,7 @@
 import {
   AppWindow,
   ArrowLeft,
+  Code2,
   ExternalLink,
   FolderOpen,
   Loader2,
@@ -14,6 +15,12 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AiLabUserApp } from '@shared/ai-lab';
 import { getRuntime } from '@shared/runtime-registry';
+import { ensureUniqueTaskDisplayName } from '@shared/task-name';
+import type { MountedProject } from '@renderer/features/projects/stores/project';
+import {
+  asMounted,
+  getProjectManagerStore,
+} from '@renderer/features/projects/stores/project-selectors';
 import { HeaderActionButton, HeaderActionToolbar } from '@renderer/lib/components/header-actions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -23,11 +30,11 @@ import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 import { AI_LAB_APPS, type AiLabAppDefinition } from '../app-registry';
 import { createAiLabProject } from '../create-ai-lab-project';
+import { startAiLabBuildTask } from '../start-ai-lab-build-task';
 import {
   useAiLabApps,
   useAssignAiLabAppProject,
   useDeleteAiLabApp,
-  useRefineAiLabApp,
   useUpdateAiLabApp,
 } from '../use-ai-lab';
 import { UserAppFrame } from './user-app-frame';
@@ -235,18 +242,27 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
   const { toast } = useToast();
   const updateApp = useUpdateAiLabApp();
   const deleteApp = useDeleteAiLabApp();
-  const refineApp = useRefineAiLabApp();
   const assignAppProject = useAssignAiLabAppProject();
   const [isOpeningWindow, setIsOpeningWindow] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
   const [isPreparingRefinement, setIsPreparingRefinement] = useState(false);
   const [refinement, setRefinement] = useState('');
-  const refinementPending =
-    isPreparingRefinement || assignAppProject.isPending || refineApp.isPending;
+  const refinementPending = isPreparingRefinement || assignAppProject.isPending;
 
   const openAppProject = () => {
     if (!app.projectId || app.projectKind !== 'app') return;
     navigate('project', { projectId: app.projectId });
+  };
+
+  const openBuildTask = () => {
+    if (!app.projectId || !app.taskId) return;
+    navigate('task', {
+      projectId: app.projectId,
+      taskId: app.taskId,
+      ...(app.conversationId
+        ? { tab: { kind: 'conversation' as const, conversationId: app.conversationId } }
+        : {}),
+    });
   };
 
   const handleDelete = () => {
@@ -290,13 +306,46 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
     if (!prompt || refinementPending) return;
     setIsPreparingRefinement(true);
     try {
+      let project: MountedProject | undefined;
       if (app.projectKind !== 'app' || !app.projectId) {
-        const project = await createAiLabProject(app.name);
+        project = await createAiLabProject(app.name);
         await assignAppProject.mutateAsync({ id: app.id, projectId: project.data.id });
+      } else {
+        const projectManager = getProjectManagerStore();
+        const loaded = await projectManager.ensureProjectLoaded(app.projectId);
+        if (!loaded) throw new Error(t('aiLab.appProjectUnavailable'));
+        await projectManager.mountProject(app.projectId);
+        project = asMounted(projectManager.projects.get(app.projectId));
       }
-      await refineApp.mutateAsync({ id: app.id, prompt });
+      if (!project) throw new Error(t('aiLab.appProjectUnavailable'));
+      if (!app.runtimeId) throw new Error(t('aiLab.appAgentUnavailable'));
+      await project.taskManager.loadTasks();
+      const taskName = ensureUniqueTaskDisplayName(
+        t('aiLab.refineTaskName'),
+        Array.from(project.taskManager.tasks.values(), (task) => task.data.name)
+      );
+      const launch = await startAiLabBuildTask({
+        project,
+        appId: app.id,
+        prompt,
+        taskName,
+        runtimeId: app.runtimeId,
+        model: app.model,
+      });
       setRefinement('');
       setIsRefining(false);
+      navigate('task', {
+        projectId: project.data.id,
+        taskId: launch.taskId,
+        tab: { kind: 'conversation', conversationId: launch.conversationId },
+      });
+      void launch.promise.catch((error: unknown) => {
+        toast({
+          title: t('aiLab.refineFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+        });
+      });
     } catch (error) {
       toast({
         title: t('aiLab.refineFailed'),
@@ -340,6 +389,11 @@ function UserAppHost({ app, onBack }: { app: AiLabUserApp; onBack: () => void })
           {app.projectKind === 'app' && app.projectId && (
             <HeaderActionButton label={t('aiLab.openAppProject')} onClick={openAppProject}>
               <FolderOpen />
+            </HeaderActionButton>
+          )}
+          {app.projectId && app.taskId && (
+            <HeaderActionButton label={t('aiLab.openLatestBuildTask')} onClick={openBuildTask}>
+              <Code2 />
             </HeaderActionButton>
           )}
           <HeaderActionButton
