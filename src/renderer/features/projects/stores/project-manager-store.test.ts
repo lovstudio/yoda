@@ -3,6 +3,7 @@ import type { LocalProject } from '@shared/projects';
 import { ProjectManagerStore } from './project-manager';
 
 const mocks = vi.hoisted(() => ({
+  ensureProjectExpanded: vi.fn(),
   getProject: vi.fn(),
   prependProjectOrder: vi.fn(),
 }));
@@ -25,6 +26,7 @@ vi.mock('@renderer/lib/stores/app-state', () => ({
       viewParamsStore: {},
     },
     sidebar: {
+      ensureProjectExpanded: mocks.ensureProjectExpanded,
       prependProjectOrder: mocks.prependProjectOrder,
       projectOrder: [],
       setProjectOrder: vi.fn(),
@@ -66,6 +68,7 @@ describe('ProjectManagerStore external project reconciliation', () => {
     expect(manager.projects.get(project.id)?.data).toEqual(project);
     expect(manager.projects.get(project.id)?.phase).toBe('idle');
     expect(mocks.prependProjectOrder).toHaveBeenCalledWith(project.id);
+    expect(mocks.ensureProjectExpanded).toHaveBeenCalledWith(project.id);
   });
 
   it('uses project data already returned by path inspection', async () => {
@@ -77,6 +80,19 @@ describe('ProjectManagerStore external project reconciliation', () => {
     expect(loaded).toBe(true);
     expect(mocks.getProject).not.toHaveBeenCalled();
     expect(manager.projects.get(project.id)?.data).toEqual(project);
+  });
+
+  it('expands a project that is already loaded', async () => {
+    const manager = new ProjectManagerStore();
+    const project = makeProject();
+    await manager.ensureProjectLoaded(project.id, project);
+    vi.clearAllMocks();
+
+    const loaded = await manager.ensureProjectLoaded(project.id);
+
+    expect(loaded).toBe(true);
+    expect(mocks.getProject).not.toHaveBeenCalled();
+    expect(mocks.ensureProjectExpanded).toHaveBeenCalledWith(project.id);
   });
 });
 

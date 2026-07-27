@@ -94,7 +94,10 @@ export class ProjectManagerStore {
     projectId: string,
     knownProject?: LocalProject | SshProject
   ): Promise<boolean> {
-    if (this.projects.has(projectId)) return true;
+    if (this.projects.has(projectId)) {
+      appState.sidebar.ensureProjectExpanded(projectId);
+      return true;
+    }
 
     const project = knownProject ?? (await rpc.projects.getProject(projectId));
     if (!project) return false;
@@ -104,7 +107,9 @@ export class ProjectManagerStore {
       this.projects.set(project.id, createUnmountedProject(project, 'idle'));
       if (!project.isInternal) appState.sidebar.prependProjectOrder(project.id);
     });
-    return this.projects.has(projectId);
+    const loaded = this.projects.has(projectId);
+    if (loaded && !project.isInternal) appState.sidebar.ensureProjectExpanded(projectId);
+    return loaded;
   }
 
   async createProject(

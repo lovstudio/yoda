@@ -191,6 +191,8 @@
     "creatingWorkspace": "正在创建任务工作区…",
     "openPendingSession": "查看下一条待处理会话",
     "loading": "加载中",
+    "loadingProjectSessions": "正在加载项目与 Sessions…",
+    "loadingSessions": "加载 Sessions…",
     "projectNotFound": "项目路径未找到",
     "reconnect": "重新连接",
     "changeSshConnection": "更换 SSH 连接",
