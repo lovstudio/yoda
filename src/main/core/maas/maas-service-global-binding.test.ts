@@ -186,6 +186,49 @@ describe('global MaaS binding', () => {
     expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
   });
 
+  it('restores the selected Codex account root before a native resume', async () => {
+    const service = new MaasService();
+
+    await expect(service.reconcileCodexStateRoot('/state/account-a')).resolves.toBeUndefined();
+
+    expect(mocks.codexAuthDisable).toHaveBeenCalledWith({ codexHome: '/state/account-a' });
+    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
+  });
+
+  it('applies the active Yoda MaaS route to the selected Codex account root', async () => {
+    mocks.settings.runtimeBindings = [
+      {
+        runtimeId: 'codex',
+        platformId: 'zenmux',
+        previousAuthProvider: 'official-api',
+        previousMaasPlatformId: null,
+        previousConfig: { authProvider: 'official-api' },
+        enabledAt: '2026-07-25T00:00:00.000Z',
+      },
+    ];
+    const service = new MaasService();
+    vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      displayName: 'ZenMux',
+      endpoint: 'https://zenmux.ai/api/v1',
+      apiKey: 'inference-secret',
+    });
+
+    await expect(service.reconcileCodexStateRoot('/state/account-b')).resolves.toBeUndefined();
+
+    expect(mocks.codexAuthEnable).toHaveBeenCalledWith({
+      codexHome: '/state/account-b',
+      platformId: 'zenmux',
+      displayName: 'ZenMux',
+      gatewayBaseUrl: 'http://127.0.0.1:15721/v1',
+      gatewayToken: 'local-gateway-token',
+    });
+    expect(mocks.gatewayConfigure).toHaveBeenCalledWith({
+      providerId: 'zenmux',
+      endpoint: 'https://zenmux.ai/api/v1',
+      apiKey: 'inference-secret',
+    });
+  });
+
   it('repairs a split runtime binding and rolls native files back if persistence fails', async () => {
     mocks.settings.runtimeBindings = [
       {

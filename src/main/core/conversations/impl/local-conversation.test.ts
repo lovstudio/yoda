@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getHookToken: vi.fn(),
   getProviderConfig: vi.fn(),
   getRuntimeInferenceCredentials: vi.fn(),
+  ensureCodexResumeProviderCompatible: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
   logDebug: vi.fn(),
   logError: vi.fn(),
@@ -24,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   maybeAutoTrustLocal: vi.fn(),
   prepareHookConfig: vi.fn(),
   prepareWindowsClaudeSettings: vi.fn(),
+  promptLibraryList: vi.fn(),
+  reconcileCodexStateRoot: vi.fn(),
   ensureCodexThreadUnarchived: vi.fn(),
   resolveAvailableTmuxSessionName: vi.fn(),
   resolveAgentResumeSessionId: vi.fn(),
@@ -114,15 +117,23 @@ vi.mock('@main/core/fs/impl/local-fs', () => ({
 vi.mock('@main/core/maas/maas-service', () => ({
   maasService: {
     getRuntimeInferenceCredentials: mocks.getRuntimeInferenceCredentials,
+    reconcileCodexStateRoot: mocks.reconcileCodexStateRoot,
   },
 }));
 
 vi.mock('@main/core/maas/codex-history-compat', () => ({
+  ensureCodexResumeProviderCompatibleForConfig: mocks.ensureCodexResumeProviderCompatible,
   migrateLegacyCodexMaasHistoryForConfig: mocks.migrateLegacyCodexMaasHistory,
 }));
 
 vi.mock('@main/core/pty/local-pty', () => ({
   spawnLocalPty: mocks.spawnLocalPty,
+}));
+
+vi.mock('@main/core/prompt-library/prompt-library-service', () => ({
+  promptLibraryService: {
+    list: mocks.promptLibraryList,
+  },
 }));
 
 vi.mock('@main/core/pty/pty-env', () => ({
@@ -264,6 +275,7 @@ describe('LocalConversationProvider', () => {
     mocks.getHookToken.mockReturnValue('token');
     mocks.aiLogStart.mockResolvedValue('ai-log-id');
     mocks.buildAgentEnv.mockReturnValue({});
+    mocks.ensureCodexResumeProviderCompatible.mockReturnValue({ status: 'unchanged' });
     mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'claude',
@@ -277,6 +289,7 @@ describe('LocalConversationProvider', () => {
     );
     mocks.maybeAutoTrustLocal.mockResolvedValue(undefined);
     mocks.prepareHookConfig.mockResolvedValue(undefined);
+    mocks.promptLibraryList.mockResolvedValue([]);
     mocks.prepareWindowsClaudeSettings.mockImplementation((_runtimeId: string, args: string[]) => ({
       args,
     }));
@@ -385,8 +398,59 @@ describe('LocalConversationProvider', () => {
       threadId: 'codex-thread-1',
       ctx: expect.anything(),
     });
+    expect(mocks.ensureCodexResumeProviderCompatible).toHaveBeenCalledWith('codex-thread-1', {
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+    });
     expect(spawned).toHaveLength(2);
     expect(spawned[1].options.args).toEqual(['resume', '--cd', '/workspace', 'codex-thread-1']);
+  });
+
+  it('resumes an adopted Codex session through its original account state root', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+    });
+    mocks.resolveAgentResumeSessionId.mockReturnValue('native-thread-1');
+    const importedConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+      sessionSource: {
+        catalogId: 'catalog-1',
+        runtimeId: 'codex',
+        sessionId: 'native-thread-1',
+        stateRoot: '/state/codex-account-a',
+        providerId: 'provider-a',
+      },
+    };
+    const provider = createProvider();
+
+    await provider.startSession(importedConversation, { cols: 80, rows: 24 }, true);
+
+    expect(mocks.reconcileCodexStateRoot).toHaveBeenCalledWith('/state/codex-account-a');
+    expect(mocks.ensureCodexThreadUnarchived).toHaveBeenCalledWith({
+      runtimeId: 'codex',
+      providerConfig: {
+        cli: 'codex',
+        resumeFlag: 'resume',
+        resumeSessionIdArg: true,
+        initialPromptFlag: '',
+        env: { CODEX_HOME: '/state/codex-account-a' },
+      },
+      threadId: 'native-thread-1',
+      ctx: expect.anything(),
+      statePath: '/state/codex-account-a/state_5.sqlite',
+    });
+    expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerVars: { CODEX_HOME: '/state/codex-account-a' },
+      })
+    );
+    expect(spawned[0].options.args).toEqual(['resume', '--cd', '/workspace', 'native-thread-1']);
   });
 
   it('injects Codex notify as a runtime config override when hooks are active', async () => {

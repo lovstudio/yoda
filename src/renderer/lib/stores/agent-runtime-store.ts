@@ -4,7 +4,8 @@ import {
   isAgentSessionRunningStatus,
   type AgentSessionRuntimeStatus,
 } from '@shared/events/agentEvents';
-import { events } from '@renderer/lib/ipc';
+import { events, rpc } from '@renderer/lib/ipc';
+import { log } from '@renderer/utils/logger';
 
 export type AgentRuntimeSnapshot = {
   /** Task ids the user has opened since their status last became attention-worthy. */
@@ -29,9 +30,10 @@ function isAttentionStatus(status: AgentSessionRuntimeStatus): boolean {
  * Global, mount-independent mirror of the main-process agent run-state store.
  *
  * The per-task `ConversationManagerStore` hydrates persisted status only when a
- * task is mounted. This store mirrors those task-scoped results and keeps them
- * live via {@link agentSessionStatusChangedChannel}. Avoiding a global cold-load
- * keeps startup cost proportional to the task the user actually opens.
+ * task is mounted. This store cold-loads only sessions with a live main-process
+ * or tmux marker and keeps them live via
+ * {@link agentSessionStatusChangedChannel}. It never mounts task views or parses
+ * every historical transcript.
  *
  * Aggregation mirrors `ConversationManagerStore.taskStatus`: a task is "working"
  * if any of its conversations is working; "awaiting-input"/"error"/"completed"
@@ -42,6 +44,11 @@ export class AgentRuntimeStore {
   private statuses = observable.map<string, AgentSessionRuntimeStatus>();
   /** Task ids the user has opened; cleared for a task when it re-enters an attention status. */
   private seenTaskIds = observable.set<string>();
+  /** Per-entry ordering guard so a slow hydration response cannot beat a live event. */
+  private statusRevisions = new Map<string, number>();
+  private revision = 0;
+  /** Enabled only by the primary app window; warm/detached windows stay passive. */
+  private projectHydrationEnabled = false;
   private off: (() => void) | null = null;
 
   constructor() {
@@ -55,6 +62,12 @@ export class AgentRuntimeStore {
     });
   }
 
+  /** Cold-load active local sessions for the primary app shell. */
+  async hydrateActiveSessions(): Promise<void> {
+    this.projectHydrationEnabled = true;
+    await this.hydrate();
+  }
+
   dispose(): void {
     this.off?.();
     this.off = null;
@@ -64,13 +77,64 @@ export class AgentRuntimeStore {
     projectId: string,
     taskId: string,
     conversationId: string,
-    status: AgentSessionRuntimeStatus
+    status: AgentSessionRuntimeStatus,
+    markAttentionUnread = true
   ): void {
+    const key = `${taskKey(projectId, taskId)}\0${conversationId}`;
     runInAction(() => {
-      this.statuses.set(`${taskKey(projectId, taskId)}\0${conversationId}`, status);
+      this.statuses.set(key, status);
+      this.statusRevisions.set(key, ++this.revision);
       // A task re-entering an attention status is "unread" again until reopened.
-      if (isAttentionStatus(status)) this.seenTaskIds.delete(taskKey(projectId, taskId));
+      if (markAttentionUnread && isAttentionStatus(status)) {
+        this.seenTaskIds.delete(taskKey(projectId, taskId));
+      }
     });
+  }
+
+  /** Re-scan one mounted remote project's host after its SSH context is ready. */
+  async hydrateProject(projectId: string): Promise<void> {
+    if (!this.projectHydrationEnabled) return;
+    await this.hydrate(projectId);
+  }
+
+  private async hydrate(projectId?: string): Promise<void> {
+    const baselineRevision = this.revision;
+    try {
+      const snapshot = await rpc.conversations.getActiveRuntimeStatuses(projectId);
+      const returnedKeys = new Set(
+        snapshot.entries.map(
+          (entry) => `${taskKey(entry.projectId, entry.taskId)}\0${entry.conversationId}`
+        )
+      );
+      const coveredProjects = new Set(snapshot.coveredProjectIds);
+
+      runInAction(() => {
+        for (const key of this.statuses.keys()) {
+          const projectKey = key.slice(0, key.indexOf('\0'));
+          if (!coveredProjects.has(projectKey) || returnedKeys.has(key)) continue;
+          if ((this.statusRevisions.get(key) ?? 0) > baselineRevision) continue;
+          this.statuses.delete(key);
+          this.statusRevisions.set(key, ++this.revision);
+        }
+
+        for (const entry of snapshot.entries) {
+          const key = `${taskKey(entry.projectId, entry.taskId)}\0${entry.conversationId}`;
+          if ((this.statusRevisions.get(key) ?? 0) > baselineRevision) continue;
+          this.applyStatus(
+            entry.projectId,
+            entry.taskId,
+            entry.conversationId,
+            entry.status,
+            false
+          );
+        }
+      });
+    } catch (error) {
+      log.warn('[agent-runtime] active status hydration failed:', {
+        projectId,
+        error,
+      });
+    }
   }
 
   /** Aggregate status for a task, mirroring `ConversationManagerStore.taskStatus`. */

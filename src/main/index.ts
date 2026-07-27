@@ -28,6 +28,8 @@ import { mobileGatewayService } from './core/mobile-gateway/mobile-gateway-servi
 import { mobileRelayService } from './core/mobile-gateway/mobile-relay-service';
 import { ensureInternalProject } from './core/projects/operations/ensureInternalProject';
 import { projectManager } from './core/projects/project-manager';
+import { promptLibraryService } from './core/prompt-library/prompt-library-service';
+import { promptSourceService } from './core/prompt-library/prompt-source-service';
 import { ptySessionRegistry } from './core/pty/pty-session-registry';
 import { prSyncScheduler } from './core/pull-requests/pr-sync-scheduler';
 import { reviewOrchestrator } from './core/review-orchestration/orchestrator';
@@ -169,6 +171,8 @@ void app.whenReady().then(async () => {
 
   // App settings must be ready before the renderer queries them on first paint.
   await appSettingsService.initialize();
+  await promptLibraryService.initialize();
+  await promptSourceService.initialize();
   ptySessionRegistry.setScrollbackLines((await appSettingsService.get('terminal')).scrollbackLines);
   __bootMark('appSettingsService.initialize done');
   await extensionMarketplaceService.initialize().catch((error: unknown) => {
@@ -318,10 +322,12 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
       agentHookService.dispose();
       sessionSummaryAutoRefreshService.dispose();
       agentSessionRuntimeStore.dispose();
+      aiLabService.dispose();
       mobileGatewayService.dispose();
       mobileRelayService.dispose();
       updateService.dispose();
       prSyncScheduler.dispose();
+      promptSourceService.dispose();
       const [extensionResult, gitWatcherResult, projectManagerResult] = await Promise.allSettled([
         extensionMarketplaceService.dispose(),
         gitWatcherRegistry.dispose(),

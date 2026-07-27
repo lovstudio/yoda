@@ -42,23 +42,40 @@ describe('AiLabAppStore', () => {
       pinned: false,
     });
     expect(await store.update(created.id, { pinned: true })).toMatchObject({ pinned: true });
-    const replaced = await store.replaceGenerated(created.id, {
+    const replaced = await store.replaceProjectBuild(created.id, {
       name: 'Packing together',
       description: 'A shared packing list',
-      html: '<!doctype html><html><body>Updated</body></html>',
+      runtimeKind: 'react-vite',
+      templateVersion: 1,
+      capabilities: [],
+      taskId: 'react-build-task',
+      conversationId: 'react-build-conversation',
+      runtimeId: 'codex',
+      model: 'gpt-5.4',
     });
     expect(replaced).toMatchObject({
       changed: true,
-      app: { name: 'Packing together', pinned: true },
+      app: {
+        name: 'Packing together',
+        pinned: true,
+        html: '',
+        runtimeKind: 'react-vite',
+      },
     });
     expect(replaced.app.updatedAt).not.toBe(created.updatedAt);
     await expect(
-      store.replaceGenerated(created.id, {
+      store.replaceProjectBuild(created.id, {
         name: replaced.app.name,
         description: replaced.app.description,
-        html: replaced.app.html,
+        runtimeKind: 'react-vite',
+        templateVersion: 1,
+        capabilities: [],
+        taskId: 'react-build-task',
+        conversationId: 'react-build-conversation',
+        runtimeId: 'codex',
+        model: 'gpt-5.4',
       })
-    ).resolves.toMatchObject({ changed: false, app: { updatedAt: replaced.app.updatedAt } });
+    ).resolves.toMatchObject({ changed: false });
     const reassigned = await store.assignProject(created.id, 'packing-app-project');
     expect(reassigned).toMatchObject({
       projectKind: 'app',

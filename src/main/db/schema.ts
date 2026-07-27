@@ -180,16 +180,25 @@ export const automationRuns = sqliteTable(
   })
 );
 
-/**
- * Reusable prompts saved by the user, surfaced in the Library. Distinct from
- * the always-on `promptPrinciples` in app settings: these are opt-in templates
- * the user picks when composing a task.
- */
+/** Persisted prompt groups, including groups that do not contain prompts yet. */
+export const promptGroups = sqliteTable('prompt_groups', {
+  name: text('name').primaryKey(),
+  createdAt: text('created_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+/** Canonical user prompt store, including grouping, sources and injection. */
 export const prompts = sqliteTable('prompts', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
   description: text('description').notNull().default(''),
   content: text('content').notNull(),
+  groupName: text('group_name').notNull().default(''),
+  extraInfo: text('extra_info').notNull().default(''),
+  injectionEnabled: integer('injection_enabled', { mode: 'boolean' }).notNull().default(false),
+  injectionOrder: integer('injection_order').notNull().default(0),
+  sourceJson: text('source_json'),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: text('created_at')
     .notNull()

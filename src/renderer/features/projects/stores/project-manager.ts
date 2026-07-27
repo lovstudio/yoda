@@ -86,6 +86,32 @@ export class ProjectManagerStore {
     await Promise.allSettled(toMount.map((id) => this.mountProject(id)));
   }
 
+  /**
+   * Reconciles a project that may have been registered outside the current
+   * renderer lifecycle (for example immediately before opening a deep link).
+   */
+  async ensureProjectLoaded(
+    projectId: string,
+    knownProject?: LocalProject | SshProject
+  ): Promise<boolean> {
+    if (this.projects.has(projectId)) {
+      appState.sidebar.ensureProjectExpanded(projectId);
+      return true;
+    }
+
+    const project = knownProject ?? (await rpc.projects.getProject(projectId));
+    if (!project) return false;
+
+    runInAction(() => {
+      if (this.projects.has(project.id)) return;
+      this.projects.set(project.id, createUnmountedProject(project, 'idle'));
+      if (!project.isInternal) appState.sidebar.prependProjectOrder(project.id);
+    });
+    const loaded = this.projects.has(projectId);
+    if (loaded && !project.isInternal) appState.sidebar.ensureProjectExpanded(projectId);
+    return loaded;
+  }
+
   async createProject(
     projectType: ProjectType,
     data: ModeData,
@@ -337,6 +363,12 @@ export class ProjectManagerStore {
           if (navTaskId) {
             taskManager.provisionTask(navTaskId).catch(() => {});
           }
+        }
+        // The primary app window enables runtime hydration; warm/detached
+        // windows keep this call passive. Re-running after every successful SSH
+        // mount also covers a project that reconnects after startup.
+        if (project.data.type === 'ssh') {
+          void appState.agentRuntime.hydrateProject(projectId);
         }
       })
       .catch((err: unknown) => {

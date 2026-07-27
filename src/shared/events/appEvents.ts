@@ -117,9 +117,6 @@ export const automationRunsUpdatedChannel = defineEvent<void>('automation-runs:u
 /** Emitted whenever a saved prompt is created, updated, or deleted (CRUD). */
 export const promptsUpdatedChannel = defineEvent<void>('prompts:updated');
 
-/** Emitted after the leaked-system-prompts reference gallery revalidates against GitHub. */
-export const leakedPromptsUpdatedChannel = defineEvent<void>('leaked-prompts:updated');
-
 /** Emitted after each dependency probe completes (path resolution or version check). */
 export const dependencyStatusUpdatedChannel = defineEvent<DependencyStatusUpdatedEvent>(
   'dependency:status-updated'

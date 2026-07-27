@@ -12,7 +12,9 @@ import { resolveTask } from '../projects/utils';
 import { getClaudeSessionActivity } from './claude-session-activity-source';
 import { resolveAgentResumeSession } from './codex-session-id';
 import { getReservedCodexThreadIds } from './codex-thread-reservations';
+import { getConversationRuntimeStateRoot } from './conversation-session-source';
 import { buildAgentCommand, buildAgentSubcommand } from './impl/agent-command';
+import { withRuntimeStateRoot } from './session-state-roots';
 import { mapConversationRowToConversation } from './utils';
 
 export async function getConversationSessionInfo(
@@ -44,6 +46,8 @@ export async function getConversationSessionInfo(
 
   const conversation = mapConversationRowToConversation(row.conversation, true);
   const workingDirectory = cwd?.trim() || row.projectPath;
+  const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
+  const stateRoot = getConversationRuntimeStateRoot(conversation, providerConfig);
   const reservedThreadIds =
     conversation.runtimeId === 'codex'
       ? await getReservedCodexThreadIds(conversation.id)
@@ -58,8 +62,9 @@ export async function getConversationSessionInfo(
     conversation.runtimeId === 'claude' && row.workspaceProvider !== 'ssh'
       ? await getClaudeSessionActivity({
           cwd: workingDirectory,
-          conversationId,
+          conversationId: session.sessionId,
           processPid: activeSession?.pid,
+          claudeHomeDir: stateRoot,
         }).then((activity) =>
           activity
             ? {
@@ -84,10 +89,11 @@ export async function getConversationSessionInfo(
       runtimeId: conversation.runtimeId,
       sessionId: session.sessionId,
       cwd: workingDirectory,
+      stateRoot: conversation.sessionSource ? stateRoot : undefined,
       skillPolicy: conversation.skillPolicy,
       includeUnarchive:
         conversation.runtimeId === 'codex' &&
-        readCodexThreadArchiveStatus(resolveCodexStatePath(), session.sessionId) === true,
+        readCodexThreadArchiveStatus(resolveCodexStatePath(stateRoot), session.sessionId) === true,
     }),
   };
 }
@@ -96,16 +102,22 @@ async function buildResumeCommand({
   runtimeId,
   sessionId,
   cwd,
+  stateRoot,
   includeUnarchive,
   skillPolicy,
 }: {
   runtimeId: RuntimeId;
   sessionId: string;
   cwd?: string;
+  stateRoot?: string;
   includeUnarchive?: boolean;
   skillPolicy?: Conversation['skillPolicy'];
 }): Promise<string | undefined> {
-  const providerConfig = await runtimeOverrideSettings.getItem(runtimeId);
+  const configuredProvider = await runtimeOverrideSettings.getItem(runtimeId);
+  const providerConfig =
+    stateRoot && (runtimeId === 'claude' || runtimeId === 'codex')
+      ? withRuntimeStateRoot(runtimeId, configuredProvider, stateRoot)
+      : configuredProvider;
   if (!providerConfig?.cli) return undefined;
   if (!providerConfig.resumeFlag && !providerConfig.sessionIdFlag) return undefined;
 

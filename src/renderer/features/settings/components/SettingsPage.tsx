@@ -10,6 +10,7 @@ import { KanbanBoard } from '@renderer/features/kanban/components/KanbanBoard';
 import { MaasView } from '@renderer/features/maas/components/MaasView';
 import { McpView } from '@renderer/features/mcp/components/McpView';
 import { MobileView } from '@renderer/features/mobile/mobile-view';
+import { PromptLibraryPanel } from '@renderer/features/prompt-library/prompt-library-panel';
 import { RoadmapView } from '@renderer/features/roadmap/components/RoadmapView';
 import SkillsCatalogHint from '@renderer/features/skills/components/SkillsCatalogHint';
 import SkillsView from '@renderer/features/skills/components/SkillsView';
@@ -42,7 +43,6 @@ import {
 } from './LlmConfigDebugCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import OpenInAppsSettingsCard from './OpenInAppsSettingsCard';
-import PromptsSettingsCard from './PromptsSettingsCard';
 import {
   AutoGenerateTaskNamesRow,
   AutoTrustWorktreesRow,
@@ -346,7 +346,13 @@ export function SettingsPage({
     prompts: {
       title: t('settings.tabs.prompts'),
       description: t('settings.promptsTab.description'),
-      sections: [{ id: 'prompt-principles', component: <PromptsSettingsCard /> }],
+      sections: [
+        {
+          id: 'prompts',
+          surface: 'plain',
+          component: <PromptLibraryPanel embedded />,
+        },
+      ],
     },
     skills: {
       title: t('skills.title'),

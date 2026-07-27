@@ -26,7 +26,13 @@ export class ClaudeSessionTitleSource implements SessionTitleSource {
   readonly runtimeId = 'claude' as const;
 
   watch(ctx: SessionTitleContext, onTitle: TitleListener): SessionTitleWatcher {
-    const filePath = resolveClaudeTranscriptPath(ctx.cwd, ctx.conversationId);
+    const filePath = ctx.stateRoot
+      ? resolveClaudeTranscriptPathFromConfigDir(
+          ctx.cwd,
+          ctx.agentSessionId ?? ctx.conversationId,
+          ctx.stateRoot
+        )
+      : resolveClaudeTranscriptPath(ctx.cwd, ctx.agentSessionId ?? ctx.conversationId);
     return new ClaudeTranscriptTailer(filePath, onTitle);
   }
 }

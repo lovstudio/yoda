@@ -1,4 +1,4 @@
-import { type Conversation } from '@shared/conversations';
+import { type AgentSessionSource, type Conversation } from '@shared/conversations';
 import type { SkillSessionPolicy } from '@shared/skills/types';
 
 export type ActiveConversationSession = {
@@ -39,4 +39,5 @@ export type ConversationConfig = {
   autoApprove?: boolean;
   permissionMode?: string;
   skillPolicy?: SkillSessionPolicy;
+  sessionSource?: AgentSessionSource;
 };

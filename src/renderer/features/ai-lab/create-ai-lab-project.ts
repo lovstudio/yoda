@@ -29,5 +29,6 @@ export async function createAiLabProject(name: string): Promise<MountedProject> 
   if (!project || project.data.type !== 'local') {
     throw new Error('The App project could not be opened.');
   }
+  await rpc.aiLab.scaffoldAppProject({ projectId, name: prepared.name });
   return project;
 }

@@ -1,4 +1,5 @@
 import { eq, inArray } from 'drizzle-orm';
+import type { AgentSessionSource } from '@shared/conversations';
 import {
   isAgentSessionRunningStatus,
   type AgentSessionRuntimeStatus,
@@ -6,6 +7,7 @@ import {
 import { makePtySessionId } from '@shared/ptySessionId';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
+import { resolveCodexStatePath } from '@main/core/session-title/codex-title-source';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import { resolveTask } from '../projects/utils';
@@ -15,6 +17,7 @@ import { findClaudeTranscriptPathBySessionId } from './claude-transcript-locator
 import { readCodexTurnVerdict } from './codex-run-state-source';
 import { resolveCodexThreadIdForConversation } from './codex-session-id';
 import { getReservedCodexThreadIds } from './codex-thread-reservations';
+import { parseConversationSessionSource } from './conversation-session-source';
 import { isInterruptedSinceLastPrompt } from './interrupt-marker';
 
 /**
@@ -50,6 +53,7 @@ export async function getConversationRuntimeStatuses(
       provider: row?.runtime ?? undefined,
       createdAt: row?.createdAt,
       title: row?.title,
+      sessionSource: row?.sessionSource,
       cwd,
     });
   }
@@ -70,6 +74,7 @@ export async function getConversationRunStatus(args: {
   cwd: string;
   createdAt?: string | null;
   title?: string | null;
+  sessionSource?: AgentSessionSource;
 }): Promise<AgentSessionRuntimeStatus> {
   return deriveStatus(args);
 }
@@ -81,9 +86,11 @@ async function deriveStatus(args: {
   provider: string | undefined;
   createdAt?: string | null;
   title?: string | null;
+  sessionSource?: AgentSessionSource;
   cwd: string | undefined;
 }): Promise<AgentSessionRuntimeStatus> {
-  const { projectId, taskId, conversationId, provider, createdAt, title, cwd } = args;
+  const { projectId, taskId, conversationId, provider, createdAt, title, sessionSource, cwd } =
+    args;
   const mountedTask = resolveTask(projectId, taskId);
 
   // Live in-memory state (set this session via hooks/tailers). Used as the base
@@ -96,9 +103,14 @@ async function deriveStatus(args: {
     // Without a cwd (task not provisioned — e.g. cold load right after an app
     // restart while the agent keeps running in tmux), locate the transcript by
     // session id instead so the status still derives from the truth source.
-    const filePath = cwd
-      ? resolveClaudeTranscriptPath(cwd, conversationId)
-      : await findClaudeTranscriptPathBySessionId(conversationId);
+    const sessionId =
+      sessionSource?.runtimeId === 'claude' ? sessionSource.sessionId : conversationId;
+    const filePath =
+      sessionSource?.runtimeId === 'claude'
+        ? await findClaudeTranscriptPathBySessionId(sessionId, sessionSource.stateRoot)
+        : cwd
+          ? resolveClaudeTranscriptPath(cwd, sessionId)
+          : await findClaudeTranscriptPathBySessionId(sessionId);
     if (filePath) {
       const verdict = await readClaudeTurnVerdictFile(filePath).catch(() => null);
       if (verdict) {
@@ -119,16 +131,25 @@ async function deriveStatus(args: {
   } else if (provider === 'codex') {
     const startedAtMs = parseTimestampMs(createdAt);
     const reservedThreadIds = await getReservedCodexThreadIds(conversationId);
-    const threadId = resolveCodexThreadIdForConversation({
-      conversationId,
-      cwd,
-      title: title ?? undefined,
-      createdAt,
-      reservedThreadIds,
-    });
+    const threadId =
+      sessionSource?.runtimeId === 'codex'
+        ? sessionSource.sessionId
+        : resolveCodexThreadIdForConversation({
+            conversationId,
+            cwd,
+            title: title ?? undefined,
+            createdAt,
+            reservedThreadIds,
+          });
+    const statePath =
+      sessionSource?.runtimeId === 'codex'
+        ? resolveCodexStatePath(sessionSource.stateRoot)
+        : undefined;
     const verdict = await readCodexTurnVerdict(
       conversationId,
-      cwd && startedAtMs !== undefined ? { cwd, startedAtMs, threadId } : { threadId }
+      cwd && startedAtMs !== undefined
+        ? { cwd, startedAtMs, threadId, statePath }
+        : { threadId, statePath }
     ).catch(() => null);
     if (verdict?.state === 'working' || verdict?.state === 'awaiting-input') truth = verdict.state;
     else if (verdict?.state === 'error') truth = 'error';
@@ -187,10 +208,16 @@ function parseTimestampMs(value: string | null | undefined): number | undefined 
   return Number.isNaN(ms) ? undefined : ms;
 }
 
-async function loadConversationRows(
-  conversationIds: string[]
-): Promise<
-  Map<string, { runtime: string | null; createdAt: string | null; title: string | null }>
+async function loadConversationRows(conversationIds: string[]): Promise<
+  Map<
+    string,
+    {
+      runtime: string | null;
+      createdAt: string | null;
+      title: string | null;
+      sessionSource?: AgentSessionSource;
+    }
+  >
 > {
   const rows = await db
     .select({
@@ -198,6 +225,7 @@ async function loadConversationRows(
       runtime: conversations.runtime,
       createdAt: conversations.createdAt,
       title: conversations.title,
+      config: conversations.config,
     })
     .from(conversations)
     .where(
@@ -206,6 +234,14 @@ async function loadConversationRows(
         : inArray(conversations.id, conversationIds)
     );
   return new Map(
-    rows.map((r) => [r.id, { runtime: r.runtime, createdAt: r.createdAt, title: r.title }])
+    rows.map((r) => [
+      r.id,
+      {
+        runtime: r.runtime,
+        createdAt: r.createdAt,
+        title: r.title,
+        sessionSource: parseConversationSessionSource(r.config),
+      },
+    ])
   );
 }

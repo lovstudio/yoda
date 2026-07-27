@@ -111,7 +111,7 @@ export type RuntimeDefinition = {
   /**
    * CLI flag that appends extra text after the runtime's own system prompt,
    * e.g. '--append-system-prompt' for Claude Code. Used to inject the
-   * user-defined prompt principles. Runtimes without this flag or a config key
+   * user-defined dynamically injected prompts. Runtimes without this flag or a config key
    * run unmodified.
    */
   appendSystemPromptFlag?: string;

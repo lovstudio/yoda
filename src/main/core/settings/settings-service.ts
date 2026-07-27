@@ -147,26 +147,53 @@ export class SettingsStore implements IInitializable {
           : value;
       }
 
-      const validated = APP_SETTINGS_SCHEMA_MAP[key].parse(toValidate) as AppSettings[K];
+      await this.persistValidated(key, toValidate, defaults);
+    });
+  }
 
-      if (isPlainObject(validated) && isPlainObject(defaults)) {
-        const delta = computeDelta(
-          validated as Record<string, unknown>,
-          defaults as Record<string, unknown>
-        );
-        if (Object.keys(delta).length === 0) {
-          await this.deleteRow(key);
-        } else {
-          await this.storeRaw(key, delta);
-        }
-      } else if (isDeepEqual(validated, defaults)) {
+  /**
+   * Atomically derives a new setting value from the latest persisted value.
+   * Background services use this instead of a get-then-update pair so a source
+   * refresh cannot overwrite a renderer edit that was queued at the same time.
+   */
+  async updateComputed<K extends AppSettingsKey>(
+    key: K,
+    compute: (current: AppSettings[K]) => AppSettings[K]
+  ): Promise<AppSettings[K]> {
+    return this.runSerialized(key, async () => {
+      const defaults = getDefaultForKey(key);
+      const current = await this.get(key);
+      const next = compute(current);
+      const validated = await this.persistValidated(key, next, defaults);
+      return validated;
+    });
+  }
+
+  private async persistValidated<K extends AppSettingsKey>(
+    key: K,
+    value: unknown,
+    defaults: AppSettings[K]
+  ): Promise<AppSettings[K]> {
+    const validated = APP_SETTINGS_SCHEMA_MAP[key].parse(value) as AppSettings[K];
+
+    if (isPlainObject(validated) && isPlainObject(defaults)) {
+      const delta = computeDelta(
+        validated as Record<string, unknown>,
+        defaults as Record<string, unknown>
+      );
+      if (Object.keys(delta).length === 0) {
         await this.deleteRow(key);
       } else {
-        await this.storeRaw(key, validated);
+        await this.storeRaw(key, delta);
       }
+    } else if (isDeepEqual(validated, defaults)) {
+      await this.deleteRow(key);
+    } else {
+      await this.storeRaw(key, validated);
+    }
 
-      delete this.cache[key];
-    });
+    delete this.cache[key];
+    return validated;
   }
 
   async reset<K extends AppSettingsKey>(key: K): Promise<void> {

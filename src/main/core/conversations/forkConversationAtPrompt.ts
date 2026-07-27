@@ -13,9 +13,15 @@ import { runtimeOverrideSettings } from '../settings/runtime-settings-service';
 import { deleteClaudeTranscript, forkClaudeTranscript } from './claude-transcript-fork';
 import { deleteCodexThread, forkCodexThread } from './codex-thread-fork';
 import { conversationEvents } from './conversation-events';
+import {
+  getConversationAgentSessionId,
+  getConversationRuntimeStateRoot,
+} from './conversation-session-source';
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getCodexSessionContext } from './getCodexSessionContext';
-import { resolveRuntimeStateDirectory } from './impl/runtime-env';
+import { createLocalAgentSessionCatalogId } from './local-agent-session-catalog';
+import { withRuntimeStateRoot } from './session-state-roots';
+import type { ConversationConfig } from './types';
 import { mapConversationRowToConversation } from './utils';
 
 const pendingContextForks = new Map<string, Promise<Conversation>>();
@@ -55,8 +61,7 @@ async function createConversationFork(
   if (!source) {
     throw new Error(`Conversation not found: ${params.conversationId}`);
   }
-  // Validate the copied config before creating an external provider fork.
-  mapConversationRowToConversation(source);
+  const sourceConversation = mapConversationRowToConversation(source);
 
   const task = resolveTask(params.projectId, params.taskId);
   if (!task) {
@@ -70,11 +75,10 @@ async function createConversationFork(
     if (params.target.kind !== 'claude-message') {
       throw new Error('Prompt restore target does not match the conversation runtime.');
     }
-    const claudeConfigDir = resolveRuntimeStateDirectory(
-      'claude',
-      await runtimeOverrideSettings.getItem('claude')
-    );
-    const context = await getClaudeSessionContext(cwd, source.id, { claudeConfigDir });
+    const providerConfig = await runtimeOverrideSettings.getItem('claude');
+    const claudeConfigDir = getConversationRuntimeStateRoot(sourceConversation, providerConfig);
+    const sourceSessionId = getConversationAgentSessionId(sourceConversation);
+    const context = await getClaudeSessionContext(cwd, sourceSessionId, { claudeConfigDir });
     const prompt = context?.prompts[params.promptIndex];
     assertPromptTarget(prompt?.restoreTarget, params.target);
 
@@ -82,7 +86,7 @@ async function createConversationFork(
     await forkClaudeTranscript({
       cwd,
       claudeConfigDir,
-      sourceSessionId: source.id,
+      sourceSessionId,
       targetSessionId: forkedConversationId,
       targetMessageId: params.target.messageId,
     });
@@ -92,13 +96,18 @@ async function createConversationFork(
     if (params.target.kind !== 'codex-turn') {
       throw new Error('Prompt restore target does not match the conversation runtime.');
     }
-    const codexHome = resolveRuntimeStateDirectory(
-      'codex',
-      await runtimeOverrideSettings.getItem('codex')
+    const providerConfig = await runtimeOverrideSettings.getItem('codex');
+    const codexHome = getConversationRuntimeStateRoot(sourceConversation, providerConfig);
+    const sessionProviderConfig = codexHome
+      ? withRuntimeStateRoot('codex', providerConfig, codexHome)
+      : providerConfig;
+    const context = await getCodexSessionContext(
+      cwd,
+      getConversationAgentSessionId(sourceConversation),
+      source.title,
+      source.createdAt,
+      { codexHome }
     );
-    const context = await getCodexSessionContext(cwd, source.id, source.title, source.createdAt, {
-      codexHome,
-    });
     const prompt = context?.prompts[params.promptIndex];
     assertPromptTarget(prompt?.restoreTarget, params.target);
     if (!context) {
@@ -109,8 +118,9 @@ async function createConversationFork(
       threadId: context.threadId,
       lastTurnId: params.target.turnId,
       cwd,
+      providerConfig: sessionProviderConfig,
     });
-    deleteProviderFork = () => deleteCodexThread(forkedConversationId);
+    deleteProviderFork = () => deleteCodexThread(forkedConversationId, sessionProviderConfig);
   } else {
     throw new Error(`Runtime does not support context restore: ${source.runtime ?? 'unknown'}`);
   }
@@ -126,7 +136,11 @@ async function createConversationFork(
         title: `${source.title} · #${params.promptIndex + 1}`,
         titleSource: 'yoda',
         runtime: source.runtime,
-        config: source.config,
+        config: createForkedConversationConfig(
+          source.config,
+          sourceConversation,
+          forkedConversationId
+        ),
         isInitialConversation: false,
         createdAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -175,6 +189,28 @@ async function createConversationFork(
     }
     throw error;
   }
+}
+
+function createForkedConversationConfig(
+  rawConfig: string | null,
+  source: Conversation,
+  forkedSessionId: string
+): string | null {
+  const config: ConversationConfig = rawConfig ? (JSON.parse(rawConfig) as ConversationConfig) : {};
+  const sessionSource = source.sessionSource;
+  if (!sessionSource) return rawConfig;
+  return JSON.stringify({
+    ...config,
+    sessionSource: {
+      ...sessionSource,
+      catalogId: createLocalAgentSessionCatalogId(
+        sessionSource.runtimeId,
+        sessionSource.stateRoot,
+        forkedSessionId
+      ),
+      sessionId: forkedSessionId,
+    },
+  });
 }
 
 function contextForkKey(params: ForkConversationAtPromptParams): string {

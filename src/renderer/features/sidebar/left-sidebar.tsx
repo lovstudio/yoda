@@ -4,10 +4,12 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { skillIssueAgentLabel } from '@shared/skills/validation';
 import { useAiLabApps, useUpdateAiLabApp } from '@renderer/features/ai-lab/use-ai-lab';
+import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import {
   useSkillValidationIssues,
   type SkillValidationIssueEntry,
 } from '@renderer/features/skills/useSkillValidationIssues';
+import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import {
   WorkspaceReviewBadge,
   WorkspaceSwitcher,
@@ -34,6 +36,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
 } from './sidebar-primitives';
+import { findSidebarSelectionRow } from './sidebar-selection-sync';
 import { SidebarSpace } from './sidebar-space';
 import { SidebarStatusBar } from './sidebar-status-bar';
 import { SidebarVirtualList } from './sidebar-virtual-list';
@@ -55,6 +58,9 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const { params: libraryParams } = useParams('library');
   const aiLabApps = useAiLabApps();
   const updateAiLabApp = useUpdateAiLabApp();
+  const sidebarContentRef = React.useRef<HTMLDivElement>(null);
+  const lastScrolledSelectionRef = React.useRef<string | null>(null);
+  const lastScrolledRowRef = React.useRef<HTMLElement | null>(null);
   const pinnedApps = (aiLabApps.data ?? []).filter((app) => app.pinned);
   const currentProjectId =
     currentView === 'task'
@@ -63,6 +69,69 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         ? projectParams.projectId
         : undefined;
   const currentTaskId = currentView === 'task' ? taskParams.taskId : undefined;
+  const currentProject = currentProjectId ? getProjectStore(currentProjectId) : undefined;
+  const currentTask =
+    currentProjectId && currentTaskId ? getTaskStore(currentProjectId, currentTaskId) : undefined;
+  const currentProjectPinned = currentProjectId
+    ? sidebarStore.isProjectPinned(currentProjectId)
+    : false;
+  const currentTaskPinned = currentTask?.data.isPinned ?? false;
+  const currentWorkspaceId =
+    currentProject?.state === 'unregistered'
+      ? currentProject.pendingWorkspaceId
+      : currentProject?.data?.workspaceId;
+  const selectionKey =
+    currentProjectId && (currentView === 'project' || currentView === 'task')
+      ? `${currentView}:${currentProjectId}:${currentTaskId ?? ''}`
+      : null;
+
+  React.useEffect(() => {
+    if (!currentProjectId || (currentView !== 'project' && currentView !== 'task')) return;
+    sidebarStore.revealSelection(currentProjectId, currentTaskId);
+  }, [
+    currentProject,
+    currentProjectId,
+    currentProjectPinned,
+    currentTask,
+    currentTaskId,
+    currentTaskPinned,
+    currentView,
+    currentWorkspaceId,
+  ]);
+
+  React.useEffect(() => {
+    const root = sidebarContentRef.current;
+    if (!selectionKey || !currentProjectId || !root) {
+      lastScrolledSelectionRef.current = null;
+      lastScrolledRowRef.current = null;
+      return;
+    }
+
+    const scrollSelectionIntoView = () => {
+      const row = findSidebarSelectionRow(root, currentProjectId, currentTaskId);
+      if (!row) {
+        lastScrolledRowRef.current = null;
+        return;
+      }
+      if (lastScrolledSelectionRef.current === selectionKey && lastScrolledRowRef.current === row) {
+        return;
+      }
+
+      lastScrolledSelectionRef.current = selectionKey;
+      lastScrolledRowRef.current = row;
+      row.scrollIntoView({ block: 'nearest' });
+    };
+
+    scrollSelectionIntoView();
+    const observer = new MutationObserver(scrollSelectionIntoView);
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ['data-sidebar-entity', 'data-sidebar-project-id', 'data-sidebar-task-id'],
+      childList: true,
+      subtree: true,
+    });
+    return () => observer.disconnect();
+  }, [currentProjectId, currentTaskId, selectionKey]);
   const skillIssueLabel =
     skillIssueCount > 0 ? t('sidebar.skillIssues', { count: skillIssueCount }) : null;
   const skillIssueTitle =
@@ -200,7 +269,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
             <div className="my-1 border-t border-border" />
           </SidebarMenu>
         </div>
-        <SidebarContent className="flex flex-col overflow-y-auto">
+        <SidebarContent ref={sidebarContentRef} className="flex flex-col overflow-y-auto">
           <SidebarPinnedTaskList />
           <SidebarGroup className="mb-0 flex flex-col shrink-0">
             <ProjectsGroupLabel />

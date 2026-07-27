@@ -6,18 +6,18 @@ import { app, clipboard, dialog, nativeImage } from 'electron';
 import {
   AI_LAB_CODEX_MODEL,
   AI_LAB_DEFAULT_ZENMUX_MODEL,
+  type AiLabAppPreviewResult,
   type AiLabEngineId,
   type AiLabEngineStatus,
   type AiLabUserApp,
   type AiLabZenmuxModel,
   type AssignAiLabAppProjectInput,
-  type CreateAiLabAppInput,
   type LogoGenerationInput,
   type LogoGenerationListItem,
   type LogoGenerationStatus,
   type PrepareAiLabBuildTaskInput,
   type PrepareAiLabBuildTaskResult,
-  type RefineAiLabAppInput,
+  type ScaffoldAiLabAppProjectInput,
   type UpdateAiLabAppInput,
 } from '@shared/ai-lab';
 import {
@@ -28,25 +28,28 @@ import {
   type AiLabImageEditResult,
   type AiLabRegenerateImageInput,
 } from '@shared/ai-lab-bridge';
-import { aiLabAppUpdatedChannel } from '@shared/events/aiLabEvents';
 import { resolveCommandPath } from '@main/core/dependencies/probe';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { maasService } from '@main/core/maas/maas-service';
+import { getProjectById } from '@main/core/projects/operations/getProjects';
 import { projectManager } from '@main/core/projects/project-manager';
 import { db } from '@main/db/client';
 import { aiLabGenerations } from '@main/db/schema';
-import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
 import { AiLabAppBuildRunner } from './app-build-runner';
-import { generateAiLabApp } from './app-generation';
-import { buildAppGenerationPrompt, buildAppRefinementRequest } from './app-generation-contract';
+import { buildAppGenerationPrompt, buildAppRefinementPrompt } from './app-generation-contract';
 import {
   normalizeAiLabImageEditInput,
   toAiLabImageEditResult,
   type AiLabImageMimeType,
 } from './app-image-edit';
-import { writeAiLabProjectHtml } from './app-project-files';
+import { aiLabAppPreviewService } from './app-preview-service';
+import {
+  markAiLabAppProjectDraft,
+  migrateLegacyAiLabAppProject,
+  scaffoldAiLabAppProject,
+} from './app-project-files';
 import { AiLabAppStore } from './app-store';
 import { AiLabBuildJobStore } from './build-job-store';
 import { generateCodexImages } from './codex-image-engine';
@@ -123,6 +126,10 @@ export class AiLabService {
 
   async initialize(): Promise<void> {
     await this.getAppBuildRunner().initialize();
+  }
+
+  dispose(): void {
+    aiLabAppPreviewService.dispose();
   }
 
   async listApps(): Promise<AiLabUserApp[]> {
@@ -254,19 +261,32 @@ export class AiLabService {
     const prompt = input.prompt.trim();
     if (!prompt) throw new Error('Describe the app you want to create.');
     if (prompt.length > 4_000) throw new Error('The app description is too long.');
-    if (input.runtimeId !== 'codex' && input.runtimeId !== 'claude') {
-      throw new Error('Yoda Build currently supports Claude and Codex.');
-    }
     const project = projectManager.getProject(input.projectId);
     if (!project) throw new Error('Select a project for Yoda Build.');
     if (!project.ctx.supportsLocalSpawn) {
       throw new Error('Yoda Build currently requires a local project.');
     }
-    const initialPrompt = buildAppGenerationPrompt(prompt, {
+    const targetApp = input.appId ? await this.requireApp(input.appId) : null;
+    if (targetApp && (targetApp.projectKind !== 'app' || targetApp.projectId !== input.projectId)) {
+      throw new Error('The selected App does not belong to this project.');
+    }
+    if (targetApp && targetApp.runtimeKind !== 'react-vite') {
+      await migrateLegacyAiLabAppProject(project.repoPath, targetApp.name, targetApp.html);
+    }
+    if (targetApp) await markAiLabAppProjectDraft(project.repoPath);
+    const promptContext = {
       projectPath: project.repoPath,
       systemPrompt: input.systemPrompt,
-    });
+    };
+    const initialPrompt = targetApp
+      ? buildAppRefinementPrompt(prompt, {
+          ...promptContext,
+          appName: targetApp.name,
+          legacySource: targetApp.runtimeKind !== 'react-vite',
+        })
+      : buildAppGenerationPrompt(prompt, promptContext);
     await this.getAppBuildRunner().prepare({
+      appId: targetApp?.id,
       projectKind: 'app',
       projectId: input.projectId,
       taskId: input.taskId,
@@ -283,29 +303,26 @@ export class AiLabService {
     await this.getAppBuildRunner().cancel(taskId);
   }
 
-  async createApp(input: CreateAiLabAppInput): Promise<AiLabUserApp> {
-    const prompt = input.prompt.trim();
-    if (!prompt) throw new Error('Describe the app you want to create.');
-    if (prompt.length > 4_000) throw new Error('The app description is too long.');
+  async scaffoldAppProject(input: ScaffoldAiLabAppProjectInput): Promise<void> {
     const project = projectManager.getProject(input.projectId);
-    if (!project) throw new Error('Select a project for Yoda Build.');
-    if (!project.ctx.supportsLocalSpawn) {
-      throw new Error('Yoda Build currently requires a local project.');
+    if (!project || !project.ctx.supportsLocalSpawn) {
+      throw new Error('The App project is not available.');
     }
-    const generated = await generateAiLabApp({
-      prompt,
-      projectPath: project.repoPath,
-      runtimeId: input.runtimeId,
-      model: input.model,
-      systemPrompt: input.systemPrompt,
-    });
-    return this.getAppStore().create({
-      ...generated,
-      prompt,
-      projectId: input.projectId,
-      runtimeId: input.runtimeId,
-      model: input.model,
-    });
+    await scaffoldAiLabAppProject(project.repoPath, input.name);
+  }
+
+  async startAppPreview(id: string): Promise<AiLabAppPreviewResult> {
+    const current = await this.requireApp(id);
+    if (current.runtimeKind !== 'react-vite') return { kind: 'legacy' };
+    if (!current.projectId) throw new Error('This App is not connected to a project.');
+    const project = await getProjectById(current.projectId);
+    if (!project || project.type !== 'local') {
+      throw new Error('The App project is not available on this computer.');
+    }
+    return {
+      kind: 'url',
+      url: await aiLabAppPreviewService.start(current.id, project.path),
+    };
   }
 
   async assignAppProject(input: AssignAiLabAppProjectInput): Promise<AiLabUserApp> {
@@ -314,48 +331,8 @@ export class AiLabService {
     if (!project || !project.ctx.supportsLocalSpawn) {
       throw new Error('The App project is not available.');
     }
-    await writeAiLabProjectHtml(project.repoPath, current.html);
+    await migrateLegacyAiLabAppProject(project.repoPath, current.name, current.html);
     return this.getAppStore().assignProject(current.id, input.projectId);
-  }
-
-  async refineApp(input: RefineAiLabAppInput): Promise<AiLabUserApp> {
-    const refinement = input.prompt.trim();
-    if (!refinement) throw new Error('Describe what you want to change.');
-    if (refinement.length > 4_000) throw new Error('The requested change is too long.');
-    const current = await this.requireApp(input.id);
-    if (!current.projectId || !current.runtimeId) {
-      throw new Error('This app cannot be updated from its current source.');
-    }
-    if (current.runtimeId !== 'codex' && current.runtimeId !== 'claude') {
-      throw new Error('This app cannot be updated with the selected agent.');
-    }
-    const project = projectManager.getProject(current.projectId);
-    if (!project || !project.ctx.supportsLocalSpawn) {
-      throw new Error('The source project is not available for this update.');
-    }
-    const generated = await generateAiLabApp({
-      prompt: buildAppRefinementRequest({
-        originalPrompt: current.prompt,
-        currentHtml: current.html,
-        refinement,
-      }),
-      projectPath: project.repoPath,
-      runtimeId: current.runtimeId,
-      model: current.model,
-    });
-    if (current.projectKind === 'app') {
-      await writeAiLabProjectHtml(project.repoPath, generated.html);
-    }
-    const result = await this.getAppStore().replaceGenerated(current.id, generated);
-    if (result.changed) {
-      events.emit(aiLabAppUpdatedChannel, {
-        appId: result.app.id,
-        appName: result.app.name,
-        projectId: result.app.projectId,
-        appProject: result.app.projectKind === 'app',
-      });
-    }
-    return result.app;
   }
 
   async updateApp(input: UpdateAiLabAppInput): Promise<AiLabUserApp> {
@@ -364,6 +341,7 @@ export class AiLabService {
 
   async deleteApp(id: string): Promise<void> {
     const appToDelete = await this.requireApp(id);
+    aiLabAppPreviewService.stop(id);
     if (appToDelete.taskId) await this.getAppBuildRunner().cancel(appToDelete.taskId);
     await this.getAppStore().delete(id);
     try {

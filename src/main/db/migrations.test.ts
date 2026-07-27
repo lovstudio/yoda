@@ -54,6 +54,23 @@ function createPartialWorkspaceSchema(db: Database.Database): void {
   `);
 }
 
+function createPromptsSchemaWithoutGroups(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE prompts (
+      id text PRIMARY KEY NOT NULL,
+      title text NOT NULL,
+      description text DEFAULT '' NOT NULL,
+      content text NOT NULL,
+      sort_order integer DEFAULT 0 NOT NULL,
+      created_at text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+      updated_at text DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    INSERT INTO prompts (id, title, content)
+    VALUES ('existing-prompt', 'Review', 'Review this change.');
+  `);
+}
+
 function columnExists(db: Database.Database, tableName: string, columnName: string): boolean {
   const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
   return rows.some((row) => row.name === columnName);
@@ -79,6 +96,7 @@ describe('runBundledMigrations', () => {
     try {
       createMigrationTable(db);
       insertAppliedMigrationRows(db, CONVERSATION_LINEAGE_PREVIOUS_MIGRATION_COUNT);
+      createPromptsSchemaWithoutGroups(db);
       db.exec(`
         CREATE TABLE conversations (id text PRIMARY KEY NOT NULL);
         INSERT INTO conversations (id) VALUES ('existing-conversation');
@@ -96,6 +114,10 @@ describe('runBundledMigrations', () => {
           )
           .get('existing-conversation')
       ).toEqual({ forked_from_conversation_id: null, forked_from_prompt_index: null });
+      expect(columnExists(db, 'prompts', 'group_name')).toBe(true);
+      expect(
+        db.prepare('SELECT group_name FROM prompts WHERE id = ?').get('existing-prompt')
+      ).toEqual({ group_name: '' });
     } finally {
       db.close();
     }

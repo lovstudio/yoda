@@ -8,10 +8,13 @@ import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import { resolveTask } from '../projects/utils';
 import { runtimeOverrideSettings } from '../settings/runtime-settings-service';
+import {
+  getConversationAgentSessionId,
+  getConversationRuntimeStateRoot,
+} from './conversation-session-source';
 import { forkConversationAtPrompt } from './forkConversationAtPrompt';
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getCodexSessionContext } from './getCodexSessionContext';
-import { resolveRuntimeStateDirectory } from './impl/runtime-env';
 import { mapConversationRowToConversation } from './utils';
 
 /** Forks a conversation at its latest completed provider-native turn. */
@@ -53,23 +56,25 @@ async function loadForkablePrompts(
   cwd: string
 ): Promise<Array<{ target?: SessionContextRestoreTarget }>> {
   if (source.runtimeId === 'claude') {
-    const claudeConfigDir = resolveRuntimeStateDirectory(
-      'claude',
-      await runtimeOverrideSettings.getItem('claude')
-    );
-    const context = await getClaudeSessionContext(cwd, source.id, { claudeConfigDir });
+    const providerConfig = await runtimeOverrideSettings.getItem('claude');
+    const claudeConfigDir = getConversationRuntimeStateRoot(source, providerConfig);
+    const context = await getClaudeSessionContext(cwd, getConversationAgentSessionId(source), {
+      claudeConfigDir,
+    });
     if (!context) throw new Error('Claude session context not found.');
     return context.prompts.map((prompt) => ({ target: prompt.restoreTarget }));
   }
 
   if (source.runtimeId === 'codex') {
-    const codexHome = resolveRuntimeStateDirectory(
-      'codex',
-      await runtimeOverrideSettings.getItem('codex')
+    const providerConfig = await runtimeOverrideSettings.getItem('codex');
+    const codexHome = getConversationRuntimeStateRoot(source, providerConfig);
+    const context = await getCodexSessionContext(
+      cwd,
+      getConversationAgentSessionId(source),
+      source.title,
+      source.createdAt,
+      { codexHome }
     );
-    const context = await getCodexSessionContext(cwd, source.id, source.title, source.createdAt, {
-      codexHome,
-    });
     if (!context) throw new Error('Codex session context not found.');
     return context.prompts.map((prompt) => ({ target: prompt.restoreTarget }));
   }
