@@ -139,6 +139,7 @@ import {
   type ComposerOverrideScope,
 } from './composer-project-overrides';
 import { ComposerPromptInput } from './composer-prompt-input';
+import { resolveProjectSubmitSourceBranch } from './home-project-submit';
 import { serializePromptWithTokens, type PromptToken } from './prompt-attachment-tokens';
 import { promptRewriteFailureDescription } from './submit-prompt-rewrite';
 
@@ -916,6 +917,23 @@ export const HomeComposer = observer(function HomeComposer({
     effectiveStandardStrategyKind === 'new-branch' ? 'new-branch' : selectedBranchSubmitKind;
   const reviewSubmitKind: TaskSubmitStrategyKind =
     effectiveReviewStrategyKind === 'new-branch' ? 'new-branch' : selectedBranchSubmitKind;
+  const projectSubmitStrategyKind: TaskSubmitStrategyKind =
+    runMode === 'team'
+      ? 'new-branch'
+      : runMode === 'review'
+        ? reviewSubmitKind
+        : runMode === 'brainstorm'
+          ? 'no-worktree'
+          : standardSubmitKind;
+  const projectSubmitSourceBranch =
+    mounted &&
+    resolveProjectSubmitSourceBranch({
+      defaultBranch,
+      currentBranch: currentBranchName,
+      isUnborn,
+      strategyKind: projectSubmitStrategyKind,
+      baseRef: mounted.data.baseRef,
+    });
   // Every comparison config is a duplicate of the current base composer config.
   // Entering compare mode (from zero) migrates the base into the list as the
   // first config and adds a second, so all rows are equal and the special base
@@ -1092,8 +1110,8 @@ export const HomeComposer = observer(function HomeComposer({
       : taskScopedTarget
         ? !!targetProvisionedTask
         : modeCanRunWithoutProject
-          ? !mounted || !!defaultBranch
-          : !!mounted && (needsInitialCommit || !!defaultBranch));
+          ? !mounted || !!projectSubmitSourceBranch
+          : !!mounted && (needsInitialCommit || !!projectSubmitSourceBranch));
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || submitting) return;
@@ -1572,12 +1590,16 @@ export const HomeComposer = observer(function HomeComposer({
       // first commit emit a ref change the store hasn't applied yet). Resolve
       // the selected branch from a fresh read so worktree modes get a valid source
       // branch instead of silently bailing here.
-      let baseDefaultBranch = defaultBranch;
+      let baseDefaultBranch = projectSubmitSourceBranch;
       if (!baseDefaultBranch) {
         const local = await rpc.repository.getLocalBranches(mounted.data.id);
-        if (local.currentBranch) {
-          baseDefaultBranch = { type: 'local', branch: local.currentBranch };
-        }
+        baseDefaultBranch = resolveProjectSubmitSourceBranch({
+          defaultBranch,
+          currentBranch: local.currentBranch,
+          isUnborn: local.isUnborn,
+          strategyKind: projectSubmitStrategyKind,
+          baseRef: mounted.data.baseRef,
+        });
       }
       if (!baseDefaultBranch) return;
 
@@ -1981,6 +2003,8 @@ export const HomeComposer = observer(function HomeComposer({
     clearPromptTokens,
     reviewSubmitKind,
     standardSubmitKind,
+    projectSubmitSourceBranch,
+    projectSubmitStrategyKind,
     prompt,
     trimmed,
     submitting,
