@@ -407,10 +407,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
       )}
     >
       <div
-        className={cn(
-          'flex w-full flex-col',
-          embedded ? 'pb-8' : 'mx-auto max-w-[1060px] px-10 pt-12 pb-24'
-        )}
+        className={cn('flex w-full flex-col', !embedded && 'mx-auto max-w-[1060px] px-10 pt-12')}
       >
         {!embedded && (
           <h1 className="text-4xl font-normal tracking-normal">{t('promptLibrary.title')}</h1>
@@ -1107,6 +1104,11 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
             )}
           </div>
         </section>
+        <div
+          data-slot="prompt-library-bottom-space"
+          aria-hidden
+          className={cn('shrink-0', embedded ? 'h-8' : 'h-24')}
+        />
       </div>
     </div>
   );

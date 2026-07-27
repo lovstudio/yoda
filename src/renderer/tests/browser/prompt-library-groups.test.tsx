@@ -246,7 +246,7 @@ describe('PromptLibraryPanel groups', () => {
     );
     await act(async () => root.render(createElement(PromptLibraryPanel)));
 
-    expect(host.querySelector('.pb-24')).not.toBeNull();
+    expect(host.querySelector('[data-slot="prompt-library-bottom-space"].h-24')).not.toBeNull();
   });
 
   it('sorts dynamically injected prompts independently of their groups', async () => {
