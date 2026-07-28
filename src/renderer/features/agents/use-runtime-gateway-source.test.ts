@@ -38,6 +38,8 @@ describe('workspace MaaS placement', () => {
       'utf8'
     );
     const triggerIndex = source.indexOf("aria-label={t('workspaceRuntime.maas.title')}");
+    const triggerEnd = source.indexOf('</PopoverTrigger>', triggerIndex);
+    const triggerSource = source.slice(triggerIndex, triggerEnd);
     const spacerIndex = source.indexOf('<span className="flex-1" />');
     const terminalIndex = source.indexOf("title={t('workspaceRuntime.terminal')}", triggerIndex);
     const localRuntimeBlockEnd = source.lastIndexOf('      ) : null}', triggerIndex);
@@ -48,5 +50,8 @@ describe('workspace MaaS placement', () => {
     expect(source).toContain('<MaasGlobalSelector');
     expect(source).toContain("    : 'MaaS';");
     expect(source).not.toContain('<GatewayRuntimeSources');
+    expect(triggerSource).toContain(
+      "globalMaasBinding.data?.enabled ? 'text-foreground' : 'text-foreground-passive'"
+    );
   });
 });

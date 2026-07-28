@@ -800,7 +800,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       <Popover>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.maas.title')}
-          className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+          className={cn(
+            'flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
+            globalMaasBinding.data?.enabled ? 'text-foreground' : 'text-foreground-passive'
+          )}
           title={t('workspaceRuntime.maas.title')}
         >
           <Cloud className="size-3.5" />
