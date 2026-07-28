@@ -24,12 +24,14 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@renderer/lib/ui/context-menu';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
@@ -352,7 +354,6 @@ export const ProjectPromptsCard = observer(function ProjectPromptsCard({
               entry={entry}
               actions={actionsFor(entry)}
               onView={() => viewPrompt(entry)}
-              onOpenSession={() => openSession(entry)}
             />
           ))}
         </ol>
@@ -375,16 +376,12 @@ function ProjectPromptRow({
   entry,
   actions,
   onView,
-  onOpenSession,
 }: {
   entry: ProjectPromptEntry;
   actions: PromptAction[];
   onView: () => void;
-  onOpenSession: () => void;
 }) {
-  const { t } = useTranslation();
   const displayText = displaySessionPromptText(entry.prompt.text);
-  const config = agentConfig[entry.conversation.runtimeId];
 
   return (
     <ContextMenu>
@@ -412,49 +409,32 @@ function ProjectPromptRow({
               </TooltipContent>
             </Tooltip>
 
-            <button
-              type="button"
-              className="hidden max-w-44 shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] text-foreground-muted hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring @xl:flex"
-              title={`${entry.conversationTitle} · ${entry.taskName}`}
-              aria-label={t('projects.promptHistory.openNamedSession', {
-                session: entry.conversationTitle,
-              })}
-              onClick={onOpenSession}
-            >
-              {config ? (
-                <AgentLogo
-                  logo={config.logo}
-                  alt={config.alt}
-                  isSvg={config.isSvg}
-                  invertInDark={config.invertInDark}
-                  className="size-3"
-                />
-              ) : (
-                <MessageSquareText className="size-3" />
-              )}
-              <span className="max-w-24 truncate">{entry.conversationTitle}</span>
-              <span className="text-foreground-passive">·</span>
-              <span className="max-w-20 truncate">{entry.taskName}</span>
-            </button>
-
             {entry.submittedAt ? (
               <span className="hidden min-w-12 shrink-0 justify-end text-[10px] text-foreground-passive @2xl:flex">
                 <RelativeTime value={entry.submittedAt} compact />
               </span>
             ) : null}
 
-            <PromptActionsDropdown actions={actions} />
+            <PromptActionsDropdown entry={entry} actions={actions} />
           </li>
         }
       />
-      <ContextMenuContent className="w-52">
+      <ContextMenuContent className="w-60">
+        <PromptSessionMenuHeader entry={entry} />
+        <ContextMenuSeparator />
         <PromptActionItems actions={actions} Item={ContextMenuItem} />
       </ContextMenuContent>
     </ContextMenu>
   );
 }
 
-function PromptActionsDropdown({ actions }: { actions: PromptAction[] }) {
+function PromptActionsDropdown({
+  entry,
+  actions,
+}: {
+  entry: ProjectPromptEntry;
+  actions: PromptAction[];
+}) {
   const { t } = useTranslation();
   return (
     <DropdownMenu>
@@ -472,10 +452,42 @@ function PromptActionsDropdown({ actions }: { actions: PromptAction[] }) {
           </Button>
         }
       />
-      <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuContent align="end" className="w-60">
+        <PromptSessionMenuHeader entry={entry} />
+        <DropdownMenuSeparator />
         <PromptActionItems actions={actions} Item={DropdownMenuItem} />
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function PromptSessionMenuHeader({ entry }: { entry: ProjectPromptEntry }) {
+  const config = agentConfig[entry.conversation.runtimeId];
+  return (
+    <div className="flex min-w-0 items-center gap-2 px-2 py-1.5" data-project-prompt-session>
+      {config ? (
+        <AgentLogo
+          logo={config.logo}
+          alt={config.alt}
+          isSvg={config.isSvg}
+          invertInDark={config.invertInDark}
+          className="size-4 shrink-0"
+        />
+      ) : (
+        <MessageSquareText className="size-4 shrink-0 text-foreground-muted" />
+      )}
+      <div className="min-w-0">
+        <div
+          className="truncate text-xs font-medium text-foreground"
+          title={entry.conversationTitle}
+        >
+          {entry.conversationTitle}
+        </div>
+        <div className="truncate text-[11px] text-foreground-muted" title={entry.taskName}>
+          {entry.taskName}
+        </div>
+      </div>
+    </div>
   );
 }
 
