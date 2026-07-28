@@ -282,13 +282,19 @@
       "quickActionTarget": "Quick action",
       "runScriptTarget": "Run scripts",
       "skillTarget": "Skill draft",
-      "generateCommand": "Compile to command",
+      "generateCommand": "Generate executable command",
+      "regenerateCommand": "Regenerate executable command",
       "generatingCommand": "Inspecting project…",
+      "workflowLabel": "Quick action setup progress",
+      "stepDescribe": "Describe operation",
+      "stepReviewCommand": "Review command",
+      "stepSaveAndRun": "Save and run",
       "actionLabel": "Action label",
       "actionLabelPlaceholder": "Local start",
       "actionCommand": "Program command",
       "actionCommandPlaceholder": "AI will generate a directly executable shell command after inspecting the project",
       "quickActionDescription": "Review or edit this command first. Once saved, the quick action runs it directly from the project directory instead of resending natural language.",
+      "commandNeedsRefresh": "The operation changed. Recompile the command before saving.",
       "commandEvidence": "Generated from: {{explanation}}",
       "skillDraft": "Skill draft",
       "skillDraftDescription": "Draft only for now. Copy it into a skill when the operation needs reusable judgment, fallbacks, or verification rules.",
@@ -3590,6 +3596,7 @@
       "disabled": "Disabled",
       "notEnabled": "Available",
       "needsConfiguration": "Configure an API key first",
+      "needsGateway": "Install and enable Yoda MaaS Gateway first",
       "toggleAria": "Enable {{platform}} globally",
       "enableAria": "Enable {{platform}}",
       "disableAria": "Disable {{platform}}",
@@ -3598,6 +3605,19 @@
       "restoredToast": "MaaS disabled and Agent CLI configurations restored",
       "codexRestartNotice": "If Codex App is open, quit it completely and reopen it to reload the local MaaS Gateway provider. The upstream API key is not placed in the app environment.",
       "updateFailed": "Could not update global MaaS configuration"
+    },
+    "gatewayRequirement": {
+      "title": "Yoda MaaS Gateway required",
+      "states": {
+        "loading": "Checking the Marketplace extension status…",
+        "unavailable": "The Gateway listing is currently unavailable. Open Marketplace to inspect it.",
+        "unsupported": "The Gateway does not support this platform.",
+        "not-installed": "Install the Gateway from Marketplace before enabling a MaaS platform.",
+        "disabled": "The Gateway is installed but disabled. Enable it from Marketplace first.",
+        "unhealthy": "The Gateway is not running normally. Open Marketplace to inspect its status."
+      },
+      "install": "Install Gateway",
+      "manage": "Open Marketplace"
     },
     "clients": {
       "title": "Agent Clients",
