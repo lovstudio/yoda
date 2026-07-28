@@ -557,7 +557,10 @@ function resolveFileTarget(
         return {
           originalText: text,
           filePath: normalizedRelative,
-          absolutePath: `${normalizedRoot}/${normalizedRelative}`,
+          // Keep the exact emitted checkout path for OS-level actions
+          // (open/reveal/copy). The workspace-relative filePath still routes
+          // in-app navigation to the active worktree equivalent.
+          absolutePath: rawPath,
           line: parsed.line,
           column: parsed.column,
         };

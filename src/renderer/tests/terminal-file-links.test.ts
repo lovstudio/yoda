@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
 import {
   extractTerminalFileLinkCandidates,
   getTerminalFileLinkMatches,
@@ -89,15 +90,14 @@ describe('terminal file links', () => {
       {
         originalText: paths[0],
         filePath: 'apps/mobile/src/App.tsx',
-        absolutePath: '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/apps/mobile/src/App.tsx',
+        absolutePath: '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/App.tsx',
         line: 1130,
         column: undefined,
       },
       {
         originalText: paths[1],
         filePath: 'apps/mobile/src/api-client.ts',
-        absolutePath:
-          '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/apps/mobile/src/api-client.ts',
+        absolutePath: '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/api-client.ts',
         line: 59,
         column: undefined,
       },
@@ -105,7 +105,7 @@ describe('terminal file links', () => {
         originalText: paths[2],
         filePath: 'src/shared/mobile-retry-interaction.test.ts',
         absolutePath:
-          '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/src/shared/mobile-retry-interaction.test.ts',
+          '/Users/mark/lovstudio/coding/yoda/src/shared/mobile-retry-interaction.test.ts',
         line: 1,
         column: undefined,
       },
@@ -209,16 +209,44 @@ describe('terminal file links', () => {
 
   it('terminates scored artifact paths before a trailing colon', () => {
     const paths = [
-      '/Users/mark/lovstudio/coding/skills/professional–infographic–skill/examples/mobile–cross–platform–selection–v2/comparison–matrix/poster.png',
-      '/Users/mark/lovstudio/coding/skills/professional–infographic–skill/examples/mobile–cross–platform–selection–v2/positioning–map/poster.png',
+      '/Users/mark/lovstudio/coding/skills/professional-infographic-skill/examples/mobile-cross-platform-selection-v2/comparison-matrix/poster.png',
+      '/Users/mark/lovstudio/coding/skills/professional-infographic-skill/examples/mobile-cross-platform-selection-v2/positioning-map/poster.png',
     ];
     const line = paths
-      .map((path, index) => `- ${path}${index === 0 ? ':' : '：'} 98/100`)
+      .map((path, index) => `- ${path}${index === 0 ? '：\n   ' : ':'} 98/100`)
       .join('\n');
 
     expect(extractTerminalFileLinkCandidates(line)).toEqual(
       paths.map((text) => ({ text, index: line.indexOf(text) }))
     );
+  });
+
+  it('opens a scored artifact from the checkout path that the terminal emitted', () => {
+    const text =
+      '/Users/mark/lovstudio/coding/skills/professional-infographic-skill/examples/mobile-cross-platform-selection-v2/comparison-matrix/poster.png';
+    const target = resolveTerminalFileLinkTarget(
+      text,
+      '/Users/mark/lovstudio/coding/skills/.worktrees/tqktx',
+      '/Users/mark',
+      ['/Users/mark/lovstudio/coding/skills']
+    );
+    if (!target?.absolutePath) throw new Error('Expected a resolved absolute artifact path');
+
+    expect(target).toMatchObject({
+      filePath:
+        'professional-infographic-skill/examples/mobile-cross-platform-selection-v2/comparison-matrix/poster.png',
+      absolutePath: text,
+    });
+    expect(
+      buildFilePathDefaultOpenRequest({
+        absolutePath: target.absolutePath,
+        kind: 'file',
+      })
+    ).toMatchObject({
+      app: 'finder',
+      path: text,
+      reveal: false,
+    });
   });
 
   it('drops a trailing sentence period after the extension', () => {
@@ -316,20 +344,21 @@ describe('terminal file links', () => {
     });
   });
 
-  it('maps absolute paths from the main checkout into the active worktree', () => {
+  it('maps main-checkout paths in-app while preserving the source path for OS actions', () => {
+    const text =
+      '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts:31';
     expect(
       resolveTerminalFileLinkTarget(
-        '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts:31',
+        text,
         '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln',
         undefined,
         ['/Users/mark/lovstudio/coding/yoda']
       )
     ).toEqual({
-      originalText:
-        '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts:31',
+      originalText: text,
       filePath: 'src/renderer/tests/terminal-file-links.test.ts',
       absolutePath:
-        '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/src/renderer/tests/terminal-file-links.test.ts',
+        '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts',
       line: 31,
       column: undefined,
     });
@@ -668,7 +697,7 @@ describe('terminal file links', () => {
         originalText: text,
         filePath: 'src/renderer/tests/terminal-file-links.test.ts',
         absolutePath:
-          '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/src/renderer/tests/terminal-file-links.test.ts',
+          '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts',
         line: 31,
         column: undefined,
       },
