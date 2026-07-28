@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.18.0
+
+### Minor Changes
+
+- 新增与 Library 并列的 Extension Marketplace，并将 Yoda MaaS Gateway 作为可安装、启用和停用的扩展交付；工作区运行栏与设置入口会跟随 Gateway 生命周期开放，并清晰显示当前启用状态。
+- 重构 MaaS Provider 切换链路：由 Gateway 统一代理上游端点与凭据，支持平台切换、健康检查和安全回退，同时让独立启动的 Agent 客户端与 Yoda 使用一致的 Provider 配置。
+- 将本地会话生命周期与 MaaS 解耦，修复 Codex 无线程会话恢复、标签页重新进入、异步导入与深链导入等场景中的状态丢失或错位。
+- 升级 Yoda Build 与 Prompt Library：生成 App 使用真实项目和任务持续迭代，提示词支持模板分组、原则文件、URL 来源及分组注入控制。
+- 强化项目与终端工作流：支持移动非 Git 项目目录、将快捷命令停靠到任务终端，并修复 PTY 启动竞态、流式渲染和 tmux 控制回复污染输入等稳定性问题。
+- 完善侧边栏、任务入口和会话导航的一致性，并隔离浏览器回归测试，降低跨测试污染造成的偶发失败。
+
 ## 0.17.4
 
 ### Patch Changes
