@@ -98,6 +98,7 @@ for (const dmg of dmgs) {
     if (!existsSync(appPath)) {
       fail(`No ${appBundle} found inside ${dmg}`);
     }
+    exec(`xcrun stapler validate "${appPath}"`, { echo: true });
     exec(`spctl -a -vv --type execute "${appPath}"`, { echo: true });
     info(`Gatekeeper passed for ${dmg}`);
   } finally {
