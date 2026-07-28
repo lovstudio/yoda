@@ -46,7 +46,10 @@ import { appSettingsService } from '@main/core/settings/settings-service';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
-import { resolveAgentResumeSessionId } from '../codex-session-id';
+import {
+  resolveAgentResumeSessionId,
+  resolveCodexThreadIdForConversation,
+} from '../codex-session-id';
 import { getReservedCodexThreadIds } from '../codex-thread-reservations';
 import { ensureCodexThreadUnarchived } from '../codex-unarchive';
 import { getConversationRuntimeStateRoot } from '../conversation-session-source';
@@ -58,7 +61,12 @@ import {
 import { buildAgentCommand } from './agent-command';
 import { injectClipboardImagesAndPrompt, substituteImageMentions } from './image-attachments';
 import { getEnabledPromptPrinciplesText } from './prompt-principles';
-import { resolveAgentApiEnvVars, resolveRuntimeEnv, resolveRuntimeTmuxEnv } from './runtime-env';
+import {
+  resolveAgentApiEnvVars,
+  resolveRuntimeEnv,
+  resolveRuntimeStateDirectory,
+  resolveRuntimeTmuxEnv,
+} from './runtime-env';
 import { prepareWindowsClaudeSettings } from './windows-claude-settings';
 
 const DEFAULT_COLS = 80;
@@ -258,10 +266,33 @@ export class LocalConversationProvider implements ConversationProvider {
           ? await getReservedCodexThreadIds(conversation.id)
           : undefined;
       if (!this.ownsPendingStart(sessionId, startToken)) return;
-      const agentSessionId = isResuming
-        ? resolveAgentResumeSessionId(conversation, this.taskPath, { reservedThreadIds })
+      const codexThreadId =
+        isResuming && conversation.runtimeId === 'codex'
+          ? (conversation.sessionSource?.sessionId ??
+            resolveCodexThreadIdForConversation({
+              conversationId: conversation.id,
+              cwd: this.taskPath,
+              title: conversation.title,
+              createdAt: conversation.createdAt,
+              statePath: resolveCodexStatePath(
+                resolveRuntimeStateDirectory('codex', sessionProviderConfig)
+              ),
+              reservedThreadIds,
+            }))
+          : undefined;
+      const effectiveIsResuming =
+        isResuming && (conversation.runtimeId !== 'codex' || codexThreadId !== undefined);
+      if (isResuming && conversation.runtimeId === 'codex' && !effectiveIsResuming) {
+        log.warn('LocalConversationProvider: Codex thread is missing; starting a fresh session', {
+          conversationId: conversation.id,
+          cwd: this.taskPath,
+        });
+      }
+      const agentSessionId = effectiveIsResuming
+        ? (codexThreadId ??
+          resolveAgentResumeSessionId(conversation, this.taskPath, { reservedThreadIds }))
         : conversation.id;
-      if (isResuming && conversation.runtimeId === 'codex') {
+      if (effectiveIsResuming && conversation.runtimeId === 'codex') {
         const compatibility = ensureCodexResumeProviderCompatibleForConfig(
           agentSessionId,
           sessionProviderConfig
@@ -281,7 +312,7 @@ export class LocalConversationProvider implements ConversationProvider {
           });
         }
       }
-      if (isResuming) {
+      if (effectiveIsResuming) {
         await ensureCodexThreadUnarchived({
           runtimeId: conversation.runtimeId,
           providerConfig: sessionProviderConfig,
@@ -298,7 +329,7 @@ export class LocalConversationProvider implements ConversationProvider {
       // native pastes after the TUI boots (so the prompt must NOT go through the
       // CLI arg, or the turn would start before the images land). Everyone else
       // gets @path mentions appended to the prompt.
-      const pendingImagePaths = !isResuming && imagePaths?.length ? imagePaths : undefined;
+      const pendingImagePaths = !effectiveIsResuming && imagePaths?.length ? imagePaths : undefined;
       const useClipboardImagePaste = Boolean(pendingImagePaths && providerDef?.clipboardImagePaste);
       const effectiveInitialPrompt =
         pendingImagePaths && !useClipboardImagePaste
@@ -316,7 +347,7 @@ export class LocalConversationProvider implements ConversationProvider {
         autoApprove: conversation.autoApprove,
         permissionMode: conversation.permissionMode,
         sessionId: agentSessionId,
-        isResuming,
+        isResuming: effectiveIsResuming,
         initialPrompt: useClipboardImagePaste ? undefined : effectiveInitialPrompt,
         workingDirectory: this.taskPath,
         appendSystemPrompt,
@@ -357,7 +388,7 @@ export class LocalConversationProvider implements ConversationProvider {
             projectId: conversation.projectId,
             taskId: conversation.taskId,
             conversationId: conversation.id,
-            resuming: String(isResuming),
+            resuming: String(effectiveIsResuming),
             authProvider,
             maasEffective: String(maasEffective),
             ...(maasCredentials ? { maasPlatformId: maasCredentials.platformId } : {}),
@@ -549,14 +580,14 @@ export class LocalConversationProvider implements ConversationProvider {
         taskId: conversation.taskId,
         cwd: this.taskPath,
         startedAtMs: sessionStartedAtMs,
-        isResuming,
-        agentSessionId: isResuming ? agentSessionId : undefined,
+        isResuming: effectiveIsResuming,
+        agentSessionId: effectiveIsResuming ? agentSessionId : undefined,
         stateRoot: runtimeStateRoot,
       });
       this.startRunStateWatcher(
         conversation,
         sessionStartedAtMs,
-        isResuming,
+        effectiveIsResuming,
         agentSessionId,
         runtimeStateRoot
       );
