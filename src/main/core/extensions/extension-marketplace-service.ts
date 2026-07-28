@@ -96,35 +96,6 @@ export class ExtensionMarketplaceService {
     return this.toMarketplaceExtension(input.extensionId);
   }
 
-  async ensureInstalled(extensionId: string): Promise<YodaMarketplaceExtension> {
-    await this.initialize();
-    const manifest = getExtensionManifest(extensionId);
-    if (!manifest) throw new Error('Required extension is not available.');
-    const installed = this.installations[extensionId];
-    if (!installed) {
-      return this.install({
-        extensionId,
-        grantedCapabilities: manifest.capabilities,
-      });
-    }
-    if (
-      installed.version !== manifest.version ||
-      !capabilitiesMatch(manifest.capabilities, installed.grantedCapabilities)
-    ) {
-      return this.install({
-        extensionId,
-        grantedCapabilities: manifest.capabilities,
-      });
-    }
-    if (!installed.enabled) {
-      return this.setEnabled(extensionId, true);
-    }
-    if (manifest.service?.autoStart) {
-      await this.runtimes.get(extensionId)?.start();
-    }
-    return this.toMarketplaceExtension(extensionId);
-  }
-
   async setEnabled(extensionId: string, enabled: boolean): Promise<YodaMarketplaceExtension> {
     await this.initialize();
     const existing = this.installations[extensionId];

@@ -190,7 +190,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 <SquarePen className="h-5 w-5 sm:h-4 sm:w-4 shrink-0" />
                 <span className="truncate min-w-0">{t('sidebar.newTask')}</span>
               </span>
-              <ShortcutHint settingsKey="newProject" />
+              <ShortcutHint settingsKey="newTask" />
             </SidebarMenuButton>
             <SidebarMenuButton
               onClick={() =>

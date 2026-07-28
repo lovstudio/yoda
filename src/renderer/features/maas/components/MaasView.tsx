@@ -60,6 +60,8 @@ import {
   useMaasPlatformDescriptions,
   useSetMaasGlobalBinding,
 } from '../useMaas';
+import { useMaasGatewayExtension } from '../useMaasGatewayExtension';
+import { MaasGatewayRequirement } from './MaasGatewayRequirement';
 
 function findConnection(
   connections: MaasConnection[] | undefined,
@@ -115,12 +117,14 @@ export const MaasConnectedCountBadge: React.FC = () => {
 export const MaasView: React.FC<{
   embedded?: boolean;
   showSectionChrome?: boolean;
-}> = ({ embedded = false, showSectionChrome = true }) => {
+  onOpenMarketplace?: () => void;
+}> = ({ embedded = false, showSectionChrome = true, onOpenMarketplace }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { data: connections, isLoading } = useMaasConnections();
   const globalBinding = useMaasGlobalBinding();
   const setGlobalBinding = useSetMaasGlobalBinding();
+  const gateway = useMaasGatewayExtension();
   const { data: platformDescriptions } = useMaasPlatformDescriptions();
   const showZenmuxUsage = useShowModal('zenmuxUsageModal');
   const [expandedPlatformId, setExpandedPlatformId] = useState<MaasPlatformId | ''>('');
@@ -207,9 +211,10 @@ export const MaasView: React.FC<{
           const enabled = Boolean(
             globalBinding.data?.enabled && globalBinding.data.platformId === platformId
           );
-          const enableAvailable = Boolean(
+          const platformConfigured = Boolean(
             connection.connected && hasMaasInferenceCredential(connection)
           );
+          const enableAvailable = gateway.ready && platformConfigured;
           const enablePending = Boolean(
             setGlobalBinding.isPending &&
               setGlobalBinding.variables?.platformId === connection.platformId
@@ -224,6 +229,7 @@ export const MaasView: React.FC<{
               onConnected={() => handlePlatformConnected(platformId)}
               enabled={enabled}
               enableAvailable={enableAvailable}
+              gatewayReady={gateway.ready}
               enablePending={enablePending}
               enableUpdating={setGlobalBinding.isPending}
               onEnabledChange={(next) => handlePlatformEnabledChange(connection, next)}
@@ -249,6 +255,10 @@ export const MaasView: React.FC<{
         embedded ? 'w-full' : 'mx-auto w-full max-w-5xl px-6 py-6'
       )}
     >
+      <MaasGatewayRequirement
+        availability={gateway.availability}
+        onOpenMarketplace={onOpenMarketplace}
+      />
       {showSectionChrome ? (
         <>
           <MaasChapter
@@ -427,6 +437,7 @@ const PlatformAccordionItem: React.FC<{
   onConnected: () => void;
   enabled: boolean;
   enableAvailable: boolean;
+  gatewayReady: boolean;
   enablePending: boolean;
   enableUpdating: boolean;
   onEnabledChange: (enabled: boolean) => void;
@@ -439,6 +450,7 @@ const PlatformAccordionItem: React.FC<{
   onConnected,
   enabled,
   enableAvailable,
+  gatewayReady,
   enablePending,
   enableUpdating,
   onEnabledChange,
@@ -497,11 +509,13 @@ const PlatformAccordionItem: React.FC<{
                   : t('maas.global.enableAria', { platform: connection.displayName })
               }
               title={
-                !enableAvailable && !enabled
-                  ? t('maas.global.needsConfiguration')
-                  : enabled
-                    ? t('maas.global.disableAria', { platform: connection.displayName })
-                    : t('maas.global.enableAria', { platform: connection.displayName })
+                !gatewayReady && !enabled
+                  ? t('maas.global.needsGateway')
+                  : !enableAvailable && !enabled
+                    ? t('maas.global.needsConfiguration')
+                    : enabled
+                      ? t('maas.global.disableAria', { platform: connection.displayName })
+                      : t('maas.global.enableAria', { platform: connection.displayName })
               }
               onCheckedChange={onEnabledChange}
             />

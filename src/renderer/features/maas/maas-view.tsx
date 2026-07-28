@@ -1,4 +1,5 @@
 import { Titlebar } from '@renderer/lib/components/titlebar/Titlebar';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { MaasView } from './components/MaasView';
 
 export function MaasTitlebar() {
@@ -6,7 +7,8 @@ export function MaasTitlebar() {
 }
 
 export function MaasMainPanel() {
-  return <MaasView />;
+  const { navigate } = useNavigate();
+  return <MaasView onOpenMarketplace={() => navigate('marketplace')} />;
 }
 
 export const maasView = {

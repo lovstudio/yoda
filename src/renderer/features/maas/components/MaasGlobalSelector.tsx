@@ -11,16 +11,20 @@ import { Button } from '@renderer/lib/ui/button';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
 import { cn } from '@renderer/utils/utils';
 import { useMaasConnections, useMaasGlobalBinding, useSetMaasGlobalBinding } from '../useMaas';
+import { useMaasGatewayExtension } from '../useMaasGatewayExtension';
+import { MaasGatewayRequirement } from './MaasGatewayRequirement';
 
 export const MaasGlobalSelector: React.FC<{
   platformId?: MaasPlatformId;
   onManagePlatform?: (platformId: MaasPlatformId) => void;
-}> = ({ platformId, onManagePlatform }) => {
+  onOpenMarketplace?: () => void;
+}> = ({ platformId, onManagePlatform, onOpenMarketplace }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const connections = useMaasConnections();
   const binding = useMaasGlobalBinding();
   const setBinding = useSetMaasGlobalBinding();
+  const gateway = useMaasGatewayExtension();
   const platformIds = platformId
     ? [platformId]
     : (connections.data?.map((connection) => connection.platformId) ?? []);
@@ -63,6 +67,12 @@ export const MaasGlobalSelector: React.FC<{
         </div>
       ) : null}
 
+      <MaasGatewayRequirement
+        availability={gateway.availability}
+        onOpenMarketplace={onOpenMarketplace}
+        compact
+      />
+
       {binding.isLoading || connections.isLoading ? (
         <div className="flex items-center gap-2 py-2 text-xs text-foreground-muted">
           <Loader2 className="size-3.5 animate-spin" />
@@ -74,9 +84,10 @@ export const MaasGlobalSelector: React.FC<{
             const platform = getMaasPlatformDefinition(nextPlatformId);
             const connection = connections.data?.find((item) => item.platformId === nextPlatformId);
             const platformName = connection?.displayName ?? platform.name;
-            const available = Boolean(
+            const platformConfigured = Boolean(
               connection?.connected && hasMaasInferenceCredential(connection)
             );
+            const available = gateway.ready && platformConfigured;
             const checked = Boolean(
               binding.data?.enabled && binding.data.platformId === nextPlatformId
             );
@@ -110,9 +121,11 @@ export const MaasGlobalSelector: React.FC<{
                         })
                       : checked
                         ? t('maas.global.needsAttention')
-                        : available
-                          ? t('maas.global.notEnabled')
-                          : t('maas.global.needsConfiguration')}
+                        : !gateway.ready
+                          ? t('maas.global.needsGateway')
+                          : available
+                            ? t('maas.global.notEnabled')
+                            : t('maas.global.needsConfiguration')}
                   </div>
                 </div>
                 {busy ? (

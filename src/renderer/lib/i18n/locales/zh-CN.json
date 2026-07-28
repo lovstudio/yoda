@@ -280,13 +280,19 @@
       "quickActionTarget": "快速操作",
       "runScriptTarget": "运行脚本",
       "skillTarget": "Skill 草稿",
-      "generateCommand": "转为程序命令",
+      "generateCommand": "生成可执行命令",
+      "regenerateCommand": "重新生成可执行命令",
       "generatingCommand": "正在分析项目…",
+      "workflowLabel": "快速操作设置进度",
+      "stepDescribe": "描述操作",
+      "stepReviewCommand": "确认命令",
+      "stepSaveAndRun": "保存并执行",
       "actionLabel": "操作名称",
       "actionLabelPlaceholder": "本地启动",
       "actionCommand": "程序命令",
       "actionCommandPlaceholder": "AI 分析项目后会在这里生成可直接执行的 Shell 命令",
       "quickActionDescription": "请先检查或编辑命令。保存后，快速操作将直接在项目目录执行它，不再重新发送自然语言。",
+      "commandNeedsRefresh": "操作描述已发生变化，请重新生成命令后再保存。",
       "commandEvidence": "生成依据：{{explanation}}",
       "skillDraft": "Skill 草稿",
       "skillDraftDescription": "当前只生成草稿。当操作需要可复用判断、回退和验证规则时，再复制成 skill。",
@@ -3590,6 +3596,7 @@
       "disabled": "未启用",
       "notEnabled": "可启用",
       "needsConfiguration": "需要先配置 API Key",
+      "needsGateway": "需要先安装并启用 Yoda MaaS Gateway",
       "toggleAria": "全局启用 {{platform}}",
       "enableAria": "启用 {{platform}}",
       "disableAria": "停用 {{platform}}",
@@ -3598,6 +3605,19 @@
       "restoredToast": "已停用 MaaS，并复原 Agent CLI 配置",
       "codexRestartNotice": "如 Codex App 已打开，请完全退出后重新打开，以重新加载本地 MaaS Gateway Provider；上游 API Key 不会进入 App 环境变量。",
       "updateFailed": "无法更新全局 MaaS 配置"
+    },
+    "gatewayRequirement": {
+      "title": "需要 Yoda MaaS Gateway",
+      "states": {
+        "loading": "正在检查扩展市场中的 Gateway 状态…",
+        "unavailable": "当前未读取到 Gateway 扩展，请前往扩展市场查看。",
+        "unsupported": "Gateway 暂不支持当前平台。",
+        "not-installed": "启用 MaaS 平台前，需要先从扩展市场安装 Gateway。",
+        "disabled": "Gateway 已安装但未启用，请先在扩展市场启用。",
+        "unhealthy": "Gateway 当前未正常运行，请前往扩展市场检查状态。"
+      },
+      "install": "安装 Gateway",
+      "manage": "打开扩展市场"
     },
     "clients": {
       "title": "Agent Client",

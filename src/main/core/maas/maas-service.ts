@@ -923,7 +923,19 @@ export class MaasService {
     platformId: MaasPlatformId,
     credentials: { displayName: string; endpoint: string; apiKey: string }
   ): Promise<MaasGatewayBinding> {
-    await extensionMarketplaceService.ensureInstalled(MAAS_GATEWAY_EXTENSION_ID);
+    const extension = await extensionMarketplaceService.getExtension(MAAS_GATEWAY_EXTENSION_ID);
+    if (!extension?.supported) {
+      throw new Error('Yoda MaaS Gateway is unavailable on this platform.');
+    }
+    if (!extension.installation) {
+      throw new Error('Install Yoda MaaS Gateway from Marketplace before enabling MaaS.');
+    }
+    if (!extension.installation.enabled) {
+      throw new Error('Enable Yoda MaaS Gateway from Marketplace before enabling MaaS.');
+    }
+    if (extension.runtime?.state !== 'running') {
+      throw new Error('Yoda MaaS Gateway is not running normally.');
+    }
     const rollback = await maasGatewayExtensionRuntime.configure({
       providerId: platformId,
       endpoint: credentials.endpoint,

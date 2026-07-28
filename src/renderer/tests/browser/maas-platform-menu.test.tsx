@@ -3,12 +3,15 @@ import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MaasConnection, MaasGlobalBindingStatus } from '@shared/maas';
+import type { MaasGatewayAvailability } from '@renderer/features/maas/maas-gateway-availability';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
   showZenmuxUsage: vi.fn(),
   setGlobalBinding: vi.fn(),
+  openMarketplace: vi.fn(),
+  gatewayAvailability: 'ready' as MaasGatewayAvailability,
   connections: [] as MaasConnection[],
   globalBinding: {
     platformId: null,
@@ -36,6 +39,13 @@ vi.mock('@renderer/features/maas/useMaas', () => ({
   }),
 }));
 
+vi.mock('@renderer/features/maas/useMaasGatewayExtension', () => ({
+  useMaasGatewayExtension: () => ({
+    availability: mocks.gatewayAvailability,
+    ready: mocks.gatewayAvailability === 'ready',
+  }),
+}));
+
 vi.mock('@renderer/lib/ipc', () => ({
   rpc: { app: { openExternal: vi.fn(async () => {}) } },
 }));
@@ -51,6 +61,7 @@ describe('MaaS platform menu', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.connections = [];
+    mocks.gatewayAvailability = 'ready';
     mocks.globalBinding = {
       platformId: null,
       enabled: false,
@@ -162,6 +173,53 @@ describe('MaaS platform menu', () => {
 
     const enableSwitch = host.querySelector<HTMLElement>('[data-slot="switch"]');
     expect(enableSwitch?.hasAttribute('data-disabled')).toBe(true);
+  });
+
+  it('keeps the Settings MaaS switch disabled until Gateway is installed', async () => {
+    mocks.gatewayAvailability = 'not-installed';
+    mocks.connections = [connection({ platformId: 'custom:first', displayName: 'First Custom' })];
+    const { MaasView } = await import('@renderer/features/maas/components/MaasView');
+    await act(async () =>
+      root.render(
+        createElement(MaasView, {
+          embedded: true,
+          onOpenMarketplace: mocks.openMarketplace,
+        })
+      )
+    );
+
+    const enableSwitch = host.querySelector<HTMLElement>(
+      '[data-slot="switch"][aria-label="maas.global.enableAria"]'
+    );
+    expect(enableSwitch?.hasAttribute('data-disabled')).toBe(true);
+    expect(host.querySelector('[data-maas-gateway-requirement="not-installed"]')).not.toBeNull();
+    const installButton = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent === 'maas.gatewayRequirement.install'
+    );
+    await act(async () => installButton?.click());
+    expect(mocks.openMarketplace).toHaveBeenCalledOnce();
+    expect(mocks.setGlobalBinding).not.toHaveBeenCalled();
+  });
+
+  it('keeps the bottom-bar selector disabled until Gateway is installed', async () => {
+    mocks.gatewayAvailability = 'not-installed';
+    mocks.connections = [connection({ platformId: 'custom:first', displayName: 'First Custom' })];
+    const { MaasGlobalSelector } = await import(
+      '@renderer/features/maas/components/MaasGlobalSelector'
+    );
+    await act(async () =>
+      root.render(
+        createElement(MaasGlobalSelector, {
+          onOpenMarketplace: mocks.openMarketplace,
+        })
+      )
+    );
+
+    const enableCheckbox = host.querySelector<HTMLElement>(
+      '[data-slot="checkbox"][aria-label="maas.global.toggleAria"]'
+    );
+    expect(enableCheckbox?.hasAttribute('data-disabled')).toBe(true);
+    expect(host.querySelector('[data-maas-gateway-requirement="not-installed"]')).not.toBeNull();
   });
 });
 
