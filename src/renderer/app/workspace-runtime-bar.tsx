@@ -167,7 +167,15 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     provisionedTask?.taskView.isTerminalDrawerOpen &&
       provisionedTask.taskView.activeBottomPanelTab === 'terminals'
   );
-  const terminalActive = provisionedTask ? taskTerminalActive : workspaceShellStore.isShellOpen;
+  const hostedQuickAction = Boolean(
+    provisionedTask && workspaceShellStore.isCommandHostedInTask(provisionedTask.taskId)
+  );
+  const hostedQuickActionActive = Boolean(
+    hostedQuickAction && provisionedTask?.taskView.isTerminalDrawerOpen
+  );
+  const terminalActive = provisionedTask
+    ? taskTerminalActive || hostedQuickActionActive
+    : workspaceShellStore.isShellOpen;
   const canCompactContext = Boolean(
     runtimeId === 'codex' && params?.projectId && params.taskId && activeConversationId
   );
@@ -260,6 +268,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
 
   const toggleTerminal = () => {
     if (provisionedTask) {
+      if (hostedQuickAction) {
+        const nextOpen = !provisionedTask.taskView.isTerminalDrawerOpen;
+        provisionedTask.taskView.setBottomPanelOpen(nextOpen);
+        if (nextOpen) provisionedTask.taskView.setFocusedRegion('bottom');
+        return;
+      }
       if (workspaceShellStore.isOpen) workspaceShellStore.close();
       if (taskTerminalActive) {
         provisionedTask.taskView.setTerminalDrawerOpen(false);

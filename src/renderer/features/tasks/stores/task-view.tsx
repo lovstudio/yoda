@@ -334,19 +334,28 @@ export class TaskViewStore {
     this.sidebarPrefs.setBottomPanelFullWidth(fullWidth);
   }
 
-  setTerminalDrawerOpen(open: boolean): void {
+  setBottomPanelOpen(open: boolean): void {
     this.sidebarPrefs.setBottomPanelOpen(open);
+  }
+
+  setTerminalDrawerOpen(open: boolean): void {
+    this.setBottomPanelOpen(open);
     if (open && this.activeBottomPanelTab === 'terminals' && this.terminalTabs.tabs.length === 0) {
       void this.terminalsMgr.createDefaultTerminal();
     }
   }
 
-  setBottomPanelTab(tab: BottomPanelTab): void {
+  setBottomPanelTab(tab: BottomPanelTab, options?: { ensureTerminal?: boolean }): void {
     this.sidebarPrefs.setBottomPanelTab(tab);
     // Activating a mode from anywhere surfaces its tab in the drawer strip.
     this.sidebarPrefs.openBottomPanelTab(tab);
     // Switching to terminals in an open drawer must not land on an empty pane.
-    if (tab === 'terminals' && this.isTerminalDrawerOpen && this.terminalTabs.tabs.length === 0) {
+    if (
+      tab === 'terminals' &&
+      options?.ensureTerminal !== false &&
+      this.isTerminalDrawerOpen &&
+      this.terminalTabs.tabs.length === 0
+    ) {
       void this.terminalsMgr.createDefaultTerminal();
     }
   }

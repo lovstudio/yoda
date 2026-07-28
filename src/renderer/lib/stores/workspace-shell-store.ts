@@ -17,6 +17,8 @@ export class WorkspaceShellStore {
   runtimeId: RuntimeId | null = null;
   runtimeAction: WorkspaceShellAction | null = null;
   commandLabel: string | null = null;
+  commandHostTaskId: string | null = null;
+  commandHostSelected = false;
   cwd: string | undefined;
   private operationVersion = 0;
 
@@ -29,6 +31,24 @@ export class WorkspaceShellStore {
 
   get isShellOpen(): boolean {
     return this.isOpen && this.mode === 'shell';
+  }
+
+  isCommandHostedInTask(taskId: string | undefined): boolean {
+    return Boolean(
+      taskId && this.isOpen && this.mode === 'command' && this.commandHostTaskId === taskId
+    );
+  }
+
+  isCommandSelectedInTask(taskId: string | undefined): boolean {
+    return this.isCommandHostedInTask(taskId) && this.commandHostSelected;
+  }
+
+  selectHostedCommand(taskId: string): void {
+    if (this.isCommandHostedInTask(taskId)) this.commandHostSelected = true;
+  }
+
+  selectTaskTerminal(taskId: string): void {
+    if (this.isCommandHostedInTask(taskId)) this.commandHostSelected = false;
   }
 
   async toggleShell(cwd?: string): Promise<void> {
@@ -97,9 +117,14 @@ export class WorkspaceShellStore {
     }
   }
 
-  async runCommand(command: string, cwd: string, label: string): Promise<void> {
+  async runCommand(
+    command: string,
+    cwd: string,
+    label: string,
+    hostTaskId: string | null = null
+  ): Promise<void> {
     const normalizedCwd = cwd.trim();
-    const operation = this.beginOperation('command', normalizedCwd, null, null, label);
+    const operation = this.beginOperation('command', normalizedCwd, null, null, label, hostTaskId);
     const previousSize = this.currentSize();
     try {
       const session = await this.replaceSession(operation);
@@ -132,6 +157,8 @@ export class WorkspaceShellStore {
     this.runtimeId = null;
     this.runtimeAction = null;
     this.commandLabel = null;
+    this.commandHostTaskId = null;
+    this.commandHostSelected = false;
     this.cwd = undefined;
     session?.dispose();
     if (session) await rpc.workspaceShell.stop(session.sessionId);
@@ -142,7 +169,8 @@ export class WorkspaceShellStore {
     cwd: string | undefined,
     runtimeId: RuntimeId | null = null,
     runtimeAction: WorkspaceShellAction | null = null,
-    commandLabel: string | null = null
+    commandLabel: string | null = null,
+    commandHostTaskId: string | null = null
   ): number {
     this.operationVersion += 1;
     this.isOpen = true;
@@ -152,6 +180,8 @@ export class WorkspaceShellStore {
     this.runtimeId = runtimeId;
     this.runtimeAction = runtimeAction;
     this.commandLabel = commandLabel;
+    this.commandHostTaskId = commandHostTaskId;
+    this.commandHostSelected = mode === 'command' && commandHostTaskId !== null;
     this.cwd = cwd;
     return this.operationVersion;
   }

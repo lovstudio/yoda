@@ -95,6 +95,11 @@ const WorkspaceViewContent = observer(function WorkspaceViewContent() {
   // while extras exist. The primary keeps the outer route providers (it IS
   // <MainPanel/>); the grid hosts the self-contained extras.
   const isTiled = appState.navigation.currentViewId === 'task' && splitViewStore.count > 0;
+  const taskParams = appState.navigation.viewParamsStore.task as { taskId?: string } | undefined;
+  const isQuickActionDocked =
+    appState.navigation.currentViewId === 'task' &&
+    workspaceShellStore.isCommandHostedInTask(taskParams?.taskId);
+  const isWorkspaceShellOpen = workspaceShellStore.isOpen && !isQuickActionDocked;
 
   // The whole central column — on every route — accepts a dragged pin (task
   // sidebar / shell pane): dropping "into the main window" means "show it
@@ -119,10 +124,10 @@ const WorkspaceViewContent = observer(function WorkspaceViewContent() {
         titlebarSlot={<TitlebarSlot />}
         mainPanel={isTiled ? <TiledTaskGrid primary={<MainPanel />} /> : <MainPanel />}
         bottomBar={<WorkspaceRuntimeBar />}
-        bottomPane={<WorkspaceShellPanel />}
-        isBottomPaneOpen={workspaceShellStore.isOpen}
+        bottomPane={<WorkspaceShellPanel active={isWorkspaceShellOpen} />}
+        isBottomPaneOpen={isWorkspaceShellOpen}
         onBottomPaneOpenChange={(open) => {
-          if (!open) workspaceShellStore.close();
+          if (!open && !isQuickActionDocked) workspaceShellStore.close();
         }}
       />
     </div>

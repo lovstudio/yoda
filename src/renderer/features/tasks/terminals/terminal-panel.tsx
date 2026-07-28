@@ -12,6 +12,7 @@ import {
   getHotkeyRegistration,
 } from '@renderer/lib/hooks/useKeyboardShortcuts';
 import { useTabShortcuts } from '@renderer/lib/hooks/useTabShortcuts';
+import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
@@ -22,6 +23,7 @@ import { TerminalPtyContent } from './terminal-pty-content';
 import { useCreateTerminal } from './use-create-terminal';
 import { useWorkspaceFileLinks } from './use-workspace-file-links';
 import { useWorkspaceWebLinks } from './use-workspace-web-links';
+import { WorkspaceShellTerminal } from './workspace-shell-terminal';
 
 export const TerminalsPanel = observer(function TerminalsPanel() {
   const { t } = useTranslation();
@@ -52,19 +54,28 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
     provisionedTask.taskView.activeBottomPanelTab === 'terminals';
 
   const activeTerminalId = terminalTabView.activeTabId;
-  const activeSession =
+  const taskTerminalSession =
     terminalTabView.tabs.find((tab) => tab.data.id === activeTerminalId)?.session ?? null;
+  const hostedQuickAction = isActive && workspaceShellStore.isCommandHostedInTask(taskId);
+  const quickActionSelected =
+    hostedQuickAction && workspaceShellStore.isCommandSelectedInTask(taskId);
 
   const allSessionIds = useMemo(
     () => terminalTabView.tabs.map((tab) => tab.session.sessionId),
     [terminalTabView.tabs]
   );
 
-  useTabShortcuts(terminalTabView, { focused: isPanelFocused });
+  useTabShortcuts(terminalTabView, {
+    focused: isPanelFocused && !quickActionSelected,
+  });
 
   const handleCreate = useCreateTerminal();
+  const handleCreateTaskTerminal = () => {
+    workspaceShellStore.selectTaskTerminal(taskId);
+    return handleCreate();
+  };
 
-  useHotkey(getHotkeyRegistration('newTerminal', keyboard), () => void handleCreate(), {
+  useHotkey(getHotkeyRegistration('newTerminal', keyboard), () => void handleCreateTaskTerminal(), {
     enabled: newTerminalHotkey !== null,
     conflictBehavior: 'replace',
   });
@@ -81,7 +92,7 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
         <Button
           size="sm"
           variant="outline"
-          onClick={handleCreate}
+          onClick={handleCreateTaskTerminal}
           className="flex items-center gap-2"
         >
           {t('tasks.terminals.newTerminal')}
@@ -109,29 +120,53 @@ export const TerminalsPanel = observer(function TerminalsPanel() {
       }}
     >
       <ResizablePanel id="terminal-drawer-pty" minSize="30%">
-        <TerminalPtyContent
-          className="h-full"
-          activeSession={activeSession}
-          allSessionIds={allSessionIds}
-          paneId="terminal-drawer"
-          active={isVisible}
-          autoFocus={autoFocus}
-          emptyState={emptyState}
-          remoteConnectionId={remoteConnectionId}
-          fileLinks={fileLinks}
-          webLinks={webLinks}
-        />
+        {quickActionSelected ? (
+          <div className="flex h-full min-h-0 flex-col">
+            <WorkspaceShellTerminal
+              active={isVisible}
+              paneId={`terminal-drawer-quick-action:${taskId}`}
+            />
+          </div>
+        ) : (
+          <TerminalPtyContent
+            className="h-full"
+            activeSession={taskTerminalSession}
+            allSessionIds={allSessionIds}
+            paneId="terminal-drawer"
+            active={isVisible}
+            autoFocus={autoFocus}
+            emptyState={emptyState}
+            remoteConnectionId={remoteConnectionId}
+            fileLinks={fileLinks}
+            webLinks={webLinks}
+          />
+        )}
       </ResizablePanel>
       <ResizableHandle className="hover:bg-background-2" />
       <ResizablePanel id="terminal-drawer-sidebar" defaultSize="25%" minSize="150px" maxSize="50%">
         <TerminalDrawerSidebar
           className="h-full"
           terminalTabView={terminalTabView}
-          activeTerminalId={activeTerminalId}
-          onSelectTerminal={(id) => terminalTabView.setActiveTab(id)}
+          activeTerminalId={quickActionSelected ? undefined : activeTerminalId}
+          onSelectTerminal={(id) => {
+            workspaceShellStore.selectTaskTerminal(taskId);
+            terminalTabView.setActiveTab(id);
+          }}
           onRemoveTerminal={(id) => terminalTabView.removeTab(id)}
           onRenameTerminal={(id, name) => void terminalMgr?.renameTerminal(id, name)}
-          onCreateTerminal={() => void handleCreate()}
+          onCreateTerminal={() => void handleCreateTaskTerminal()}
+          hostedQuickAction={
+            hostedQuickAction
+              ? {
+                  label: t('workspaceRuntime.quickAction', {
+                    label: workspaceShellStore.commandLabel ?? t('projects.quickActions.title'),
+                  }),
+                  isActive: quickActionSelected,
+                  onSelect: () => workspaceShellStore.selectHostedCommand(taskId),
+                  onClose: () => workspaceShellStore.close(),
+                }
+              : undefined
+          }
         />
       </ResizablePanel>
     </ResizablePanelGroup>

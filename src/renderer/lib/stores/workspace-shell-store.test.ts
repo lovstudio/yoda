@@ -110,10 +110,18 @@ describe('WorkspaceShellStore', () => {
   it('opens a fresh command terminal for a programmatic quick action', async () => {
     const store = new WorkspaceShellStore();
 
-    await store.runCommand('pnpm run dev', '/repo', 'Start locally');
+    await store.runCommand('pnpm run dev', '/repo', 'Start locally', 'task-1');
 
     expect(store.mode).toBe('command');
     expect(store.commandLabel).toBe('Start locally');
+    expect(store.commandHostTaskId).toBe('task-1');
+    expect(store.isCommandHostedInTask('task-1')).toBe(true);
+    expect(store.isCommandSelectedInTask('task-1')).toBe(true);
+    expect(store.isCommandHostedInTask('task-2')).toBe(false);
+    store.selectTaskTerminal('task-1');
+    expect(store.isCommandSelectedInTask('task-1')).toBe(false);
+    store.selectHostedCommand('task-1');
+    expect(store.isCommandSelectedInTask('task-1')).toBe(true);
     expect(store.isOpen).toBe(true);
     expect(mocks.runCommand).toHaveBeenCalledWith(store.session?.sessionId, {
       command: 'pnpm run dev',

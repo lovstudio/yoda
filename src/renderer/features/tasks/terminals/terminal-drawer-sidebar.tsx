@@ -21,6 +21,7 @@ export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
   onRemoveTerminal,
   onRenameTerminal,
   onCreateTerminal,
+  hostedQuickAction,
   className,
 }: {
   terminalTabView: TerminalTabViewStore;
@@ -29,6 +30,12 @@ export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
   onRemoveTerminal: (id: string) => void;
   onRenameTerminal: (id: string, name: string) => void;
   onCreateTerminal: () => void;
+  hostedQuickAction?: {
+    label: string;
+    isActive: boolean;
+    onSelect: () => void;
+    onClose: () => void;
+  };
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -45,6 +52,33 @@ export const TerminalDrawerSidebar = observer(function TerminalDrawerSidebar({
   });
   return (
     <SidebarList className={className} dropRef={dropZone.dropRef} isDropOver={dropZone.isOver}>
+      {hostedQuickAction ? (
+        <SidebarRow
+          icon={<Play className="size-3" />}
+          label={hostedQuickAction.label}
+          isActive={hostedQuickAction.isActive}
+          onSelect={hostedQuickAction.onSelect}
+          action={
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    className="ml-1 flex size-5 shrink-0 items-center justify-center rounded text-foreground-muted opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100"
+                    aria-label={t('common.close')}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      hostedQuickAction.onClose();
+                    }}
+                  >
+                    <X className="size-3" />
+                  </button>
+                }
+              />
+              <TooltipContent>{t('common.close')}</TooltipContent>
+            </Tooltip>
+          }
+        />
+      ) : null}
       {terminalTabView.tabs.map((terminal) => (
         <SidebarRow
           key={terminal.data.id}
