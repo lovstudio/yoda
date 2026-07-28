@@ -235,6 +235,7 @@ export class LocalTerminalProvider implements TerminalProvider {
       ptySessionRegistry.register(sessionId, pty, {
         preserveBufferOnExit: policy.preserveBufferOnExit,
         registrationEpoch: operation.registrationEpoch,
+        tmuxBacked: Boolean(tmuxSessionName),
       });
       registrationCompleted = true;
       if (!this.isCurrentStart(sessionId, operation)) {

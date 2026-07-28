@@ -264,6 +264,7 @@ export class SshTerminalProvider implements TerminalProvider {
       ptySessionRegistry.register(sessionId, pty, {
         preserveBufferOnExit: policy.preserveBufferOnExit,
         registrationEpoch,
+        tmuxBacked: Boolean(tmuxSessionName),
       });
       registrationCompleted = true;
       if (!this.isCurrentStart(sessionId, operation)) {

@@ -12,6 +12,7 @@ import {
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import type { Pty, PtyExitInfo } from './pty';
+import { TmuxTerminalReplyFilter } from './tmux-terminal-reply-filter';
 
 const FLUSH_INTERVAL_MS = 16; // One IPC output batch per display frame.
 const CONTINUATION_BYTE_MASK = 0xc0;
@@ -49,6 +50,7 @@ type SessionState = {
   readonly generation: number;
   readonly registrationEpoch: number;
   readonly ringBuffer: Utf8RingBuffer;
+  readonly tmuxInputFilter: TmuxTerminalReplyFilter | null;
   live: boolean;
   sequence: number;
   pendingData: Buffer[];
@@ -264,7 +266,11 @@ export class PtySessionRegistry {
   register(
     sessionId: string,
     pty: Pty,
-    options?: { preserveBufferOnExit?: boolean; registrationEpoch?: number }
+    options?: {
+      preserveBufferOnExit?: boolean;
+      registrationEpoch?: number;
+      tmuxBacked?: boolean;
+    }
   ): void {
     const preserveBufferOnExit = options?.preserveBufferOnExit ?? false;
     const previousState = this.sessions.get(sessionId);
@@ -281,6 +287,7 @@ export class PtySessionRegistry {
       generation,
       registrationEpoch: registration.epoch,
       ringBuffer: new Utf8RingBuffer(this.ringBufferCapBytes),
+      tmuxInputFilter: options?.tmuxBacked ? new TmuxTerminalReplyFilter() : null,
       live: true,
       sequence: 0,
       pendingData: [],
@@ -357,12 +364,12 @@ export class PtySessionRegistry {
     state.inputOff = events.on(
       ptyInputChannel,
       (data) => {
-        if (this.sessions.get(sessionId) === state) pty.write(data);
+        if (this.sessions.get(sessionId) === state) this.writeInput(state, data);
       },
       sessionId
     );
     if (registration.acceptPendingInput) {
-      this.drainPendingInput(sessionId, pty, registration.epoch);
+      this.drainPendingInput(sessionId, state, registration.epoch);
     } else {
       this.clearPendingInput(sessionId);
     }
@@ -387,9 +394,9 @@ export class PtySessionRegistry {
    * disappeared.
    */
   writeOrQueue(sessionId: string, data: string): 'written' | 'queued' | 'full' | 'unavailable' {
-    const pty = this.get(sessionId);
-    if (pty) {
-      if (data) pty.write(data);
+    const state = this.sessions.get(sessionId);
+    if (state?.live) {
+      this.writeInput(state, data);
       return 'written';
     }
 
@@ -759,13 +766,23 @@ export class PtySessionRegistry {
     this.pendingInputs.delete(sessionId);
   }
 
-  private drainPendingInput(sessionId: string, pty: Pty, registrationEpoch: number): void {
+  private writeInput(state: SessionState, data: string): void {
+    if (!data) return;
+    const filtered = state.tmuxInputFilter?.feed(data) ?? data;
+    if (filtered) state.pty.write(filtered);
+  }
+
+  private drainPendingInput(
+    sessionId: string,
+    state: SessionState,
+    registrationEpoch: number
+  ): void {
     const pending = this.pendingInputs.get(sessionId);
     if (!pending) return;
     if (pending.timer) clearTimeout(pending.timer);
     this.pendingInputs.delete(sessionId);
     if (pending.epoch !== registrationEpoch || Date.now() >= pending.expiresAt) return;
-    for (const chunk of pending.chunks) pty.write(chunk);
+    for (const chunk of pending.chunks) this.writeInput(state, chunk);
   }
 
   private consumeRegistrationIntent(
