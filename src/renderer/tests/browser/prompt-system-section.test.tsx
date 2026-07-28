@@ -13,7 +13,9 @@ import type * as PromptSystemModule from '@renderer/features/prompt-library/prom
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
+  getDependencies: vi.fn(),
   getFiles: vi.fn(),
+  getRuntimeSettings: vi.fn(),
   saveFile: vi.fn(),
 }));
 
@@ -36,14 +38,9 @@ vi.mock('@renderer/lib/ipc', () => ({
   rpc: {
     dependencies: {
       probeCategory: vi.fn(),
-      getAll: vi.fn(async () => ({
-        claude: { id: 'claude', category: 'agent', status: 'available' },
-        codex: { id: 'codex', category: 'agent', status: 'available' },
-        glm: { id: 'glm', category: 'agent', status: 'available' },
-        grok: { id: 'grok', category: 'agent', status: 'available' },
-      })),
+      getAll: mocks.getDependencies,
     },
-    runtimeSettings: { getAll: vi.fn(async () => ({})) },
+    runtimeSettings: { getAll: mocks.getRuntimeSettings },
     conversations: {
       getEditableRuntimeInstructionFiles: mocks.getFiles,
       saveEditableRuntimeInstructionFile: mocks.saveFile,
@@ -113,6 +110,13 @@ describe('PromptSystemSection', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mocks.getDependencies.mockResolvedValue({
+      claude: { id: 'claude', category: 'agent', status: 'available' },
+      codex: { id: 'codex', category: 'agent', status: 'available' },
+      glm: { id: 'glm', category: 'agent', status: 'available' },
+      grok: { id: 'grok', category: 'agent', status: 'available' },
+    });
+    mocks.getRuntimeSettings.mockResolvedValue({});
     mocks.getFiles.mockImplementation(async ({ runtimeId }: { runtimeId: RuntimeId }) =>
       userFiles(runtimeId)
     );
@@ -157,12 +161,13 @@ describe('PromptSystemSection', () => {
       await vi.waitFor(() => {
         expect(host.textContent).toContain('Claude Code');
         expect(host.textContent).toContain('Codex');
-        expect(host.textContent).toContain('GLM');
         expect(host.textContent).toContain('/fixture/.codex/AGENTS.md');
       });
     });
 
+    expect(host.textContent).not.toContain('GLM');
     expect(host.textContent).not.toContain('Grok');
+    expect(host.querySelectorAll('[data-slot="tabs-tab"]')).toHaveLength(2);
     expect(host.querySelector('[data-slot="agent-system-prompt"]')).toBeNull();
     expect(host.querySelectorAll('[data-slot="runtime-instruction-file"]')).toHaveLength(2);
     expect(host.querySelector('textarea')).toBeNull();
@@ -208,6 +213,32 @@ describe('PromptSystemSection', () => {
       await vi.waitFor(() => expect(host.textContent).toContain('/fixture/.claude/CLAUDE.md'));
     });
     expect(host.querySelector('[data-slot="agent-system-prompt"]')).toBeNull();
+  });
+
+  it('labels a GLM-backed Claude CLI namespace as Claude Code instead of adding a GLM tab', async () => {
+    mocks.getRuntimeSettings.mockResolvedValue({
+      claude: { disabled: true },
+    });
+    await renderSection();
+
+    await act(async () => {
+      await vi.waitFor(() => expect(host.textContent).toContain('Claude Code'));
+    });
+
+    expect(host.textContent).not.toContain('GLM');
+    const claudeTab = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-tab"]')
+    ).find((tab) => tab.textContent?.includes('Claude Code'));
+    await act(async () => claudeTab?.click());
+
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(mocks.getFiles).toHaveBeenCalledWith({
+          runtimeId: 'glm',
+          projectId: null,
+        })
+      );
+    });
   });
 
   it('shows RPC failures explicitly instead of claiming that no instruction file exists', async () => {

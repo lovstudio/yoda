@@ -19,9 +19,30 @@ import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
 
 const enabledPromptRuntimesQueryKey = ['promptLibrary', 'enabledRuntimes'] as const;
+const standardInstructionClis = ['codex', 'claude'] as const;
 
 function hasStandardInstructionFiles(runtime: RuntimeDefinition): boolean {
-  return runtime.cli === 'claude' || runtime.cli === 'codex';
+  return standardInstructionClis.some((cli) => runtime.cli === cli);
+}
+
+function groupEnabledPromptRuntimes(
+  dependencies: DependencyStatusMap,
+  runtimeConfigs: RuntimeCustomConfigs
+): RuntimeDefinition[] {
+  const enabled = (runtime: RuntimeDefinition) =>
+    hasStandardInstructionFiles(runtime) &&
+    dependencies[runtime.id]?.status === 'available' &&
+    runtimeConfigs[runtime.id]?.disabled !== true;
+
+  return standardInstructionClis.flatMap((cli) => {
+    const runtime =
+      RUNTIMES.find((candidate) => candidate.id === cli && enabled(candidate)) ??
+      RUNTIMES.find((candidate) => candidate.cli === cli && enabled(candidate));
+    if (!runtime) return [];
+
+    const canonicalRuntime = RUNTIMES.find((candidate) => candidate.id === cli);
+    return [{ ...runtime, name: canonicalRuntime?.name ?? runtime.name }];
+  });
 }
 
 export async function loadEnabledPromptRuntimes(): Promise<RuntimeDefinition[]> {
@@ -30,12 +51,7 @@ export async function loadEnabledPromptRuntimes(): Promise<RuntimeDefinition[]> 
     rpc.dependencies.getAll() as Promise<DependencyStatusMap>,
     rpc.runtimeSettings.getAll() as Promise<RuntimeCustomConfigs>,
   ]);
-  return RUNTIMES.filter(
-    (runtime) =>
-      hasStandardInstructionFiles(runtime) &&
-      dependencies[runtime.id]?.status === 'available' &&
-      runtimeConfigs[runtime.id]?.disabled !== true
-  );
+  return groupEnabledPromptRuntimes(dependencies, runtimeConfigs);
 }
 
 function instructionFilesQueryKey(request: EditableRuntimeInstructionFilesRequest) {
