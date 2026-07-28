@@ -164,6 +164,45 @@ describe('PtySessionRegistry', () => {
     expect(pty.writes).toEqual(['first', '-second', '-live']);
   });
 
+  it('filters duplicate xterm identification replies only for tmux-backed sessions', () => {
+    const registry = new PtySessionRegistry();
+    const tmuxPty = new FakePty();
+    const directPty = new FakePty();
+    const terminalReplies = '\x1b[>0;276;0c\x1bP>|xterm.js(6.1.0-beta.292)\x1b\\user input';
+
+    registry.register('tmux-session', tmuxPty, { tmuxBacked: true });
+    registry.register('direct-session', directPty);
+
+    expect(registry.writeOrQueue('tmux-session', terminalReplies)).toBe('written');
+    expect(registry.writeOrQueue('direct-session', terminalReplies)).toBe('written');
+    expect(tmuxPty.writes).toEqual(['user input']);
+    expect(directPty.writes).toEqual([terminalReplies]);
+  });
+
+  it('filters split xterm replies queued before a tmux PTY registers', () => {
+    const registry = new PtySessionRegistry();
+    const registrationEpoch = registry.beginRegistration('session');
+
+    expect(registry.writeOrQueue('session', 'before\x1b[>0;')).toBe('queued');
+    expect(registry.writeOrQueue('session', '276;0c\x1bP>|xterm.js(6.1.0-')).toBe('queued');
+    expect(registry.writeOrQueue('session', 'beta.292)\x1b\\after')).toBe('queued');
+
+    const pty = new FakePty();
+    registry.register('session', pty, { registrationEpoch, tmuxBacked: true });
+
+    expect(pty.writes).toEqual(['before', 'after']);
+  });
+
+  it('filters tmux replies received through the legacy input event path', () => {
+    const registry = new PtySessionRegistry();
+    const pty = new FakePty();
+    registry.register('session', pty, { tmuxBacked: true });
+
+    emitInput('session', '\x1b[?1;2cvisible');
+
+    expect(pty.writes).toEqual(['visible']);
+  });
+
   it('exposes whether an outer creation registration is still current', () => {
     const registry = new PtySessionRegistry();
     const epoch = registry.beginRegistration('session');

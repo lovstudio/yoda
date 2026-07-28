@@ -535,7 +535,10 @@ export class LocalConversationProvider implements ConversationProvider {
 
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       registrationAttempted = true;
-      ptySessionRegistry.register(sessionId, pty, { registrationEpoch });
+      ptySessionRegistry.register(sessionId, pty, {
+        registrationEpoch,
+        tmuxBacked: Boolean(tmuxSessionName),
+      });
       registrationCompleted = true;
       if (!this.ownsPendingStart(sessionId, startToken)) {
         ptySessionRegistry.unregister(sessionId);
