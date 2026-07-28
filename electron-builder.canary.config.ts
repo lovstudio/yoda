@@ -1,4 +1,5 @@
 import type { Configuration } from 'electron-builder';
+import { shouldNotarizeMacBuild } from './scripts/release/lib/mac-notarization';
 import {
   APP_ID,
   APP_NAME_LOWER,
@@ -53,7 +54,7 @@ const config: Configuration = {
     entitlementsInherit: 'build/entitlements.mac.plist',
     target: [{ target: 'dmg', arch: ['arm64'] }],
     icon: 'src/assets/images/yoda/yoda-canary.icns',
-    notarize: false,
+    notarize: shouldNotarizeMacBuild(),
     extendInfo: {
       SUPublicEDKey: SPARKLE_PUBLIC_ED_KEY,
       NSAppTransportSecurity: { NSAllowsLocalNetworking: true },

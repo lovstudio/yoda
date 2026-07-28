@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.1
+
+### Patch Changes
+
+- 在 macOS DMG 打包前完成 App 公证与 ticket staple，并在 CI 中同时校验外部 App bundle、DMG 及挂载后的 App，确保离线 Gatekeeper 验证完整通过。
+
 ## 0.18.0
 
 ### Minor Changes

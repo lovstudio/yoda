@@ -156,6 +156,7 @@ for (const appDir of appBundles) {
   exec(`codesign --verify --deep --strict --verbose=2 "${appDir}"`, { echo: true });
 
   if (expectedTeamId) {
+    exec(`xcrun stapler validate "${appDir}"`, { echo: true });
     const meta = exec(`codesign -dv --verbose=4 "${appDir}" 2>&1`);
     if (!meta.includes('Authority=Developer ID Application')) {
       fail('Not Developer ID Application signed');

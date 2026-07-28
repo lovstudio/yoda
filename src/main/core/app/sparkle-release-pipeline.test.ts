@@ -11,6 +11,8 @@ const canaryWorkflow = readFileSync('.github/workflows/release-canary.yml', 'utf
 const productionBuilderConfig = readFileSync('electron-builder.config.ts', 'utf8');
 const canaryBuilderConfig = readFileSync('electron-builder.canary.config.ts', 'utf8');
 const releaseBuild = readFileSync('scripts/release/build.ts', 'utf8');
+const macVerification = readFileSync('scripts/release/verify-mac.ts', 'utf8');
+const macNotarization = readFileSync('scripts/release/notarize-mac.ts', 'utf8');
 
 describe('Sparkle release pipeline', () => {
   it('requires signing and retains enough history for skipped releases', () => {
@@ -64,6 +66,14 @@ describe('Sparkle release pipeline', () => {
     expect(generator).toContain('retainExistingSparkleHistoryItems');
     expect(productionWorkflow).not.toContain('release/*.zip');
     expect(chinaMirrorWorkflow).not.toContain("--pattern 'yoda-*.zip'");
+  });
+
+  it('staples the app before DMG packaging and gates the mounted public app ticket', () => {
+    for (const config of [productionBuilderConfig, canaryBuilderConfig]) {
+      expect(config).toContain('notarize: shouldNotarizeMacBuild()');
+    }
+    expect(macVerification).toContain('xcrun stapler validate "${appDir}"');
+    expect(macNotarization).toContain('xcrun stapler validate "${appPath}"');
   });
 
   it('refreshes stable manifests, appcasts, and overwritten latest binaries on Qiniu', () => {
