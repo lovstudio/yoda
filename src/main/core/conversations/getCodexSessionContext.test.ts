@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { getCodexSessionContext } from './getCodexSessionContext';
+import { getCodexSessionContext, getCodexSessionPrompts } from './getCodexSessionContext';
 
 describe('getCodexSessionContext', () => {
   const previousCodexHome = process.env.CODEX_HOME;
@@ -66,6 +66,10 @@ describe('getCodexSessionContext', () => {
     insertDynamicTool(statePath, 'conversation-1');
 
     const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
+    const promptOnly = await getCodexSessionPrompts(cwd, 'conversation-1', undefined, undefined, {
+      codexHome,
+      reservedThreadIds: new Set(),
+    });
 
     expect(context).toEqual(
       expect.objectContaining({
@@ -87,6 +91,7 @@ describe('getCodexSessionContext', () => {
         restoreTarget: { kind: 'codex-turn', turnId: 'turn-1' },
       },
     ]);
+    expect(promptOnly).toEqual(context?.prompts);
     expect(context?.messages).toEqual([
       {
         id: '2026-06-02T11:00:03.000Z',

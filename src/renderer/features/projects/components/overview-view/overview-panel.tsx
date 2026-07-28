@@ -7,6 +7,7 @@ import {
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { FeaturesOverviewCard } from './features-overview-card';
 import { IssuesOverviewCard } from './issues-overview-card';
+import { ProjectPromptsCard } from './project-prompts-card';
 import { PullRequestsOverviewCard } from './pull-requests-overview-card';
 import { QuickActionsCard } from './quick-actions-card';
 import { RepoStatusCard } from './repo-status-card';
@@ -29,6 +30,7 @@ export const OverviewPanel = observer(function OverviewPanel() {
     <div className="overflow-y-auto h-full">
       <div className="max-w-3xl mx-auto w-full px-6 py-6 flex flex-col gap-4">
         <QuickActionsCard projectId={projectId} />
+        <ProjectPromptsCard key={projectId} projectId={projectId} />
         <FeaturesOverviewCard projectId={projectId} />
         <RepoStatusCard projectId={projectId} />
         <PullRequestsOverviewCard projectId={projectId} />

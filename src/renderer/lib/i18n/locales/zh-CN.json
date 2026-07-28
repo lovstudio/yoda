@@ -4625,6 +4625,28 @@
       "thisProject": "{{name}}（本项目）"
     },
     "projectNotReady": "项目尚未就绪",
+    "promptHistory": {
+      "title": "项目对话",
+      "scanning": "正在扫描 {{scanned}} / {{total}} 个会话，已发现 {{count}} 条 Prompt",
+      "loaded": "共 {{count}} 条 Prompt",
+      "filterByTask": "按任务筛选",
+      "allTasks": "全部任务",
+      "sort": "Prompt 排序",
+      "newestFirst": "最新优先",
+      "oldestFirst": "最早优先",
+      "waitingForPrompts": "正在读取对话文件…",
+      "empty": "项目中还没有用户 Prompt",
+      "emptyTask": "该任务中还没有用户 Prompt",
+      "loadFailed": "Prompt 目录加载失败",
+      "viewAll": "查看全部（{{count}}）",
+      "collapse": "收起",
+      "viewPrompt": "查看完整内容",
+      "openSession": "定位并打开会话",
+      "openNamedSession": "打开会话 {{session}}",
+      "openSessionFailed": "会话打开失败",
+      "forkFromPrompt": "从此 Prompt Fork",
+      "taskUnavailable": "对应任务尚未准备完成"
+    },
     "sessionsView": {
       "count": "{{count}} 个会话",
       "emptyTitle": "没有会话",
