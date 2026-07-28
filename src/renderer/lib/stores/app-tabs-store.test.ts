@@ -1,3 +1,4 @@
+import { makeAutoObservable } from 'mobx';
 import { describe, expect, it, vi } from 'vitest';
 import type { ViewId, WrapParams } from '@renderer/app/view-registry';
 import {
@@ -23,6 +24,39 @@ function createNavigationStub(): NavigationStore {
     }),
     _applyNavigation: vi.fn(),
   };
+  return navigation as unknown as NavigationStore;
+}
+
+function createReactiveNavigationStub(
+  currentViewId: ViewId,
+  viewParamsStore: Record<string, Record<string, unknown>>
+): NavigationStore {
+  const navigation = makeAutoObservable({
+    currentViewId,
+    viewParamsStore,
+    navigate: vi.fn(function <T extends ViewId>(
+      this: {
+        currentViewId: ViewId;
+        viewParamsStore: Record<string, Record<string, unknown>>;
+      },
+      viewId: T,
+      params?: WrapParams<T>
+    ) {
+      this.currentViewId = viewId;
+      this.viewParamsStore = { ...this.viewParamsStore, [viewId]: params ?? {} };
+    }),
+    _applyNavigation: vi.fn(function <T extends ViewId>(
+      this: {
+        currentViewId: ViewId;
+        viewParamsStore: Record<string, Record<string, unknown>>;
+      },
+      viewId: T,
+      params?: WrapParams<T>
+    ) {
+      this.currentViewId = viewId;
+      this.viewParamsStore = { ...this.viewParamsStore, [viewId]: params ?? {} };
+    }),
+  });
   return navigation as unknown as NavigationStore;
 }
 
@@ -74,6 +108,61 @@ describe('AppTabsStore navigation history integration', () => {
 
     expect(navigation.navigate).not.toHaveBeenCalled();
     expect(navigation._applyNavigation).toHaveBeenCalledWith('skills', {});
+  });
+});
+
+describe('AppTabsStore task scope entry', () => {
+  it('restores the task scope session with the latest activation sequence', () => {
+    const overviewParams = {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      tab: { kind: 'overview' },
+    };
+    const sessionParams = {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      tab: { kind: 'conversation', conversationId: 'conversation-1' },
+    };
+    const navigation = createReactiveNavigationStub('home', { home: {} });
+    const tabs = new AppTabsStore(navigation);
+    tabs.restoreSnapshot({
+      tabs: [
+        { id: 'home-tab', viewId: 'home', params: {}, seq: 3 },
+        { id: 'overview-tab', viewId: 'task', params: overviewParams, seq: 1 },
+        { id: 'session-tab', viewId: 'task', params: sessionParams, seq: 2 },
+      ],
+      activeTabId: 'home-tab',
+    });
+    tabs.start();
+
+    navigation.navigate('task', { projectId: 'project-1', taskId: 'task-1' });
+
+    expect(tabs.activeTabId).toBe('session-tab');
+    expect(tabs.replayNonce).toBe(1);
+    expect(navigation.viewParamsStore.task).toEqual(sessionParams);
+    tabs.dispose();
+  });
+
+  it('replays the remembered session when the active task row is clicked again', () => {
+    const sessionParams = {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      tab: { kind: 'conversation', conversationId: 'conversation-1' },
+    };
+    const navigation = createReactiveNavigationStub('task', { task: sessionParams });
+    const tabs = new AppTabsStore(navigation);
+    tabs.restoreSnapshot({
+      tabs: [{ id: 'session-tab', viewId: 'task', params: sessionParams, seq: 2 }],
+      activeTabId: 'session-tab',
+    });
+    tabs.start();
+
+    navigation.navigate('task', { projectId: 'project-1', taskId: 'task-1' });
+
+    expect(tabs.activeTabId).toBe('session-tab');
+    expect(tabs.replayNonce).toBe(1);
+    expect(navigation.viewParamsStore.task).toEqual(sessionParams);
+    tabs.dispose();
   });
 });
 
