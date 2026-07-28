@@ -68,6 +68,7 @@ vi.mock('@renderer/lib/ui/context-menu', async () => {
   return {
     ContextMenu: container('context-menu'),
     ContextMenuContent: container('context-menu-content'),
+    ContextMenuGroup: container('context-menu-group'),
     ContextMenuItem: item('context-menu-item'),
     ContextMenuLabel: container('context-menu-label'),
     ContextMenuSeparator: () => create('hr'),
@@ -100,6 +101,7 @@ vi.mock('@renderer/lib/ui/dropdown-menu', async () => {
   return {
     DropdownMenu: container('dropdown-menu'),
     DropdownMenuContent: container('dropdown-menu-content'),
+    DropdownMenuGroup: container('dropdown-menu-group'),
     DropdownMenuItem: item('dropdown-menu-item'),
     DropdownMenuLabel: container('dropdown-menu-label'),
     DropdownMenuSeparator: () => create('hr'),
@@ -193,6 +195,11 @@ describe('ProjectMenu quick actions submenu', () => {
       expect(host.querySelector('[data-slot$="menu-sub-trigger"]')?.textContent).toContain(
         'Launch commands'
       );
+      const labels = Array.from(host.querySelectorAll<HTMLElement>('[data-slot$="menu-label"]'));
+      expect(labels).toHaveLength(2);
+      expect(
+        labels.every((label) => label.parentElement?.dataset.slot === `${surface}-menu-group`)
+      ).toBe(true);
       const items = Array.from(
         host.querySelectorAll<HTMLButtonElement>(`button[data-slot="${itemSlot}"]`)
       );
