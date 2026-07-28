@@ -19,6 +19,12 @@ export default defineConfig({
     build: {
       emptyOutDir: true,
       rollupOptions: {
+        input: {
+          index: resolve('src/main/index.ts'),
+          'extension-workers/maas-gateway': resolve(
+            'src/main/core/extensions/maas-gateway/worker.ts'
+          ),
+        },
         // legacy-port intentionally lazy-loads db/client + db/kv + settings-service
         // to avoid opening the main sqlite handle before the migration gate runs.
         // The matching dynamic-import warnings are not actionable.

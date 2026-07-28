@@ -2,7 +2,7 @@ import { type Terminal } from '@xterm/xterm';
 import { useCallback, useEffect, useRef } from 'react';
 import type { AppSettings } from '@shared/app-settings';
 import { appPasteChannel } from '@shared/events/appEvents';
-import { ptyDataChannel, ptyExitChannel } from '@shared/events/ptyEvents';
+import { ptyDataChannel, ptyExitChannel, type PtyExitEvent } from '@shared/events/ptyEvents';
 import {
   DEFAULT_TERMINAL_RENDERER,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
@@ -140,12 +140,12 @@ function hasEnterSubmit(data: string): boolean {
 export interface UsePtyOptions {
   /** Deterministic PTY session ID: makePtySessionId(projectId, scopeId, leafId). */
   sessionId: string;
-  /** Pre-connected FrontendPty instance owned by the entity's PtySession store. */
+  /** Prepared FrontendPty instance owned by the entity's PtySession store. */
   pty: FrontendPty;
   theme?: SessionTheme;
   mapShiftEnterToCtrlJ?: boolean;
   onActivity?: () => void;
-  onExit?: (info: { exitCode: number | undefined; signal?: number }) => void;
+  onExit?: (info: PtyExitEvent) => void;
   onFirstMessage?: (message: string) => void;
   onEnterPress?: (message: string) => void;
   onSubmittedInput?: (message: string, isTaskInput: boolean) => void;
@@ -171,14 +171,10 @@ export interface UseTerminalReturn {
  * reparented to the off-screen xterm host rather than disposed, so scrollback
  * is preserved across tab switches.
  *
- * For sessions pre-registered via PtySessionProvider the mount is effectively
- * synchronous (no await needed).  Standalone sessions (not pre-registered)
- * are auto-registered inside an async IIFE, awaiting the historical buffer
- * fetch before mounting.
- *
  * When inside a PaneSizingProvider the terminal is pre-resized to the pane's
  * current dimensions BEFORE being appended to the visible DOM, eliminating
- * the flash caused by a post-mount resize.
+ * the flash caused by a post-mount resize. The PTY output subscription begins
+ * only after live measurement opens the flush gate.
  */
 export function usePty(
   options: UsePtyOptions,
@@ -219,9 +215,9 @@ export function usePty(
   const themeRef = useRef(theme);
   themeRef.current = theme;
 
-  // When inside a PaneSizingProvider, PTY resizes are broadcast to ALL sessions
-  // in the pane (including background ones).  Falls back to per-session resize
-  // for standalone terminals (chat, task terminal panel, etc.).
+  // When inside a PaneSizingProvider, only the pane's active session is resized.
+  // Background PTYs keep the size that matches their off-screen xterm grid until
+  // they mount and measure as the active session.
   const paneSizing = usePaneSizingContext();
   // Ref so the main effect (which only re-runs on sessionId change) always
   // accesses the latest context value without needing it as a dependency.
@@ -343,17 +339,25 @@ export function usePty(
           refreshTerminal(term);
         }
 
-        // Now that the terminal is sized to the real pane width, drain any
-        // output that was buffered while it was off-screen at default cols.
+        // Open the parser flush gate only after xterm has the real pane grid.
+        // PtySession prepares xterm but deliberately does not subscribe; doing
+        // so earlier would register a flow-control consumer that cannot ACK.
         pty.flushPendingWrites();
 
         // PTY resize goes out in the same tick as the grid commit, so the
         // app's SIGWINCH repaint corresponds to exactly this grid size.
         if (pane) {
-          pane.reportDimensions(targetCols, targetRows);
+          pane.reportDimensions(sessionId, targetCols, targetRows);
         } else {
           sendPtyResizeRef.current(targetCols, targetRows);
         }
+
+        // Listener-first subscription starts only after mount + measurement +
+        // flush-gate activation. FrontendPty keeps a successful subscription
+        // alive while off-screen and single-flights repeated resize reports.
+        void pty.connect().catch((error) => {
+          log.warn('useTerminal: failed to subscribe PTY output', { sessionId, error });
+        });
       } catch (e) {
         log.warn('useTerminal: measureAndResize failed', { sessionId, error: e });
       }
@@ -432,7 +436,19 @@ export function usePty(
           }
         }
       }
-      void rpc.pty.sendInput(sessionId, data);
+      void rpc.pty
+        .sendInput(sessionId, data)
+        .then((result) => {
+          if (!result.success) {
+            log.warn('Terminal input queue is full', {
+              sessionId,
+              error: result.error,
+            });
+          }
+        })
+        .catch((error) => {
+          log.warn('Failed to send terminal input', { sessionId, error });
+        });
     },
     [sessionId]
   );
@@ -472,13 +488,14 @@ export function usePty(
   }, []);
 
   const pasteFromClipboard = useCallback(() => {
+    const target = termRef.current;
     navigator.clipboard
       .readText()
       .then((text) => {
-        if (text) sendInput(text);
+        if (text && target && termRef.current === target) target.paste(text);
       })
       .catch(() => {});
-  }, [sendInput]);
+  }, []);
 
   // ─── Main effect: mount terminal once per sessionId ────────────────────────
 
@@ -511,9 +528,14 @@ export function usePty(
     }
 
     // ── Mount ─────────────────────────────────────────────────────────────────
-    // pty is pre-connected by PtySession before TerminalPane renders, so no
-    // async work is needed here.
+    // PtySession has synchronously prepared xterm; output subscription waits
+    // for the first successful live measurement below.
     const cleanups: (() => void)[] = [];
+    let mountLease: number | undefined;
+    let mounted = true;
+    cleanups.push(() => {
+      mounted = false;
+    });
 
     {
       const frontendPty = pty;
@@ -525,7 +547,8 @@ export function usePty(
       frontendPty.terminal.options.macOptionClickForcesSelection = true;
 
       // Mount: pre-resize then appendChild (flash-free).
-      frontendPty.mount(container as HTMLElement, targetDims);
+      const activeMountLease = frontendPty.mount(container as HTMLElement, targetDims);
+      mountLease = activeMountLease;
 
       // Always sync after mounting — targetDims may be stale if the pane was
       // resized while this session was off-screen.  measureAndResize defers to
@@ -540,6 +563,16 @@ export function usePty(
             customFontFamily = terminalSettings.fontFamily.trim();
             if (customFontFamily) {
               frontendPty.terminal.options.fontFamily = buildTerminalFontFamily(customFontFamily);
+              const remeasureAfterFontLoad = () => {
+                if (mounted) {
+                  measureAndResizeRef.current(0, {
+                    forceRefresh: true,
+                    resetResizeDedup: true,
+                  });
+                }
+              };
+              requestAnimationFrame(remeasureAfterFontLoad);
+              void document.fonts?.ready.then(remeasureAfterFontLoad);
             }
           }
           frontendPty.setRendererPreference(
@@ -552,39 +585,7 @@ export function usePty(
         }
       );
 
-      // ── DECRQM xterm.js 6.0 bug workaround ────────────────────────────────
       const terminal = frontendPty.terminal;
-      try {
-        const parser = (
-          terminal as unknown as {
-            parser?: { registerCsiHandler?: (...args: unknown[]) => { dispose(): void } };
-          }
-        ).parser;
-        if (parser?.registerCsiHandler) {
-          const ansiDisp = parser.registerCsiHandler(
-            { intermediates: '$', final: 'p' },
-            (params: (number | number[])[]) => {
-              const mode = (params[0] as number) ?? 0;
-              sendInput(`\x1b[${mode};0$y`, { track: false });
-              return true;
-            }
-          );
-          const decDisp = parser.registerCsiHandler(
-            { prefix: '?', intermediates: '$', final: 'p' },
-            (params: (number | number[])[]) => {
-              const mode = (params[0] as number) ?? 0;
-              sendInput(`\x1b[?${mode};0$y`, { track: false });
-              return true;
-            }
-          );
-          cleanups.push(
-            () => ansiDisp.dispose(),
-            () => decDisp.dispose()
-          );
-        }
-      } catch (err) {
-        log.warn('useTerminal: failed to register DECRQM workaround', { error: err });
-      }
 
       // ── Keyboard shortcuts ─────────────────────────────────────────────────
       const imeNativePunctuationBridge = registerTerminalImeNativePunctuation(terminal);
@@ -673,14 +674,11 @@ export function usePty(
       const handleTerminalInput = (data: string) => {
         onActivityRef.current?.();
 
-        // xterm.js auto-answers Device Attributes queries (`\x1b[c` / `\x1b[>c`)
-        // by emitting the reply back through onData. Inside tmux the inner agent's
-        // query is already answered by tmux's own emulation, so this outer reply is
-        // a duplicate that tmux passes through to the pane as literal input — it
-        // surfaces in the prompt box as stray text like `0;276;0c`. Drop the
-        // Primary (`\x1b[?...c`) and Secondary (`\x1b[>...c`) DA replies; they are
-        // never legitimate keystrokes.
-        let filtered = data.replace(/\x1b\[[?>][0-9;]*c/g, '');
+        // xterm-generated terminal replies (DA/DECRQM/bracketed paste) are part
+        // of the PTY protocol, not keyboard noise. Forward them intact. xterm 6
+        // already answers DECRQM with its real mode state; overriding or
+        // stripping those replies leaves TUIs with incorrect terminal modes.
+        let filtered = data;
         if (!ptyStartedRef.current) {
           filtered = filtered.replace(/\x1b\[I|\x1b\[O/g, '');
         }
@@ -719,8 +717,8 @@ export function usePty(
 
       // OSC 8 hyperlinks go through the FrontendPty's link handler — route them
       // through the same funnel while this pane hosts the terminal.
-      pty.setLinkOpener(openUrl);
-      cleanups.push(() => pty.setLinkOpener(null));
+      pty.setLinkOpener(openUrl, activeMountLease);
+      cleanups.push(() => pty.setLinkOpener(null, activeMountLease));
 
       // ── ptyStartedRef — detect first PTY output ────────────────────────────
       // FrontendPty owns the data subscription and writes directly to the
@@ -914,7 +912,7 @@ export function usePty(
       const offExit = events.on(
         ptyExitChannel,
         (info) => {
-          onExitRef.current?.(info as { exitCode: number | undefined; signal?: number });
+          onExitRef.current?.(info);
         },
         sessionId
       );
@@ -1017,7 +1015,7 @@ export function usePty(
         } catch {}
       }
       // Return terminal's ownedContainer to the off-screen host.
-      pty.unmount();
+      pty.unmount(mountLease);
       termRef.current = null;
       ptyStartedRef.current = false;
       firstMessageSentRef.current = false;

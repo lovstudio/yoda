@@ -61,11 +61,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
   const { params: taskParams } = useParams('task');
   const { params: projectParams } = useParams('project');
 
-  const containerRef = useRef<HTMLDivElement>(null);
   const autoExpandedActiveIdRef = useRef<string | null>(null);
-  // Last dndId we scrolled into view; gates the reveal effect so it fires on
-  // navigation / first mount but not on every background row refresh.
-  const lastScrolledTargetRef = useRef<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [taskProjection, setTaskProjection] = useState<TreeProjection | null>(null);
   // Project a task is hovering over for a cross-project move (null = none).
@@ -120,18 +116,6 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
   // rows under the cursor. Release on leave/unmount lets the list reflow.
   useEffect(() => () => sidebarStore.releaseTaskReflow('projects-list'), []);
 
-  // Expand the parent project when navigating to a task (not when `rows` changes —
-  // otherwise collapsing while staying on that task would immediately re-expand).
-  useEffect(() => {
-    if (currentView !== 'task') return;
-    const targetProjectId = taskParams.projectId;
-    const targetTaskId = taskParams.taskId;
-    if (!targetProjectId || !targetTaskId) return;
-    const activeTask = getTaskStore(targetProjectId, targetTaskId);
-    if (activeTask?.data.isPinned) return;
-    sidebarStore.ensureProjectExpanded(targetProjectId);
-  }, [currentView, taskParams.projectId, taskParams.taskId]);
-
   // Reveal the active project/task if navigation lands inside a truncated group.
   useEffect(() => {
     if (!activeSidebarDndId) {
@@ -160,46 +144,14 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
       next.add(hiddenGroupId);
       return next;
     });
-  }, [activeSidebarDndId, displayRows, expandedTaskGroupIds]);
-
-  // Scroll the active project/task into view when navigation changes, or when the
-  // active row first mounts (e.g. after expanding a truncated group). Guard on the
-  // target dndId so background row refreshes (which produce a fresh `renderRows`
-  // reference on every store update) don't yank the scroll position back.
-  useEffect(() => {
-    let targetProjectId: string | null = null;
-    let targetTaskId: string | null = null;
-
-    if (currentView === 'task') {
-      targetProjectId = taskParams.projectId;
-      targetTaskId = taskParams.taskId;
-    } else if (currentView === 'project') {
-      targetProjectId = projectParams.projectId;
-    }
-
-    if (!targetProjectId) {
-      lastScrolledTargetRef.current = null;
-      return;
-    }
-
-    if (targetTaskId) {
-      const activeTask = getTaskStore(targetProjectId, targetTaskId);
-      if (activeTask?.data.isPinned) {
-        return;
-      }
-    }
-
-    const dndId = targetTaskId
-      ? toTaskDndId(targetProjectId, targetTaskId)
-      : toProjectDndId(targetProjectId);
-    const node = containerRef.current?.querySelector<HTMLElement>(`[data-sidebar-row="${dndId}"]`);
-    if (!node) return;
-    // Already aligned this target — a re-run here is just a row refresh, not a
-    // navigation or a newly-mounted node, so leave the user's scroll alone.
-    if (lastScrolledTargetRef.current === dndId) return;
-    lastScrolledTargetRef.current = dndId;
-    node.scrollIntoView({ block: 'nearest' });
-  }, [currentView, taskParams.projectId, taskParams.taskId, projectParams.projectId, renderRows]);
+  }, [
+    activeSidebarDndId,
+    currentView,
+    displayRows,
+    expandedTaskGroupIds,
+    taskParams.projectId,
+    taskParams.taskId,
+  ]);
 
   function toggleTaskGroupExpanded(groupId: string) {
     setExpandedTaskGroupIds((prev) => {
@@ -332,7 +284,6 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     >
       <SortableContext items={allDndIds} strategy={verticalListSortingStrategy}>
         <div
-          ref={containerRef}
           className="space-y-0.5 px-3 pt-1 pb-3 overflow-hidden"
           onPointerEnter={() => sidebarStore.holdTaskReflow('projects-list')}
           onPointerLeave={() => sidebarStore.releaseTaskReflow('projects-list')}

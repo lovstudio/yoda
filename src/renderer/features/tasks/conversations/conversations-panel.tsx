@@ -81,7 +81,11 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
               className="absolute top-1 right-1 z-30 border border-border/60 bg-background/80 opacity-0 shadow-sm backdrop-blur-sm transition-opacity group-hover/session:opacity-100 hover:opacity-100 focus:opacity-100"
             />
           ) : null}
-          <PaneSizingProvider paneId="conversations" sessionIds={allSessionIds}>
+          <PaneSizingProvider
+            paneId="conversations"
+            sessionIds={allSessionIds}
+            activeSessionId={activeConversation?.session.sessionId ?? null}
+          >
             {!hasConversationTabs ? (
               conversationCount > 0 ? (
                 <ConversationSessionList

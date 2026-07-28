@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { migrateLegacyCodexMaasHistory } from './codex-history-compat';
+import {
+  ensureCodexResumeProviderCompatible,
+  migrateLegacyCodexMaasHistory,
+} from './codex-history-compat';
 
 describe('legacy Codex MaaS history compatibility', () => {
   let directory: string;
@@ -93,5 +96,120 @@ describe('legacy Codex MaaS history compatibility', () => {
 
   it('is a no-op when Codex has not created a state database', () => {
     expect(migrateLegacyCodexMaasHistory({ statePath })).toEqual({ rows: 0, files: 0 });
+  });
+
+  it('retags the requested thread when its historical provider is no longer configured', () => {
+    const rolloutPath = join(directory, 'stale-provider.jsonl');
+    const configPath = join(directory, 'config.toml');
+    const firstMeta = {
+      timestamp: '2026-07-25T00:00:00.000Z',
+      type: 'session_meta',
+      payload: {
+        id: 'stale-thread',
+        cwd: '/workspace',
+        model_provider: 'lovbrowser',
+        originator: 'codex-tui',
+      },
+    };
+    writeFileSync(
+      rolloutPath,
+      `${JSON.stringify(firstMeta)}\n${JSON.stringify({ type: 'event_msg', payload: {} })}\n`
+    );
+    writeFileSync(configPath, 'model = "gpt-5.6-codex"\n');
+
+    const db = new Database(statePath);
+    db.exec(`
+      CREATE TABLE threads (
+        id TEXT PRIMARY KEY,
+        rollout_path TEXT NOT NULL,
+        model_provider TEXT NOT NULL
+      )
+    `);
+    db.prepare('INSERT INTO threads VALUES (?, ?, ?)').run(
+      'stale-thread',
+      rolloutPath,
+      'lovbrowser'
+    );
+    db.close();
+
+    expect(
+      ensureCodexResumeProviderCompatible({
+        threadId: 'stale-thread',
+        statePath,
+        configPath,
+      })
+    ).toEqual({
+      status: 'repaired',
+      fromProviderId: 'lovbrowser',
+      toProviderId: 'openai',
+    });
+
+    const repairedDb = new Database(statePath, { readonly: true });
+    expect(
+      repairedDb.prepare('SELECT model_provider FROM threads WHERE id = ?').get('stale-thread')
+    ).toEqual({ model_provider: 'openai' });
+    repairedDb.close();
+
+    const records = readFileSync(rolloutPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { type: string; payload: Record<string, unknown> });
+    expect(records[0]?.payload.model_provider).toBe('openai');
+    expect(records.at(-1)?.payload.model_provider).toBe('openai');
+  });
+
+  it('preserves a historical provider that is still present in Codex config', () => {
+    const rolloutPath = join(directory, 'configured-provider.jsonl');
+    const configPath = join(directory, 'config.toml');
+    const contents = `${JSON.stringify({
+      timestamp: '2026-07-25T00:00:00.000Z',
+      type: 'session_meta',
+      payload: {
+        id: 'configured-thread',
+        cwd: '/workspace',
+        model_provider: 'lovbrowser',
+      },
+    })}\n`;
+    writeFileSync(rolloutPath, contents);
+    writeFileSync(
+      configPath,
+      [
+        'model_provider = "custom"',
+        '[model_providers.lovbrowser]',
+        'name = "LovBrowser"',
+        'base_url = "https://example.test/v1"',
+        'wire_api = "responses"',
+        '',
+        '[model_providers.custom]',
+        'name = "Custom"',
+        'base_url = "https://custom.example.test/v1"',
+        'wire_api = "responses"',
+        '',
+      ].join('\n')
+    );
+
+    const db = new Database(statePath);
+    db.exec(`
+      CREATE TABLE threads (
+        id TEXT PRIMARY KEY,
+        rollout_path TEXT NOT NULL,
+        model_provider TEXT NOT NULL
+      )
+    `);
+    db.prepare('INSERT INTO threads VALUES (?, ?, ?)').run(
+      'configured-thread',
+      rolloutPath,
+      'lovbrowser'
+    );
+    db.close();
+
+    expect(
+      ensureCodexResumeProviderCompatible({
+        threadId: 'configured-thread',
+        statePath,
+        configPath,
+      })
+    ).toEqual({ status: 'unchanged', providerId: 'lovbrowser' });
+    expect(readFileSync(rolloutPath, 'utf8')).toBe(contents);
   });
 });

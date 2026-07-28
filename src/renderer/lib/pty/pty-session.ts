@@ -1,4 +1,4 @@
-import { makeAutoObservable, onBecomeObserved, runInAction } from 'mobx';
+import { makeAutoObservable, runInAction } from 'mobx';
 import type { AppSettings } from '@shared/app-settings';
 import {
   DEFAULT_TERMINAL_RENDERER,
@@ -12,20 +12,52 @@ export type PtySessionStatus = 'disconnected' | 'connecting' | 'ready';
 export class PtySession {
   pty: FrontendPty | null = null;
   status: PtySessionStatus = 'disconnected';
+  private connectionEnabled: boolean;
+  private connectionRequested = false;
+  private connectPromise: Promise<void> | null = null;
 
-  constructor(readonly sessionId: string) {
-    makeAutoObservable(this, {
+  constructor(
+    readonly sessionId: string,
+    options?: { deferConnection?: boolean }
+  ) {
+    this.connectionEnabled = !(options?.deferConnection ?? false);
+    makeAutoObservable<this, 'connectionEnabled' | 'connectionRequested' | 'connectPromise'>(this, {
       pty: false,
-    });
-    // Safety net: auto-connect the first time any observer reads status.
-    // Eager connect in manager store load() is the primary path; this covers edge cases.
-    onBecomeObserved(this, 'status', () => {
-      if (this.status === 'disconnected') void this.connect();
+      connectionEnabled: false,
+      connectionRequested: false,
+      connectPromise: false,
     });
   }
 
-  async connect() {
+  /**
+   * Allow a deferred renderer to connect after its backend PTY exists.
+   * A visible terminal may request the connection before backend creation
+   * completes; connectionRequested carries that demand across this gate.
+   */
+  enableConnection(): void {
+    this.connectionEnabled = true;
+    if (this.connectionRequested && this.status === 'disconnected') void this.connect();
+  }
+
+  async connect(): Promise<void> {
+    // Connection demand must come from a real terminal surface. This method
+    // prepares xterm and its settings only; usePty starts the main-process
+    // output subscription after the mounted terminal has real dimensions.
+    this.connectionRequested = true;
+    if (!this.connectionEnabled) return;
+    if (this.connectPromise) return this.connectPromise;
     if (this.pty) return;
+
+    const promise = this.connectInternal();
+    this.connectPromise = promise;
+    try {
+      await promise;
+    } finally {
+      if (this.connectPromise === promise) this.connectPromise = null;
+    }
+  }
+
+  private async connectInternal(): Promise<void> {
     this.pty = new FrontendPty(this.sessionId);
     const pty = this.pty;
     runInAction(() => {
@@ -41,8 +73,6 @@ export class PtySession {
       pty.setRendererPreference(DEFAULT_TERMINAL_RENDERER);
       pty.setScrollbackLines(DEFAULT_TERMINAL_SCROLLBACK_LINES);
     }
-    if (this.pty !== pty) return;
-    await pty.connect();
     if (this.pty !== pty) {
       pty.dispose();
       return;
@@ -63,6 +93,7 @@ export class PtySession {
       this.pty = null;
       this.status = 'disconnected';
     });
+    this.connectionEnabled = true;
     await this.connect();
     if (carriedDims && this.pty) {
       this.pty.lastSentDims = carriedDims;
@@ -70,6 +101,8 @@ export class PtySession {
   }
 
   dispose() {
+    this.connectionRequested = false;
+    this.connectPromise = null;
     this.pty?.dispose();
     runInAction(() => {
       this.pty = null;

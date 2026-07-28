@@ -1,0 +1,1 @@
+ALTER TABLE `prompts` ADD `group_name` text DEFAULT '' NOT NULL;

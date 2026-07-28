@@ -2,7 +2,7 @@ import { AlertTriangle, FolderOpen } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { projectDisplayName, type Project } from '@shared/projects';
+import { MAX_PROJECT_ALIAS_LENGTH, projectDisplayName, type Project } from '@shared/projects';
 import { RemoteDirectorySelector } from '@renderer/features/projects/components/add-project-modal/remote-directory-selector';
 import {
   getProjectManagerStore,
@@ -37,7 +37,7 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
   const { t } = useTranslation();
   const project = getProjectStore(projectId);
   const data = project?.data;
-  const currentName = data?.name ?? '';
+  const currentName = project?.displayName ?? '';
   const currentPath = data?.path ?? '';
   const shouldSyncPathWithName = useRef(pathLeaf(currentPath) === currentName);
 
@@ -141,6 +141,7 @@ export const MoveProjectPathModal = observer(function MoveProjectPathModal({
                   void handleSubmit();
                 }
               }}
+              maxLength={MAX_PROJECT_ALIAS_LENGTH}
               autoFocus
             />
           </Field>

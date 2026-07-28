@@ -1,5 +1,5 @@
 import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
-import { CheckIcon } from 'lucide-react';
+import { CheckIcon, MinusIcon } from 'lucide-react';
 import { cn } from '@renderer/utils/utils';
 
 function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
@@ -7,7 +7,7 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        'peer relative flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-border-1 outline-none group-has-disabled/field:opacity-50 after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 aria-invalid:aria-checked:border-primary data-checked:border-primary data-checked:bg-background-neutral data-checked:text-foreground-neutral',
+        'peer group/checkbox relative flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-border-1 outline-none group-has-disabled/field:opacity-50 after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 aria-invalid:aria-checked:border-primary data-checked:border-primary data-checked:bg-background-neutral data-checked:text-foreground-neutral data-indeterminate:border-primary data-indeterminate:bg-background-neutral data-indeterminate:text-foreground-neutral',
         className
       )}
       {...props}
@@ -16,7 +16,16 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
         data-slot="checkbox-indicator"
         className="grid place-content-center text-current transition-none [&>svg]:size-3"
       >
-        <CheckIcon absoluteStrokeWidth strokeWidth={3} />
+        <CheckIcon
+          className="group-data-indeterminate/checkbox:hidden"
+          absoluteStrokeWidth
+          strokeWidth={3}
+        />
+        <MinusIcon
+          className="hidden group-data-indeterminate/checkbox:block"
+          absoluteStrokeWidth
+          strokeWidth={3}
+        />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   );

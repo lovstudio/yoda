@@ -59,10 +59,11 @@ export class CodexSessionTitleSource implements SessionTitleSource {
     const startedAtMs = ctx.startedAtMs ?? Date.now();
     return new CodexThreadTitlePoller({
       conversationId: ctx.conversationId,
-      statePath: resolveCodexStatePath(),
+      statePath: resolveCodexStatePath(ctx.stateRoot),
       cwd: ctx.cwd,
       startedAtMs,
       isResuming: ctx.isResuming ?? false,
+      threadId: ctx.agentSessionId,
       onTitle,
     });
   }
@@ -563,6 +564,7 @@ type CodexThreadTitlePollerOptions = {
   cwd: string;
   startedAtMs: number;
   isResuming: boolean;
+  threadId?: string;
   onTitle: TitleListener;
 };
 
@@ -580,6 +582,7 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
     this.bindDeadline = options.startedAtMs + READY_POLL_MAX_MS;
     this.minUpdatedAtMs = options.startedAtMs - RESUME_START_GRACE_MS;
     activeCodexThreadTitlePollers.add(this);
+    this.threadId = options.threadId;
     this.schedule(0);
   }
 

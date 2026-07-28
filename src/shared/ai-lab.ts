@@ -73,13 +73,38 @@ export type LogoGenerationListItem = LogoGenerationRecord & {
 
 export type AiLabProjectKind = 'app';
 
-/** A user-created, single-file app hosted by AI Lab's isolated web sandbox. */
+export const AI_LAB_APP_RUNTIME_KINDS = ['legacy-html', 'react-vite'] as const;
+
+export type AiLabAppRuntimeKind = (typeof AI_LAB_APP_RUNTIME_KINDS)[number];
+
+export const AI_LAB_APP_CAPABILITIES = ['ai.image.edit'] as const;
+
+export type AiLabAppCapability = (typeof AI_LAB_APP_CAPABILITIES)[number];
+
+export const AI_LAB_APP_MANIFEST_PATH = '.yoda/app.json';
+export const AI_LAB_APP_TEMPLATE_VERSION = 1;
+
+export type AiLabAppManifest = {
+  schemaVersion: 1;
+  template: 'react-vite';
+  templateVersion: number;
+  status: 'draft' | 'ready';
+  name: string;
+  description: string;
+  capabilities: AiLabAppCapability[];
+};
+
+/** A user-created app. Project apps keep source in their dedicated Git repository. */
 export type AiLabUserApp = {
   id: string;
   name: string;
   description: string;
   prompt: string;
+  /** Legacy single-file source only. React/Vite apps use the project repository as source. */
   html: string;
+  runtimeKind?: AiLabAppRuntimeKind;
+  templateVersion?: number;
+  capabilities?: AiLabAppCapability[];
   /** Marks a dedicated project owned by this App, rather than a legacy source project. */
   projectKind?: AiLabProjectKind;
   projectId?: string;
@@ -93,6 +118,8 @@ export type AiLabUserApp = {
 };
 
 export type PrepareAiLabBuildTaskInput = {
+  /** Present when continuing development of an existing App project. */
+  appId?: string;
   prompt: string;
   projectId: string;
   taskId: string;
@@ -106,17 +133,24 @@ export type PrepareAiLabBuildTaskResult = {
   initialPrompt: string;
 };
 
-export type CreateAiLabAppInput = {
-  prompt: string;
+export type ScaffoldAiLabAppProjectInput = {
   projectId: string;
-  runtimeId: RuntimeId;
-  model?: string | null;
-  systemPrompt?: string;
+  name: string;
 };
 
-export type RefineAiLabAppInput = {
-  id: string;
-  prompt: string;
+export type AiLabAppPreviewResult =
+  | { kind: 'legacy' }
+  | {
+      kind: 'url';
+      url: string;
+    };
+
+export type AiLabAppProjectBuild = {
+  name: string;
+  description: string;
+  runtimeKind: Extract<AiLabAppRuntimeKind, 'react-vite'>;
+  templateVersion: number;
+  capabilities: AiLabAppCapability[];
 };
 
 export type AssignAiLabAppProjectInput = {

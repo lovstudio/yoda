@@ -8,6 +8,10 @@ export interface SessionTitleContext {
   taskId: string;
   /** Absolute path of the worktree the agent runs in. */
   cwd: string;
+  /** Provider-native id when it differs from Yoda's stable conversation id. */
+  agentSessionId?: string;
+  /** Provider state root selected by Yoda's local session catalog. */
+  stateRoot?: string;
   /** Timestamp captured immediately before spawning the agent process. */
   startedAtMs?: number;
   isResuming?: boolean;

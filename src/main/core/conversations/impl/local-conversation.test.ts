@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
+import { ptyDataChannel, ptyExitChannel } from '@shared/events/ptyEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
 import type { IExecutionContext } from '@main/core/execution-context/types';
 import type { Pty, PtyExitInfo } from '@main/core/pty/pty';
@@ -8,6 +9,7 @@ import { LocalConversationProvider } from './local-conversation';
 
 const mocks = vi.hoisted(() => ({
   appSettingsGet: vi.fn(),
+  aiLogFinish: vi.fn(),
   aiLogStart: vi.fn(),
   buildAgentEnv: vi.fn(),
   captureTelemetry: vi.fn(),
@@ -16,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   getHookToken: vi.fn(),
   getProviderConfig: vi.fn(),
   getRuntimeInferenceCredentials: vi.fn(),
+  ensureCodexResumeProviderCompatible: vi.fn(),
   migrateLegacyCodexMaasHistory: vi.fn(),
   logDebug: vi.fn(),
   logError: vi.fn(),
@@ -24,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   maybeAutoTrustLocal: vi.fn(),
   prepareHookConfig: vi.fn(),
   prepareWindowsClaudeSettings: vi.fn(),
+  promptLibraryList: vi.fn(),
+  reconcileCodexStateRoot: vi.fn(),
   ensureCodexThreadUnarchived: vi.fn(),
   resolveAvailableTmuxSessionName: vi.fn(),
   resolveAgentResumeSessionId: vi.fn(),
@@ -54,7 +59,7 @@ vi.mock('@main/core/agent-hooks/classifier-wiring', () => ({
 vi.mock('@main/core/ai-logs/ai-log-service', () => ({
   aiLogService: {
     start: mocks.aiLogStart,
-    finish: vi.fn().mockResolvedValue(undefined),
+    finish: mocks.aiLogFinish,
   },
 }));
 
@@ -114,15 +119,23 @@ vi.mock('@main/core/fs/impl/local-fs', () => ({
 vi.mock('@main/core/maas/maas-service', () => ({
   maasService: {
     getRuntimeInferenceCredentials: mocks.getRuntimeInferenceCredentials,
+    reconcileCodexStateRoot: mocks.reconcileCodexStateRoot,
   },
 }));
 
 vi.mock('@main/core/maas/codex-history-compat', () => ({
+  ensureCodexResumeProviderCompatibleForConfig: mocks.ensureCodexResumeProviderCompatible,
   migrateLegacyCodexMaasHistoryForConfig: mocks.migrateLegacyCodexMaasHistory,
 }));
 
 vi.mock('@main/core/pty/local-pty', () => ({
   spawnLocalPty: mocks.spawnLocalPty,
+}));
+
+vi.mock('@main/core/prompt-library/prompt-library-service', () => ({
+  promptLibraryService: {
+    list: mocks.promptLibraryList,
+  },
 }));
 
 vi.mock('@main/core/pty/pty-env', () => ({
@@ -206,22 +219,36 @@ type SpawnOptions = {
 };
 
 class FakePty implements Pty {
+  private readonly dataHandlers: Array<(data: string) => void> = [];
   private readonly exitHandlers: Array<(info: PtyExitInfo) => void> = [];
   readonly pid = 4321;
   readonly writes: string[] = [];
+  killCalls = 0;
+  writeError: Error | null = null;
 
   write(data: string): void {
+    if (this.writeError) throw this.writeError;
     this.writes.push(data);
   }
 
   resize(): void {}
 
-  kill(): void {}
+  kill(): void {
+    this.killCalls += 1;
+  }
 
-  onData(): void {}
+  onData(handler: (data: string) => void): void {
+    this.dataHandlers.push(handler);
+  }
 
   onExit(handler: (info: PtyExitInfo) => void): void {
     this.exitHandlers.push(handler);
+  }
+
+  emitData(data: string): void {
+    for (const handler of this.dataHandlers) {
+      handler(data);
+    }
   }
 
   emitExit(info: PtyExitInfo = { exitCode: 0 }): void {
@@ -262,8 +289,10 @@ describe('LocalConversationProvider', () => {
     vi.clearAllMocks();
     mocks.getHookPort.mockReturnValue(0);
     mocks.getHookToken.mockReturnValue('token');
+    mocks.aiLogFinish.mockResolvedValue(undefined);
     mocks.aiLogStart.mockResolvedValue('ai-log-id');
     mocks.buildAgentEnv.mockReturnValue({});
+    mocks.ensureCodexResumeProviderCompatible.mockReturnValue({ status: 'unchanged' });
     mocks.migrateLegacyCodexMaasHistory.mockReturnValue({ rows: 0, files: 0 });
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'claude',
@@ -277,6 +306,7 @@ describe('LocalConversationProvider', () => {
     );
     mocks.maybeAutoTrustLocal.mockResolvedValue(undefined);
     mocks.prepareHookConfig.mockResolvedValue(undefined);
+    mocks.promptLibraryList.mockResolvedValue([]);
     mocks.prepareWindowsClaudeSettings.mockImplementation((_runtimeId: string, args: string[]) => ({
       args,
     }));
@@ -332,6 +362,141 @@ describe('LocalConversationProvider', () => {
     expect(spawned).toHaveLength(1);
   });
 
+  it('accepts optimistic input while async startup is still preparing the PTY', async () => {
+    let finishTrust!: () => void;
+    mocks.maybeAutoTrustLocal.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishTrust = resolve;
+      })
+    );
+    const provider = createProvider();
+
+    const startPromise = provider.startSession(
+      conversation,
+      { cols: 80, rows: 24 },
+      false,
+      'Fix this'
+    );
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'early input')).toBe('queued');
+
+    finishTrust();
+    await startPromise;
+
+    expect(spawned[0].pty.writes).toEqual(['early input']);
+  });
+
+  it('does not revive a session stopped while async startup is pending', async () => {
+    let finishTrust!: () => void;
+    mocks.maybeAutoTrustLocal.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishTrust = resolve;
+      })
+    );
+    const provider = createProvider();
+
+    const startPromise = provider.startSession(
+      conversation,
+      { cols: 80, rows: 24 },
+      false,
+      'Fix this'
+    );
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'stale input')).toBe('queued');
+
+    await provider.stopSession(conversation.id);
+    finishTrust();
+    await startPromise;
+
+    expect(spawned).toHaveLength(0);
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'late input')).toBe('unavailable');
+  });
+
+  it('single-flights concurrent starts for the same conversation', async () => {
+    let finishTrust!: () => void;
+    mocks.maybeAutoTrustLocal.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishTrust = resolve;
+      })
+    );
+    const provider = createProvider();
+
+    const first = provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+    const second = provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.maybeAutoTrustLocal).toHaveBeenCalledTimes(1);
+    finishTrust();
+    await Promise.all([first, second]);
+
+    expect(spawned).toHaveLength(1);
+    expect(ptySessionRegistry.get(sessionId)).toBe(spawned[0].pty);
+  });
+
+  it('rolls back a partially registered PTY when queued input delivery throws', async () => {
+    const pty = new FakePty();
+    pty.writeError = new Error('write failed');
+    mocks.spawnLocalPty.mockImplementationOnce((options: SpawnOptions) => {
+      spawned.push({ pty, options });
+      return pty;
+    });
+    const provider = createProvider();
+
+    const startPromise = provider.startSession(
+      conversation,
+      { cols: 80, rows: 24 },
+      false,
+      'Fix this'
+    );
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'early input')).toBe('queued');
+
+    await expect(startPromise).rejects.toThrow('write failed');
+    expect(pty.killCalls).toBe(1);
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'late input')).toBe('unavailable');
+  });
+
+  it('lets the registry flush final output and emit exit after provider cleanup', async () => {
+    const provider = createProvider();
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    spawned[0].pty.emitData('final output');
+    spawned[0].pty.emitExit({ exitCode: 7 });
+
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      ptyDataChannel,
+      expect.objectContaining({ data: 'final output' }),
+      sessionId
+    );
+    expect(mocks.emitEvent).toHaveBeenCalledWith(ptyExitChannel, { exitCode: 7 }, sessionId);
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+  });
+
+  it('registers the PTY before immediate post-spawn output and exit can run', async () => {
+    mocks.spawnLocalPty.mockImplementationOnce((options: SpawnOptions) => {
+      const pty = new FakePty();
+      spawned.push({ pty, options });
+      void Promise.resolve().then(() => {
+        pty.emitData('immediate output');
+        pty.emitExit({ exitCode: 9, signal: 'SIGTERM' });
+      });
+      return pty;
+    });
+    const provider = createProvider();
+
+    await provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
+
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      ptyDataChannel,
+      expect.objectContaining({ data: 'immediate output' }),
+      sessionId
+    );
+    expect(mocks.emitEvent).toHaveBeenCalledWith(
+      ptyExitChannel,
+      { exitCode: 9, signal: 'SIGTERM' },
+      sessionId
+    );
+    expect(ptySessionRegistry.get(sessionId)).toBeUndefined();
+  });
+
   it('uses provider resume arguments when explicitly resumed after exit', async () => {
     const provider = createProvider();
 
@@ -385,8 +550,59 @@ describe('LocalConversationProvider', () => {
       threadId: 'codex-thread-1',
       ctx: expect.anything(),
     });
+    expect(mocks.ensureCodexResumeProviderCompatible).toHaveBeenCalledWith('codex-thread-1', {
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+    });
     expect(spawned).toHaveLength(2);
     expect(spawned[1].options.args).toEqual(['resume', '--cd', '/workspace', 'codex-thread-1']);
+  });
+
+  it('resumes an adopted Codex session through its original account state root', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+    });
+    mocks.resolveAgentResumeSessionId.mockReturnValue('native-thread-1');
+    const importedConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+      sessionSource: {
+        catalogId: 'catalog-1',
+        runtimeId: 'codex',
+        sessionId: 'native-thread-1',
+        stateRoot: '/state/codex-account-a',
+        providerId: 'provider-a',
+      },
+    };
+    const provider = createProvider();
+
+    await provider.startSession(importedConversation, { cols: 80, rows: 24 }, true);
+
+    expect(mocks.reconcileCodexStateRoot).toHaveBeenCalledWith('/state/codex-account-a');
+    expect(mocks.ensureCodexThreadUnarchived).toHaveBeenCalledWith({
+      runtimeId: 'codex',
+      providerConfig: {
+        cli: 'codex',
+        resumeFlag: 'resume',
+        resumeSessionIdArg: true,
+        initialPromptFlag: '',
+        env: { CODEX_HOME: '/state/codex-account-a' },
+      },
+      threadId: 'native-thread-1',
+      ctx: expect.anything(),
+      statePath: '/state/codex-account-a/state_5.sqlite',
+    });
+    expect(mocks.buildAgentEnv).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerVars: { CODEX_HOME: '/state/codex-account-a' },
+      })
+    );
+    expect(spawned[0].options.args).toEqual(['resume', '--cd', '/workspace', 'native-thread-1']);
   });
 
   it('injects Codex notify as a runtime config override when hooks are active', async () => {
@@ -421,7 +637,7 @@ describe('LocalConversationProvider', () => {
     expect(spawned[0].options.args.slice(2)).toEqual(['Fix this']);
   });
 
-  it('launches Codex through the persisted MaaS provider without overriding its identity', async () => {
+  it('launches Codex through the persisted local MaaS Gateway provider', async () => {
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'codex',
       resumeFlag: 'resume',
@@ -660,6 +876,11 @@ describe('LocalConversationProvider', () => {
       provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this')
     ).rejects.toThrow('spawn failed');
     expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(mocks.aiLogFinish).toHaveBeenCalledWith('ai-log-id', {
+      status: 'failed',
+      error: 'PTY spawn failed: Error: spawn failed',
+    });
+    expect(ptySessionRegistry.writeOrQueue(sessionId, 'late input')).toBe('unavailable');
   });
 
   it('cleans prepared settings when a session is stopped', async () => {

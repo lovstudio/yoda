@@ -10,6 +10,7 @@ import { automationController } from './core/automation/controller';
 import { conversationController } from './core/conversations/controller';
 import { dependenciesController } from './core/dependencies/controller';
 import { editorBufferController } from './core/editor/controller';
+import { extensionsController } from './core/extensions/controller';
 import { featurebaseController } from './core/featurebase/controller';
 import { featureController } from './core/features/controller';
 import { forgejoController } from './core/forgejo/controller';
@@ -19,7 +20,6 @@ import { githubController } from './core/github/controller';
 import { gitlabController } from './core/gitlab/controller';
 import { issueController } from './core/issues/controller';
 import { jiraController } from './core/jira/controller';
-import { leakedPromptsController } from './core/leaked-prompts/controller';
 import { linearController } from './core/linear/controller';
 import { llmController } from './core/llm/controller';
 import { lovcodeController } from './core/lovcode/controller';
@@ -85,7 +85,6 @@ export const rpcRouter = createRPCRouter({
   plugins: pluginsController,
   promptLibrary: promptLibraryController,
   quickActions: quickActionsController,
-  leakedPrompts: leakedPromptsController,
   skills: skillsController,
   ssh: sshController,
   projects: projectController,
@@ -99,6 +98,7 @@ export const rpcRouter = createRPCRouter({
   dependencies: dependenciesController,
   mcp: mcpController,
   editorBuffer: editorBufferController,
+  extensions: extensionsController,
   telemetry: telemetryController,
   pullRequests: pullRequestController,
   viewState: viewStateController,

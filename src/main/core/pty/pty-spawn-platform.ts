@@ -7,8 +7,8 @@ import { getWindowsEnvValue } from '@main/utils/windows-env';
 import { buildTmuxShellLine } from './tmux-session-name';
 
 // tmux rejects an over-long command string with "command too long". A large
-// appended system prompt (e.g. a principle carrying a full leaked system
-// prompt) pushes the inlined `new-session` command past that limit, so above
+// appended system prompt (for example, a large sourced prompt) pushes the
+// inlined `new-session` command past that limit, so above
 // this size we stash the command in a temp script and have tmux run that.
 const TMUX_INLINE_COMMAND_LIMIT = 16_384;
 

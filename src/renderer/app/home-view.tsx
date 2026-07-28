@@ -66,9 +66,11 @@ import { FeatureWorkflowPreview } from '@renderer/features/agent-room/feature-wo
 import { invalidateTeamRoomQueries } from '@renderer/features/agent-room/team-room-queries';
 import { useAgents } from '@renderer/features/agents-config/use-agents';
 import { createAiLabProject } from '@renderer/features/ai-lab/create-ai-lab-project';
+import { startAiLabBuildTask } from '@renderer/features/ai-lab/start-ai-lab-build-task';
 import {
   effectiveGlobalEnabled,
   setGlobalOverride,
+  setGlobalOverrides,
   setProjectItems,
 } from '@renderer/features/projects/project-prompt-principles';
 import {
@@ -78,6 +80,12 @@ import {
   getRepositoryStore,
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
+import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
+import {
+  usePrompts,
+  useSetPromptGroupInjectionEnabled,
+  useUpdatePrompt,
+} from '@renderer/features/prompt-library/use-prompts';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
 import { ContextItem, memoryFileLabel } from '@renderer/features/tasks/components/context-item';
@@ -137,6 +145,7 @@ import {
   type ComposerOverrideScope,
 } from './composer-project-overrides';
 import { ComposerPromptInput } from './composer-prompt-input';
+import { resolveProjectSubmitSourceBranch } from './home-project-submit';
 import { serializePromptWithTokens, type PromptToken } from './prompt-attachment-tokens';
 import { promptRewriteFailureDescription } from './submit-prompt-rewrite';
 
@@ -911,6 +920,23 @@ export const HomeComposer = observer(function HomeComposer({
     effectiveStandardStrategyKind === 'new-branch' ? 'new-branch' : selectedBranchSubmitKind;
   const reviewSubmitKind: TaskSubmitStrategyKind =
     effectiveReviewStrategyKind === 'new-branch' ? 'new-branch' : selectedBranchSubmitKind;
+  const projectSubmitStrategyKind: TaskSubmitStrategyKind =
+    runMode === 'team'
+      ? 'new-branch'
+      : runMode === 'review'
+        ? reviewSubmitKind
+        : runMode === 'brainstorm'
+          ? 'no-worktree'
+          : standardSubmitKind;
+  const projectSubmitSourceBranch =
+    mounted &&
+    resolveProjectSubmitSourceBranch({
+      defaultBranch,
+      currentBranch: currentBranchName,
+      isUnborn,
+      strategyKind: projectSubmitStrategyKind,
+      baseRef: mounted.data.baseRef,
+    });
   // Every comparison config is a duplicate of the current base composer config.
   // Entering compare mode (from zero) migrates the base into the list as the
   // first config and adds a second, so all rows are equal and the special base
@@ -939,20 +965,24 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [updateDraft]
   );
-  const { value: promptPrinciplesValue, update: updatePromptPrinciples } =
-    useAppSettingsKey('promptPrinciples');
-  const promptPrinciples = promptPrinciplesValue?.items ?? [];
+  const { data: promptLibraryItems } = usePrompts();
+  const updateLibraryPrompt = useUpdatePrompt();
+  const setLibraryPromptGroup = useSetPromptGroupInjectionEnabled();
+  const promptPrinciples = useMemo(
+    () =>
+      (promptLibraryItems ?? [])
+        .slice()
+        .sort((left, right) => left.injectionOrder - right.injectionOrder),
+    [promptLibraryItems]
+  );
   // Run-defaults section is collapsed by default — it is rarely changed and its
   // eight rows otherwise dominate the popover.
   const [runDefaultsOpen, setRunDefaultsOpen] = useState(false);
   const setPromptPrincipleEnabled = useCallback(
     (id: string, enabled: boolean) => {
-      const items = promptPrinciplesValue?.items ?? [];
-      updatePromptPrinciples({
-        items: items.map((item) => (item.id === id ? { ...item, enabled } : item)),
-      });
+      updateLibraryPrompt.mutate({ id, patch: { injectionEnabled: enabled } });
     },
-    [promptPrinciplesValue, updatePromptPrinciples]
+    [updateLibraryPrompt]
   );
   // When a project is selected, prompt-principle toggles operate on the
   // project's layer (override globals + its own items) stored in project
@@ -996,8 +1026,14 @@ export const HomeComposer = observer(function HomeComposer({
     hasProject: hasProjectOverrideTarget,
   });
   const setGlobalPrincipleProjectOverride = useCallback(
-    (principle: { id: string; enabled: boolean }, enabled: boolean) => {
+    (principle: { id: string; injectionEnabled: boolean }, enabled: boolean) => {
       saveProjectPromptPrinciples(setGlobalOverride(projectPromptPrinciples, principle, enabled));
+    },
+    [projectPromptPrinciples, saveProjectPromptPrinciples]
+  );
+  const setGlobalPrincipleGroupProjectOverride = useCallback(
+    (principles: Array<{ id: string; injectionEnabled: boolean }>, enabled: boolean) => {
+      saveProjectPromptPrinciples(setGlobalOverrides(projectPromptPrinciples, principles, enabled));
     },
     [projectPromptPrinciples, saveProjectPromptPrinciples]
   );
@@ -1081,8 +1117,8 @@ export const HomeComposer = observer(function HomeComposer({
       : taskScopedTarget
         ? !!targetProvisionedTask
         : modeCanRunWithoutProject
-          ? !mounted || !!defaultBranch
-          : !!mounted && (needsInitialCommit || !!defaultBranch));
+          ? !mounted || !!projectSubmitSourceBranch
+          : !!mounted && (needsInitialCommit || !!projectSubmitSourceBranch));
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || submitting) return;
@@ -1215,8 +1251,6 @@ export const HomeComposer = observer(function HomeComposer({
         if (!slot.provider) return;
         const resolvedRequirement = deferInitialPrompt ? await requirementPromise : requirement;
         if (!resolvedRequirement) return;
-        const taskId = crypto.randomUUID();
-        const conversationId = crypto.randomUUID();
         const projectName =
           taskNameFromPrompt(resolvedRequirement) || t('home.defaultAppProjectName');
         try {
@@ -1225,47 +1259,27 @@ export const HomeComposer = observer(function HomeComposer({
             t('home.buildTaskName'),
             Array.from(appProject.taskManager.tasks.values(), (task) => task.data.name)
           );
-          const plan = await rpc.aiLab.prepareBuildTask({
+          const launch = await startAiLabBuildTask({
             prompt: resolvedRequirement,
-            projectId: appProject.data.id,
-            taskId,
-            conversationId,
+            project: appProject,
+            taskName,
             runtimeId: slot.provider,
             model: slot.agent?.model,
             systemPrompt: slot.systemPrompt,
+            imagePaths,
+            skillSelection: agentSkillSelection(slot.agent),
           });
-          const createPromise = appProject.taskManager.createTask({
-            id: taskId,
-            projectId: appProject.data.id,
-            name: taskName,
-            sourceBranch: { type: 'local', branch: appProject.data.baseRef },
-            strategy: { kind: 'no-worktree' },
-            initialConversation: {
-              id: conversationId,
-              projectId: appProject.data.id,
-              taskId,
-              runtime: slot.provider,
-              title: initialConversationTitle(slot.provider, resolvedRequirement, []),
-              initialPrompt: plan.initialPrompt,
-              imagePaths,
-              model: slot.agent?.model,
-              skillSelection: agentSkillSelection(slot.agent),
-            },
-          });
-          void createPromise.catch((error: unknown) => {
-            void rpc.aiLab.cancelBuildTask(taskId);
+          void launch.promise.catch((error: unknown) => {
             toast.error(t('home.buildFailed'), {
               description: error instanceof Error ? error.message : t('common.unknownError'),
             });
           });
-          navigate('library', { section: 'apps' });
-          onSubmitted?.({ kind: 'task', projectId: appProject.data.id, taskId });
+          goToTask(appProject.data.id, launch.taskId);
           toast.success(t('home.buildStarted'), {
             description: t('home.buildStartedDescription'),
           });
           resetComposer();
         } catch (error) {
-          void rpc.aiLab.cancelBuildTask(taskId);
           toast.error(t('home.buildFailed'), {
             description: error instanceof Error ? error.message : t('common.unknownError'),
           });
@@ -1561,12 +1575,16 @@ export const HomeComposer = observer(function HomeComposer({
       // first commit emit a ref change the store hasn't applied yet). Resolve
       // the selected branch from a fresh read so worktree modes get a valid source
       // branch instead of silently bailing here.
-      let baseDefaultBranch = defaultBranch;
+      let baseDefaultBranch = projectSubmitSourceBranch;
       if (!baseDefaultBranch) {
         const local = await rpc.repository.getLocalBranches(mounted.data.id);
-        if (local.currentBranch) {
-          baseDefaultBranch = { type: 'local', branch: local.currentBranch };
-        }
+        baseDefaultBranch = resolveProjectSubmitSourceBranch({
+          defaultBranch,
+          currentBranch: local.currentBranch,
+          isUnborn: local.isUnborn,
+          strategyKind: projectSubmitStrategyKind,
+          baseRef: mounted.data.baseRef,
+        });
       }
       if (!baseDefaultBranch) return;
 
@@ -1970,6 +1988,8 @@ export const HomeComposer = observer(function HomeComposer({
     clearPromptTokens,
     reviewSubmitKind,
     standardSubmitKind,
+    projectSubmitSourceBranch,
+    projectSubmitStrategyKind,
     prompt,
     trimmed,
     submitting,
@@ -2031,39 +2051,26 @@ export const HomeComposer = observer(function HomeComposer({
             </button>
           }
         />
-        {promptPrinciples.length === 0 ? (
-          <p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>
-        ) : (
-          promptPrinciples.map((principle) => (
-            <div key={principle.id} className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span className="min-w-0 truncate text-xs text-foreground">
-                  {principle.name || t('home.promptPrincipleUnnamed')}
-                </span>
-                {principle.text ? (
-                  <InfoTooltip
-                    label={principle.name || t('home.promptPrincipleUnnamed')}
-                    content={<span className="whitespace-pre-wrap">{principle.text}</span>}
-                  />
-                ) : null}
-              </div>
-              <Switch
-                size="sm"
-                checked={
-                  selectedProjectId
-                    ? effectiveGlobalEnabled(projectPromptPrinciples, principle)
-                    : principle.enabled
-                }
-                onCheckedChange={(checked) =>
-                  selectedProjectId
-                    ? setGlobalPrincipleProjectOverride(principle, checked)
-                    : setPromptPrincipleEnabled(principle.id, checked)
-                }
-                aria-label={t('settings.prompts.toggle')}
-              />
-            </div>
-          ))
-        )}
+        <PromptInjectionControls
+          prompts={promptPrinciples}
+          isPromptEnabled={(prompt) =>
+            selectedProjectId
+              ? effectiveGlobalEnabled(projectPromptPrinciples, prompt)
+              : prompt.injectionEnabled
+          }
+          onPromptEnabledChange={(prompt, checked) =>
+            selectedProjectId
+              ? setGlobalPrincipleProjectOverride(prompt, checked)
+              : setPromptPrincipleEnabled(prompt.id, checked)
+          }
+          onGroupEnabledChange={(groupName, principles, enabled) =>
+            selectedProjectId
+              ? setGlobalPrincipleGroupProjectOverride(principles, enabled)
+              : setLibraryPromptGroup.mutate({ groupName, enabled })
+          }
+          disabled={updateLibraryPrompt.isPending || setLibraryPromptGroup.isPending}
+          empty={<p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>}
+        />
         {selectedProjectId && projectPrincipleItems.length > 0 ? (
           <>
             <div className="mt-1 text-[10px] font-medium uppercase tracking-wide text-foreground-passive">

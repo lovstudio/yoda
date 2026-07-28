@@ -1,7 +1,10 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import type { RunStateEvent, RunStatus } from '@shared/events/agent-run-state';
-import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
+import {
+  resolveClaudeTranscriptPath,
+  resolveClaudeTranscriptPathFromConfigDir,
+} from '@main/core/session-title/claude-title-source';
 import { log } from '@main/lib/logger';
 import { iterateLines } from '@main/utils/text-lines';
 import { isInterruptedSinceLastPrompt } from './interrupt-marker';
@@ -223,14 +226,14 @@ export interface ClaudeRunStateContext {
 export function watchClaudeRunState(
   ctx: ClaudeRunStateContext,
   dispatch: RunStateDispatch,
-  getStatus?: RunStatusReader
+  getStatus?: RunStatusReader,
+  options: { sessionId?: string; claudeConfigDir?: string } = {}
 ): ClaudeRunStateWatcher {
-  return new ClaudeTranscriptStateTailer(
-    resolveClaudeTranscriptPath(ctx.cwd, ctx.conversationId),
-    ctx.conversationId,
-    dispatch,
-    getStatus
-  );
+  const sessionId = options.sessionId ?? ctx.conversationId;
+  const transcriptPath = options.claudeConfigDir
+    ? resolveClaudeTranscriptPathFromConfigDir(ctx.cwd, sessionId, options.claudeConfigDir)
+    : resolveClaudeTranscriptPath(ctx.cwd, sessionId);
+  return new ClaudeTranscriptStateTailer(transcriptPath, ctx.conversationId, dispatch, getStatus);
 }
 
 class ClaudeTranscriptStateTailer implements ClaudeRunStateWatcher {

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import type { RuntimeCustomConfig } from '@shared/app-settings';
 import { buildAgentEnv } from '@main/core/pty/pty-env';
 import { buildAgentSubcommand } from '../conversations/impl/agent-command';
 import { resolveAgentApiEnvVars, resolveRuntimeEnv } from '../conversations/impl/runtime-env';
@@ -16,6 +17,8 @@ export type CodexAppServerRequestOptions = {
   /** Required for request fields marked experimental by the installed Codex version. */
   experimentalApi?: boolean;
   timeoutMs?: number;
+  /** Pins the short-lived app-server to the provider account/state root that owns the thread. */
+  providerConfig?: RuntimeCustomConfig;
 };
 
 /**
@@ -29,7 +32,7 @@ export async function requestCodexAppServer(
   params: Record<string, unknown>,
   options: CodexAppServerRequestOptions = {}
 ): Promise<unknown> {
-  const providerConfig = await runtimeOverrideSettings.getItem('codex');
+  const providerConfig = options.providerConfig ?? (await runtimeOverrideSettings.getItem('codex'));
   const command = buildAgentSubcommand({
     runtimeId: 'codex',
     providerConfig,

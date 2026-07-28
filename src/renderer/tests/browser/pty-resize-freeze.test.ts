@@ -96,7 +96,36 @@ describe('FrontendPty.commitResize', () => {
     webglMocks.clearTextureAtlas.mockClear();
   });
 
-  it('invalidates the resize snapshot and fully redraws WebGL after scrolling', async () => {
+  it('recognizes common home/fence sequences as full TUI repaints', () => {
+    const looksLikeRepaint = (
+      FrontendPty as unknown as { looksLikeRepaint: (data: string) => boolean }
+    ).looksLikeRepaint;
+
+    expect(looksLikeRepaint('\x1b[1;1Hredraw')).toBe(true);
+    expect(looksLikeRepaint('\x1b[1;1fredraw')).toBe(true);
+    expect(looksLikeRepaint('\x1b[?2026hbatched\x1b[?2026l')).toBe(true);
+    expect(looksLikeRepaint('\x1b[35;1Hincremental-row')).toBe(false);
+  });
+
+  it('releases the freeze overlay backing store when unmounted', () => {
+    pty = new FrontendPty('session-overlay-release');
+    mountTarget = document.createElement('div');
+    document.body.appendChild(mountTarget);
+    const lease = pty.mount(mountTarget, { cols: 120, rows: 32 });
+    const overlay = createOverlay(pty);
+    overlay.width = 640;
+    overlay.height = 320;
+    setFreezeState(pty, overlay, 'idle');
+
+    pty.unmount(lease);
+
+    expect(overlay.width).toBe(0);
+    expect(overlay.height).toBe(0);
+    expect(overlay.parentElement).toBeNull();
+    expect((pty as unknown as PtyInternals).freezeOverlay).toBeNull();
+  });
+
+  it('invalidates the resize snapshot without clearing the shared glyph atlas', async () => {
     pty = new FrontendPty('session-scroll-redraw');
     pty.setRendererPreference('webgl');
     pty.flushPendingWrites();
@@ -117,12 +146,14 @@ describe('FrontendPty.commitResize', () => {
     pty.terminal.scrollLines(1);
 
     expect((pty as unknown as PtyInternals).hasFreezeSnapshot).toBe(false);
-    await vi.waitFor(() => expect(webglMocks.clearTextureAtlas).toHaveBeenCalledTimes(1));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(webglMocks.clearTextureAtlas).not.toHaveBeenCalled();
   });
 
   it('defers WebGL recovery while off-screen and redraws cleanly when mounted', async () => {
     pty = new FrontendPty('session-background-scroll');
     pty.setRendererPreference('webgl');
+    expect(pty.getRendererDiagnosticsEntry().engine).toBe('dom');
     pty.flushPendingWrites();
     await writeTerminal(
       pty,
@@ -138,11 +169,20 @@ describe('FrontendPty.commitResize', () => {
     document.body.appendChild(mountTarget);
     pty.mount(mountTarget, { cols: 120, rows: 32 });
 
-    await vi.waitFor(() => expect(webglMocks.clearTextureAtlas).toHaveBeenCalledTimes(1));
+    expect(pty.getRendererDiagnosticsEntry().engine).toBe('webgl');
+    expect(webglMocks.clearTextureAtlas).not.toHaveBeenCalled();
+
+    pty.unmount();
+    expect(pty.getRendererDiagnosticsEntry().engine).toBe('dom');
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
+    expect(pty.getRendererDiagnosticsEntry().engine).toBe('webgl');
   });
 
   it('switches and redraws every live terminal renderer immediately', () => {
     pty = new FrontendPty('session-renderer-toggle');
+    mountTarget = document.createElement('div');
+    document.body.appendChild(mountTarget);
+    pty.mount(mountTarget, { cols: 120, rows: 32 });
     pty.setRendererPreference('webgl');
     expect(pty.getRendererDiagnosticsEntry().engine).toBe('webgl');
 
@@ -152,7 +192,57 @@ describe('FrontendPty.commitResize', () => {
     webglMocks.clearTextureAtlas.mockClear();
     applyRendererPreferenceToAll('webgl');
     expect(pty.getRendererDiagnosticsEntry().engine).toBe('webgl');
-    expect(webglMocks.clearTextureAtlas).toHaveBeenCalled();
+    expect(webglMocks.clearTextureAtlas).not.toHaveBeenCalled();
+  });
+
+  it('ignores a stale unmount cleanup after a newer host claims the terminal', () => {
+    pty = new FrontendPty('session-mount-lease');
+    const firstTarget = document.createElement('div');
+    const secondTarget = document.createElement('div');
+    document.body.append(firstTarget, secondTarget);
+    mountTarget = secondTarget;
+
+    const firstLease = pty.mount(firstTarget, { cols: 100, rows: 24 });
+    const secondLease = pty.mount(secondTarget, { cols: 120, rows: 30 });
+    pty.unmount(firstLease);
+
+    expect(pty.ownedContainer.parentElement).toBe(secondTarget);
+    expect(pty.terminal.cols).toBe(120);
+    pty.unmount(secondLease);
+    expect(pty.ownedContainer.parentElement).not.toBe(secondTarget);
+    firstTarget.remove();
+  });
+
+  it('keeps only the latest host through repeated mount and stale-unmount churn', () => {
+    pty = new FrontendPty('session-mount-lease-churn');
+    pty.setRendererPreference('dom');
+    const targets = Array.from({ length: 64 }, () => document.createElement('div'));
+    document.body.append(...targets);
+    mountTarget = targets.at(-1) ?? null;
+
+    const leases: number[] = [];
+    for (const [index, target] of targets.entries()) {
+      leases.push(pty.mount(target, { cols: 80 + index, rows: 24 + (index % 8) }));
+
+      // React cleanup from the prior host can run after the new effect mounts.
+      // Every stale cleanup must leave exactly one live host untouched.
+      if (index > 0) pty.unmount(leases[index - 1]);
+      expect(pty.ownedContainer.parentElement).toBe(target);
+      expect(targets.filter((candidate) => candidate.contains(pty!.ownedContainer))).toEqual([
+        target,
+      ]);
+    }
+
+    for (const staleLease of leases.slice(0, -1).reverse()) {
+      pty.unmount(staleLease);
+      expect(pty.ownedContainer.parentElement).toBe(targets.at(-1));
+    }
+    expect(pty.terminal.cols).toBe(143);
+    expect(pty.terminal.rows).toBe(31);
+
+    pty.unmount(leases.at(-1));
+    expect(targets.some((target) => target.contains(pty!.ownedContainer))).toBe(false);
+    for (const target of targets.slice(0, -1)) target.remove();
   });
 
   it('keeps the previous frame visible while a wider grid renders', async () => {

@@ -13,6 +13,9 @@ export interface Pty {
   readonly pid?: number;
   write(data: string): void;
   resize(cols: number, rows: number): void;
+  /** Temporarily stop/resume output reads for renderer flow control. */
+  pause?(): void;
+  resume?(): void;
   kill(): void;
   onData(handler: (data: string) => void): void;
   onExit(handler: (info: PtyExitInfo) => void): void;

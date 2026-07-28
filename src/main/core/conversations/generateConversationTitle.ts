@@ -12,6 +12,7 @@ import type {
   TaskNamingSettings,
   TaskNamingStatus,
 } from '@shared/task-naming';
+import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import {
   buildDebugTrace,
   buildNamingPromptParts,
@@ -26,6 +27,10 @@ import { db } from '@main/db/client';
 import { conversations, projects } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
+import {
+  getConversationAgentSessionId,
+  getConversationRuntimeStateRoot,
+} from './conversation-session-source';
 import { getClaudeSessionContext } from './getClaudeSessionContext';
 import { getCodexSessionContext } from './getCodexSessionContext';
 import { mapConversationRowToConversation } from './utils';
@@ -396,15 +401,24 @@ async function loadSessionMessages(
   cwd: string
 ): Promise<SessionTranscriptMessage[]> {
   if (conversation.runtimeId === 'claude') {
-    const context = await getClaudeSessionContext(cwd, conversation.id);
+    const providerConfig = await runtimeOverrideSettings.getItem('claude');
+    const context = await getClaudeSessionContext(
+      cwd,
+      getConversationAgentSessionId(conversation),
+      {
+        claudeConfigDir: getConversationRuntimeStateRoot(conversation, providerConfig),
+      }
+    );
     return context?.messages ?? promptsToMessages(context?.prompts ?? []);
   }
   if (conversation.runtimeId === 'codex') {
+    const providerConfig = await runtimeOverrideSettings.getItem('codex');
     const context = await getCodexSessionContext(
       cwd,
-      conversation.id,
+      getConversationAgentSessionId(conversation),
       conversation.title,
-      conversation.createdAt ?? null
+      conversation.createdAt ?? null,
+      { codexHome: getConversationRuntimeStateRoot(conversation, providerConfig) }
     );
     return context?.messages ?? promptsToMessages(context?.prompts ?? []);
   }

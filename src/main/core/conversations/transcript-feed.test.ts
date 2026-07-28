@@ -41,6 +41,9 @@ vi.mock('@main/db/client', () => ({
 vi.mock('@main/db/schema', () => ({ conversations: { id: 'id' } }));
 vi.mock('@main/lib/events', () => ({ events: { emit: vi.fn() } }));
 vi.mock('@main/lib/logger', () => ({ log: { warn: vi.fn() } }));
+vi.mock('@main/core/settings/runtime-settings-service', () => ({
+  runtimeOverrideSettings: { getItem: vi.fn(async () => undefined) },
+}));
 vi.mock('../projects/utils', () => ({
   resolveTask: () => ({ conversations: { taskPath: '/workspace' } }),
 }));
@@ -53,6 +56,7 @@ vi.mock('./getCodexSessionContext', () => ({
 vi.mock('./utils', () => ({ mapConversationRowToConversation: (row: unknown) => row }));
 vi.mock('@main/core/session-title/claude-title-source', () => ({
   resolveClaudeTranscriptPath: vi.fn(),
+  resolveClaudeTranscriptPathFromConfigDir: vi.fn(),
 }));
 
 describe('transcript feed local subscription', () => {

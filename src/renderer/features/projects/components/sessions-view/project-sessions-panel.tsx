@@ -3,7 +3,7 @@ import { MessageSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Conversation } from '@shared/conversations';
+import type { Conversation, LocalAgentSession } from '@shared/conversations';
 import {
   conversationArchivedChannel,
   conversationMovedChannel,
@@ -17,11 +17,13 @@ import { asProvisioned, getTaskManagerStore } from '@renderer/features/tasks/sto
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { events, rpc } from '@renderer/lib/ipc';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
+import { mergeProjectSessionItems, type ProjectSessionItem } from './project-session-items';
 import {
   getProjectSessionTaskArchivedAt,
   openProjectSessionConversation,
@@ -29,16 +31,10 @@ import {
 
 const projectSessionsQueryKey = (projectId: string) => ['project-sessions', projectId] as const;
 
-function getConversationSortTime(conversation: Conversation): number {
-  const raw =
-    conversation.archivedAt ??
-    conversation.lastInteractedAt ??
-    conversation.updatedAt ??
-    conversation.createdAt ??
-    '';
-  const time = new Date(raw).getTime();
-  return Number.isNaN(time) ? 0 : time;
-}
+type ProjectSessionsData = {
+  conversations: Conversation[];
+  localSessions: LocalAgentSession[];
+};
 
 const ProjectSessionRow = observer(function ProjectSessionRow({
   conversation,
@@ -133,6 +129,70 @@ const ProjectSessionRow = observer(function ProjectSessionRow({
   );
 });
 
+function LocalAgentSessionRow({
+  projectId,
+  session,
+}: {
+  projectId: string;
+  session: LocalAgentSession;
+}) {
+  const { t } = useTranslation();
+  const { navigate } = useNavigate();
+  const showSession = useShowModal('localAgentSessionModal');
+  const config = agentConfig[session.runtimeId];
+  const interactedAt = session.updatedAt ?? session.createdAt ?? '';
+
+  const handleOpen = () => {
+    showSession({
+      projectId,
+      session,
+      onSuccess: ({ projectId: resultProjectId, taskId, conversationId }) => {
+        void openProjectSessionConversation(
+          { projectId: resultProjectId, taskId, id: conversationId },
+          navigate
+        );
+      },
+    });
+  };
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        'group flex h-10 w-full items-center gap-2 rounded-md border border-transparent px-2 text-left outline-none transition-colors',
+        'hover:border-border hover:bg-background-1 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring'
+      )}
+      title={`${session.title} · ${session.stateRoot}`}
+      aria-label={t('projects.sessionsView.previewLocalSession', { title: session.title })}
+      onClick={handleOpen}
+    >
+      <span className="flex size-6 shrink-0 items-center justify-center rounded bg-background-2">
+        {config ? (
+          <AgentLogo
+            logo={config.logo}
+            alt={config.alt}
+            isSvg={config.isSvg}
+            invertInDark={config.invertInDark}
+            className="size-4"
+          />
+        ) : (
+          <MessageSquare className="size-4 text-foreground-passive" />
+        )}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{session.title}</span>
+      <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+        {t('projects.sessionsView.localBadge')}
+      </span>
+      <span className="hidden min-w-24 max-w-44 truncate text-xs text-foreground-muted sm:block">
+        {session.providerId || session.runtimeId}
+      </span>
+      <span className="flex min-w-12 shrink-0 justify-end text-xs text-foreground-passive">
+        <RelativeTime value={interactedAt} compact />
+      </span>
+    </button>
+  );
+}
+
 export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -146,7 +206,14 @@ export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
     queryKey,
     queryFn: async () => {
       const conversations = await rpc.conversations.getConversations();
-      return conversations.filter((conversation) => conversation.projectId === projectId);
+      const localSessions =
+        project?.data.type === 'local'
+          ? await rpc.conversations.listLocalAgentSessions(project.data.path)
+          : [];
+      return {
+        conversations: conversations.filter((conversation) => conversation.projectId === projectId),
+        localSessions,
+      };
     },
     enabled: Boolean(project),
     staleTime: 0,
@@ -156,12 +223,17 @@ export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
   useEffect(() => {
     const offRenamed = events.on(conversationRenamedChannel, (event) => {
       if (event.projectId !== projectId) return;
-      queryClient.setQueryData<Conversation[]>(queryKey, (current) =>
-        current?.map((conversation) =>
-          conversation.id === event.conversationId
-            ? { ...conversation, title: event.title }
-            : conversation
-        )
+      queryClient.setQueryData<ProjectSessionsData>(queryKey, (current) =>
+        current
+          ? {
+              ...current,
+              conversations: current.conversations.map((conversation) =>
+                conversation.id === event.conversationId
+                  ? { ...conversation, title: event.title }
+                  : conversation
+              ),
+            }
+          : current
       );
     });
     const refresh = () => {
@@ -188,8 +260,8 @@ export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
     };
   }, [projectId, queryClient, queryKey]);
 
-  const conversations = useMemo(
-    () => [...(data ?? [])].sort((a, b) => getConversationSortTime(b) - getConversationSortTime(a)),
+  const sessions = useMemo(
+    () => mergeProjectSessionItems(data?.conversations ?? [], data?.localSessions ?? []),
     [data]
   );
 
@@ -203,15 +275,15 @@ export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
             {t('tasks.conversations.sessions')}
           </h2>
           <span className="text-xs text-foreground-muted">
-            {t('projects.sessionsView.count', { count: conversations.length })}
+            {t('projects.sessionsView.count', { count: sessions.length })}
           </span>
         </div>
 
-        {isLoading && conversations.length === 0 ? (
+        {isLoading && sessions.length === 0 ? (
           <EmptyState label={t('common.loading')} />
         ) : error ? (
           <EmptyState label={t('common.error')} description={String(error)} />
-        ) : conversations.length === 0 ? (
+        ) : sessions.length === 0 ? (
           <EmptyState
             label={t('projects.sessionsView.emptyTitle')}
             description={t('projects.sessionsView.emptyDescription')}
@@ -219,9 +291,20 @@ export const ProjectSessionsPanel = observer(function ProjectSessionsPanel() {
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto py-3">
             <div className="flex flex-col gap-1">
-              {conversations.map((conversation) => (
-                <ProjectSessionRow key={conversation.id} conversation={conversation} />
-              ))}
+              {sessions.map((item: ProjectSessionItem) =>
+                item.kind === 'conversation' ? (
+                  <ProjectSessionRow
+                    key={`conversation:${item.conversation.id}`}
+                    conversation={item.conversation}
+                  />
+                ) : (
+                  <LocalAgentSessionRow
+                    key={`local:${item.session.catalogId}`}
+                    projectId={projectId}
+                    session={item.session}
+                  />
+                )
+              )}
             </div>
           </div>
         )}

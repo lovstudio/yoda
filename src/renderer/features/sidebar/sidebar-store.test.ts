@@ -2,6 +2,7 @@ import { observable, runInAction } from 'mobx';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LocalProject } from '@shared/projects';
 import type { Task } from '@shared/tasks';
+import { DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
 import type { ProjectStore } from '@renderer/features/projects/stores/project';
 import type { ProjectManagerStore } from '@renderer/features/projects/stores/project-manager';
 import { createUnprovisionedTask, type TaskStore } from '@renderer/features/tasks/stores/task';
@@ -107,6 +108,52 @@ describe('SidebarStore task recency ordering', () => {
     expect(projectIds(store.orderedProjects)).toEqual(['project-late', 'project-early']);
   });
 
+  it('moves a project to the front when one of its tasks is touched', () => {
+    const target = makeTask('target', {
+      createdAt: '2026-06-02T08:00:00.000Z',
+      lastInteractedAt: '2026-06-02T08:00:00.000Z',
+      projectId: 'project-early',
+    });
+    const leading = makeTask('leading', {
+      createdAt: '2026-06-02T10:00:00.000Z',
+      lastInteractedAt: '2026-06-02T10:00:00.000Z',
+      projectId: 'project-late',
+    });
+    const store = makeSidebarStore([
+      makeProject('project-early', [target]),
+      makeProject('project-late', [leading]),
+    ]);
+
+    expect(projectIds(store.orderedProjects)).toEqual(['project-late', 'project-early']);
+
+    runInAction(() => {
+      target.data.lastInteractedAt = '2026-06-02T11:00:00.000Z';
+    });
+
+    expect(projectIds(store.orderedProjects)).toEqual(['project-early', 'project-late']);
+
+    runInAction(() => {
+      target.data.lastInteractedAt = '2026-06-02T07:00:00.000Z';
+    });
+
+    expect(store.projectActivityById['project-early']).toBe('2026-06-02T11:00:00.000Z');
+    expect(projectIds(store.orderedProjects)).toEqual(['project-early', 'project-late']);
+  });
+
+  it('uses parsed time to find a project latest task across timestamp formats', () => {
+    const newDbTask = makeTask('new-db-task', {
+      createdAt: '2026-06-02 10:00:00',
+      lastInteractedAt: '2026-06-02 10:00:00',
+    });
+    const olderIsoTask = makeTask('older-iso-task', {
+      createdAt: '2026-06-02T09:59:59.000Z',
+      lastInteractedAt: '2026-06-02T09:59:59.000Z',
+    });
+    const store = makeSidebarStore([makeProject('project-1', [olderIsoTask, newDbTask])]);
+
+    expect(store.projectActivityById['project-1']).toBe('2026-06-02 10:00:00');
+  });
+
   it('groups activity rows by last interaction even when created-at sort is selected', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-02T12:00:00.000Z'));
@@ -146,6 +193,23 @@ describe('SidebarStore task recency ordering', () => {
     restored.setNavSectionHidden(false);
 
     expect(restored.navSectionHidden).toBe(false);
+  });
+
+  it('keeps a project visible while its sessions load when empty projects are hidden', () => {
+    const project = makeProject('loading-project', [], 'loading');
+    const store = makeSidebarStore([project]);
+    store.setHideProjectsWithoutActiveTasks(true);
+
+    expect(projectIds(store.orderedProjects)).toEqual(['loading-project']);
+
+    const taskManager = project.mountedProject?.taskManager;
+    expect(taskManager).toBeDefined();
+    if (!taskManager) return;
+    runInAction(() => {
+      taskManager.taskLoadState = 'loaded';
+    });
+
+    expect(store.orderedProjects).toEqual([]);
   });
 });
 
@@ -269,6 +333,53 @@ describe('SidebarStore subtask tree rows', () => {
     store.setChildTaskOrder('parent', ['c1', 'c2']);
     expect(taskIds(store.sidebarRows)).toEqual(['parent', 'c1', 'c2']);
   });
+
+  it('reveals the selected task and expands its collapsed ancestors', () => {
+    const parent = makeTask('parent', { createdAt: '2026-06-02T10:00:00.000Z' });
+    const child = makeTask('child', {
+      createdAt: '2026-06-02T11:00:00.000Z',
+      parentTaskId: 'parent',
+    });
+    const store = makeSidebarStore([makeProject('project-1', [parent, child])]);
+    store.projectsCollapsed = true;
+    store.collapsedTaskIds.add('parent');
+
+    store.revealSelection('project-1', 'child');
+
+    expect(store.projectsCollapsed).toBe(false);
+    expect(store.expandedProjectIds.has('project-1')).toBe(true);
+    expect(store.collapsedTaskIds.has('parent')).toBe(false);
+  });
+
+  it('opens the pinned section when the selected task is pinned', () => {
+    const pinned = makeTask('pinned', {
+      createdAt: '2026-06-02T10:00:00.000Z',
+      isPinned: true,
+    });
+    const store = makeSidebarStore([makeProject('project-1', [pinned])]);
+    store.pinnedCollapsed = true;
+    store.projectsCollapsed = true;
+
+    store.revealSelection('project-1', 'pinned');
+
+    expect(store.pinnedCollapsed).toBe(false);
+    expect(store.projectsCollapsed).toBe(true);
+    expect(store.expandedProjectIds.has('project-1')).toBe(true);
+  });
+
+  it('follows a selected project into its workspace when filtering', () => {
+    const setActiveWorkspaceId = vi.fn();
+    const store = makeSidebarStore([makeProject('project-1', [])], {
+      activeWorkspaceId: 'workspace-1',
+      isFiltering: true,
+      matchesActive: () => false,
+      setActiveWorkspaceId,
+    });
+
+    store.revealSelection('project-1');
+
+    expect(setActiveWorkspaceId).toHaveBeenCalledWith(DEFAULT_WORKSPACE_ID);
+  });
 });
 
 function makeTask(
@@ -304,7 +415,11 @@ function makeTask(
   return createUnprovisionedTask(task);
 }
 
-function makeProject(projectId: string, tasks: TaskStore[]): ProjectStore {
+function makeProject(
+  projectId: string,
+  tasks: TaskStore[],
+  taskLoadState: 'idle' | 'loading' | 'loaded' | 'error' = 'loaded'
+): ProjectStore {
   const data: LocalProject = {
     type: 'local',
     id: projectId,
@@ -328,14 +443,18 @@ function makeProject(projectId: string, tasks: TaskStore[]): ProjectStore {
     errorCode: undefined,
     mode: null,
     mountedProject: {
-      taskManager: {
+      taskManager: observable({
         tasks: observable.map(tasks.map((task) => [task.data.id, task])),
-      },
+        taskLoadState,
+      }),
     },
   } as ProjectStore;
 }
 
-function makeSidebarStore(projects: ProjectStore[]): SidebarStore {
+function makeSidebarStore(
+  projects: ProjectStore[],
+  workspaceOverrides: Partial<WorkspaceStore> = {}
+): SidebarStore {
   return new SidebarStore(
     {
       projects: observable.map(projects.map((project) => [project.id, project])),
@@ -344,6 +463,7 @@ function makeSidebarStore(projects: ProjectStore[]): SidebarStore {
       activeWorkspaceId: 'all',
       isFiltering: false,
       matchesActive: () => true,
+      ...workspaceOverrides,
     } as unknown as WorkspaceStore
   );
 }

@@ -1,9 +1,8 @@
 import type {
   AssignAiLabAppProjectInput,
-  CreateAiLabAppInput,
   LogoGenerationInput,
   PrepareAiLabBuildTaskInput,
-  RefineAiLabAppInput,
+  ScaffoldAiLabAppProjectInput,
   UpdateAiLabAppInput,
 } from '@shared/ai-lab';
 import type { AiLabImageEditInput, AiLabRegenerateImageInput } from '@shared/ai-lab-bridge';
@@ -66,16 +65,16 @@ async function deleteAppImageEdit(input: { appId: string; id: string }) {
   return aiLabService.deleteAppImageEdit(input);
 }
 
-async function createApp(input: CreateAiLabAppInput) {
-  return aiLabService.createApp(input);
+async function scaffoldAppProject(input: ScaffoldAiLabAppProjectInput) {
+  return aiLabService.scaffoldAppProject(input);
+}
+
+async function startAppPreview(id: string) {
+  return aiLabService.startAppPreview(id);
 }
 
 async function assignAppProject(input: AssignAiLabAppProjectInput) {
   return aiLabService.assignAppProject(input);
-}
-
-async function refineApp(input: RefineAiLabAppInput) {
-  return aiLabService.refineApp(input);
 }
 
 async function prepareBuildTask(input: PrepareAiLabBuildTaskInput) {
@@ -109,9 +108,9 @@ export const aiLabController = createRPCController({
   regenerateAppImage,
   saveAppImageEdit,
   deleteAppImageEdit,
-  createApp,
+  scaffoldAppProject,
+  startAppPreview,
   assignAppProject,
-  refineApp,
   prepareBuildTask,
   cancelBuildTask,
   updateApp,
