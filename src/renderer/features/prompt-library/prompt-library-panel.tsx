@@ -987,7 +987,6 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
         </section>
 
         <ProjectPromptSection
-          prompts={items}
           projectId={selectedProjectId}
           runtimeId={activeRuntimeId}
           onProjectIdChange={setSelectedProjectId}

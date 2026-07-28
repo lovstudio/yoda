@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,7 +58,13 @@ describe('editable runtime instruction files', () => {
     const request = { runtimeId: 'claude' as const, projectId: 'project-1' };
 
     const before = await getEditableRuntimeInstructionFiles(request);
-    const projectFile = before.find((file) => file.kind === 'project-claude');
+    const projectFiles = before.filter((file) => file.scope === 'project');
+    expect(projectFiles.map((file) => file.path)).toEqual([
+      path.join(projectPath, 'CLAUDE.md'),
+      path.join(projectPath, '.claude', 'CLAUDE.md'),
+      path.join(projectPath, 'CLAUDE.local.md'),
+    ]);
+    const projectFile = projectFiles[0];
     expect(projectFile).toMatchObject({
       path: path.join(projectPath, 'CLAUDE.md'),
       scope: 'project',
@@ -90,14 +96,17 @@ describe('editable runtime instruction files', () => {
     const request = { runtimeId: 'codex' as const, projectId: 'project-1' };
 
     const files = await getEditableRuntimeInstructionFiles(request);
-    expect(files.find((file) => file.kind === 'project-agents')).toMatchObject({
+    const projectFiles = files.filter((file) => file.scope === 'project');
+    expect(projectFiles.map((file) => file.path)).toEqual([
+      path.join(projectPath, 'AGENTS.override.md'),
+      path.join(projectPath, 'AGENTS.md'),
+    ]);
+    expect(
+      projectFiles.find((file) => file.path === path.join(projectPath, 'AGENTS.md'))
+    ).toMatchObject({
       scope: 'project',
       exists: true,
       content: 'Existing rules',
-    });
-    expect(files.find((file) => file.kind === 'project-codex-agents')).toMatchObject({
-      path: path.join(projectPath, '.codex', 'AGENTS.md'),
-      exists: false,
     });
 
     await expect(
@@ -119,10 +128,23 @@ describe('editable runtime instruction files', () => {
       projectId: 'project-1',
     });
 
-    expect(files.find((file) => file.kind === 'global-codex-agents')).toMatchObject({
-      path: path.join(codexHome, 'AGENTS.md'),
-      scope: 'user',
-      exists: false,
-    });
+    expect(files.filter((file) => file.scope === 'user').map((file) => file.path)).toEqual([
+      path.join(codexHome, 'AGENTS.override.md'),
+      path.join(codexHome, 'AGENTS.md'),
+    ]);
+  });
+
+  it('surfaces read errors instead of reporting an unreadable path as missing', async () => {
+    const { getEditableRuntimeInstructionFiles } = await import('./editable-instruction-files');
+    const codexHome = path.join(projectPath, 'custom-codex-home');
+    await mkdir(path.join(codexHome, 'AGENTS.md'), { recursive: true });
+    mocks.getRuntimeConfig.mockResolvedValue({ env: { CODEX_HOME: codexHome } });
+
+    await expect(
+      getEditableRuntimeInstructionFiles({
+        runtimeId: 'codex',
+        projectId: 'project-1',
+      })
+    ).rejects.toMatchObject({ code: 'EISDIR' });
   });
 });

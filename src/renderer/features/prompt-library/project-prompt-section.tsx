@@ -1,23 +1,16 @@
-import { FolderCog, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, FolderCog, Loader2, Plus, Trash2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProjectPromptPrinciples, PromptPrinciple } from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
-import type { Prompt } from '@shared/prompt-library';
 import type { RuntimeId } from '@shared/runtime-registry';
-import {
-  effectiveGlobalEnabled,
-  setGlobalOverride,
-  setGlobalOverrides,
-  setProjectItems,
-} from '@renderer/features/projects/project-prompt-principles';
+import { setProjectItems } from '@renderer/features/projects/project-prompt-principles';
 import {
   asMounted,
   getProjectManagerStore,
   getProjectSettingsStore,
 } from '@renderer/features/projects/stores/project-selectors';
-import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -26,6 +19,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
+import { cn } from '@renderer/utils/utils';
 import { PromptInstructionFilesEditor } from './prompt-system-section';
 
 function navigationProjectId(): string | undefined {
@@ -40,12 +34,10 @@ function navigationProjectId(): string | undefined {
 }
 
 export const ProjectPromptSection = observer(function ProjectPromptSection({
-  prompts,
   projectId,
   runtimeId,
   onProjectIdChange,
 }: {
-  prompts: Prompt[];
   projectId: string | null;
   runtimeId: RuntimeId | null;
   onProjectIdChange: (projectId: string | null) => void;
@@ -59,6 +51,7 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
   const settingsStore = projectId ? getProjectSettingsStore(projectId) : undefined;
   const settings = settingsStore?.settings;
   const [draft, setDraft] = useState<ProjectPromptPrinciples | undefined>();
+  const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(() => new Set());
   const saveQueue = useRef(Promise.resolve());
 
   const defaultProjectId = (() => {
@@ -118,9 +111,6 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
   };
 
   const items = draft?.items ?? [];
-  const orderedPrompts = prompts
-    .slice()
-    .sort((left, right) => left.injectionOrder - right.injectionOrder);
 
   const patchItem = (id: string, patch: Partial<PromptPrinciple>) => {
     savePrinciples(
@@ -129,6 +119,31 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
         items.map((item) => (item.id === id ? { ...item, ...patch } : item))
       )
     );
+  };
+
+  const addItem = () => {
+    const id = crypto.randomUUID();
+    setExpandedItemIds((current) => new Set(current).add(id));
+    savePrinciples(
+      setProjectItems(draft, [
+        ...items,
+        {
+          id,
+          name: '',
+          text: '',
+          enabled: true,
+        },
+      ])
+    );
+  };
+
+  const toggleItem = (id: string) => {
+    setExpandedItemIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   return (
@@ -165,7 +180,7 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
           <Loader2 className="size-5 animate-spin text-foreground-muted" />
         </div>
       ) : (
-        <div className="grid gap-6 p-4">
+        <div className="grid gap-5 p-4">
           {runtimeId ? (
             <div>
               <h3 className="text-xs font-medium text-foreground">
@@ -185,32 +200,6 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
           ) : null}
 
           <div>
-            <h3 className="text-xs font-medium text-foreground">
-              {t('promptLibrary.project.globalOverrides')}
-            </h3>
-            <p className="mt-1 text-xs leading-5 text-foreground-muted">
-              {t('promptLibrary.project.globalOverridesDescription')}
-            </p>
-            <div className="mt-3">
-              <PromptInjectionControls
-                prompts={orderedPrompts}
-                isPromptEnabled={(prompt) => effectiveGlobalEnabled(draft, prompt)}
-                onPromptEnabledChange={(prompt, enabled) =>
-                  savePrinciples(setGlobalOverride(draft, prompt, enabled))
-                }
-                onGroupEnabledChange={(_groupName, groupPrompts, enabled) =>
-                  savePrinciples(setGlobalOverrides(draft, groupPrompts, enabled))
-                }
-                empty={
-                  <p className="text-xs text-foreground-muted">
-                    {t('promptLibrary.project.noGlobalPrompts')}
-                  </p>
-                }
-              />
-            </div>
-          </div>
-
-          <div>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 className="text-xs font-medium text-foreground">
@@ -220,83 +209,95 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
                   {t('promptLibrary.project.localPromptsDescription')}
                 </p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  savePrinciples(
-                    setProjectItems(draft, [
-                      ...items,
-                      {
-                        id: crypto.randomUUID(),
-                        name: '',
-                        text: '',
-                        enabled: true,
-                      },
-                    ])
-                  )
-                }
-              >
+              <Button type="button" variant="outline" size="sm" onClick={addItem}>
                 <Plus className="size-4" />
                 {t('promptLibrary.project.add')}
               </Button>
             </div>
 
             {items.length === 0 ? (
-              <p className="mt-3 rounded-lg border border-dashed border-border px-3 py-4 text-xs text-foreground-muted">
+              <p className="mt-3 rounded-lg border border-dashed border-border px-3 py-3 text-xs text-foreground-muted">
                 {t('promptLibrary.project.empty')}
               </p>
             ) : (
-              <div className="mt-3 grid gap-3">
-                {items.map((item) => (
-                  <div key={item.id} className="rounded-lg border border-border bg-background p-3">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        size="sm"
-                        checked={item.enabled}
-                        onCheckedChange={(enabled) => patchItem(item.id, { enabled })}
-                        aria-label={t('promptLibrary.project.toggle', {
-                          name: item.name || t('promptLibrary.project.untitled'),
-                        })}
-                      />
-                      <Input
-                        className="h-8 min-w-0 flex-1 text-sm"
-                        defaultValue={item.name}
-                        placeholder={t('promptLibrary.project.namePlaceholder')}
-                        onBlur={(event) => {
-                          const name = event.target.value.trim();
-                          if (name !== item.name) patchItem(item.id, { name });
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={t('promptLibrary.project.remove')}
-                        onClick={() =>
-                          savePrinciples(
-                            setProjectItems(
-                              draft,
-                              items.filter((entry) => entry.id !== item.id)
+              <div className="mt-3 overflow-hidden rounded-lg border border-border bg-background">
+                {items.map((item) => {
+                  const expanded = expandedItemIds.has(item.id);
+                  const name = item.name || t('promptLibrary.project.untitled');
+                  return (
+                    <div
+                      key={item.id}
+                      data-slot="project-prompt-row"
+                      className="border-t border-border first:border-t-0"
+                    >
+                      <div className="flex min-w-0 items-center">
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left outline-none hover:bg-background-1 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+                          aria-expanded={expanded}
+                          onClick={() => toggleItem(item.id)}
+                        >
+                          <ChevronRight
+                            className={cn(
+                              'size-4 shrink-0 text-foreground-muted transition-transform',
+                              expanded && 'rotate-90'
+                            )}
+                          />
+                          <span className="truncate text-sm font-medium text-foreground">
+                            {name}
+                          </span>
+                        </button>
+                        <Switch
+                          size="sm"
+                          checked={item.enabled}
+                          onCheckedChange={(enabled) => patchItem(item.id, { enabled })}
+                          aria-label={t('promptLibrary.project.toggle', {
+                            name,
+                          })}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="mx-2"
+                          aria-label={t('promptLibrary.project.remove')}
+                          onClick={() =>
+                            savePrinciples(
+                              setProjectItems(
+                                draft,
+                                items.filter((entry) => entry.id !== item.id)
+                              )
                             )
-                          )
-                        }
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
+                          }
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                      {expanded ? (
+                        <div className="grid gap-3 border-t border-border bg-background px-3 py-3">
+                          <Input
+                            className="h-8 text-sm"
+                            defaultValue={item.name}
+                            placeholder={t('promptLibrary.project.namePlaceholder')}
+                            onBlur={(event) => {
+                              const nextName = event.target.value.trim();
+                              if (nextName !== item.name) patchItem(item.id, { name: nextName });
+                            }}
+                          />
+                          <Textarea
+                            className="min-h-24 resize-y font-mono text-xs leading-relaxed"
+                            defaultValue={item.text}
+                            placeholder={t('promptLibrary.project.contentPlaceholder')}
+                            onBlur={(event) => {
+                              const text = event.target.value;
+                              if (text !== item.text) patchItem(item.id, { text });
+                            }}
+                          />
+                        </div>
+                      ) : null}
                     </div>
-                    <Textarea
-                      className="mt-3 min-h-28 resize-y font-mono text-xs leading-relaxed"
-                      defaultValue={item.text}
-                      placeholder={t('promptLibrary.project.contentPlaceholder')}
-                      onBlur={(event) => {
-                        const text = event.target.value;
-                        if (text !== item.text) patchItem(item.id, { text });
-                      }}
-                    />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

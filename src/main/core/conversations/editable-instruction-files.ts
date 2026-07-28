@@ -9,6 +9,7 @@ import type {
 import { getRuntime } from '@shared/runtime-registry';
 import { SshExecutionContext } from '@main/core/execution-context/ssh-execution-context';
 import { SshFileSystem } from '@main/core/fs/impl/ssh-fs';
+import { FileSystemErrorCodes } from '@main/core/fs/types';
 import { getProjectById } from '@main/core/projects/operations/getProjects';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { sshConnectionManager } from '@main/core/ssh/ssh-connection-manager';
@@ -51,8 +52,13 @@ function candidatesFor(
               scope: 'project',
             },
             {
-              kind: 'project-agents',
-              path: pathApi.join(projectPath, 'AGENTS.md'),
+              kind: 'project-claude',
+              path: pathApi.join(projectPath, '.claude', 'CLAUDE.md'),
+              scope: 'project',
+            },
+            {
+              kind: 'project-claude',
+              path: pathApi.join(projectPath, 'CLAUDE.local.md'),
               scope: 'project',
             },
           ] satisfies InstructionFileCandidate[])
@@ -63,6 +69,11 @@ function candidatesFor(
     return [
       {
         kind: 'global-codex-agents',
+        path: pathApi.join(stateDirectory, 'AGENTS.override.md'),
+        scope: 'user',
+      },
+      {
+        kind: 'global-codex-agents',
         path: pathApi.join(stateDirectory, 'AGENTS.md'),
         scope: 'user',
       },
@@ -70,12 +81,12 @@ function candidatesFor(
         ? ([
             {
               kind: 'project-agents',
-              path: pathApi.join(projectPath, 'AGENTS.md'),
+              path: pathApi.join(projectPath, 'AGENTS.override.md'),
               scope: 'project',
             },
             {
-              kind: 'project-codex-agents',
-              path: pathApi.join(projectPath, '.codex', 'AGENTS.md'),
+              kind: 'project-agents',
+              path: pathApi.join(projectPath, 'AGENTS.md'),
               scope: 'project',
             },
           ] satisfies InstructionFileCandidate[])
@@ -148,7 +159,10 @@ async function readCandidate(
       content,
       bytes: Buffer.byteLength(content),
     } as EditableRuntimeInstructionFile;
-  } catch {
+  } catch (error) {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
+    if (code !== 'ENOENT' && code !== FileSystemErrorCodes.NOT_FOUND) throw error;
     return {
       kind: candidate.kind,
       path: candidate.path,
