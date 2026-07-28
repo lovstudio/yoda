@@ -3888,12 +3888,6 @@
     "skill": "Skill",
     "terminal": "Terminal",
     "quickAction": "Quick action: {{label}}",
-    "renderer": {
-      "dom": "DOM",
-      "webgl": "WebGL",
-      "mixed": "Mixed",
-      "switchMode": "Currently using {{current}} rendering; switch to {{next}} and redraw terminals"
-    },
     "gateway": {
       "title": "Gateway",
       "description": "Choose MaaS, a subscription account, or an API key for each Agent Client",
