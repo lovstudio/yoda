@@ -30,13 +30,13 @@ export const OverviewPanel = observer(function OverviewPanel() {
     <div className="overflow-y-auto h-full">
       <div className="max-w-3xl mx-auto w-full px-6 py-6 flex flex-col gap-4">
         <QuickActionsCard projectId={projectId} />
-        <ProjectPromptsCard key={projectId} projectId={projectId} />
         <FeaturesOverviewCard projectId={projectId} />
         <RepoStatusCard projectId={projectId} />
         <PullRequestsOverviewCard projectId={projectId} />
         <IssuesOverviewCard projectId={projectId} />
         <TokenUsageCard projectId={projectId} />
         <TasksOverviewCard projectId={projectId} />
+        <ProjectPromptsCard key={projectId} projectId={projectId} />
       </div>
     </div>
   );
