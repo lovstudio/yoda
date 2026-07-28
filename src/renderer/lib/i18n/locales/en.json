@@ -273,8 +273,13 @@
       "saveFailed": "Failed to save project settings."
     },
     "captureAutomation": {
-      "menuLabel": "Quick actions",
-      "createLabel": "New quick action…",
+      "menuLabel": "Launch commands",
+      "createLabel": "Generate command from a requirement…",
+      "detectedCommands": "Detected from project",
+      "savedCommands": "Saved commands",
+      "loadingCommands": "Reading project commands…",
+      "loadCommandsFailed": "Project commands could not be read.",
+      "noCommands": "No launch commands detected.",
       "title": "Quick operation — {{name}}",
       "intentLabel": "Natural-language operation",
       "intentPlaceholder": "Example: Start this project locally, install dependencies if needed, keep the dev server running, and verify the localhost URL.",

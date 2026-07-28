@@ -271,8 +271,13 @@
       "saveFailed": "保存项目设置失败。"
     },
     "captureAutomation": {
-      "menuLabel": "快速操作",
-      "createLabel": "新建快速操作…",
+      "menuLabel": "启动命令",
+      "createLabel": "根据自然语言需求生成命令…",
+      "detectedCommands": "从项目中读取",
+      "savedCommands": "已保存命令",
+      "loadingCommands": "正在读取项目命令…",
+      "loadCommandsFailed": "读取项目命令失败。",
+      "noCommands": "未检测到启动命令。",
       "title": "快速操作 — {{name}}",
       "intentLabel": "自然语言操作",
       "intentPlaceholder": "例如：本地启动这个项目，必要时安装依赖，保持 dev server 运行，并验证 localhost URL。",
