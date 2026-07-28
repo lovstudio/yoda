@@ -215,32 +215,6 @@ describe('PromptSystemSection', () => {
     expect(host.querySelector('[data-slot="agent-system-prompt"]')).toBeNull();
   });
 
-  it('labels a GLM-backed Claude CLI namespace as Claude Code instead of adding a GLM tab', async () => {
-    mocks.getRuntimeSettings.mockResolvedValue({
-      claude: { disabled: true },
-    });
-    await renderSection();
-
-    await act(async () => {
-      await vi.waitFor(() => expect(host.textContent).toContain('Claude Code'));
-    });
-
-    expect(host.textContent).not.toContain('GLM');
-    const claudeTab = Array.from(
-      host.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-tab"]')
-    ).find((tab) => tab.textContent?.includes('Claude Code'));
-    await act(async () => claudeTab?.click());
-
-    await act(async () => {
-      await vi.waitFor(() =>
-        expect(mocks.getFiles).toHaveBeenCalledWith({
-          runtimeId: 'glm',
-          projectId: null,
-        })
-      );
-    });
-  });
-
   it('shows RPC failures explicitly instead of claiming that no instruction file exists', async () => {
     mocks.getFiles.mockRejectedValue(new Error('main process needs restart'));
     await renderSection();

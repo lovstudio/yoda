@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { runtimeIdSchema } from './runtime-id-schema';
 import { RUNTIME_IDS } from './runtime-registry';
 
 export const automationStatusSchema = z.enum(['active', 'paused']);
@@ -14,7 +15,7 @@ export const automationSchema = z.object({
   title: z.string(),
   workspaceName: z.string(),
   prompt: z.string(),
-  runtime: z.enum(RUNTIME_IDS),
+  runtime: runtimeIdSchema,
   scheduleLabel: z.string(),
   status: automationStatusSchema,
   triggerKind: automationTriggerKindSchema,

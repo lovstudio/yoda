@@ -14,7 +14,7 @@ import {
   type PromptSourceLoadResult,
   type PromptSourceRefreshResult,
 } from './prompt-library';
-import { RUNTIME_IDS } from './runtime-registry';
+import { runtimeIdSchema } from './runtime-id-schema';
 
 export const PROJECT_CONFIG_FILE = '.yoda.json';
 
@@ -136,7 +136,7 @@ export const composerBaseBranchSchema = z.object({
 export type ComposerBaseBranch = z.infer<typeof composerBaseBranchSchema>;
 
 export const composerDefaultsSchema = z.object({
-  runtimeId: z.enum(RUNTIME_IDS).optional(),
+  runtimeId: runtimeIdSchema.optional(),
   // The retired `compare` run mode coerces to `normal` so an old `.yoda.json`
   // override still parses instead of failing the whole settings object.
   runMode: z.preprocess(
@@ -146,7 +146,7 @@ export const composerDefaultsSchema = z.object({
   baseBranch: composerBaseBranchSchema.optional(),
   standardStrategyKind: z.enum(composerStrategyKindValues).optional(),
   reviewStrategyKind: z.enum(composerStrategyKindValues).optional(),
-  reviewerRuntime: z.enum(RUNTIME_IDS).optional(),
+  reviewerRuntime: runtimeIdSchema.optional(),
   attachImagesAsPaths: z.boolean().optional(),
   inputPromptLanguage: z.enum(taskOutputLanguageValues).optional(),
   namingLanguage: z.enum(taskOutputLanguageValues).optional(),

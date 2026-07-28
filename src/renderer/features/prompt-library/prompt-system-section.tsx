@@ -25,33 +25,18 @@ function hasStandardInstructionFiles(runtime: RuntimeDefinition): boolean {
   return standardInstructionClis.some((cli) => runtime.cli === cli);
 }
 
-function groupEnabledPromptRuntimes(
-  dependencies: DependencyStatusMap,
-  runtimeConfigs: RuntimeCustomConfigs
-): RuntimeDefinition[] {
-  const enabled = (runtime: RuntimeDefinition) =>
-    hasStandardInstructionFiles(runtime) &&
-    dependencies[runtime.id]?.status === 'available' &&
-    runtimeConfigs[runtime.id]?.disabled !== true;
-
-  return standardInstructionClis.flatMap((cli) => {
-    const runtime =
-      RUNTIMES.find((candidate) => candidate.id === cli && enabled(candidate)) ??
-      RUNTIMES.find((candidate) => candidate.cli === cli && enabled(candidate));
-    if (!runtime) return [];
-
-    const canonicalRuntime = RUNTIMES.find((candidate) => candidate.id === cli);
-    return [{ ...runtime, name: canonicalRuntime?.name ?? runtime.name }];
-  });
-}
-
 export async function loadEnabledPromptRuntimes(): Promise<RuntimeDefinition[]> {
   await rpc.dependencies.probeCategory('agent');
   const [dependencies, runtimeConfigs] = await Promise.all([
     rpc.dependencies.getAll() as Promise<DependencyStatusMap>,
     rpc.runtimeSettings.getAll() as Promise<RuntimeCustomConfigs>,
   ]);
-  return groupEnabledPromptRuntimes(dependencies, runtimeConfigs);
+  return RUNTIMES.filter(
+    (runtime) =>
+      hasStandardInstructionFiles(runtime) &&
+      dependencies[runtime.id]?.status === 'available' &&
+      runtimeConfigs[runtime.id]?.disabled !== true
+  );
 }
 
 function instructionFilesQueryKey(request: EditableRuntimeInstructionFilesRequest) {

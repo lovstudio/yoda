@@ -2335,7 +2335,7 @@
     },
     "system": {
       "title": "CLI 提示词",
-      "description": "按本机已启用的 CLI 类型切换；共用同一套指令文件的运行时只显示一次。这里只编辑 CLI 自己读取的指令文件，不重复智能体配置。",
+      "description": "按本机已启用的 Coding Agent CLI 切换。这里只编辑各 CLI 自己读取的指令文件，不展示模型或 MaaS 服务。",
       "noEnabledAgents": "当前没有已启用且支持标准指令文件的 Agent CLI。",
       "userPromptDescription": "以下是 {{runtime}} 的标准用户级指令路径；文件不存在时，展开对应行即可创建。",
       "noInstructionFiles": "这个 Agent CLI 没有可编辑的标准指令文件。",

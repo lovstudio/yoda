@@ -17,8 +17,9 @@ import {
   quickActionSchema,
   taskOutputLanguageValues,
 } from '@shared/project-settings';
+import { runtimeIdSchema } from '@shared/runtime-id-schema';
 import { RUNTIME_MODEL_CANDIDATE_SOURCES } from '@shared/runtime-model-candidates';
-import { AGENT_ACCOUNT_PROVIDER_IDS, RUNTIME_IDS, RUNTIMES } from '@shared/runtime-registry';
+import { AGENT_ACCOUNT_PROVIDER_IDS, RUNTIMES } from '@shared/runtime-registry';
 import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
   DEFAULT_SUMMARY_CONTEXT_RECENT,
@@ -112,12 +113,12 @@ export const taskSettingsSchema = z.object({
 });
 
 export const runtimeAutoApproveDefaultsSchema = z
-  .partialRecord(z.enum(RUNTIME_IDS), z.boolean())
+  .partialRecord(runtimeIdSchema, z.boolean())
   .default({});
 
 /** Per-runtime selected permission-mode id (see runtime-registry permissionModes). */
 export const runtimePermissionModesSchema = z
-  .partialRecord(z.enum(RUNTIME_IDS), z.string())
+  .partialRecord(runtimeIdSchema, z.string())
   .default({});
 
 export const automationStatusSchema = z.enum(['active', 'paused']);
@@ -127,7 +128,7 @@ export const automationEntrySchema = z.object({
   title: z.string(),
   workspaceName: z.string(),
   prompt: z.string(),
-  runtime: z.enum(RUNTIME_IDS),
+  runtime: runtimeIdSchema,
   scheduleLabel: z.string(),
   status: automationStatusSchema,
   createdAt: z.string(),
@@ -204,7 +205,7 @@ export const maasConnectionSchema = z.object({
 });
 
 export const maasRuntimeBindingSchema = z.object({
-  runtimeId: z.enum(RUNTIME_IDS),
+  runtimeId: runtimeIdSchema,
   platformId: maasPlatformIdSchema,
   previousAuthProvider: z.enum(AGENT_ACCOUNT_PROVIDER_IDS).nullable(),
   previousMaasPlatformId: maasPlatformIdSchema.nullable(),
@@ -221,7 +222,7 @@ export const maasSettingsSchema = z.object({
 export const llmProfileSchema = z.object({
   id: z.string().min(1).catch(DEFAULT_LLM_PROFILE_ID),
   name: z.string().min(1).catch(DEFAULT_LLM_PROFILE_NAME),
-  runtimeId: z.enum(RUNTIME_IDS).catch(DEFAULT_LLM_PROFILE_RUNTIME_ID),
+  runtimeId: runtimeIdSchema.catch(DEFAULT_LLM_PROFILE_RUNTIME_ID),
   authProvider: z.enum(AGENT_ACCOUNT_PROVIDER_IDS).catch(DEFAULT_LLM_PROFILE_ACCESS_METHOD),
   maasPlatformId: maasPlatformIdSchema.catch(DEFAULT_LLM_PROFILE_MAAS_PLATFORM_ID),
   model: z.string().catch(''),
@@ -266,7 +267,7 @@ export const runtimeModelCandidatesSettingsSchema = z.preprocess(
       ? { runtimes: (value as { providers?: unknown }).providers }
       : value,
   z.object({
-    runtimes: z.partialRecord(z.enum(RUNTIME_IDS), runtimeModelCandidateSettingsSchema).default({}),
+    runtimes: z.partialRecord(runtimeIdSchema, runtimeModelCandidateSettingsSchema).default({}),
   })
 );
 
@@ -325,7 +326,7 @@ export const systemThemesSchema = z
   .catch({ light: 'ylight', dark: 'ydark' })
   .default({ light: 'ylight', dark: 'ydark' });
 
-export const defaultRuntimeSchema = z.optional(z.enum(RUNTIME_IDS)).default(DEFAULT_RUNTIME_ID);
+export const defaultRuntimeSchema = runtimeIdSchema.optional().default(DEFAULT_RUNTIME_ID);
 
 export const keyboardSettingsSchema = z
   .optional(
@@ -405,11 +406,11 @@ export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });
 
 const homeRunModeSchema = z.enum(['normal', 'build', 'brainstorm', 'review', 'team']);
 const teamRuntimeSelectionSchema = z.object({
-  ceo: z.enum(RUNTIME_IDS),
-  product: z.enum(RUNTIME_IDS),
-  engineering: z.enum(RUNTIME_IDS),
-  uiux: z.enum(RUNTIME_IDS),
-  operations: z.enum(RUNTIME_IDS),
+  ceo: runtimeIdSchema,
+  product: runtimeIdSchema,
+  engineering: runtimeIdSchema,
+  uiux: runtimeIdSchema,
+  operations: runtimeIdSchema,
 });
 
 /** provider→runtime terminology migration for persisted home drafts. */
@@ -457,9 +458,9 @@ export const homeDraftSchema = z.preprocess(
         remoteName: z.string().optional(),
       })
       .nullable(),
-    runtimeOverride: z.enum(RUNTIME_IDS).nullable(),
+    runtimeOverride: runtimeIdSchema.nullable(),
     runMode: homeRunModeSchema,
-    reviewReviewerRuntime: z.enum(RUNTIME_IDS),
+    reviewReviewerRuntime: runtimeIdSchema,
     teamRuntimes: teamRuntimeSelectionSchema,
     /** Selected Agent Team template id for the `team` paradigm (built-in or user). */
     selectedTeamId: z.string().default('builtin:startup'),

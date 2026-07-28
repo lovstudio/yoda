@@ -2335,7 +2335,7 @@
     },
     "system": {
       "title": "CLI prompts",
-      "description": "Switch between enabled CLI types. Runtimes that share the same instruction files appear only once. This area edits CLI instruction files only and does not duplicate Agent configuration.",
+      "description": "Switch between enabled Coding Agent CLIs. This area edits each CLI's own instruction files and does not list models or MaaS services.",
       "noEnabledAgents": "No enabled Agent CLI with supported standard instruction files is available.",
       "userPromptDescription": "These are the standard user-level instruction paths for {{runtime}}. Expand a missing file to create it.",
       "noInstructionFiles": "This Agent CLI has no editable standard instruction file.",
