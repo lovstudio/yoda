@@ -17,6 +17,9 @@ const releaseToolsDir = join(cacheDir, 'ReleaseTools');
 const derivedDir = join(cacheDir, 'DerivedData');
 const productsDir = join(cacheDir, 'Products');
 const patchPath = resolve('native/macos/yoda-sparkle-updater/delta-only.patch');
+const deltaExtendedAttributesPatchPath = resolve(
+  'native/macos/yoda-sparkle-updater/delta-extended-attributes.patch'
+);
 const helperPath = join(stageDir, 'YodaSparkleUpdater');
 const frameworkPath = join(stageDir, 'Sparkle.framework');
 const generateAppcastPath = join(stageDir, 'bin', 'generate_appcast');
@@ -49,6 +52,9 @@ function isPrepared(): boolean {
   return (
     strings.includes('yoda-full-update-disabled') &&
     strings.includes('YODA_EVENT {"type":"installing"}') &&
+    run('strings', [generateAppcastPath], { capture: true }).includes(
+      'yoda-delta-sanitize-code-signing-xattrs'
+    ) &&
     readFrameworkLink('Sparkle') === 'Versions/Current/Sparkle' &&
     readFrameworkLink(join('Versions', 'Current')) === 'B'
   );
@@ -71,11 +77,13 @@ function prepareSource(): void {
 }
 
 function applyDeltaOnlyPatch(): void {
-  const patch = readFileSync(patchPath);
-  run('git', ['-C', sourceDir, 'apply', '--check', patchPath]);
-  run('git', ['-C', sourceDir, 'apply', patchPath]);
-  const patchDigest = createHash('sha256').update(patch).digest('hex');
-  info(`Applied delta-only patch ${patchDigest.slice(0, 12)}`);
+  for (const currentPatchPath of [patchPath, deltaExtendedAttributesPatchPath]) {
+    const patch = readFileSync(currentPatchPath);
+    run('git', ['-C', sourceDir, 'apply', '--check', currentPatchPath]);
+    run('git', ['-C', sourceDir, 'apply', currentPatchPath]);
+    const patchDigest = createHash('sha256').update(patch).digest('hex');
+    info(`Applied Sparkle patch ${patchDigest.slice(0, 12)}`);
+  }
 }
 
 function buildHelper(): void {
@@ -88,6 +96,26 @@ function buildHelper(): void {
       join(sourceDir, 'Sparkle.xcodeproj'),
       '-scheme',
       'sparkle-cli',
+      '-configuration',
+      'Release',
+      '-quiet',
+      '-derivedDataPath',
+      derivedDir,
+      `CONFIGURATION_BUILD_DIR=${productsDir}`,
+      'ARCHS=arm64 x86_64',
+      'ONLY_ACTIVE_ARCH=NO',
+      'CODE_SIGNING_ALLOWED=NO',
+      'build',
+    ],
+    { capture: true }
+  );
+  run(
+    'xcodebuild',
+    [
+      '-project',
+      join(sourceDir, 'Sparkle.xcodeproj'),
+      '-scheme',
+      'generate_appcast',
       '-configuration',
       'Release',
       '-quiet',
@@ -139,6 +167,7 @@ function stageArtifacts(): void {
     recursive: true,
     verbatimSymlinks: true,
   });
+  cpSync(join(productsDir, 'generate_appcast'), generateAppcastPath);
 }
 
 function verifyArtifacts(): void {
@@ -166,6 +195,10 @@ function verifyArtifacts(): void {
   const toolArchitectures = run('lipo', ['-archs', generateAppcastPath], { capture: true });
   if (!toolArchitectures.includes('arm64') || !toolArchitectures.includes('x86_64')) {
     throw new Error(`Sparkle generate_appcast is not universal: ${toolArchitectures.trim()}`);
+  }
+  const generateAppcastStrings = run('strings', [generateAppcastPath], { capture: true });
+  if (!generateAppcastStrings.includes('yoda-delta-sanitize-code-signing-xattrs')) {
+    throw new Error('Sparkle generate_appcast does not sanitize code-signing extended attributes');
   }
 }
 

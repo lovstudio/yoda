@@ -59,8 +59,8 @@ describe('Sparkle release pipeline', () => {
     expect(releaseBuild).toContain("mac: 'dmg'");
     expect(generator).toContain('`${artifactPrefix}-${arch}.dmg`');
     expect(generator).not.toContain('`${artifactPrefix}-${arch}.zip`');
-    expect(generator).toContain('compatibleDeltaHistory');
-    expect(generator).toContain('cross-format ZIP-to-DMG');
+    expect(generator).toContain('requiredDeltaHistory');
+    expect(generator).toContain('ZIP and DMG history are both valid');
     expect(generator).toContain('retainExistingSparkleHistoryItems');
     expect(productionWorkflow).not.toContain('release/*.zip');
     expect(chinaMirrorWorkflow).not.toContain("--pattern 'yoda-*.zip'");

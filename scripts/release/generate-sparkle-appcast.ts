@@ -107,14 +107,15 @@ async function generateForArch(arch: string): Promise<void> {
     variant === 'stable'
       ? pinSparkleAssetUrls(withOriginalHistory, repository)
       : withOriginalHistory;
-  // Sparkle only creates deltas between compatible full-archive formats. The first DMG-only
-  // release therefore falls back to its signed full DMG for clients on ZIP-based history.
-  const compatibleDeltaHistory = history.filter((item) => item.fileName.endsWith('.dmg'));
+  // Sparkle diffs the extracted application bundles, so ZIP and DMG history are both valid
+  // delta sources. Yoda's updater is deliberately delta-only; every retained version must
+  // therefore have an exact signed delta to the current release.
+  const requiredDeltaHistory = history;
   writeFileSync(appcastPath, generated);
   validateGeneratedSparkleAppcast(
     generated,
     currentVersion,
-    compatibleDeltaHistory.map((item) => item.version)
+    requiredDeltaHistory.map((item) => item.version)
   );
 
   copyFileSync(appcastPath, join('release', appcastName));
@@ -125,13 +126,8 @@ async function generateForArch(arch: string): Promise<void> {
     copyFileSync(source, join('release', delta.published));
   }
 
-  if (compatibleDeltaHistory.length > 0 && qualified.artifacts.length === 0) {
-    fail(`Sparkle generated no ${arch} deltas from compatible DMG history`);
-  }
-  if (history.length > compatibleDeltaHistory.length) {
-    info(
-      `Skipped ${history.length - compatibleDeltaHistory.length} cross-format ZIP-to-DMG delta(s); Sparkle will use the full DMG`
-    );
+  if (requiredDeltaHistory.length > 0 && qualified.artifacts.length === 0) {
+    fail(`Sparkle generated no ${arch} deltas from retained release history`);
   }
   info(
     `Generated ${appcastName}, ${versionedArchiveName}, and ${qualified.artifacts.length} delta(s)`
@@ -166,6 +162,8 @@ function runGenerateAppcast(workDir: string, outputPath: string): void {
     const details = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim().slice(-12_000);
     fail(`generate_appcast failed (${result.status ?? result.signal ?? 'unknown'}): ${details}`);
   }
+  const details = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
+  if (details) info(details.slice(-12_000));
 }
 
 async function fetchOptionalText(url: string): Promise<string | null> {

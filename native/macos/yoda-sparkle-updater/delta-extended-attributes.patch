@@ -1,0 +1,65 @@
+diff --git a/generate_appcast/ArchiveItem.swift b/generate_appcast/ArchiveItem.swift
+index 357937e..f26a1ca 100644
+--- a/generate_appcast/ArchiveItem.swift
++++ b/generate_appcast/ArchiveItem.swift
+@@ -4,6 +4,7 @@
+ //
+ 
+ import Foundation
++import Darwin
+ import UniformTypeIdentifiers
+ 
+ struct UpdateBranch: Hashable {
+@@ -37,9 +38,52 @@ class DeltaUpdate {
+         return (archiveFileAttributes[.size] as! NSNumber).int64Value
+     }
+ 
++    private class func removeCodeSigningExtendedAttributes(from root: URL) throws {
++        print("yoda-delta-sanitize-code-signing-xattrs \(root.path)")
++
++        let attributeNames = [
++            "com.apple.cs.CodeDirectory",
++            "com.apple.cs.CodeRequirements",
++            "com.apple.cs.CodeSignature",
++        ]
++        let fileManager = FileManager.default
++        var paths = [root]
++        if let enumerator = fileManager.enumerator(
++            at: root,
++            includingPropertiesForKeys: nil,
++            options: [],
++            errorHandler: { path, error in
++                print("Failed to enumerate \(path.path): \(error)")
++                return false
++            }
++        ) {
++            for case let path as URL in enumerator {
++                paths.append(path)
++            }
++        }
++
++        for path in paths {
++            for attributeName in attributeNames {
++                let result = path.path.withCString { filePath in
++                    attributeName.withCString { attribute in
++                        removexattr(filePath, attribute, XATTR_NOFOLLOW)
++                    }
++                }
++                if result != 0 && errno != ENOATTR {
++                    throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [
++                        NSFilePathErrorKey: path.path,
++                    ])
++                }
++            }
++        }
++    }
++
+     class func create(from: ArchiveItem, to: ArchiveItem, deltaVersion: SUBinaryDeltaMajorVersion, deltaCompressionMode: SPUDeltaCompressionMode, deltaCompressionLevel: UInt8, archivePath: URL) throws -> DeltaUpdate {
+         var createDiffError: NSError?
+ 
++        try removeCodeSigningExtendedAttributes(from: from.appPath)
++        try removeCodeSigningExtendedAttributes(from: to.appPath)
++
+         if !createBinaryDelta(from.appPath.path, to.appPath.path, archivePath.path, deltaVersion, deltaCompressionMode, deltaCompressionLevel, false, &createDiffError) {
+             throw createDiffError!
+         }

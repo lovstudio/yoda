@@ -2,6 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const patch = readFileSync('native/macos/yoda-sparkle-updater/delta-only.patch', 'utf8');
+const deltaExtendedAttributesPatch = readFileSync(
+  'native/macos/yoda-sparkle-updater/delta-extended-attributes.patch',
+  'utf8'
+);
 const stableConfig = readFileSync('electron-builder.config.ts', 'utf8');
 const canaryConfig = readFileSync('electron-builder.canary.config.ts', 'utf8');
 const releaseBuild = readFileSync('scripts/release/build.ts', 'utf8');
@@ -19,6 +23,19 @@ describe('Yoda Sparkle helper patch', () => {
 
   it('contains no full-download bypass', () => {
     expect(patch).not.toMatch(/allowFull|fallbackToFull|disableDeltaOnly/i);
+  });
+
+  it('sanitizes DMG-preserved code-signing xattrs only in Sparkle delta worktrees', () => {
+    expect(deltaExtendedAttributesPatch).toContain('removeCodeSigningExtendedAttributes');
+    expect(deltaExtendedAttributesPatch).toContain('com.apple.cs.CodeDirectory');
+    expect(deltaExtendedAttributesPatch).toContain('com.apple.cs.CodeRequirements');
+    expect(deltaExtendedAttributesPatch).toContain('com.apple.cs.CodeSignature');
+    expect(deltaExtendedAttributesPatch).toContain('XATTR_NOFOLLOW');
+    expect(sparklePreparation).toContain("'generate_appcast'");
+    expect(sparklePreparation).toContain('yoda-delta-sanitize-code-signing-xattrs');
+    expect(sparklePreparation).toContain(
+      "cpSync(join(productsDir, 'generate_appcast'), generateAppcastPath)"
+    );
   });
 
   it('reports the original delta failure before Sparkle tries its regular-update fallback', () => {
