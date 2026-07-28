@@ -169,10 +169,27 @@ describe('ProjectPromptsCard', () => {
       })
     );
 
-    const sessionButton = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="projects.promptHistory.openNamedSession"]'
+    const firstRow = host.querySelector('ol > li');
+    expect(firstRow?.textContent).not.toContain('Newer task');
+    expect(
+      host.querySelector('button[aria-label="projects.promptHistory.openNamedSession"]')
+    ).toBeNull();
+
+    const moreButton = firstRow?.querySelector<HTMLButtonElement>(
+      'button[aria-label="common.more"]'
     );
-    await act(async () => sessionButton?.click());
+    await act(async () => {
+      moreButton?.click();
+      await Promise.resolve();
+    });
+    expect(document.querySelector('[data-project-prompt-session]')?.textContent).toContain(
+      'Newer task'
+    );
+
+    const openSessionItem = [
+      ...document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]'),
+    ].find((item) => item.textContent?.includes('projects.promptHistory.openSession'));
+    await act(async () => openSessionItem?.click());
     expect(mocks.openSession).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'newer' }),
       mocks.navigate,
