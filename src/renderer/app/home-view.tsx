@@ -22,7 +22,6 @@ import {
   Server,
   Settings2,
   ShieldCheck,
-  Sparkles,
   Wrench,
   X,
 } from 'lucide-react';
@@ -372,9 +371,6 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
         className="mx-auto flex min-h-full w-full max-w-6xl flex-1 flex-col px-5 pb-8 pt-14 @2xl:px-8 @5xl:px-10"
       >
         <div data-yoda-surface="home-masthead" aria-hidden="true">
-          <span className="dream-skin-masthead-icon">
-            <Sparkles />
-          </span>
           <span className="dream-skin-masthead-copy">
             <strong />
             <small />

@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   ensureCodexThreadUnarchived: vi.fn(),
   resolveAvailableTmuxSessionName: vi.fn(),
   resolveAgentResumeSessionId: vi.fn(),
+  resolveCodexThreadIdForConversation: vi.fn(),
   resolveLocalPtySpawn: vi.fn(),
   dispatchRuntimeStatus: vi.fn(),
   removeRuntimeStatus: vi.fn(),
@@ -170,6 +171,7 @@ vi.mock('@main/core/session-title/session-title-manager', () => ({
 
 vi.mock('../codex-session-id', () => ({
   resolveAgentResumeSessionId: mocks.resolveAgentResumeSessionId,
+  resolveCodexThreadIdForConversation: mocks.resolveCodexThreadIdForConversation,
 }));
 
 vi.mock('../codex-unarchive', () => ({
@@ -315,6 +317,7 @@ describe('LocalConversationProvider', () => {
     mocks.resolveAgentResumeSessionId.mockImplementation((conversation: Conversation) => {
       return conversation.id;
     });
+    mocks.resolveCodexThreadIdForConversation.mockReturnValue('conv-1');
     mocks.resolveAvailableTmuxSessionName.mockResolvedValue(undefined);
     mocks.resolveLocalPtySpawn.mockImplementation(
       ({
@@ -530,14 +533,18 @@ describe('LocalConversationProvider', () => {
 
     await provider.startSession(codexConversation, { cols: 80, rows: 24 }, false, 'Fix this');
     spawned[0].pty.emitExit({ exitCode: 0 });
-    mocks.resolveAgentResumeSessionId.mockReturnValueOnce('codex-thread-1');
+    mocks.resolveCodexThreadIdForConversation.mockReturnValueOnce('codex-thread-1');
 
     await provider.startSession(codexConversation, { cols: 80, rows: 24 }, true);
 
-    expect(mocks.resolveAgentResumeSessionId).toHaveBeenCalledWith(
-      codexConversation,
-      '/workspace',
-      { reservedThreadIds: new Set() }
+    expect(mocks.resolveCodexThreadIdForConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: codexConversation.id,
+        cwd: '/workspace',
+        title: codexConversation.title,
+        createdAt: codexConversation.createdAt,
+        reservedThreadIds: new Set(),
+      })
     );
     expect(mocks.ensureCodexThreadUnarchived).toHaveBeenCalledWith({
       runtimeId: 'codex',
@@ -560,6 +567,48 @@ describe('LocalConversationProvider', () => {
     expect(spawned[1].options.args).toEqual(['resume', '--cd', '/workspace', 'codex-thread-1']);
   });
 
+  it('starts a fresh Codex session when the persisted thread is missing', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+    });
+    mocks.resolveCodexThreadIdForConversation.mockReturnValueOnce(undefined);
+    const codexConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+      createdAt: '2026-06-04 06:45:36',
+    };
+    const provider = createProvider();
+
+    await provider.startSession(codexConversation, { cols: 80, rows: 24 }, true);
+
+    expect(spawned).toHaveLength(1);
+    expect(spawned[0].options.args).toEqual([]);
+    expect(mocks.ensureCodexResumeProviderCompatible).not.toHaveBeenCalled();
+    expect(mocks.ensureCodexThreadUnarchived).not.toHaveBeenCalled();
+    expect(mocks.aiLogStart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ resuming: 'false' }),
+      })
+    );
+    expect(mocks.startTitle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: codexConversation.id,
+        isResuming: false,
+        agentSessionId: undefined,
+      })
+    );
+    expect(mocks.logWarn).toHaveBeenCalledWith(
+      'LocalConversationProvider: Codex thread is missing; starting a fresh session',
+      {
+        conversationId: codexConversation.id,
+        cwd: '/workspace',
+      }
+    );
+  });
+
   it('resumes an adopted Codex session through its original account state root', async () => {
     mocks.getProviderConfig.mockResolvedValue({
       cli: 'codex',
@@ -567,7 +616,6 @@ describe('LocalConversationProvider', () => {
       resumeSessionIdArg: true,
       initialPromptFlag: '',
     });
-    mocks.resolveAgentResumeSessionId.mockReturnValue('native-thread-1');
     const importedConversation: Conversation = {
       ...conversation,
       runtimeId: 'codex',
