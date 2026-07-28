@@ -60,3 +60,37 @@ describe('NavigationStore navigation side effects', () => {
     expect(mocks.markTaskSeen).toHaveBeenCalledWith('project-1', 'task-1');
   });
 });
+
+describe('NavigationStore persisted route migration', () => {
+  it('restores a Library app route under Marketplace', () => {
+    const store = new NavigationStore();
+
+    store.restoreSnapshot({
+      currentViewId: 'library',
+      viewParams: {
+        library: { section: 'apps', appId: 'app-1' },
+      },
+    });
+
+    expect(store.currentViewId).toBe('marketplace');
+    expect(store.viewParamsStore.marketplace).toEqual({
+      section: 'apps',
+      appId: 'app-1',
+    });
+    expect(store.viewParamsStore.library).toEqual({ section: 'prompts' });
+  });
+
+  it('restores the former Library extension catalog under Marketplace extensions', () => {
+    const store = new NavigationStore();
+
+    store.restoreSnapshot({
+      currentViewId: 'library',
+      viewParams: {
+        library: { section: 'marketplace' },
+      },
+    });
+
+    expect(store.currentViewId).toBe('marketplace');
+    expect(store.viewParamsStore.marketplace).toEqual({ section: 'extensions' });
+  });
+});
