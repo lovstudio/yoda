@@ -78,23 +78,50 @@ export function useDeletePrompt() {
   });
 }
 
-export function useReorderInjectedPrompts() {
+export function useReorderPromptGroups() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (ids: string[]) => rpc.promptLibrary.reorderInjection(ids),
-    onMutate: async (ids) => {
-      await queryClient.cancelQueries({ queryKey: promptsQueryKey });
-      const previous = queryClient.getQueryData<Prompt[]>(promptsQueryKey);
-      const order = new Map(ids.map((id, index) => [id, index]));
-      queryClient.setQueryData<Prompt[]>(promptsQueryKey, (current) =>
-        current?.map((prompt) => ({
-          ...prompt,
-          injectionOrder: order.get(prompt.id) ?? prompt.injectionOrder,
-        }))
-      );
+    mutationFn: (names: string[]) => rpc.promptLibrary.reorderGroups(names),
+    onMutate: async (names) => {
+      await queryClient.cancelQueries({ queryKey: promptGroupsQueryKey });
+      const previous = queryClient.getQueryData<string[]>(promptGroupsQueryKey);
+      queryClient.setQueryData(promptGroupsQueryKey, names);
       return { previous };
     },
-    onError: (_error, _ids, context) => {
+    onError: (_error, _names, context) => {
+      if (context?.previous) queryClient.setQueryData(promptGroupsQueryKey, context.previous);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: promptGroupsQueryKey });
+      void queryClient.invalidateQueries({ queryKey: promptsQueryKey });
+    },
+  });
+}
+
+export function useReorderPrompts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupName, ids }: { groupName: string; ids: string[] }) =>
+      rpc.promptLibrary.reorderPrompts(groupName, ids),
+    onMutate: async ({ groupName, ids }) => {
+      await queryClient.cancelQueries({ queryKey: promptsQueryKey });
+      const previous = queryClient.getQueryData<Prompt[]>(promptsQueryKey);
+      queryClient.setQueryData<Prompt[]>(promptsQueryKey, (current) => {
+        if (!current) return current;
+        const promptsById = new Map(current.map((prompt) => [prompt.id, prompt]));
+        const groupIndexes = current.flatMap((prompt, index) =>
+          prompt.groupName.trim() === groupName.trim() ? [index] : []
+        );
+        const next = current.slice();
+        groupIndexes.forEach((index, groupIndex) => {
+          const prompt = promptsById.get(ids[groupIndex] ?? '');
+          if (prompt) next[index] = prompt;
+        });
+        return next;
+      });
+      return { previous };
+    },
+    onError: (_error, _input, context) => {
       if (context?.previous) queryClient.setQueryData(promptsQueryKey, context.previous);
     },
     onSettled: () => {
