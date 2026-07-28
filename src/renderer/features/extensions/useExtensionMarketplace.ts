@@ -9,6 +9,15 @@ import {
   listMarketplaceExtensions,
 } from './extension-marketplace-query';
 
+function replaceMarketplaceExtension(
+  extensions: YodaMarketplaceExtension[] | undefined,
+  extension: YodaMarketplaceExtension
+): YodaMarketplaceExtension[] | undefined {
+  return extensions?.map((candidate) =>
+    candidate.manifest.id === extension.manifest.id ? extension : candidate
+  );
+}
+
 export function useExtensionMarketplace() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -34,7 +43,13 @@ export function useExtensionMarketplace() {
       if (!result.success) throw new Error(result.error ?? t('extensions.errors.install'));
       return result.extension;
     },
-    onSuccess: () => void refresh(),
+    onSuccess: (extension) => {
+      if (!extension) return void refresh();
+      queryClient.setQueryData<YodaMarketplaceExtension[]>(
+        EXTENSION_MARKETPLACE_QUERY_KEY,
+        (extensions) => replaceMarketplaceExtension(extensions, extension)
+      );
+    },
     onError: (error) =>
       toast({
         title: t('extensions.errors.install'),
@@ -46,15 +61,52 @@ export function useExtensionMarketplace() {
   const setEnabledMutation = useMutation({
     mutationFn: async ({ extensionId, enabled }: { extensionId: string; enabled: boolean }) => {
       const result = await rpc.extensions.setEnabled({ extensionId, enabled });
-      if (!result.success) throw new Error(result.error ?? t('extensions.errors.update'));
+      if (!result.success || !result.extension) {
+        throw new Error(result.error ?? t('extensions.errors.update'));
+      }
+      return result.extension;
     },
-    onSuccess: () => void refresh(),
-    onError: (error) =>
+    onMutate: async ({ extensionId, enabled }) => {
+      await queryClient.cancelQueries({
+        queryKey: EXTENSION_MARKETPLACE_QUERY_KEY,
+        exact: true,
+      });
+      const previousExtensions = queryClient.getQueryData<YodaMarketplaceExtension[]>(
+        EXTENSION_MARKETPLACE_QUERY_KEY
+      );
+      queryClient.setQueryData<YodaMarketplaceExtension[]>(
+        EXTENSION_MARKETPLACE_QUERY_KEY,
+        (extensions) =>
+          extensions?.map((extension) =>
+            extension.manifest.id === extensionId && extension.installation
+              ? {
+                  ...extension,
+                  installation: {
+                    ...extension.installation,
+                    enabled,
+                  },
+                }
+              : extension
+          )
+      );
+      return { previousExtensions };
+    },
+    onSuccess: (extension) => {
+      queryClient.setQueryData<YodaMarketplaceExtension[]>(
+        EXTENSION_MARKETPLACE_QUERY_KEY,
+        (extensions) => replaceMarketplaceExtension(extensions, extension)
+      );
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previousExtensions) {
+        queryClient.setQueryData(EXTENSION_MARKETPLACE_QUERY_KEY, context.previousExtensions);
+      }
       toast({
         title: t('extensions.errors.update'),
         description: error.message,
         variant: 'destructive',
-      }),
+      });
+    },
   });
 
   const uninstallMutation = useMutation({
@@ -88,10 +140,13 @@ export function useExtensionMarketplace() {
     isLoading: query.isPending,
     isRefreshing: query.isFetching,
     pendingExtensionId:
-      installMutation.variables?.manifest.id ??
-      setEnabledMutation.variables?.extensionId ??
-      uninstallMutation.variables ??
+      (installMutation.isPending ? installMutation.variables?.manifest.id : undefined) ??
+      (setEnabledMutation.isPending ? setEnabledMutation.variables?.extensionId : undefined) ??
+      (uninstallMutation.isPending ? uninstallMutation.variables : undefined) ??
       null,
+    pendingEnabledChange: setEnabledMutation.isPending
+      ? (setEnabledMutation.variables ?? null)
+      : null,
     searchQuery,
     setSearchQuery,
     refresh,

@@ -30,12 +30,14 @@ const CAPABILITY_ICONS: Partial<Record<YodaExtensionCapability, typeof Network>>
 function ExtensionCard({
   extension,
   pending,
+  pendingEnabled,
   onInstall,
   onSetEnabled,
   onUninstall,
 }: {
   extension: YodaMarketplaceExtension;
   pending: boolean;
+  pendingEnabled?: boolean;
   onInstall: (extension: YodaMarketplaceExtension) => void;
   onSetEnabled: (extensionId: string, enabled: boolean) => void;
   onUninstall: (extensionId: string) => void;
@@ -71,7 +73,7 @@ function ExtensionCard({
 
         {installation && (
           <Switch
-            checked={installation.enabled}
+            checked={pendingEnabled ?? installation.enabled}
             disabled={pending}
             onCheckedChange={(enabled) => onSetEnabled(manifest.id, enabled)}
             aria-label={t('extensions.toggleAria', { name: manifest.name })}
@@ -137,6 +139,7 @@ export function ExtensionMarketplaceView() {
     isLoading,
     isRefreshing,
     pendingExtensionId,
+    pendingEnabledChange,
     searchQuery,
     setSearchQuery,
     refresh,
@@ -190,6 +193,11 @@ export function ExtensionMarketplaceView() {
                 key={extension.manifest.id}
                 extension={extension}
                 pending={pendingExtensionId === extension.manifest.id}
+                pendingEnabled={
+                  pendingEnabledChange?.extensionId === extension.manifest.id
+                    ? pendingEnabledChange.enabled
+                    : undefined
+                }
                 onInstall={install}
                 onSetEnabled={setEnabled}
                 onUninstall={uninstall}
