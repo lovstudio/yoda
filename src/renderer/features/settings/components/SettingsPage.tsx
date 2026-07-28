@@ -10,13 +10,14 @@ import { KanbanBoard } from '@renderer/features/kanban/components/KanbanBoard';
 import { MaasView } from '@renderer/features/maas/components/MaasView';
 import { McpView } from '@renderer/features/mcp/components/McpView';
 import { MobileView } from '@renderer/features/mobile/mobile-view';
+import { PromptLibraryPanel } from '@renderer/features/prompt-library/prompt-library-panel';
 import { RoadmapView } from '@renderer/features/roadmap/components/RoadmapView';
 import SkillsCatalogHint from '@renderer/features/skills/components/SkillsCatalogHint';
 import SkillsView from '@renderer/features/skills/components/SkillsView';
 import { NamingConfigFields } from '@renderer/features/tasks/components/naming-config-fields';
 import { SummaryConfigFields } from '@renderer/features/tasks/components/summary-config-fields';
 import { UsageView } from '@renderer/features/usage/components/UsageView';
-import { useIsPinHosted } from '@renderer/lib/layout/navigation-provider';
+import { useIsPinHosted, useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import {
   DropdownMenu,
@@ -42,7 +43,6 @@ import {
 } from './LlmConfigDebugCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import OpenInAppsSettingsCard from './OpenInAppsSettingsCard';
-import PromptsSettingsCard from './PromptsSettingsCard';
 import {
   AutoGenerateTaskNamesRow,
   AutoTrustWorktreesRow,
@@ -207,6 +207,7 @@ export function SettingsPage({
 }) {
   const { t } = useTranslation();
   const tabGroups = useSettingsTabGroups();
+  const { navigate } = useNavigate();
   // In the side pane the chip-strip row hosts the tab picker — don't double it.
   const isPinHosted = useIsPinHosted();
 
@@ -346,7 +347,13 @@ export function SettingsPage({
     prompts: {
       title: t('settings.tabs.prompts'),
       description: t('settings.promptsTab.description'),
-      sections: [{ id: 'prompt-principles', component: <PromptsSettingsCard /> }],
+      sections: [
+        {
+          id: 'prompts',
+          surface: 'plain',
+          component: <PromptLibraryPanel embedded />,
+        },
+      ],
     },
     skills: {
       title: t('skills.title'),
@@ -364,7 +371,7 @@ export function SettingsPage({
     maas: {
       title: t('maas.title'),
       description: t('maas.subtitle'),
-      component: <MaasView embedded />,
+      component: <MaasView embedded onOpenMarketplace={() => navigate('marketplace')} />,
     },
     usage: {
       title: t('usage.title'),

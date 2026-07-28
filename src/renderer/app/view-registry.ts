@@ -67,6 +67,12 @@ const libraryView = {
   PaneHeaderSlot: deferredExport(libraryModule, 'LibraryPaneHeaderSlot'),
 };
 
+const marketplaceModule = () => import('@renderer/features/extensions/marketplace-view');
+const marketplaceView = {
+  TitlebarSlot: deferredExport(marketplaceModule, 'MarketplaceTitlebar'),
+  MainPanel: deferredExport(marketplaceModule, 'MarketplaceMainPanel'),
+};
+
 const maasModule = () => import('@renderer/features/maas/maas-view');
 const maasView = {
   TitlebarSlot: deferredExport(maasModule, 'MaasTitlebar'),
@@ -161,6 +167,7 @@ export const views = {
   maas: maasView,
   usage: usageView,
   library: libraryView,
+  marketplace: marketplaceView,
   skills: skillsView,
   skill: skillDetailView,
   skillCompare: skillCompareView,

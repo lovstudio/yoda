@@ -1,163 +1,77 @@
-const MANIFEST_MARKER = '---YODA_APP_MANIFEST---';
-const HTML_MARKER = '---YODA_APP_HTML---';
-
-export type GeneratedAiLabApp = {
-  name: string;
-  description: string;
-  html: string;
+type AppBuildPromptContext = {
+  projectPath: string;
+  systemPrompt?: string;
 };
 
-export function buildAppRefinementRequest(input: {
-  originalPrompt: string;
-  currentHtml: string;
-  refinement: string;
-}): string {
-  return `Update the existing mini app instead of starting over. Preserve working behavior and stored user data unless the requested change requires otherwise.
-
-ORIGINAL REQUEST:
-${input.originalPrompt}
-
-CURRENT APP HTML:
-${input.currentHtml}
-
-REQUESTED CHANGE:
-${input.refinement}`;
+export function buildAppGenerationPrompt(prompt: string, context: AppBuildPromptContext): string {
+  return buildProjectAgentPrompt({
+    context,
+    requestHeading: 'CREATE THIS APP',
+    request: prompt,
+    continuation: false,
+  });
 }
 
-export function buildAppGenerationPrompt(
-  prompt: string,
-  context?: { projectPath?: string; systemPrompt?: string }
+export function buildAppRefinementPrompt(
+  refinement: string,
+  context: AppBuildPromptContext & { appName: string; legacySource: boolean }
 ): string {
-  return `You are the app generator inside Yoda AI Lab. Build a polished, genuinely useful mini app from the user's natural-language request.
-
-${
-  context?.projectPath
-    ? `PROJECT CONTEXT:\nYou are running read-only inside ${context.projectPath}. Inspect the existing project when useful and reuse its product language, data shapes, design tokens, and API conventions. Do not modify project files.`
-    : ''
-}
-${
-  context?.systemPrompt?.trim()
-    ? `\nSELECTED AGENT INSTRUCTIONS:\n${context.systemPrompt.trim()}`
-    : ''
+  return buildProjectAgentPrompt({
+    context,
+    requestHeading: `IMPROVE THE EXISTING APP "${context.appName}"`,
+    request: refinement,
+    continuation: true,
+    legacySource: context.legacySource,
+  });
 }
 
-USER REQUEST:
-${prompt}
+function buildProjectAgentPrompt(input: {
+  context: AppBuildPromptContext;
+  requestHeading: string;
+  request: string;
+  continuation: boolean;
+  legacySource?: boolean;
+}): string {
+  const selectedInstructions = input.context.systemPrompt?.trim();
+  return `You are the Yoda Build Agent working in a dedicated App project at:
+${input.context.projectPath}
 
-RUNTIME CONTRACT:
-- Return one complete HTML document. It runs inside a sandboxed iframe.
-- Everything must live in this one file: markup, styles, data, and interaction code.
-- Keep the complete document under 24 KB so it can be stored and launched instantly.
-- Do not use external scripts, stylesheets, fonts, images, network requests, or package imports. The app must work offline immediately.
-- Recreate React/shadcn interaction quality with accessible semantic HTML, reusable JavaScript render functions, restrained design tokens, clear focus states, and polished empty/error states.
-- Keep data access behind an explicit async service/repository boundary so a real backend adapter can replace local state without changing the UI.
-- When a request needs image restyling or reference-image generation, call the host capability documented below. Do not substitute Canvas filters, local calculations, timers, or fake success for a model result.
-- For backend capabilities not listed below, implement honest unavailable/error states against a service boundary. Do not fake remote success.
-- Use localStorage only as an optional enhancement: the sandbox may deny it, so catch storage errors and keep an in-memory fallback.
-- Do not attempt to access window.parent, Electron, Node.js, cookies, or the filesystem.
-- Make the layout responsive down to 360px. Respect prefers-color-scheme and prefers-reduced-motion.
-- No placeholder buttons: every visible control must work.
-- Prefer a focused app with one memorable primary workflow over a generic dashboard.
-- Treat provider names, model names and IDs, MaaS routing, APIs, host bridges, sandboxes, credentials, engines, contracts, and backend architecture as private implementation details. Never expose them in visible UI copy, titles, badges, labels, status text, alt text, tooltips, success messages, or user-facing errors. Describe only the user benefit and task state.
+You are a normal coding Agent with permission to work in this project. Directly inspect, create, and edit project files. Do not print source code into the conversation and do not return a generated HTML document.
 
-HOST CAPABILITY — ZENMUX IMAGE EDIT:
-- This section is implementation-only. Its terminology must never appear in the generated app's visible interface.
-- The sandbox exposes window.yoda.ai.editImage(input). The host obtains the user's configured ZenMux MaaS inference credentials; API keys are never available inside the app.
-- Input: { imageDataUrl, prompt, size?, quality? }. imageDataUrl must be a base64 PNG/JPEG/WebP data URL. size is one of "1024x1024", "1536x1024", "1024x1536". quality is "auto", "medium", or "high".
-- Output: Promise<{ imageDataUrl, model }>. model is pinned by the host to "openai/gpt-image-2" and imageDataUrl is the actual generated PNG.
-- The host sends the source as a multipart image edit. GPT Image 2 automatically processes every image input at high input fidelity, so do not pass the legacy input_fidelity option. For portrait restyling, prompts must explicitly preserve the exact person's identity, gender presentation, age, facial geometry, hairstyle, pose, camera angle, clothing, and distinctive objects.
-- A complete call looks like: const result = await window.yoda.ai.editImage({ imageDataUrl, prompt, size: "1024x1024", quality: "high" });
-- To copy the latest host/model error, call await window.yoda.ai.copyLastError(). This delegates clipboard writing to Yoda because the sandbox cannot access the Clipboard API directly.
-- Always show genuine pending and error states around the awaited call. Only show success or enable download after result.imageDataUrl is returned.
-- Remote error states must show a concise, product-language failure message while keeping the full technical error available through a visible copy-error control.
-- The host asks the user for permission before the first paid model call in each open app session.
+${input.requestHeading}:
+${input.request}
 
-OUTPUT CONTRACT:
-Output exactly these two markers and their content, with no Markdown fence or commentary:
-${MANIFEST_MARKER}
-{"name":"short app name, at most 24 characters","description":"one sentence, at most 80 characters"}
-${HTML_MARKER}
-<!doctype html>...the complete app...</html>`;
-}
-
-export function parseGeneratedAiLabApp(raw: string): GeneratedAiLabApp {
-  const manifestIndex = raw.indexOf(MANIFEST_MARKER);
-  const htmlIndex = raw.indexOf(HTML_MARKER);
-  if (manifestIndex < 0 || htmlIndex <= manifestIndex) {
-    throw new Error('The app generator returned an invalid response.');
+${selectedInstructions ? `SELECTED AGENT INSTRUCTIONS:\n${selectedInstructions}\n` : ''}${
+    input.continuation
+      ? 'Preserve working behavior and user data unless the requested change requires otherwise. Work from the existing project instead of starting over.\n'
+      : ''
+  }${
+    input.legacySource
+      ? 'This App is being migrated from the old single-file runtime. The previous implementation is available at legacy/index.html for reference. Rebuild the product as maintainable React components; do not keep the legacy iframe as the final implementation.\n'
+      : ''
   }
+PROJECT CONTRACT:
+- The project is already scaffolded with React, Vite, TypeScript, Tailwind CSS, and reusable shadcn-style primitives under src/components/ui.
+- Build a focused, genuinely useful web App. You may add packages when they materially improve the product.
+- Keep product source in src and split meaningful features into components, hooks, and services. Do not collapse the App back into one HTML file.
+- Use real React state and accessible controls. Every visible action must work, including loading, empty, error, keyboard-focus, and narrow-screen states.
+- Keep data access behind an explicit async service/repository boundary so a future backend adapter can replace local persistence without rewriting the UI.
+- Never fake a remote or model result. If an unavailable backend is essential, implement an honest unavailable/error state behind the service boundary.
+- Treat provider names, model IDs, credentials, routing, host bridges, sandboxes, and backend architecture as private implementation details. Never expose them in user-facing copy.
+- Do not access Electron, Node.js, parent window internals, cookies, or host credentials.
+- Do not start a persistent dev server. Yoda owns the preview process.
 
-  const manifestText = raw
-    .slice(manifestIndex + MANIFEST_MARKER.length, htmlIndex)
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/```\s*$/i, '');
-  let manifest: unknown;
-  try {
-    manifest = JSON.parse(manifestText);
-  } catch {
-    throw new Error('The app generator returned an invalid manifest.');
-  }
-  if (!isAppManifest(manifest)) {
-    throw new Error('The app generator returned an incomplete manifest.');
-  }
+YODA CAPABILITY SDK:
+- The typed host client is src/lib/yoda.ts and is installed as window.yoda.
+- For genuine reference-image generation or image editing, call await window.yoda.ai.editImage({ imageDataUrl, prompt, size?, quality? }).
+- Show genuine pending and error states. Only show success or enable download after the returned imageDataUrl exists.
+- If the App uses this capability, add "ai.image.edit" to capabilities in .yoda/app.json. Otherwise keep capabilities empty.
+- Never expose the capability's provider or model name in the visible App.
 
-  const html = raw
-    .slice(htmlIndex + HTML_MARKER.length)
-    .trim()
-    .replace(/^```(?:html)?\s*/i, '')
-    .replace(/```\s*$/i, '');
-  if (!/^<!doctype html>/i.test(html) || !/<\/html>\s*$/i.test(html)) {
-    throw new Error('The app generator did not return a complete HTML document.');
-  }
-  return {
-    name: manifest.name.trim().slice(0, 24),
-    description: manifest.description.trim().slice(0, 80),
-    html,
-  };
-}
-
-export function extractGeneratedAppFromTranscript(
-  blocks: { role: string; content: string }[]
-): GeneratedAiLabApp {
-  let lastUserIndex = -1;
-  for (let index = blocks.length - 1; index >= 0; index -= 1) {
-    if (blocks[index]?.role === 'user') {
-      lastUserIndex = index;
-      break;
-    }
-  }
-  const turnOutput = blocks
-    .slice(lastUserIndex + 1)
-    .filter((block) => block.role === 'assistant')
-    .map((block) => block.content)
-    .join('\n\n');
-  const candidates = [
-    turnOutput,
-    ...blocks
-      .filter((block) => block.role === 'assistant')
-      .map((block) => block.content)
-      .reverse(),
-  ].filter((candidate, index, all) => candidate.trim() && all.indexOf(candidate) === index);
-
-  let lastError: unknown = new Error('The Yoda Build agent did not return an app.');
-  for (const candidate of candidates) {
-    try {
-      return parseGeneratedAiLabApp(candidate);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError;
-}
-
-function isAppManifest(value: unknown): value is { name: string; description: string } {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as { name?: unknown; description?: unknown };
-  return (
-    typeof candidate.name === 'string' &&
-    candidate.name.trim().length > 0 &&
-    typeof candidate.description === 'string' &&
-    candidate.description.trim().length > 0
-  );
+COMPLETION CONTRACT:
+1. Inspect the existing scaffold and implement the request by editing files directly.
+2. Run pnpm install when dependencies are not installed or changed.
+3. Run pnpm run check and fix every error.
+4. Update .yoda/app.json with an accurate name, one-sentence description, capabilities, and status "ready". Only mark it ready after the check succeeds.
+5. In your final response, give only a concise implementation summary and verification result. Do not paste source files or large code blocks.`;
 }

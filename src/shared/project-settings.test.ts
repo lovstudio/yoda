@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { quickActionSchema, shareableProjectSettingsSchema } from './project-settings';
+import {
+  promptPrincipleSchema,
+  quickActionSchema,
+  shareableProjectSettingsSchema,
+} from './project-settings';
 
 describe('shareableProjectSettingsSchema', () => {
   it('accepts Yoda Build as a project composer mode', () => {
@@ -50,6 +54,42 @@ describe('quickActionSchema', () => {
       label: 'Release',
       command: '/release-via-cicd',
       kind: 'agent',
+    });
+  });
+});
+
+describe('promptPrincipleSchema', () => {
+  it('keeps legacy inline principles valid', () => {
+    const parsed = promptPrincipleSchema.parse({
+      id: 'inline',
+      name: 'Inline',
+      text: 'Always verify.',
+      enabled: true,
+    });
+
+    expect(parsed.id).toBe('inline');
+    expect(parsed.source).toBeUndefined();
+  });
+
+  it('accepts persisted file and URL source metadata', () => {
+    expect(
+      promptPrincipleSchema.parse({
+        id: 'remote',
+        name: 'Remote',
+        text: 'Source-backed content',
+        enabled: true,
+        source: {
+          type: 'url',
+          url: 'https://example.com/principle.md',
+          refreshIntervalMinutes: 60,
+          timeoutSeconds: 10,
+          lastSyncedAt: '2026-07-27T00:00:00.000Z',
+        },
+      }).source
+    ).toMatchObject({
+      type: 'url',
+      refreshIntervalMinutes: 60,
+      timeoutSeconds: 10,
     });
   });
 });

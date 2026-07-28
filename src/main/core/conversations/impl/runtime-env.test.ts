@@ -64,6 +64,12 @@ describe('resolveRuntimeEnv', () => {
     });
   });
 
+  it('does not forward a process-global credential to Codex MaaS processes', () => {
+    expect(
+      resolveRuntimeEnv({ authProvider: 'yoda-maas' }, { runtimeId: 'codex' })
+    ).toBeUndefined();
+  });
+
   it('keeps official API variables when official API auth is selected', () => {
     expect(
       resolveRuntimeEnv(

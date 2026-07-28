@@ -29,7 +29,12 @@ export function resolveMaasRuntimeEnv(
   const spec = getRuntimeAccountProfile(runtimeId).maas.runtimeEnv;
   if (!spec || !supportsMaasPlatformForRuntime(runtimeId, credentials.platformId)) return undefined;
 
-  if (runtimeId === 'codex') return undefined;
+  if (runtimeId === 'codex') {
+    // Codex authenticates to the localhost MaaS Gateway through its provider
+    // config. The upstream credential stays in Yoda's encrypted store and is
+    // delivered to the Gateway over utility-process IPC.
+    return undefined;
+  }
 
   let endpoint = credentials.endpoint.replace(/\/+$/, '');
   if (runtimeId === 'claude' && credentials.platformId === 'zenmux') {

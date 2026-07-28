@@ -140,6 +140,47 @@ describe('TaskManagerStore task rename events', () => {
   });
 });
 
+describe('TaskManagerStore external task reconciliation', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mocks.listeners.clear();
+  });
+
+  it('loads a task added after the initial project snapshot', async () => {
+    const manager = createManager();
+    mocks.getTasks.mockResolvedValue([makeTask('Imported session')]);
+    mocks.getPullRequestsForTask.mockResolvedValue({ success: false });
+
+    const loaded = await manager.ensureTaskLoaded('task-1');
+
+    expect(loaded).toBe(true);
+    expect(mocks.getTasks).toHaveBeenCalledWith('project-1');
+    expect(manager.tasks.get('task-1')?.data.name).toBe('Imported session');
+    manager.dispose();
+  });
+
+  it('reports task loading while imported sessions are being read', async () => {
+    const manager = createManager();
+    let resolveTasks: ((tasks: Task[]) => void) | undefined;
+    mocks.getTasks.mockReturnValue(
+      new Promise<Task[]>((resolve) => {
+        resolveTasks = resolve;
+      })
+    );
+    mocks.getPullRequestsForTask.mockResolvedValue({ success: false });
+
+    const loading = manager.loadTasks();
+
+    expect(manager.taskLoadState).toBe('loading');
+    resolveTasks?.([makeTask('Imported session')]);
+    await loading;
+
+    expect(manager.taskLoadState).toBe('loaded');
+    expect(manager.tasks.get('task-1')?.data.name).toBe('Imported session');
+    manager.dispose();
+  });
+});
+
 function createManager(): TaskManagerStore {
   const repository = { repositoryUrl: null } as unknown as RepositoryStore;
   const settings = {

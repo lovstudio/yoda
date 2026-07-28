@@ -9,6 +9,7 @@ describe('view registry startup boundary', () => {
       'agents/agents-view',
       'ai-lab/ai-lab-view',
       'automation/automation-view',
+      'extensions/marketplace-view',
       'library/library-view',
       'maas/maas-view',
       'mcp/mcp-view',

@@ -12,7 +12,6 @@ import { PaneSizingProvider } from '@renderer/lib/pty/pane-sizing-context';
 import { Button } from '@renderer/lib/ui/button';
 import { EmptyState } from '@renderer/lib/ui/empty-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
-import { ConversationDragHandle } from './conversation-drag-handle';
 import type { ConversationStore } from './conversation-manager';
 import { ConversationSession } from './conversation-session';
 import { ConversationTree } from './conversation-tree';
@@ -68,20 +67,16 @@ export const ConversationsPanel = observer(function ConversationsPanel() {
         <div
           ref={containerRef}
           tabIndex={-1}
-          className="group/session relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden outline-none"
+          className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden outline-none"
           onFocus={() => {
             if (isActive) provisioned.taskView.setFocusedRegion('main');
           }}
         >
-          {activeConversation ? (
-            <ConversationDragHandle
-              projectId={projectId}
-              taskId={taskId}
-              conversationId={activeConversation.data.id}
-              className="absolute top-1 right-1 z-30 border border-border/60 bg-background/80 opacity-0 shadow-sm backdrop-blur-sm transition-opacity group-hover/session:opacity-100 hover:opacity-100 focus:opacity-100"
-            />
-          ) : null}
-          <PaneSizingProvider paneId="conversations" sessionIds={allSessionIds}>
+          <PaneSizingProvider
+            paneId="conversations"
+            sessionIds={allSessionIds}
+            activeSessionId={activeConversation?.session.sessionId ?? null}
+          >
             {!hasConversationTabs ? (
               conversationCount > 0 ? (
                 <ConversationSessionList

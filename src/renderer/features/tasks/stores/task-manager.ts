@@ -183,6 +183,7 @@ export class TaskManagerStore {
   private _disposeRepositoryReaction: (() => void) | null = null;
 
   tasks = observable.map<string, TaskStore>();
+  taskLoadState: 'idle' | 'loading' | 'loaded' | 'error' = 'idle';
   /**
    * Tasks whose archive flow (pre-archive commands + conversation archives) is
    * in flight. Rows observe this to render a loading state while the task is
@@ -200,7 +201,11 @@ export class TaskManagerStore {
     this._repository = repository;
     this._settingsStore = settingsStore;
     this._baseRef = baseRef;
-    makeObservable(this, { tasks: observable, archivingTaskIds: observable });
+    makeObservable(this, {
+      tasks: observable,
+      taskLoadState: observable,
+      archivingTaskIds: observable,
+    });
 
     events.on(taskStatusUpdatedChannel, ({ taskId, projectId: evtProjectId, status }) => {
       if (evtProjectId !== this.projectId) return;
@@ -330,29 +335,72 @@ export class TaskManagerStore {
 
   loadTasks(): Promise<void> {
     if (!this._loadPromise) {
+      runInAction(() => {
+        this.taskLoadState = 'loading';
+      });
       this._loadPromise = rpc.tasks
         .getTasks(this.projectId)
         .then((tasks) => {
+          this._mergeLoadedTasks(tasks);
           runInAction(() => {
-            for (const t of tasks) {
-              this.tasks.set(t.id, createUnprovisionedTask(t));
-              // An archive in flight in the main process (requested but not
-              // finished, e.g. across a renderer reload) — show the spinner;
-              // the task:archived event completes it.
-              if (t.archiveRequestedAt && !t.archivedAt) this.archivingTaskIds.add(t.id);
-            }
+            this.taskLoadState = 'loaded';
           });
-          const reloadPromises = tasks.flatMap((t) => {
-            const store = this.tasks.get(t.id);
-            return store && isRegistered(store) ? [this._reloadPrsForTask(store)] : [];
-          });
-          void Promise.all(reloadPromises);
         })
         .catch((e) => {
+          runInAction(() => {
+            this.taskLoadState = 'error';
+          });
           console.error('Error loading tasks', e);
         });
     }
     return this._loadPromise;
+  }
+
+  /**
+   * Reconciles a task inserted after the initial project load, such as a
+   * session imported by another local app immediately before a deep link.
+   */
+  async ensureTaskLoaded(taskId: string): Promise<boolean> {
+    if (this.tasks.has(taskId)) return true;
+    await this.loadTasks();
+    if (this.tasks.has(taskId)) return true;
+
+    runInAction(() => {
+      this.taskLoadState = 'loading';
+    });
+    try {
+      this._mergeLoadedTasks(await rpc.tasks.getTasks(this.projectId));
+      runInAction(() => {
+        this.taskLoadState = 'loaded';
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.taskLoadState = 'error';
+      });
+      throw error;
+    }
+    return this.tasks.has(taskId);
+  }
+
+  private _mergeLoadedTasks(tasks: Task[]): void {
+    const addedTaskIds: string[] = [];
+    runInAction(() => {
+      for (const task of tasks) {
+        if (!this.tasks.has(task.id)) {
+          this.tasks.set(task.id, createUnprovisionedTask(task));
+          addedTaskIds.push(task.id);
+        }
+        // An archive in flight in the main process (requested but not
+        // finished, e.g. across a renderer reload) — show the spinner;
+        // the task:archived event completes it.
+        if (task.archiveRequestedAt && !task.archivedAt) this.archivingTaskIds.add(task.id);
+      }
+    });
+    const reloadPromises = addedTaskIds.flatMap((taskId) => {
+      const store = this.tasks.get(taskId);
+      return store && isRegistered(store) ? [this._reloadPrsForTask(store)] : [];
+    });
+    void Promise.all(reloadPromises);
   }
 
   async createTask(params: CreateTaskParams) {

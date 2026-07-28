@@ -162,7 +162,6 @@ export class LifecycleScriptsStore implements TabViewProvider<LifecycleScriptSto
         );
         this.scripts.set(entry.id, store);
         addTabId(this, entry.id);
-        void store.session.connect();
       }
       if (!this.activeTabId && this.tabOrder.length > 0) {
         this.activeTabId = this.tabOrder[0];

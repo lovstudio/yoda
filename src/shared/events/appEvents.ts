@@ -83,13 +83,6 @@ export type PlanEvent = {
 
 export const planEventChannel = defineEvent<PlanEvent>('plan:event');
 
-export const ptyDataChannel = defineEvent<string>('pty:data');
-
-export const ptyExitChannel = defineEvent<{
-  exitCode: number;
-  signal?: number;
-}>('pty:exit');
-
 /** Emitted by main process when a PTY is definitively killed (e.g. on deleteTask/deleteConversation). */
 export const ptyKilledChannel = defineEvent<{ id: string }>('pty:killed');
 
@@ -116,9 +109,6 @@ export const automationRunsUpdatedChannel = defineEvent<void>('automation-runs:u
 
 /** Emitted whenever a saved prompt is created, updated, or deleted (CRUD). */
 export const promptsUpdatedChannel = defineEvent<void>('prompts:updated');
-
-/** Emitted after the leaked-system-prompts reference gallery revalidates against GitHub. */
-export const leakedPromptsUpdatedChannel = defineEvent<void>('leaked-prompts:updated');
 
 /** Emitted after each dependency probe completes (path resolution or version check). */
 export const dependencyStatusUpdatedChannel = defineEvent<DependencyStatusUpdatedEvent>(

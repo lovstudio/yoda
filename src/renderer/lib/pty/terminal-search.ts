@@ -24,32 +24,6 @@ interface LogicalLine {
   segments: PhysicalLineSegment[];
 }
 
-function buildLogicalLines(buffer: TerminalSearchBufferLike): LogicalLine[] {
-  const logicalLines: LogicalLine[] = [];
-  let current: LogicalLine | null = null;
-
-  for (let index = 0; index < buffer.length; index += 1) {
-    const line = buffer.getLine(index);
-    if (!line) continue;
-
-    const text = line.translateToString(false);
-    if (!current || !line.isWrapped) {
-      if (current) logicalLines.push(current);
-      current = { text: '', segments: [] };
-    }
-
-    current.segments.push({
-      row: index,
-      startIndex: current.text.length,
-    });
-    current.text += text;
-  }
-
-  if (current) logicalLines.push(current);
-
-  return logicalLines;
-}
-
 function resolveMatchStart(
   segments: PhysicalLineSegment[],
   startIndex: number
@@ -83,9 +57,9 @@ export function collectTerminalSearchMatches(
   if (!normalizedQuery) return [];
 
   const matches: TerminalSearchMatch[] = [];
-  const logicalLines = buildLogicalLines(buffer);
-
-  for (const logicalLine of logicalLines) {
+  let logicalLine: LogicalLine | null = null;
+  const collectFromLogicalLine = () => {
+    if (!logicalLine) return;
     const haystack = logicalLine.text.toLocaleLowerCase();
     let fromIndex = 0;
 
@@ -102,7 +76,26 @@ export function collectTerminalSearchMatches(
 
       fromIndex = matchIndex + Math.max(1, normalizedQuery.length);
     }
+  };
+
+  // Process one logical line at a time instead of first copying the complete
+  // 200k-line scrollback into a second array. Wrapped rows still concatenate
+  // correctly, while peak memory is bounded by the longest logical line.
+  for (let index = 0; index < buffer.length; index += 1) {
+    const line = buffer.getLine(index);
+    if (!line) continue;
+
+    if (!logicalLine || !line.isWrapped) {
+      collectFromLogicalLine();
+      logicalLine = { text: '', segments: [] };
+    }
+    logicalLine.segments.push({
+      row: index,
+      startIndex: logicalLine.text.length,
+    });
+    logicalLine.text += line.translateToString(false);
   }
+  collectFromLogicalLine();
 
   return matches;
 }
