@@ -159,6 +159,23 @@ export type CodexMemoryFile = {
 
 export type RuntimeInstructionFile = ClaudeMemoryFile | CodexMemoryFile;
 
+export type EditableRuntimeInstructionFile = RuntimeInstructionFile & {
+  /** User-level files live in the Agent CLI home; project files live in the selected project. */
+  scope: 'user' | 'project';
+  /** Missing candidates are returned with empty content so the editor can create them. */
+  exists: boolean;
+};
+
+export type EditableRuntimeInstructionFilesRequest = {
+  runtimeId: RuntimeId;
+  projectId?: string | null;
+};
+
+export type SaveEditableRuntimeInstructionFileRequest = EditableRuntimeInstructionFilesRequest & {
+  path: string;
+  content: string;
+};
+
 /**
  * One entry of Claude Code's self-maintained memory store
  * (~/.claude/projects/<encoded-cwd>/memory/). Unlike CLAUDE.md / AGENTS.md

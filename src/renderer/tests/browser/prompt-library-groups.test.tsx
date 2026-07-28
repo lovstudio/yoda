@@ -45,6 +45,22 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   useRefreshPromptSource: () => ({ mutate: mocks.refreshPrompt, isPending: false }),
 }));
 
+vi.mock('@renderer/features/prompt-library/prompt-system-section', async () => {
+  const React = await import('react');
+  return {
+    PromptSystemSection: () =>
+      React.createElement('section', { 'data-slot': 'prompt-system-section' }),
+  };
+});
+
+vi.mock('@renderer/features/prompt-library/project-prompt-section', async () => {
+  const React = await import('react');
+  return {
+    ProjectPromptSection: () =>
+      React.createElement('section', { 'data-slot': 'project-prompt-section' }),
+  };
+});
+
 vi.mock('@renderer/lib/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
@@ -357,6 +373,44 @@ describe('PromptLibraryPanel groups', () => {
     await act(async () => root.render(createElement(PromptLibraryPanel)));
 
     expect(host.querySelector('[data-slot="prompt-library-bottom-space"].h-24')).not.toBeNull();
+  });
+
+  it('shows system and project layers before the editable prompt list', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const system = host.querySelector('[data-slot="prompt-system-section"]');
+    const project = host.querySelector('[data-slot="project-prompt-section"]');
+    const globalHeading = Array.from(host.querySelectorAll('h2')).find((heading) =>
+      heading.textContent?.includes('promptLibrary.collection.title')
+    );
+    const promptListHeading = Array.from(host.querySelectorAll('h2')).find((heading) =>
+      heading.textContent?.includes('promptLibrary.collection.all')
+    );
+    const global = globalHeading?.closest('section') ?? null;
+    const promptList = promptListHeading?.closest('section') ?? null;
+
+    expect(system).not.toBeNull();
+    expect(global).not.toBeNull();
+    expect(project).not.toBeNull();
+    expect(promptList).not.toBeNull();
+    if (!system || !global || !project || !promptList) {
+      throw new Error('Prompt layer sections are missing');
+    }
+    expect(system.compareDocumentPosition(global) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(global.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(system.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(project.compareDocumentPosition(promptList) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
   });
 
   it('removes the separate injection order card and keyboard-sorts prompt rows within a group', async () => {

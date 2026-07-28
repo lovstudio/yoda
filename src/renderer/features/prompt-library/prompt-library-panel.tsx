@@ -43,6 +43,7 @@ import {
   type PromptSource,
   type PromptSourceError,
 } from '@shared/prompt-library';
+import type { RuntimeId } from '@shared/runtime-registry';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -62,6 +63,7 @@ import { Input } from '@renderer/lib/ui/input';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
+import { ProjectPromptSection } from './project-prompt-section';
 import {
   getNamedPromptGroups,
   groupPrompts,
@@ -69,6 +71,7 @@ import {
   UNGROUPED_PROMPT_GROUP,
 } from './prompt-groups';
 import { PromptGroupInjectionToggle } from './prompt-injection-controls';
+import { PromptSystemSection } from './prompt-system-section';
 import {
   useCreatePrompt,
   useCreatePromptGroup,
@@ -311,6 +314,8 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const [nextGroupName, setNextGroupName] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  const [activeRuntimeId, setActiveRuntimeId] = useState<RuntimeId | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   const items = useMemo(() => data ?? [], [data]);
   const groups = useMemo(
@@ -641,6 +646,8 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
         {!embedded && (
           <h1 className="text-4xl font-normal tracking-normal">{t('promptLibrary.title')}</h1>
         )}
+
+        <PromptSystemSection runtimeId={activeRuntimeId} onRuntimeIdChange={setActiveRuntimeId} />
 
         <section className={cn(embedded ? 'mt-6' : 'mt-10')}>
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -979,6 +986,12 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
           )}
         </section>
 
+        <ProjectPromptSection
+          prompts={items}
+          projectId={selectedProjectId}
+          runtimeId={activeRuntimeId}
+          onProjectIdChange={setSelectedProjectId}
+        />
         <section className="mt-10">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-medium text-foreground">

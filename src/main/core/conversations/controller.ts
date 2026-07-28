@@ -4,6 +4,10 @@ import { archiveConversation } from './archiveConversation';
 import { getClaudeStatusline, setClaudeStatusline } from './claude-statusline';
 import { createConversation } from './createConversation';
 import { deleteConversation } from './deleteConversation';
+import {
+  getEditableRuntimeInstructionFiles,
+  saveEditableRuntimeInstructionFile,
+} from './editable-instruction-files';
 import { forkConversation } from './forkConversation';
 import { forkConversationAtPrompt } from './forkConversationAtPrompt';
 import {
@@ -119,6 +123,8 @@ export const conversationController = createRPCController({
   getCodexSessionContext: getConfiguredCodexSessionContext,
   getInstructionFiles,
   getRuntimeInstructionFiles,
+  getEditableRuntimeInstructionFiles,
+  saveEditableRuntimeInstructionFile,
   getConversationSessionInfo,
   getSessionSummary,
   getSessionSummaryPreview,
