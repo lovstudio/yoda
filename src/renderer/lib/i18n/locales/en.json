@@ -4625,6 +4625,28 @@
       "thisProject": "{{name}} (this project)"
     },
     "projectNotReady": "Project is not ready",
+    "promptHistory": {
+      "title": "Project conversations",
+      "scanning": "Scanning {{scanned}} / {{total}} sessions · {{count}} prompts found",
+      "loaded": "{{count}} prompts",
+      "filterByTask": "Filter by task",
+      "allTasks": "All tasks",
+      "sort": "Prompt order",
+      "newestFirst": "Newest first",
+      "oldestFirst": "Oldest first",
+      "waitingForPrompts": "Reading conversation files…",
+      "empty": "No user prompts in this project yet",
+      "emptyTask": "No user prompts in this task yet",
+      "loadFailed": "Failed to load the prompt catalog",
+      "viewAll": "View all ({{count}})",
+      "collapse": "Collapse",
+      "viewPrompt": "View full prompt",
+      "openSession": "Locate and open session",
+      "openNamedSession": "Open session {{session}}",
+      "openSessionFailed": "Failed to open session",
+      "forkFromPrompt": "Fork from this prompt",
+      "taskUnavailable": "The task is not ready"
+    },
     "sessionsView": {
       "count": "{{count}} sessions",
       "emptyTitle": "No sessions",

@@ -160,6 +160,50 @@ export async function getCodexSessionContext(
   };
 }
 
+/** Prompt-only rollout reader for progressive project-history surfaces. */
+export async function getCodexSessionPrompts(
+  cwd: string,
+  conversationId: string,
+  conversationTitle?: string,
+  conversationCreatedAt?: string | null,
+  options: { codexHome?: string; reservedThreadIds?: ReadonlySet<string> } = {}
+): Promise<ClaudeSessionPrompt[]> {
+  const codexHome = options.codexHome ?? resolveCodexHome();
+  const statePath = resolveCodexStatePath(codexHome);
+  const rootThread =
+    resolveCodexThread({
+      statePath,
+      cwd,
+      conversationId,
+      conversationTitle,
+      conversationCreatedAt,
+    }) ??
+    (await resolveCodexThreadFromRollouts({
+      codexHome,
+      cwd,
+      conversationId,
+      conversationTitle,
+      conversationCreatedAt,
+    }));
+  if (!rootThread) return [];
+  const reservedThreadIds =
+    options.reservedThreadIds ??
+    (await import('./codex-thread-reservations').then(({ getReservedCodexThreadIds }) =>
+      getReservedCodexThreadIds(conversationId)
+    ));
+  const currentThreadId = resolveLatestCodexThreadIdInLineage({
+    statePath,
+    rootThreadId: rootThread.id,
+    reservedThreadIds,
+  });
+  const thread =
+    currentThreadId === rootThread.id
+      ? rootThread
+      : (readCodexThreadContext(statePath, currentThreadId) ?? rootThread);
+  const rollout = await loadRolloutContext(thread.rolloutPath, thread.firstUserMessage, 'full');
+  return rollout?.prompts ?? [];
+}
+
 export async function getCodexSessionModel(
   cwd: string,
   conversationId: string,
