@@ -199,7 +199,10 @@ describe('CaptureProjectAutomationModal', () => {
         })
       );
     });
-    await waitFor(() => generateButton()?.disabled === true, 'quick-action modal did not load');
+    await waitFor(
+      () => mocks.load.mock.calls.length > 0 && primaryButton()?.disabled === true,
+      'quick-action modal did not load'
+    );
   }
 
   function primaryButton(): HTMLButtonElement | undefined {
@@ -207,20 +210,20 @@ describe('CaptureProjectAutomationModal', () => {
     return buttons.item(buttons.length - 1) || undefined;
   }
 
-  function generateButton(): HTMLButtonElement | undefined {
-    return Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
-      button.textContent?.includes('sidebar.captureAutomation.generateCommand')
-    );
-  }
-
-  async function enterIntentCompileAndSubmit(intent: string): Promise<void> {
+  function intentTextarea(): HTMLTextAreaElement {
     const textarea = host.querySelector<HTMLTextAreaElement>(
       'textarea[aria-label="natural-language-operation"]'
     );
     if (!textarea) throw new Error('natural-language operation input was not rendered');
-    await act(async () => setTextareaValue(textarea, intent));
-    const generate = generateButton();
-    if (!generate) throw new Error('generate command button was not rendered');
+    return textarea;
+  }
+
+  async function enterIntentCompileAndSubmit(intent: string): Promise<void> {
+    await act(async () => setTextareaValue(intentTextarea(), intent));
+    const generate = primaryButton();
+    if (!generate) throw new Error('quick-action primary button was not rendered');
+    expect(generate.disabled).toBe(false);
+    expect(generate.textContent).toContain('sidebar.captureAutomation.generateCommand');
     await act(async () => generate.click());
     await waitFor(
       () =>
@@ -230,6 +233,8 @@ describe('CaptureProjectAutomationModal', () => {
     );
     const submit = primaryButton();
     if (!submit) throw new Error('quick-action submit button was not rendered');
+    expect(submit.disabled).toBe(false);
+    expect(submit.textContent).toContain('sidebar.captureAutomation.saveAndRun');
     await act(async () => submit.click());
   }
 
@@ -276,6 +281,43 @@ describe('CaptureProjectAutomationModal', () => {
       action: savedAction,
     });
     expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('turns the primary action into recompile when the operation changes', async () => {
+    await renderModal();
+
+    await act(async () => setTextareaValue(intentTextarea(), 'Start this project.'));
+    const generate = primaryButton();
+    if (!generate) throw new Error('quick-action primary button was not rendered');
+    await act(async () => generate.click());
+    await waitFor(
+      () => primaryButton()?.textContent?.includes('sidebar.captureAutomation.saveAndRun') === true,
+      'save-and-run action was not shown after compilation'
+    );
+
+    await act(async () => setTextareaValue(intentTextarea(), 'Start and verify this project.'));
+
+    const recompile = primaryButton();
+    expect(recompile?.disabled).toBe(false);
+    expect(recompile?.textContent).toContain('sidebar.captureAutomation.regenerateCommand');
+    expect(host.textContent).toContain('sidebar.captureAutomation.commandNeedsRefresh');
+    expect(
+      host.querySelector<HTMLElement>(
+        '[aria-label="sidebar.captureAutomation.workflowLabel"] [aria-current="step"]'
+      )?.textContent
+    ).toContain('sidebar.captureAutomation.stepReviewCommand');
+
+    await act(async () => recompile?.click());
+    await waitFor(
+      () => mocks.compile.mock.calls.length === 2,
+      'changed operation was not compiled again'
+    );
+    expect(mocks.compile).toHaveBeenLastCalledWith({
+      projectId: 'project-1',
+      intent: 'Start and verify this project.',
+      runtimeId: 'codex',
+    });
+    expect(primaryButton()?.textContent).toContain('sidebar.captureAutomation.saveAndRun');
   });
 
   it('does not execute or navigate when saving the quick action fails', async () => {
