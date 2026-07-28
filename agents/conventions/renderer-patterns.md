@@ -52,7 +52,7 @@ only after mount, real-size measurement, and flush-gate activation. Observing
 allocate scrollback buffers or subscribe as flow-control consumers.
 
 - `pty-session.ts` — single-flight connection state and deferred backend-ready gate
-- `pty.ts` — persistent xterm instance, ordered output handshake, renderer lifecycle
+- `pty.ts` — persistent xterm instance, ordered output handshake, canonical DOM scene
 - `use-pty.ts` — visible host, input, font, resize, links, and settings integration
 - `pane-sizing-context.tsx` — active-session-only dimension reporting
 - `pty-pane.tsx` — shared terminal component
@@ -71,7 +71,9 @@ watermark → unmount/off-screen with subscription retained → dispose
   its backend PTY must never parse the same stream at different grids.
 - `mount()` returns a lease. React cleanup must pass that lease to `unmount()`
   and mount-scoped handlers so an older cleanup cannot detach a newer host.
-- WebGL exists only while mounted; off-screen sessions use the DOM renderer.
+- The core DOM renderer is the single visual scene. Resize from the live
+  content box after layout, refresh from xterm's canonical buffer, and never
+  add a retained-frame screenshot layer.
 - `sessionId` format is
   `makePtySessionId(projectId, taskId, conversationId)` and is deterministic.
 

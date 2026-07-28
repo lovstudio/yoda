@@ -132,6 +132,25 @@ describe('measureDimensions', () => {
     expect(dims!.rows).toBe(Math.floor(400 / 16.5));
   });
 
+  it('preserves fractional container pixels at a column and row boundary', () => {
+    container = makeContainer('800.75px', '400.75px');
+    const dims = measureDimensions(container, 8.0075, 16.03);
+
+    expect(dims).toEqual({ cols: 100, rows: 25 });
+  });
+
+  it('measures the content box instead of counting border and padding as terminal space', () => {
+    container = makeContainer('826px', '422px');
+    container.style.boxSizing = 'border-box';
+    container.style.padding = '8px 10px';
+    container.style.border = '3px solid transparent';
+
+    expect(measureDimensions(container, CW, CH)).toEqual({
+      cols: 100,
+      rows: 25,
+    });
+  });
+
   // ── Height-chain integration ───────────────────────────────────────────────
   // Validates the CSS fix in panel.tsx + pane-sizing-context.tsx:
   //   flex parent → flex child (flex:1) → PaneSizingProvider wrapper (flex:1 1 0%) → container
