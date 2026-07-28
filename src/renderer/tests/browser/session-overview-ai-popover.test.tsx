@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionSummarySnapshot } from '@shared/conversations';
+import { SessionOverviewAIButton } from '@renderer/features/tasks/session-info-panel';
 import '../../index.css';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -101,9 +102,7 @@ vi.mock('@renderer/lib/ipc', () => ({
 }));
 
 async function settleLayout(): Promise<void> {
-  await act(async () => {
-    await new Promise((resolve) => window.setTimeout(resolve, 150));
-  });
+  await new Promise((resolve) => window.setTimeout(resolve, 150));
 }
 
 describe('SessionOverviewAIButton popover positioning', () => {
@@ -140,7 +139,6 @@ describe('SessionOverviewAIButton popover positioning', () => {
   });
 
   it('keeps its anchor position while asynchronous content expands', async () => {
-    const { SessionOverviewAIButton } = await import('@renderer/features/tasks/session-info-panel');
     await act(async () => root.render(createElement(SessionOverviewAIButton)));
 
     const trigger = host.querySelector<HTMLButtonElement>(
@@ -154,7 +152,7 @@ describe('SessionOverviewAIButton popover positioning', () => {
     expect(popup?.getAttribute('data-side')).toBe('top');
     const before = popup?.getBoundingClientRect();
 
-    await act(async () => {
+    act(() => {
       resolveSnapshot({
         conversationId: 'conversation-1',
         projectId: 'project-1',
