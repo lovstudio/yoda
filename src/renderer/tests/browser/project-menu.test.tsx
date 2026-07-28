@@ -8,13 +8,18 @@ import {
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QuickAction } from '@shared/project-settings';
+import type { ProjectLaunchCommand } from '@shared/quick-actions';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const translations: Record<string, string> = {
-  'sidebar.captureAutomation.menuLabel': 'Quick actions',
-  'sidebar.captureAutomation.createLabel': 'New quick action…',
-  'projects.quickActions.empty': 'No quick actions configured.',
+  'sidebar.captureAutomation.menuLabel': 'Launch commands',
+  'sidebar.captureAutomation.createLabel': 'Generate command from a requirement…',
+  'sidebar.captureAutomation.detectedCommands': 'Detected from project',
+  'sidebar.captureAutomation.savedCommands': 'Saved commands',
+  'sidebar.captureAutomation.loadingCommands': 'Reading project commands…',
+  'sidebar.captureAutomation.loadCommandsFailed': 'Project commands could not be read.',
+  'sidebar.captureAutomation.noCommands': 'No launch commands detected.',
 };
 
 vi.mock('react-i18next', () => ({
@@ -64,6 +69,7 @@ vi.mock('@renderer/lib/ui/context-menu', async () => {
     ContextMenu: container('context-menu'),
     ContextMenuContent: container('context-menu-content'),
     ContextMenuItem: item('context-menu-item'),
+    ContextMenuLabel: container('context-menu-label'),
     ContextMenuSeparator: () => create('hr'),
     ContextMenuSub: container('context-menu-sub'),
     ContextMenuSubContent: container('context-menu-sub-content'),
@@ -95,6 +101,7 @@ vi.mock('@renderer/lib/ui/dropdown-menu', async () => {
     DropdownMenu: container('dropdown-menu'),
     DropdownMenuContent: container('dropdown-menu-content'),
     DropdownMenuItem: item('dropdown-menu-item'),
+    DropdownMenuLabel: container('dropdown-menu-label'),
     DropdownMenuSeparator: () => create('hr'),
     DropdownMenuSub: container('dropdown-menu-sub'),
     DropdownMenuSubContent: container('dropdown-menu-sub-content'),
@@ -109,6 +116,13 @@ const savedAction: QuickAction = {
   label: 'Start and verify',
   command: 'Start this project and verify the local URL.',
   kind: 'agent',
+};
+
+const detectedCommand: ProjectLaunchCommand = {
+  id: 'package.json:dev',
+  label: 'dev',
+  command: 'pnpm run dev',
+  source: 'package.json',
 };
 
 function requiredActions() {
@@ -146,46 +160,62 @@ describe('ProjectMenu quick actions submenu', () => {
   it.each([
     ['context', 'context-menu-item'],
     ['dropdown', 'dropdown-menu-item'],
-  ] as const)('shows and reruns saved actions in the %s menu', async (surface, itemSlot) => {
-    const { ProjectActionsMenu, ProjectContextMenu } = await import(
-      '@renderer/features/sidebar/project-menu'
-    );
-    const onRunQuickAction = vi.fn();
-    const onCaptureAutomation = vi.fn();
-    const actions = {
-      ...requiredActions(),
-      quickActions: [savedAction],
-      onRunQuickAction,
-      onCaptureAutomation,
-    };
-
-    await act(async () => {
-      root.render(
-        surface === 'context'
-          ? createElement(ProjectContextMenu, {
-              ...actions,
-              children: createElement('div', null, 'Example project'),
-            })
-          : createElement(ProjectActionsMenu, {
-              ...actions,
-              trigger: createElement('button', null, 'More'),
-            })
+  ] as const)(
+    'shows detected and saved commands in the %s menu and keeps generation discoverable',
+    async (surface, itemSlot) => {
+      const { ProjectActionsMenu, ProjectContextMenu } = await import(
+        '@renderer/features/sidebar/project-menu'
       );
-    });
+      const onRunQuickAction = vi.fn();
+      const onCaptureAutomation = vi.fn();
+      const actions = {
+        ...requiredActions(),
+        quickActions: [savedAction],
+        launchCommands: [detectedCommand],
+        onRunQuickAction,
+        onCaptureAutomation,
+      };
 
-    expect(host.querySelector('[data-slot$="menu-sub-trigger"]')?.textContent).toContain(
-      'Quick actions'
-    );
-    const items = Array.from(
-      host.querySelectorAll<HTMLButtonElement>(`button[data-slot="${itemSlot}"]`)
-    );
-    const savedActionItem = items.find((item) => item.textContent?.includes(savedAction.label));
-    const createActionItem = items.find((item) => item.textContent?.includes('New quick action'));
+      await act(async () => {
+        root.render(
+          surface === 'context'
+            ? createElement(ProjectContextMenu, {
+                ...actions,
+                children: createElement('div', null, 'Example project'),
+              })
+            : createElement(ProjectActionsMenu, {
+                ...actions,
+                trigger: createElement('button', null, 'More'),
+              })
+        );
+      });
 
-    await act(async () => savedActionItem?.click());
-    expect(onRunQuickAction).toHaveBeenCalledWith(savedAction);
+      expect(host.querySelector('[data-slot$="menu-sub-trigger"]')?.textContent).toContain(
+        'Launch commands'
+      );
+      const items = Array.from(
+        host.querySelectorAll<HTMLButtonElement>(`button[data-slot="${itemSlot}"]`)
+      );
+      const detectedCommandItem = items.find((item) =>
+        item.textContent?.includes(detectedCommand.command)
+      );
+      const savedActionItem = items.find((item) => item.textContent?.includes(savedAction.label));
+      const createActionItem = items.find((item) =>
+        item.textContent?.includes('Generate command from a requirement')
+      );
 
-    await act(async () => createActionItem?.click());
-    expect(onCaptureAutomation).toHaveBeenCalledTimes(1);
-  });
+      await act(async () => detectedCommandItem?.click());
+      expect(onRunQuickAction).toHaveBeenNthCalledWith(1, {
+        id: detectedCommand.id,
+        label: detectedCommand.label,
+        command: detectedCommand.command,
+        kind: 'shell',
+      });
+      await act(async () => savedActionItem?.click());
+      expect(onRunQuickAction).toHaveBeenNthCalledWith(2, savedAction);
+
+      await act(async () => createActionItem?.click());
+      expect(onCaptureAutomation).toHaveBeenCalledTimes(1);
+    }
+  );
 });
