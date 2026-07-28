@@ -9,6 +9,7 @@ import type { Prompt } from '@shared/prompt-library';
 const mocks = vi.hoisted(() => ({
   createGroup: vi.fn(),
   createPrompt: vi.fn(),
+  renameGroup: vi.fn(),
   updatePrompt: vi.fn(),
   deletePrompt: vi.fn(),
   promptGroups: [] as string[],
@@ -31,6 +32,7 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   usePrompts: () => ({ data: mocks.prompts, isLoading: false }),
   usePromptGroups: () => ({ data: mocks.promptGroups, isLoading: false }),
   useCreatePromptGroup: () => ({ mutate: mocks.createGroup, isPending: false }),
+  useRenamePromptGroup: () => ({ mutate: mocks.renameGroup, isPending: false }),
   useCreatePrompt: () => ({ mutate: mocks.createPrompt, isPending: false }),
   useUpdatePrompt: () => ({ mutate: mocks.updatePrompt, isPending: false }),
   useDeletePrompt: () => ({ mutate: mocks.deletePrompt }),
@@ -192,6 +194,54 @@ describe('PromptLibraryPanel groups', () => {
     );
   });
 
+  it('creates a prompt directly inside a group', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const createInBuildButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="promptLibrary.groups.createPrompt"]'
+    );
+    expect(createInBuildButton).not.toBeNull();
+    await act(async () => createInBuildButton?.click());
+
+    const editor = host.querySelector<HTMLFormElement>('form[data-slot="prompt-library-editor"]');
+    const titleInput = editor?.querySelector<HTMLInputElement>(
+      'input[placeholder="promptLibrary.form.titlePlaceholder"]'
+    );
+    const groupInput = editor?.querySelector<HTMLInputElement>(
+      'input[placeholder="promptLibrary.form.groupPlaceholder"]'
+    );
+    const contentInput = editor?.querySelector<HTMLTextAreaElement>(
+      'textarea[placeholder="promptLibrary.form.contentPlaceholder"]'
+    );
+    expect(groupInput?.value).toBe('Build');
+
+    await act(async () => {
+      if (!titleInput || !contentInput) return;
+      setFormValue(titleInput, 'Build prompt');
+      setFormValue(contentInput, 'Build the project.');
+    });
+    await act(async () => editor?.requestSubmit());
+
+    expect(mocks.createPrompt).toHaveBeenCalledWith(
+      {
+        title: 'Build prompt',
+        description: '',
+        content: 'Build the project.',
+        groupName: 'Build',
+        extraInfo: '',
+        injectionEnabled: false,
+        source: undefined,
+      },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      })
+    );
+  });
+
   it('creates an empty persisted group from the collection header', async () => {
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'
@@ -216,6 +266,39 @@ describe('PromptLibraryPanel groups', () => {
 
     expect(mocks.createGroup).toHaveBeenCalledWith(
       'Writing',
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      })
+    );
+  });
+
+  it('renames a named group from its header', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const renameBuildButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="promptLibrary.groups.rename"]'
+    );
+    expect(renameBuildButton).not.toBeNull();
+    await act(async () => renameBuildButton?.click());
+
+    const renameForm = host.querySelector<HTMLFormElement>(
+      'form[data-slot="prompt-group-rename-form"]'
+    );
+    const nameInput = renameForm?.querySelector<HTMLInputElement>(
+      'input[placeholder="promptLibrary.groups.namePlaceholder"]'
+    );
+    expect(nameInput?.value).toBe('Build');
+    await act(async () => {
+      if (nameInput) setFormValue(nameInput, 'Delivery');
+    });
+    await act(async () => renameForm?.requestSubmit());
+
+    expect(mocks.renameGroup).toHaveBeenCalledWith(
+      { currentName: 'Build', nextName: 'Delivery' },
       expect.objectContaining({
         onSuccess: expect.any(Function),
         onError: expect.any(Function),

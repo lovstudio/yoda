@@ -33,7 +33,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import React, { useId, useMemo, useState } from 'react';
+import React, { useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES,
@@ -76,6 +76,7 @@ import {
   usePromptGroups,
   usePrompts,
   useRefreshPromptSource,
+  useRenamePromptGroup,
   useReorderPromptGroups,
   useReorderPrompts,
   useSetPromptGroupInjectionEnabled,
@@ -285,6 +286,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const { data, isLoading } = usePrompts();
   const { data: persistedGroupNames, isLoading: groupsLoading } = usePromptGroups();
   const createGroup = useCreatePromptGroup();
+  const renameGroup = useRenamePromptGroup();
   const createPrompt = useCreatePrompt();
   const updatePrompt = useUpdatePrompt();
   const deletePrompt = useDeletePrompt();
@@ -297,6 +299,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
   const groupOptionsId = useId();
+  const editorRef = useRef<HTMLFormElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<PromptDraft>(EMPTY_DRAFT);
   const [sourceForm, setSourceForm] = useState<SourceForm | null>(null);
@@ -304,6 +307,8 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const [groupFormOpen, setGroupFormOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [moveAfterCreateId, setMoveAfterCreateId] = useState<string | null>(null);
+  const [renamingGroupName, setRenamingGroupName] = useState<string | null>(null);
+  const [nextGroupName, setNextGroupName] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
 
@@ -321,6 +326,12 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const normalizedNewGroupName = newGroupName.trim();
   const canCreateGroup =
     normalizedNewGroupName.length > 0 && !namedGroups.includes(normalizedNewGroupName);
+  const normalizedNextGroupName = nextGroupName.trim();
+  const canRenameGroup =
+    renamingGroupName !== null &&
+    normalizedNextGroupName.length > 0 &&
+    normalizedNextGroupName !== renamingGroupName &&
+    !namedGroups.includes(normalizedNextGroupName);
 
   const closeEditor = () => {
     setEditingId(null);
@@ -331,6 +342,20 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
     setSourceForm(null);
     setEditingId('new');
     setDraft(EMPTY_DRAFT);
+  };
+
+  const openCreateInGroup = (groupName: string) => {
+    setSourceForm(null);
+    setEditingId('new');
+    setDraft({ ...EMPTY_DRAFT, groupName });
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      next.delete(groupName);
+      return next;
+    });
+    requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   const openCreateFromSource = (name: string, text: string, source: PromptSource) => {
@@ -355,6 +380,21 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
     setGroupFormOpen(false);
     setNewGroupName('');
     setMoveAfterCreateId(null);
+  };
+
+  const openGroupRenamer = (groupName: string) => {
+    setRenamingGroupName(groupName);
+    setNextGroupName(groupName);
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      next.delete(groupName);
+      return next;
+    });
+  };
+
+  const closeGroupRenamer = () => {
+    setRenamingGroupName(null);
+    setNextGroupName('');
   };
 
   const movePromptToGroup = (entry: Prompt, groupName: string) => {
@@ -400,6 +440,39 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
           variant: 'destructive',
         }),
     });
+  };
+
+  const handleRenameGroup = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canRenameGroup || !renamingGroupName) return;
+    const currentName = renamingGroupName;
+    const renamedName = normalizedNextGroupName;
+    renameGroup.mutate(
+      { currentName, nextName: renamedName },
+      {
+        onSuccess: () => {
+          setCollapsedGroups((current) => {
+            if (!current.has(currentName)) return current;
+            const next = new Set(current);
+            next.delete(currentName);
+            next.add(renamedName);
+            return next;
+          });
+          setDraft((current) =>
+            current.groupName.trim() === currentName
+              ? { ...current, groupName: renamedName }
+              : current
+          );
+          closeGroupRenamer();
+        },
+        onError: (error) =>
+          toast({
+            title: t('promptLibrary.groups.renameFailed'),
+            description: error instanceof Error ? error.message : String(error),
+            variant: 'destructive',
+          }),
+      }
+    );
   };
 
   const showSourceError = (error: PromptSourceError) => {
@@ -768,6 +841,8 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
 
           {editorOpen && (
             <form
+              ref={editorRef}
+              data-slot="prompt-library-editor"
               onSubmit={handleSave}
               className="mt-5 grid gap-4 rounded-lg border border-border bg-background-secondary p-4"
             >
@@ -993,6 +1068,36 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                     {groupLabel}
                                   </span>
                                 </button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={t('promptLibrary.groups.createPrompt', {
+                                    name: groupLabel,
+                                  })}
+                                  title={t('promptLibrary.groups.createPrompt', {
+                                    name: groupLabel,
+                                  })}
+                                  onClick={() => openCreateInGroup(group.name)}
+                                >
+                                  <Plus className="size-4" />
+                                </Button>
+                                {group.name !== UNGROUPED_PROMPT_GROUP && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={t('promptLibrary.groups.rename', {
+                                      name: groupLabel,
+                                    })}
+                                    title={t('promptLibrary.groups.rename', {
+                                      name: groupLabel,
+                                    })}
+                                    onClick={() => openGroupRenamer(group.name)}
+                                  >
+                                    <Pencil className="size-4" />
+                                  </Button>
+                                )}
                                 <PromptGroupInjectionToggle
                                   groupName={group.name}
                                   prompts={group.prompts}
@@ -1004,6 +1109,44 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                   }
                                 />
                               </div>
+
+                              {renamingGroupName === group.name && (
+                                <form
+                                  data-slot="prompt-group-rename-form"
+                                  onSubmit={handleRenameGroup}
+                                  className="flex flex-wrap items-end gap-2 border-t border-border bg-background px-3 py-3"
+                                >
+                                  <label className="grid min-w-48 flex-1 gap-1.5">
+                                    <span className="text-xs font-medium text-foreground">
+                                      {t('promptLibrary.groups.renameTitle', {
+                                        name: groupLabel,
+                                      })}
+                                    </span>
+                                    <Input
+                                      value={nextGroupName}
+                                      onChange={(event) => setNextGroupName(event.target.value)}
+                                      placeholder={t('promptLibrary.groups.namePlaceholder')}
+                                      autoFocus
+                                    />
+                                  </label>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={closeGroupRenamer}
+                                  >
+                                    {t('common.cancel')}
+                                  </Button>
+                                  <Button
+                                    type="submit"
+                                    size="sm"
+                                    disabled={!canRenameGroup || renameGroup.isPending}
+                                  >
+                                    <Save className="size-4" />
+                                    {t('common.save')}
+                                  </Button>
+                                </form>
+                              )}
 
                               {groupIsOpen &&
                                 (group.prompts.length === 0 ? (

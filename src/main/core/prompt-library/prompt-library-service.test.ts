@@ -77,6 +77,47 @@ describe('PromptLibraryService groups', () => {
     expect(await service.listGroups()).toEqual(['Research']);
   });
 
+  it('renames a group while preserving its order and moving every prompt', async () => {
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+    const build = await service.create({
+      title: 'Build',
+      description: '',
+      content: 'Build',
+      groupName: 'Build',
+      extraInfo: '',
+      injectionEnabled: true,
+    });
+    await service.create({
+      title: 'Review',
+      description: '',
+      content: 'Review',
+      groupName: 'Review',
+      extraInfo: '',
+      injectionEnabled: true,
+    });
+
+    expect(await service.renameGroup(' Build ', ' Delivery ')).toBe('Delivery');
+
+    expect(await service.listGroups()).toEqual(['Delivery', 'Review']);
+    expect(await service.list()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: build.id, groupName: 'Delivery' })])
+    );
+  });
+
+  it('renames an empty group and rejects a duplicate name', async () => {
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+    await service.createGroup('Research');
+    await service.createGroup('Writing');
+
+    expect(await service.renameGroup('Research', 'Discovery')).toBe('Discovery');
+    await expect(service.renameGroup('Discovery', 'Writing')).rejects.toThrow(
+      'Prompt group already exists'
+    );
+    expect(await service.listGroups()).toEqual(['Discovery', 'Writing']);
+  });
+
   it('reorders named groups and keeps ungrouped prompts after them', async () => {
     const { PromptLibraryService } = await import('./prompt-library-service');
     const service = new PromptLibraryService();

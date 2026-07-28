@@ -7,6 +7,8 @@ export const promptLibraryController = createRPCController({
   list: () => promptLibraryService.list(),
   listGroups: () => promptLibraryService.listGroups(),
   createGroup: (name: string) => promptLibraryService.createGroup(name),
+  renameGroup: (currentName: string, nextName: string) =>
+    promptLibraryService.renameGroup(currentName, nextName),
   reorderGroups: (names: string[]) => promptLibraryService.reorderGroups(names),
   reorderPrompts: (groupName: string, ids: string[]) =>
     promptLibraryService.reorderPrompts(groupName, ids),

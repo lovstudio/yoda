@@ -47,6 +47,18 @@ export function useCreatePromptGroup() {
   });
 }
 
+export function useRenamePromptGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ currentName, nextName }: { currentName: string; nextName: string }) =>
+      rpc.promptLibrary.renameGroup(currentName, nextName),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: promptGroupsQueryKey });
+      void queryClient.invalidateQueries({ queryKey: promptsQueryKey });
+    },
+  });
+}
+
 export function useCreatePrompt() {
   const queryClient = useQueryClient();
   return useMutation({

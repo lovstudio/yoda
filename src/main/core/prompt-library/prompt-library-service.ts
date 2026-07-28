@@ -166,6 +166,38 @@ export class PromptLibraryService {
     return parsed;
   }
 
+  async renameGroup(currentName: string, nextName: string): Promise<string> {
+    const current = promptGroupNameSchema.parse(currentName);
+    const next = promptGroupNameSchema.parse(nextName);
+    if (current === next) return current;
+
+    const [existing, collision] = await Promise.all([
+      db
+        .select({ name: promptGroups.name })
+        .from(promptGroups)
+        .where(eq(promptGroups.name, current))
+        .limit(1),
+      db
+        .select({ name: promptGroups.name })
+        .from(promptGroups)
+        .where(eq(promptGroups.name, next))
+        .limit(1),
+    ]);
+    if (!existing[0]) throw new Error('Prompt group not found');
+    if (collision[0]) throw new Error('Prompt group already exists');
+
+    db.transaction((tx) => {
+      tx.update(promptGroups).set({ name: next }).where(eq(promptGroups.name, current)).run();
+      tx.update(prompts)
+        .set({ groupName: next })
+        .where(sql`trim(${prompts.groupName}) = ${current}`)
+        .run();
+    });
+    await this.syncInjectionOrder();
+    events.emit(promptsUpdatedChannel, undefined);
+    return next;
+  }
+
   private async ensureGroup(name: string): Promise<void> {
     const normalized = name.trim();
     if (!normalized) return;
