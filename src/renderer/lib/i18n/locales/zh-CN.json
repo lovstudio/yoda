@@ -2116,7 +2116,6 @@
   },
   "library": {
     "sections": {
-      "apps": "应用",
       "prompts": "提示词",
       "agents": "智能体",
       "agentTeams": "智能体团队",
@@ -2124,6 +2123,12 @@
       "plugins": "插件",
       "mcp": "MCP",
       "automation": "自动化"
+    }
+  },
+  "marketplace": {
+    "sections": {
+      "extensions": "扩展",
+      "apps": "应用"
     }
   },
   "extensions": {

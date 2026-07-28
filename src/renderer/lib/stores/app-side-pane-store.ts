@@ -1,5 +1,6 @@
 import { action, makeObservable, observable, toJS } from 'mobx';
 import type { AppSidePaneSnapshot, SidePanePinSnapshot } from '@shared/view-state';
+import { migratePersistedViewRoute } from '@renderer/app/route-migrations';
 import type { ViewId } from '@renderer/app/view-registry';
 import { routeKey } from './app-tabs-store';
 import type { Snapshottable } from './snapshottable';
@@ -184,7 +185,14 @@ export class AppSidePaneStore implements Snapshottable<AppSidePaneSnapshot> {
 
   restoreSnapshot(snapshot: Partial<AppSidePaneSnapshot>): void {
     if (!Array.isArray(snapshot.pins)) return;
-    const restored = snapshot.pins.filter(isValidPinSnapshot).map((pin) => toJS(pin));
+    const restored = snapshot.pins.filter(isValidPinSnapshot).map((pin) => {
+      if (pin.kind !== 'view') return toJS(pin);
+      const migrated = migratePersistedViewRoute({
+        viewId: pin.viewId,
+        params: pin.params,
+      });
+      return toJS({ ...pin, ...migrated });
+    });
     this.pins = restored as SidePanePin[];
     this.activePinId = restored.some((pin) => pin.id === snapshot.activePinId)
       ? (snapshot.activePinId ?? null)

@@ -2116,7 +2116,6 @@
   },
   "library": {
     "sections": {
-      "apps": "Apps",
       "prompts": "Prompts",
       "agents": "Agents",
       "agentTeams": "Agent Teams",
@@ -2124,6 +2123,12 @@
       "plugins": "Plugins",
       "mcp": "MCP",
       "automation": "Automation"
+    }
+  },
+  "marketplace": {
+    "sections": {
+      "extensions": "Extensions",
+      "apps": "Apps"
     }
   },
   "extensions": {

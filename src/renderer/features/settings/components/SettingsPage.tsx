@@ -371,7 +371,12 @@ export function SettingsPage({
     maas: {
       title: t('maas.title'),
       description: t('maas.subtitle'),
-      component: <MaasView embedded onOpenMarketplace={() => navigate('marketplace')} />,
+      component: (
+        <MaasView
+          embedded
+          onOpenMarketplace={() => navigate('marketplace', { section: 'extensions' })}
+        />
+      ),
     },
     usage: {
       title: t('usage.title'),

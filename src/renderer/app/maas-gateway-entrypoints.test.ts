@@ -6,8 +6,8 @@ describe('MaaS Gateway entry-point wiring', () => {
     const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
 
     expect(source).toContain('<MaasGlobalSelector');
-    expect(source).toContain(
-      "onOpenMarketplace={() => appState.navigation.navigate('marketplace')}"
+    expect(source).toMatch(
+      /onOpenMarketplace=\{\(\) =>\s+appState\.navigation\.navigate\('marketplace', \{ section: 'extensions' \}\)\s+\}/
     );
   });
 
@@ -18,7 +18,7 @@ describe('MaaS Gateway entry-point wiring', () => {
     );
 
     expect(source).toMatch(
-      /<MaasView\s+embedded\s+onOpenMarketplace=\{\(\) => navigate\('marketplace'\)\}/
+      /<MaasView\s+embedded\s+onOpenMarketplace=\{\(\) =>\s+navigate\('marketplace', \{ section: 'extensions' \}\)\s*\}/
     );
   });
 });
