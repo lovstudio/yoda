@@ -131,6 +131,13 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const lastAutoResumeSessionRef = useRef<string | null>(null);
 
+  // Both sidebar hosts wrap pinned bodies in React Activity. Effects run only
+  // for the visible pin, making this the surface's explicit connection demand.
+  useEffect(() => {
+    if (!isActive) return;
+    void session.connect();
+  }, [isActive, session]);
+
   // Auto-resume the session when it becomes visible here (mirrors ConversationsPanel).
   useEffect(() => {
     if (!isActive) {
@@ -190,7 +197,11 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-[var(--xterm-bg)] px-2 pt-2">
-      <PaneSizingProvider paneId={`sidebar-pin:${conversation.data.id}`} sessionIds={sessionIds}>
+      <PaneSizingProvider
+        paneId={`sidebar-pin:${conversation.data.id}`}
+        sessionIds={sessionIds}
+        activeSessionId={sessionId}
+      >
         {sessionId && sessionStatus === 'ready' && session.pty ? (
           <div
             ref={terminalContainerRef}

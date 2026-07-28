@@ -54,6 +54,14 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
   const terminalRef = useRef<{ focus: () => void }>(null);
   const focusPendingRef = useRef(false);
 
+  // Request xterm/subscription ownership only while this terminal surface is
+  // active. For optimistic sessions, PtySession latches the request until the
+  // backend-ready gate opens.
+  useEffect(() => {
+    if (!active || !activeSession) return;
+    void activeSession.connect();
+  }, [active, activeSession]);
+
   const {
     isSearchOpen,
     searchQuery,
@@ -111,7 +119,7 @@ export const TerminalPtyContent = observer(function TerminalPtyContent({
         }
       }}
     >
-      <PaneSizingProvider paneId={paneId} sessionIds={sessionIds}>
+      <PaneSizingProvider paneId={paneId} sessionIds={sessionIds} activeSessionId={activeSessionId}>
         {!hasSessions ? (
           emptyState
         ) : (

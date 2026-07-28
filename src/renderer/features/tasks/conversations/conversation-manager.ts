@@ -190,7 +190,6 @@ export class ConversationManagerStore {
         }
         const moved = new ConversationStore(event.conversation);
         this.conversations.set(event.conversation.id, moved);
-        void moved.session.connect();
       });
       void this.hydrateRuntimeStatuses([event.conversation.id]);
     });
@@ -293,10 +292,8 @@ export class ConversationManagerStore {
       }
       const store = new ConversationStore(nextConversation);
       this.conversations.set(conversation.id, store);
-      // Historical conversations are status-hydrated without eagerly creating
-      // xterm instances or subscribing to transcript-backed PTY history. The
-      // visible ConversationSession observes `session.status`, which connects
-      // this PTY on demand; new/forked conversations still connect immediately.
+      // All conversations stay renderer-lazy until a real terminal surface
+      // explicitly requests their session. Status-only panels remain passive.
     }
   }
 
@@ -340,7 +337,6 @@ export class ConversationManagerStore {
     runInAction(() => {
       const store = new ConversationStore(conversation);
       this.conversations.set(conversation.id, store);
-      void store.session.connect();
     });
     this.onUserPromptAt?.(conversation.lastInteractedAt ?? new Date().toISOString());
     return conversation;
@@ -409,8 +405,6 @@ export class ConversationManagerStore {
       this.conversations.set(conversation.id, store);
       if (conversation.resume) {
         store.setSessionExited(true);
-      } else {
-        void store.session.connect();
       }
     });
     this.onUserPromptAt?.(conversation.lastInteractedAt ?? new Date().toISOString());

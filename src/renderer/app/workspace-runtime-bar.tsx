@@ -7,12 +7,11 @@ import {
   Gauge,
   HardDrive,
   MessageSquare,
-  Monitor,
   Sparkles,
   Terminal,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getMaasPlatformDefinition } from '@shared/maas';
 import {
@@ -22,7 +21,6 @@ import {
   type AgentAccountUsage,
   type RuntimeId,
 } from '@shared/runtime-registry';
-import { DEFAULT_TERMINAL_RENDERER } from '@shared/terminal-settings';
 import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
 import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
 import { useMaasConnections, useMaasGlobalBinding } from '@renderer/features/maas/useMaas';
@@ -39,15 +37,6 @@ import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-inf
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import {
-  applyRendererPreferenceToAll,
-  getTerminalRendererDiagnostics,
-  subscribeTerminalRendererDiagnostics,
-} from '@renderer/lib/pty/pty';
-import {
-  nextTerminalRendererPreference,
-  resolveTerminalRendererDisplayMode,
-} from '@renderer/lib/pty/terminal-renderer-selection';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
 import { Button } from '@renderer/lib/ui/button';
@@ -67,16 +56,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const showConfirmActionModal = useShowModal('confirmActionModal');
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
-  const {
-    value: terminalSettings,
-    update: updateTerminalSettings,
-    isSaving: isSavingTerminalSettings,
-  } = useAppSettingsKey('terminal');
-  const terminalRendererDiagnostics = useSyncExternalStore(
-    subscribeTerminalRendererDiagnostics,
-    getTerminalRendererDiagnostics,
-    getTerminalRendererDiagnostics
-  );
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
@@ -206,18 +185,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const sessionHistoryLabel = t('workspaceRuntime.sessionHistory', {
     count: displayedPromptCount ?? 0,
   });
-  const rendererPreference = terminalSettings?.renderer ?? DEFAULT_TERMINAL_RENDERER;
-  const rendererDisplayMode = resolveTerminalRendererDisplayMode(
-    rendererPreference,
-    terminalRendererDiagnostics
-  );
-  const nextRendererPreference = nextTerminalRendererPreference(rendererDisplayMode);
-  const rendererDisplayLabel = t(`workspaceRuntime.renderer.${rendererDisplayMode}`);
-  const nextRendererLabel = t(`workspaceRuntime.renderer.${nextRendererPreference}`);
-  const rendererSwitchLabel = t('workspaceRuntime.renderer.switchMode', {
-    current: rendererDisplayLabel,
-    next: nextRendererLabel,
-  });
   const globalMaasBinding = useMaasGlobalBinding();
   const { data: maasConnections } = useMaasConnections();
   const selectedMaasPlatformId = globalMaasBinding.data?.enabled
@@ -285,11 +252,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       return;
     }
     void workspaceShellStore.toggleShell().catch(() => {});
-  };
-
-  const toggleTerminalRenderer = () => {
-    updateTerminalSettings({ renderer: nextRendererPreference });
-    applyRendererPreferenceToAll(nextRendererPreference);
   };
 
   const compactContext = async () => {
@@ -888,7 +850,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             </div>
           </div>
           <div className="grid gap-3 p-3">
-            <MaasGlobalSelector onManagePlatform={() => appState.navigation.navigate('maas')} />
+            <MaasGlobalSelector
+              onManagePlatform={() => appState.navigation.navigate('maas')}
+              onOpenMarketplace={() => appState.navigation.navigate('marketplace')}
+            />
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -936,17 +901,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           />
         </PopoverContent>
       </Popover>
-      <button
-        type="button"
-        title={rendererSwitchLabel}
-        aria-label={rendererSwitchLabel}
-        disabled={isSavingTerminalSettings}
-        onClick={toggleTerminalRenderer}
-        className="flex h-5 shrink-0 items-center gap-1 rounded px-1.5 font-mono transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border disabled:pointer-events-none disabled:opacity-50"
-      >
-        <Monitor className="size-3.5" />
-        <span aria-live="polite">{rendererDisplayLabel}</span>
-      </button>
       <button
         type="button"
         title={t('workspaceRuntime.terminal')}

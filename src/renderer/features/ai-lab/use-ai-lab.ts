@@ -3,7 +3,6 @@ import type {
   AiLabUserApp,
   AssignAiLabAppProjectInput,
   LogoGenerationInput,
-  RefineAiLabAppInput,
   UpdateAiLabAppInput,
 } from '@shared/ai-lab';
 import { rpc } from '@renderer/lib/ipc';
@@ -13,6 +12,8 @@ export const aiLabQueryKeys = {
   generations: ['aiLab', 'generations'] as const,
   image: (id: string, index: number) => ['aiLab', 'image', id, index] as const,
   apps: ['aiLab', 'apps'] as const,
+  appPreview: (appId: string, updatedAt: string) =>
+    ['aiLab', 'appPreview', appId, updatedAt] as const,
   appImageEdits: (appId: string) => ['aiLab', 'appImageEdits', appId] as const,
   appImageEdit: (appId: string, id: string) => ['aiLab', 'appImageEdit', appId, id] as const,
 };
@@ -40,17 +41,15 @@ export function useDeleteAiLabApp() {
   });
 }
 
-export function useRefineAiLabApp() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: RefineAiLabAppInput) => rpc.aiLab.refineApp(input),
-    onSuccess: (app) => {
-      queryClient.setQueryData<AiLabUserApp[]>(aiLabQueryKeys.apps, (current = []) => [
-        app,
-        ...current.filter((candidate) => candidate.id !== app.id),
-      ]);
-    },
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: aiLabQueryKeys.apps }),
+export function useAiLabAppPreview(app: AiLabUserApp, enabled: boolean) {
+  return useQuery({
+    queryKey: aiLabQueryKeys.appPreview(app.id, app.updatedAt),
+    queryFn: () => rpc.aiLab.startAppPreview(app.id),
+    enabled,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    retry: false,
   });
 }
 

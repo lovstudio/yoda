@@ -94,19 +94,38 @@ function hashRenderedRows(image: ImageData, rows: number): number[] {
   return hashes;
 }
 
+function hashImage(image: ImageData): number {
+  let hash = 2_166_136_261;
+  for (const channel of image.data) {
+    hash ^= channel;
+    hash = Math.imul(hash, 16_777_619) >>> 0;
+  }
+  return hash;
+}
+
+function countDifferentChannels(first: ImageData, second: ImageData): number {
+  if (first.width !== second.width || first.height !== second.height)
+    return Number.POSITIVE_INFINITY;
+  let differences = 0;
+  for (let index = 0; index < first.data.length; index += 1) {
+    if (first.data[index] !== second.data[index]) differences += 1;
+  }
+  return differences;
+}
+
 describe('FrontendPty WebGL scrolling', () => {
-  let pty: FrontendPty | null = null;
-  let mountTarget: HTMLDivElement | null = null;
+  const ptys: FrontendPty[] = [];
+  const mountTargets: HTMLDivElement[] = [];
 
   afterEach(() => {
-    pty?.dispose();
-    pty = null;
-    mountTarget?.remove();
-    mountTarget = null;
+    vi.useRealTimers();
+    for (const pty of ptys.splice(0)) pty.dispose();
+    for (const target of mountTargets.splice(0)) target.remove();
   });
 
   it('renders every visible row once after sustained output scrolling', async () => {
-    mountTarget = document.createElement('div');
+    const mountTarget = document.createElement('div');
+    mountTargets.push(mountTarget);
     Object.assign(mountTarget.style, {
       position: 'absolute',
       left: '0',
@@ -117,22 +136,29 @@ describe('FrontendPty WebGL scrolling', () => {
     });
     document.body.appendChild(mountTarget);
 
-    pty = new FrontendPty('session-webgl-visual', {
+    const pty = new FrontendPty('session-webgl-visual', {
       override: {
         background: '#ffffff',
         foreground: '#111111',
         cursor: '#111111',
       },
     });
+    ptys.push(pty);
     pty.setRendererPreference('webgl');
-    expect(pty.getRendererDiagnosticsEntry().engine).toBe('webgl');
     pty.flushPendingWrites();
     pty.mount(mountTarget, { cols: 80, rows: 24 });
+    expect(pty.getRendererDiagnosticsEntry().engine).toBe('webgl');
 
-    await writeTerminal(
-      pty,
-      Array.from({ length: 100 }, (_, index) => `${uniqueRow(index)}\r\n`).join('')
-    );
+    // Deliver output across multiple renderer frames instead of as one parser
+    // chunk. This is the shape that previously exposed stale WebGL rows during
+    // sustained agent output.
+    for (let batch = 0; batch < 20; batch += 1) {
+      await writeTerminal(
+        pty,
+        Array.from({ length: 12 }, (_, offset) => `${uniqueRow(batch * 12 + offset)}\r\n`).join('')
+      );
+      if (batch % 4 === 3) await nextAnimationFrame();
+    }
     pty.terminal.scrollToBottom();
     await nextAnimationFrame();
     await nextAnimationFrame();
@@ -149,5 +175,118 @@ describe('FrontendPty WebGL scrolling', () => {
     // viewport. Keep both a unique-row ratio and a hard repetition cap.
     expect(new Set(rowHashes).size).toBeGreaterThanOrEqual(Math.floor(rowHashes.length * 0.9));
     expect(Math.max(...counts.values())).toBeLessThanOrEqual(2);
+  });
+
+  it('keeps a sibling WebGL terminal pixel-stable while the other scrolls and is disposed', async () => {
+    const firstTarget = document.createElement('div');
+    const secondTarget = document.createElement('div');
+    mountTargets.push(firstTarget, secondTarget);
+    for (const [index, target] of [firstTarget, secondTarget].entries()) {
+      Object.assign(target.style, {
+        position: 'absolute',
+        left: `${index * 710}px`,
+        top: '0',
+        width: '700px',
+        height: '360px',
+        background: '#ffffff',
+      });
+    }
+    document.body.append(firstTarget, secondTarget);
+
+    const first = new FrontendPty('session-webgl-atlas-first', {
+      override: {
+        background: '#ffffff',
+        foreground: '#191919',
+        cursor: '#ffffff',
+      },
+    });
+    const second = new FrontendPty('session-webgl-atlas-second', {
+      override: {
+        background: '#ffffff',
+        foreground: '#191919',
+        cursor: '#ffffff',
+      },
+    });
+    ptys.push(first, second);
+    for (const [pty, target] of [
+      [first, firstTarget],
+      [second, secondTarget],
+    ] as const) {
+      pty.setRendererPreference('webgl');
+      pty.flushPendingWrites();
+      pty.mount(target, { cols: 72, rows: 20 });
+      expect(pty.getRendererDiagnosticsEntry().engine).toBe('webgl');
+    }
+
+    await writeTerminal(
+      first,
+      Array.from({ length: 120 }, (_, index) => `mutable-${uniqueRow(index)}\r\n`).join('')
+    );
+    await writeTerminal(
+      second,
+      Array.from({ length: 20 }, (_, index) => `stable-${uniqueRow(index + 500)}\r\n`).join('')
+    );
+    first.terminal.scrollToTop();
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+
+    const secondScreen = second.ownedContainer.querySelector<HTMLElement>('.xterm-screen');
+    if (!secondScreen) throw new Error('sibling xterm screen was not mounted');
+    const before = await screenshotPixels(secondScreen);
+
+    for (let iteration = 0; iteration < 12; iteration += 1) {
+      first.terminal.scrollLines(iteration % 2 === 0 ? 5 : -3);
+      await nextAnimationFrame();
+    }
+    second.terminal.refresh(0, second.terminal.rows - 1);
+    await nextAnimationFrame();
+    const afterScroll = await screenshotPixels(secondScreen);
+    expect(hashImage(afterScroll)).toBe(hashImage(before));
+    expect(countDifferentChannels(afterScroll, before)).toBe(0);
+
+    first.dispose();
+    ptys.splice(ptys.indexOf(first), 1);
+    second.terminal.refresh(0, second.terminal.rows - 1);
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+
+    expect(second.getRendererDiagnosticsEntry().engine).toBe('webgl');
+    const afterSiblingDispose = await screenshotPixels(secondScreen);
+    expect(hashImage(afterSiblingDispose)).toBe(hashImage(before));
+    expect(countDifferentChannels(afterSiblingDispose, before)).toBe(0);
+  });
+
+  it('falls back to the DOM renderer after a WebGL context-loss event', async () => {
+    const mountTarget = document.createElement('div');
+    mountTargets.push(mountTarget);
+    Object.assign(mountTarget.style, {
+      position: 'absolute',
+      width: '640px',
+      height: '320px',
+    });
+    document.body.appendChild(mountTarget);
+
+    const pty = new FrontendPty('session-webgl-context-loss');
+    ptys.push(pty);
+    pty.setRendererPreference('webgl');
+    pty.flushPendingWrites();
+    pty.mount(mountTarget, { cols: 80, rows: 20 });
+    await writeTerminal(pty, 'content-survives-context-loss');
+
+    const canvases = pty.ownedContainer.querySelectorAll<HTMLCanvasElement>('.xterm-screen canvas');
+    expect(canvases.length).toBeGreaterThan(0);
+    vi.useFakeTimers();
+    for (const canvas of canvases) {
+      canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    }
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    expect(pty.getRendererDiagnosticsEntry()).toMatchObject({
+      engine: 'dom',
+      issue: 'webgl-context-lost',
+    });
+    expect(pty.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(
+      'content-survives-context-loss'
+    );
   });
 });

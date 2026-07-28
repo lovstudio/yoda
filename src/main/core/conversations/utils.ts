@@ -20,6 +20,7 @@ export function mapConversationRowToConversation(
     autoApprove: config?.autoApprove,
     permissionMode: config?.permissionMode,
     skillPolicy: config?.skillPolicy,
+    sessionSource: config?.sessionSource,
     resume: resume,
     lastInteractedAt: row.lastInteractedAt ?? null,
     isInitialConversation: row.isInitialConversation,

@@ -17,22 +17,26 @@ import { join } from 'node:path';
  */
 const INDEX_TTL_MS = 30_000;
 
-let cached: { at: number; index: Promise<Map<string, string>> } | null = null;
+const cachedByRoot = new Map<string, { at: number; index: Promise<Map<string, string>> }>();
 
 export async function findClaudeTranscriptPathBySessionId(
-  sessionId: string
+  sessionId: string,
+  claudeConfigDir = join(homedir(), '.claude')
 ): Promise<string | undefined> {
   const now = Date.now();
+  const cached = cachedByRoot.get(claudeConfigDir);
   if (!cached || now - cached.at >= INDEX_TTL_MS) {
-    cached = { at: now, index: buildIndex() };
+    const next = { at: now, index: buildIndex(claudeConfigDir) };
+    cachedByRoot.set(claudeConfigDir, next);
+    return (await next.index).get(sessionId);
   }
   return (await cached.index).get(sessionId);
 }
 
 /** sessionId -> absolute transcript path. Best-effort: unreadable dirs are skipped. */
-async function buildIndex(): Promise<Map<string, string>> {
+async function buildIndex(claudeConfigDir: string): Promise<Map<string, string>> {
   const index = new Map<string, string>();
-  const root = join(homedir(), '.claude', 'projects');
+  const root = join(claudeConfigDir, 'projects');
   let projectDirs: string[];
   try {
     projectDirs = (await readdir(root, { withFileTypes: true }))

@@ -1,6 +1,11 @@
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal, type IDisposable, type ITerminalOptions } from '@xterm/xterm';
-import { ptyDataChannel } from '@shared/events/ptyEvents';
+import {
+  PTY_CONSUMER_HEARTBEAT_INTERVAL_MS,
+  ptyDataChannel,
+  type PtyDataEvent,
+} from '@shared/events/ptyEvents';
 import {
   DEFAULT_TERMINAL_RENDERER,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
@@ -44,6 +49,31 @@ export const TERMINAL_LINE_HEIGHT = 1.0;
  * Everything else is event-driven; see FrontendPty.commitResize().
  */
 const UNFREEZE_FALLBACK_MS = 300;
+/** Avoid a full-canvas GPU→2D copy on every high-frequency cursor repaint. */
+const FREEZE_SNAPSHOT_MIN_INTERVAL_MS = 150;
+/**
+ * Bound each xterm parser job. 64 Ki UTF-16 code units is at most 192 KiB of
+ * UTF-8 for BMP text (and less for paired supplementary code points), while
+ * still amortising Terminal.write overhead for normal PTY batches.
+ */
+export const XTERM_WRITE_CHUNK_CODE_UNITS = 64 * 1024;
+
+type ConnectOutcome = 'connected' | 'cancelled';
+
+type PendingConnectAttempt = {
+  readonly consumerId: string;
+  readonly pendingEvents: PtyDataEvent[];
+  cancelled: boolean;
+  snapshotResolved: boolean;
+  unsubscribeRequested: boolean;
+  stopListening: () => void;
+};
+
+type TerminalWriteQueueItem = {
+  readonly data: string;
+  readonly onWritten?: () => void;
+  offset: number;
+};
 
 export type TerminalRendererIssue = 'webgl-unavailable' | 'webgl-context-lost';
 
@@ -158,9 +188,10 @@ export function buildTheme(theme?: SessionTheme): ITerminalOptions['theme'] {
  *
  * Owns the xterm Terminal instance for the full lifetime of the session.
  * The terminal is created synchronously during construction and opened into
- * an off-screen container. Call connect() to subscribe to the main-process
- * ring buffer and live IPC events — this writes historical output directly
- * to xterm and sets up ongoing data delivery without any renderer-side buffer.
+ * an off-screen container. After mount/measurement opens the flush gate,
+ * connect() subscribes to the main-process ring buffer and live IPC events.
+ * Successful subscriptions survive later unmounts so off-screen sessions keep
+ * parsing and acknowledging output without retaining a GPU renderer.
  *
  * DOM management is handled via mount() / unmount():
  *  - mount()   → appends ownedContainer to the visible mount target
@@ -204,6 +235,9 @@ export class FrontendPty {
   readonly terminal: Terminal;
   readonly ownedContainer: HTMLDivElement;
   private offData: (() => void) | null = null;
+  private connectedConsumerId: string | null = null;
+  private pendingConnectAttempt: PendingConnectAttempt | null = null;
+  private connectPromise: Promise<ConnectOutcome> | null = null;
   /** Last { cols, rows } sent to rpc.pty.resize(). Used by PaneSizingContext to skip redundant IPC calls. */
   lastSentDims: { cols: number; rows: number } | null = null;
   /**
@@ -212,8 +246,20 @@ export class FrontendPty {
    * mount() after the terminal has been resized to real pane dimensions, so
    * scrollback never reflows from a stale default width.
    */
-  private pendingWrites: string[] = [];
+  private pendingWrites: Array<{
+    data: string;
+    acknowledgement?: { generation: number; sequence: number };
+  }> = [];
   private hasFlushed = false;
+  private terminalWriteQueue: TerminalWriteQueueItem[] = [];
+  private terminalWriteActive = false;
+  private outputGeneration = 0;
+  private lastOutputSequence = 0;
+  private acknowledgedGeneration = 0;
+  private acknowledgedSequence = 0;
+  private consumerHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private consumerHeartbeatInFlight = false;
+  private isDisposed = false;
   private savedViewportY: number | null = null;
   /**
    * Whether the viewport was pinned to the tail (following live output) when
@@ -228,6 +274,7 @@ export class FrontendPty {
   private freezeOverlay: HTMLCanvasElement | null = null;
   /** Whether freezeOverlay holds a usable captured frame (see captureFreezeSnapshot). */
   private hasFreezeSnapshot = false;
+  private lastFreezeSnapshotAt = Number.NEGATIVE_INFINITY;
   /** Per-render snapshot capture into freezeOverlay; disposed with the terminal. */
   private freezeSnapshotDisposable: IDisposable | null = null;
   /** Unfreeze event chain state: idle → await-data → await-render → idle. */
@@ -244,10 +291,10 @@ export class FrontendPty {
   private rendererIssue: TerminalRendererIssue | null = null;
   private webglAddon: WebglAddon | null = null;
   private webglContextLossDisposable: IDisposable | null = null;
-  /** Coalesces scroll recovery to at most one full WebGL redraw per animation frame. */
-  private webglViewportRefreshFrame: number | null = null;
   /** Off-screen sessions defer GPU recovery until mount(), avoiding background redraw work. */
   private isMounted = false;
+  /** Lease protecting a newer host from an older React effect's late cleanup. */
+  private mountGeneration = 0;
 
   constructor(
     readonly sessionId: string,
@@ -266,7 +313,9 @@ export class FrontendPty {
       scrollback: normalizeTerminalScrollbackLines(
         options?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
       ),
-      convertEol: true,
+      // A real PTY's termios owns newline translation. Rewriting bare LF here
+      // changes terminal control semantics and can corrupt cursor-based TUIs.
+      convertEol: false,
       fontFamily: DEFAULT_TERMINAL_FONT_FAMILY,
       fontSize: 13,
       lineHeight: TERMINAL_LINE_HEIGHT,
@@ -291,6 +340,13 @@ export class FrontendPty {
       theme: buildTheme(theme),
     });
 
+    // Match modern shell wcwidth tables. The xterm core defaults to Unicode 6,
+    // which mismeasures newer CJK/emoji code points and makes following glyphs
+    // overwrite the wrong cells. Grapheme clustering remains opt-in until its
+    // experimental width rules are validated against local, tmux, and SSH.
+    this.terminal.loadAddon(new Unicode11Addon());
+    this.terminal.unicode.activeVersion = '11';
+
     // OSC 52 → system clipboard (tmux copy-mode etc.). Disposed with the terminal.
     registerOsc52ClipboardHandler(this.terminal);
 
@@ -301,7 +357,7 @@ export class FrontendPty {
     this.scrollDisposable = this.terminal.onScroll((viewportY) => {
       this.savedViewportY = viewportY;
       this.savedAtBottom = viewportY >= this.terminal.buffer.active.baseY;
-      this.scheduleCleanWebglViewportRefresh();
+      this.invalidateFreezeSnapshot();
     });
     this.freezeSnapshotDisposable = this.terminal.onRender(() => this.captureFreezeSnapshot());
 
@@ -360,7 +416,8 @@ export class FrontendPty {
   }
 
   /** Override OSC 8 hyperlink activation (e.g. in-app browser); null restores the system browser. */
-  setLinkOpener(opener: ((url: string) => void) | null): void {
+  setLinkOpener(opener: ((url: string) => void) | null, mountLease?: number): void {
+    if (mountLease !== undefined && mountLease !== this.mountGeneration) return;
     this.linkOpener = opener;
   }
 
@@ -391,6 +448,15 @@ export class FrontendPty {
       return;
     }
 
+    // Background sessions keep parsing into xterm's canonical buffer but do
+    // not retain a GPU context. A WebGL renderer is created only for the
+    // terminal that is actually mounted.
+    if (!this.isMounted) {
+      this.disposeWebglRenderer();
+      this.setRendererState('dom', null);
+      return;
+    }
+
     if (this.webglAddon) {
       this.setRendererState('webgl', null);
       return;
@@ -410,7 +476,6 @@ export class FrontendPty {
   }
 
   private disposeWebglRenderer(): void {
-    this.cancelScheduledWebglViewportRefresh();
     this.invalidateFreezeSnapshot();
     this.webglContextLossDisposable?.dispose();
     this.webglContextLossDisposable = null;
@@ -435,40 +500,14 @@ export class FrontendPty {
     }
   }
 
-  private cancelScheduledWebglViewportRefresh(): void {
-    if (this.webglViewportRefreshFrame === null) return;
-    cancelAnimationFrame(this.webglViewportRefreshFrame);
-    this.webglViewportRefreshFrame = null;
-  }
-
   /**
-   * Rebuild the WebGL model and repaint every visible row from xterm's buffer.
-   * clearTextureAtlas() clears both the glyph renderer model and its textures;
-   * refreshAllRows() keeps the recovery correct across addon implementations.
+   * Repaint visible rows from xterm's canonical buffer without clearing the
+   * glyph atlas. xterm shares atlas pages across terminals; clearing one from a
+   * scroll callback can leave sibling render models pointing at stale glyph
+   * coordinates and is far more expensive than xterm's own dirty-row renderer.
    */
   private redrawViewportFromBuffer(): void {
-    try {
-      this.webglAddon?.clearTextureAtlas();
-    } catch {}
     this.refreshAllRows();
-  }
-
-  /**
-   * Chromium can composite a partially updated WebGL frame while xterm scrolls
-   * the normal buffer, leaving the outgoing row visible at several positions.
-   * Coalesce all scroll notifications in one animation frame, discard the old
-   * resize snapshot immediately, then force one full redraw from the canonical
-   * xterm buffer. This keeps WebGL enabled without accumulating stale pixels.
-   */
-  private scheduleCleanWebglViewportRefresh(): void {
-    this.invalidateFreezeSnapshot();
-    if (!this.isMounted || !this.webglAddon || this.webglViewportRefreshFrame !== null) return;
-
-    this.webglViewportRefreshFrame = requestAnimationFrame(() => {
-      this.webglViewportRefreshFrame = null;
-      if (!this.isMounted || !this.webglAddon) return;
-      this.redrawViewportFromBuffer();
-    });
   }
 
   private loadWebglRenderer(): void {
@@ -551,25 +590,152 @@ export class FrontendPty {
   }
 
   /**
-   * Subscribe to the session: fetches the ring buffer from the main process,
-   * writes it directly to xterm, then sets up a live IPC listener for future
-   * data. Marks status as 'ready' once complete.
+   * Subscribe listener-first, then bridge the snapshot/live boundary with the
+   * main process generation+sequence watermark. Listener-first alone can
+   * duplicate a batch already present in the snapshot; snapshot-first can
+   * lose a batch in the RPC return window. The watermark closes both races.
    *
-   * The main process guarantees atomicity: subscribe() snapshots the ring
-   * buffer and registers the consumer in one synchronous tick, so no data
-   * can slip between the snapshot and the first live IPC event.
+   * The first subscription is allowed only after a visible mount has real
+   * dimensions and opens the flush gate. Once established it remains live
+   * across unmounts; only a still-pending first subscription is cancelled.
    */
   async connect(): Promise<void> {
-    const result = await rpc.pty.subscribe(this.sessionId);
-    const historical = result.success ? result.data.buffer : '';
-    if (historical) this.writeOrBuffer(historical);
-    this.offData = events.on(
+    if (
+      this.isDisposed ||
+      this.connectedConsumerId !== null ||
+      !this.isMounted ||
+      !this.hasFlushed
+    ) {
+      return;
+    }
+    if (this.connectPromise) {
+      await this.connectPromise;
+      return;
+    }
+
+    const promise = this.connectOnce();
+    this.connectPromise = promise;
+    let outcome: ConnectOutcome;
+    try {
+      outcome = await promise;
+    } finally {
+      if (this.connectPromise === promise) this.connectPromise = null;
+    }
+
+    // A new host can claim the same FrontendPty while the cancelled RPC is
+    // resolving. Retry for that live host; concurrent callers join this retry.
+    if (
+      outcome === 'cancelled' &&
+      !this.isDisposed &&
+      this.isMounted &&
+      this.connectedConsumerId === null
+    ) {
+      await this.connect();
+    }
+  }
+
+  private async connectOnce(): Promise<ConnectOutcome> {
+    const pendingEvents: PtyDataEvent[] = [];
+    let listenerActive = true;
+    let attempt: PendingConnectAttempt | null = null;
+    const offData = events.on(
       ptyDataChannel,
-      (data: string) => {
-        this.writeOrBuffer(data);
+      (event) => {
+        if (!attempt || attempt.cancelled) return;
+        if (!attempt.snapshotResolved) {
+          pendingEvents.push(event);
+          return;
+        }
+        this.acceptOutputEvent(event);
       },
       this.sessionId
     );
+    const stopListening = () => {
+      if (!listenerActive) return;
+      listenerActive = false;
+      offData();
+    };
+    attempt = {
+      consumerId: globalThis.crypto.randomUUID(),
+      pendingEvents,
+      cancelled: false,
+      snapshotResolved: false,
+      unsubscribeRequested: false,
+      stopListening,
+    };
+    this.pendingConnectAttempt = attempt;
+
+    let result: Awaited<ReturnType<typeof rpc.pty.subscribe>>;
+    try {
+      result = await rpc.pty.subscribe(this.sessionId, attempt.consumerId);
+    } catch (error) {
+      this.cancelConnectAttempt(attempt);
+      throw error;
+    }
+
+    if (attempt.cancelled || this.isDisposed) {
+      this.cancelConnectAttempt(attempt);
+      return 'cancelled';
+    }
+    if (this.pendingConnectAttempt === attempt) this.pendingConnectAttempt = null;
+    this.connectedConsumerId = attempt.consumerId;
+    this.offData = attempt.stopListening;
+
+    const snapshot = result.data;
+    this.outputGeneration = snapshot.generation;
+    this.lastOutputSequence = snapshot.sequence;
+    this.acknowledgedGeneration = snapshot.generation;
+    this.acknowledgedSequence = 0;
+    this.startConsumerHeartbeat();
+    if (snapshot.buffer) {
+      this.writeOrBuffer(snapshot.buffer, {
+        generation: snapshot.generation,
+        sequence: snapshot.sequence,
+      });
+    } else if (snapshot.sequence > 0) {
+      this.acknowledgeOutput(snapshot.generation, snapshot.sequence);
+    }
+
+    attempt.snapshotResolved = true;
+    for (const event of pendingEvents) this.acceptOutputEvent(event);
+    pendingEvents.length = 0;
+    return 'connected';
+  }
+
+  private cancelPendingConnect(): void {
+    const attempt = this.pendingConnectAttempt;
+    if (!attempt) return;
+    this.cancelConnectAttempt(attempt);
+    // A remount may start a fresh attempt with a distinct consumer token while
+    // the cancelled subscribe RPC finishes in the background.
+    this.connectPromise = null;
+  }
+
+  private cancelConnectAttempt(attempt: PendingConnectAttempt): void {
+    attempt.cancelled = true;
+    attempt.pendingEvents.length = 0;
+    attempt.stopListening();
+    if (this.pendingConnectAttempt === attempt) this.pendingConnectAttempt = null;
+    if (attempt.unsubscribeRequested) return;
+    attempt.unsubscribeRequested = true;
+    void rpc.pty.unsubscribe(this.sessionId, attempt.consumerId).catch(() => {});
+  }
+
+  private acceptOutputEvent(event: PtyDataEvent): void {
+    if (event.generation < this.outputGeneration) return;
+    if (event.generation > this.outputGeneration) {
+      this.outputGeneration = event.generation;
+      this.lastOutputSequence = 0;
+      this.acknowledgedGeneration = event.generation;
+      this.acknowledgedSequence = 0;
+    }
+    if (event.sequence <= this.lastOutputSequence) return;
+
+    this.lastOutputSequence = event.sequence;
+    this.writeOrBuffer(event.data, {
+      generation: event.generation,
+      sequence: event.sequence,
+    });
   }
 
   /**
@@ -584,13 +750,20 @@ export class FrontendPty {
   private static looksLikeRepaint(data: string): boolean {
     return (
       data.includes('\x1b[H') ||
+      data.includes('\x1b[1;1H') ||
+      data.includes('\x1b[1;1f') ||
       data.includes('\x1b[2J') ||
       data.includes('\x1b[3J') ||
-      data.includes('\x1b[?1049')
+      data.includes('\x1b[?1049') ||
+      data.includes('\x1b[?2026h') ||
+      data.includes('\x1b[?2026l')
     );
   }
 
-  private writeOrBuffer(data: string): void {
+  private writeOrBuffer(
+    data: string,
+    acknowledgement?: { generation: number; sequence: number }
+  ): void {
     if (this.hasFlushed) {
       // Unfreeze chain step 1: the app's post-SIGWINCH repaint reaching us
       // (in-flight pre-resize chunks — spinners, streamed rows — must NOT
@@ -598,10 +771,90 @@ export class FrontendPty {
       if (this.unfreezePhase === 'await-data' && FrontendPty.looksLikeRepaint(data)) {
         this.unfreezePhase = 'await-render';
       }
-      this.terminal.write(data);
+      this.writeTerminalData(data, () => {
+        if (acknowledgement) {
+          this.acknowledgeOutput(acknowledgement.generation, acknowledgement.sequence);
+        }
+      });
     } else {
-      this.pendingWrites.push(data);
+      this.pendingWrites.push({ data, acknowledgement });
     }
+  }
+
+  private writeTerminalData(data: string, onWritten?: () => void): void {
+    if (this.isDisposed) return;
+    this.terminalWriteQueue.push({ data, onWritten, offset: 0 });
+    this.pumpTerminalWriteQueue();
+  }
+
+  private pumpTerminalWriteQueue(): void {
+    if (this.isDisposed || this.terminalWriteActive) return;
+    const write = this.terminalWriteQueue[0];
+    if (!write) return;
+    if (write.offset >= write.data.length) {
+      this.terminalWriteQueue.shift();
+      write.onWritten?.();
+      this.pumpTerminalWriteQueue();
+      return;
+    }
+
+    let end = Math.min(write.offset + XTERM_WRITE_CHUNK_CODE_UNITS, write.data.length);
+    // Keep a surrogate pair in the same parser job.
+    if (
+      end < write.data.length &&
+      end > write.offset &&
+      write.data.charCodeAt(end - 1) >= 0xd800 &&
+      write.data.charCodeAt(end - 1) <= 0xdbff &&
+      write.data.charCodeAt(end) >= 0xdc00 &&
+      write.data.charCodeAt(end) <= 0xdfff
+    ) {
+      end -= 1;
+    }
+
+    this.terminalWriteActive = true;
+    this.terminal.write(write.data.slice(write.offset, end), () => {
+      if (this.isDisposed) return;
+      this.terminalWriteActive = false;
+      write.offset = end;
+      if (write.offset >= write.data.length) {
+        this.terminalWriteQueue.shift();
+        write.onWritten?.();
+      }
+      this.pumpTerminalWriteQueue();
+    });
+  }
+
+  private acknowledgeOutput(generation: number, sequence: number): void {
+    const consumerId = this.connectedConsumerId;
+    if (!consumerId || generation <= 0 || sequence <= 0 || this.isDisposed) return;
+    if (
+      generation > this.acknowledgedGeneration ||
+      (generation === this.acknowledgedGeneration && sequence > this.acknowledgedSequence)
+    ) {
+      this.acknowledgedGeneration = generation;
+      this.acknowledgedSequence = sequence;
+    }
+    rpc.pty.acknowledgeOutput(this.sessionId, consumerId, generation, sequence).catch(() => {});
+  }
+
+  private startConsumerHeartbeat(): void {
+    if (this.consumerHeartbeatTimer !== null) return;
+    this.consumerHeartbeatTimer = setInterval(() => {
+      const consumerId = this.connectedConsumerId;
+      if (!consumerId || this.isDisposed || this.consumerHeartbeatInFlight) return;
+      this.consumerHeartbeatInFlight = true;
+      rpc.pty
+        .heartbeatConsumer(
+          this.sessionId,
+          consumerId,
+          this.acknowledgedGeneration,
+          this.acknowledgedSequence
+        )
+        .catch(() => {})
+        .finally(() => {
+          this.consumerHeartbeatInFlight = false;
+        });
+    }, PTY_CONSUMER_HEARTBEAT_INTERVAL_MS);
   }
 
   /**
@@ -681,6 +934,18 @@ export class FrontendPty {
     return overlay;
   }
 
+  private releaseFreezeOverlayBackingStore(): void {
+    const overlay = this.freezeOverlay;
+    if (!overlay) return;
+    overlay.remove();
+    // Resetting dimensions releases the full DPR-scaled pixel allocation.
+    overlay.width = 0;
+    overlay.height = 0;
+    this.freezeOverlay = null;
+    this.hasFreezeSnapshot = false;
+    this.lastFreezeSnapshotAt = Number.NEGATIVE_INFINITY;
+  }
+
   /**
    * Mirror the just-rendered WebGL frame onto the (hidden) freeze overlay. Runs
    * on every onRender because the WebGL canvas uses preserveDrawingBuffer:false;
@@ -689,9 +954,10 @@ export class FrontendPty {
    * the masking snapshot is never overwritten by mid-resize garbage.
    */
   private captureFreezeSnapshot(allowWhileFrozen = false): void {
+    const now = performance.now();
     if (
       !this.isMounted ||
-      this.webglViewportRefreshFrame !== null ||
+      (!allowWhileFrozen && now - this.lastFreezeSnapshotAt < FREEZE_SNAPSHOT_MIN_INTERVAL_MS) ||
       (!allowWhileFrozen && this.unfreezePhase !== 'idle')
     ) {
       return;
@@ -712,6 +978,7 @@ export class FrontendPty {
     overlay.style.width = canvas.style.width || `${canvas.width}px`;
     overlay.style.height = canvas.style.height || `${canvas.height}px`;
     this.hasFreezeSnapshot = true;
+    this.lastFreezeSnapshotAt = now;
   }
 
   /**
@@ -721,7 +988,7 @@ export class FrontendPty {
    * arming an unfreeze that has nothing to reveal.
    */
   private freezeFrame(): boolean {
-    if (!this.hasFreezeSnapshot || !this.freezeOverlay || this.webglViewportRefreshFrame !== null) {
+    if (!this.hasFreezeSnapshot || !this.freezeOverlay) {
       return false;
     }
     this.freezeOverlay.style.display = 'block';
@@ -777,17 +1044,22 @@ export class FrontendPty {
     if (this.hasFlushed) return;
     this.hasFlushed = true;
     if (this.pendingWrites.length === 0) return;
-    const buffered = this.pendingWrites.join('');
+    const pendingWrites = this.pendingWrites;
     this.pendingWrites = [];
-    this.terminal.write(buffered, () => {
-      try {
-        this.terminal.scrollToBottom();
-        this.savedViewportY = this.terminal.buffer.active.viewportY;
-        this.savedAtBottom = true;
-        this.cancelScheduledWebglViewportRefresh();
-        this.redrawViewportFromBuffer();
-      } catch {}
-    });
+    for (const [index, write] of pendingWrites.entries()) {
+      this.writeTerminalData(write.data, () => {
+        if (write.acknowledgement) {
+          this.acknowledgeOutput(write.acknowledgement.generation, write.acknowledgement.sequence);
+        }
+        if (index !== pendingWrites.length - 1) return;
+        try {
+          this.terminal.scrollToBottom();
+          this.savedViewportY = this.terminal.buffer.active.viewportY;
+          this.savedAtBottom = true;
+          this.redrawViewportFromBuffer();
+        } catch {}
+      });
+    }
   }
 
   /**
@@ -795,10 +1067,10 @@ export class FrontendPty {
    * If targetDims are provided the terminal is resized BEFORE the appendChild
    * to eliminate the flash caused by a post-mount resize.
    */
-  mount(mountTarget: HTMLElement, targetDims?: { cols: number; rows: number }): void {
+  mount(mountTarget: HTMLElement, targetDims?: { cols: number; rows: number }): number {
+    const mountLease = ++this.mountGeneration;
     // Mount dims are authoritative — drop any stale freeze overlay.
     this.unfreeze();
-    this.cancelScheduledWebglViewportRefresh();
     this.invalidateFreezeSnapshot();
     if (
       targetDims &&
@@ -806,13 +1078,15 @@ export class FrontendPty {
     ) {
       this.terminal.resize(targetDims.cols, targetDims.rows);
     }
-    this.isMounted = true;
     mountTarget.appendChild(this.ownedContainer);
+    this.isMounted = true;
+    this.applyRendererPreference();
     // Force a clean renderer repaint after reparenting in the DOM.
     const t = this.terminal;
     const savedViewportY = this.savedViewportY;
     const savedAtBottom = this.savedAtBottom;
     requestAnimationFrame(() => {
+      if (mountLease !== this.mountGeneration) return;
       try {
         if ((t as unknown as { _isDisposed?: boolean })._isDisposed) return;
         // A session that was following the tail returns to the tail — output
@@ -823,10 +1097,10 @@ export class FrontendPty {
         } else if (savedViewportY !== null) {
           t.scrollToLine(savedViewportY);
         }
-        this.cancelScheduledWebglViewportRefresh();
         this.redrawViewportFromBuffer();
       } catch {}
     });
+    return mountLease;
   }
 
   /**
@@ -834,10 +1108,16 @@ export class FrontendPty {
    * TerminalPane unmounting).  Must be called after all ResizeObservers on
    * the visible mount target have been disconnected.
    */
-  unmount(): void {
+  unmount(mountLease?: number): void {
+    if (mountLease !== undefined && mountLease !== this.mountGeneration) return;
+    this.mountGeneration += 1;
     this.isMounted = false;
-    this.cancelScheduledWebglViewportRefresh();
+    this.cancelPendingConnect();
+    this.unfreeze();
     this.invalidateFreezeSnapshot();
+    this.releaseFreezeOverlayBackingStore();
+    this.disposeWebglRenderer();
+    this.setRendererState('dom', null);
     ensureXtermHost().appendChild(this.ownedContainer);
   }
 
@@ -847,15 +1127,26 @@ export class FrontendPty {
    * disposes the xterm Terminal, and removes the owned container from the DOM.
    */
   dispose(): void {
+    if (this.isDisposed) return;
+    this.isDisposed = true;
+    this.cancelPendingConnect();
+    this.connectPromise = null;
+    if (this.consumerHeartbeatTimer !== null) {
+      clearInterval(this.consumerHeartbeatTimer);
+      this.consumerHeartbeatTimer = null;
+    }
+    this.mountGeneration += 1;
     FrontendPty.all.delete(this);
     notifyTerminalRendererDiagnosticsChanged();
     this.isMounted = false;
-    this.cancelScheduledWebglViewportRefresh();
     this.unfreeze();
-    this.freezeOverlay?.remove();
-    this.freezeOverlay = null;
+    this.releaseFreezeOverlayBackingStore();
+    this.terminalWriteQueue = [];
+    this.terminalWriteActive = false;
     this.offData?.();
     this.offData = null;
+    const connectedConsumerId = this.connectedConsumerId;
+    this.connectedConsumerId = null;
     this.scrollDisposable.dispose();
     this.freezeSnapshotDisposable?.dispose();
     this.freezeSnapshotDisposable = null;
@@ -863,7 +1154,9 @@ export class FrontendPty {
     this.webglContextLossDisposable = null;
     this.webglAddon?.dispose();
     this.webglAddon = null;
-    rpc.pty.unsubscribe(this.sessionId).catch(() => {});
+    if (connectedConsumerId) {
+      void rpc.pty.unsubscribe(this.sessionId, connectedConsumerId).catch(() => {});
+    }
     try {
       this.terminal.dispose();
     } catch {}

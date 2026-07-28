@@ -18,6 +18,7 @@ const EMPTY_SEARCH_STATUS: TerminalSearchStatus = {
   currentIndex: 0,
   total: 0,
 };
+const SEARCH_DEBOUNCE_MS = 120;
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -39,6 +40,11 @@ export function useTerminalSearch({
   const searchedTerminalRef = useRef<Terminal | null>(null);
   const activeSearchQueryRef = useRef('');
   const activeSearchMatchRef = useRef<TerminalSearchMatch | null>(null);
+  const cachedMatchesRef = useRef<{
+    terminal: Terminal;
+    query: string;
+    matches: TerminalSearchMatch[];
+  } | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchStatus, setSearchStatus] = useState<TerminalSearchStatus>(EMPTY_SEARCH_STATUS);
@@ -47,6 +53,7 @@ export function useTerminalSearch({
     setSearchQuery('');
     setSearchStatus(EMPTY_SEARCH_STATUS);
     setIsSearchOpen(false);
+    cachedMatchesRef.current = null;
   }, []);
 
   const clearTerminalSelection = useCallback((target?: Terminal | null) => {
@@ -59,6 +66,7 @@ export function useTerminalSearch({
       searchedTerminalRef.current = null;
       activeSearchQueryRef.current = '';
       activeSearchMatchRef.current = null;
+      cachedMatchesRef.current = null;
     }
   }, []);
 
@@ -94,7 +102,12 @@ export function useTerminalSearch({
         return EMPTY_SEARCH_STATUS;
       }
 
-      const matches = collectTerminalSearchMatches(buffer, query);
+      const cached = cachedMatchesRef.current;
+      const matches =
+        !options.reset && cached?.terminal === terminal && cached.query === query
+          ? cached.matches
+          : collectTerminalSearchMatches(buffer, query);
+      cachedMatchesRef.current = { terminal, query, matches };
       if (matches.length === 0) {
         searchedTerminalRef.current = terminal;
         activeSearchQueryRef.current = query;
@@ -154,9 +167,8 @@ export function useTerminalSearch({
         setSearchStatus(EMPTY_SEARCH_STATUS);
         return;
       }
-      runTerminalSearch(nextQuery, { direction: 'next', reset: true });
     },
-    [clearTerminalSelection, runTerminalSearch]
+    [clearTerminalSelection]
   );
 
   const stepSearch = useCallback(
@@ -198,11 +210,19 @@ export function useTerminalSearch({
 
   useEffect(() => {
     if (!enabled || !isSearchOpen || !searchQuery || !terminal) return;
-    const id = requestAnimationFrame(() => {
+    const id = setTimeout(() => {
       runTerminalSearch(searchQuery, { direction: 'next', reset: true });
-    });
-    return () => cancelAnimationFrame(id);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(id);
   }, [enabled, isSearchOpen, runTerminalSearch, searchQuery, terminal]);
+
+  useEffect(() => {
+    if (!terminal) return;
+    const disposable = terminal.onWriteParsed(() => {
+      cachedMatchesRef.current = null;
+    });
+    return () => disposable.dispose();
+  }, [terminal]);
 
   useEffect(() => {
     if (!enabled) return;

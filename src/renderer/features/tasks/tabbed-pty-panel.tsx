@@ -55,6 +55,14 @@ export const TabbedPtyPanel = observer(function TabbedPtyPanel<TEntity>({
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<{ focus: () => void }>(null);
   const focusPendingRef = useRef(false);
+
+  // This mounted panel is the connection demand boundary. Reading status in
+  // other MobX observers must remain passive and must not create an xterm.
+  useEffect(() => {
+    if (!activeSession) return;
+    void activeSession.connect();
+  }, [activeSession]);
+
   const {
     isSearchOpen,
     searchQuery,
@@ -109,7 +117,11 @@ export const TabbedPtyPanel = observer(function TabbedPtyPanel<TEntity>({
       }}
     >
       <div className="shrink-0">{tabBar}</div>
-      <PaneSizingProvider paneId={paneId} sessionIds={allSessionIds}>
+      <PaneSizingProvider
+        paneId={paneId}
+        sessionIds={allSessionIds}
+        activeSessionId={activeSessionId}
+      >
         {tabs.length === 0 ? (
           emptyState
         ) : (

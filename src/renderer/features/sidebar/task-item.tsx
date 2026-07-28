@@ -187,6 +187,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
                 'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1',
                 taskIndentClass
               )}
+              data-sidebar-entity="task"
+              data-sidebar-project-id={projectId}
+              data-sidebar-task-id={taskId}
               isActive={isActive}
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => setHovered(true)}

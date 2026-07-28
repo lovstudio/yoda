@@ -1,12 +1,12 @@
 /**
- * PaneSizingContext — owns PTY resize for every session that belongs to a pane.
+ * PaneSizingContext — owns PTY resize for the active session in a pane.
  *
- * The active TerminalPane calls reportDimensions(cols, rows) whenever its
- * terminal resizes.  The provider forwards that resize to ALL registered
- * sessions (active + background) immediately, so background agents always have
- * the correct terminal width even when they are off-screen.  Pacing is owned
- * by the caller (use-pty throttles measure+resize); broadcasting synchronously
- * keeps the PTY SIGWINCH in the same tick as the xterm reflow.
+ * The active TerminalPane calls reportDimensions(sessionId, cols, rows) whenever its
+ * terminal resizes. The provider forwards that resize only when the reporting
+ * session is still active. Background PTYs keep the dimensions that match their
+ * off-screen xterm grid; when one becomes active, the existing mount/measure
+ * path resizes its xterm and backend together. Pacing is owned by the caller
+ * (use-pty throttles measure+resize).
  *
  * Each provider renders a wrapper <div> that fills its parent and registers
  * itself in the module-level paneRegistry under its paneId.  This lets any
@@ -15,7 +15,11 @@
  * needing a mounted terminal.
  *
  * Usage:
- *   <PaneSizingProvider paneId="conversations" sessionIds={allConversationSessionIds}>
+ *   <PaneSizingProvider
+ *     paneId="conversations"
+ *     sessionIds={allConversationSessionIds}
+ *     activeSessionId={activeSessionId}
+ *   >
  *     ...
  *     <TerminalPane sessionId={activeSessionId} />
  *   </PaneSizingProvider>
@@ -60,11 +64,11 @@ export function getPaneContainer(paneId: string): HTMLDivElement | null {
 
 export interface PaneSizingContextValue {
   /**
-   * Called by the active terminal after every resize.  Synchronously
-   * broadcasts the dimensions to all registered sessions (active +
-   * background); identical dims for the same session set are deduped.
+   * Called by a terminal after every resize. The report is forwarded only when
+   * reportSessionId is the pane's current active session; stale reports from a
+   * terminal being unmounted are ignored.
    */
-  reportDimensions: (cols: number, rows: number) => void;
+  reportDimensions: (reportSessionId: string, cols: number, rows: number) => void;
   /**
    * Returns the last dimensions reported to this pane, or null if no terminal
    * has reported dimensions yet.  Used as a fallback when cell metrics are
@@ -106,15 +110,23 @@ interface PaneSizingProviderProps {
   /** Stable identifier for this pane.  Used to register in the module-level
    *  paneRegistry so code outside the React tree can measure this pane. */
   paneId: string;
-  /** All session IDs that belong to this pane (active + background). */
+  /** All session IDs that belong to this pane. Used to validate activeSessionId. */
   sessionIds: string[];
+  /** The only session whose xterm and backend PTY may be resized by this pane. */
+  activeSessionId: string | null;
   children: ReactNode;
 }
 
-export function PaneSizingProvider({ paneId, sessionIds, children }: PaneSizingProviderProps) {
+export function PaneSizingProvider({
+  paneId,
+  sessionIds,
+  activeSessionId,
+  children,
+}: PaneSizingProviderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const sessionsRef = useRef<string[]>([]);
   const lastDimensionsRef = useRef<{ cols: number; rows: number } | null>(null);
+  const validActiveSessionId =
+    activeSessionId && sessionIds.includes(activeSessionId) ? activeSessionId : null;
 
   // Register/unregister this pane in the module-level registry.
   useEffect(() => {
@@ -126,42 +138,23 @@ export function PaneSizingProvider({ paneId, sessionIds, children }: PaneSizingP
     };
   }, [paneId]);
 
-  // When sessionIds change, send the current known dimensions to any sessions
-  // that are newly added (e.g. a conversation was just created, or a tab was
-  // unpinned back from the sidebar into this pane).
-  useEffect(() => {
-    const prev = sessionsRef.current;
-    const added = sessionIds.filter((id) => !prev.includes(id));
-    sessionsRef.current = sessionIds;
-    const dims = lastDimensionsRef.current;
-    if (dims && added.length > 0) {
-      for (const id of added) {
-        if (FrontendPty.noteResize(id, dims.cols, dims.rows)) {
-          void rpc.pty.resize(id, dims.cols, dims.rows);
-        }
-      }
-    }
-  }, [sessionIds]);
+  const reportDimensions = useCallback(
+    (reportSessionId: string, cols: number, rows: number) => {
+      if (!validActiveSessionId || reportSessionId !== validActiveSessionId) return;
 
-  const reportDimensions = useCallback((cols: number, rows: number) => {
-    const dims = {
-      cols: Math.max(MIN_TERMINAL_COLS, cols),
-      rows: Math.max(MIN_TERMINAL_ROWS, rows),
-    };
-    lastDimensionsRef.current = dims;
-    // The skip-redundant-IPC dedup is PER SESSION (FrontendPty.lastSentDims),
-    // never per pane: a session can move between panes (sidebar pin/unpin),
-    // and a pane-level "did my size change" check would silently swallow the
-    // backend resize after another pane changed that session's dims. The
-    // per-session record also covers restarted sessions: a restart reuses the
-    // sessionId but gets a NEW FrontendPty (lastSentDims=null), so the next
-    // report always reaches it.
-    for (const id of sessionsRef.current) {
-      if (FrontendPty.noteResize(id, dims.cols, dims.rows)) {
-        void rpc.pty.resize(id, dims.cols, dims.rows);
+      const dims = {
+        cols: Math.max(MIN_TERMINAL_COLS, cols),
+        rows: Math.max(MIN_TERMINAL_ROWS, rows),
+      };
+      lastDimensionsRef.current = dims;
+      // Keep dedup per session: pin/unpin can move the active session between
+      // panes, and a restarted session gets a new FrontendPty with no prior dims.
+      if (FrontendPty.noteResize(validActiveSessionId, dims.cols, dims.rows)) {
+        void rpc.pty.resize(validActiveSessionId, dims.cols, dims.rows);
       }
-    }
-  }, []);
+    },
+    [validActiveSessionId]
+  );
 
   const getCurrentDimensions = useCallback(
     (): { cols: number; rows: number } | null => lastDimensionsRef.current,

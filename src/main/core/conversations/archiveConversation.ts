@@ -4,6 +4,7 @@ import type { RuntimeId } from '@shared/runtime-registry';
 import { projectManager } from '@main/core/projects/project-manager';
 import type { ProjectProvider } from '@main/core/projects/project-provider';
 import { resolveTask } from '@main/core/projects/utils';
+import { resolveCodexStatePath } from '@main/core/session-title/codex-title-source';
 import { runtimeOverrideSettings } from '@main/core/settings/runtime-settings-service';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { db } from '@main/db/client';
@@ -21,7 +22,9 @@ import { ensureCodexThreadArchived } from './codex-archive';
 import { resolveAgentResumeSessionId } from './codex-session-id';
 import { getReservedCodexThreadIds } from './codex-thread-reservations';
 import { conversationEvents } from './conversation-events';
+import { getConversationRuntimeStateRoot } from './conversation-session-source';
 import { runPreArchiveCommand } from './pre-archive-command';
+import { withRuntimeStateRoot } from './session-state-roots';
 import { mapConversationRowToConversation } from './utils';
 
 export type ArchiveConversationOptions = {
@@ -125,15 +128,22 @@ async function archiveCodexConversation({
   const cwd = await resolveTaskCwd({ task, project, projectPath });
   const providerConfig = await runtimeOverrideSettings.getItem('codex');
   const mappedConversation = mapConversationRowToConversation(conversation, true);
+  const stateRoot = mappedConversation.sessionSource
+    ? getConversationRuntimeStateRoot(mappedConversation, providerConfig)
+    : undefined;
+  const sessionProviderConfig = stateRoot
+    ? withRuntimeStateRoot('codex', providerConfig, stateRoot)
+    : providerConfig;
   const reservedThreadIds = await getReservedCodexThreadIds(mappedConversation.id);
   const threadId = resolveAgentResumeSessionId(mappedConversation, cwd, {
     reservedThreadIds,
   });
   await ensureCodexThreadArchived({
     runtimeId: mappedConversation.runtimeId,
-    providerConfig,
+    providerConfig: sessionProviderConfig,
     threadId,
     ctx: project.ctx,
+    statePath: stateRoot ? resolveCodexStatePath(stateRoot) : undefined,
   });
 }
 

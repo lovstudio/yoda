@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { and, eq } from 'drizzle-orm';
 import { createRPCController } from '@shared/ipc/rpc';
+import { parsePtySessionId } from '@shared/ptySessionId';
 import { err, ok } from '@shared/result';
 import { loadCodexRolloutTerminalHistoryForConversation } from '@main/core/conversations/codex-rollout-terminal-history';
 import { mapConversationRowToConversation } from '@main/core/conversations/utils';
@@ -11,14 +12,15 @@ import { log } from '@main/lib/logger';
 import { taskManager } from '../tasks/task-manager';
 import { workspaceRegistry } from '../workspaces/workspace-registry';
 import { ptySessionRegistry } from './pty-session-registry';
+import { normalizePlainTextTerminalEol } from './terminal-history-eol';
 
 export const ptyController = createRPCController({
   /** Send raw input data to a PTY session. */
   sendInput: (sessionId: string, data: string) => {
-    const pty = ptySessionRegistry.get(sessionId);
-    if (!pty) return err({ type: 'not_found' as const });
-    pty.write(data);
-    return ok();
+    const status = ptySessionRegistry.writeOrQueue(sessionId, data);
+    if (status === 'full') return err({ type: 'input_queue_full' as const });
+    if (status === 'unavailable') return err({ type: 'not_found' as const });
+    return ok({ queued: status === 'queued' });
   },
 
   /** Resize a PTY session to the given terminal dimensions. */
@@ -34,18 +36,59 @@ export const ptyController = createRPCController({
    * for future IPC delivery. Non-destructive — the ring buffer is kept intact.
    * Called once by the renderer when connecting a FrontendPty to a session.
    */
-  subscribe: async (sessionId: string) => {
-    const buffer = ptySessionRegistry.subscribe(sessionId);
-    if (buffer || ptySessionRegistry.get(sessionId)) return ok({ buffer });
-    return ok({ buffer: await loadHistoricalConversationBuffer(sessionId) });
+  subscribe: async (sessionId: string, consumerId: string) => {
+    const initialSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
+    if (initialSnapshot.buffer || ptySessionRegistry.get(sessionId)) return ok(initialSnapshot);
+
+    const historicalBuffer = await loadHistoricalConversationBuffer(sessionId);
+    // The history lookup crosses an async boundary. Re-subscribe atomically so
+    // a PTY that registered (and perhaps already exited) in the meantime wins
+    // over stale history. Its listener was installed before the first call, so
+    // live events remain queued and the returned watermark can deduplicate them.
+    const latestSnapshot = ptySessionRegistry.subscribe(sessionId, consumerId);
+    if (
+      latestSnapshot.generation !== initialSnapshot.generation ||
+      latestSnapshot.sequence !== initialSnapshot.sequence ||
+      latestSnapshot.buffer ||
+      ptySessionRegistry.get(sessionId)
+    ) {
+      return ok(latestSnapshot);
+    }
+    return ok({
+      buffer: historicalBuffer,
+      generation: latestSnapshot.generation,
+      sequence: latestSnapshot.sequence,
+    });
+  },
+
+  /** Cumulative acknowledgement that xterm has parsed an output batch. */
+  acknowledgeOutput: (
+    sessionId: string,
+    consumerId: string,
+    generation: number,
+    sequence: number
+  ) => {
+    ptySessionRegistry.acknowledge(sessionId, consumerId, generation, sequence);
+    return ok();
+  },
+
+  /** Renew a renderer consumer lease and replay its latest parsed watermark. */
+  heartbeatConsumer: (
+    sessionId: string,
+    consumerId: string,
+    generation: number,
+    acknowledgedSequence: number
+  ) => {
+    ptySessionRegistry.heartbeat(sessionId, consumerId, generation, acknowledgedSequence);
+    return ok();
   },
 
   /**
    * Remove the renderer's consumer registration for a session.
    * Called when the renderer disposes its FrontendPty.
    */
-  unsubscribe: (sessionId: string) => {
-    ptySessionRegistry.unsubscribe(sessionId);
+  unsubscribe: (sessionId: string, consumerId: string) => {
+    ptySessionRegistry.unsubscribe(sessionId, consumerId);
     return ok();
   },
 
@@ -102,7 +145,7 @@ export const ptyController = createRPCController({
 });
 
 async function loadHistoricalConversationBuffer(sessionId: string): Promise<string> {
-  const parsed = parseConversationSessionId(sessionId);
+  const parsed = parsePtySessionId(sessionId);
   if (!parsed) return '';
 
   const [row] = await db
@@ -116,8 +159,8 @@ async function loadHistoricalConversationBuffer(sessionId: string): Promise<stri
     .where(
       and(
         eq(conversations.projectId, parsed.projectId),
-        eq(conversations.taskId, parsed.taskId),
-        eq(conversations.id, parsed.conversationId)
+        eq(conversations.taskId, parsed.scopeId),
+        eq(conversations.id, parsed.leafId)
       )
     )
     .limit(1);
@@ -127,31 +170,22 @@ async function loadHistoricalConversationBuffer(sessionId: string): Promise<stri
   const conversation = mapConversationRowToConversation(row.conversation);
   if (conversation.runtimeId !== 'codex') return '';
 
-  const workspaceId = taskManager.getWorkspaceId(parsed.taskId);
+  const workspaceId = taskManager.getWorkspaceId(parsed.scopeId);
   const cwd = (workspaceId ? workspaceRegistry.get(workspaceId)?.path : null) ?? row.projectPath;
 
   try {
-    return (
+    const history =
       (await loadCodexRolloutTerminalHistoryForConversation({
         conversation,
         cwd,
-      })) ?? ''
-    );
+      })) ?? '';
+    return normalizePlainTextTerminalEol(history);
   } catch (error) {
     log.warn('ptyController.subscribe: failed to load Codex rollout history', {
       sessionId,
-      conversationId: parsed.conversationId,
+      conversationId: parsed.leafId,
       error: String(error),
     });
     return '';
   }
-}
-
-function parseConversationSessionId(
-  sessionId: string
-): { projectId: string; taskId: string; conversationId: string } | null {
-  const [projectId, taskId, ...conversationParts] = sessionId.split(':');
-  const conversationId = conversationParts.join(':');
-  if (!projectId || !taskId || !conversationId) return null;
-  return { projectId, taskId, conversationId };
 }

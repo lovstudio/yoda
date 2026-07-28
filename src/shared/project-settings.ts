@@ -1,4 +1,19 @@
 import z from 'zod';
+import {
+  PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES,
+  PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS,
+  PROMPT_SOURCE_MAX_REFRESH_MINUTES,
+  PROMPT_SOURCE_MAX_TIMEOUT_SECONDS,
+  PROMPT_SOURCE_MIN_REFRESH_MINUTES,
+  PROMPT_SOURCE_MIN_TIMEOUT_SECONDS,
+  promptSourceErrorCodeSchema,
+  promptSourceErrorSchema,
+  promptSourceSchema,
+  type PromptSource,
+  type PromptSourceError,
+  type PromptSourceLoadResult,
+  type PromptSourceRefreshResult,
+} from './prompt-library';
 import { RUNTIME_IDS } from './runtime-registry';
 
 export const PROJECT_CONFIG_FILE = '.yoda.json';
@@ -44,15 +59,32 @@ export const quickActionSchema = z.object({
 export type QuickAction = z.infer<typeof quickActionSchema>;
 
 /**
- * An atomic, user-defined operating principle appended after the runtime's
- * system prompt at spawn. The canonical source of truth for this shape — the
- * app-global `promptPrinciples` setting reuses it, and projects layer on top.
+ * Legacy project-local prompt shape. App-global entries are migrated to the
+ * prompt library; this remains for `.yoda.json` compatibility.
  */
+export const promptPrincipleSourceErrorCodeSchema = promptSourceErrorCodeSchema;
+export type PromptPrincipleSourceErrorCode = z.infer<typeof promptPrincipleSourceErrorCodeSchema>;
+export const promptPrincipleSourceErrorSchema = promptSourceErrorSchema;
+export type PromptPrincipleSourceError = PromptSourceError;
+export const PROMPT_PRINCIPLE_SOURCE_DEFAULT_REFRESH_MINUTES =
+  PROMPT_SOURCE_DEFAULT_REFRESH_MINUTES;
+export const PROMPT_PRINCIPLE_SOURCE_MIN_REFRESH_MINUTES = PROMPT_SOURCE_MIN_REFRESH_MINUTES;
+export const PROMPT_PRINCIPLE_SOURCE_MAX_REFRESH_MINUTES = PROMPT_SOURCE_MAX_REFRESH_MINUTES;
+export const PROMPT_PRINCIPLE_SOURCE_DEFAULT_TIMEOUT_SECONDS =
+  PROMPT_SOURCE_DEFAULT_TIMEOUT_SECONDS;
+export const PROMPT_PRINCIPLE_SOURCE_MIN_TIMEOUT_SECONDS = PROMPT_SOURCE_MIN_TIMEOUT_SECONDS;
+export const PROMPT_PRINCIPLE_SOURCE_MAX_TIMEOUT_SECONDS = PROMPT_SOURCE_MAX_TIMEOUT_SECONDS;
+export const promptPrincipleSourceSchema = promptSourceSchema;
+export type PromptPrincipleSource = PromptSource;
+export type PromptPrincipleSourceLoadResult = PromptSourceLoadResult;
+export type PromptPrincipleSourceRefreshResult = PromptSourceRefreshResult;
+
 export const promptPrincipleSchema = z.object({
   id: z.string(),
   name: z.string(),
   text: z.string(),
   enabled: z.boolean(),
+  source: promptPrincipleSourceSchema.optional(),
 });
 
 export type PromptPrinciple = z.infer<typeof promptPrincipleSchema>;

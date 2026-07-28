@@ -30,7 +30,6 @@ export class TerminalManagerStore {
       for (const terminal of terminals) {
         const store = new TerminalStore(terminal);
         this.terminals.set(terminal.id, store);
-        void store.session.connect();
       }
     });
   }
@@ -44,9 +43,8 @@ export class TerminalManagerStore {
     };
 
     runInAction(() => {
-      const store = new TerminalStore(optimistic);
+      const store = new TerminalStore(optimistic, { deferConnection: true });
       this.terminals.set(params.id, store);
-      void store.session.connect();
     });
 
     try {
@@ -55,6 +53,7 @@ export class TerminalManagerStore {
         const store = this.terminals.get(params.id);
         if (store) {
           Object.assign(store.data, terminal);
+          store.session.enableConnection();
         }
       });
       return terminal;
@@ -122,10 +121,13 @@ export class TerminalStore {
   data: Terminal;
   session: PtySession;
 
-  constructor(terminal: Terminal) {
+  constructor(terminal: Terminal, options?: { deferConnection?: boolean }) {
     this.data = terminal;
     this.session = new PtySession(
-      makePtySessionId(terminal.projectId, terminal.taskId, terminal.id)
+      makePtySessionId(terminal.projectId, terminal.taskId, terminal.id),
+      {
+        deferConnection: options?.deferConnection,
+      }
     );
     makeObservable(this, { data: observable, session: observable });
   }

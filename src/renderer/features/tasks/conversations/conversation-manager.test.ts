@@ -344,9 +344,10 @@ describe('ConversationManagerStore', () => {
     });
 
     expect(store.conversations.get('conversation-2')?.data.title).toBe('Synced Codex title');
+    expect(mocks.ptyConnectMock).not.toHaveBeenCalled();
   });
 
-  it('adds a context fork returned by the main process and connects its PTY', async () => {
+  it('adds a context fork without connecting before a terminal surface requests it', async () => {
     const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
     mocks.ptyConnectMock.mockClear();
     const params = {
@@ -366,7 +367,7 @@ describe('ConversationManagerStore', () => {
       forkedFromConversationId: 'conversation-1',
       forkedFromPromptIndex: 0,
     });
-    expect(mocks.ptyConnectMock).toHaveBeenCalled();
+    expect(mocks.ptyConnectMock).not.toHaveBeenCalled();
   });
 
   it('adds a full conversation fork and deduplicates repeated requests', async () => {
@@ -387,7 +388,7 @@ describe('ConversationManagerStore', () => {
     expect(mocks.forkConversationMock).toHaveBeenCalledTimes(1);
     expect(mocks.forkConversationMock).toHaveBeenCalledWith(params);
     expect(store.conversations.get('conversation-fork')?.data).toEqual(fork);
-    expect(mocks.ptyConnectMock).toHaveBeenCalledTimes(1);
+    expect(mocks.ptyConnectMock).not.toHaveBeenCalled();
 
     await store.forkConversation(params);
     expect(mocks.forkConversationMock).toHaveBeenCalledTimes(2);
@@ -505,7 +506,7 @@ describe('ConversationManagerStore', () => {
     expect(mocks.ptyDisposeMock).toHaveBeenCalled();
   });
 
-  it('registers a conversation that moves into this task with its new PTY identity', async () => {
+  it('registers a moved conversation lazily with its new PTY identity', async () => {
     const store = new ConversationManagerStore('project-1', 'task-2');
     const listener = mocks.listeners.get(conversationMovedChannel.name);
     mocks.ptyConnectMock.mockClear();
@@ -520,7 +521,7 @@ describe('ConversationManagerStore', () => {
     expect(store.conversations.get('conversation-1')?.session.sessionId).toBe(
       'project-1:task-2:conversation-1'
     );
-    expect(mocks.ptyConnectMock).toHaveBeenCalled();
+    expect(mocks.ptyConnectMock).not.toHaveBeenCalled();
     expect(mocks.getConversationRuntimeStatusesMock).toHaveBeenCalledWith('project-1', 'task-2', [
       'conversation-1',
     ]);

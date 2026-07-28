@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   mountProject: vi.fn(),
   projects: new Map<string, object>(),
   prepareQuickProject: vi.fn(),
+  scaffoldAppProject: vi.fn(),
   asMounted: vi.fn(),
 }));
 
@@ -23,6 +24,9 @@ vi.mock('@renderer/lib/ipc', () => ({
     projects: {
       prepareQuickProject: mocks.prepareQuickProject,
     },
+    aiLab: {
+      scaffoldAppProject: mocks.scaffoldAppProject,
+    },
   },
 }));
 
@@ -31,6 +35,7 @@ describe('createAiLabProject', () => {
     mocks.createProject.mockReset();
     mocks.mountProject.mockReset();
     mocks.prepareQuickProject.mockReset();
+    mocks.scaffoldAppProject.mockReset();
     mocks.asMounted.mockReset();
     mocks.projects.clear();
   });
@@ -49,6 +54,7 @@ describe('createAiLabProject', () => {
     mocks.createProject.mockResolvedValue('app-project');
     mocks.mountProject.mockResolvedValue(undefined);
     mocks.asMounted.mockReturnValue(mounted);
+    mocks.scaffoldAppProject.mockResolvedValue(undefined);
 
     await expect(createAiLabProject('Trip planner')).resolves.toBe(mounted);
     expect(mocks.createProject).toHaveBeenCalledWith(
@@ -62,5 +68,9 @@ describe('createAiLabProject', () => {
     );
     expect(mocks.mountProject).toHaveBeenCalledWith('app-project');
     expect(mocks.asMounted).toHaveBeenCalledWith(store);
+    expect(mocks.scaffoldAppProject).toHaveBeenCalledWith({
+      projectId: 'app-project',
+      name: 'Trip planner',
+    });
   });
 });

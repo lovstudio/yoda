@@ -1,4 +1,4 @@
-import { Bot, FileCode2, ListPlus, Loader2, WandSparkles } from 'lucide-react';
+import { Bot, Check, FileCode2, ListPlus, Loader2, WandSparkles } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -30,6 +30,7 @@ import {
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@renderer/lib/ui/field';
 import { Input } from '@renderer/lib/ui/input';
 import { Textarea } from '@renderer/lib/ui/textarea';
+import { cn } from '@renderer/utils/utils';
 
 type CaptureProjectAutomationModalArgs = {
   projectId: string;
@@ -138,6 +139,13 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     () => buildSkillDraft(serializedIntent, label || suggestedLabel, command),
     [command, serializedIntent, label, suggestedLabel]
   );
+  const cleanedIntent = serializedIntent.trim();
+  const hasIntent = cleanedIntent.length > 0;
+  const hasCurrentCommand = compiledIntent === cleanedIntent && command.trim().length > 0;
+  const hasPreviousCompilation = compiledIntent !== null;
+  const intentChangedSinceCompilation = hasPreviousCompilation && compiledIntent !== cleanedIntent;
+  const quickActionStep = !hasIntent ? 1 : hasCurrentCommand ? 3 : 2;
+  const compilationUnavailable = !runtimeId || createDisabled;
 
   useEffect(() => {
     if (labelOverridden) return;
@@ -294,6 +302,14 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     }
   };
 
+  const handlePrimaryAction = async () => {
+    if (target === 'quickAction' && !hasCurrentCommand) {
+      await handleCompile();
+      return;
+    }
+    await handleSubmit();
+  };
+
   return (
     <>
       <DialogHeader>
@@ -317,29 +333,6 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
               showSubmitButton={false}
             />
             <FieldDescription>{t('sidebar.captureAutomation.intentDescription')}</FieldDescription>
-            {target === 'quickAction' && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="self-start"
-                disabled={
-                  loading || compiling || !serializedIntent.trim() || !runtimeId || createDisabled
-                }
-                onClick={() => void handleCompile()}
-              >
-                {compiling ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <WandSparkles className="size-3.5" />
-                )}
-                {t(
-                  compiling
-                    ? 'sidebar.captureAutomation.generatingCommand'
-                    : 'sidebar.captureAutomation.generateCommand'
-                )}
-              </Button>
-            )}
           </Field>
 
           <div className="grid grid-cols-3 gap-2">
@@ -374,6 +367,47 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
 
           {target === 'quickAction' && (
             <FieldGroup>
+              <ol
+                aria-label={t('sidebar.captureAutomation.workflowLabel')}
+                className="grid grid-cols-3 gap-2"
+              >
+                {[
+                  t('sidebar.captureAutomation.stepDescribe'),
+                  t('sidebar.captureAutomation.stepReviewCommand'),
+                  t('sidebar.captureAutomation.stepSaveAndRun'),
+                ].map((stepLabel, index) => {
+                  const step = index + 1;
+                  const isCurrent = quickActionStep === step;
+                  const isComplete = quickActionStep > step;
+                  return (
+                    <li
+                      key={stepLabel}
+                      aria-current={isCurrent ? 'step' : undefined}
+                      className={cn(
+                        'flex min-w-0 items-center gap-2 rounded-md border border-border px-2.5 py-2 text-xs text-foreground-muted',
+                        isCurrent && 'border-primary/40 bg-primary/5 text-foreground',
+                        isComplete && 'bg-background-1 text-foreground'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'flex size-5 shrink-0 items-center justify-center rounded-full border border-border bg-background font-mono text-[10px] text-foreground-passive',
+                          isCurrent && 'border-primary text-primary',
+                          isComplete && 'border-status-done/50 bg-status-done/10 text-status-done'
+                        )}
+                      >
+                        {isComplete ? <Check className="size-3" aria-hidden /> : step}
+                      </span>
+                      <span className="min-w-0 leading-tight">{stepLabel}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+              {hasIntent && compilationUnavailable && !hasCurrentCommand ? (
+                <FieldDescription className="text-destructive">
+                  {t('sidebar.captureAutomation.compilationUnavailable')}
+                </FieldDescription>
+              ) : null}
               <Field>
                 <FieldLabel>{t('sidebar.captureAutomation.actionLabel')}</FieldLabel>
                 <Input
@@ -395,6 +429,11 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
                 <FieldDescription>
                   {t('sidebar.captureAutomation.quickActionDescription')}
                 </FieldDescription>
+                {intentChangedSinceCompilation ? (
+                  <FieldDescription className="text-status-in-progress">
+                    {t('sidebar.captureAutomation.commandNeedsRefresh')}
+                  </FieldDescription>
+                ) : null}
                 {explanation ? (
                   <FieldDescription>
                     {t('sidebar.captureAutomation.commandEvidence', { explanation })}
@@ -469,24 +508,41 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
           </Button>
         ) : (
           <ConfirmButton
-            onClick={() => void handleSubmit()}
+            onClick={() => void handlePrimaryAction()}
             disabled={
               loading ||
               compiling ||
               submitting ||
               (target === 'quickAction' &&
-                (compiledIntent !== serializedIntent.trim() || !command.trim()))
+                !hasCurrentCommand &&
+                (!hasIntent || compilationUnavailable))
             }
           >
-            {target === 'quickAction'
-              ? t(
-                  submitting
-                    ? 'sidebar.captureAutomation.savingAndRunning'
-                    : 'sidebar.captureAutomation.saveAndRun'
-                )
-              : submitting
-                ? t('common.saving')
-                : t('sidebar.captureAutomation.save')}
+            {target === 'quickAction' ? (
+              compiling ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  {t('sidebar.captureAutomation.generatingCommand')}
+                </>
+              ) : submitting ? (
+                t('sidebar.captureAutomation.savingAndRunning')
+              ) : hasCurrentCommand ? (
+                t('sidebar.captureAutomation.saveAndRun')
+              ) : (
+                <>
+                  <WandSparkles className="size-3.5" />
+                  {t(
+                    hasPreviousCompilation
+                      ? 'sidebar.captureAutomation.regenerateCommand'
+                      : 'sidebar.captureAutomation.generateCommand'
+                  )}
+                </>
+              )
+            ) : submitting ? (
+              t('common.saving')
+            ) : (
+              t('sidebar.captureAutomation.save')
+            )}
           </ConfirmButton>
         )}
       </DialogFooter>

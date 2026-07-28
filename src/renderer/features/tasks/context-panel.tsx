@@ -32,7 +32,12 @@ import type {
   CodexSessionContext,
   ContextSkill,
 } from '@shared/conversations';
-import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
+import {
+  asMounted,
+  getProjectSettingsStore,
+  getProjectStore,
+} from '@renderer/features/projects/stores/project-selectors';
+import { usePrompts } from '@renderer/features/prompt-library/use-prompts';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
   ContextItem,
@@ -461,13 +466,27 @@ function PersonaSection({
   files: Array<ClaudeMemoryFile | CodexMemoryFile>;
   systemPromptHint?: string;
   codexSystemPrompt?: CodexSystemPrompt;
-  /** True for runtimes that inject the user's prompt principles at spawn. */
+  /** True for runtimes that inject the user's dynamic prompts at spawn. */
   showPromptPrinciples?: boolean;
 }) {
   const { t } = useTranslation();
-  const { value: promptPrinciplesValue } = useAppSettingsKey('promptPrinciples');
+  const provisioned = useProvisionedTask();
+  const { data: libraryPrompts } = usePrompts();
+  const projectPrompts = getProjectSettingsStore(provisioned.projectId)?.settings?.promptPrinciples;
   const principles = showPromptPrinciples
-    ? (promptPrinciplesValue?.items ?? []).filter((p) => p.enabled && p.text.trim().length > 0)
+    ? [
+        ...(libraryPrompts ?? [])
+          .filter(
+            (prompt) =>
+              (projectPrompts?.globalOverrides?.[prompt.id] ?? prompt.injectionEnabled) &&
+              prompt.content.trim().length > 0
+          )
+          .sort((left, right) => left.injectionOrder - right.injectionOrder)
+          .map((prompt) => ({ id: prompt.id, name: prompt.title, text: prompt.content })),
+        ...(projectPrompts?.items ?? []).filter(
+          (prompt) => prompt.enabled && prompt.text.trim().length > 0
+        ),
+      ]
     : [];
   const base = codexSystemPrompt?.baseInstructions;
   const developerMessages = codexSystemPrompt?.developerMessages ?? [];
@@ -510,7 +529,7 @@ function PersonaSection({
         </SubGroup>
       ) : null}
 
-      {/* User-defined principles, appended after the system prompt at spawn. */}
+      {/* User-defined prompts, appended after the system prompt at spawn. */}
       {principles.length > 0 ? (
         <SubGroup label={t('tasks.panel.promptPrinciples')}>
           {principles.map((principle) => (

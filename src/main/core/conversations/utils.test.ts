@@ -44,4 +44,30 @@ describe('mapConversationRowToConversation', () => {
     expect(conversation.forkedFromConversationId).toBeUndefined();
     expect(conversation.forkedFromPromptIndex).toBeUndefined();
   });
+
+  it('keeps provider-native source coordinates separate from the Yoda conversation id', () => {
+    const conversation = mapConversationRowToConversation(
+      conversationRow({
+        id: 'yoda-conversation',
+        config: JSON.stringify({
+          sessionSource: {
+            catalogId: 'catalog-1',
+            runtimeId: 'codex',
+            sessionId: 'native-thread',
+            stateRoot: '/state/account-a',
+            providerId: 'provider-a',
+          },
+        }),
+      })
+    );
+
+    expect(conversation.id).toBe('yoda-conversation');
+    expect(conversation.sessionSource).toEqual({
+      catalogId: 'catalog-1',
+      runtimeId: 'codex',
+      sessionId: 'native-thread',
+      stateRoot: '/state/account-a',
+      providerId: 'provider-a',
+    });
+  });
 });

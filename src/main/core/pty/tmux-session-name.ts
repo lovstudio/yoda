@@ -8,6 +8,16 @@ const YODA_TMUX_SERVER_ARGS = ['-L', YODA_TMUX_SOCKET_NAME, '-f', '/dev/null'] a
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TMUX_SEND_TIMEOUT_MS = 2_000;
 const TMUX_SEND_MAX_BUFFER = 4_096;
+const TMUX_LIST_TIMEOUT_MS = 2_000;
+const TMUX_LIST_MAX_BUFFER = 128 * 1024;
+const TMUX_LIST_FORMAT_SEPARATOR = '\u001f';
+// tmux renders control bytes in format output using their octal escape.
+const TMUX_LIST_OUTPUT_SEPARATOR = '\\037';
+
+export type TmuxSessionMarker = {
+  sessionName: string;
+  cwd: string;
+};
 
 function tmuxShellPrefix(): string {
   return ['tmux', ...YODA_TMUX_SERVER_ARGS].join(' ');
@@ -74,6 +84,55 @@ export function buildTmuxShellLine(
 export function makeTmuxSessionName(sessionId: string): string {
   const encoded = Buffer.from(sessionId, 'utf8').toString('base64url');
   return `${TMUX_SESSION_PREFIX}${encoded}`;
+}
+
+/** Decode only canonical Yoda-owned tmux names. */
+export function decodeTmuxSessionName(sessionName: string): string | undefined {
+  if (!sessionName.startsWith(TMUX_SESSION_PREFIX)) return undefined;
+  const encoded = sessionName.slice(TMUX_SESSION_PREFIX.length);
+  if (!encoded || !/^[A-Za-z0-9_-]+$/.test(encoded)) return undefined;
+  try {
+    const sessionId = Buffer.from(encoded, 'base64url').toString('utf8');
+    return makeTmuxSessionName(sessionId) === sessionName ? sessionId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * List the lightweight system markers for sessions that survived a renderer or
+ * app restart. One pane is created per Yoda session; dedupe defensively in case
+ * a user added another pane.
+ */
+export async function listTmuxSessionMarkers(ctx: IExecutionContext): Promise<TmuxSessionMarker[]> {
+  try {
+    const { stdout } = await ctx.exec(
+      'tmux',
+      [
+        ...YODA_TMUX_SERVER_ARGS,
+        'list-panes',
+        '-a',
+        '-F',
+        `#{session_name}${TMUX_LIST_FORMAT_SEPARATOR}#{pane_current_path}`,
+      ],
+      { timeout: TMUX_LIST_TIMEOUT_MS, maxBuffer: TMUX_LIST_MAX_BUFFER }
+    );
+    const markers = new Map<string, TmuxSessionMarker>();
+    for (const line of stdout.split('\n')) {
+      const separatorIndex = line.indexOf(TMUX_LIST_OUTPUT_SEPARATOR);
+      if (separatorIndex < 0) continue;
+      const sessionName = line.slice(0, separatorIndex).trim();
+      if (!decodeTmuxSessionName(sessionName) || markers.has(sessionName)) continue;
+      markers.set(sessionName, {
+        sessionName,
+        cwd: line.slice(separatorIndex + TMUX_LIST_OUTPUT_SEPARATOR.length).trim(),
+      });
+    }
+    return [...markers.values()];
+  } catch {
+    // No Yoda tmux server is the normal "nothing to hydrate" state.
+    return [];
+  }
 }
 
 export async function killTmuxSession(ctx: IExecutionContext, sessionName: string): Promise<void> {

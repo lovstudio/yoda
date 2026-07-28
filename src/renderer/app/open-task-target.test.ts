@@ -1,19 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '@shared/conversations';
 import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
-import { openProvisionedTaskTab } from './open-task-target';
+import { openProvisionedTaskTab, prepareTaskTarget } from './open-task-target';
 
 const mocks = vi.hoisted(() => ({
+  ensureProjectLoaded: vi.fn(),
+  ensureTaskLoaded: vi.fn(),
   getArchivedConversationsForTask: vi.fn(),
+  getTaskManagerStore: vi.fn(),
+  mountProject: vi.fn(),
+  provisionTask: vi.fn(),
   showModal: vi.fn(),
 }));
 
 vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
-  getProjectManagerStore: vi.fn(),
+  getProjectManagerStore: () => ({
+    ensureProjectLoaded: mocks.ensureProjectLoaded,
+    mountProject: mocks.mountProject,
+  }),
 }));
 
 vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
   asProvisioned: vi.fn(),
+  getTaskManagerStore: mocks.getTaskManagerStore,
   getTaskStore: vi.fn(),
 }));
 
@@ -90,6 +99,14 @@ describe('openProvisionedTaskTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getArchivedConversationsForTask.mockResolvedValue([]);
+    mocks.ensureProjectLoaded.mockResolvedValue(true);
+    mocks.mountProject.mockResolvedValue(undefined);
+    mocks.ensureTaskLoaded.mockResolvedValue(true);
+    mocks.provisionTask.mockResolvedValue(undefined);
+    mocks.getTaskManagerStore.mockReturnValue({
+      ensureTaskLoaded: mocks.ensureTaskLoaded,
+      provisionTask: mocks.provisionTask,
+    });
   });
 
   it('opens an active conversation normally', async () => {
@@ -124,6 +141,40 @@ describe('openProvisionedTaskTab', () => {
     expect(provisioned.taskView.setFocusedRegion).toHaveBeenCalledWith('main');
     expect(mocks.showModal).toHaveBeenCalledWith('archivedSessionTranscriptModal', {
       conversation: archivedConversation,
+    });
+  });
+
+  describe('prepareTaskTarget', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mocks.ensureProjectLoaded.mockResolvedValue(true);
+      mocks.mountProject.mockResolvedValue(undefined);
+      mocks.ensureTaskLoaded.mockResolvedValue(true);
+      mocks.provisionTask.mockResolvedValue(undefined);
+      mocks.getTaskManagerStore.mockReturnValue({
+        ensureTaskLoaded: mocks.ensureTaskLoaded,
+        provisionTask: mocks.provisionTask,
+      });
+    });
+
+    it('reconciles an externally added project and task before provisioning', async () => {
+      await prepareTaskTarget('project-1', 'task-1');
+
+      expect(mocks.ensureProjectLoaded).toHaveBeenCalledWith('project-1');
+      expect(mocks.mountProject).toHaveBeenCalledWith('project-1');
+      expect(mocks.getTaskManagerStore).toHaveBeenCalledWith('project-1');
+      expect(mocks.ensureTaskLoaded).toHaveBeenCalledWith('task-1');
+      expect(mocks.provisionTask).toHaveBeenCalledWith('task-1');
+    });
+
+    it('stops when the project no longer exists', async () => {
+      mocks.ensureProjectLoaded.mockResolvedValue(false);
+
+      await prepareTaskTarget('missing-project', 'task-1');
+
+      expect(mocks.mountProject).not.toHaveBeenCalled();
+      expect(mocks.ensureTaskLoaded).not.toHaveBeenCalled();
+      expect(mocks.provisionTask).not.toHaveBeenCalled();
     });
   });
 

@@ -1,84 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildAppGenerationPrompt,
-  buildAppRefinementRequest,
-  extractGeneratedAppFromTranscript,
-  parseGeneratedAiLabApp,
-} from './app-generation-contract';
+import { buildAppGenerationPrompt, buildAppRefinementPrompt } from './app-generation-contract';
 
-describe('AI Lab app generation', () => {
-  it('parses a generated single-file app', () => {
-    expect(
-      parseGeneratedAiLabApp(
-        `noise\n---YODA_APP_MANIFEST---\n{"name":"专注钟","description":"一个安静的计时器"}\n---YODA_APP_HTML---\n<!doctype html><html><body>ok</body></html>`
-      )
-    ).toEqual({
-      name: '专注钟',
-      description: '一个安静的计时器',
-      html: '<!doctype html><html><body>ok</body></html>',
-    });
-  });
-
-  it('rejects incomplete HTML', () => {
-    expect(() =>
-      parseGeneratedAiLabApp(
-        `---YODA_APP_MANIFEST---\n{"name":"A","description":"B"}\n---YODA_APP_HTML---\n<div />`
-      )
-    ).toThrow('complete HTML');
-  });
-
-  it('puts the natural-language request into the sandbox contract', () => {
+describe('Yoda Build Agent prompt', () => {
+  it('requires direct project editing and a checked file artifact', () => {
     const prompt = buildAppGenerationPrompt('做一个旅行打包清单', {
       projectPath: '/workspace/travel',
       systemPrompt: 'Reuse the existing product language.',
     });
+
     expect(prompt).toContain('做一个旅行打包清单');
     expect(prompt).toContain('/workspace/travel');
     expect(prompt).toContain('Reuse the existing product language.');
-    expect(prompt).toContain('one complete HTML document');
-    expect(prompt).toContain('work offline immediately');
-    expect(prompt).toContain('window.yoda.ai.editImage');
-    expect(prompt).toContain('window.yoda.ai.copyLastError');
-    expect(prompt).toContain('openai/gpt-image-2');
-    expect(prompt).toContain('high input fidelity');
-    expect(prompt).toContain('Do not substitute Canvas filters');
-    expect(prompt).toContain('copy-error control');
-    expect(prompt).toContain('private implementation details');
-    expect(prompt).toContain('must never appear');
-    expect(prompt).toContain('product-language failure message');
+    expect(prompt).toContain('Directly inspect, create, and edit project files');
+    expect(prompt).toContain('Do not print source code into the conversation');
+    expect(prompt).toContain('React, Vite, TypeScript');
+    expect(prompt).toContain('src/components/ui');
+    expect(prompt).toContain('pnpm run check');
+    expect(prompt).toContain('.yoda/app.json');
+    expect(prompt).toContain('status "ready"');
+    expect(prompt).not.toContain('one complete HTML document');
+    expect(prompt).not.toContain('YODA_APP_HTML');
   });
 
-  it('extracts the app from the latest completed assistant turn', () => {
-    const app = extractGeneratedAppFromTranscript([
-      { role: 'user', content: 'Build a timer' },
-      { role: 'assistant', content: 'Working on it.' },
-      {
-        role: 'assistant',
-        content: [
-          '---YODA_APP_MANIFEST---',
-          '{"name":"Timer","description":"A focused timer"}',
-          '---YODA_APP_HTML---',
-          '<!doctype html><html><body>Timer</body></html>',
-        ].join('\n'),
-      },
-    ]);
-
-    expect(app).toEqual({
-      name: 'Timer',
-      description: 'A focused timer',
-      html: '<!doctype html><html><body>Timer</body></html>',
+  it('continues from existing project files and explains legacy migration', () => {
+    const prompt = buildAppRefinementPrompt('Add laps without losing saved settings', {
+      appName: 'Timer',
+      projectPath: '/workspace/timer',
+      legacySource: true,
     });
-  });
 
-  it('keeps the current app as context for a refinement', () => {
-    const prompt = buildAppRefinementRequest({
-      originalPrompt: 'Build a timer',
-      currentHtml: '<!doctype html><html><body>Timer</body></html>',
-      refinement: 'Add laps without losing saved settings',
-    });
-    expect(prompt).toContain('Build a timer');
-    expect(prompt).toContain('<body>Timer</body>');
+    expect(prompt).toContain('IMPROVE THE EXISTING APP "Timer"');
     expect(prompt).toContain('Add laps without losing saved settings');
-    expect(prompt).toContain('Preserve working behavior');
+    expect(prompt).toContain('Preserve working behavior and user data');
+    expect(prompt).toContain('legacy/index.html');
+    expect(prompt).toContain('Rebuild the product as maintainable React components');
   });
 });

@@ -74,9 +74,10 @@ export function LibraryViewWrapper({
   appId?: string;
 }) {
   const { setParams } = useParams('library');
-  // Navigation snapshots from the earlier AI Lab placement may still carry
-  // `aiLab`; migrate that hidden legacy value into the user-facing Apps shelf.
-  const resolvedSection = (section as string) === 'aiLab' ? 'apps' : section;
+  // Navigation snapshots from earlier placements may still carry `aiLab` or
+  // `marketplace`; migrate those hidden legacy values into the Apps shelf.
+  const resolvedSection =
+    (section as string) === 'aiLab' || (section as string) === 'marketplace' ? 'apps' : section;
   const onSectionChange = useCallback(
     (next: LibrarySection) => setParams({ section: next }),
     [setParams]

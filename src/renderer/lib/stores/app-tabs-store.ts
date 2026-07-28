@@ -178,9 +178,10 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
    */
   stripScope: string | null = null;
   /**
-   * Bumped on every activating openTab — lets the task view re-run its route
-   * replay even when the route itself didn't change (clicking the same session
-   * again must re-align internal state if a previous alignment was disrupted).
+   * Bumped on every activating openTab and remembered scope entry — lets the
+   * task view re-run its route replay even when the route itself didn't change
+   * (clicking the same session/task again must re-align internal state if a
+   * previous alignment was disrupted).
    */
   replayNonce = 0;
 
@@ -265,6 +266,12 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
             // Entering a scope is explicit — the strip follows even when the
             // remembered tab is sticky.
             this.stripScope = scope;
+            // The remembered route can be identical to the current route while
+            // the task's internal TabManagerStore has drifted (for example, a
+            // slower overview replay won after the session tab was selected).
+            // Force TopLevelTabSync to re-apply the remembered target so a task
+            // row click heals that mismatch instead of leaving overview visible.
+            this.replayNonce += 1;
             this._activate(remembered);
             this.navigation._applyNavigation(
               remembered.viewId,

@@ -122,6 +122,7 @@
     "newTask": "新建任务",
     "searchTasks": "搜索任务",
     "library": "资源库",
+    "marketplace": "扩展市场",
     "skills": "技能",
     "skillIssues": "{{count}} 个 skill 校验问题",
     "automation": "自动化",
@@ -191,6 +192,8 @@
     "creatingWorkspace": "正在创建任务工作区…",
     "openPendingSession": "查看下一条待处理会话",
     "loading": "加载中",
+    "loadingProjectSessions": "正在加载项目与 Sessions…",
+    "loadingSessions": "加载 Sessions…",
     "projectNotFound": "项目路径未找到",
     "reconnect": "重新连接",
     "changeSshConnection": "更换 SSH 连接",
@@ -223,18 +226,18 @@
       "title": "移动项目路径",
       "nameLabel": "项目名",
       "pathLabel": "项目路径",
-      "pathHint": "使用已存在的 git 仓库根目录。",
+      "pathHint": "输入新路径会自动创建目录并移动整个项目；空目录也可作为目标，也可以选择已有 Git 仓库。",
       "selectDirectory": "选择目录",
       "selectDirectoryTitle": "选择项目目录",
-      "selectDirectoryMessage": "选择该项目要使用的仓库根目录。",
+      "selectDirectoryMessage": "选择空目录或已有 Git 仓库；新路径可直接在输入框中填写。",
       "projectMissing": "项目不存在。",
       "nameRequired": "项目名不能为空。",
       "pathRequired": "项目路径不能为空。",
       "unchanged": "项目名和路径没有变化。",
       "targetExistsTitle": "目标项目已存在",
       "targetExistsDescription": "该路径已注册为「{{project}}」。要将当前项目合并到该目标项目吗？",
-      "submit": "保存",
-      "saving": "保存中…",
+      "submit": "移动",
+      "saving": "移动中…",
       "mergeSubmit": "合并",
       "merging": "合并中…",
       "failed": "移动项目路径失败"
@@ -277,13 +280,19 @@
       "quickActionTarget": "快速操作",
       "runScriptTarget": "运行脚本",
       "skillTarget": "Skill 草稿",
-      "generateCommand": "转为程序命令",
+      "generateCommand": "生成可执行命令",
+      "regenerateCommand": "重新生成可执行命令",
       "generatingCommand": "正在分析项目…",
+      "workflowLabel": "快速操作设置进度",
+      "stepDescribe": "描述操作",
+      "stepReviewCommand": "确认命令",
+      "stepSaveAndRun": "保存并执行",
       "actionLabel": "操作名称",
       "actionLabelPlaceholder": "本地启动",
       "actionCommand": "程序命令",
       "actionCommandPlaceholder": "AI 分析项目后会在这里生成可直接执行的 Shell 命令",
       "quickActionDescription": "请先检查或编辑命令。保存后，快速操作将直接在项目目录执行它，不再重新发送自然语言。",
+      "commandNeedsRefresh": "操作描述已发生变化，请重新生成命令后再保存。",
       "commandEvidence": "生成依据：{{explanation}}",
       "skillDraft": "Skill 草稿",
       "skillDraftDescription": "当前只生成草稿。当操作需要可复用判断、回退和验证规则时，再复制成 skill。",
@@ -647,18 +656,50 @@
       "description": "新建会话时默认使用的 CLI 客户端。"
     },
     "promptsTab": {
-      "description": "原子化的运行原则。勾选的原则会在会话启动时追加到客户端的 system prompt 之后。"
+      "description": "统一管理提示词、分组、内容来源和动态注入。"
     },
     "prompts": {
-      "description": "每条原则是一条原子化规则。开启后会嵌入到客户端的 system prompt 之后，并显示在会话面板的人设章节中。",
-      "addPrinciple": "添加原则",
+      "description": "统一管理提示词、内容来源与动态注入。",
+      "addPrinciple": "添加提示词",
+      "addManual": "手动添加",
+      "addFromFile": "从文件导入",
+      "addFromUrl": "从 URL 添加",
+      "fileImportFailed": "文件导入失败",
+      "urlFormTitle": "从 URL 添加原则",
+      "urlLabel": "目标文件 URL",
+      "urlPlaceholder": "https://example.com/principle.md",
+      "refreshInterval": "刷新间隔（分钟）",
+      "requestTimeout": "请求超时（秒）",
+      "importUrl": "导入并启用",
+      "loadingUrl": "正在读取",
       "namePlaceholder": "名称",
       "textPlaceholder": "追加到 system prompt 之后的原则内容",
-      "toggle": "启用原则",
+      "toggle": "启用动态注入",
       "remove": "移除原则",
       "reorder": "拖动排序",
       "toggleExpand": "展开原则",
-      "empty": "暂无原则。"
+      "empty": "暂无提示词。",
+      "fileSource": "本地文件",
+      "urlSource": "URL",
+      "refreshNow": "立即刷新",
+      "refreshing": "刷新中",
+      "refreshFailed": "原则刷新失败",
+      "refreshSucceeded": "原则内容已刷新",
+      "lastSynced": "上次成功同步：{{date}}",
+      "notSynced": "尚未成功同步",
+      "sourceContent": "来源内容",
+      "sourceContentHint": "内容由来源维护，刷新会覆盖当前内容；标题仍可单独修改。",
+      "sourceErrors": {
+        "empty_content": "来源内容为空。",
+        "file_read_failed": "无法读取该文件。",
+        "http_error": "目标地址返回 HTTP {{detail}}。",
+        "invalid_url": "请输入有效的 URL。",
+        "request_failed": "请求失败：{{detail}}",
+        "request_timeout": "请求已超时。",
+        "source_not_found": "该原则没有可刷新的来源。",
+        "too_large": "来源内容超过 2 MB 上限。",
+        "unsupported_url": "只支持 HTTP 或 HTTPS URL。"
+      }
     },
     "statusline": {
       "title": "Statusline 模板",
@@ -1105,6 +1146,16 @@
     "signInToLovstudio": "登录 LovStudio",
     "signInDescription": "LovStudio 账户统一承载身份、积分、Relay 和 GitHub OAuth；不登录也可继续使用本地功能。",
     "connectedAs": "已登录为 {{name}}",
+    "maasGateway": {
+      "stepTitle": "MaaS Gateway",
+      "title": "安装 Yoda MaaS Gateway？",
+      "description": "这是扩展市场中的可选后台服务。安装后，Codex 可通过本机代理使用和热切换第三方 MaaS，真实 API Key 不会写入 Codex 配置。",
+      "security": "Gateway 只监听 127.0.0.1；Provider 密钥保存在 Yoda 加密密钥库，并仅通过进程 IPC 注入运行时内存。",
+      "install": "安装 Gateway",
+      "skip": "暂不需要",
+      "unavailable": "MaaS Gateway 当前不在扩展市场中。",
+      "installFailed": "MaaS Gateway 安装失败。"
+    },
     "import": {
       "importing": "导入中…",
       "importData": "导入数据",
@@ -1193,12 +1244,12 @@
     "agentCliConfigLabel": "Agent CLI",
     "agentCliConfigHint": "当前所选 Agent CLI 的运行权限与启动前会读取的指令文件。",
     "systemPromptLabel": "System Prompt",
-    "systemPromptHint": "已启用的 Prompt 原则会追加到所选 Agent CLI 的 system/developer prompt；CLI 内置 system prompt 不可编辑。",
-    "systemPromptHintClaude": "已启用的 Prompt 原则会通过 --append-system-prompt 追加到 Claude Code 的 system prompt；Claude 内置 system prompt 不可编辑。",
-    "systemPromptHintCodex": "已启用的 Prompt 原则会写入 Codex developer_instructions；Codex 内置指令不可编辑。",
-    "promptPrinciplesLabel": "Prompt 原则",
-    "promptPrinciplesProjectHeading": "本项目",
-    "promptPrincipleUnnamed": "未命名原则",
+    "systemPromptHint": "启用动态注入的提示词会追加到所选 Agent CLI 的 system/developer prompt；CLI 内置 system prompt 不可编辑。",
+    "systemPromptHintClaude": "启用动态注入的提示词会通过 --append-system-prompt 追加到 Claude Code 的 system prompt；Claude 内置 system prompt 不可编辑。",
+    "systemPromptHintCodex": "启用动态注入的提示词会写入 Codex developer_instructions；Codex 内置指令不可编辑。",
+    "promptPrinciplesLabel": "动态提示词",
+    "promptPrinciplesProjectHeading": "项目专属提示词",
+    "promptPrincipleUnnamed": "未命名提示词",
     "instructionFilesLabel": "指令文件",
     "instructionFilesHint": "客户端内置 system prompt 不可编辑。全局 CLAUDE.md 充当用户级 system prompt，项目 CLAUDE.md / AGENTS.md 是项目级 prompt。点击展开查看，悬停行尾可打开编辑。",
     "instructionFilesHintClaude": "Claude CLI 的内置 system prompt 不可编辑。这里仅列出本次运行会读取的全局 CLAUDE.md 与项目级 CLAUDE.md / AGENTS.md。",
@@ -1257,7 +1308,7 @@
     "defaultAppProjectName": "新 App",
     "buildTaskName": "创建与优化 App",
     "buildStarted": "正在创建 App",
-    "buildStartedDescription": "完成后会自动出现在 Library / Apps，无需手动刷新。",
+    "buildStartedDescription": "Agent 正在直接编辑 App 项目；你可以在当前任务查看过程，完成后会自动出现在 Apps。",
     "buildCreated": "「{{name}}」已生成到 Apps",
     "buildUpdated": "「{{name}}」已自动更新",
     "buildFailed": "Yoda Build 生成失败",
@@ -1783,8 +1834,8 @@
       "noSystemPrompt": "暂无 system prompt 记录",
       "runtimeContext": "运行时上下文",
       "persona": "人设",
-      "promptPrinciples": "运行原则",
-      "promptPrincipleUntitled": "未命名原则",
+      "promptPrinciples": "动态提示词",
+      "promptPrincipleUntitled": "未命名提示词",
       "contextItemEmpty": "该条目没有可展示内容。源文件可能为空、已移动，或当前会话只记录了路径。",
       "contextItemNoSource": "该条目没有可展示内容，也没有关联的源文件。",
       "instructionFiles": "指令文件",
@@ -2075,6 +2126,44 @@
       "automation": "自动化"
     }
   },
+  "extensions": {
+    "title": "Yoda 扩展市场",
+    "subtitle": "发现并管理由 Yoda 托管的第三方扩展与后台服务",
+    "searchPlaceholder": "搜索扩展…",
+    "refreshAria": "刷新扩展市场",
+    "verified": "已认证",
+    "running": "运行中",
+    "installed": "已安装",
+    "install": "安装",
+    "uninstall": "卸载",
+    "unsupported": "当前平台不可用",
+    "toggleAria": "切换 {{name}}",
+    "backgroundService": "后台服务扩展",
+    "localEndpoint": "本地端点：{{endpoint}}",
+    "noMatches": "没有匹配的扩展。",
+    "errors": {
+      "install": "扩展安装失败",
+      "update": "扩展更新失败",
+      "remove": "扩展卸载失败"
+    },
+    "capabilities": {
+      "network": {
+        "loopback": "监听本机端口",
+        "outbound": "访问模型服务"
+      },
+      "secrets": {
+        "provider": "使用 Provider 密钥"
+      },
+      "client": {
+        "codex": {
+          "configure": "配置 Codex"
+        }
+      },
+      "autostart": {
+        "yoda": "随 Yoda 启动"
+      }
+    }
+  },
   "agentTeams": {
     "routing": {
       "reviewLoop": "评审循环（迭代直到通过）",
@@ -2220,17 +2309,30 @@
   },
   "promptLibrary": {
     "title": "提示词库",
-    "principles": {
-      "title": "原子原则"
-    },
-    "templates": {
-      "title": "提示词模板"
+    "collection": {
+      "title": "提示词",
+      "description": "提示词只有一种。你可以为它分组、从不同来源同步，并选择是否在会话启动时动态注入。",
+      "all": "全部提示词"
     },
     "new": "新建提示词",
     "empty": "还没有保存的提示词。新建一个，下次创建任务时即可复用。",
     "copy": "复制",
     "copied": "已复制到剪贴板",
     "saveFailed": "保存提示词失败",
+    "groups": {
+      "create": "新建分组",
+      "createAndMove": "新建分组并移动",
+      "createAndMoveAction": "新建并移动",
+      "createFailed": "新建分组失败",
+      "namePlaceholder": "例如：开发与调试",
+      "empty": "这个分组还没有提示词。可通过提示词右侧的移动按钮加入。",
+      "enabledCount": "已启用 {{enabled}}/{{count}}",
+      "move": "移动「{{name}}」到其他分组",
+      "moveTo": "移动到分组",
+      "toggleInjection": "切换「{{name}}」分组的动态注入",
+      "ungrouped": "未分组",
+      "count": "{{count}} 条"
+    },
     "delete": {
       "title": "删除提示词",
       "description": "确定删除「{{name}}」？此操作无法撤销。",
@@ -2241,19 +2343,63 @@
       "titlePlaceholder": "例如：Bug 排查",
       "description": "描述",
       "descriptionPlaceholder": "可选：简述何时使用这个提示词",
+      "group": "分组",
+      "groupPlaceholder": "例如：开发与调试",
+      "groupHint": "可输入已有分组或新分组；留空则归入“未分组”。",
       "content": "提示词内容",
-      "contentPlaceholder": "要复用的提示词文本…"
+      "contentPlaceholder": "要复用的提示词文本…",
+      "extraInfo": "额外信息",
+      "extraInfoPlaceholder": "可选：补充说明、参考网址或扩展入口"
     },
-    "reference": {
-      "title": "泄露的系统提示词",
-      "description": "只读参考库，来源",
+    "injection": {
+      "title": "动态注入顺序",
+      "description": "已启用的提示词会按以下顺序追加到运行时提示词。拖动左侧手柄即可调整顺序，项目仍可单独关闭某一条。",
+      "empty": "还没有启用动态注入。可在编辑器或提示词列表中开启。",
+      "enable": "动态注入",
+      "enableHint": "会话启动时自动追加这条提示词",
+      "disable": "关闭动态注入",
+      "reorder": "拖动「{{name}}」调整注入顺序",
+      "toggle": "切换「{{name}}」的动态注入",
+      "badge": "动态注入",
+      "moveUp": "上移",
+      "moveDown": "下移"
+    },
+    "source": {
+      "manual": "手动添加",
+      "file": "从文件",
+      "url": "从网址",
+      "git": "从 Git",
+      "urlLabel": "内容网址",
+      "urlPlaceholder": "https://example.com/prompt.md 或 Gist Raw URL",
+      "repository": "Git 仓库",
+      "filePath": "仓库内文件路径",
+      "ref": "分支或标签（可选）",
+      "refreshInterval": "自动刷新间隔（分钟）",
+      "timeout": "超时（秒）",
+      "load": "读取内容",
+      "loadFailed": "读取提示词来源失败",
       "refresh": "刷新",
-      "searchPlaceholder": "按名称或厂商搜索…",
-      "count": "共 {{count}} 条",
-      "openSource": "在 GitHub 打开",
-      "addAsPrinciple": "添加为 Prompt 原则",
-      "addedAsPrinciple": "已添加到 Prompt 原则（已启用）",
-      "loadFailed": "无法加载该提示词，请检查网络后重试。"
+      "detach": "转为手动内容",
+      "readOnlyHint": "内容由来源同步。若要直接编辑，请先转为手动内容。",
+      "type": {
+        "file": "文件",
+        "url": "网址",
+        "git": "Git"
+      },
+      "errors": {
+        "empty_content": "来源内容为空。",
+        "file_read_failed": "文件读取失败。{{detail}}",
+        "git_clone_failed": "Git 仓库读取失败。{{detail}}",
+        "git_file_not_found": "仓库中没有找到指定文件。{{detail}}",
+        "http_error": "网址返回错误状态：{{detail}}",
+        "invalid_git_path": "仓库内文件路径不合法。",
+        "invalid_url": "网址或仓库地址不合法。",
+        "request_failed": "网络请求失败。{{detail}}",
+        "request_timeout": "读取超时。",
+        "source_not_found": "这条提示词没有可刷新的来源。",
+        "too_large": "来源内容超过 2 MB。",
+        "unsupported_url": "仅支持 HTTP 或 HTTPS 网址。"
+      }
     }
   },
   "automation": {
@@ -3208,7 +3354,7 @@
   },
   "aiLab": {
     "title": "AI Lab",
-    "subtitle": "用自然语言创建、运行并收藏你的单文件应用。",
+    "subtitle": "用自然语言创建、运行并持续开发你的 App 项目。",
     "back": "返回 Apps",
     "newApp": "新建 App",
     "openApp": "打开应用",
@@ -3217,9 +3363,15 @@
     "windowLoading": "正在加载应用…",
     "windowLoadFailed": "应用加载失败",
     "windowNotFound": "这个应用已不存在或无法访问。",
+    "previewStarting": "正在启动 App 开发预览…",
+    "previewFailed": "App 开发预览启动失败",
     "returnToBuildTask": "返回创建任务",
+    "openLatestBuildTask": "打开最近开发任务",
     "openAppProject": "打开 App 项目",
+    "appProjectUnavailable": "App 项目当前不可用。",
+    "appAgentUnavailable": "这个旧 App 没有可继续使用的 Agent 配置。",
     "refine": "优化 App",
+    "refineTaskName": "继续开发 App",
     "refineTitle": "描述希望调整的地方",
     "refinePlaceholder": "例如：支持识别任意城市和完整地址，并自动刷新路线结果……",
     "applyRefinement": "应用修改",
@@ -3444,14 +3596,28 @@
       "disabled": "未启用",
       "notEnabled": "可启用",
       "needsConfiguration": "需要先配置 API Key",
+      "needsGateway": "需要先安装并启用 Yoda MaaS Gateway",
       "toggleAria": "全局启用 {{platform}}",
       "enableAria": "启用 {{platform}}",
       "disableAria": "停用 {{platform}}",
       "manage": "配置 {{platform}}",
       "enabledToast": "{{platform}} 已对所有兼容 Agent CLI 生效",
       "restoredToast": "已停用 MaaS，并复原 Agent CLI 配置",
-      "codexRestartNotice": "如 Codex App 已打开，请重新打开它以刷新登录模式。",
+      "codexRestartNotice": "如 Codex App 已打开，请完全退出后重新打开，以重新加载本地 MaaS Gateway Provider；上游 API Key 不会进入 App 环境变量。",
       "updateFailed": "无法更新全局 MaaS 配置"
+    },
+    "gatewayRequirement": {
+      "title": "需要 Yoda MaaS Gateway",
+      "states": {
+        "loading": "正在检查扩展市场中的 Gateway 状态…",
+        "unavailable": "当前未读取到 Gateway 扩展，请前往扩展市场查看。",
+        "unsupported": "Gateway 暂不支持当前平台。",
+        "not-installed": "启用 MaaS 平台前，需要先从扩展市场安装 Gateway。",
+        "disabled": "Gateway 已安装但未启用，请先在扩展市场启用。",
+        "unhealthy": "Gateway 当前未正常运行，请前往扩展市场检查状态。"
+      },
+      "install": "安装 Gateway",
+      "manage": "打开扩展市场"
     },
     "clients": {
       "title": "Agent Client",
@@ -3722,12 +3888,6 @@
     "skill": "Skill",
     "terminal": "终端",
     "quickAction": "快速操作：{{label}}",
-    "renderer": {
-      "dom": "DOM",
-      "webgl": "WebGL",
-      "mixed": "混合",
-      "switchMode": "当前为 {{current}} 渲染；点击切换到 {{next}} 并重绘终端"
-    },
     "gateway": {
       "title": "Gateway",
       "description": "为每个 Agent Client 选择 MaaS、订阅账号或 API Key",
@@ -4477,7 +4637,12 @@
       "emptyTitle": "没有会话",
       "emptyDescription": "打开一个任务会话后会显示在这里。",
       "openSession": "打开 {{title}}",
-      "taskFallback": "任务 {{id}}"
+      "taskFallback": "任务 {{id}}",
+      "localBadge": "本机",
+      "localAgentSession": "在本机发现的 Agent 原生会话",
+      "previewLocalSession": "预览本机会话 {{title}}",
+      "addAndContinue": "加入 Yoda 并继续",
+      "addFailed": "本机会话加入 Yoda 失败"
     },
     "harness": {
       "label": "Harness",
@@ -4587,24 +4752,24 @@
       "provisionCommand": "Provision 命令",
       "terminateCommand": "Terminate 命令",
       "promptPrinciples": {
-        "title": "提示词原则",
-        "description": "在全局原则之上叠加本项目的规则。两者都会在会话启动时拼接到智能体系统提示词之后。",
-        "globalHeading": "全局原则",
-        "globalEmpty": "还没有全局原则。可在 设置 → 提示词 中添加。",
-        "localHeading": "项目原则",
+        "title": "项目提示词注入",
+        "description": "决定提示词库里的提示词是否在本项目动态注入，也可添加仅属于本项目的提示词。",
+        "globalHeading": "提示词库",
+        "globalEmpty": "提示词库还是空的。可在设置 → 提示词中添加。",
+        "localHeading": "项目专属提示词",
         "toggleGlobal": "在本项目启用",
-        "toggleLocal": "启用原则",
-        "unnamed": "未命名原则",
+        "toggleLocal": "启用提示词",
+        "unnamed": "未命名提示词",
         "namePlaceholder": "名称",
-        "textPlaceholder": "拼接到系统提示词后的原则文本…",
-        "add": "添加原则",
-        "remove": "移除原则"
+        "textPlaceholder": "动态注入的提示词内容…",
+        "add": "添加项目提示词",
+        "remove": "移除提示词"
       },
       "shareable": {
         "fields": {
           "promptPrinciples": {
-            "modalLabel": "提示词原则",
-            "leafLabel": "提示词原则"
+            "modalLabel": "项目提示词注入",
+            "leafLabel": "项目提示词注入"
           },
           "preservePatterns": {
             "modalLabel": "保留模式",

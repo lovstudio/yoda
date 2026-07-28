@@ -26,7 +26,8 @@ export type FocusView =
   | 'roadmap'
   | 'kanban'
   | 'projectsOverview'
-  | 'library';
+  | 'library'
+  | 'marketplace';
 export type FocusMainPanel = 'agents' | 'editor' | 'diff';
 export type FocusedRegion = 'main' | 'bottom';
 
@@ -79,6 +80,7 @@ export type TelemetryEventProperties = {
   automation_viewed: { from_view: FocusView | null };
   mobile_viewed: { from_view: FocusView | null };
   library_viewed: { from_view: FocusView | null };
+  marketplace_viewed: { from_view: FocusView | null };
 
   project_added: { type: 'local' | 'ssh'; strategy: 'open' | 'create' | 'clone'; success: boolean };
   project_deleted: EmptyProps;
