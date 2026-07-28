@@ -11,6 +11,10 @@ import { SettingsSyncAgent } from './app/settings-sync-agent';
 import { WelcomeScreen } from './app/welcome';
 import { Workspace } from './app/workspace';
 import { AiLabAppWindow } from './features/ai-lab/ai-lab-window';
+import {
+  EXTENSION_MARKETPLACE_QUERY_KEY,
+  listMarketplaceExtensions,
+} from './features/extensions/extension-marketplace-query';
 import { IntegrationsProvider } from './features/integrations/integrations-provider';
 import { Onboarding } from './features/onboarding/onboarding';
 import { ComparisonWindow } from './features/tasks/comparison-window';
@@ -21,7 +25,6 @@ import {
   isComparisonWindowLaunch,
 } from './lib/comparison-window-launch-target';
 import { useAccountSession } from './lib/hooks/useAccount';
-import { rpc } from './lib/ipc';
 import { WorkspaceLayoutContextProvider } from './lib/layout/layout-provider';
 import { WorkspaceViewProvider } from './lib/layout/provider';
 import { FeatureFlagProvider } from './lib/providers/feature-flag-override-context';
@@ -45,8 +48,8 @@ const AppContent = observer(function AppContent() {
 
   const { data: session, isLoading: sessionLoading } = useAccountSession();
   const { data: extensions = [], isLoading: extensionsLoading } = useQuery({
-    queryKey: ['extensions', 'marketplace'],
-    queryFn: () => rpc.extensions.listMarketplace(),
+    queryKey: EXTENSION_MARKETPLACE_QUERY_KEY,
+    queryFn: listMarketplaceExtensions,
     enabled: view === 'onboarding',
   });
 

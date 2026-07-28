@@ -17,7 +17,7 @@ import SkillsView from '@renderer/features/skills/components/SkillsView';
 import { NamingConfigFields } from '@renderer/features/tasks/components/naming-config-fields';
 import { SummaryConfigFields } from '@renderer/features/tasks/components/summary-config-fields';
 import { UsageView } from '@renderer/features/usage/components/UsageView';
-import { useIsPinHosted } from '@renderer/lib/layout/navigation-provider';
+import { useIsPinHosted, useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import {
   DropdownMenu,
@@ -207,6 +207,7 @@ export function SettingsPage({
 }) {
   const { t } = useTranslation();
   const tabGroups = useSettingsTabGroups();
+  const { navigate } = useNavigate();
   // In the side pane the chip-strip row hosts the tab picker — don't double it.
   const isPinHosted = useIsPinHosted();
 
@@ -370,7 +371,7 @@ export function SettingsPage({
     maas: {
       title: t('maas.title'),
       description: t('maas.subtitle'),
-      component: <MaasView embedded />,
+      component: <MaasView embedded onOpenMarketplace={() => navigate('marketplace')} />,
     },
     usage: {
       title: t('usage.title'),

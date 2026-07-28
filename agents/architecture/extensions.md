@@ -37,6 +37,9 @@ privileged product state:
 - The extension receives only capabilities granted from its manifest.
 - Disabling or uninstalling the MaaS Gateway restores active MaaS Client
   bindings before stopping the service.
+- MaaS activation requires the Gateway to have been explicitly installed and
+  enabled in Marketplace. MaaS controls must never install or enable the
+  extension implicitly.
 
 ## Background-Service Lifecycle
 

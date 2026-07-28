@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   codexAuthDisable: vi.fn(),
   codexAuthEnable: vi.fn(),
   codexAuthRollback: vi.fn(),
-  extensionEnsureInstalled: vi.fn(),
+  extensionGet: vi.fn(),
   gatewayClear: vi.fn(),
   gatewayConfigure: vi.fn(),
   gatewayProviderId: null as string | null,
@@ -89,7 +89,7 @@ vi.mock('./codex-maas-auth-switch', () => ({
 
 vi.mock('../extensions/extension-marketplace-service', () => ({
   extensionMarketplaceService: {
-    ensureInstalled: mocks.extensionEnsureInstalled,
+    getExtension: mocks.extensionGet,
   },
 }));
 
@@ -128,7 +128,11 @@ describe('global MaaS binding', () => {
     vi.clearAllMocks();
     mocks.codexAuthEnable.mockResolvedValue(mocks.codexAuthRollback);
     mocks.codexAuthDisable.mockResolvedValue(mocks.codexAuthRollback);
-    mocks.extensionEnsureInstalled.mockResolvedValue(undefined);
+    mocks.extensionGet.mockResolvedValue({
+      supported: true,
+      installation: { enabled: true },
+      runtime: { state: 'running' },
+    });
     mocks.gatewayClear.mockResolvedValue(undefined);
     mocks.gatewayProviderId = null;
     mocks.gatewayConfigure.mockImplementation(async (configuration: { providerId: string }) => {
@@ -400,6 +404,44 @@ describe('global MaaS binding', () => {
     expect(mocks.codexAuthDisable).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    [
+      'not installed',
+      { supported: true, installation: null, runtime: null },
+      'Install Yoda MaaS Gateway from Marketplace before enabling MaaS.',
+    ],
+    [
+      'disabled',
+      { supported: true, installation: { enabled: false }, runtime: { state: 'stopped' } },
+      'Enable Yoda MaaS Gateway from Marketplace before enabling MaaS.',
+    ],
+    [
+      'not running',
+      { supported: true, installation: { enabled: true }, runtime: { state: 'error' } },
+      'Yoda MaaS Gateway is not running normally.',
+    ],
+    [
+      'unsupported',
+      { supported: false, installation: null, runtime: null },
+      'Yoda MaaS Gateway is unavailable on this platform.',
+    ],
+  ])('rejects MaaS enable when the Gateway is %s', async (_state, extension, error) => {
+    const service = new MaasService();
+    vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
+      displayName: 'MaaS Test',
+      endpoint: 'https://maas.example.test/v1',
+      apiKey: 'secret',
+    });
+    mocks.extensionGet.mockResolvedValue(extension);
+
+    await expect(
+      service.setGlobalBinding({ platformId: 'zenmux', enabled: true })
+    ).resolves.toEqual({ success: false, error });
+    expect(mocks.gatewayConfigure).not.toHaveBeenCalled();
+    expect(mocks.codexAuthEnable).not.toHaveBeenCalled();
+    expect(mocks.settings.runtimeBindings).toEqual([]);
+  });
+
   it('rolls back every Client when a global switch fails midway', async () => {
     const service = new MaasService();
     vi.spyOn(service, 'getInferenceCredentials').mockResolvedValue({
@@ -533,7 +575,11 @@ describe('stored MaaS keys', () => {
     vi.clearAllMocks();
     mocks.codexAuthEnable.mockResolvedValue(mocks.codexAuthRollback);
     mocks.codexAuthDisable.mockResolvedValue(mocks.codexAuthRollback);
-    mocks.extensionEnsureInstalled.mockResolvedValue(undefined);
+    mocks.extensionGet.mockResolvedValue({
+      supported: true,
+      installation: { enabled: true },
+      runtime: { state: 'running' },
+    });
     mocks.gatewayClear.mockResolvedValue(undefined);
     mocks.gatewayProviderId = null;
     mocks.gatewayConfigure.mockImplementation(async (configuration: { providerId: string }) => {

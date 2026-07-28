@@ -3596,6 +3596,7 @@
       "disabled": "Disabled",
       "notEnabled": "Available",
       "needsConfiguration": "Configure an API key first",
+      "needsGateway": "Install and enable Yoda MaaS Gateway first",
       "toggleAria": "Enable {{platform}} globally",
       "enableAria": "Enable {{platform}}",
       "disableAria": "Disable {{platform}}",
@@ -3604,6 +3605,19 @@
       "restoredToast": "MaaS disabled and Agent CLI configurations restored",
       "codexRestartNotice": "If Codex App is open, quit it completely and reopen it to reload the local MaaS Gateway provider. The upstream API key is not placed in the app environment.",
       "updateFailed": "Could not update global MaaS configuration"
+    },
+    "gatewayRequirement": {
+      "title": "Yoda MaaS Gateway required",
+      "states": {
+        "loading": "Checking the Marketplace extension status…",
+        "unavailable": "The Gateway listing is currently unavailable. Open Marketplace to inspect it.",
+        "unsupported": "The Gateway does not support this platform.",
+        "not-installed": "Install the Gateway from Marketplace before enabling a MaaS platform.",
+        "disabled": "The Gateway is installed but disabled. Enable it from Marketplace first.",
+        "unhealthy": "The Gateway is not running normally. Open Marketplace to inspect its status."
+      },
+      "install": "Install Gateway",
+      "manage": "Open Marketplace"
     },
     "clients": {
       "title": "Agent Clients",

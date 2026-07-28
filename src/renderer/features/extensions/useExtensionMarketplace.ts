@@ -4,8 +4,10 @@ import { useTranslation } from 'react-i18next';
 import type { YodaMarketplaceExtension } from '@shared/extensions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
-
-const MARKETPLACE_QUERY_KEY = ['extensions', 'marketplace'] as const;
+import {
+  EXTENSION_MARKETPLACE_QUERY_KEY,
+  listMarketplaceExtensions,
+} from './extension-marketplace-query';
 
 export function useExtensionMarketplace() {
   const { t } = useTranslation();
@@ -14,12 +16,12 @@ export function useExtensionMarketplace() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const query = useQuery({
-    queryKey: MARKETPLACE_QUERY_KEY,
-    queryFn: () => rpc.extensions.listMarketplace(),
+    queryKey: EXTENSION_MARKETPLACE_QUERY_KEY,
+    queryFn: listMarketplaceExtensions,
   });
 
   const refresh = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: MARKETPLACE_QUERY_KEY }),
+    () => queryClient.invalidateQueries({ queryKey: EXTENSION_MARKETPLACE_QUERY_KEY }),
     [queryClient]
   );
 
