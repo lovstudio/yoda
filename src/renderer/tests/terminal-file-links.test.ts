@@ -207,6 +207,20 @@ describe('terminal file links', () => {
     ]);
   });
 
+  it('terminates scored artifact paths before a trailing colon', () => {
+    const paths = [
+      '/Users/mark/lovstudio/coding/skills/professional–infographic–skill/examples/mobile–cross–platform–selection–v2/comparison–matrix/poster.png',
+      '/Users/mark/lovstudio/coding/skills/professional–infographic–skill/examples/mobile–cross–platform–selection–v2/positioning–map/poster.png',
+    ];
+    const line = paths
+      .map((path, index) => `- ${path}${index === 0 ? ':' : '：'} 98/100`)
+      .join('\n');
+
+    expect(extractTerminalFileLinkCandidates(line)).toEqual(
+      paths.map((text) => ({ text, index: line.indexOf(text) }))
+    );
+  });
+
   it('drops a trailing sentence period after the extension', () => {
     const line = 'output/手工川-会话实时摘要机制-2026-06-09-v0.1.md.';
     const expected = 'output/手工川-会话实时摘要机制-2026-06-09-v0.1.md';
