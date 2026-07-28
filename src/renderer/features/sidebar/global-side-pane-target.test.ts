@@ -37,7 +37,7 @@ describe('GlobalSidePaneTarget', () => {
   it('renders the owning navigation unpin shortcut when provided', () => {
     const html = renderToStaticMarkup(
       createElement(GlobalSidePaneTarget, {
-        viewId: 'library',
+        viewId: 'marketplace',
         params: { section: 'apps', appId: 'app-1' },
         altHeld: false,
         unpinAction: {

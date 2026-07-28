@@ -7,6 +7,9 @@ export const promptLibraryController = createRPCController({
   list: () => promptLibraryService.list(),
   listGroups: () => promptLibraryService.listGroups(),
   createGroup: (name: string) => promptLibraryService.createGroup(name),
+  reorderGroups: (names: string[]) => promptLibraryService.reorderGroups(names),
+  reorderPrompts: (groupName: string, ids: string[]) =>
+    promptLibraryService.reorderPrompts(groupName, ids),
   setGroupInjectionEnabled: (groupName: string, enabled: boolean) =>
     promptLibraryService.setGroupInjectionEnabled(groupName, enabled),
   create: async (input: PromptCreateInput) => {
@@ -23,7 +26,6 @@ export const promptLibraryController = createRPCController({
     await promptLibraryService.remove(id);
     await promptSourceService.reconcile();
   },
-  reorderInjection: (ids: string[]) => promptLibraryService.reorderInjection(ids),
   selectFile: () => promptSourceService.selectFile(),
   loadUrl: (input: { refreshIntervalMinutes?: number; timeoutSeconds?: number; url: string }) =>
     promptSourceService.loadUrl(input),

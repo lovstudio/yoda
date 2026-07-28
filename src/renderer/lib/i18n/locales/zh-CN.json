@@ -271,8 +271,13 @@
       "saveFailed": "保存项目设置失败。"
     },
     "captureAutomation": {
-      "menuLabel": "快速操作",
+      "menuLabel": "启动命令",
       "createLabel": "新建快速操作…",
+      "detectedCommands": "从项目中读取",
+      "savedCommands": "已保存命令",
+      "loadingCommands": "正在读取项目命令…",
+      "loadCommandsFailed": "读取项目命令失败。",
+      "noCommands": "未检测到启动命令。",
       "title": "新建快速操作 · {{name}}",
       "intentLabel": "想让 Yoda 一键做什么？",
       "intentPlaceholder": "例如：启动本地开发环境并打开预览",
@@ -2093,7 +2098,6 @@
   },
   "library": {
     "sections": {
-      "apps": "应用",
       "prompts": "提示词",
       "agents": "智能体",
       "agentTeams": "智能体团队",
@@ -2101,6 +2105,12 @@
       "plugins": "插件",
       "mcp": "MCP",
       "automation": "自动化"
+    }
+  },
+  "marketplace": {
+    "sections": {
+      "extensions": "扩展",
+      "apps": "应用"
     }
   },
   "extensions": {
@@ -2306,6 +2316,8 @@
       "enabledCount": "已启用 {{enabled}}/{{count}}",
       "move": "移动「{{name}}」到其他分组",
       "moveTo": "移动到分组",
+      "reorderGroup": "拖动「{{name}}」调整分组顺序",
+      "reorderPrompt": "拖动「{{name}}」调整它在分组内的顺序",
       "toggleInjection": "切换「{{name}}」分组的动态注入",
       "ungrouped": "未分组",
       "count": "{{count}} 条"

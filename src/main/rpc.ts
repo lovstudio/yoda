@@ -32,6 +32,7 @@ import { projectController } from './core/projects/controller';
 import { promptLibraryController } from './core/prompt-library/controller';
 import { ptyController } from './core/pty/controller';
 import { pullRequestController } from './core/pull-requests/controller';
+import { quickActionsController } from './core/quick-actions/controller';
 import { repositoryController } from './core/repository/controller';
 import { reviewOrchestrationController } from './core/review-orchestration/controller';
 import { searchController } from './core/search/controller';
@@ -83,6 +84,7 @@ export const rpcRouter = createRPCRouter({
   plain: plainController,
   plugins: pluginsController,
   promptLibrary: promptLibraryController,
+  quickActions: quickActionsController,
   skills: skillsController,
   ssh: sshController,
   projects: projectController,

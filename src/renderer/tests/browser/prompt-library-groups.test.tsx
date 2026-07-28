@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   promptGroups: [] as string[],
   prompts: [] as Prompt[],
   refreshPrompt: vi.fn(),
+  reorderGroups: vi.fn(),
   reorderPrompts: vi.fn(),
   setGroupInjection: vi.fn(),
 }));
@@ -33,7 +34,8 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   useCreatePrompt: () => ({ mutate: mocks.createPrompt, isPending: false }),
   useUpdatePrompt: () => ({ mutate: mocks.updatePrompt, isPending: false }),
   useDeletePrompt: () => ({ mutate: mocks.deletePrompt }),
-  useReorderInjectedPrompts: () => ({ mutate: mocks.reorderPrompts, isPending: false }),
+  useReorderPromptGroups: () => ({ mutate: mocks.reorderGroups, isPending: false }),
+  useReorderPrompts: () => ({ mutate: mocks.reorderPrompts, isPending: false }),
   useSetPromptGroupInjectionEnabled: () => ({
     mutate: mocks.setGroupInjection,
     isPending: false,
@@ -274,30 +276,28 @@ describe('PromptLibraryPanel groups', () => {
     expect(host.querySelector('[data-slot="prompt-library-bottom-space"].h-24')).not.toBeNull();
   });
 
-  it('sorts and keyboard-drags dynamically injected prompts independently of groups', async () => {
+  it('removes the separate injection order card and keyboard-sorts prompt rows within a group', async () => {
     mocks.prompts = [
       { ...prompt('second', 'Review'), injectionEnabled: true, injectionOrder: 20 },
-      { ...prompt('first', 'Build'), injectionEnabled: true, injectionOrder: 10 },
+      { ...prompt('first', 'Review'), injectionEnabled: true, injectionOrder: 10 },
     ];
+    mocks.promptGroups = ['Review'];
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'
     );
     await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
 
-    const injectionHeading = Array.from(host.querySelectorAll('h2')).find((heading) =>
-      heading.textContent?.includes('promptLibrary.injection.title')
-    );
-    const injectionSection = injectionHeading?.closest('section');
-    const rows = Array.from(injectionSection?.querySelectorAll('li') ?? []);
+    expect(host.textContent).not.toContain('promptLibrary.injection.title');
+    const rows = Array.from(host.querySelectorAll('[data-slot="prompt-library-row"]'));
     expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringContaining('first'),
       expect.stringContaining('second'),
+      expect.stringContaining('first'),
     ]);
 
     const dragHandles = Array.from(
-      injectionSection?.querySelectorAll<HTMLButtonElement>(
-        'button[aria-label="promptLibrary.injection.reorder"]'
-      ) ?? []
+      host.querySelectorAll<HTMLButtonElement>(
+        'button[aria-label="promptLibrary.groups.reorderPrompt"]'
+      )
     );
     expect(dragHandles).toHaveLength(2);
     dragHandles[0]?.focus();
@@ -316,6 +316,40 @@ describe('PromptLibraryPanel groups', () => {
         new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true })
       );
     });
-    expect(mocks.reorderPrompts).toHaveBeenCalledWith(['second', 'first']);
+    expect(mocks.reorderPrompts).toHaveBeenCalledWith({
+      groupName: 'Review',
+      ids: ['first', 'second'],
+    });
+  });
+
+  it('keyboard-sorts named group cards while keeping Ungrouped fixed', async () => {
+    const { PromptLibraryPanel } = await import(
+      '@renderer/features/prompt-library/prompt-library-panel'
+    );
+    await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
+
+    const dragHandles = Array.from(
+      host.querySelectorAll<HTMLButtonElement>(
+        'button[aria-label="promptLibrary.groups.reorderGroup"]'
+      )
+    );
+    expect(dragHandles).toHaveLength(2);
+    dragHandles[0]?.focus();
+    await act(async () => {
+      dragHandles[0]?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true })
+      );
+    });
+    await act(async () => {
+      dragHandles[0]?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true })
+      );
+    });
+    await act(async () => {
+      dragHandles[0]?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true })
+      );
+    });
+    expect(mocks.reorderGroups).toHaveBeenCalledWith(['Review', 'Build']);
   });
 });

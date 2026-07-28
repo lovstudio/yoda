@@ -273,8 +273,13 @@
       "saveFailed": "Failed to save project settings."
     },
     "captureAutomation": {
-      "menuLabel": "Quick actions",
+      "menuLabel": "Launch commands",
       "createLabel": "New quick action…",
+      "detectedCommands": "Detected from project",
+      "savedCommands": "Saved commands",
+      "loadingCommands": "Reading project commands…",
+      "loadCommandsFailed": "Project commands could not be read.",
+      "noCommands": "No launch commands detected.",
       "title": "New quick action · {{name}}",
       "intentLabel": "What should Yoda do in one click?",
       "intentPlaceholder": "Example: Start the local development environment and open the preview",
@@ -2093,7 +2098,6 @@
   },
   "library": {
     "sections": {
-      "apps": "Apps",
       "prompts": "Prompts",
       "agents": "Agents",
       "agentTeams": "Agent Teams",
@@ -2101,6 +2105,12 @@
       "plugins": "Plugins",
       "mcp": "MCP",
       "automation": "Automation"
+    }
+  },
+  "marketplace": {
+    "sections": {
+      "extensions": "Extensions",
+      "apps": "Apps"
     }
   },
   "extensions": {
@@ -2306,6 +2316,8 @@
       "enabledCount": "{{enabled}}/{{count}} enabled",
       "move": "Move {{name}} to another group",
       "moveTo": "Move to group",
+      "reorderGroup": "Drag {{name}} to reorder this group",
+      "reorderPrompt": "Drag {{name}} to reorder it within this group",
       "toggleInjection": "Toggle dynamic injection for the {{name}} group",
       "ungrouped": "Ungrouped",
       "count": "{{count}}"

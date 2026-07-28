@@ -1,5 +1,6 @@
 import { action, computed, makeObservable, observable, reaction, toJS } from 'mobx';
 import type { AppTabsSnapshot } from '@shared/view-state';
+import { migratePersistedViewRoute } from '@renderer/app/route-migrations';
 import type { ViewId, WrapParams } from '@renderer/app/view-registry';
 import { log } from '@renderer/utils/logger';
 import type { NavigationStore } from './navigation-store';
@@ -657,7 +658,17 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
       .filter(
         (tab): tab is AppTabEntry => typeof tab?.id === 'string' && typeof tab.viewId === 'string'
       )
-      .map((tab) => ({ ...tab, params: normalizeTabParams(tab.viewId, tab.params ?? {}) }))
+      .map((tab) => {
+        const migrated = migratePersistedViewRoute({
+          viewId: tab.viewId,
+          params: tab.params ?? {},
+        });
+        return {
+          ...tab,
+          viewId: migrated.viewId as ViewId,
+          params: normalizeTabParams(migrated.viewId, migrated.params),
+        };
+      })
       .filter((tab) => {
         const key = routeKey(tab.viewId, tab.params);
         if (seenRoutes.has(key)) return false;
@@ -673,7 +684,8 @@ export class AppTabsStore implements Snapshottable<AppTabsSnapshot> {
     // tab so the first sticky activation doesn't swap the row.
     const restoredActive = restored.find((tab) => tab.id === snapshot.activeTabId) ?? restored[0];
     this.stripScope =
-      typeof snapshot.stripScope === 'string'
+      typeof snapshot.stripScope === 'string' &&
+      !(snapshot.stripScope === 'view:library' && restoredActive.viewId === 'marketplace')
         ? snapshot.stripScope
         : tabScopeKey(restoredActive.viewId, restoredActive.params);
     this.activationSeq = Math.max(0, ...restored.map((tab) => tab.seq ?? 0));
