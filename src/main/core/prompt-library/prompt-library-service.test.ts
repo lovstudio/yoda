@@ -31,6 +31,7 @@ function createSchema(sqlite: Database.Database): void {
   sqlite.exec(`
     CREATE TABLE prompt_groups (
       name TEXT PRIMARY KEY NOT NULL,
+      sort_order INTEGER DEFAULT 0 NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
     CREATE TABLE prompts (
@@ -76,6 +77,72 @@ describe('PromptLibraryService groups', () => {
     expect(await service.listGroups()).toEqual(['Research']);
   });
 
+  it('reorders named groups and keeps ungrouped prompts after them', async () => {
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+    const build = await service.create({
+      title: 'Build',
+      description: '',
+      content: 'Build',
+      groupName: 'Build',
+      extraInfo: '',
+      injectionEnabled: true,
+    });
+    const review = await service.create({
+      title: 'Review',
+      description: '',
+      content: 'Review',
+      groupName: 'Review',
+      extraInfo: '',
+      injectionEnabled: true,
+    });
+    const ungrouped = await service.create({
+      title: 'General',
+      description: '',
+      content: 'General',
+      groupName: '',
+      extraInfo: '',
+      injectionEnabled: true,
+    });
+
+    await service.reorderGroups(['Review', 'Build']);
+
+    expect(await service.listGroups()).toEqual(['Review', 'Build']);
+    expect(
+      (await service.list())
+        .slice()
+        .sort((left, right) => left.injectionOrder - right.injectionOrder)
+        .map((prompt) => prompt.id)
+    ).toEqual([review.id, build.id, ungrouped.id]);
+  });
+
+  it('reorders prompts only inside the selected group and syncs injection order', async () => {
+    const { PromptLibraryService } = await import('./prompt-library-service');
+    const service = new PromptLibraryService();
+    const first = await service.create({
+      title: 'First',
+      description: '',
+      content: 'First',
+      groupName: 'Review',
+      extraInfo: '',
+      injectionEnabled: true,
+    });
+    const second = await service.create({
+      title: 'Second',
+      description: '',
+      content: 'Second',
+      groupName: 'Review',
+      extraInfo: '',
+      injectionEnabled: true,
+    });
+
+    await service.reorderPrompts('Review', [first.id, second.id]);
+
+    const ordered = await service.list();
+    expect(ordered.map((prompt) => prompt.id)).toEqual([first.id, second.id]);
+    expect(ordered.map((prompt) => prompt.injectionOrder)).toEqual([0, 1]);
+  });
+
   it('persists groups introduced by prompt creation and movement', async () => {
     const { PromptLibraryService } = await import('./prompt-library-service');
     const service = new PromptLibraryService();
@@ -112,7 +179,7 @@ describe('PromptLibraryService groups', () => {
     expect(await service.listGroups()).toEqual(['Imported']);
   });
 
-  it('toggles a whole group while appending newly enabled prompts in stable order', async () => {
+  it('toggles a whole group without changing the visible prompt order', async () => {
     const { PromptLibraryService } = await import('./prompt-library-service');
     const service = new PromptLibraryService();
     const biography = await service.create({
@@ -147,9 +214,12 @@ describe('PromptLibraryService groups', () => {
     expect(enabled.map((prompt) => prompt.id)).toEqual(
       expect.arrayContaining([biography.id, assets.id, language.id])
     );
-    expect(enabled.find((prompt) => prompt.id === assets.id)?.injectionOrder).toBeGreaterThan(
-      enabled.find((prompt) => prompt.id === language.id)?.injectionOrder ?? -1
-    );
+    expect(
+      enabled
+        .slice()
+        .sort((left, right) => left.injectionOrder - right.injectionOrder)
+        .map((prompt) => prompt.id)
+    ).toEqual([assets.id, biography.id, language.id]);
     expect(state.emit).toHaveBeenCalledTimes(1);
 
     state.emit.mockReset();
