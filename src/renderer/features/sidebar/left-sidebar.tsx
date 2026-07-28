@@ -233,7 +233,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
             {pinnedApps.map((app) => (
               <GlobalSidePaneTarget
                 key={app.id}
-                viewId="library"
+                viewId="marketplace"
                 params={{ section: 'apps', appId: app.id }}
                 altHeld={altHeld}
                 unpinAction={{
@@ -244,17 +244,17 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               >
                 <SidebarMenuButton
                   isActive={
-                    currentView === 'library' &&
-                    libraryParams.section === 'apps' &&
-                    libraryParams.appId === app.id
+                    currentView === 'marketplace' &&
+                    marketplaceParams.section === 'apps' &&
+                    marketplaceParams.appId === app.id
                   }
                   onClick={(event) =>
                     event.altKey
-                      ? appState.sidePane.toggleView('library', {
+                      ? appState.sidePane.toggleView('marketplace', {
                           section: 'apps',
                           appId: app.id,
                         })
-                      : navigate('library', { section: 'apps', appId: app.id })
+                      : navigate('marketplace', { section: 'apps', appId: app.id })
                   }
                   aria-label={app.name}
                   title={app.description}

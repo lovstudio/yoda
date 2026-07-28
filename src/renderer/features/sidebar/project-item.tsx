@@ -8,10 +8,11 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildProjectDeepLink } from '@shared/deep-links';
 import type { QuickAction } from '@shared/project-settings';
+import type { ProjectLaunchCommand } from '@shared/quick-actions';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
@@ -56,6 +57,8 @@ const UNREGISTERED_PHASE_KEY: Record<UnregisteredProject['phase'], string> = {
   error: 'sidebar.phase.error',
 };
 
+const LAUNCH_COMMAND_CACHE_MS = 5_000;
+
 export const SidebarProjectItem = observer(function SidebarProjectItem({
   projectId,
   isDropTarget = false,
@@ -76,6 +79,12 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const showMoveProjectPath = useShowModal('moveProjectPathModal');
   const showConfirmRemoveProject = useShowModal('confirmActionModal');
   const [isMenuOpen, setMenuOpen] = useState(false);
+  const [launchCommands, setLaunchCommands] = useState<ProjectLaunchCommand[]>([]);
+  const [launchCommandsLoading, setLaunchCommandsLoading] = useState(false);
+  const [launchCommandsFailed, setLaunchCommandsFailed] = useState(false);
+  const launchCommandsLoadedPath = useRef<string | null>(null);
+  const launchCommandsLoadedAt = useRef(0);
+  const launchCommandsRequest = useRef<Promise<void> | null>(null);
   // Alt/Option-held hover hints (and click) that the row pins into the global
   // side pane instead of expanding — same affordance as the nav controls.
   const altHeld = useAltKeyHeld();
@@ -147,10 +156,48 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
 
   const isExpanded = sidebarStore.expandedProjectIds.has(projectId);
 
+  const loadLaunchCommands = useCallback(() => {
+    const mounted = asMounted(getProjectStore(projectId));
+    if (!mounted || mounted.data.type !== 'local') return;
+    const projectPath = mounted.data.path;
+    const cacheIsFresh =
+      launchCommandsLoadedPath.current === projectPath &&
+      Date.now() - launchCommandsLoadedAt.current < LAUNCH_COMMAND_CACHE_MS;
+    if (cacheIsFresh || launchCommandsRequest.current) return;
+
+    setLaunchCommandsLoading(true);
+    setLaunchCommandsFailed(false);
+    if (launchCommandsLoadedPath.current !== projectPath) setLaunchCommands([]);
+    const request = rpc.quickActions
+      .discover(projectId)
+      .then((commands) => {
+        const current = asMounted(getProjectStore(projectId));
+        if (!current || current.data.type !== 'local' || current.data.path !== projectPath) return;
+        launchCommandsLoadedPath.current = projectPath;
+        launchCommandsLoadedAt.current = Date.now();
+        setLaunchCommands(commands);
+      })
+      .catch((error) => {
+        log.warn('project launch command discovery failed', {
+          projectId,
+          error: String(error),
+        });
+        setLaunchCommandsFailed(true);
+      })
+      .finally(() => {
+        if (launchCommandsRequest.current === request) {
+          launchCommandsRequest.current = null;
+          setLaunchCommandsLoading(false);
+        }
+      });
+    launchCommandsRequest.current = request;
+  }, [projectId]);
+
   const prefetchProjectMenuData = useCallback(() => {
     prefetchRepository();
     void settingsStore?.pageData.load();
-  }, [prefetchRepository, settingsStore]);
+    loadLaunchCommands();
+  }, [loadLaunchCommands, prefetchRepository, settingsStore]);
 
   const handleRunQuickAction = useCallback(
     async (action: QuickAction) => {
@@ -340,9 +387,14 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         ? undefined
         : () => showCaptureAutomation({ projectId, projectName: project.displayName }),
     quickActions,
+    launchCommands,
+    launchCommandsLoading,
+    launchCommandsFailed,
     onRunQuickAction:
       project.state === 'mounted' &&
-      (expressProviderId || (mountedProject?.data.type === 'local' && quickActions.length > 0))
+      (expressProviderId ||
+        (mountedProject?.data.type === 'local' &&
+          (quickActions.length > 0 || launchCommands.length > 0)))
         ? (action: QuickAction) => void handleRunQuickAction(action)
         : undefined,
     onMenuOpen: prefetchProjectMenuData,

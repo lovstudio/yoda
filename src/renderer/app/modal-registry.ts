@@ -102,7 +102,7 @@ export const modalRegistry = {
   archivedSessionTranscriptModal: createModal(ArchivedSessionTranscriptModal, { size: 'lg' }),
   localAgentSessionModal: createModal(LocalAgentSessionModal, { size: 'lg' }),
   shareProjectConfigModal: createModal(ShareProjectConfigModal, { size: 'md' }),
-  captureProjectAutomationModal: createModal(CaptureProjectAutomationModal, { size: 'lg' }),
+  captureProjectAutomationModal: createModal(CaptureProjectAutomationModal, { size: 'md' }),
   manageRunScriptsModal: createModal(ManageRunScriptsModal, { size: 'md' }),
   manageQuickActionsModal: createModal(ManageQuickActionsModal, { size: 'md' }),
   integrationSetupModal: createModal(IntegrationSetupModal, { size: 'md' }),

@@ -49,8 +49,8 @@ export const quickActionSchema = z.object({
   label: z.string(),
   command: z.string(),
   /**
-   * Legacy quick actions were Agent prompts. Keep them runnable as-is while
-   * making newly compiled operations explicit programmatic shell commands.
+   * Agent actions open an inspectable Yoda task so failures can be fixed in
+   * context. Shell actions remain available for explicit direct commands.
    */
   kind: z.enum(['agent', 'shell']).default('agent'),
   sourceIntent: z.string().optional(),

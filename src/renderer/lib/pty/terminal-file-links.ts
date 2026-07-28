@@ -12,7 +12,7 @@ const MAX_WRAPPED_LINE_LENGTH = 2048;
 // `foo.md（…）` terminate cleanly instead of swallowing trailing prose.
 const PATH_SEG_EXCLUDED = `\\s"'\`$<>|\\\\:：()（）「」『』【】〈〉《》，、。；！？`;
 const PATH_LEADING = `\\s"'([{<:：（「『【〈《、`;
-const PATH_TRAILING = `\\s"')\\]}>,，、。；;!?！？.(（）「」『』【】〈〉《》`;
+const PATH_TRAILING = `\\s"')\\]}>,:：，、。；;!?！？.(（）「」『』【】〈〉《》`;
 // File extension: 1–32 path chars after a dot, but the final char may not be a
 // dot so a trailing sentence period (`foo.md.`) is left out of the link.
 const PATH_EXT = `[^${PATH_SEG_EXCLUDED}\\/]{0,31}[^${PATH_SEG_EXCLUDED}\\/.]`;
@@ -557,7 +557,10 @@ function resolveFileTarget(
         return {
           originalText: text,
           filePath: normalizedRelative,
-          absolutePath: `${normalizedRoot}/${normalizedRelative}`,
+          // Keep the exact emitted checkout path for OS-level actions
+          // (open/reveal/copy). The workspace-relative filePath still routes
+          // in-app navigation to the active worktree equivalent.
+          absolutePath: rawPath,
           line: parsed.line,
           column: parsed.column,
         };

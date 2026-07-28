@@ -111,6 +111,17 @@ export type ClaudeSessionPrompt = {
   restoreTarget?: SessionContextRestoreTarget;
 };
 
+/**
+ * Lightweight database-backed catalog row for progressively loading a
+ * project's prompt history. Prompt bodies remain sourced from provider
+ * transcripts so this index cannot drift from the actual Agent session.
+ */
+export type ProjectPromptSource = {
+  conversation: Conversation;
+  taskName: string;
+  taskArchivedAt: string | null;
+};
+
 export type SessionContextRestoreTarget =
   | { kind: 'claude-message'; messageId: string }
   | { kind: 'codex-turn'; turnId: string };

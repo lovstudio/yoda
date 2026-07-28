@@ -1,13 +1,6 @@
-import type { RuntimeId } from './runtime-registry';
-
-export type CompileQuickActionInput = {
-  projectId: string;
-  intent: string;
-  runtimeId: RuntimeId;
-};
-
-export type CompiledQuickAction = {
+export type ProjectLaunchCommand = {
+  id: string;
   label: string;
   command: string;
-  explanation: string;
+  source: string;
 };

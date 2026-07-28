@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ClaudeSessionPrompt, Conversation } from '@shared/conversations';
+import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
@@ -17,6 +18,31 @@ export type RestoringConversationPrompt = {
   promptId: string;
   promptIndex: number;
 };
+
+/**
+ * Shared execution path for every surface that forks a prompt checkpoint.
+ * Callers own confirmation, navigation and success/error messaging.
+ */
+export async function forkConversationAtPromptIntoNewTab(
+  provisionedTask: ProvisionedTask,
+  { conversation, prompt, promptIndex }: ConversationPromptLocation
+): Promise<Conversation | null> {
+  if (!prompt.restoreTarget) return null;
+  const initialSize =
+    provisionedTask.conversations.conversations.get(conversation.id)?.session.pty?.lastSentDims ??
+    undefined;
+  const fork = await provisionedTask.conversations.forkConversationAtPrompt({
+    projectId: conversation.projectId,
+    taskId: conversation.taskId,
+    conversationId: conversation.id,
+    promptIndex,
+    target: prompt.restoreTarget,
+    initialSize,
+  });
+  provisionedTask.taskView.tabManager.openConversation(fork.id);
+  provisionedTask.taskView.setFocusedRegion('main');
+  return fork;
+}
 
 /**
  * Shared context-checkpoint action for every prompt-history surface. The source
@@ -53,19 +79,11 @@ export function useConversationPromptRestore(): {
         promptIndex,
       });
       try {
-        const initialSize =
-          provisionedTask.conversations.conversations.get(conversation.id)?.session.pty
-            ?.lastSentDims ?? undefined;
-        const fork = await provisionedTask.conversations.forkConversationAtPrompt({
-          projectId: conversation.projectId,
-          taskId: conversation.taskId,
-          conversationId: conversation.id,
+        await forkConversationAtPromptIntoNewTab(provisionedTask, {
+          conversation,
+          prompt,
           promptIndex,
-          target: prompt.restoreTarget,
-          initialSize,
         });
-        provisionedTask.taskView.tabManager.openConversation(fork.id);
-        provisionedTask.taskView.setFocusedRegion('main');
         toast({ title: t('tasks.sessionInfo.restoreContextSuccess') });
       } catch (error) {
         toast({

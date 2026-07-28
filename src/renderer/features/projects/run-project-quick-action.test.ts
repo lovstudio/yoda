@@ -114,7 +114,7 @@ describe('runProjectQuickAction', () => {
     expect(mocks.runCommand).toHaveBeenCalledWith('pnpm run dev', '/repo', 'Start locally', null);
   });
 
-  it('keeps legacy Agent actions on the task execution path', async () => {
+  it('routes Agent actions through the inspectable task execution path', async () => {
     const action: QuickAction = {
       id: 'release',
       label: 'Release',

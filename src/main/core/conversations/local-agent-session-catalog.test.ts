@@ -1,8 +1,11 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { LocalAgentSessionCatalog } from './local-agent-session-catalog';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  createLocalAgentSessionCatalogId,
+  LocalAgentSessionCatalog,
+} from './local-agent-session-catalog';
 
 describe('LocalAgentSessionCatalog', () => {
   let directory: string;
@@ -182,5 +185,49 @@ describe('LocalAgentSessionCatalog', () => {
         archived: true,
       }),
     ]);
+  });
+
+  it('coalesces concurrent cache-miss refreshes into one catalog scan', async () => {
+    const projectPath = join(directory, 'project');
+    const claudeProject = join(claudeRoot, 'projects', '-project');
+    await mkdir(claudeProject, { recursive: true });
+    await writeFile(
+      join(claudeProject, 'shared-session.jsonl'),
+      JSON.stringify({
+        type: 'user',
+        sessionId: 'shared-session',
+        cwd: projectPath,
+        timestamp: '2026-01-03T00:00:00.000Z',
+        message: { content: 'Shared session' },
+      })
+    );
+
+    let releaseScan: () => void = () => {};
+    const scanGate = new Promise<void>((resolve) => {
+      releaseScan = resolve;
+    });
+    const listRoots = vi.fn(async (runtimeId: 'claude' | 'codex') => {
+      await scanGate;
+      return [runtimeId === 'codex' ? codexRoot : claudeRoot];
+    });
+    const sharedCatalog = new LocalAgentSessionCatalog({ list: listRoots }, async (runtimeId) => ({
+      cli: runtimeId,
+    }));
+    const catalogId = createLocalAgentSessionCatalogId('claude', claudeRoot, 'shared-session');
+
+    const lookups = [
+      sharedCatalog.get(catalogId),
+      sharedCatalog.get(catalogId),
+      sharedCatalog.get(catalogId),
+    ];
+    await vi.waitFor(() => expect(listRoots).toHaveBeenCalledTimes(2));
+    releaseScan();
+
+    await expect(Promise.all(lookups)).resolves.toEqual([
+      expect.objectContaining({ sessionId: 'shared-session' }),
+      expect.objectContaining({ sessionId: 'shared-session' }),
+      expect.objectContaining({ sessionId: 'shared-session' }),
+    ]);
+    expect(listRoots).toHaveBeenCalledTimes(2);
   });
 });

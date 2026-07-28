@@ -12,7 +12,7 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { events } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 
-/** Connects background Yoda Build completion to Library cache and user navigation. */
+/** Connects background Yoda Build completion to Marketplace cache and user navigation. */
 export function AiLabBuildEvents() {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -31,7 +31,7 @@ export function AiLabBuildEvents() {
         title: t('home.buildCreated', { name: payload.appName }),
         action: {
           label: t('aiLab.openApp'),
-          onClick: () => navigate('library', { section: 'apps', appId: payload.appId }),
+          onClick: () => navigate('marketplace', { section: 'apps', appId: payload.appId }),
         },
       });
     });
