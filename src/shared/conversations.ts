@@ -29,6 +29,17 @@ export type Conversation = {
   forkedFromConversationId?: string;
   /** Zero-based prompt index in the direct parent conversation. */
   forkedFromPromptIndex?: number;
+  /**
+   * Main-process-only recovery payload. Included while provisioning a persisted
+   * conversation whose first prompt never reached the Agent process.
+   */
+  pendingInitialPrompt?: PendingInitialPrompt;
+};
+
+export type PendingInitialPrompt = {
+  prompt?: string;
+  imagePaths?: string[];
+  model?: string | null;
 };
 
 export type AgentSessionSource = {

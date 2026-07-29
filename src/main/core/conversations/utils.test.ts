@@ -70,4 +70,24 @@ describe('mapConversationRowToConversation', () => {
       providerId: 'provider-a',
     });
   });
+
+  it('exposes a pending initial prompt only to task provisioning', () => {
+    const row = conversationRow({
+      config: JSON.stringify({
+        autoApprove: true,
+        pendingInitialPrompt: {
+          prompt: 'Recover this prompt',
+          imagePaths: ['/tmp/context.png'],
+          model: null,
+        },
+      }),
+    });
+
+    expect(mapConversationRowToConversation(row).pendingInitialPrompt).toBeUndefined();
+    expect(mapConversationRowToConversation(row, true).pendingInitialPrompt).toEqual({
+      prompt: 'Recover this prompt',
+      imagePaths: ['/tmp/context.png'],
+      model: null,
+    });
+  });
 });

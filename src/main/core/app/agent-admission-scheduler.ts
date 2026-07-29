@@ -1,8 +1,9 @@
-import { cpus, freemem, totalmem } from 'node:os';
+import { cpus, totalmem } from 'node:os';
 import type { AgentAdmissionSnapshot } from '@shared/app-resource';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { calculateAutomaticAgentLimit, countActiveAgentAdmissions } from './agent-admission-policy';
+import { getSystemMemoryUsedPercent } from './system-memory';
 
 const ADMISSION_POLL_MS = 500;
 
@@ -45,10 +46,7 @@ class AgentAdmissionScheduler {
   private async refreshSnapshot(): Promise<AgentAdmissionSnapshot> {
     const settings = await appSettingsService.get('terminal');
     const totalMemoryBytes = totalmem();
-    const memoryUsedPercent =
-      totalMemoryBytes > 0
-        ? Math.round(((totalMemoryBytes - freemem()) / totalMemoryBytes) * 1_000) / 10
-        : 0;
+    const memoryUsedPercent = await getSystemMemoryUsedPercent();
     const effectiveLimit =
       settings.agentConcurrencyMode === 'auto'
         ? calculateAutomaticAgentLimit(totalMemoryBytes, cpus().length)

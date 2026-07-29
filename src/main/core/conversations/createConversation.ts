@@ -14,6 +14,8 @@ import { telemetryService } from '@main/lib/telemetry';
 import { resolveTask } from '../projects/utils';
 import { conversationEvents } from './conversation-events';
 import { localAgentSessionCatalog } from './local-agent-session-catalog-instance';
+import { pendingInitialPromptFromParams } from './pending-initial-prompt';
+import { clearPendingInitialPrompt } from './pending-initial-prompt-store';
 import { mapConversationRowToConversation } from './utils';
 
 /**
@@ -100,17 +102,20 @@ export async function createConversation(params: CreateConversationParams): Prom
           params.runtime
         )
       : undefined;
+    const pendingInitialPrompt = pendingInitialPromptFromParams(params);
     const config =
       autoApprove === undefined &&
       permissionMode === undefined &&
       skillPolicy === undefined &&
-      sessionSource === undefined
+      sessionSource === undefined &&
+      pendingInitialPrompt === undefined
         ? undefined
         : JSON.stringify({
             autoApprove,
             permissionMode,
             skillPolicy,
             sessionSource,
+            pendingInitialPrompt,
           });
     const lastInteractedAt = new Date().toISOString();
 
@@ -155,6 +160,9 @@ export async function createConversation(params: CreateConversationParams): Prom
         sessionImagePaths,
         params.model
       );
+      if (pendingInitialPrompt) {
+        await clearPendingInitialPrompt(id);
+      }
     }
     telemetryService.capture('conversation_created', {
       runtime: params.runtime,
