@@ -67,6 +67,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     recommendedSkills,
     refresh: refreshCatalog,
     install,
+    setDisabledBatch,
   } = useSkills();
   const {
     usage,
@@ -276,6 +277,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
           familiesByPrimaryKey={familiesByPrimaryKey}
           onSelect={openDetail}
           onInstall={install}
+          onSetDisabledBatch={setDisabledBatch}
           setSkillRef={setSkillRef}
           highlightedSkillId={highlightedSkillId}
         />

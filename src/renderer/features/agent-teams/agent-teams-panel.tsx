@@ -40,6 +40,7 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
     | 'systemPrompt'
     | 'enabledSkillIds'
     | 'manualSkillIds'
+    | 'skillPolicyMode'
     | 'model'
   > | null = null;
   if (member.agentRef) {
@@ -55,6 +56,7 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
           systemPrompt: preset.systemPrompt,
           enabledSkillIds: [],
           manualSkillIds: [],
+          skillPolicyMode: 'runtime-defaults',
           model: null,
         };
     }
@@ -67,6 +69,7 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
       systemPrompt: member.systemPrompt,
       enabledSkillIds: [],
       manualSkillIds: [],
+      skillPolicyMode: 'runtime-defaults',
       model: null,
     };
   }
@@ -80,6 +83,7 @@ function resolveMemberAgent(member: AgentTeamMember, agents: Agent[]): Agent | n
     systemPrompt: base.systemPrompt,
     enabledSkillIds: base.enabledSkillIds,
     manualSkillIds: base.manualSkillIds,
+    skillPolicyMode: base.skillPolicyMode,
     preferredRuntime: member.runtime,
     model: base.model,
     source: 'local',

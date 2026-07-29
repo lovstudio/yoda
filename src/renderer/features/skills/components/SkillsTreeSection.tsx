@@ -1,8 +1,19 @@
-import { ChartNoAxesColumn, ChevronRight, Pencil, Plus, PowerOff } from 'lucide-react';
+import {
+  ChartNoAxesColumn,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  Plus,
+  Power,
+  PowerOff,
+} from 'lucide-react';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SkillFamily } from '@shared/skills/grouping';
 import type { CatalogSkill, SkillUsageStat } from '@shared/skills/types';
+import { Button } from '@renderer/lib/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 import { buildSkillTree } from '../skill-tree';
 import SkillFamilyCount from './SkillFamilyCount';
@@ -17,6 +28,7 @@ interface SkillsTreeSectionProps {
   familiesByPrimaryKey: ReadonlyMap<string, SkillFamily>;
   onSelect: (skill: CatalogSkill) => void;
   onInstall: (skillKey: string) => void;
+  onSetDisabledBatch: (skillKeys: string[], disabled: boolean) => Promise<boolean>;
   setSkillRef: (skillKey: string) => (node: HTMLDivElement | null) => void;
   highlightedSkillId: string | null;
 }
@@ -29,6 +41,7 @@ const SkillsTreeSection: React.FC<SkillsTreeSectionProps> = ({
   familiesByPrimaryKey,
   onSelect,
   onInstall,
+  onSetDisabledBatch,
   setSkillRef,
   highlightedSkillId,
 }) => {
@@ -57,6 +70,7 @@ const SkillsTreeSection: React.FC<SkillsTreeSectionProps> = ({
             familiesByPrimaryKey={familiesByPrimaryKey}
             onSelect={onSelect}
             onInstall={onInstall}
+            onSetDisabledBatch={onSetDisabledBatch}
             setSkillRef={setSkillRef}
             highlightedSkillId={highlightedSkillId}
           />
@@ -78,32 +92,81 @@ const SkillTreeGroup: React.FC<SkillTreeGroupProps> = ({
   familiesByPrimaryKey,
   onSelect,
   onInstall,
+  onSetDisabledBatch,
   setSkillRef,
   highlightedSkillId,
 }) => {
   const [open, setOpen] = React.useState(true);
+  const [updating, setUpdating] = React.useState(false);
+  const { t } = useTranslation();
   const groupTotal = skills.reduce((sum, skill) => sum + (lookupUsage(skill)?.total ?? 0), 0);
+  const editableSkills = skills.filter((skill) => skill.installed && skill.scope !== 'plugin');
+  const allDisabled = editableSkills.length > 0 && editableSkills.every((skill) => skill.disabled);
+  const targetDisabled = !allDisabled;
+  const actionLabel = t(targetDisabled ? 'skills.groupDisableAria' : 'skills.groupEnableAria', {
+    name: prefix,
+    count: editableSkills.length,
+  });
+  const updateGroup = async () => {
+    setUpdating(true);
+    try {
+      await onSetDisabledBatch(
+        editableSkills.map((skill) => skill.key),
+        targetDisabled
+      );
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left hover:bg-muted/40">
-        <ChevronRight
-          className={cn(
-            'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
-            open && 'rotate-90'
-          )}
-        />
-        <span className="truncate text-sm font-medium">{prefix}</span>
-        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-          {skills.length}
-        </span>
-        {groupTotal > 0 && (
-          <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-muted-foreground">
-            <ChartNoAxesColumn className="h-3 w-3" />
-            {groupTotal}
+      <div className="group flex items-center rounded-md hover:bg-muted/40">
+        <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left">
+          <ChevronRight
+            className={cn(
+              'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
+              open && 'rotate-90'
+            )}
+          />
+          <span className="truncate text-sm font-medium">{prefix}</span>
+          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+            {skills.length}
           </span>
+          {groupTotal > 0 && (
+            <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-muted-foreground">
+              <ChartNoAxesColumn className="h-3 w-3" />
+              {groupTotal}
+            </span>
+          )}
+        </CollapsibleTrigger>
+        {editableSkills.length > 0 && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  className="mr-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  aria-label={actionLabel}
+                  disabled={updating}
+                  onClick={() => void updateGroup()}
+                />
+              }
+            >
+              {updating ? (
+                <Loader2 className="animate-spin" />
+              ) : targetDisabled ? (
+                <PowerOff />
+              ) : (
+                <Power />
+              )}
+            </TooltipTrigger>
+            <TooltipContent>{actionLabel}</TooltipContent>
+          </Tooltip>
         )}
-      </CollapsibleTrigger>
+      </div>
       <CollapsibleContent>
         <div className="ml-[1.0625rem] flex flex-col gap-0.5 border-l border-border/60 pl-2">
           {skills.map((skill) => (

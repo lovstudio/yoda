@@ -4,6 +4,7 @@ import type { Agent, AgentDraft, AgentSource } from '@shared/agents';
 import { isValidRuntimeId } from '@shared/runtime-registry';
 import { db } from '@main/db/client';
 import { agents, type AgentRow } from '@main/db/schema';
+import { decodeStoredAgentSkillPolicy, encodeAgentSkillPolicy } from './agent-skill-policy';
 
 function slugify(input: string): string {
   return (
@@ -17,14 +18,7 @@ function slugify(input: string): string {
 }
 
 function rowToAgent(row: AgentRow): Agent {
-  const storedSkillPolicies = Array.isArray(row.enabledSkillIds) ? row.enabledSkillIds : [];
-  const enabledSkillIds: string[] = [];
-  const manualSkillIds: string[] = [];
-  for (const value of storedSkillPolicies) {
-    if (value.startsWith('manual:')) manualSkillIds.push(value.slice('manual:'.length));
-    else if (value.startsWith('auto:')) enabledSkillIds.push(value.slice('auto:'.length));
-    else enabledSkillIds.push(value); // Legacy rows stored plain ids as automatic.
-  }
+  const skillPolicy = decodeStoredAgentSkillPolicy(row.enabledSkillIds);
   return {
     id: row.id,
     slug: row.slug,
@@ -32,8 +26,9 @@ function rowToAgent(row: AgentRow): Agent {
     description: row.description,
     icon: row.icon,
     systemPrompt: row.systemPrompt,
-    enabledSkillIds,
-    manualSkillIds,
+    enabledSkillIds: skillPolicy.enabledSkillIds,
+    manualSkillIds: skillPolicy.manualSkillIds,
+    skillPolicyMode: skillPolicy.skillPolicyMode,
     preferredRuntime: isValidRuntimeId(row.preferredRuntime) ? row.preferredRuntime : null,
     model: row.model ?? null,
     source: row.source === 'imported' ? 'imported' : 'local',
@@ -43,7 +38,8 @@ function rowToAgent(row: AgentRow): Agent {
 }
 
 function sanitizeDraft(draft: AgentDraft): Omit<AgentDraft, 'name'> & { name: string } {
-  const enabledSkillIds = [...new Set(draft.enabledSkillIds)];
+  const enabledSkillIds =
+    draft.skillPolicyMode === 'allowlist' ? [...new Set(draft.enabledSkillIds)] : [];
   const automatic = new Set(enabledSkillIds);
   return {
     name: draft.name.trim() || 'Untitled agent',
@@ -51,22 +47,17 @@ function sanitizeDraft(draft: AgentDraft): Omit<AgentDraft, 'name'> & { name: st
     icon: draft.icon.trim(),
     systemPrompt: draft.systemPrompt,
     enabledSkillIds,
-    manualSkillIds: [...new Set(draft.manualSkillIds)].filter((skillId) => !automatic.has(skillId)),
+    manualSkillIds:
+      draft.skillPolicyMode === 'allowlist'
+        ? [...new Set(draft.manualSkillIds)].filter((skillId) => !automatic.has(skillId))
+        : [],
+    skillPolicyMode: draft.skillPolicyMode,
     preferredRuntime: isValidRuntimeId(draft.preferredRuntime) ? draft.preferredRuntime : null,
     model: draft.model?.trim() ? draft.model.trim() : null,
   };
 }
 
 class AgentsConfigService {
-  private encodeSkillPolicies(
-    draft: Pick<AgentDraft, 'enabledSkillIds' | 'manualSkillIds'>
-  ): string[] {
-    return [
-      ...draft.enabledSkillIds.map((skillId) => `auto:${skillId}`),
-      ...draft.manualSkillIds.map((skillId) => `manual:${skillId}`),
-    ];
-  }
-
   async list(): Promise<Agent[]> {
     const rows = await db.select().from(agents).orderBy(desc(agents.updatedAt)).execute();
     return rows.map(rowToAgent);
@@ -109,7 +100,7 @@ class AgentsConfigService {
         description: clean.description,
         icon: clean.icon,
         systemPrompt: clean.systemPrompt,
-        enabledSkillIds: this.encodeSkillPolicies(clean),
+        enabledSkillIds: encodeAgentSkillPolicy(clean),
         preferredRuntime: clean.preferredRuntime,
         model: clean.model,
         source,
@@ -129,7 +120,7 @@ class AgentsConfigService {
         description: clean.description,
         icon: clean.icon,
         systemPrompt: clean.systemPrompt,
-        enabledSkillIds: this.encodeSkillPolicies(clean),
+        enabledSkillIds: encodeAgentSkillPolicy(clean),
         preferredRuntime: clean.preferredRuntime,
         model: clean.model,
         updatedAt: new Date().toISOString(),
@@ -156,6 +147,7 @@ class AgentsConfigService {
         systemPrompt: source.systemPrompt,
         enabledSkillIds: source.enabledSkillIds,
         manualSkillIds: source.manualSkillIds,
+        skillPolicyMode: source.skillPolicyMode,
         preferredRuntime: source.preferredRuntime,
         model: source.model,
       },
