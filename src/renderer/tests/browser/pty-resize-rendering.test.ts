@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '@xterm/xterm/css/xterm.css';
+import '@renderer/index.css';
 import { FrontendPty } from '@renderer/lib/pty/pty';
 
 vi.mock('@renderer/lib/ipc', () => ({
@@ -135,6 +136,31 @@ describe('FrontendPty canonical DOM rendering', () => {
     expect(visibleBufferText(pty)).toContain('标题：终端稳定性 🧭');
     expect(visibleBufferText(pty)).toContain('第二行 café résumé');
     expect(pty.ownedContainer.querySelector('.terminal-freeze-overlay')).toBeNull();
+  });
+
+  it('keeps CJK punctuation and final wide glyphs inside the DOM row grid', async () => {
+    pty = new FrontendPty('session-cjk-row-width');
+    pty.flushPendingWrites();
+    mountTarget = document.createElement('div');
+    Object.assign(mountTarget.style, { width: '1100px', height: '420px' });
+    document.body.appendChild(mountTarget);
+    pty.mount(mountTarget, { cols: 127, rows: 24 });
+
+    await writeTerminal(
+      pty,
+      '• 合并后的实时 TTY 仍保持 127 列，说明外层与挂载容器在当前页面恰好同宽，刚才的改动修正了测量优先级，但还没命中这张截图的实际差值。'
+    );
+    await nextAnimationFrame();
+
+    const rows = Array.from(pty.ownedContainer.querySelectorAll<HTMLElement>('.xterm-rows > div'));
+    const firstRow = rows.find((row) => row.textContent?.includes('合并后的实时'));
+
+    expect(firstRow).toBeDefined();
+    expect(firstRow?.textContent).toContain('实际差');
+    expect(firstRow?.scrollWidth).toBeLessThanOrEqual(firstRow?.clientWidth ?? 0);
+    expect(getComputedStyle(pty.terminal.element!).getPropertyValue('text-spacing-trim')).toBe(
+      'space-all'
+    );
   });
 
   it('reparents the same canonical scene without losing its buffer', async () => {
