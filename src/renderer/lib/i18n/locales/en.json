@@ -2579,7 +2579,7 @@
       "count": "Most skills",
       "trigger": "Longest trigger text",
       "body": "Longest body",
-      "total": "Most used",
+      "total": "Invocation count (high to low)",
       "manual": "Most manual",
       "auto": "Most agent-invoked",
       "recent": "Recently used"
