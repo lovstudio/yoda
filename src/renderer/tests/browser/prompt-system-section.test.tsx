@@ -89,11 +89,16 @@ function setTextareaValue(control: HTMLTextAreaElement, value: string): void {
 
 function Harness() {
   const [runtimeId, setRuntimeId] = useState<RuntimeId | null>(null);
-  const { PromptSystemSection } = requirePromptSystemSection();
-  return createElement(PromptSystemSection, {
-    runtimeId,
-    onRuntimeIdChange: setRuntimeId,
-  });
+  const { PromptRuntimeSelector, UserInstructionSection } = requirePromptSystemSection();
+  return createElement(
+    'div',
+    null,
+    createElement(PromptRuntimeSelector, {
+      runtimeId,
+      onRuntimeIdChange: setRuntimeId,
+    }),
+    createElement(UserInstructionSection, { runtimeId })
+  );
 }
 
 let promptSystemModule: typeof PromptSystemModule | undefined;
@@ -103,7 +108,7 @@ function requirePromptSystemSection() {
   return promptSystemModule;
 }
 
-describe('PromptSystemSection', () => {
+describe('prompt instruction sections', () => {
   let host: HTMLDivElement;
   let root: Root;
   let queryClient: QueryClient;
@@ -167,7 +172,12 @@ describe('PromptSystemSection', () => {
 
     expect(host.textContent).not.toContain('GLM');
     expect(host.textContent).not.toContain('Grok');
-    expect(host.querySelectorAll('[data-slot="tabs-tab"]')).toHaveLength(2);
+    expect(host.querySelectorAll('[data-slot="toggle-group-item"]')).toHaveLength(2);
+    const runtimeSelector = host.querySelector('[data-slot="prompt-runtime-selector"]');
+    const userSection = host.querySelector('[data-slot="user-instruction-section"]');
+    expect(runtimeSelector).not.toBeNull();
+    expect(userSection).not.toBeNull();
+    expect(runtimeSelector?.closest('[data-slot="user-instruction-section"]')).toBeNull();
     expect(host.querySelector('[data-slot="agent-system-prompt"]')).toBeNull();
     expect(host.querySelectorAll('[data-slot="runtime-instruction-file"]')).toHaveLength(1);
     expect(host.textContent).toContain('promptLibrary.system.addTemporaryOverride');
@@ -274,10 +284,10 @@ describe('PromptSystemSection', () => {
       await vi.waitFor(() => expect(host.textContent).toContain('Claude Code'));
     });
 
-    const claudeTab = Array.from(
-      host.querySelectorAll<HTMLButtonElement>('[data-slot="tabs-tab"]')
-    ).find((tab) => tab.textContent?.includes('Claude Code'));
-    await act(async () => claudeTab?.click());
+    const claudeToggle = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('[data-slot="toggle-group-item"]')
+    ).find((toggle) => toggle.textContent?.includes('Claude Code'));
+    await act(async () => claudeToggle?.click());
 
     await act(async () => {
       await vi.waitFor(() => expect(host.textContent).toContain('/fixture/.claude/CLAUDE.md'));

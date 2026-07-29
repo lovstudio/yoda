@@ -1,6 +1,12 @@
 import { execFile } from 'node:child_process';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
-import type { LovcodeAvailability, LovcodeSearchResult } from '@shared/lovcode';
+import {
+  LOVCODE_MIN_SEARCH_VERSION,
+  type LovcodeAvailability,
+  type LovcodeSearchResult,
+} from '@shared/lovcode';
 import type { SearchItem } from '@shared/search';
 import { sqlite } from '@main/db/client';
 import { log } from '@main/lib/logger';
@@ -12,10 +18,19 @@ const VERSION_TIMEOUT_MS = 3_000;
 const MAX_SUBTITLE_LENGTH = 180;
 
 type LovcodeCommandResult = { stdout: string };
-type LovcodeCommandRunner = (
+export type LovcodeCommandRunner = (
   args: string[],
   options: { timeout: number; maxBuffer?: number }
 ) => Promise<LovcodeCommandResult>;
+type LovcodeCommandExecutor = (
+  command: string,
+  args: string[],
+  options: { timeout: number; maxBuffer?: number }
+) => Promise<LovcodeCommandResult>;
+type LovcodeCommandDiscovery = () => Promise<{
+  commands: string[];
+  incompatibleVersion?: string;
+}>;
 
 type LovcodeSearchRow = {
   session_id?: string;
@@ -45,14 +60,56 @@ export type LovcodeConversationRow = {
 
 type LovcodeConversationLoader = (sessionIds: string[]) => LovcodeConversationRow[];
 
-const runLovcodeCommand: LovcodeCommandRunner = async (args, options) => {
-  const { stdout } = await execFileAsync(LOVCODE_BIN, args, {
+export class LovcodeUpgradeRequiredError extends Error {
+  constructor(readonly version: string) {
+    super(`Lovcode ${version} does not expose indexed search`);
+  }
+}
+
+const executeLovcodeCommand: LovcodeCommandExecutor = async (command, args, options) => {
+  const { stdout } = await execFileAsync(command, args, {
     timeout: options.timeout,
     maxBuffer: options.maxBuffer,
     encoding: 'utf8',
   });
   return { stdout };
 };
+
+export function createLovcodeCommandRunner(
+  discover: LovcodeCommandDiscovery = discoverLovcodeCommands,
+  execute: LovcodeCommandExecutor = executeLovcodeCommand
+): LovcodeCommandRunner {
+  let resolvedCommand: string | null = null;
+
+  return async (args, options) => {
+    if (resolvedCommand) {
+      try {
+        return await execute(resolvedCommand, args, options);
+      } catch {
+        resolvedCommand = null;
+      }
+    }
+
+    const discovery = await discover();
+    let lastError: unknown;
+    for (const command of discovery.commands) {
+      try {
+        const result = await execute(command, args, options);
+        resolvedCommand = command;
+        return result;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (discovery.incompatibleVersion) {
+      throw new LovcodeUpgradeRequiredError(discovery.incompatibleVersion);
+    }
+    throw lastError ?? new Error('Lovcode executable not found');
+  };
+}
+
+const runLovcodeCommand = createLovcodeCommandRunner();
 
 export class LovcodeService {
   private cachedAvailability: LovcodeAvailability | null = null;
@@ -68,15 +125,19 @@ export class LovcodeService {
       const { stdout } = await this.runCommand(['--version'], { timeout: VERSION_TIMEOUT_MS });
       this.cachedAvailability = { status: 'available', version: stdout.trim() };
     } catch (err) {
-      log.debug('LovcodeService: lovcode binary not available', { error: String(err) });
-      this.cachedAvailability = { status: 'not-installed' };
+      if (err instanceof LovcodeUpgradeRequiredError) {
+        this.cachedAvailability = { status: 'upgrade-required', version: err.version };
+      } else {
+        log.debug('LovcodeService: lovcode binary not available', { error: String(err) });
+        this.cachedAvailability = { status: 'not-installed' };
+      }
     }
     return this.cachedAvailability;
   }
 
   async search(query: string): Promise<LovcodeSearchResult> {
     const availability = await this.checkAvailability();
-    if (availability.status !== 'available') return { status: 'not-installed' };
+    if (availability.status !== 'available') return availability;
 
     const trimmed = query.trim();
     if (!trimmed) return { status: 'ok', items: [] };
@@ -96,6 +157,59 @@ export class LovcodeService {
       return { status: 'error' };
     }
   }
+}
+
+async function discoverLovcodeCommands(): Promise<{
+  commands: string[];
+  incompatibleVersion?: string;
+}> {
+  const commands = new Set<string>();
+  if (process.env.LOVCODE_BIN) commands.add(process.env.LOVCODE_BIN);
+  commands.add(LOVCODE_BIN);
+
+  let incompatibleVersion: string | undefined;
+  if (process.platform === 'darwin') {
+    const appPaths = ['/Applications/lovcode.app', join(homedir(), 'Applications/lovcode.app')];
+    for (const appPath of appPaths) {
+      const version = await readMacAppVersion(appPath);
+      if (!version) continue;
+      if (isVersionAtLeast(version, LOVCODE_MIN_SEARCH_VERSION)) {
+        commands.add(join(appPath, 'Contents', 'MacOS', 'lovcode'));
+      } else {
+        incompatibleVersion ??= version;
+      }
+    }
+  }
+
+  return { commands: Array.from(commands), incompatibleVersion };
+}
+
+async function readMacAppVersion(appPath: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      '/usr/bin/plutil',
+      ['-extract', 'CFBundleShortVersionString', 'raw', join(appPath, 'Contents', 'Info.plist')],
+      { timeout: VERSION_TIMEOUT_MS, encoding: 'utf8' }
+    );
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function isVersionAtLeast(version: string, minimum: string): boolean {
+  const normalize = (value: string) =>
+    value
+      .replace(/^lovcode\s+/i, '')
+      .split(/[.-]/)
+      .slice(0, 3)
+      .map((part) => Number.parseInt(part, 10) || 0);
+  const current = normalize(version);
+  const required = normalize(minimum);
+  for (let index = 0; index < 3; index += 1) {
+    if (current[index] !== required[index]) return current[index] > required[index];
+  }
+  return true;
 }
 
 export function parseSearchHits(stdout: string): LovcodeSearchHit[] {

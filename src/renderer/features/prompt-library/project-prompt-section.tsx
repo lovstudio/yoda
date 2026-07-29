@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProjectPromptPrinciples, PromptPrinciple } from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
-import type { RuntimeId } from '@shared/runtime-registry';
+import { RUNTIMES, type RuntimeId } from '@shared/runtime-registry';
 import { setProjectItems } from '@renderer/features/projects/project-prompt-principles';
 import {
   asMounted,
@@ -112,6 +112,7 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
   };
 
   const items = draft?.items ?? [];
+  const runtimeName = RUNTIMES.find((runtime) => runtime.id === runtimeId)?.name;
 
   const patchItem = (id: string, patch: Partial<PromptPrinciple>) => {
     savePrinciples(
@@ -150,7 +151,7 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
   return (
     <PromptLibraryChapter
       dataSlot="project-prompt-section"
-      className="mt-6"
+      className="mt-3"
       icon={FolderCog}
       title={t('promptLibrary.project.title')}
       description={t('promptLibrary.project.description')}
@@ -176,10 +177,12 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
           {runtimeId ? (
             <div>
               <h3 className="text-xs font-medium text-foreground">
-                {t('promptLibrary.project.instructionFiles')}
+                {t('promptLibrary.project.instructionFiles', { runtime: runtimeName })}
               </h3>
               <p className="mt-1 text-xs leading-5 text-foreground-muted">
-                {t('promptLibrary.project.instructionFilesDescription')}
+                {t('promptLibrary.project.instructionFilesDescription', {
+                  runtime: runtimeName,
+                })}
               </p>
               <div className="mt-2">
                 <PromptInstructionFilesEditor

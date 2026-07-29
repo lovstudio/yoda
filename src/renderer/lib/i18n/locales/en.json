@@ -709,6 +709,7 @@
       "litellmConnectedDescription": "Gateway: {{endpoint}}",
       "lovcodeDescription": "Search session content across every project and open the matching Yoda session",
       "lovcodeConnectedDescription": "Global session search connected · {{version}}",
+      "lovcodeUpgradeDescription": "Version {{version}} is installed; upgrade to search and open sessions in Yoda",
       "lovcodeInstalledTooltip": "Lovcode is connected to global session search",
       "copyInstallCommand": "Copy install command",
       "commandCopied": "Command copied",
@@ -718,6 +719,7 @@
       "connect": "Connect {{name}}",
       "connecting": "Connecting {{name}}…",
       "install": "Install {{name}}",
+      "upgrade": "Upgrade {{name}}",
       "detecting": "Detecting {{name}}…",
       "cancelConnecting": "Cancel connecting {{name}}",
       "githubCliManagedTooltip": "Run `gh auth logout` in your terminal to disconnect",
@@ -2068,6 +2070,9 @@
       "title": "Connect Lovcode global search",
       "description": "Install Lovcode to search session content across every project and open the matching session.",
       "install": "Get Lovcode",
+      "upgradeTitle": "Upgrade Lovcode to search",
+      "upgradeDescription": "Version {{version}} is installed; upgrade to search complete session content across every project.",
+      "upgrade": "Upgrade Lovcode",
       "matches": "Session content",
       "searchError": "Lovcode search is temporarily unavailable. Try again shortly."
     }
@@ -2353,9 +2358,14 @@
       "extraInfo": "Extra information",
       "extraInfoPlaceholder": "Optional notes, reference URL, or extension entry point"
     },
+    "runtime": {
+      "title": "Current CLI",
+      "description": "The user-level and project-level instructions below follow this selection.",
+      "label": "Select current CLI"
+    },
     "system": {
-      "title": "CLI instructions",
-      "description": "Edit the user-level instructions read by the current CLI across projects. Only enabled CLIs with supported instruction files are shown.",
+      "title": "User-level instructions",
+      "description": "Standard user-level instructions read by {{runtime}} across all projects.",
       "noEnabledAgents": "No enabled Agent CLI with supported standard instruction files is available.",
       "userPromptDescription": "These are the standard user-level instruction paths for {{runtime}}. Expand a missing file to create it.",
       "codexFileDescription": "Codex reads AGENTS.md by default. An AGENTS.override.md in the same directory temporarily replaces it.",
@@ -2374,11 +2384,11 @@
       "fileLoadFailed": "Failed to load instruction files: {{detail}}"
     },
     "project": {
-      "title": "Project instructions and prompts",
-      "description": "Select a project to edit the current CLI's project-level instructions and prompts that only apply to that project.",
+      "title": "Project-level instructions and prompts",
+      "description": "Project-level instructions follow the current CLI; project-only prompts follow the selected project.",
       "selectProject": "Select a project to inspect and edit its prompts.",
-      "instructionFiles": "Agent project instructions",
-      "instructionFilesDescription": "These are the standard project instruction paths read by the Agent CLI selected above. Missing files can be created directly.",
+      "instructionFiles": "{{runtime}} project-level instructions",
+      "instructionFilesDescription": "These are the standard instruction paths read by {{runtime}} in this project. Missing files can be created directly.",
       "localPrompts": "Project-only prompts",
       "localPromptsDescription": "These prompts belong only to this project and are injected after global dynamic prompts.",
       "add": "Add project prompt",
