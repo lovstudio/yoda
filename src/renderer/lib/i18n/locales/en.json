@@ -14,6 +14,7 @@
   "fileActions": {
     "label": "File actions",
     "openInMainArea": "Open in main area",
+    "previewInSidePane": "Preview in sidebar",
     "openInApp": "Open in {{app}}",
     "openFile": "Open file",
     "revealInFolder": "Reveal in folder",

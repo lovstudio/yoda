@@ -64,7 +64,7 @@ export function getFileKind(filePath: string): Exclude<ManagedFileKind, 'too-lar
 
 /** True for file kinds that default to rendered/preview mode. */
 export function isPreviewableKind(kind: ManagedFileKind): boolean {
-  return kind === 'svg' || kind === 'markdown';
+  return kind === 'image' || kind === 'svg' || kind === 'markdown' || kind === 'pdf';
 }
 
 /** True for files the diff viewer must not load into Monaco. */

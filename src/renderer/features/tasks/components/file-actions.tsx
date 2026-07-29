@@ -16,6 +16,8 @@ import {
   ContextMenuTrigger,
 } from '@renderer/lib/ui/context-menu';
 import { DropdownMenuItem } from '@renderer/lib/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
+import { cn } from '@renderer/utils/utils';
 
 /**
  * Task-scoped file-action surface: composes the context-free path actions
@@ -69,6 +71,12 @@ export function useFileActions(sourcePath: string) {
 export function useTaskFilePlacementActions(path: string | null | undefined) {
   const provisioned = useProvisionedTask();
 
+  const previewInSidebar = () => {
+    if (!path) return;
+    provisioned.taskView.tabManager.openFilePreviewInSidebar(path);
+    provisioned.taskView.setSidebarCollapsed(false);
+  };
+
   const openInSidebar = () => {
     if (!path) return;
     provisioned.taskView.tabManager.openFileInSidebar(path);
@@ -82,7 +90,50 @@ export function useTaskFilePlacementActions(path: string | null | undefined) {
     appState.sidePane.pinTask(provisioned.projectId, provisioned.taskId, tabId);
   };
 
-  return { openInSidebar, openInGlobalSidebar };
+  return { previewInSidebar, openInSidebar, openInGlobalSidebar };
+}
+
+/**
+ * Discoverable shortcut for previewable assets in the file tree. The action
+ * stays in the shared task-file layer so every caller gets identical placement
+ * semantics and the tree does not reimplement tab management.
+ */
+export function FilePreviewInSidebarButton({
+  path,
+  className,
+}: {
+  path: string;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  const { previewInSidebar } = useTaskFilePlacementActions(path);
+  const label = t('fileActions.previewInSidePane');
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={label}
+            className={cn(
+              'flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
+              className
+            )}
+            onClick={(event) => {
+              event.stopPropagation();
+              previewInSidebar();
+            }}
+          />
+        }
+      >
+        <PanelRight className="size-3.5" />
+      </TooltipTrigger>
+      <TooltipContent side="left" sideOffset={6}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 /**
