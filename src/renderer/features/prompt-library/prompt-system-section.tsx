@@ -1,5 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Loader2, Plus, RefreshCw, Save, SquareTerminal } from 'lucide-react';
+import {
+  ChevronRight,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Save,
+  SquareTerminal,
+  UserRound,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuntimeCustomConfigs } from '@shared/app-settings';
@@ -15,8 +23,8 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
-import { Tabs, TabsList, TabsTab } from '@renderer/lib/ui/tabs';
 import { Textarea } from '@renderer/lib/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
 import { PromptLibraryChapter } from './prompt-library-chapter';
 
@@ -295,7 +303,7 @@ export function PromptInstructionFilesEditor({
   );
 }
 
-export function PromptSystemSection({
+export function PromptRuntimeSelector({
   runtimeId,
   onRuntimeIdChange,
 }: {
@@ -317,57 +325,83 @@ export function PromptSystemSection({
   const selectedRuntime = runtimes.find((runtime) => runtime.id === runtimeId) ?? null;
 
   return (
-    <PromptLibraryChapter
-      dataSlot="prompt-system-section"
+    <section
+      data-slot="prompt-runtime-selector"
       className="mt-6"
-      icon={SquareTerminal}
+      aria-labelledby="prompt-runtime-selector-title"
+    >
+      <div className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-y border-border px-1 py-2.5">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <SquareTerminal className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
+          <div className="min-w-0">
+            <h2 id="prompt-runtime-selector-title" className="text-sm font-medium text-foreground">
+              {t('promptLibrary.runtime.title')}
+            </h2>
+            <p className="mt-0.5 text-xs leading-5 text-foreground-muted">
+              {t('promptLibrary.runtime.description')}
+            </p>
+          </div>
+        </div>
+        {isLoading ? (
+          <Loader2 className="mr-2 size-4 animate-spin text-foreground-muted" />
+        ) : runtimes.length === 0 ? (
+          <p className="text-xs text-foreground-muted">
+            {t('promptLibrary.system.noEnabledAgents')}
+          </p>
+        ) : (
+          <ToggleGroup
+            value={selectedRuntime ? [selectedRuntime.id] : []}
+            onValueChange={([value]) => {
+              if (value) onRuntimeIdChange(value as RuntimeId);
+            }}
+            size="sm"
+            aria-label={t('promptLibrary.runtime.label')}
+          >
+            {runtimes.map((runtime) => (
+              <ToggleGroupItem key={runtime.id} value={runtime.id} className="px-3">
+                {runtime.name}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        )}
+      </div>
+    </section>
+  );
+}
+
+export function UserInstructionSection({ runtimeId }: { runtimeId: RuntimeId | null }) {
+  const { t } = useTranslation();
+  const selectedRuntime = RUNTIMES.find((runtime) => runtime.id === runtimeId) ?? null;
+
+  return (
+    <PromptLibraryChapter
+      dataSlot="user-instruction-section"
+      className="mt-3"
+      icon={UserRound}
       title={t('promptLibrary.system.title')}
-      description={t('promptLibrary.system.description')}
+      description={
+        selectedRuntime
+          ? t('promptLibrary.system.description', { runtime: selectedRuntime.name })
+          : t('promptLibrary.system.noEnabledAgents')
+      }
       bodyClassName="p-3"
     >
-      {isLoading ? (
-        <div className="flex min-h-16 items-center justify-center">
-          <Loader2 className="size-5 animate-spin text-foreground-muted" />
-        </div>
-      ) : runtimes.length === 0 ? (
-        <p className="text-sm text-foreground-muted">{t('promptLibrary.system.noEnabledAgents')}</p>
-      ) : (
+      {selectedRuntime ? (
         <div>
-          <Tabs
-            value={selectedRuntime?.id ?? ''}
-            onValueChange={(value) => onRuntimeIdChange(value as RuntimeId)}
-          >
-            <TabsList className="h-auto min-h-7 flex-wrap justify-start">
-              {runtimes.map((runtime) => (
-                <TabsTab
-                  key={runtime.id}
-                  value={runtime.id}
-                  className="min-h-6 flex-none data-[selected]:bg-background data-[selected]:shadow-sm"
-                >
-                  {runtime.name}
-                </TabsTab>
-              ))}
-            </TabsList>
-          </Tabs>
-
-          {selectedRuntime ? (
-            <div className="mt-3">
-              <p className="mb-2 text-xs leading-5 text-foreground-muted">
-                {selectedRuntime.cli === 'codex'
-                  ? t('promptLibrary.system.codexFileDescription')
-                  : t('promptLibrary.system.userPromptDescription', {
-                      runtime: selectedRuntime.name,
-                    })}
-              </p>
-              <PromptInstructionFilesEditor
-                runtimeId={selectedRuntime.id}
-                projectId={null}
-                scope="user"
-              />
-            </div>
-          ) : null}
+          <p className="mb-2 text-xs leading-5 text-foreground-muted">
+            {selectedRuntime.cli === 'codex'
+              ? t('promptLibrary.system.codexFileDescription')
+              : t('promptLibrary.system.userPromptDescription', {
+                  runtime: selectedRuntime.name,
+                })}
+          </p>
+          <PromptInstructionFilesEditor
+            runtimeId={selectedRuntime.id}
+            projectId={null}
+            scope="user"
+          />
         </div>
-      )}
+      ) : null}
     </PromptLibraryChapter>
   );
 }
