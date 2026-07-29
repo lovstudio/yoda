@@ -3994,6 +3994,7 @@
       "runningAgents": "Running agents",
       "runningAgentsShort": "{{count}} agents",
       "sessionFallback": "Session {{id}}",
+      "taskFallback": "Task {{id}}",
       "openSession": "Open session “{{title}}”",
       "openOnlyRunningAgent": "Open the running agent session",
       "showRunningAgents": "Show {{count}} running agents",

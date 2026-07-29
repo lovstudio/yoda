@@ -4,8 +4,11 @@ import { describe, expect, it } from 'vitest';
 describe('workspace running agent sessions', () => {
   const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
 
-  it('shows the running agent count in the persistent resource trigger', () => {
-    expect(source).toContain('resourceSnapshot?.activeAgentSessions ?? 0');
+  it('derives the displayed count from globally routable sessions', () => {
+    expect(source).toContain('appState.agentRuntime');
+    expect(source).toContain('.runningSessions()');
+    expect(source).toContain('const runningAgentCount = runningAgentSessions.length');
+    expect(source).not.toContain('resourceSnapshot?.activeAgentSessions ?? 0');
     expect(source).toContain("t('workspaceRuntime.resources.runningAgentsShort'");
   });
 
