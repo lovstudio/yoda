@@ -21,6 +21,12 @@ export const SKILL_SORT_MODES = [
 
 export type SkillSortMode = (typeof SKILL_SORT_MODES)[number];
 
+const USAGE_SORT_MODES = new Set<SkillSortMode>(['total', 'recent', 'manual', 'auto']);
+
+export function isUsageSortMode(mode: SkillSortMode): boolean {
+  return USAGE_SORT_MODES.has(mode);
+}
+
 function triggerTextLength(skill: CatalogSkill): number {
   const name = skill.frontmatter.name || skill.displayName;
   const description = skill.description || skill.frontmatter.description || '';

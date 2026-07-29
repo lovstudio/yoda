@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CatalogSkill, SkillUsageStat } from '@shared/skills/types';
-import { sortSkills } from './skill-sort';
+import { isUsageSortMode, SKILL_SORT_MODES, sortSkills } from './skill-sort';
 
 function skill(id: string): CatalogSkill {
   return {
@@ -34,6 +34,10 @@ function usage(skillId: string, total: number): SkillUsageStat {
 }
 
 describe('skill sorting', () => {
+  it('identifies the modes that wait for usage statistics', () => {
+    expect(SKILL_SORT_MODES.filter(isUsageSortMode)).toEqual(['total', 'recent', 'manual', 'auto']);
+  });
+
   it('sorts skills by invocation count from highest to lowest', () => {
     const skills = [skill('alpha'), skill('beta'), skill('gamma')];
     const usageBySkill = new Map([

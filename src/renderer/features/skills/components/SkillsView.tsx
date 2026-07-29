@@ -30,7 +30,7 @@ import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@renderer/lib
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
 import { skillNeedsAttention } from '../skill-health';
-import { SKILL_SORT_MODES, sortSkills, type SkillSortMode } from '../skill-sort';
+import { isUsageSortMode, SKILL_SORT_MODES, sortSkills, type SkillSortMode } from '../skill-sort';
 import ExternalSkillMarketplaces from './ExternalSkillMarketplaces';
 import SkillCard from './SkillCard';
 import SkillsCatalogHint from './SkillsCatalogHint';
@@ -65,10 +65,15 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     setSearchQuery,
     installedSkills,
     recommendedSkills,
-    refresh,
+    refresh: refreshCatalog,
     install,
   } = useSkills();
-  const { usage, lookupUsage } = useSkillUsage();
+  const {
+    usage,
+    isRefreshing: isUsageRefreshing,
+    refresh: refreshUsage,
+    lookupUsage,
+  } = useSkillUsage();
   const [sortMode, setSortMode] = React.useState<SkillSortMode>('name');
   const [layout, setLayout] = React.useState<SkillsLayout>(loadStoredLayout);
   const [section, setSection] = React.useState<SkillsSection>('installed');
@@ -87,17 +92,16 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     }
   }, []);
 
-  // 'name' and the length rankings always work; 'count' needs the tree;
-  // usage modes need stats.
+  // Keep the menu shape stable while the first usage snapshot is being built.
   const visibleSortModes = React.useMemo(
-    () =>
-      SKILL_SORT_MODES.filter((mode) => {
-        if (mode === 'count') return layout === 'tree';
-        if (mode === 'name' || mode === 'trigger' || mode === 'body') return true;
-        return usageAvailable;
-      }),
-    [layout, usageAvailable]
+    () => SKILL_SORT_MODES.filter((mode) => mode !== 'count' || layout === 'tree'),
+    [layout]
   );
+  const refreshing = isRefreshing || isUsageRefreshing;
+  const refresh = React.useCallback(() => {
+    refreshCatalog();
+    void refreshUsage();
+  }, [refreshCatalog, refreshUsage]);
 
   const installedFamilies = React.useMemo(
     () => groupSkillFamilies(installedSkills),
@@ -383,7 +387,12 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
               </SelectTrigger>
               <SelectContent align="end">
                 {visibleSortModes.map((mode) => (
-                  <SelectItem key={mode} value={mode} className="text-xs">
+                  <SelectItem
+                    key={mode}
+                    value={mode}
+                    disabled={!usageAvailable && isUsageSortMode(mode)}
+                    className="text-xs"
+                  >
                     {t(`skills.sort.${mode}`)}
                   </SelectItem>
                 ))}
@@ -394,11 +403,11 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
             variant="ghost"
             size="icon"
             onClick={refresh}
-            disabled={isRefreshing}
+            disabled={refreshing}
             aria-label={t('skills.refreshAria')}
           >
             <RefreshCw
-              className={`h-4 w-4 text-muted-foreground ${isRefreshing ? 'animate-spin' : ''}`}
+              className={`h-4 w-4 text-muted-foreground ${refreshing ? 'animate-spin' : ''}`}
             />
           </Button>
           <Button
