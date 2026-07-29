@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-29T05:41:29.507431+00:00",
+  "generated_at": "2026-07-29T05:58:35.931329+00:00",
   "input": "poster.html",
   "aspect": "16:9",
   "canvas": {
@@ -15,7 +15,7 @@
   },
   "metrics": {
     "primary_blocks": 1,
-    "semantic_units": 578,
+    "semantic_units": 581,
     "audited_elements": 5,
     "images": 1,
     "template": "comparison-matrix",
@@ -56,7 +56,7 @@
   "human_review": {
     "required": true,
     "status": "passed",
-    "note": "已检查 3200×1800 原图与 480×270 缩略图：标题可在五秒内复述；LiteLLM 默认决策与 Higress 条件决策清晰；矩阵标签、来源和限定在原图可读；无溢出、空容器或装饰性伪图形。"
+    "note": "已检查 3200×1800 原图与 480×270 缩略图：大标题先说明开源 MaaS 网关选型主题，再列统一管理、自动路由与稳定性比较维度；具体建议位于矩阵尾部深色区域；无标题断词、溢出、空容器或层级歧义。"
   },
   "errors": [],
   "warnings": [],

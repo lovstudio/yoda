@@ -1,6 +1,6 @@
 # Infographic brief
 
-Working title: 异构 MaaS 默认选 LiteLLM；已有 K8s 且追求数据面稳定时转向 Higress
+Working title: 开源 MaaS 网关选型指南：统一管理、自动路由与稳定性对比
 Template: comparison-matrix
 Evidence mode: qualitative
 
@@ -13,6 +13,8 @@ Evidence mode: qualitative
 ## Governing message
 
 异构 MaaS 默认选 LiteLLM；已有 K8s 且追求数据面稳定时转向 Higress。
+
+Presentation rule: 大标题说明本图的用途与主题；选型建议置于矩阵尾部，作为完成比较后的决策读出。
 
 ## Supporting claims
 
@@ -94,8 +96,9 @@ Evidence mode: qualitative
 ## Copy map
 
 - Figure label: Exhibit 01 · MaaS Gateway Selection
-- Action title: 异构 MaaS 默认选 LiteLLM；已有 K8s 且追求数据面稳定时转向 Higress
-- Optional deck: 面向个人/小团队自托管；结论基于截至 2026-07-29 的官方功能与架构资料，不含统一压测。
+- Display title: 开源 MaaS 网关选型指南：统一管理、自动路由与稳定性对比
+- Optional deck: LiteLLM、Higress、Portkey 与 New API；面向个人/小团队自托管；资料截至 2026-07-29。
+- Tail recommendation: 默认 LiteLLM；已有 K8s，且高并发/SSE 稳定优先时选择 Higress。
 - Visual labels: 异构接入与管理、自动路由、稳定性上限、运维门槛、选择边界。
 - Source / note: S1–S5 官方文档清单、检索日期和定性判断限定。
 
@@ -108,10 +111,11 @@ Evidence mode: qualitative
 
 ## Human review
 
-- [x] 标题可在五秒内复述。
+- [x] 标题可在五秒内说明本图的用途与比较主题。
+- [x] 具体选型建议位于尾部区域，符合“先比较、后建议”的阅读顺序。
 - [x] 矩阵不依赖逐字阅读即可看出 LiteLLM 与 Higress 的选择边界。
 - [x] 橙色只表示决策性差异。
 - [x] 每个可见判断都映射到 S1–S5。
 - [x] 原图与 480×270 缩略图均无溢出、空洞容器或伪数据图形。
 
-Review evidence: 2026-07-29 检查 3200×1800 `poster.png` 原图及 480×270 缩略图；原图中的全部标签、来源和限定可读，缩略图中行动标题、LiteLLM 深色默认决策格与 Higress 橙色条件决策格仍可快速识别。
+Review evidence: 2026-07-29 检查 3200×1800 `poster.png` 原图及 480×270 缩略图；大标题稳定分成两行，先说明“开源 MaaS 网关选型指南”，再交代统一管理、自动路由与稳定性三个比较维度；具体建议位于矩阵尾部深色区域，原图可直接阅读，缩略图仍能辨认“先比较、后建议”的层级；全部矩阵标签、来源和限定无溢出。
