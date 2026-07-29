@@ -281,6 +281,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     (session) => session.status === 'awaiting-input'
   ).length;
   const tmuxSessionCount = agentSessions.filter((session) => session.tmuxBacked).length;
+  const agentTriggerText =
+    attentionAgentCount > 0
+      ? t('workspaceRuntime.agents.triggerAttention', {
+          count: agentSessionCount,
+          attention: attentionAgentCount,
+        })
+      : workingAgentCount > 0
+        ? t('workspaceRuntime.agents.triggerWorking', {
+            count: agentSessionCount,
+            working: workingAgentCount,
+          })
+        : String(agentSessionCount);
   const resourceLatencyP95 = getWorkspaceLatencyP95(resourceSnapshot);
   const latencyTitle = resourceSnapshot?.rendererPerformance
     ? t('workspaceRuntime.resources.latencyDetails', {
@@ -817,6 +829,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           aria-label={t('workspaceRuntime.agents.triggerLabel', {
             count: agentSessionCount,
             working: workingAgentCount,
+            attention: attentionAgentCount,
           })}
           className={cn(
             'flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
@@ -825,26 +838,20 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           title={t('workspaceRuntime.agents.triggerLabel', {
             count: agentSessionCount,
             working: workingAgentCount,
+            attention: attentionAgentCount,
           })}
         >
           <Bot className="size-3.5" />
-          <span className="tabular-nums">
-            {t('workspaceRuntime.agents.triggerShort', {
-              count: agentSessionCount,
-              working: workingAgentCount,
-            })}
-          </span>
-          <span
-            aria-hidden
-            className={cn(
-              'size-1.5 rounded-full',
-              attentionAgentCount > 0
-                ? 'bg-amber-500'
-                : workingAgentCount > 0
-                  ? 'bg-primary'
-                  : 'bg-foreground-disabled'
-            )}
-          />
+          <span className="tabular-nums">{agentTriggerText}</span>
+          {attentionAgentCount > 0 || workingAgentCount > 0 ? (
+            <span
+              aria-hidden
+              className={cn(
+                'size-1.5 rounded-full',
+                attentionAgentCount > 0 ? 'bg-amber-500' : 'bg-primary'
+              )}
+            />
+          ) : null}
         </PopoverTrigger>
         <PopoverContent
           align="end"

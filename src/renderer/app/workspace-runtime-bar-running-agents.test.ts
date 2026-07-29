@@ -28,6 +28,13 @@ describe('workspace agent sessions', () => {
     expect(source).toContain('Math.round(session.cpuPercent)');
   });
 
+  it('keeps the idle trigger compact and only adds meaningful active state', () => {
+    expect(source).toContain(': String(agentSessionCount)');
+    expect(source).toContain("t('workspaceRuntime.agents.triggerAttention'");
+    expect(source).toContain("t('workspaceRuntime.agents.triggerWorking'");
+    expect(source).not.toContain("t('workspaceRuntime.agents.triggerShort'");
+  });
+
   it('keeps the resource overview focused on four expandable and time-aware metrics', () => {
     expect(source).toContain('<WorkspaceResourceTrend');
     expect(source).toContain("label={t('workspaceRuntime.resources.latency')}");

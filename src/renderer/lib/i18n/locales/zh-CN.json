@@ -4068,8 +4068,9 @@
     "agents": {
       "title": "Agent 运行状态",
       "description": "Agent 工作状态与 tmux 载体独立展示；需要处理和高资源占用的会话优先",
-      "triggerLabel": "共 {{count}} 个 Agent 会话，{{working}} 个工作中",
-      "triggerShort": "{{count}} Agent · {{working}} 工作中",
+      "triggerLabel": "共 {{count}} 个 Agent 会话，{{working}} 个工作中，{{attention}} 个待处理",
+      "triggerWorking": "{{count}} · {{working}} 工作中",
+      "triggerAttention": "{{count}} · {{attention}} 待处理",
       "sessions": "会话",
       "working": "工作中",
       "attention": "待处理",
