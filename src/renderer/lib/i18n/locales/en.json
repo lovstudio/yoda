@@ -2298,7 +2298,7 @@
     "title": "Prompts",
     "collection": {
       "title": "Prompts",
-      "description": "There is one prompt model. Group it, sync it from a source, and choose whether it is dynamically injected when a session starts.",
+      "description": "Create reusable prompts, sort them into groups, sync from files, URLs, or Git, and optionally inject them when a session starts.",
       "all": "All prompts"
     },
     "new": "New prompt",
@@ -2345,13 +2345,18 @@
       "extraInfoPlaceholder": "Optional notes, reference URL, or extension entry point"
     },
     "system": {
-      "title": "CLI prompts",
-      "description": "Switch between enabled Coding Agent CLIs. This area edits each CLI's own instruction files and does not list models or MaaS services.",
+      "title": "CLI instructions",
+      "description": "Edit the user-level instructions read by the current CLI across projects. Only enabled CLIs with supported instruction files are shown.",
       "noEnabledAgents": "No enabled Agent CLI with supported standard instruction files is available.",
       "userPromptDescription": "These are the standard user-level instruction paths for {{runtime}}. Expand a missing file to create it.",
+      "codexFileDescription": "Codex reads AGENTS.md by default. An AGENTS.override.md in the same directory temporarily replaces it.",
       "noInstructionFiles": "This Agent CLI has no editable standard instruction file.",
       "existingFile": "Existing file",
+      "activeFile": "Active",
+      "activeOverride": "Temporary override active",
+      "overriddenFile": "Temporarily overridden",
       "newFile": "Missing",
+      "addTemporaryOverride": "Add temporary override",
       "filePromptLabel": "Edit {{name}}",
       "filePromptPlaceholder": "Instructions for this Agent CLI at the user or project level…",
       "createFile": "Create file",
@@ -2360,8 +2365,8 @@
       "fileLoadFailed": "Failed to load instruction files: {{detail}}"
     },
     "project": {
-      "title": "Project prompts",
-      "description": "Select a project to edit the current Agent CLI's standard project instruction files and project-only prompts. The current or most recently active project is selected by default.",
+      "title": "Project instructions and prompts",
+      "description": "Select a project to edit the current CLI's project-level instructions and prompts that only apply to that project.",
       "selectProject": "Select a project to inspect and edit its prompts.",
       "instructionFiles": "Agent project instructions",
       "instructionFilesDescription": "These are the standard project instruction paths read by the Agent CLI selected above. Missing files can be created directly.",
