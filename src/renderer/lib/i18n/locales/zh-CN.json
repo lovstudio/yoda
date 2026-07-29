@@ -1382,6 +1382,8 @@
       "publicShareCopied": "公开链接已复制",
       "publicShareCreated": "公开链接已生成",
       "publicShareCopyFailed": "自动复制失败，可打开页面后从浏览器复制。",
+      "publicShareAssetsUploaded": "已同步 {{count}} 个本地素材。",
+      "publicShareAssetsPartial": "已同步 {{uploaded}} 个素材；另有 {{omitted}} 个素材缺失或超出大小限制。",
       "publicShareFailed": "生成公开链接失败",
       "publicShareFailedDescription": "请确认已登录 Yoda 账号，且该会话已有聊天记录。",
       "openInSidePane": "在侧边栏打开",

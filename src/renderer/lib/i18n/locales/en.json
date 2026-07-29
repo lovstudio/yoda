@@ -1382,6 +1382,8 @@
       "publicShareCopied": "Public link copied",
       "publicShareCreated": "Public link created",
       "publicShareCopyFailed": "Open the page and copy the link from your browser.",
+      "publicShareAssetsUploaded": "Synced {{count}} local assets.",
+      "publicShareAssetsPartial": "Synced {{uploaded}} assets; {{omitted}} were missing or exceeded the size limit.",
       "publicShareFailed": "Failed to create public link",
       "publicShareFailedDescription": "Sign in to Yoda and make sure this session has chat history.",
       "openInSidePane": "Open in sidebar",

@@ -54,6 +54,8 @@ describe('createYodaSessionShareUpload', () => {
 
     expect(upload.blocks.map((block) => block.id)).toEqual(['block-1', 'block-2']);
     expect(upload.blocks[1]?.timestamp).toBeNull();
+    expect(upload.assets).toEqual([]);
+    expect(upload.omittedAssetCount).toBe(0);
     expect(serialized).not.toContain('private-project-id');
     expect(serialized).not.toContain('private-task-id');
     expect(serialized).not.toContain('private-conversation-id');
