@@ -55,8 +55,10 @@ import type { CreateTaskError, CreateTaskWarning, Task } from '@shared/tasks';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { loadClaudeTranscript } from '@main/core/conversations/claude-transcript';
 import {
+  loadCodexRolloutShareImagesTailForConversation,
   loadCodexRolloutTerminalHistoryTailForConversation,
   loadCodexRolloutTranscriptTailForConversation,
+  type CodexRolloutShareImageGroup,
 } from '@main/core/conversations/codex-rollout-terminal-history';
 import { getConversationRuntimeStatuses } from '@main/core/conversations/getConversationRuntimeStatuses';
 import { getConversationSessionInfo } from '@main/core/conversations/getConversationSessionInfo';
@@ -1017,14 +1019,40 @@ export class MobileGatewayService {
     taskId: string,
     conversationId: string
   ): Promise<MobileSessionDetail> {
-    return (await this.getSessionShareSource(projectId, taskId, conversationId)).detail;
+    return (await this.loadSessionDetailSource(projectId, taskId, conversationId)).detail;
   }
 
   async getSessionShareSource(
     projectId: string,
     taskId: string,
     conversationId: string
-  ): Promise<{ detail: MobileSessionDetail; cwd: string }> {
+  ): Promise<{
+    detail: MobileSessionDetail;
+    cwd: string;
+    embeddedImages: CodexRolloutShareImageGroup[];
+  }> {
+    const source = await this.loadSessionDetailSource(projectId, taskId, conversationId);
+    const embeddedImages =
+      source.conversation.runtimeId === 'codex'
+        ? await loadCodexRolloutShareImagesTailForConversation({
+            conversation: source.conversation,
+            cwd: source.cwd,
+          }).catch((error: unknown) => {
+            log.warn('MobileGateway: failed to load embedded session images', {
+              conversationId: source.conversation.id,
+              error: String(error),
+            });
+            return [];
+          })
+        : [];
+    return { detail: source.detail, cwd: source.cwd, embeddedImages };
+  }
+
+  private async loadSessionDetailSource(
+    projectId: string,
+    taskId: string,
+    conversationId: string
+  ): Promise<{ detail: MobileSessionDetail; cwd: string; conversation: Conversation }> {
     const data = await this.loadTaskSessionData(projectId, taskId);
     const conversation = data.conversations.find((item) => item.id === conversationId);
     const session = data.sessions.find((item) => item.id === conversationId);
@@ -1043,6 +1071,7 @@ export class MobileGatewayService {
 
     return {
       cwd: data.cwd,
+      conversation,
       detail: {
         generatedAt: new Date().toISOString(),
         session,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatCodexRolloutTerminalHistory,
+  parseCodexRolloutShareImages,
   parseCodexRolloutTranscript,
 } from './codex-rollout-terminal-history';
 
@@ -135,6 +136,60 @@ describe('formatCodexRolloutTerminalHistory', () => {
 });
 
 describe('parseCodexRolloutTranscript', () => {
+  it('keeps embedded user images recoverable for public sharing', () => {
+    const imageData = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ';
+    const raw = [
+      {
+        timestamp: '2026-07-29T05:40:33.120Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: '<image name=[Image #1] path="/tmp/source.png">',
+            },
+            {
+              type: 'input_image',
+              image_url: `data:image/png;base64,${imageData}`,
+            },
+            { type: 'input_text', text: '</image>' },
+            {
+              type: 'input_text',
+              text: '[Image #1] 那个 P 图汇总图应该上传',
+            },
+          ],
+        },
+      },
+      {
+        timestamp: '2026-07-29T05:40:33.121Z',
+        type: 'event_msg',
+        payload: {
+          type: 'user_message',
+          message: '[Image #1] 那个 P 图汇总图应该上传',
+        },
+      },
+    ]
+      .map((row) => JSON.stringify(row))
+      .join('\n');
+
+    expect(parseCodexRolloutShareImages(raw)).toEqual([
+      {
+        timestamp: '2026-07-29T05:40:33.120Z',
+        message: '[Image #1] 那个 P 图汇总图应该上传',
+        images: [
+          {
+            label: 'Image #1',
+            contentType: 'image/png',
+            dataBase64: imageData,
+          },
+        ],
+      },
+    ]);
+    expect(parseCodexRolloutTranscript(raw)[0]?.content).toBe('[Image #1] 那个 P 图汇总图应该上传');
+  });
+
   it('returns structured renderable transcript blocks from event messages', () => {
     const raw = [
       {

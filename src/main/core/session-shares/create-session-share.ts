@@ -8,12 +8,16 @@ export async function createSessionShare(
   taskId: string,
   conversationId: string
 ): Promise<YodaSessionShareResponse> {
-  const { detail, cwd } = await mobileGatewayService.getSessionShareSource(
+  const { detail, cwd, embeddedImages } = await mobileGatewayService.getSessionShareSource(
     projectId,
     taskId,
     conversationId
   );
-  const upload = await attachLocalSessionAssets(createYodaSessionShareUpload(detail), cwd);
+  const upload = await attachLocalSessionAssets(
+    createYodaSessionShareUpload(detail),
+    cwd,
+    embeddedImages
+  );
   if (upload.blocks.length === 0) {
     throw new Error('This session has no shareable chat history yet.');
   }
