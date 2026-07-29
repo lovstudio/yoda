@@ -5,7 +5,7 @@
  * reflects genuine CSS layout — no stubs required for the DOM or CSSOM.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { measureDimensions } from '@renderer/lib/pty/pty-dimensions';
+import { measureDimensions, TERMINAL_FIT_GUARD_COLUMNS } from '@renderer/lib/pty/pty-dimensions';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -92,6 +92,15 @@ describe('measureDimensions', () => {
     expect(dims).toEqual({
       cols: Math.floor((800 - SCROLLBAR) / CW) - GUARD_COLS, // 96
       rows: Math.floor(400 / CH), // 25
+    });
+  });
+
+  it('keeps the shared terminal fit one column inside the clipping edge', () => {
+    container = makeContainer('800px', '400px');
+
+    expect(measureDimensions(container, CW, CH, 0, TERMINAL_FIT_GUARD_COLUMNS)).toEqual({
+      cols: 99,
+      rows: 25,
     });
   });
 
