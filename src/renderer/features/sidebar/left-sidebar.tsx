@@ -230,6 +230,24 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </span>
               </SidebarMenuButton>
             </GlobalSidePaneTarget>
+            <GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams} altHeld={altHeld}>
+              <SidebarMenuButton
+                isActive={isCurrentView(currentView, 'marketplace')}
+                onClick={(event) =>
+                  event.altKey
+                    ? appState.sidePane.toggleView('marketplace', marketplaceParams)
+                    : navigate('marketplace')
+                }
+                aria-label={t('sidebar.marketplace')}
+                title={t('sidebar.marketplace')}
+                className="w-full justify-start"
+              >
+                <span className="flex min-w-0 w-full items-center gap-2">
+                  <Store className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
+                  <span className="min-w-0 truncate">{t('sidebar.marketplace')}</span>
+                </span>
+              </SidebarMenuButton>
+            </GlobalSidePaneTarget>
             {pinnedApps.map((app) => (
               <GlobalSidePaneTarget
                 key={app.id}
@@ -267,24 +285,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </SidebarMenuButton>
               </GlobalSidePaneTarget>
             ))}
-            <GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams} altHeld={altHeld}>
-              <SidebarMenuButton
-                isActive={isCurrentView(currentView, 'marketplace')}
-                onClick={(event) =>
-                  event.altKey
-                    ? appState.sidePane.toggleView('marketplace', marketplaceParams)
-                    : navigate('marketplace')
-                }
-                aria-label={t('sidebar.marketplace')}
-                title={t('sidebar.marketplace')}
-                className="w-full justify-start"
-              >
-                <span className="flex min-w-0 w-full items-center gap-2">
-                  <Store className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                  <span className="min-w-0 truncate">{t('sidebar.marketplace')}</span>
-                </span>
-              </SidebarMenuButton>
-            </GlobalSidePaneTarget>
             <div className="my-1 border-t border-border" />
           </SidebarMenu>
         </div>
