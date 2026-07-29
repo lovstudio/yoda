@@ -186,6 +186,10 @@ export class FrontendPty {
   /** Lease protecting a newer host from an older React effect's late cleanup. */
   private mountGeneration = 0;
 
+  get mounted(): boolean {
+    return this.isMounted;
+  }
+
   constructor(
     readonly sessionId: string,
     theme?: SessionTheme,

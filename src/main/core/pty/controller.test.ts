@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   emit: vi.fn(),
   loadHistory: vi.fn(),
   select: vi.fn(),
+  resumeConversation: vi.fn(),
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -24,6 +25,10 @@ vi.mock('@main/core/conversations/utils', () => ({
     id: 'conversation',
     runtimeId: 'codex',
   })),
+}));
+
+vi.mock('@main/core/conversations/resumeConversation', () => ({
+  resumeConversation: mocks.resumeConversation,
 }));
 
 vi.mock('@main/core/tasks/task-manager', () => ({
@@ -67,6 +72,7 @@ vi.mock('@main/lib/events', () => ({
 
 vi.mock('@main/lib/logger', () => ({
   log: {
+    debug: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
   },
@@ -201,11 +207,20 @@ describe('ptyController.subscribe history handoff', () => {
 });
 
 describe('ptyController.sendInput registration gate', () => {
-  it('reports not_found outside a live or pending registration epoch', () => {
-    expect(ptyController.sendInput('project-none:task-none:conversation-none', 'input')).toEqual({
-      success: false,
-      error: { type: 'not_found' },
+  it('queues the first input and transparently resumes a cold agent session', () => {
+    mocks.resumeConversation.mockResolvedValue(undefined);
+    const sessionId = 'project-none:task-none:conversation-none';
+    expect(ptyController.sendInput(sessionId, 'input')).toEqual({
+      success: true,
+      data: { queued: true },
     });
+    expect(mocks.resumeConversation).toHaveBeenCalledWith(
+      'project-none',
+      'task-none',
+      'conversation-none'
+    );
+    const epoch = ptySessionRegistry.beginRegistration(sessionId);
+    ptySessionRegistry.cancelRegistration(sessionId, epoch);
   });
 
   it('accepts optimistic input during an explicit registration epoch', () => {

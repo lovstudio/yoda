@@ -49,6 +49,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popove
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
+import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { WorkspaceResourceMetric } from './workspace-resource-metric';
 import { getQuotaWindowLabel } from './workspace-runtime-bar-format';
 
@@ -73,6 +74,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     conversationId: string;
     count: number;
   } | null>(null);
+
+  useEffect(() => startRendererPerformanceReporter(), []);
   const route = appState.navigation.currentViewId;
   const params = appState.navigation.viewParamsStore[route] as
     | { projectId?: string; taskId?: string }
@@ -428,12 +431,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   };
 
   const handleRunningAgentMetricClick = () => {
-    const onlySession = runningAgentSessions.length === 1 ? runningAgentSessions[0] : undefined;
-    if (onlySession) {
-      openRunningAgentSession(onlySession);
-      return;
-    }
-    if (runningAgentSessions.length > 1) {
+    if (runningAgentSessions.length > 0) {
       setIsRunningAgentListOpen((current) => !current);
     }
   };
@@ -758,7 +756,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           align="end"
           side="top"
           sideOffset={8}
-          className="w-80 gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+          className="w-[420px] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
         >
           <div className="border-b border-border p-3">
             <div className="text-sm font-medium">{t('workspaceRuntime.resources.title')}</div>
@@ -793,8 +791,45 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               expanded={runningAgentSessions.length > 1 ? isRunningAgentListOpen : undefined}
               onClick={runningAgentSessions.length > 0 ? handleRunningAgentMetricClick : undefined}
             />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.resources.inputLatency')}
+              value={
+                resourceSnapshot?.rendererPerformance
+                  ? `${resourceSnapshot.rendererPerformance.inputLatency.p95Ms} ms`
+                  : '—'
+              }
+            />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.resources.mainLoop')}
+              value={resourceSnapshot ? `${resourceSnapshot.mainEventLoop.p95Ms} ms` : '—'}
+            />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.resources.rendererLoop')}
+              value={
+                resourceSnapshot?.rendererPerformance
+                  ? `${resourceSnapshot.rendererPerformance.eventLoop.p95Ms} ms`
+                  : '—'
+              }
+            />
           </div>
-          {runningAgentSessions.length > 1 && isRunningAgentListOpen ? (
+          {resourceSnapshot ? (
+            <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2 text-[11px]">
+              <span className="text-foreground-passive">
+                {t('workspaceRuntime.resources.scheduler')}
+              </span>
+              <span className="font-mono tabular-nums text-foreground-muted">
+                {resourceSnapshot.admission.mode === 'unlimited'
+                  ? t('workspaceRuntime.resources.schedulerUnlimited')
+                  : t('workspaceRuntime.resources.schedulerSummary', {
+                      active: runningAgentCount,
+                      limit: resourceSnapshot.admission.effectiveLimit,
+                      queued: resourceSnapshot.admission.queued,
+                      memory: resourceSnapshot.admission.memoryUsedPercent,
+                    })}
+              </span>
+            </div>
+          ) : null}
+          {runningAgentSessions.length > 0 && isRunningAgentListOpen ? (
             <div id="workspace-running-agent-list" className="border-b border-border p-3">
               <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
                 {t('workspaceRuntime.resources.runningAgents')}
@@ -828,6 +863,19 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                         <span className="block truncate text-sm text-foreground">{title}</span>
                         <span className="block truncate text-[11px] text-foreground-passive">
                           {session.taskTitle} · {t(`agentStatus.${session.status}`)}
+                        </span>
+                        <span className="block truncate font-mono text-[10px] text-foreground-passive">
+                          PID {session.pid ?? '—'} · {Math.round(session.cpuPercent)}% ·{' '}
+                          {formatBytes(session.memoryBytes)} ·{' '}
+                          {formatBytes(session.outputBytesPerSecond)}/s ·{' '}
+                          {formatBytes(session.ringBufferBytes)}/
+                          {formatBytes(session.ringBufferCapBytes)} buffer ·{' '}
+                          {t('workspaceRuntime.resources.lastActivity', {
+                            time: session.lastActivityAt
+                              ? new Date(session.lastActivityAt).toLocaleTimeString()
+                              : '—',
+                          })}{' '}
+                          · {t(`workspaceRuntime.resources.lifecycle.${session.lifecycle}`)}
                         </span>
                       </span>
                       <AgentStatusIndicator

@@ -1,10 +1,15 @@
 import { exec } from 'node:child_process';
 import { stat, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { eq } from 'drizzle-orm';
 import { app, clipboard, dialog, shell } from 'electron';
 import { isAiLabWindowTarget, type AiLabWindowTarget } from '@shared/ai-lab-window';
-import type { AppResourceSnapshot } from '@shared/app-resource';
+import type {
+  AppEventLoopMetrics,
+  AppResourceSnapshot,
+  RendererPerformanceSample,
+} from '@shared/app-resource';
 import { isComparisonWindowTarget, type ComparisonWindowTarget } from '@shared/comparison-window';
 import {
   appPasteChannel,
@@ -33,6 +38,8 @@ import {
 } from '@main/app/task-window-dock';
 import { openTaskWindowFromPool } from '@main/app/task-window-pool';
 import { createAiLabWindow, createComparisonWindow, getMainWindow } from '@main/app/window';
+import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
+import { appSettingsService } from '@main/core/settings/settings-service';
 import { taskManager } from '@main/core/tasks/task-manager';
 import { db } from '@main/db/client';
 import { sshConnections } from '@main/db/schema';
@@ -50,6 +57,8 @@ import {
   buildRemoteSshCommand,
   buildRemoteTerminalExecArgs,
 } from '@main/utils/remoteOpenIn';
+import { agentAdmissionScheduler } from './agent-admission-scheduler';
+import { sampleProcessTrees } from './agent-process-sampler';
 import {
   checkCommand,
   checkMacApp,
@@ -66,6 +75,7 @@ import {
 } from './voice-input';
 
 const FONT_CACHE_TTL_MS = 5 * 60 * 1_000;
+const IDLE_SESSION_SWEEP_INTERVAL_MS = 30_000;
 
 type RemoteTerminalLaunchAttempt = {
   file: string;
@@ -84,9 +94,18 @@ class AppService implements IInitializable, IDisposable {
   private cachedAppVersionPromise: Promise<string> | null = null;
   private cachedInstalledFonts: { fonts: string[]; fetchedAt: number } | null = null;
   private _unsubscribes: Array<() => void> = [];
+  private readonly mainEventLoopHistogram = monitorEventLoopDelay({ resolution: 20 });
+  private rendererPerformance: RendererPerformanceSample | null = null;
+  private idleSessionSweepTimer: ReturnType<typeof setInterval> | null = null;
 
   initialize(): void {
     void this.getCachedAppVersion();
+    this.mainEventLoopHistogram.enable();
+    this.idleSessionSweepTimer = setInterval(
+      () => void this.hibernateIdleSessions(),
+      IDLE_SESSION_SWEEP_INTERVAL_MS
+    );
+    this.idleSessionSweepTimer.unref?.();
 
     this._unsubscribes = [
       events.on(appUndoChannel, () => {
@@ -104,6 +123,11 @@ class AppService implements IInitializable, IDisposable {
   dispose(): void {
     for (const unsub of this._unsubscribes) unsub();
     this._unsubscribes = [];
+    this.mainEventLoopHistogram.disable();
+    if (this.idleSessionSweepTimer) {
+      clearInterval(this.idleSessionSweepTimer);
+      this.idleSessionSweepTimer = null;
+    }
   }
 
   getCachedAppVersion(): Promise<string> {
@@ -117,7 +141,7 @@ class AppService implements IInitializable, IDisposable {
     return this.cachedAppVersionPromise;
   }
 
-  getResourceSnapshot(): AppResourceSnapshot {
+  async getResourceSnapshot(): Promise<AppResourceSnapshot> {
     const processes = app
       .getAppMetrics()
       .map((metric) => ({
@@ -128,15 +152,15 @@ class AppService implements IInitializable, IDisposable {
         memoryBytes: metric.memory.workingSetSize * 1024,
       }))
       .sort((left, right) => right.memoryBytes - left.memoryBytes);
-    const runningAgentSessions = taskManager.getRunningAgentSessions();
-
-    return {
-      sampledAt: new Date().toISOString(),
-      cpuPercent:
-        Math.round(processes.reduce((total, item) => total + item.cpuPercent, 0) * 10) / 10,
-      memoryBytes: processes.reduce((total, item) => total + item.memoryBytes, 0),
-      activeAgentSessions: runningAgentSessions.length,
-      runningAgentSessions: runningAgentSessions.map((session) => ({
+    const agentSessions = taskManager.getAgentSessions();
+    const processTrees = await sampleProcessTrees(
+      agentSessions.flatMap((session) => (session.pid === undefined ? [] : [session.pid]))
+    );
+    const runningAgentSessions = agentSessions.map((session) => {
+      const diagnostics = ptySessionRegistry.getDiagnostics(session.sessionId);
+      const processTree = session.pid === undefined ? undefined : processTrees.get(session.pid);
+      const lastActivityAt = Math.max(session.statusChangedAt, diagnostics?.lastOutputAt ?? 0);
+      return {
         projectId: session.projectId,
         taskId: session.taskId,
         conversationId: session.conversationId,
@@ -144,9 +168,73 @@ class AppService implements IInitializable, IDisposable {
         title: session.title,
         taskTitle: session.taskTitle ?? session.taskId,
         status: session.status,
-      })),
+        pid: processTree?.pid ?? session.pid ?? null,
+        cpuPercent: processTree?.cpuPercent ?? 0,
+        memoryBytes: processTree?.memoryBytes ?? 0,
+        outputBytesPerSecond: diagnostics?.outputBytesPerSecond ?? 0,
+        lastActivityAt: lastActivityAt > 0 ? new Date(lastActivityAt).toISOString() : null,
+        ringBufferBytes: diagnostics?.ringBufferBytes ?? 0,
+        ringBufferCapBytes: diagnostics?.ringBufferCapBytes ?? 0,
+        rendererConsumers: diagnostics?.consumerCount ?? 0,
+        lifecycle: diagnostics?.consumerCount ? ('hot' as const) : ('warm' as const),
+      };
+    });
+    const agentCpuPercent = runningAgentSessions.reduce(
+      (total, session) => total + session.cpuPercent,
+      0
+    );
+    const agentMemoryBytes = runningAgentSessions.reduce(
+      (total, session) => total + session.memoryBytes,
+      0
+    );
+    const mainEventLoop = this.readMainEventLoopMetrics();
+    const admission = await agentAdmissionScheduler.getSnapshot();
+
+    return {
+      sampledAt: new Date().toISOString(),
+      cpuPercent:
+        Math.round(
+          (processes.reduce((total, item) => total + item.cpuPercent, 0) + agentCpuPercent) * 10
+        ) / 10,
+      memoryBytes:
+        processes.reduce((total, item) => total + item.memoryBytes, 0) + agentMemoryBytes,
+      activeAgentSessions: taskManager.getRunningAgentSessions().length,
+      runningAgentSessions,
       processes,
+      mainEventLoop,
+      rendererPerformance: this.rendererPerformance,
+      admission,
     };
+  }
+
+  reportRendererPerformance(sample: RendererPerformanceSample): void {
+    this.rendererPerformance = sample;
+  }
+
+  private readMainEventLoopMetrics(): AppEventLoopMetrics {
+    const toMs = (nanoseconds: number): number => {
+      const value = nanoseconds / 1_000_000;
+      return Number.isFinite(value) ? Math.round(value * 10) / 10 : 0;
+    };
+    const metrics = {
+      p50Ms: toMs(this.mainEventLoopHistogram.percentile(50)),
+      p95Ms: toMs(this.mainEventLoopHistogram.percentile(95)),
+      p99Ms: toMs(this.mainEventLoopHistogram.percentile(99)),
+      maxMs: toMs(this.mainEventLoopHistogram.max),
+    };
+    this.mainEventLoopHistogram.reset();
+    return metrics;
+  }
+
+  private async hibernateIdleSessions(): Promise<void> {
+    try {
+      const settings = await appSettingsService.get('terminal');
+      const timeoutMs = settings.idleSessionTimeoutMinutes * 60_000;
+      const count = await taskManager.hibernateIdleAgentSessions(timeoutMs);
+      if (count > 0) log.info('AppService: hibernated idle agent sessions', { count });
+    } catch (error) {
+      log.warn('AppService: idle session sweep failed', { error: String(error) });
+    }
   }
 
   async listInstalledFonts(

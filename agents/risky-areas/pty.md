@@ -25,6 +25,11 @@
 - confirm renderer event flow if hook payload or notification behavior changes
 - preserve the output contract: generation isolates respawns, sequence joins
   snapshot/live data exactly once, and xterm write ACKs release PTY backpressure
+- keep renderer PTYs bounded by the configured hot-terminal LRU; an evicted
+  xterm must unsubscribe and be reconstructed from the main-process snapshot
+- idle-session hibernation may terminate only detachable `idle`/`completed`
+  sessions with zero renderer consumers; first reopen/input must transparently
+  resume through the existing conversation registration epoch
 - decode byte streams incrementally; never call `Buffer.toString('utf8')`
   independently on arbitrary SSH/network chunks
 - keep replay buffers bounded by UTF-8 bytes without slicing inside a code point

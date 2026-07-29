@@ -14,6 +14,7 @@ import { applyHookOverrides } from '@main/core/agent-hooks/inspect/hook-override
 import { hookOverridesStore } from '@main/core/agent-hooks/inspect/hook-overrides-store';
 import { aiLogService } from '@main/core/ai-logs/ai-log-service';
 import { interactiveTurnLogger } from '@main/core/ai-logs/interactive-turn-logger';
+import { agentAdmissionScheduler } from '@main/core/app/agent-admission-scheduler';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
 import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-interrupt-sniffer';
@@ -173,6 +174,15 @@ export class LocalConversationProvider implements ConversationProvider {
     this.pendingStarts.set(sessionId, { token: startToken, completion });
 
     const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+    const releaseAdmission = await agentAdmissionScheduler.admit(sessionId, () =>
+      this.ownsPendingStart(sessionId, startToken)
+    );
+    if (!releaseAdmission) {
+      ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
+      if (this.ownsPendingStart(sessionId, startToken)) this.pendingStarts.delete(sessionId);
+      resolveCompletion();
+      return;
+    }
     let registrationAttempted = false;
     let registrationCompleted = false;
     let startCommitted = false;
@@ -648,6 +658,7 @@ export class LocalConversationProvider implements ConversationProvider {
       }
       if (ownsStart) this.pendingStarts.delete(sessionId);
       if (!startFailed) resolveCompletion();
+      releaseAdmission();
     }
   }
 

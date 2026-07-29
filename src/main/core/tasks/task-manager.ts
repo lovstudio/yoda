@@ -9,6 +9,7 @@ import type { Terminal } from '@shared/terminals';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import type { ActiveConversationSession } from '@main/core/conversations/types';
 import type { IExecutionContext } from '@main/core/execution-context/types';
+import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { killTmuxSession, makeTmuxSessionName } from '@main/core/pty/tmux-session-name';
 import { getTaskSessionLeafIds } from '@main/core/tasks/session-targets';
 import { taskEvents } from '@main/core/tasks/task-events';
@@ -21,6 +22,7 @@ import { LifecycleMap } from '@main/lib/lifecycle-map';
 import { log } from '@main/lib/logger';
 import type { ProjectProvider, ProvisionResult, TaskProvider } from '../projects/project-provider';
 import { withTimeout } from '../projects/utils';
+import { shouldHibernateIdleSession } from './idle-session-hibernation';
 import {
   formatProvisionTaskError,
   TASK_TIMEOUT_MS,
@@ -45,6 +47,7 @@ export type ActiveAgentSessionSummary = {
 
 export type RunningAgentSession = ActiveConversationSession & {
   status: ReturnType<typeof agentSessionRuntimeStore.getStatus>;
+  statusChangedAt: number;
 };
 
 export type TaskManagerHooks = {
@@ -294,15 +297,57 @@ class TaskManager {
   }
 
   getRunningAgentSessions(): RunningAgentSession[] {
+    return this.getAgentSessions().filter((session) => isAgentSessionRunningStatus(session.status));
+  }
+
+  getAgentSessions(): RunningAgentSession[] {
     const sessions: RunningAgentSession[] = [];
     for (const stored of this._lifecycle.values()) {
       for (const session of stored.taskProvider.conversations.getActiveSessions()) {
-        const status = agentSessionRuntimeStore.getStatus(session);
-        if (!isAgentSessionRunningStatus(status)) continue;
-        sessions.push({ ...session, taskTitle: stored.taskName, status });
+        const state = agentSessionRuntimeStore.getState(session);
+        sessions.push({
+          ...session,
+          taskTitle: stored.taskName,
+          status: state.status,
+          statusChangedAt: state.updatedAt,
+        });
       }
     }
     return sessions;
+  }
+
+  async hibernateIdleAgentSessions(timeoutMs: number): Promise<number> {
+    if (timeoutMs <= 0) return 0;
+    const now = Date.now();
+    const candidates: Array<{ provider: TaskProvider['conversations']; conversationId: string }> =
+      [];
+    for (const stored of this._lifecycle.values()) {
+      for (const session of stored.taskProvider.conversations.getActiveSessions()) {
+        const state = agentSessionRuntimeStore.getState(session);
+        const diagnostics = ptySessionRegistry.getDiagnostics(session.sessionId);
+        if (
+          !diagnostics ||
+          !shouldHibernateIdleSession({
+            detachable: session.detachable,
+            status: state.status,
+            statusChangedAt: state.updatedAt,
+            now,
+            timeoutMs,
+            rendererConsumers: diagnostics.consumerCount,
+          })
+        ) {
+          continue;
+        }
+        candidates.push({
+          provider: stored.taskProvider.conversations,
+          conversationId: session.conversationId,
+        });
+      }
+    }
+    const results = await Promise.allSettled(
+      candidates.map(({ provider, conversationId }) => provider.stopSession(conversationId))
+    );
+    return results.filter((result) => result.status === 'fulfilled').length;
   }
 
   getActiveAgentSessionSummary(): ActiveAgentSessionSummary {
