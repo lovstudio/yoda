@@ -11,8 +11,11 @@ export type LiteLlmManagedState =
   | 'running'
   | 'external-running';
 
+export type LiteLlmManagedOperation = 'installing' | 'starting' | 'stopping' | 'starting-docker';
+
 export type LiteLlmManagedStatus = {
   state: LiteLlmManagedState;
+  operation: LiteLlmManagedOperation | null;
   managed: boolean;
   installed: boolean;
   dockerInstalled: boolean;

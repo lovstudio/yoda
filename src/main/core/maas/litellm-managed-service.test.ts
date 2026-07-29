@@ -192,6 +192,79 @@ describe('LiteLlmManagedService', () => {
     expect(composeFile).not.toContain(values.get('yoda-litellm-postgres-password')!);
   });
 
+  it('reuses an active installation when another request also targets a running gateway', async () => {
+    const directory = await createTemporaryDirectory();
+    let stackRunning = false;
+    let releasePull!: () => void;
+    let reportPullStarted!: () => void;
+    const pullGate = new Promise<void>((resolve) => {
+      releasePull = resolve;
+    });
+    const pullStarted = new Promise<void>((resolve) => {
+      reportPullStarted = resolve;
+    });
+    const dockerCalls: string[][] = [];
+    const runDocker: DockerCommandRunner = vi.fn(async (args) => {
+      dockerCalls.push(args);
+      if (args[0] === '--version') {
+        return { stdout: 'Docker version 28.0.0', stderr: '' };
+      }
+      if (args[0] === 'info') {
+        return { stdout: '28.0.0', stderr: '' };
+      }
+      if (args.includes('pull')) {
+        reportPullStarted();
+        await pullGate;
+      }
+      if (args.includes('up')) stackRunning = true;
+      return { stdout: '', stderr: '' };
+    });
+    const { store } = createSecretStore();
+    const service = new LiteLlmManagedService({
+      getManagedDirectory: () => directory,
+      runDocker,
+      fetch: vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/health/readiness')) {
+          return stackRunning
+            ? jsonResponse({ status: 'healthy', db: 'connected' })
+            : jsonResponse({ status: 'offline' }, 503);
+        }
+        if (url.endsWith('/key/generate') && init?.method === 'POST') {
+          return jsonResponse({ key: 'sk-yoda-virtual' });
+        }
+        if (url.endsWith('/v1/models')) {
+          return jsonResponse({ data: [] });
+        }
+        return jsonResponse({}, 404);
+      }) as typeof fetch,
+      secretStore: store,
+      maasConnector: { connectPlatform: vi.fn(async () => ({ success: true as const })) },
+      platform: 'darwin',
+    });
+
+    const installation = service.install();
+    await pullStarted;
+    await expect(service.getStatus()).resolves.toMatchObject({
+      state: 'stopped',
+      operation: 'installing',
+    });
+
+    const duplicateStart = service.start();
+    releasePull();
+
+    await expect(installation).resolves.toMatchObject({
+      success: true,
+      status: { state: 'running', operation: null },
+    });
+    await expect(duplicateStart).resolves.toMatchObject({
+      success: true,
+      status: { state: 'running', operation: null },
+    });
+    expect(dockerCalls.filter((args) => args.includes('pull'))).toHaveLength(1);
+    expect(dockerCalls.filter((args) => args.includes('up'))).toHaveLength(1);
+  });
+
   it('copies the managed administrator password before opening the console', async () => {
     const directory = await createTemporaryDirectory();
     const runDocker: DockerCommandRunner = vi.fn(async (args) =>

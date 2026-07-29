@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import {
   LITELLM_DOCKER_DESKTOP_URL,
   LITELLM_MANAGED_ENDPOINT,
+  type LiteLlmManagedOperation,
   type LiteLlmManagedState,
 } from '@shared/litellm-managed';
 import type { MaasConnection } from '@shared/maas';
@@ -30,6 +31,20 @@ import { Button } from '@renderer/lib/ui/button';
 
 type LiteLlmIntegrationCardProps = {
   onOpenManualSettings: () => void;
+};
+
+const operationActionKeys: Record<LiteLlmManagedOperation, string> = {
+  installing: 'settings.integrationsTab.litellmInstalling',
+  starting: 'settings.integrationsTab.litellmStarting',
+  stopping: 'settings.integrationsTab.litellmStopping',
+  'starting-docker': 'settings.integrationsTab.litellmStartingDocker',
+};
+
+const operationStatusKeys: Record<LiteLlmManagedOperation, string> = {
+  installing: 'settings.integrationsTab.litellmStatusInstalling',
+  starting: 'settings.integrationsTab.litellmStatusStarting',
+  stopping: 'settings.integrationsTab.litellmStatusStopping',
+  'starting-docker': 'settings.integrationsTab.litellmStatusDockerStarting',
 };
 
 function stateTone(state: LiteLlmManagedState | undefined): string {
@@ -60,6 +75,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
 
   const status = statusQuery.data;
   const operationPending =
+    Boolean(status?.operation) ||
     install.isPending ||
     start.isPending ||
     stop.isPending ||
@@ -77,6 +93,18 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     }
     if (statusQuery.isLoading) return t('settings.integrationsTab.litellmDetecting');
     if (statusQuery.isError || !status) return t('settings.integrationsTab.litellmDetectionFailed');
+    if (status.operation === 'installing') {
+      return t('settings.integrationsTab.litellmInstallingDescription');
+    }
+    if (status.operation === 'starting') {
+      return t('settings.integrationsTab.litellmStartingDescription');
+    }
+    if (status.operation === 'stopping') {
+      return t('settings.integrationsTab.litellmStoppingDescription');
+    }
+    if (status.operation === 'starting-docker') {
+      return t('settings.integrationsTab.litellmDockerStartingDescription');
+    }
 
     switch (status.state) {
       case 'docker-missing':
@@ -104,19 +132,21 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
 
   const statusLabel = remoteConnection
     ? t('settings.integrationsTab.litellmStatusRemote')
-    : status?.state === 'running'
-      ? status.modelCount === 0
-        ? t('settings.integrationsTab.litellmStatusNeedsModel')
-        : t('settings.integrationsTab.litellmStatusReady')
-      : status?.state === 'external-running'
-        ? t('settings.integrationsTab.litellmStatusDetected')
-        : status?.state === 'stopped'
-          ? t('settings.integrationsTab.litellmStatusStopped')
-          : status?.state === 'docker-starting'
-            ? t('settings.integrationsTab.litellmStatusDockerStarting')
-            : status?.state === 'docker-stopped'
-              ? t('settings.integrationsTab.litellmStatusDockerStopped')
-              : t('settings.integrationsTab.litellmStatusNotInstalled');
+    : status?.operation
+      ? t(operationStatusKeys[status.operation])
+      : status?.state === 'running'
+        ? status.modelCount === 0
+          ? t('settings.integrationsTab.litellmStatusNeedsModel')
+          : t('settings.integrationsTab.litellmStatusReady')
+        : status?.state === 'external-running'
+          ? t('settings.integrationsTab.litellmStatusDetected')
+          : status?.state === 'stopped'
+            ? t('settings.integrationsTab.litellmStatusStopped')
+            : status?.state === 'docker-starting'
+              ? t('settings.integrationsTab.litellmStatusDockerStarting')
+              : status?.state === 'docker-stopped'
+                ? t('settings.integrationsTab.litellmStatusDockerStopped')
+                : t('settings.integrationsTab.litellmStatusNotInstalled');
 
   const runAction = async (
     action: () => Promise<unknown>,
@@ -176,6 +206,15 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
             <RefreshCw className="mr-1.5 h-4 w-4" />
           )}
           {t('settings.integrationsTab.litellmRecheck')}
+        </Button>
+      );
+    }
+
+    if (status.operation) {
+      return (
+        <Button type="button" size="sm" disabled>
+          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+          {t(operationActionKeys[status.operation])}
         </Button>
       );
     }
@@ -383,7 +422,11 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
               <span
                 className={`h-1.5 w-1.5 rounded-full ${stateTone(
-                  remoteConnection ? 'external-running' : status?.state
+                  remoteConnection
+                    ? 'external-running'
+                    : status?.operation
+                      ? 'docker-starting'
+                      : status?.state
                 )}`}
               />
               {statusLabel}
