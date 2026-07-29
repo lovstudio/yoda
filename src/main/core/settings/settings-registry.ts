@@ -18,10 +18,7 @@ import {
   DEFAULT_TASK_NAMING_RECENT_TASK_LIMIT,
   DEFAULT_TASK_NAMING_TIMEOUT_MS,
 } from '@shared/task-naming';
-import {
-  DEFAULT_TERMINAL_RENDERER,
-  DEFAULT_TERMINAL_SCROLLBACK_LINES,
-} from '@shared/terminal-settings';
+import { DEFAULT_TERMINAL_SCROLLBACK_LINES } from '@shared/terminal-settings';
 import { getDefaultLocalWorktreeDirectory } from './worktree-defaults';
 
 export const DEFAULT_RUNTIME_ID = 'claude';
@@ -96,7 +93,6 @@ export const SETTINGS_DEFAULTS = {
     soundFocusMode: 'always' as const,
   },
   terminal: {
-    renderer: DEFAULT_TERMINAL_RENDERER,
     autoCopyOnSelection: true,
     scrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
   },

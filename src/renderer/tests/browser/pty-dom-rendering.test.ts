@@ -12,19 +12,14 @@ vi.mock('@renderer/lib/ipc', () => ({
       openExternal: vi.fn(),
     },
     pty: {
-      subscribe: vi.fn(),
+      subscribe: vi.fn(async () => ({
+        success: true,
+        data: { buffer: '', generation: 1, sequence: 0 },
+      })),
       unsubscribe: vi.fn(() => Promise.resolve()),
+      acknowledgeOutput: vi.fn(() => Promise.resolve()),
+      heartbeatConsumer: vi.fn(() => Promise.resolve()),
     },
-  },
-}));
-
-vi.mock('@renderer/lib/hooks/use-toast', () => ({
-  toast: vi.fn(),
-}));
-
-vi.mock('@renderer/lib/i18n', () => ({
-  default: {
-    t: (key: string) => key,
   },
 }));
 
@@ -113,7 +108,7 @@ function countDifferentChannels(first: ImageData, second: ImageData): number {
   return differences;
 }
 
-describe('FrontendPty WebGL scrolling', () => {
+describe('FrontendPty DOM rendering', () => {
   const ptys: FrontendPty[] = [];
   const mountTargets: HTMLDivElement[] = [];
 
@@ -136,7 +131,7 @@ describe('FrontendPty WebGL scrolling', () => {
     });
     document.body.appendChild(mountTarget);
 
-    const pty = new FrontendPty('session-webgl-visual', {
+    const pty = new FrontendPty('session-dom-visual', {
       override: {
         background: '#ffffff',
         foreground: '#111111',
@@ -144,13 +139,12 @@ describe('FrontendPty WebGL scrolling', () => {
       },
     });
     ptys.push(pty);
-    pty.setRendererPreference('webgl');
     pty.flushPendingWrites();
     pty.mount(mountTarget, { cols: 80, rows: 24 });
-    expect(pty.getRendererDiagnosticsEntry().engine).toBe('webgl');
+    expect(pty.ownedContainer.querySelector('.xterm-rows')).not.toBeNull();
 
     // Deliver output across multiple renderer frames instead of as one parser
-    // chunk. This is the shape that previously exposed stale WebGL rows during
+    // chunk. This is the shape that previously exposed stale retained rows during
     // sustained agent output.
     for (let batch = 0; batch < 20; batch += 1) {
       await writeTerminal(
@@ -177,7 +171,7 @@ describe('FrontendPty WebGL scrolling', () => {
     expect(Math.max(...counts.values())).toBeLessThanOrEqual(2);
   });
 
-  it('keeps a sibling WebGL terminal pixel-stable while the other scrolls and is disposed', async () => {
+  it('keeps a sibling terminal pixel-stable while the other scrolls and is disposed', async () => {
     const firstTarget = document.createElement('div');
     const secondTarget = document.createElement('div');
     mountTargets.push(firstTarget, secondTarget);
@@ -193,14 +187,14 @@ describe('FrontendPty WebGL scrolling', () => {
     }
     document.body.append(firstTarget, secondTarget);
 
-    const first = new FrontendPty('session-webgl-atlas-first', {
+    const first = new FrontendPty('session-dom-isolation-first', {
       override: {
         background: '#ffffff',
         foreground: '#191919',
         cursor: '#ffffff',
       },
     });
-    const second = new FrontendPty('session-webgl-atlas-second', {
+    const second = new FrontendPty('session-dom-isolation-second', {
       override: {
         background: '#ffffff',
         foreground: '#191919',
@@ -212,10 +206,9 @@ describe('FrontendPty WebGL scrolling', () => {
       [first, firstTarget],
       [second, secondTarget],
     ] as const) {
-      pty.setRendererPreference('webgl');
       pty.flushPendingWrites();
       pty.mount(target, { cols: 72, rows: 20 });
-      expect(pty.getRendererDiagnosticsEntry().engine).toBe('webgl');
+      expect(pty.ownedContainer.querySelector('.xterm-rows')).not.toBeNull();
     }
 
     await writeTerminal(
@@ -250,43 +243,9 @@ describe('FrontendPty WebGL scrolling', () => {
     await nextAnimationFrame();
     await nextAnimationFrame();
 
-    expect(second.getRendererDiagnosticsEntry().engine).toBe('webgl');
+    expect(second.ownedContainer.querySelector('.xterm-rows')).not.toBeNull();
     const afterSiblingDispose = await screenshotPixels(secondScreen);
     expect(hashImage(afterSiblingDispose)).toBe(hashImage(before));
     expect(countDifferentChannels(afterSiblingDispose, before)).toBe(0);
-  });
-
-  it('falls back to the DOM renderer after a WebGL context-loss event', async () => {
-    const mountTarget = document.createElement('div');
-    mountTargets.push(mountTarget);
-    Object.assign(mountTarget.style, {
-      position: 'absolute',
-      width: '640px',
-      height: '320px',
-    });
-    document.body.appendChild(mountTarget);
-
-    const pty = new FrontendPty('session-webgl-context-loss');
-    ptys.push(pty);
-    pty.setRendererPreference('webgl');
-    pty.flushPendingWrites();
-    pty.mount(mountTarget, { cols: 80, rows: 20 });
-    await writeTerminal(pty, 'content-survives-context-loss');
-
-    const canvases = pty.ownedContainer.querySelectorAll<HTMLCanvasElement>('.xterm-screen canvas');
-    expect(canvases.length).toBeGreaterThan(0);
-    vi.useFakeTimers();
-    for (const canvas of canvases) {
-      canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
-    }
-    await vi.advanceTimersByTimeAsync(3_000);
-
-    expect(pty.getRendererDiagnosticsEntry()).toMatchObject({
-      engine: 'dom',
-      issue: 'webgl-context-lost',
-    });
-    expect(pty.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(
-      'content-survives-context-loss'
-    );
   });
 });

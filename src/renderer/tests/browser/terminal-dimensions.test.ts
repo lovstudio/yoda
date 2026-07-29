@@ -5,7 +5,7 @@
  * reflects genuine CSS layout — no stubs required for the DOM or CSSOM.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { measureDimensions } from '@renderer/lib/pty/pty-dimensions';
+import { measureDimensions, TERMINAL_FIT_GUARD_COLUMNS } from '@renderer/lib/pty/pty-dimensions';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -95,6 +95,15 @@ describe('measureDimensions', () => {
     });
   });
 
+  it('keeps the shared terminal fit one column inside the clipping edge', () => {
+    container = makeContainer('800px', '400px');
+
+    expect(measureDimensions(container, CW, CH, 0, TERMINAL_FIT_GUARD_COLUMNS)).toEqual({
+      cols: 99,
+      rows: 25,
+    });
+  });
+
   it('clamps cols to MINIMUM_COLS (2) when container is very narrow', () => {
     container = makeContainer('3px', '400px'); // 3 / 8 = 0 → clamp to 2
     const dims = measureDimensions(container, CW, CH);
@@ -130,6 +139,25 @@ describe('measureDimensions', () => {
     const dims = measureDimensions(container, CW, 16.5);
     expect(dims).not.toBeNull();
     expect(dims!.rows).toBe(Math.floor(400 / 16.5));
+  });
+
+  it('preserves fractional container pixels at a column and row boundary', () => {
+    container = makeContainer('800.75px', '400.75px');
+    const dims = measureDimensions(container, 8.0075, 16.03);
+
+    expect(dims).toEqual({ cols: 100, rows: 25 });
+  });
+
+  it('measures the content box instead of counting border and padding as terminal space', () => {
+    container = makeContainer('826px', '422px');
+    container.style.boxSizing = 'border-box';
+    container.style.padding = '8px 10px';
+    container.style.border = '3px solid transparent';
+
+    expect(measureDimensions(container, CW, CH)).toEqual({
+      cols: 100,
+      rows: 25,
+    });
   });
 
   // ── Height-chain integration ───────────────────────────────────────────────

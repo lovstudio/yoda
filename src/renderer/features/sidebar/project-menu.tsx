@@ -7,7 +7,7 @@ import {
   Copy,
   FolderPen,
   Info,
-  ListPlus,
+  Loader2,
   PencilLine,
   Pin,
   PinOff,
@@ -20,6 +20,7 @@ import {
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { QuickAction } from '@shared/project-settings';
+import type { ProjectLaunchCommand } from '@shared/quick-actions';
 import {
   WorkspaceAssignContextSubmenu,
   WorkspaceAssignDropdownSubmenu,
@@ -33,7 +34,9 @@ import { rpc } from '@renderer/lib/ipc';
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuLabel,
   ContextMenuSeparator,
   ContextMenuSub,
   ContextMenuSubContent,
@@ -43,7 +46,9 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -68,6 +73,9 @@ interface ProjectMenuActions {
   onConfigureScripts?: () => void;
   onCaptureAutomation?: () => void;
   quickActions?: QuickAction[];
+  launchCommands?: ProjectLaunchCommand[];
+  launchCommandsLoading?: boolean;
+  launchCommandsFailed?: boolean;
   onRunQuickAction?: (action: QuickAction) => void;
   onMenuOpen?: () => void;
   onRename?: () => void;
@@ -271,33 +279,92 @@ async function copyProjectPath(path: string, t: TFunction) {
   }
 }
 
+function quickActionFromLaunchCommand(command: ProjectLaunchCommand): QuickAction {
+  return {
+    id: command.id,
+    label: command.label,
+    command: command.command,
+    kind: 'shell',
+  };
+}
+
 function ProjectQuickActionsContextSubmenu({ actions }: { actions: ProjectMenuActions }) {
   const { t } = useTranslation();
   const quickActions = actions.quickActions ?? [];
+  const launchCommands = (actions.launchCommands ?? []).filter(
+    (command) => !quickActions.some((action) => action.command.trim() === command.command)
+  );
+  const hasCommands = launchCommands.length > 0 || quickActions.length > 0;
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger>
-        <WandSparkles className="size-4" />
+        <Play className="size-4" />
         {t('sidebar.captureAutomation.menuLabel')}
       </ContextMenuSubTrigger>
-      <ContextMenuSubContent className="min-w-48">
-        {quickActions.length === 0 ? (
-          <ContextMenuItem disabled>{t('projects.quickActions.empty')}</ContextMenuItem>
-        ) : (
-          quickActions.map((action) => (
-            <ContextMenuItem
-              key={action.id}
-              disabled={!actions.onRunQuickAction}
-              onClick={(event) => {
-                event.stopPropagation();
-                actions.onRunQuickAction?.(action);
-              }}
-            >
-              <Play className="size-4" />
-              {action.label}
-            </ContextMenuItem>
-          ))
-        )}
+      <ContextMenuSubContent className="min-w-72 max-w-96">
+        {actions.launchCommandsLoading && launchCommands.length === 0 ? (
+          <ContextMenuItem disabled>
+            <Loader2 className="size-4 animate-spin" />
+            {t('sidebar.captureAutomation.loadingCommands')}
+          </ContextMenuItem>
+        ) : null}
+        {launchCommands.length > 0 ? (
+          <ContextMenuGroup>
+            <ContextMenuLabel>{t('sidebar.captureAutomation.detectedCommands')}</ContextMenuLabel>
+            {launchCommands.map((command) => (
+              <ContextMenuItem
+                key={command.id}
+                disabled={!actions.onRunQuickAction}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  actions.onRunQuickAction?.(quickActionFromLaunchCommand(command));
+                }}
+              >
+                <Play className="size-4" />
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate">{command.label}</span>
+                  <span className="truncate font-mono text-[10px] text-foreground-passive">
+                    {command.command}
+                  </span>
+                </span>
+              </ContextMenuItem>
+            ))}
+          </ContextMenuGroup>
+        ) : null}
+        {quickActions.length > 0 ? (
+          <>
+            {launchCommands.length > 0 ? <ContextMenuSeparator /> : null}
+            <ContextMenuGroup>
+              <ContextMenuLabel>{t('sidebar.captureAutomation.savedCommands')}</ContextMenuLabel>
+              {quickActions.map((action) => (
+                <ContextMenuItem
+                  key={action.id}
+                  disabled={!actions.onRunQuickAction}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    actions.onRunQuickAction?.(action);
+                  }}
+                >
+                  <Play className="size-4" />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">{action.label}</span>
+                    <span className="truncate font-mono text-[10px] text-foreground-passive">
+                      {action.command}
+                    </span>
+                  </span>
+                </ContextMenuItem>
+              ))}
+            </ContextMenuGroup>
+          </>
+        ) : null}
+        {!actions.launchCommandsLoading && actions.launchCommandsFailed ? (
+          <ContextMenuItem disabled>
+            {t('sidebar.captureAutomation.loadCommandsFailed')}
+          </ContextMenuItem>
+        ) : null}
+        {!actions.launchCommandsLoading && !actions.launchCommandsFailed && !hasCommands ? (
+          <ContextMenuItem disabled>{t('sidebar.captureAutomation.noCommands')}</ContextMenuItem>
+        ) : null}
         <ContextMenuSeparator />
         <ContextMenuItem
           onClick={(event) => {
@@ -305,7 +372,7 @@ function ProjectQuickActionsContextSubmenu({ actions }: { actions: ProjectMenuAc
             actions.onCaptureAutomation?.();
           }}
         >
-          <ListPlus className="size-4" />
+          <WandSparkles className="size-4" />
           {t('sidebar.captureAutomation.createLabel')}
         </ContextMenuItem>
       </ContextMenuSubContent>
@@ -316,30 +383,80 @@ function ProjectQuickActionsContextSubmenu({ actions }: { actions: ProjectMenuAc
 function ProjectQuickActionsDropdownSubmenu({ actions }: { actions: ProjectMenuActions }) {
   const { t } = useTranslation();
   const quickActions = actions.quickActions ?? [];
+  const launchCommands = (actions.launchCommands ?? []).filter(
+    (command) => !quickActions.some((action) => action.command.trim() === command.command)
+  );
+  const hasCommands = launchCommands.length > 0 || quickActions.length > 0;
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
-        <WandSparkles className="size-4" />
+        <Play className="size-4" />
         {t('sidebar.captureAutomation.menuLabel')}
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="min-w-48">
-        {quickActions.length === 0 ? (
-          <DropdownMenuItem disabled>{t('projects.quickActions.empty')}</DropdownMenuItem>
-        ) : (
-          quickActions.map((action) => (
-            <DropdownMenuItem
-              key={action.id}
-              disabled={!actions.onRunQuickAction}
-              onClick={(event) => {
-                event.stopPropagation();
-                actions.onRunQuickAction?.(action);
-              }}
-            >
-              <Play className="size-4" />
-              {action.label}
-            </DropdownMenuItem>
-          ))
-        )}
+      <DropdownMenuSubContent className="min-w-72 max-w-96">
+        {actions.launchCommandsLoading && launchCommands.length === 0 ? (
+          <DropdownMenuItem disabled>
+            <Loader2 className="size-4 animate-spin" />
+            {t('sidebar.captureAutomation.loadingCommands')}
+          </DropdownMenuItem>
+        ) : null}
+        {launchCommands.length > 0 ? (
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t('sidebar.captureAutomation.detectedCommands')}</DropdownMenuLabel>
+            {launchCommands.map((command) => (
+              <DropdownMenuItem
+                key={command.id}
+                disabled={!actions.onRunQuickAction}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  actions.onRunQuickAction?.(quickActionFromLaunchCommand(command));
+                }}
+              >
+                <Play className="size-4" />
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate">{command.label}</span>
+                  <span className="truncate font-mono text-[10px] text-foreground-passive">
+                    {command.command}
+                  </span>
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        ) : null}
+        {quickActions.length > 0 ? (
+          <>
+            {launchCommands.length > 0 ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>{t('sidebar.captureAutomation.savedCommands')}</DropdownMenuLabel>
+              {quickActions.map((action) => (
+                <DropdownMenuItem
+                  key={action.id}
+                  disabled={!actions.onRunQuickAction}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    actions.onRunQuickAction?.(action);
+                  }}
+                >
+                  <Play className="size-4" />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">{action.label}</span>
+                    <span className="truncate font-mono text-[10px] text-foreground-passive">
+                      {action.command}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </>
+        ) : null}
+        {!actions.launchCommandsLoading && actions.launchCommandsFailed ? (
+          <DropdownMenuItem disabled>
+            {t('sidebar.captureAutomation.loadCommandsFailed')}
+          </DropdownMenuItem>
+        ) : null}
+        {!actions.launchCommandsLoading && !actions.launchCommandsFailed && !hasCommands ? (
+          <DropdownMenuItem disabled>{t('sidebar.captureAutomation.noCommands')}</DropdownMenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={(event) => {
@@ -347,7 +464,7 @@ function ProjectQuickActionsDropdownSubmenu({ actions }: { actions: ProjectMenuA
             actions.onCaptureAutomation?.();
           }}
         >
-          <ListPlus className="size-4" />
+          <WandSparkles className="size-4" />
           {t('sidebar.captureAutomation.createLabel')}
         </DropdownMenuItem>
       </DropdownMenuSubContent>

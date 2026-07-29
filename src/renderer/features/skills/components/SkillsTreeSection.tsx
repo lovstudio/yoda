@@ -1,12 +1,12 @@
 import { ChartNoAxesColumn, ChevronRight, Pencil, Plus, PowerOff } from 'lucide-react';
 import React from 'react';
-import { useTranslation } from 'react-i18next';
 import type { SkillFamily } from '@shared/skills/grouping';
 import type { CatalogSkill, SkillUsageStat } from '@shared/skills/types';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import { cn } from '@renderer/utils/utils';
 import { buildSkillTree } from '../skill-tree';
 import SkillFamilyCount from './SkillFamilyCount';
+import SkillUsageSummary from './SkillUsageSummary';
 
 interface SkillsTreeSectionProps {
   /** Pre-sorted skills; tree grouping preserves this order. */
@@ -143,7 +143,6 @@ const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
   setSkillRef,
   highlighted,
 }) => {
-  const { t } = useTranslation();
   const description = skill.description || skill.frontmatter.description || '';
 
   return (
@@ -180,16 +179,13 @@ const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
       {(skill.installed || (usage && usage.total > 0)) && (
         <span className="grid shrink-0 place-items-center">
           {usage && usage.total > 0 && (
-            <span
+            <SkillUsageSummary
+              usage={usage}
               className={cn(
-                'col-start-1 row-start-1 flex items-center gap-1 text-[11px] tabular-nums text-muted-foreground',
+                'col-start-1 row-start-1',
                 skill.installed && 'transition-opacity group-hover:opacity-0'
               )}
-              title={t('skills.usageTitle', { manual: usage.manual, auto: usage.auto })}
-            >
-              <ChartNoAxesColumn className="h-3 w-3" />
-              {usage.total}
-            </span>
+            />
           )}
           {skill.installed && (
             <Pencil className="col-start-1 row-start-1 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />

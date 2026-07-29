@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { AlertTriangle, ChartNoAxesColumn, Pencil, Plus, PowerOff } from 'lucide-react';
+import { AlertTriangle, Pencil, Plus, PowerOff } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SkillFamily } from '@shared/skills/grouping';
@@ -18,6 +18,7 @@ import { skillFilePath } from '../skill-file-path';
 import { primarySkillHealthIssue } from '../skill-health';
 import SkillFamilyCount from './SkillFamilyCount';
 import SkillIconRenderer from './SkillIconRenderer';
+import SkillUsageSummary from './SkillUsageSummary';
 
 interface SkillCardProps {
   skill: CatalogSkill;
@@ -112,16 +113,13 @@ const SkillCard: React.FC<SkillCardProps> = ({ skill, family, usage, onSelect, o
       {(skill.installed || (usage && usage.total > 0)) && (
         <div className="grid shrink-0 place-items-center self-center">
           {usage && usage.total > 0 && (
-            <span
+            <SkillUsageSummary
+              usage={usage}
               className={cn(
-                'col-start-1 row-start-1 flex items-center gap-1 text-[11px] tabular-nums text-muted-foreground',
+                'col-start-1 row-start-1',
                 skill.installed && 'transition-opacity group-hover:opacity-0'
               )}
-              title={t('skills.usageTitle', { manual: usage.manual, auto: usage.auto })}
-            >
-              <ChartNoAxesColumn className="h-3 w-3" />
-              {usage.total}
-            </span>
+            />
           )}
           {skill.installed && (
             <Pencil className="col-start-1 row-start-1 h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />

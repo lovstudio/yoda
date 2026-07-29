@@ -1,9 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { AppSettings } from '@shared/app-settings';
-import {
-  DEFAULT_TERMINAL_RENDERER,
-  DEFAULT_TERMINAL_SCROLLBACK_LINES,
-} from '@shared/terminal-settings';
+import { DEFAULT_TERMINAL_SCROLLBACK_LINES } from '@shared/terminal-settings';
 import { rpc } from '@renderer/lib/ipc';
 import { FrontendPty } from '@renderer/lib/pty/pty';
 
@@ -65,12 +62,10 @@ export class PtySession {
     });
     try {
       const terminalSettings = (await rpc.appSettings.get('terminal')) as AppSettings['terminal'];
-      pty.setRendererPreference(terminalSettings?.renderer ?? DEFAULT_TERMINAL_RENDERER);
       pty.setScrollbackLines(
         terminalSettings?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
       );
     } catch {
-      pty.setRendererPreference(DEFAULT_TERMINAL_RENDERER);
       pty.setScrollbackLines(DEFAULT_TERMINAL_SCROLLBACK_LINES);
     }
     if (this.pty !== pty) {

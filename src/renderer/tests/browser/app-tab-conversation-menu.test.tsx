@@ -44,7 +44,7 @@ describe('conversation tab context menu', () => {
       },
     } as unknown as ProvisionedTask;
 
-    const [management] = buildConversationSections(
+    const [management, copy] = buildConversationSections(
       provisioned,
       'project-1',
       'task-1',
@@ -53,5 +53,7 @@ describe('conversation tab context menu', () => {
     );
 
     expect(management.some((item) => isValidElement(item) && item.key === 'move')).toBe(true);
+    expect(copy.some((item) => isValidElement(item) && item.key === 'share-public')).toBe(true);
+    expect(copy.some((item) => isValidElement(item) && item.key === 'copy-link')).toBe(true);
   });
 });

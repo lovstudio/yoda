@@ -14,6 +14,12 @@ export type PromptGroupInjectionState = {
 };
 
 export function groupPrompts(prompts: Prompt[], persistedGroups: string[] = []): PromptGroup[] {
+  const persistedGroupOrder = new Map(
+    persistedGroups
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name, index) => [name, index])
+  );
   const promptsByGroup = new Map<string, Prompt[]>(
     persistedGroups
       .map((name): [string, Prompt[]] => [name.trim(), []])
@@ -33,6 +39,11 @@ export function groupPrompts(prompts: Prompt[], persistedGroups: string[] = []):
   })).sort((left, right) => {
     if (left.name === UNGROUPED_PROMPT_GROUP) return 1;
     if (right.name === UNGROUPED_PROMPT_GROUP) return -1;
+    const leftOrder = persistedGroupOrder.get(left.name);
+    const rightOrder = persistedGroupOrder.get(right.name);
+    if (leftOrder !== undefined && rightOrder !== undefined) return leftOrder - rightOrder;
+    if (leftOrder !== undefined) return -1;
+    if (rightOrder !== undefined) return 1;
     return left.name.localeCompare(right.name);
   });
 }
@@ -44,9 +55,13 @@ export function getNamedPromptGroups(prompts: Prompt[], persistedGroups: string[
 }
 
 export function getInjectionOrderedPromptGroups(prompts: Prompt[]): PromptGroup[] {
-  return groupPrompts(
-    prompts.slice().sort((left, right) => left.injectionOrder - right.injectionOrder)
+  const orderedPrompts = prompts
+    .slice()
+    .sort((left, right) => left.injectionOrder - right.injectionOrder);
+  const orderedGroupNames = Array.from(
+    new Set(orderedPrompts.map((prompt) => prompt.groupName.trim()).filter(Boolean))
   );
+  return groupPrompts(orderedPrompts, orderedGroupNames);
 }
 
 export function getPromptGroupInjectionState(

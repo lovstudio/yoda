@@ -13,13 +13,21 @@ import {
 
 export type SessionPromptsModalArgs = {
   prompts: ClaudeSessionPrompt[];
+  /** Optional one-based transcript positions when displaying a prompt subset. */
+  promptNumbers?: number[];
   sessionTitle?: string;
   onRestorePrompt?: (prompt: ClaudeSessionPrompt, index: number) => void;
 };
 
 type Props = BaseModalProps<void> & SessionPromptsModalArgs;
 
-export function SessionPromptsModal({ prompts, sessionTitle, onRestorePrompt, onClose }: Props) {
+export function SessionPromptsModal({
+  prompts,
+  promptNumbers,
+  sessionTitle,
+  onRestorePrompt,
+  onClose,
+}: Props) {
   const { t } = useTranslation();
   return (
     <>
@@ -39,7 +47,7 @@ export function SessionPromptsModal({ prompts, sessionTitle, onRestorePrompt, on
             <PromptModalItem
               key={prompt.id}
               prompt={prompt}
-              index={index + 1}
+              index={promptNumbers?.[index] ?? index + 1}
               onRestore={onRestorePrompt}
             />
           ))

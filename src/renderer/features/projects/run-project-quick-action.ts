@@ -21,8 +21,8 @@ function getActiveQuickActionHost(projectId: string) {
 /**
  * The single execution boundary for a project quick action.
  *
- * Compiled actions execute their reviewed shell command directly. Legacy Agent
- * actions keep the original task/prompt behavior for backward compatibility.
+ * Agent actions open an inspectable task that can be continued when execution
+ * needs repair. Explicit shell actions run directly in the project terminal.
  */
 export async function runProjectQuickAction(args: {
   project: MountedProject;
