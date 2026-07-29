@@ -125,6 +125,20 @@ describe('MaaS platform menu', () => {
     );
   });
 
+  it('opens a requested LiteLLM draft directly from the Settings integrations page', async () => {
+    const { MaasView } = await import('@renderer/features/maas/components/MaasView');
+    await act(async () =>
+      root.render(
+        createElement(MaasView, {
+          embedded: true,
+          requestedPlatformId: 'litellm',
+        })
+      )
+    );
+
+    expect(host.querySelector('[data-maas-platform-id="litellm"]')).not.toBeNull();
+  });
+
   it('can add more than one independent Custom platform draft', async () => {
     const { MaasView } = await import('@renderer/features/maas/components/MaasView');
     await act(async () => root.render(createElement(MaasView, { embedded: true })));

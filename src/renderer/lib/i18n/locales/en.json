@@ -704,6 +704,8 @@
       "plainDescription": "Work on Plain threads",
       "forgejoDescription": "Work on Forgejo issues",
       "featurebaseDescription": "Work on Featurebase posts",
+      "litellmDescription": "Manage multiple model services with automatic routing, load balancing, and failover",
+      "litellmConnectedDescription": "Gateway: {{endpoint}}",
       "copyInstallCommand": "Copy install command",
       "commandCopied": "Command copied",
       "copyInstallFor": "Copy install command for {{name}}",

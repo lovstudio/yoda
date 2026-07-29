@@ -117,8 +117,9 @@ export const MaasConnectedCountBadge: React.FC = () => {
 export const MaasView: React.FC<{
   embedded?: boolean;
   showSectionChrome?: boolean;
+  requestedPlatformId?: MaasPlatformTemplateId;
   onOpenMarketplace?: () => void;
-}> = ({ embedded = false, showSectionChrome = true, onOpenMarketplace }) => {
+}> = ({ embedded = false, showSectionChrome = true, requestedPlatformId, onOpenMarketplace }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { data: connections, isLoading } = useMaasConnections();
@@ -127,8 +128,15 @@ export const MaasView: React.FC<{
   const gateway = useMaasGatewayExtension();
   const { data: platformDescriptions } = useMaasPlatformDescriptions();
   const showZenmuxUsage = useShowModal('zenmuxUsageModal');
-  const [expandedPlatformId, setExpandedPlatformId] = useState<MaasPlatformId | ''>('');
-  const [draftPlatformIds, setDraftPlatformIds] = useState<MaasPlatformId[]>([]);
+  const [initialRequestedPlatformId] = useState<MaasPlatformId | undefined>(() =>
+    requestedPlatformId === 'custom' ? createCustomMaasPlatformId() : requestedPlatformId
+  );
+  const [expandedPlatformId, setExpandedPlatformId] = useState<MaasPlatformId | ''>(
+    initialRequestedPlatformId ?? ''
+  );
+  const [draftPlatformIds, setDraftPlatformIds] = useState<MaasPlatformId[]>(
+    initialRequestedPlatformId ? [initialRequestedPlatformId] : []
+  );
   const configuredCount = connections?.filter((connection) => connection.configured).length ?? 0;
   const activeCount = globalBinding.data?.enabled ? 1 : 0;
   const visiblePlatformIds = useMemo(

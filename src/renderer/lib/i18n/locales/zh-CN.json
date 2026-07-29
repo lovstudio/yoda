@@ -704,6 +704,8 @@
       "plainDescription": "在 Plain 工单中协作",
       "forgejoDescription": "在 Forgejo issue 中协作",
       "featurebaseDescription": "在 Featurebase 帖子上协作",
+      "litellmDescription": "统一管理多个模型服务，并提供自动路由、负载均衡与故障切换",
+      "litellmConnectedDescription": "Gateway：{{endpoint}}",
       "copyInstallCommand": "复制安装命令",
       "commandCopied": "命令已复制",
       "copyInstallFor": "复制 {{name}} 的安装命令",
