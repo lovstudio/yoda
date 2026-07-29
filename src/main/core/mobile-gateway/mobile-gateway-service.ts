@@ -1008,7 +1008,11 @@ export class MobileGatewayService {
     };
   }
 
-  private async getSessionDetail(
+  /**
+   * Canonical renderable session snapshot used by both the mobile detail API
+   * and public session sharing.
+   */
+  async getSessionDetail(
     projectId: string,
     taskId: string,
     conversationId: string
