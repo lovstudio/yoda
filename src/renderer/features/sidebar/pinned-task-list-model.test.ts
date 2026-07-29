@@ -83,6 +83,29 @@ describe('pinned task list disclosure', () => {
     ]);
   });
 
+  it('applies a custom visible threshold to every pinned task group', () => {
+    const rows = limitPinnedTaskListRows(entries, new Set(), 3);
+
+    expect(rows.filter((row) => row.kind === 'project-task')).toHaveLength(4);
+    expect(rows.filter((row) => row.kind === 'task')).toHaveLength(3);
+    expect(rows.filter((row) => row.kind === 'task-group-toggle')).toEqual([
+      {
+        kind: 'task-group-toggle',
+        groupId: 'pinned-project-tasks::project-a',
+        hiddenCount: 4,
+        expanded: false,
+        rowVariant: 'underProject',
+      },
+      {
+        kind: 'task-group-toggle',
+        groupId: 'pinned-tasks',
+        hiddenCount: 3,
+        expanded: false,
+        rowVariant: 'pinned',
+      },
+    ]);
+  });
+
   it('identifies the collapsed group hiding the selected task', () => {
     expect(findHiddenPinnedTaskGroupId(entries, new Set(), 'project-a', 'project-task-7')).toBe(
       'pinned-project-tasks::project-a'
@@ -93,6 +116,9 @@ describe('pinned task list disclosure', () => {
     expect(
       findHiddenPinnedTaskGroupId(entries, new Set(), 'project-a', 'project-task-1')
     ).toBeNull();
+    expect(findHiddenPinnedTaskGroupId(entries, new Set(), 'project-a', 'project-task-4', 3)).toBe(
+      'pinned-project-tasks::project-a'
+    );
     expect(
       findHiddenPinnedTaskGroupId(
         entries,

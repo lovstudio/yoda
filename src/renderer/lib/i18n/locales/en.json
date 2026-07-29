@@ -152,6 +152,8 @@
     "groupByNone": "No grouping",
     "groupByType": "By type",
     "groupByActivity": "By recent activity",
+    "collapseThreshold": "Collapse threshold",
+    "collapseThresholdOption": "{{count}} tasks",
     "branchDisplay": "Branch",
     "branchDisplayHidden": "Hidden",
     "branchDisplayCompact": "Compact",

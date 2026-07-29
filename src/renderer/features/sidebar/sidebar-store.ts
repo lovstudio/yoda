@@ -1,10 +1,13 @@
 import { computed, makeAutoObservable, observable, reaction, runInAction } from 'mobx';
 import { type LocalProject, type SshProject } from '@shared/projects';
-import type {
-  SidebarBranchDisplay,
-  SidebarSnapshot,
-  SidebarTaskGroupBy,
-  SidebarTaskSortBy,
+import {
+  DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT,
+  SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS,
+  type SidebarBranchDisplay,
+  type SidebarSnapshot,
+  type SidebarTaskGroupBy,
+  type SidebarTaskGroupVisibleLimit,
+  type SidebarTaskSortBy,
 } from '@shared/view-state';
 import { DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
 import {
@@ -27,6 +30,15 @@ function parseSidebarTaskSortBy(value: unknown): SidebarTaskSortBy | undefined {
 function parseSidebarTaskGroupBy(value: unknown): SidebarTaskGroupBy | undefined {
   return value === 'project' || value === 'none' || value === 'type' || value === 'activity'
     ? value
+    : undefined;
+}
+
+function parseSidebarTaskGroupVisibleLimit(
+  value: unknown
+): SidebarTaskGroupVisibleLimit | undefined {
+  return typeof value === 'number' &&
+    SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS.some((option) => option === value)
+    ? (value as SidebarTaskGroupVisibleLimit)
     : undefined;
 }
 
@@ -152,6 +164,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   pinnedProjectIds = observable.set<string>();
   taskSortBy: SidebarTaskSortBy = 'updated-at';
   taskGroupBy: SidebarTaskGroupBy = 'project';
+  taskGroupVisibleLimit = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT;
   taskBranchDisplay: SidebarBranchDisplay = 'compact';
   pinnedCollapsed = false;
   projectsCollapsed = false;
@@ -569,6 +582,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       projectActivityById: { ...this.projectActivityById },
       taskSortBy: this.taskSortBy,
       taskGroupBy: this.taskGroupBy,
+      taskGroupVisibleLimit: this.taskGroupVisibleLimit,
       taskBranchDisplay: this.taskBranchDisplay,
       pinnedProjectIds: [...this.pinnedProjectIds],
       pinnedCollapsed: this.pinnedCollapsed,
@@ -608,6 +622,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (snapshot.taskGroupBy !== undefined) {
       const v = parseSidebarTaskGroupBy(snapshot.taskGroupBy);
       if (v !== undefined) this.taskGroupBy = v;
+    }
+    if (snapshot.taskGroupVisibleLimit !== undefined) {
+      const v = parseSidebarTaskGroupVisibleLimit(snapshot.taskGroupVisibleLimit);
+      if (v !== undefined) this.taskGroupVisibleLimit = v;
     }
     if (snapshot.taskBranchDisplay !== undefined) {
       const v = parseSidebarBranchDisplay(snapshot.taskBranchDisplay);
@@ -819,6 +837,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       this.taskOrderByProject = {};
       this.taskOrderByParent = {};
     }
+  }
+
+  setTaskGroupVisibleLimit(limit: SidebarTaskGroupVisibleLimit): void {
+    this.taskGroupVisibleLimit = limit;
   }
 
   setProjectOrder(ids: string[]): void {
