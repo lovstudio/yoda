@@ -3667,6 +3667,9 @@
       "siliconflow": {
         "description": "使用 SiliconFlow API 调用 GenAI 能力，支持 OpenAI 接口调用。"
       },
+      "litellm": {
+        "description": "通过一个 OpenAI 兼容 Gateway 汇聚多个 MaaS，并由 LiteLLM 执行路由、负载均衡与故障切换。"
+      },
       "custom": {
         "description": "为给定聊天对话创建模型响应。"
       }
@@ -3694,6 +3697,8 @@
       "apiKeyPlaceholder": "粘贴 API Key 或管理 Key",
       "managementApiKey": "Management API Key",
       "zenmuxManagementKeyPlaceholder": "粘贴 ZenMux Management API Key",
+      "litellmKeyPlaceholder": "粘贴 LiteLLM Virtual Key 或 Master Key",
+      "litellmSetupHelper": "请先在 LiteLLM 中配置上游 MaaS、模型名称与路由规则；Yoda 只连接 Gateway，并通过 /v1/responses 转发 Codex 请求。",
       "inferenceApiKey": "Agent Client API Key",
       "inferenceApiKeyPlaceholder": "粘贴用于模型调用的 ZenMux API Key",
       "inferenceApiKeyHelper": "此 Key 仅用于 Agent Client 的模型调用；上方 Management Key 仅用于用量与日志统计。",

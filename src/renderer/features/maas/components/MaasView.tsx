@@ -792,7 +792,9 @@ const ConnectionPanel: React.FC<{
   const apiKeyPlaceholder =
     connection.platformId === 'zenmux'
       ? t('maas.connection.zenmuxManagementKeyPlaceholder')
-      : t('maas.connection.apiKeyPlaceholder');
+      : connection.platformId === 'litellm'
+        ? t('maas.connection.litellmKeyPlaceholder')
+        : t('maas.connection.apiKeyPlaceholder');
   const platformDescription =
     officialDescription?.source === 'fallback' || !officialDescription
       ? t(`maas.platforms.${getMaasPlatformTemplateId(connection.platformId)}.description`)
@@ -895,6 +897,12 @@ const ConnectionPanel: React.FC<{
           <span>{platformDescription}</span>
           {officialDescription && <MaasDescriptionSourceBadge description={officialDescription} />}
         </div>
+
+        {connection.platformId === 'litellm' && (
+          <div className="max-w-2xl rounded-lg border border-border/60 bg-background-secondary px-3 py-2 text-xs leading-relaxed text-foreground-muted">
+            {t('maas.connection.litellmSetupHelper')}
+          </div>
+        )}
 
         <div className="grid gap-3 @3xl:grid-cols-[minmax(10rem,0.9fr)_minmax(16rem,1.4fr)]">
           <label className="grid gap-1.5">

@@ -95,6 +95,34 @@ describe('MaaS platform menu', () => {
     const menu = document.querySelector('[data-slot="dropdown-menu-content"]');
     expect(menu?.textContent).toContain('maas.selectPlatform');
     expect(menu?.textContent).toContain('ZenMux');
+    expect(menu?.textContent).toContain('LiteLLM');
+  });
+
+  it('adds LiteLLM with a local Gateway preset and routing guidance', async () => {
+    const { MaasView } = await import('@renderer/features/maas/components/MaasView');
+    await act(async () => root.render(createElement(MaasView, { embedded: true })));
+
+    const addButton = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent === 'maas.addPlatform'
+    );
+    await act(async () => addButton?.click());
+    const litellmItem = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) => item.textContent?.includes('LiteLLM'));
+    expect(litellmItem).toBeDefined();
+    await act(async () => litellmItem?.click());
+
+    const panel = host.querySelector<HTMLElement>('[data-maas-platform-id="litellm"]');
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain('maas.connection.litellmSetupHelper');
+    expect(
+      Array.from(panel?.querySelectorAll<HTMLInputElement>('input') ?? []).map(
+        (input) => input.value
+      )
+    ).toEqual(expect.arrayContaining(['LiteLLM', 'http://127.0.0.1:4000/v1']));
+    expect(panel?.querySelector('input[type="password"]')?.getAttribute('placeholder')).toBe(
+      'maas.connection.litellmKeyPlaceholder'
+    );
   });
 
   it('can add more than one independent Custom platform draft', async () => {

@@ -3667,6 +3667,9 @@
       "siliconflow": {
         "description": "Use SiliconFlow API to call GenAI capabilities; call via OpenAI interface."
       },
+      "litellm": {
+        "description": "Unify multiple MaaS providers behind an OpenAI-compatible Gateway, with routing, load balancing, and failover handled by LiteLLM."
+      },
       "custom": {
         "description": "Creates a model response for the given chat conversation."
       }
@@ -3694,6 +3697,8 @@
       "apiKeyPlaceholder": "Paste API or management key",
       "managementApiKey": "Management API key",
       "zenmuxManagementKeyPlaceholder": "Paste ZenMux Management API Key",
+      "litellmKeyPlaceholder": "Paste a LiteLLM Virtual Key or Master Key",
+      "litellmSetupHelper": "Configure upstream MaaS providers, model names, and routing rules in LiteLLM first. Yoda connects only to the Gateway and forwards Codex requests through /v1/responses.",
       "inferenceApiKey": "Agent Client API key",
       "inferenceApiKeyPlaceholder": "Paste a ZenMux API key for model inference",
       "inferenceApiKeyHelper": "This key is used only for Agent Client model calls. The Management key above remains dedicated to usage and log statistics.",

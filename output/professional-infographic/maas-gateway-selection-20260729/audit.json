@@ -1,0 +1,65 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-07-29T05:41:29.507431+00:00",
+  "input": "poster.html",
+  "aspect": "16:9",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "image": {
+    "path": "poster.png",
+    "width": 3200,
+    "height": 1800,
+    "scale": 2
+  },
+  "metrics": {
+    "primary_blocks": 1,
+    "semantic_units": 578,
+    "audited_elements": 5,
+    "images": 1,
+    "template": "comparison-matrix",
+    "evidence_mode": "qualitative",
+    "header_area_ratio": 0.1036,
+    "visual_area_ratio": 0.6486,
+    "footer_area_ratio": 0.0497,
+    "card_area_ratio": 0.0,
+    "data_points": 20,
+    "annotations": 2,
+    "source_refs": 26,
+    "decision_markers": 2,
+    "encodings": ["position", "color"],
+    "low_occupancy_blocks": 0
+  },
+  "quality_proxy": {
+    "total": 98,
+    "threshold": 85,
+    "dimensions": {
+      "core_conclusion": 20,
+      "evidence_quality": 20,
+      "visual_encoding": 20,
+      "information_density": 15,
+      "copy_and_annotations": 8,
+      "layout_and_type": 10,
+      "source_and_brand": 5
+    },
+    "critical_minimums": {
+      "core_conclusion": 16,
+      "evidence_quality": 12,
+      "visual_encoding": 14,
+      "information_density": 10
+    },
+    "critical_failures": [],
+    "machine_proxy_only": true,
+    "human_review_required": true
+  },
+  "human_review": {
+    "required": true,
+    "status": "passed",
+    "note": "已检查 3200×1800 原图与 480×270 缩略图：标题可在五秒内复述；LiteLLM 默认决策与 Higress 条件决策清晰；矩阵标签、来源和限定在原图可读；无溢出、空容器或装饰性伪图形。"
+  },
+  "errors": [],
+  "warnings": [],
+  "status": "pass",
+  "strict": true
+}
