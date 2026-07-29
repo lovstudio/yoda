@@ -60,19 +60,19 @@ const SkillAccordionRow: React.FC<SkillAccordionRowProps> = ({
         hasWarning && 'bg-amber-500/5 data-[panel-open]:bg-amber-500/10'
       )}
     >
-      <div className="flex min-w-0 items-center pr-2 transition-colors hover:bg-muted/30">
+      <div className="group/row flex min-h-10 min-w-0 items-center pr-3 transition-colors hover:bg-muted/30">
         <CollapsibleTrigger
-          className="group flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border"
+          className="group grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_7.75rem] items-center gap-x-3 self-stretch px-3 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border @2xl:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)_7.75rem]"
           title={description || undefined}
         >
-          <ChevronRight
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform group-data-[panel-open]:rotate-90"
-            aria-hidden="true"
-          />
-          <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2">
+            <ChevronRight
+              className="h-3.5 w-3.5 shrink-0 text-foreground-muted transition-transform group-data-[panel-open]:rotate-90"
+              aria-hidden="true"
+            />
             <span
               className={cn(
-                'min-w-0 truncate text-sm font-medium text-foreground',
+                'min-w-0 truncate text-[13px] font-medium text-foreground',
                 skill.disabled && 'text-muted-foreground line-through decoration-border'
               )}
             >
@@ -92,13 +92,14 @@ const SkillAccordionRow: React.FC<SkillAccordionRowProps> = ({
               />
             )}
           </span>
-          <span className="hidden min-w-0 max-w-64 flex-1 truncate text-xs text-muted-foreground @2xl:block">
+          <span className="hidden min-w-0 truncate text-xs text-foreground-muted @2xl:block">
             {description || t('skills.noDescription')}
           </span>
-          <span className="hidden w-24 shrink-0 truncate text-[9px] font-medium uppercase tracking-wide text-muted-foreground @xl:block">
-            {t(`skills.source.${skill.source}`)}
+          <span className="flex w-[7.75rem] justify-end">
+            {usage && usage.total > 0 && (
+              <SkillUsageSummary usage={usage} className="w-full justify-end" />
+            )}
           </span>
-          {usage && usage.total > 0 && <SkillUsageSummary usage={usage} />}
         </CollapsibleTrigger>
         <Tooltip>
           <TooltipTrigger
@@ -106,7 +107,8 @@ const SkillAccordionRow: React.FC<SkillAccordionRowProps> = ({
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-sm"
+                size="icon-xs"
+                className="opacity-0 transition-opacity group-hover/row:opacity-100 focus-visible:opacity-100"
                 aria-label={t(skill.installed ? 'skills.openDetailsAria' : 'skills.installAria', {
                   name: skill.displayName,
                 })}

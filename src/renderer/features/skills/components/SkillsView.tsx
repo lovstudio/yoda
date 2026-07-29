@@ -18,14 +18,17 @@ import type { CatalogSkill } from '@shared/skills/types';
 import { useOpenViewTab, useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
-import { Input } from '@renderer/lib/ui/input';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/lib/ui/select';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
+import { Input } from '@renderer/lib/ui/input';
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@renderer/lib/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
@@ -42,6 +45,8 @@ type SkillsLayout = 'list' | 'tree';
 type SkillsSection = 'installed' | 'recommended' | 'attention';
 
 const LAYOUT_STORAGE_KEY = 'yoda.skillsLayout';
+const USAGE_SORT_OPTIONS = ['total', 'recent', 'manual', 'auto'] as const;
+const CONTENT_SORT_OPTIONS = ['trigger', 'body'] as const;
 
 function loadStoredLayout(): SkillsLayout {
   try {
@@ -345,7 +350,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
         {/* Toolbar */}
         <div
           className={cn(
-            'sticky top-0 z-20 mb-6 flex items-center gap-2 border-b border-border/60 bg-background/95 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80',
+            'sticky top-0 z-20 mb-3 flex items-center gap-2 border-b border-border/60 bg-background/95 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80',
             !embedded && '-mx-8 px-8'
           )}
         >
@@ -355,7 +360,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
               placeholder={t('skills.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
+              className="h-7 pl-9"
             />
           </div>
           <ToggleGroup
@@ -375,34 +380,85 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
             </ToggleGroupItem>
           </ToggleGroup>
           {visibleSortModes.length > 1 && (
-            <Select value={sortMode} onValueChange={(value) => setSortMode(value as SkillSortMode)}>
-              <SelectTrigger
-                className="w-auto shrink-0 gap-1.5 text-xs text-muted-foreground"
-                aria-label={t('skills.sort.ariaLabel')}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 max-w-40 gap-1.5 px-2 text-xs text-foreground-muted"
+                    aria-label={t('skills.sort.ariaLabel')}
+                  />
+                }
               >
                 <ArrowDownWideNarrow className="h-3.5 w-3.5 shrink-0" />
-                {/* Narrow containers keep the icon-only trigger */}
-                <span className="hidden @xl:contents">
-                  <SelectValue />
-                </span>
-              </SelectTrigger>
-              <SelectContent align="end">
-                {visibleSortModes.map((mode) => (
-                  <SelectItem
-                    key={mode}
-                    value={mode}
-                    disabled={!usageAvailable && isUsageSortMode(mode)}
-                    className="text-xs"
+                <span className="hidden truncate @xl:inline">{t(`skills.sort.${sortMode}`)}</span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-36">
+                <DropdownMenuRadioGroup
+                  value={sortMode}
+                  onValueChange={(value) => setSortMode(value as SkillSortMode)}
+                >
+                  <DropdownMenuRadioItem value="name" className="py-1 text-xs">
+                    {t('skills.sort.name')}
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="py-1 text-xs">
+                    {t('skills.sort.usageGroup')}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-40">
+                    <DropdownMenuRadioGroup
+                      value={sortMode}
+                      onValueChange={(value) => setSortMode(value as SkillSortMode)}
+                    >
+                      {USAGE_SORT_OPTIONS.map((mode) => (
+                        <DropdownMenuRadioItem
+                          key={mode}
+                          value={mode}
+                          disabled={!usageAvailable && isUsageSortMode(mode)}
+                          className="py-1 text-xs"
+                        >
+                          {t(`skills.sort.${mode}`)}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                {layout === 'tree' && (
+                  <DropdownMenuRadioGroup
+                    value={sortMode}
+                    onValueChange={(value) => setSortMode(value as SkillSortMode)}
                   >
-                    {t(`skills.sort.${mode}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                    <DropdownMenuRadioItem value="count" className="py-1 text-xs">
+                      {t('skills.sort.count')}
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                )}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="py-1 text-xs">
+                    {t('skills.sort.contentGroup')}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-40">
+                    <DropdownMenuRadioGroup
+                      value={sortMode}
+                      onValueChange={(value) => setSortMode(value as SkillSortMode)}
+                    >
+                      {CONTENT_SORT_OPTIONS.map((mode) => (
+                        <DropdownMenuRadioItem key={mode} value={mode} className="py-1 text-xs">
+                          {t(`skills.sort.${mode}`)}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             onClick={refresh}
             disabled={refreshing}
             aria-label={t('skills.refreshAria')}
@@ -427,7 +483,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
         <Tabs
           value={section}
           onValueChange={(value) => setSection(value as SkillsSection)}
-          className="gap-4"
+          className="gap-3"
         >
           <TabsList>
             <TabsIndicator />
