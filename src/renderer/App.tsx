@@ -17,6 +17,7 @@ import {
 } from './features/extensions/extension-marketplace-query';
 import { IntegrationsProvider } from './features/integrations/integrations-provider';
 import { Onboarding } from './features/onboarding/onboarding';
+import { getOnboardingSteps, type OnboardingStep } from './features/onboarding/onboarding-steps';
 import { ComparisonWindow } from './features/tasks/comparison-window';
 import { TaskTabWindow } from './features/tasks/task-window';
 import { getAiLabWindowLaunchTarget, isAiLabWindowLaunch } from './lib/ai-lab-window-launch-target';
@@ -39,7 +40,6 @@ import { TooltipProvider } from './lib/ui/tooltip';
 export const HAS_SEEN_ONBOARDING = 'yoda:has-seen-onboarding:v1';
 
 type AppView = 'onboarding' | 'welcome' | 'workspace';
-type OnboardingStep = 'sign-in' | 'maas-gateway';
 
 const AppContent = observer(function AppContent() {
   const [view, setView] = useState<AppView>(() =>
@@ -68,14 +68,16 @@ const AppContent = observer(function AppContent() {
 
   useEffect(() => {
     if (!isLoading && view === 'onboarding' && frozenSteps === null) {
-      const computed: OnboardingStep[] = [];
-      if (!session?.isSignedIn) computed.push('sign-in');
       const gatewayInstalled = extensions.some(
         (extension) =>
           extension.manifest.id === MAAS_GATEWAY_EXTENSION_ID && extension.installation !== null
       );
-      if (!gatewayInstalled) computed.push('maas-gateway');
-      setFrozenSteps(computed);
+      setFrozenSteps(
+        getOnboardingSteps({
+          isSignedIn: session?.isSignedIn ?? false,
+          isMaasGatewayInstalled: gatewayInstalled,
+        })
+      );
     }
   }, [view, isLoading, frozenSteps, session, extensions]);
 

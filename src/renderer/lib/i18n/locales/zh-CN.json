@@ -1119,6 +1119,18 @@
     "continueLocal": "暂不登录，仅使用本地功能",
     "getStarted": "开始使用",
     "welcome": "欢迎使用 Yoda",
+    "language": {
+      "stepTitle": "语言",
+      "title": "选择界面语言",
+      "description": "Yoda 将在后续引导和应用中使用该语言，你也可以稍后在设置中更改。",
+      "continueWith": "使用{{language}}继续",
+      "zh-CN": {
+        "description": "使用简体中文界面"
+      },
+      "en": {
+        "description": "使用英文界面"
+      }
+    },
     "signInTitle": "登录",
     "importTitle": "导入",
     "loading": "加载中…",

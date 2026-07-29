@@ -1119,6 +1119,18 @@
     "continueLocal": "Not now — use local features only",
     "getStarted": "Get started",
     "welcome": "Welcome to Yoda",
+    "language": {
+      "stepTitle": "Language",
+      "title": "Choose your language",
+      "description": "Yoda will use this language throughout setup and the app. You can change it later in Settings.",
+      "continueWith": "Continue in {{language}}",
+      "zh-CN": {
+        "description": "Use the app in Simplified Chinese"
+      },
+      "en": {
+        "description": "Use the app in English"
+      }
+    },
     "signInTitle": "Sign in",
     "importTitle": "Import",
     "loading": "Loading…",

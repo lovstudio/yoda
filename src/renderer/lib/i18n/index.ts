@@ -15,6 +15,15 @@ export function normalizeSupportedLanguage(language?: string | null): SupportedL
   return 'zh-CN';
 }
 
+export async function changeAppLanguage(language: SupportedLanguage): Promise<void> {
+  try {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  } catch {
+    /* Ignore unavailable local storage; the active session can still change language. */
+  }
+  await i18n.changeLanguage(language);
+}
+
 void i18n
   .use(LanguageDetector)
   .use(initReactI18next)
