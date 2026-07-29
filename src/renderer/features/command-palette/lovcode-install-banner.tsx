@@ -1,6 +1,6 @@
 import { ExternalLink, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { LOVCODE_REPO_URL } from '@shared/lovcode';
+import { LOVCODE_DOWNLOAD_URL } from '@shared/lovcode';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
 
@@ -22,7 +22,7 @@ export function LovcodeInstallBanner() {
       </div>
       <Button
         size="sm"
-        onClick={() => void rpc.app.openExternal(LOVCODE_REPO_URL)}
+        onClick={() => void rpc.app.openExternal(LOVCODE_DOWNLOAD_URL)}
         className="gap-1.5"
       >
         {t('commandPalette.lovcode.install')}
