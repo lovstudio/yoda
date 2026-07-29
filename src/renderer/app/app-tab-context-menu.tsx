@@ -484,7 +484,17 @@ async function shareConversationPublicly(
       t(copied.success ? 'tasks.tabs.publicShareCopied' : 'tasks.tabs.publicShareCreated'),
       {
         id: toastId,
-        description: copied.success ? undefined : t('tasks.tabs.publicShareCopyFailed'),
+        description:
+          share.omittedAssetCount > 0
+            ? t('tasks.tabs.publicShareAssetsPartial', {
+                uploaded: share.assetCount,
+                omitted: share.omittedAssetCount,
+              })
+            : share.assetCount > 0
+              ? t('tasks.tabs.publicShareAssetsUploaded', { count: share.assetCount })
+              : copied.success
+                ? undefined
+                : t('tasks.tabs.publicShareCopyFailed'),
         action: {
           label: t('common.open'),
           onClick: () => void rpc.app.openExternal(share.url),
