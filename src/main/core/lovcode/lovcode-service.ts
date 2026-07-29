@@ -1,6 +1,4 @@
 import { execFile } from 'node:child_process';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { promisify } from 'node:util';
 import {
   LOVCODE_MIN_SEARCH_VERSION,
@@ -10,6 +8,10 @@ import {
 import type { SearchItem } from '@shared/search';
 import { sqlite } from '@main/db/client';
 import { log } from '@main/lib/logger';
+import {
+  detectLovcodeDesktopInstallation,
+  type LovcodeDesktopInstallation,
+} from './lovcode-desktop-installation';
 
 const execFileAsync = promisify(execFile);
 const LOVCODE_BIN = 'lovcode';
@@ -29,7 +31,6 @@ type LovcodeCommandExecutor = (
 ) => Promise<LovcodeCommandResult>;
 type LovcodeCommandDiscovery = () => Promise<{
   commands: string[];
-  incompatibleVersion?: string;
 }>;
 
 type LovcodeSearchRow = {
@@ -59,12 +60,7 @@ export type LovcodeConversationRow = {
 };
 
 type LovcodeConversationLoader = (sessionIds: string[]) => LovcodeConversationRow[];
-
-export class LovcodeUpgradeRequiredError extends Error {
-  constructor(readonly version: string) {
-    super(`Lovcode ${version} does not expose indexed search`);
-  }
-}
+type LovcodeDesktopDetector = () => Promise<LovcodeDesktopInstallation | null>;
 
 const executeLovcodeCommand: LovcodeCommandExecutor = async (command, args, options) => {
   const { stdout } = await execFileAsync(command, args, {
@@ -83,11 +79,7 @@ export function createLovcodeCommandRunner(
 
   return async (args, options) => {
     if (resolvedCommand) {
-      try {
-        return await execute(resolvedCommand, args, options);
-      } catch {
-        resolvedCommand = null;
-      }
+      return execute(resolvedCommand, args, options);
     }
 
     const discovery = await discover();
@@ -102,9 +94,6 @@ export function createLovcodeCommandRunner(
       }
     }
 
-    if (discovery.incompatibleVersion) {
-      throw new LovcodeUpgradeRequiredError(discovery.incompatibleVersion);
-    }
     throw lastError ?? new Error('Lovcode executable not found');
   };
 }
@@ -116,21 +105,40 @@ export class LovcodeService {
 
   constructor(
     private readonly runCommand: LovcodeCommandRunner = runLovcodeCommand,
-    private readonly loadConversations: LovcodeConversationLoader = loadLovcodeConversations
+    private readonly loadConversations: LovcodeConversationLoader = loadLovcodeConversations,
+    private readonly detectDesktop: LovcodeDesktopDetector = detectLovcodeDesktopInstallation
   ) {}
 
   async checkAvailability(force = false): Promise<LovcodeAvailability> {
     if (!force && this.cachedAvailability) return this.cachedAvailability;
     try {
       const { stdout } = await this.runCommand(['--version'], { timeout: VERSION_TIMEOUT_MS });
-      this.cachedAvailability = { status: 'available', version: stdout.trim() };
-    } catch (err) {
-      if (err instanceof LovcodeUpgradeRequiredError) {
-        this.cachedAvailability = { status: 'upgrade-required', version: err.version };
-      } else {
-        log.debug('LovcodeService: lovcode binary not available', { error: String(err) });
-        this.cachedAvailability = { status: 'not-installed' };
+      const version = stdout.trim();
+      if (version) {
+        this.cachedAvailability = isVersionAtLeast(version, LOVCODE_MIN_SEARCH_VERSION)
+          ? { status: 'available', version }
+          : { status: 'upgrade-required', version };
+        return this.cachedAvailability;
       }
+    } catch (err) {
+      log.debug('LovcodeService: search CLI not available', { error: String(err) });
+    }
+
+    try {
+      const desktop = await this.detectDesktop();
+      if (!desktop) {
+        this.cachedAvailability = { status: 'not-installed' };
+      } else if (
+        desktop.version &&
+        !isVersionAtLeast(desktop.version, LOVCODE_MIN_SEARCH_VERSION)
+      ) {
+        this.cachedAvailability = { status: 'upgrade-required', version: desktop.version };
+      } else {
+        this.cachedAvailability = { status: 'desktop-only', version: desktop.version };
+      }
+    } catch (err) {
+      log.debug('LovcodeService: Lovcode desktop detection failed', { error: String(err) });
+      this.cachedAvailability = { status: 'not-installed' };
     }
     return this.cachedAvailability;
   }
@@ -159,42 +167,17 @@ export class LovcodeService {
   }
 }
 
-async function discoverLovcodeCommands(): Promise<{
-  commands: string[];
-  incompatibleVersion?: string;
-}> {
+async function discoverLovcodeCommands(): Promise<{ commands: string[] }> {
   const commands = new Set<string>();
   if (process.env.LOVCODE_BIN) commands.add(process.env.LOVCODE_BIN);
   commands.add(LOVCODE_BIN);
 
-  let incompatibleVersion: string | undefined;
-  if (process.platform === 'darwin') {
-    const appPaths = ['/Applications/lovcode.app', join(homedir(), 'Applications/lovcode.app')];
-    for (const appPath of appPaths) {
-      const version = await readMacAppVersion(appPath);
-      if (!version) continue;
-      if (isVersionAtLeast(version, LOVCODE_MIN_SEARCH_VERSION)) {
-        commands.add(join(appPath, 'Contents', 'MacOS', 'lovcode'));
-      } else {
-        incompatibleVersion ??= version;
-      }
-    }
+  const desktop = await detectLovcodeDesktopInstallation();
+  if (desktop?.version && isVersionAtLeast(desktop.version, LOVCODE_MIN_SEARCH_VERSION)) {
+    commands.add(desktop.executablePath);
   }
 
-  return { commands: Array.from(commands), incompatibleVersion };
-}
-
-async function readMacAppVersion(appPath: string): Promise<string | null> {
-  try {
-    const { stdout } = await execFileAsync(
-      '/usr/bin/plutil',
-      ['-extract', 'CFBundleShortVersionString', 'raw', join(appPath, 'Contents', 'Info.plist')],
-      { timeout: VERSION_TIMEOUT_MS, encoding: 'utf8' }
-    );
-    return stdout.trim() || null;
-  } catch {
-    return null;
-  }
+  return { commands: Array.from(commands) };
 }
 
 export function isVersionAtLeast(version: string, minimum: string): boolean {
