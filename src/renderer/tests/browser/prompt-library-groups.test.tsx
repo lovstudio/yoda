@@ -384,6 +384,7 @@ describe('PromptLibraryPanel groups', () => {
     const system = host.querySelector('[data-slot="prompt-system-section"]');
     const project = host.querySelector('[data-slot="project-prompt-section"]');
     const collection = host.querySelector('[data-slot="prompt-collection-section"]');
+    const promptList = host.querySelector('[data-slot="prompt-list-section"]');
     const promptListHeading = Array.from(host.querySelectorAll('h2')).find((heading) =>
       heading.textContent?.includes('promptLibrary.collection.all')
     );
@@ -391,15 +392,19 @@ describe('PromptLibraryPanel groups', () => {
     expect(collection).not.toBeNull();
     expect(system).not.toBeNull();
     expect(project).not.toBeNull();
+    expect(promptList).not.toBeNull();
     expect(promptListHeading).not.toBeNull();
-    expect(promptListHeading?.closest('section')).toBe(collection);
-    if (!collection || !system || !project) {
+    expect(promptListHeading?.closest('section')).toBe(promptList);
+    if (!collection || !system || !project || !promptList) {
       throw new Error('Prompt layer sections are missing');
     }
     expect(collection.compareDocumentPosition(system) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
     expect(system.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(project.compareDocumentPosition(promptList) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
   });
