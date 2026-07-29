@@ -3,10 +3,12 @@ import type { SearchItem } from './search';
 export type LovcodeAvailability =
   | { status: 'available'; version: string }
   | { status: 'upgrade-required'; version: string }
+  | { status: 'desktop-only'; version: string | null }
   | { status: 'not-installed' };
 
 export type LovcodeSearchResult =
   | { status: 'not-installed' }
+  | { status: 'desktop-only'; version: string | null }
   | { status: 'upgrade-required'; version: string }
   | { status: 'error' }
   | { status: 'ok'; items: SearchItem[] };

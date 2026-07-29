@@ -16,6 +16,38 @@ export type AppRunningAgentSession = {
   title: string;
   taskTitle: string;
   status: AgentSessionRuntimeStatus;
+  pid: number | null;
+  cpuPercent: number;
+  memoryBytes: number;
+  outputBytesPerSecond: number;
+  lastActivityAt: string | null;
+  ringBufferBytes: number;
+  ringBufferCapBytes: number;
+  rendererConsumers: number;
+  lifecycle: 'hot' | 'warm';
+};
+
+export type AppEventLoopMetrics = {
+  p50Ms: number;
+  p95Ms: number;
+  p99Ms: number;
+  maxMs: number;
+};
+
+export type RendererPerformanceSample = {
+  sampledAt: string;
+  eventLoop: AppEventLoopMetrics;
+  inputLatency: AppEventLoopMetrics;
+  longTaskCount: number;
+};
+
+export type AgentAdmissionSnapshot = {
+  mode: 'auto' | 'fixed' | 'unlimited';
+  configuredLimit: number;
+  effectiveLimit: number;
+  memoryUsedPercent: number;
+  queued: number;
+  pausedReason: 'memory' | 'concurrency' | null;
 };
 
 export type AppResourceSnapshot = {
@@ -25,6 +57,9 @@ export type AppResourceSnapshot = {
   activeAgentSessions: number;
   runningAgentSessions: AppRunningAgentSession[];
   processes: AppProcessResource[];
+  mainEventLoop: AppEventLoopMetrics;
+  rendererPerformance: RendererPerformanceSample | null;
+  admission: AgentAdmissionSnapshot;
 };
 
 export type WorktreeStorageItem = {

@@ -176,7 +176,10 @@ describe('Settings integrations', () => {
   it('shows the detected Lovcode version and refreshes detection when Yoda regains focus', async () => {
     mocks.checkLovcodeAvailability
       .mockResolvedValueOnce({ status: 'not-installed' })
-      .mockResolvedValueOnce({ status: 'available', version: 'lovcode 0.8.0' });
+      .mockResolvedValueOnce({
+        status: 'available',
+        version: 'lovcode 0.40.0',
+      });
     const { default: IntegrationsCard } = await import(
       '@renderer/features/settings/components/IntegrationsCard'
     );
@@ -188,11 +191,35 @@ describe('Settings integrations', () => {
     await act(async () => window.dispatchEvent(new Event('focus')));
 
     expect(host.textContent).toContain('settings.integrationsTab.lovcodeConnectedDescription');
-    expect(host.textContent).toContain('lovcode 0.8.0');
+    expect(host.textContent).toContain('lovcode 0.40.0');
     expect(
       host.querySelector('[aria-label="settings.integrationsTab.lovcodeInstalledTooltip"]')
     ).not.toBeNull();
     expect(mocks.checkLovcodeAvailability).toHaveBeenCalledTimes(2);
+  });
+
+  it('acknowledges a desktop-only Lovcode app and hides the download action', async () => {
+    mocks.checkLovcodeAvailability.mockResolvedValue({
+      status: 'desktop-only',
+      version: '0.39.9',
+    });
+    const { default: IntegrationsCard } = await import(
+      '@renderer/features/settings/components/IntegrationsCard'
+    );
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+    );
+
+    expect(host.textContent).toContain(
+      'settings.integrationsTab.lovcodeDesktopConnectedDescription'
+    );
+    expect(host.textContent).toContain('0.39.9');
+    expect(
+      host.querySelector('[aria-label="settings.integrationsTab.lovcodeDesktopTooltip"]')
+    ).not.toBeNull();
+    expect(
+      host.querySelector('button[aria-label="settings.integrationsTab.install:Lovcode"]')
+    ).toBeNull();
   });
 
   it('offers an upgrade when the installed Lovcode predates global search', async () => {
