@@ -95,11 +95,11 @@ describe('measureDimensions', () => {
     });
   });
 
-  it('keeps the shared terminal fit one column inside the clipping edge', () => {
+  it('keeps one overdraw column plus one visible column inside the clipping edge', () => {
     container = makeContainer('800px', '400px');
 
     expect(measureDimensions(container, CW, CH, 0, TERMINAL_FIT_GUARD_COLUMNS)).toEqual({
-      cols: 99,
+      cols: 98,
       rows: 25,
     });
   });
