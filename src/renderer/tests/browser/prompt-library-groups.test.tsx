@@ -375,7 +375,7 @@ describe('PromptLibraryPanel groups', () => {
     expect(host.querySelector('[data-slot="prompt-library-bottom-space"].h-24')).not.toBeNull();
   });
 
-  it('shows system and project layers before the editable prompt list', async () => {
+  it('puts reusable prompts first and keeps CLI and project instruction chapters together', async () => {
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'
     );
@@ -383,32 +383,23 @@ describe('PromptLibraryPanel groups', () => {
 
     const system = host.querySelector('[data-slot="prompt-system-section"]');
     const project = host.querySelector('[data-slot="project-prompt-section"]');
-    const globalHeading = Array.from(host.querySelectorAll('h2')).find((heading) =>
-      heading.textContent?.includes('promptLibrary.collection.title')
-    );
+    const collection = host.querySelector('[data-slot="prompt-collection-section"]');
     const promptListHeading = Array.from(host.querySelectorAll('h2')).find((heading) =>
       heading.textContent?.includes('promptLibrary.collection.all')
     );
-    const global = globalHeading?.closest('section') ?? null;
-    const promptList = promptListHeading?.closest('section') ?? null;
 
+    expect(collection).not.toBeNull();
     expect(system).not.toBeNull();
-    expect(global).not.toBeNull();
     expect(project).not.toBeNull();
-    expect(promptList).not.toBeNull();
-    if (!system || !global || !project || !promptList) {
+    expect(promptListHeading).not.toBeNull();
+    expect(promptListHeading?.closest('section')).toBe(collection);
+    if (!collection || !system || !project) {
       throw new Error('Prompt layer sections are missing');
     }
-    expect(system.compareDocumentPosition(global) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
-    expect(global.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    expect(collection.compareDocumentPosition(system) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
     expect(system.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
-    expect(project.compareDocumentPosition(promptList) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
   });
