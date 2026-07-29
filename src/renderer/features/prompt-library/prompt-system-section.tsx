@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, FileText, Loader2, RefreshCw, Save } from 'lucide-react';
+import { ChevronRight, Loader2, Plus, RefreshCw, Save, SquareTerminal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuntimeCustomConfigs } from '@shared/app-settings';
@@ -10,6 +10,7 @@ import type {
 import type { DependencyStatusMap } from '@shared/dependencies';
 import { RUNTIMES, type RuntimeDefinition, type RuntimeId } from '@shared/runtime-registry';
 import { GlobalFileActionsDropdown } from '@renderer/lib/components/file-path-actions';
+import { FileIcon } from '@renderer/lib/editor/file-icon';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { Badge } from '@renderer/lib/ui/badge';
@@ -17,9 +18,19 @@ import { Button } from '@renderer/lib/ui/button';
 import { Tabs, TabsList, TabsTab } from '@renderer/lib/ui/tabs';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
+import { PromptLibraryChapter } from './prompt-library-chapter';
 
 const enabledPromptRuntimesQueryKey = ['promptLibrary', 'enabledRuntimes'] as const;
 const standardInstructionClis = ['codex', 'claude'] as const;
+const CODEX_OVERRIDE_FILENAME = 'AGENTS.override.md';
+
+function instructionFilename(filePath: string): string {
+  return filePath.split(/[\\/]/).pop() ?? filePath;
+}
+
+function isCodexOverrideFile(file: EditableRuntimeInstructionFile): boolean {
+  return instructionFilename(file.path) === CODEX_OVERRIDE_FILENAME;
+}
 
 function hasStandardInstructionFiles(runtime: RuntimeDefinition): boolean {
   return standardInstructionClis.some((cli) => runtime.cli === cli);
@@ -58,14 +69,20 @@ function useEditableInstructionFiles(request: EditableRuntimeInstructionFilesReq
 export function PromptInstructionFileEditor({
   file,
   request,
+  statusLabel,
+  statusMuted = false,
+  initiallyExpanded = false,
 }: {
   file: EditableRuntimeInstructionFile;
   request: EditableRuntimeInstructionFilesRequest;
+  statusLabel: string;
+  statusMuted?: boolean;
+  initiallyExpanded?: boolean;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   const [content, setContent] = useState(file.content);
   const save = useMutation({
     mutationFn: () =>
@@ -91,7 +108,7 @@ export function PromptInstructionFileEditor({
   });
 
   const changed = content !== file.content;
-  const filename = file.path.split(/[\\/]/).pop() ?? file.path;
+  const filename = instructionFilename(file.path);
 
   return (
     <div data-slot="runtime-instruction-file" className="border-t border-border first:border-t-0">
@@ -109,7 +126,7 @@ export function PromptInstructionFileEditor({
               expanded && 'rotate-90'
             )}
           />
-          <FileText className="size-4 shrink-0 text-foreground-muted" />
+          <FileIcon filename={filename} size={16} className="shrink-0" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium text-foreground">{filename}</span>
             <span
@@ -120,8 +137,8 @@ export function PromptInstructionFileEditor({
             </span>
           </span>
         </button>
-        <Badge variant="secondary" className="mr-2 shrink-0">
-          {file.exists ? t('promptLibrary.system.existingFile') : t('promptLibrary.system.newFile')}
+        <Badge variant={statusMuted ? 'outline' : 'secondary'} className="mr-2 shrink-0">
+          {statusLabel}
         </Badge>
         {file.exists ? (
           <span className="mr-2 shrink-0">
@@ -183,6 +200,10 @@ export function PromptInstructionFilesEditor({
     refetch,
   } = useEditableInstructionFiles(request);
   const scopedFiles = files.filter((file) => file.scope === scope);
+  const overrideFile = scopedFiles.find(isCodexOverrideFile);
+  const hasActiveOverride = overrideFile?.exists === true;
+  const [revealedOverridePath, setRevealedOverridePath] = useState<string | null>(null);
+  const showMissingOverride = overrideFile?.path === revealedOverridePath;
 
   if (isLoading) {
     return (
@@ -226,15 +247,50 @@ export function PromptInstructionFilesEditor({
     );
   }
 
+  const visibleFiles = scopedFiles.filter(
+    (file) => !isCodexOverrideFile(file) || file.exists || showMissingOverride
+  );
+
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-background">
-      {scopedFiles.map((file) => (
-        <PromptInstructionFileEditor
-          key={`${file.kind}:${file.path}`}
-          file={file}
-          request={request}
-        />
-      ))}
+    <div className="grid gap-2">
+      <div className="overflow-hidden rounded-lg border border-border bg-background-secondary">
+        {visibleFiles.map((file) => {
+          const isOverride = isCodexOverrideFile(file);
+          const isOverriddenBase =
+            hasActiveOverride && instructionFilename(file.path) === 'AGENTS.md';
+          const statusLabel = !file.exists
+            ? t('promptLibrary.system.newFile')
+            : isOverride
+              ? t('promptLibrary.system.activeOverride')
+              : isOverriddenBase
+                ? t('promptLibrary.system.overriddenFile')
+                : t('promptLibrary.system.activeFile');
+          return (
+            <PromptInstructionFileEditor
+              key={`${file.kind}:${file.path}`}
+              file={file}
+              request={request}
+              statusLabel={statusLabel}
+              statusMuted={isOverriddenBase || !file.exists}
+              initiallyExpanded={isOverride && showMissingOverride && !file.exists}
+            />
+          );
+        })}
+      </div>
+      {overrideFile && !overrideFile.exists && !showMissingOverride ? (
+        <div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-foreground-muted"
+            onClick={() => setRevealedOverridePath(overrideFile.path)}
+          >
+            <Plus className="size-4" />
+            {t('promptLibrary.system.addTemporaryOverride')}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -261,27 +317,22 @@ export function PromptSystemSection({
   const selectedRuntime = runtimes.find((runtime) => runtime.id === runtimeId) ?? null;
 
   return (
-    <section
-      data-slot="prompt-system-section"
-      className="mt-10 rounded-lg border border-border bg-background-secondary"
+    <PromptLibraryChapter
+      dataSlot="prompt-system-section"
+      className="mt-6"
+      icon={SquareTerminal}
+      title={t('promptLibrary.system.title')}
+      description={t('promptLibrary.system.description')}
+      bodyClassName="p-3"
     >
-      <div className="border-b border-border px-4 py-3">
-        <h2 className="text-sm font-medium text-foreground">{t('promptLibrary.system.title')}</h2>
-        <p className="mt-1 text-xs leading-5 text-foreground-muted">
-          {t('promptLibrary.system.description')}
-        </p>
-      </div>
-
       {isLoading ? (
-        <div className="flex min-h-24 items-center justify-center">
+        <div className="flex min-h-16 items-center justify-center">
           <Loader2 className="size-5 animate-spin text-foreground-muted" />
         </div>
       ) : runtimes.length === 0 ? (
-        <p className="px-4 py-4 text-sm text-foreground-muted">
-          {t('promptLibrary.system.noEnabledAgents')}
-        </p>
+        <p className="text-sm text-foreground-muted">{t('promptLibrary.system.noEnabledAgents')}</p>
       ) : (
-        <div className="p-3">
+        <div>
           <Tabs
             value={selectedRuntime?.id ?? ''}
             onValueChange={(value) => onRuntimeIdChange(value as RuntimeId)}
@@ -302,9 +353,11 @@ export function PromptSystemSection({
           {selectedRuntime ? (
             <div className="mt-3">
               <p className="mb-2 text-xs leading-5 text-foreground-muted">
-                {t('promptLibrary.system.userPromptDescription', {
-                  runtime: selectedRuntime.name,
-                })}
+                {selectedRuntime.cli === 'codex'
+                  ? t('promptLibrary.system.codexFileDescription')
+                  : t('promptLibrary.system.userPromptDescription', {
+                      runtime: selectedRuntime.name,
+                    })}
               </p>
               <PromptInstructionFilesEditor
                 runtimeId={selectedRuntime.id}
@@ -315,6 +368,6 @@ export function PromptSystemSection({
           ) : null}
         </div>
       )}
-    </section>
+    </PromptLibraryChapter>
   );
 }

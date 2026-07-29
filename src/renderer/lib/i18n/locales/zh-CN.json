@@ -2300,7 +2300,7 @@
     "title": "提示词库",
     "collection": {
       "title": "提示词",
-      "description": "提示词只有一种。你可以为它分组、从不同来源同步，并选择是否在会话启动时动态注入。",
+      "description": "创建可复用提示词并按分组排序；可从文件、网址或 Git 同步，也可选择在会话启动时自动注入。",
       "all": "全部提示词"
     },
     "new": "新建提示词",
@@ -2347,13 +2347,18 @@
       "extraInfoPlaceholder": "可选：补充说明、参考网址或扩展入口"
     },
     "system": {
-      "title": "CLI 提示词",
-      "description": "按本机已启用的 Coding Agent CLI 切换。这里只编辑各 CLI 自己读取的指令文件，不展示模型或 MaaS 服务。",
+      "title": "CLI 指令",
+      "description": "编辑当前 CLI 在所有项目中读取的用户级指令。仅显示本机已启用且支持标准指令文件的 CLI。",
       "noEnabledAgents": "当前没有已启用且支持标准指令文件的 Agent CLI。",
       "userPromptDescription": "以下是 {{runtime}} 的标准用户级指令路径；文件不存在时，展开对应行即可创建。",
+      "codexFileDescription": "Codex 默认读取 AGENTS.md；同目录存在 AGENTS.override.md 时，后者会临时替代前者。",
       "noInstructionFiles": "这个 Agent CLI 没有可编辑的标准指令文件。",
       "existingFile": "已存在",
+      "activeFile": "当前生效",
+      "activeOverride": "临时覆盖生效中",
+      "overriddenFile": "已被临时覆盖",
       "newFile": "未创建",
+      "addTemporaryOverride": "添加临时覆盖",
       "filePromptLabel": "编辑 {{name}}",
       "filePromptPlaceholder": "写入这个 Agent CLI 的用户级或项目级指令…",
       "createFile": "创建文件",
@@ -2362,8 +2367,8 @@
       "fileLoadFailed": "读取指令文件失败：{{detail}}"
     },
     "project": {
-      "title": "项目提示词",
-      "description": "选择项目后，编辑当前 Agent CLI 的标准项目指令文件和项目专属提示词。默认使用当前或最近激活的项目。",
+      "title": "项目指令与提示词",
+      "description": "选择项目后，编辑当前 CLI 的项目级指令，以及只对该项目生效的提示词。",
       "selectProject": "选择一个项目后即可查看和编辑项目提示词。",
       "instructionFiles": "Agent 项目指令",
       "instructionFilesDescription": "这些是上方当前 Agent CLI 在项目中读取的标准指令路径；文件不存在时可直接创建。",
