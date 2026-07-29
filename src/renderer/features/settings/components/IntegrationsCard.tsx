@@ -1,4 +1,4 @@
-import { ArrowUpCircle, Check, Download, Loader2, Plus, Settings2, Waypoints } from 'lucide-react';
+import { ArrowUpCircle, Check, Download, Loader2, Plus, Settings2 } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import featurebaseSvg from '@/assets/images/Featurebase.svg?raw';
@@ -11,13 +11,13 @@ import lovcodeSvg from '@/assets/images/Lovcode.svg?raw';
 import plainSvg from '@/assets/images/Plain.svg?raw';
 import { LOVCODE_DOWNLOAD_URL, type LovcodeAvailability } from '@shared/lovcode';
 import { useIntegrationsContext } from '@renderer/features/integrations/integrations-provider';
-import { useMaasConnections } from '@renderer/features/maas/useMaas';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { useGithubContext } from '@renderer/lib/providers/github-context-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
+import { LiteLlmIntegrationCard } from './LiteLlmIntegrationCard';
 
 /** Light mode: original SVG colors. Dark / dark-black: primary colour. */
 const SvgLogo = ({ raw }: { raw: string }) => {
@@ -58,7 +58,6 @@ type IntegrationItem = {
 
 const IntegrationsCard: React.FC<{ onOpenLiteLlm: () => void }> = ({ onOpenLiteLlm }) => {
   const { t } = useTranslation();
-  const { data: maasConnections, isLoading: maasLoading } = useMaasConnections();
   const [lovcodeAvailability, setLovcodeAvailability] = useState<LovcodeAvailability | null>(null);
   const [lovcodeLoading, setLovcodeLoading] = useState(true);
   const {
@@ -96,9 +95,6 @@ const IntegrationsCard: React.FC<{ onOpenLiteLlm: () => void }> = ({ onOpenLiteL
   const showIntegrationSetup = useShowModal('integrationSetupModal');
 
   const isCliManaged = authenticated && tokenSource === 'cli';
-  const liteLlmConnection = maasConnections?.find(
-    (connection) => connection.platformId === 'litellm'
-  );
   const refreshLovcodeAvailability = useCallback(async () => {
     setLovcodeLoading(true);
     try {
@@ -166,20 +162,6 @@ const IntegrationsCard: React.FC<{ onOpenLiteLlm: () => void }> = ({ onOpenLiteL
         ) : (
           <Download className="h-4 w-4" />
         ),
-    },
-    {
-      id: 'litellm',
-      name: 'LiteLLM',
-      description: liteLlmConnection?.connected
-        ? t('settings.integrationsTab.litellmConnectedDescription', {
-            endpoint: liteLlmConnection.endpoint,
-          })
-        : t('settings.integrationsTab.litellmDescription'),
-      icon: <Waypoints className="h-8 w-8 text-primary" />,
-      connected: !!liteLlmConnection?.connected,
-      loading: maasLoading,
-      onConnect: onOpenLiteLlm,
-      opensSettings: true,
     },
     {
       id: 'github',
@@ -274,6 +256,7 @@ const IntegrationsCard: React.FC<{ onOpenLiteLlm: () => void }> = ({ onOpenLiteL
       className="grid gap-3"
       style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
     >
+      <LiteLlmIntegrationCard onOpenManualSettings={onOpenLiteLlm} />
       {integrations.map((integration) => (
         <div key={integration.id} className="flex h-full min-h-0">
           <div className="flex w-full items-center gap-4 rounded-lg border border-muted bg-muted/20 p-4">

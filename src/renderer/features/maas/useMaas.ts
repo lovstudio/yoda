@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
+import type { LiteLlmManagedActionResult, LiteLlmManagedStatus } from '@shared/litellm-managed';
 import type {
   MaasConnectInput,
   MaasConnection,
@@ -28,6 +29,7 @@ export const maasQueryKeys = {
   runtimeBindings: (platformId?: MaasPlatformId) =>
     ['maas', 'runtime-bindings', platformId ?? 'all'] as const,
   globalBinding: ['maas', 'global-binding'] as const,
+  liteLlmManaged: ['maas', 'litellm-managed'] as const,
   records: (platformId: MaasPlatformId, kind: MaasInvocationFilterKind, refreshSequence = 0) =>
     ['maas', 'records', REAL_USAGE_QUERY_VERSION, platformId, kind, refreshSequence] as const,
   summary: (
@@ -48,6 +50,61 @@ export const maasQueryKeys = {
       refreshSequence,
     ] as const,
 };
+
+function assertLiteLlmActionSucceeded(result: LiteLlmManagedActionResult): LiteLlmManagedStatus {
+  if (!result.success) {
+    throw new Error(result.error ?? 'LiteLLM operation failed.');
+  }
+  return result.status;
+}
+
+export function useLiteLlmManagedStatus(enabled = true) {
+  return useQuery<LiteLlmManagedStatus>({
+    queryKey: maasQueryKeys.liteLlmManaged,
+    queryFn: () => rpc.maas.getLiteLlmManagedStatus(),
+    enabled,
+    staleTime: 5_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+function useLiteLlmManagedAction(action: () => Promise<LiteLlmManagedActionResult>) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => assertLiteLlmActionSucceeded(await action()),
+    onSuccess: (status) => {
+      queryClient.setQueryData(maasQueryKeys.liteLlmManaged, status);
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
+    },
+  });
+}
+
+export function useInstallLiteLlm() {
+  return useLiteLlmManagedAction(() => rpc.maas.installLiteLlm());
+}
+
+export function useStartLiteLlm() {
+  return useLiteLlmManagedAction(() => rpc.maas.startLiteLlm());
+}
+
+export function useStopLiteLlm() {
+  return useLiteLlmManagedAction(() => rpc.maas.stopLiteLlm());
+}
+
+export function useStartDockerForLiteLlm() {
+  return useLiteLlmManagedAction(() => rpc.maas.startDockerForLiteLlm());
+}
+
+export function useOpenLiteLlmAdmin() {
+  return useMutation({
+    mutationFn: async () => {
+      const result = await rpc.maas.openLiteLlmAdmin();
+      if (!result.success) throw new Error(result.error ?? 'Failed to open LiteLLM Admin UI.');
+    },
+  });
+}
 
 export function useMaasRuntimeBindings(platformId?: MaasPlatformId, enabled = true) {
   return useQuery<MaasRuntimeBindingStatus[]>({

@@ -29,14 +29,29 @@ const MINIMUM_ROWS = 1;
 // Embedded xterm viewport scrollbars are hidden in index.css, so subtracting
 // xterm's addon-fit 14px fallback creates visible fake padding on the right.
 export const DEFAULT_XTERM_SCROLLBAR_WIDTH = 0;
-// Keep the last drawable cell away from the clipping edge. Terminal TUIs can
-// paint wide CJK glyphs and rounded message backgrounds through that cell; an
-// exact edge-to-edge fit clips their right edge in narrow panes.
-export const TERMINAL_FIT_GUARD_COLUMNS = 1;
+// Keep wide glyphs and TUI decoration away from the clipping edge. One column
+// absorbs double-width/rounded-background overdraw; the second remains visibly
+// blank so narrow panes do not still look clipped at the right edge.
+export const TERMINAL_FIT_GUARD_COLUMNS = 2;
 
 export interface TerminalDimensions {
   cols: number;
   rows: number;
+}
+
+/**
+ * Resolve the box that actually clips xterm's rendered rows.
+ *
+ * Once mounted, xterm's direct parent is the same source of truth used by
+ * FitAddon. Pane wrappers remain useful before the owned terminal scene has
+ * been attached, but can be wider than a nested terminal host.
+ */
+export function resolveTerminalFitContainer(
+  terminalParent: HTMLElement | null,
+  mountTarget: HTMLElement | null,
+  paneContainer: HTMLElement | null
+): HTMLElement | null {
+  return terminalParent ?? mountTarget ?? paneContainer;
 }
 
 function readDimensions(read: () => XtermCellDimensions | undefined): XtermCellDimensions | null {

@@ -12,6 +12,7 @@ import {
   getCellMetrics,
   getTerminalFitScrollbarWidth,
   measureDimensions,
+  resolveTerminalFitContainer,
   TERMINAL_FIT_GUARD_COLUMNS,
 } from './pty-dimensions';
 import { isRealTaskInput, SubmittedInputBuffer } from './pty-input-buffer';
@@ -280,11 +281,15 @@ export function usePty(
           return;
         }
 
-        // Prefer the pane wrapper: it is stable before the terminal's owned
-        // container has fully settled after being reparented from the off-screen host.
+        // Fit the box that actually clips xterm's rows. A pane wrapper can be
+        // wider than the nested terminal host, which makes the final CJK cells
+        // exist in the buffer but render beyond the visible right edge.
         const termParent = (term as unknown as { element?: HTMLElement }).element?.parentElement;
-        const measureTarget =
-          pane?.containerRef.current ?? termParent ?? (containerRef.current as HTMLElement | null);
+        const measureTarget = resolveTerminalFitContainer(
+          termParent ?? null,
+          containerRef.current as HTMLElement | null,
+          pane?.containerRef.current ?? null
+        );
         if (!measureTarget) return;
         const scrollbarWidth = getTerminalFitScrollbarWidth(term);
 

@@ -8,6 +8,7 @@ import type {
   MaasSetRuntimeBindingInput,
   MaasUsageSummaryInput,
 } from '@shared/maas';
+import { liteLlmManagedService } from './litellm-managed-service';
 import { maasService } from './maas-service';
 
 async function listConnections() {
@@ -85,4 +86,10 @@ export const maasController = createRPCController({
   setRuntimeBinding,
   getGlobalBinding,
   setGlobalBinding,
+  getLiteLlmManagedStatus: () => liteLlmManagedService.getStatus(),
+  installLiteLlm: () => liteLlmManagedService.install(),
+  startLiteLlm: () => liteLlmManagedService.start(),
+  stopLiteLlm: () => liteLlmManagedService.stop(),
+  startDockerForLiteLlm: () => liteLlmManagedService.startDockerDesktop(),
+  openLiteLlmAdmin: () => liteLlmManagedService.openAdmin(),
 });
