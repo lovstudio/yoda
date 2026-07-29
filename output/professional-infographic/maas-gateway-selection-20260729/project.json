@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "title": "异构 MaaS 默认选 LiteLLM；已有 K8s 且追求数据面稳定时转向 Higress",
+  "title": "开源 MaaS 网关选型指南：统一管理、自动路由与稳定性对比",
   "aspect": "16:9",
   "template": "comparison-matrix",
   "evidence_mode": "qualitative",

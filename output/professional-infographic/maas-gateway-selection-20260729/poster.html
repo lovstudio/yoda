@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>异构 MaaS 默认选 LiteLLM；已有 K8s 且追求数据面稳定时转向 Higress</title>
+    <title>开源 MaaS 网关选型指南：统一管理、自动路由与稳定性对比</title>
     <style>
       :root {
         --brand-primary: #24324a;
@@ -98,6 +98,10 @@
         font-weight: 760;
         letter-spacing: -0.025em;
         text-wrap: balance;
+      }
+
+      .poster__title span {
+        display: block;
       }
 
       .deck {
@@ -376,6 +380,11 @@
         text-transform: uppercase;
       }
 
+      .matrix-readout b {
+        color: white;
+        font-weight: 780;
+      }
+
       .route-flow {
         display: flex;
         align-items: center;
@@ -442,10 +451,11 @@
 
       <header class="header" data-region="header">
         <h1 class="poster__title" data-audit="title">
-          异构 MaaS 默认选 LiteLLM；已有 K8s 且追求数据面稳定时转向 Higress
+          <span>开源 MaaS 网关选型指南</span>
+          <span>统一管理、自动路由与稳定性对比</span>
         </h1>
         <p class="deck" data-audit="description">
-          个人／小团队自托管 · 截至 2026-07-29 官方资料 · 未做统一压测
+          LiteLLM、Higress、Portkey 与 New API · 面向个人／小团队自托管 · 截至 2026-07-29
         </p>
       </header>
 
@@ -615,8 +625,8 @@
           </div>
 
           <div class="matrix-readout" data-annotation data-source-ref="S1 S3">
-            <strong>落地原则</strong>
-            <span>固定 Gateway；先做健康路由，语义选模延后。</span>
+            <strong>选型建议</strong>
+            <span><b>默认 LiteLLM</b>；已有 K8s，且高并发／SSE 稳定优先时选择 Higress。</span>
             <span class="route-flow" aria-label="客户端经统一网关路由到多个 MaaS">
               <span class="route-node">客户端</span>
               <span>→</span>
