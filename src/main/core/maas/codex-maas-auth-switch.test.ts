@@ -147,6 +147,19 @@ describe('Codex MaaS native authentication switch', () => {
     expect(await readFile(configPath, 'utf8')).toBe(originalConfig);
   });
 
+  it('writes LiteLLM as a distinct Codex model provider', async () => {
+    await enableGateway(authSwitch, codexHome, {
+      platformId: 'litellm',
+      displayName: 'LiteLLM',
+    });
+
+    const activeConfig = await readFile(configPath, 'utf8');
+    expect(activeConfig).toContain('model_provider = "litellm"');
+    expect(activeConfig).toContain('[model_providers.litellm]');
+    expect(activeConfig).toContain('name = "LiteLLM"');
+    expect(activeConfig).toContain('wire_api = "responses"');
+  });
+
   it('rolls an enable operation back without leaving a stale snapshot', async () => {
     const rollback = await enableGateway(authSwitch, codexHome);
 
@@ -284,7 +297,7 @@ function enableGateway(
   authSwitch: CodexMaasAuthSwitch,
   codexHome: string,
   overrides: {
-    platformId?: 'zenmux' | 'openrouter';
+    platformId?: 'zenmux' | 'openrouter' | 'litellm';
     displayName?: string;
     gatewayToken?: string;
   } = {}

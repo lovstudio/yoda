@@ -23,4 +23,13 @@ describe('MaaS platform instances', () => {
     expect(isMaasPlatformId('custom')).toBe(true);
     expect(getMaasPlatformTemplateId('custom')).toBe('custom');
   });
+
+  it('provides a local LiteLLM Gateway preset that supports Responses API routing', () => {
+    expect(isMaasPlatformId('litellm')).toBe(true);
+    expect(getMaasPlatformDefinition('litellm')).toMatchObject({
+      id: 'litellm',
+      name: 'LiteLLM',
+      defaultEndpoint: 'http://127.0.0.1:4000/v1',
+    });
+  });
 });
