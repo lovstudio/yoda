@@ -111,7 +111,10 @@ export async function loadCodexRolloutTranscriptForConversation({
     getConversationAgentSessionId(conversation),
     conversation.title,
     conversation.createdAt,
-    conversation.sessionSource ? { codexHome: conversation.sessionSource.stateRoot } : undefined
+    {
+      ...(conversation.sessionSource ? { codexHome: conversation.sessionSource.stateRoot } : {}),
+      conversationLastInteractedAt: conversation.lastInteractedAt,
+    }
   );
   if (!context?.rolloutPath) return null;
 
@@ -233,6 +236,7 @@ async function resolveCodexRolloutContext(conversation: Conversation, cwd: strin
         cwd,
         title: conversation.title,
         createdAt: conversation.createdAt,
+        lastInteractedAt: conversation.lastInteractedAt,
         statePath,
       });
   if (thread) {
@@ -256,6 +260,7 @@ async function resolveCodexRolloutContext(conversation: Conversation, cwd: strin
     conversation.createdAt,
     {
       ...(source ? { codexHome: source.stateRoot } : {}),
+      conversationLastInteractedAt: conversation.lastInteractedAt,
       transcriptMode: 'harness',
     }
   ).catch(() => null);

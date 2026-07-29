@@ -605,6 +605,33 @@ describe('getCodexSessionContext', () => {
     expect(context?.rolloutPath).toBe(rolloutPath);
   });
 
+  it('can resolve a renamed legacy thread by its unique activity window', async () => {
+    writeRollout(rolloutPath, { id: 'legacy-thread', cwd });
+    insertThread(statePath, rolloutPath, {
+      id: 'legacy-thread',
+      cwd,
+      title: 'Original long user prompt',
+      firstUserMessage: 'Original long user prompt',
+      createdAtMs: Date.parse('2026-07-27T10:10:43.000Z'),
+      updatedAtMs: Date.parse('2026-07-27T10:58:42.000Z'),
+    });
+
+    const context = await getCodexSessionContext(
+      cwd,
+      'legacy-yoda-conversation',
+      'Renamed Yoda title',
+      '2026-07-27 08:03:43',
+      {
+        codexHome,
+        conversationLastInteractedAt: '2026-07-27T10:49:21.067Z',
+        reservedThreadIds: new Set(),
+      }
+    );
+
+    expect(context?.threadId).toBe('legacy-thread');
+    expect(context?.rolloutPath).toBe(rolloutPath);
+  });
+
   it('follows the newest Codex rewind fork for the same Yoda conversation', async () => {
     const forkedRolloutPath = join(dir, 'forked-rollout.jsonl');
     writeRollout(rolloutPath, { id: 'root-thread', cwd });
