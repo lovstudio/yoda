@@ -711,6 +711,7 @@
       "lovcodeDesktopConnectedDescription": "已安装桌面应用 · {{version}}",
       "lovcodeDesktopInstalledDescription": "已安装桌面应用",
       "lovcodeDesktopTooltip": "已检测到本机 Lovcode 应用",
+      "lovcodeUpgradeDescription": "当前为 {{version}}；升级后即可在 Yoda 中全局搜索并打开会话",
       "lovcodeInstalledTooltip": "Lovcode 已接入全局会话搜索",
       "copyInstallCommand": "复制安装命令",
       "commandCopied": "命令已复制",
@@ -720,6 +721,7 @@
       "connect": "连接 {{name}}",
       "connecting": "连接 {{name}} 中…",
       "install": "安装 {{name}}",
+      "upgrade": "升级 {{name}}",
       "detecting": "正在检测 {{name}}…",
       "cancelConnecting": "取消连接 {{name}}",
       "githubCliManagedTooltip": "在终端中执行 `gh auth logout` 即可断开连接",
@@ -2072,6 +2074,9 @@
       "install": "获取 Lovcode",
       "desktopOnlyTitle": "Lovcode 已安装",
       "desktopOnlyDescription": "当前桌面版尚未向 Yoda 提供命令行搜索接口，可继续在 Lovcode 中搜索会话。",
+      "upgradeTitle": "升级 Lovcode 后搜索",
+      "upgradeDescription": "当前为 {{version}}；升级后即可搜索所有项目的完整会话内容。",
+      "upgrade": "升级 Lovcode",
       "matches": "会话内容",
       "searchError": "Lovcode 搜索暂时不可用，请稍后重试。"
     }

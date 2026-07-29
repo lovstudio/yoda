@@ -1,6 +1,10 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { LovcodeAvailability, LovcodeSearchResult } from '@shared/lovcode';
+import {
+  LOVCODE_MIN_SEARCH_VERSION,
+  type LovcodeAvailability,
+  type LovcodeSearchResult,
+} from '@shared/lovcode';
 import type { SearchItem } from '@shared/search';
 import { sqlite } from '@main/db/client';
 import { log } from '@main/lib/logger';
@@ -16,10 +20,18 @@ const VERSION_TIMEOUT_MS = 3_000;
 const MAX_SUBTITLE_LENGTH = 180;
 
 type LovcodeCommandResult = { stdout: string };
-type LovcodeCommandRunner = (
+export type LovcodeCommandRunner = (
   args: string[],
   options: { timeout: number; maxBuffer?: number }
 ) => Promise<LovcodeCommandResult>;
+type LovcodeCommandExecutor = (
+  command: string,
+  args: string[],
+  options: { timeout: number; maxBuffer?: number }
+) => Promise<LovcodeCommandResult>;
+type LovcodeCommandDiscovery = () => Promise<{
+  commands: string[];
+}>;
 
 type LovcodeSearchRow = {
   session_id?: string;
@@ -50,8 +62,8 @@ export type LovcodeConversationRow = {
 type LovcodeConversationLoader = (sessionIds: string[]) => LovcodeConversationRow[];
 type LovcodeDesktopDetector = () => Promise<LovcodeDesktopInstallation | null>;
 
-const runLovcodeCommand: LovcodeCommandRunner = async (args, options) => {
-  const { stdout } = await execFileAsync(LOVCODE_BIN, args, {
+const executeLovcodeCommand: LovcodeCommandExecutor = async (command, args, options) => {
+  const { stdout } = await execFileAsync(command, args, {
     timeout: options.timeout,
     maxBuffer: options.maxBuffer,
     encoding: 'utf8',
@@ -59,9 +71,37 @@ const runLovcodeCommand: LovcodeCommandRunner = async (args, options) => {
   return { stdout };
 };
 
+export function createLovcodeCommandRunner(
+  discover: LovcodeCommandDiscovery = discoverLovcodeCommands,
+  execute: LovcodeCommandExecutor = executeLovcodeCommand
+): LovcodeCommandRunner {
+  let resolvedCommand: string | null = null;
+
+  return async (args, options) => {
+    if (resolvedCommand) {
+      return execute(resolvedCommand, args, options);
+    }
+
+    const discovery = await discover();
+    let lastError: unknown;
+    for (const command of discovery.commands) {
+      try {
+        const result = await execute(command, args, options);
+        resolvedCommand = command;
+        return result;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError ?? new Error('Lovcode executable not found');
+  };
+}
+
+const runLovcodeCommand = createLovcodeCommandRunner();
+
 export class LovcodeService {
   private cachedAvailability: LovcodeAvailability | null = null;
-  private cachedCliAvailability: LovcodeAvailability | null = null;
 
   constructor(
     private readonly runCommand: LovcodeCommandRunner = runLovcodeCommand,
@@ -71,17 +111,31 @@ export class LovcodeService {
 
   async checkAvailability(force = false): Promise<LovcodeAvailability> {
     if (!force && this.cachedAvailability) return this.cachedAvailability;
-    const cliAvailability = await this.checkCliAvailability(force);
-    if (cliAvailability.status === 'available') {
-      this.cachedAvailability = cliAvailability;
-      return this.cachedAvailability;
+    try {
+      const { stdout } = await this.runCommand(['--version'], { timeout: VERSION_TIMEOUT_MS });
+      const version = stdout.trim();
+      if (version) {
+        this.cachedAvailability = isVersionAtLeast(version, LOVCODE_MIN_SEARCH_VERSION)
+          ? { status: 'available', version }
+          : { status: 'upgrade-required', version };
+        return this.cachedAvailability;
+      }
+    } catch (err) {
+      log.debug('LovcodeService: search CLI not available', { error: String(err) });
     }
 
     try {
       const desktop = await this.detectDesktop();
-      this.cachedAvailability = desktop
-        ? { status: 'available', version: desktop.version, source: 'desktop' }
-        : { status: 'not-installed' };
+      if (!desktop) {
+        this.cachedAvailability = { status: 'not-installed' };
+      } else if (
+        desktop.version &&
+        !isVersionAtLeast(desktop.version, LOVCODE_MIN_SEARCH_VERSION)
+      ) {
+        this.cachedAvailability = { status: 'upgrade-required', version: desktop.version };
+      } else {
+        this.cachedAvailability = { status: 'desktop-only', version: desktop.version };
+      }
     } catch (err) {
       log.debug('LovcodeService: Lovcode desktop detection failed', { error: String(err) });
       this.cachedAvailability = { status: 'not-installed' };
@@ -90,13 +144,8 @@ export class LovcodeService {
   }
 
   async search(query: string): Promise<LovcodeSearchResult> {
-    const cliAvailability = await this.checkCliAvailability();
-    if (cliAvailability.status !== 'available') {
-      const availability = await this.checkAvailability();
-      return availability.status === 'available' && availability.source === 'desktop'
-        ? { status: 'desktop-only', version: availability.version }
-        : { status: 'not-installed' };
-    }
+    const availability = await this.checkAvailability();
+    if (availability.status !== 'available') return availability;
 
     const trimmed = query.trim();
     if (!trimmed) return { status: 'ok', items: [] };
@@ -116,22 +165,34 @@ export class LovcodeService {
       return { status: 'error' };
     }
   }
+}
 
-  private async checkCliAvailability(force = false): Promise<LovcodeAvailability> {
-    if (!force && this.cachedCliAvailability) return this.cachedCliAvailability;
-    try {
-      const { stdout } = await this.runCommand(['--version'], { timeout: VERSION_TIMEOUT_MS });
-      this.cachedCliAvailability = {
-        status: 'available',
-        version: stdout.trim() || null,
-        source: 'cli',
-      };
-    } catch (err) {
-      log.debug('LovcodeService: lovcode CLI not available', { error: String(err) });
-      this.cachedCliAvailability = { status: 'not-installed' };
-    }
-    return this.cachedCliAvailability;
+async function discoverLovcodeCommands(): Promise<{ commands: string[] }> {
+  const commands = new Set<string>();
+  if (process.env.LOVCODE_BIN) commands.add(process.env.LOVCODE_BIN);
+  commands.add(LOVCODE_BIN);
+
+  const desktop = await detectLovcodeDesktopInstallation();
+  if (desktop?.version && isVersionAtLeast(desktop.version, LOVCODE_MIN_SEARCH_VERSION)) {
+    commands.add(desktop.executablePath);
   }
+
+  return { commands: Array.from(commands) };
+}
+
+export function isVersionAtLeast(version: string, minimum: string): boolean {
+  const normalize = (value: string) =>
+    value
+      .replace(/^lovcode\s+/i, '')
+      .split(/[.-]/)
+      .slice(0, 3)
+      .map((part) => Number.parseInt(part, 10) || 0);
+  const current = normalize(version);
+  const required = normalize(minimum);
+  for (let index = 0; index < 3; index += 1) {
+    if (current[index] !== required[index]) return current[index] > required[index];
+  }
+  return true;
 }
 
 export function parseSearchHits(stdout: string): LovcodeSearchHit[] {

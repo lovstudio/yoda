@@ -4,9 +4,19 @@ import { LOVCODE_DOWNLOAD_URL } from '@shared/lovcode';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
 
-export function LovcodeInstallBanner({ desktopInstalled = false }: { desktopInstalled?: boolean }) {
+type LovcodeInstallBannerProps = {
+  status?: 'not-installed' | 'desktop-only' | 'upgrade-required';
+  version?: string | null;
+};
+
+export function LovcodeInstallBanner({
+  status = 'not-installed',
+  version,
+}: LovcodeInstallBannerProps) {
   const { t } = useTranslation();
-  const Icon = desktopInstalled ? Check : Search;
+  const desktopOnly = status === 'desktop-only';
+  const upgradeRequired = status === 'upgrade-required';
+  const Icon = desktopOnly ? Check : Search;
 
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
@@ -16,26 +26,31 @@ export function LovcodeInstallBanner({ desktopInstalled = false }: { desktopInst
       <div className="flex flex-col gap-1">
         <h2 className="text-sm font-medium font-mono text-foreground">
           {t(
-            desktopInstalled
+            desktopOnly
               ? 'commandPalette.lovcode.desktopOnlyTitle'
-              : 'commandPalette.lovcode.title'
+              : upgradeRequired
+                ? 'commandPalette.lovcode.upgradeTitle'
+                : 'commandPalette.lovcode.title'
           )}
         </h2>
         <p className="text-xs leading-relaxed text-foreground-passive max-w-sm">
           {t(
-            desktopInstalled
+            desktopOnly
               ? 'commandPalette.lovcode.desktopOnlyDescription'
-              : 'commandPalette.lovcode.description'
+              : upgradeRequired
+                ? 'commandPalette.lovcode.upgradeDescription'
+                : 'commandPalette.lovcode.description',
+            { version }
           )}
         </p>
       </div>
-      {!desktopInstalled && (
+      {!desktopOnly && (
         <Button
           size="sm"
           onClick={() => void rpc.app.openExternal(LOVCODE_DOWNLOAD_URL)}
           className="gap-1.5"
         >
-          {t('commandPalette.lovcode.install')}
+          {t(upgradeRequired ? 'commandPalette.lovcode.upgrade' : 'commandPalette.lovcode.install')}
           <ExternalLink className="size-3.5" />
         </Button>
       )}

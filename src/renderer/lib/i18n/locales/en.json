@@ -711,6 +711,7 @@
       "lovcodeDesktopConnectedDescription": "Desktop app installed · {{version}}",
       "lovcodeDesktopInstalledDescription": "Desktop app installed",
       "lovcodeDesktopTooltip": "Lovcode desktop app detected",
+      "lovcodeUpgradeDescription": "Version {{version}} is installed; upgrade to search and open sessions in Yoda",
       "lovcodeInstalledTooltip": "Lovcode is connected to global session search",
       "copyInstallCommand": "Copy install command",
       "commandCopied": "Command copied",
@@ -720,6 +721,7 @@
       "connect": "Connect {{name}}",
       "connecting": "Connecting {{name}}…",
       "install": "Install {{name}}",
+      "upgrade": "Upgrade {{name}}",
       "detecting": "Detecting {{name}}…",
       "cancelConnecting": "Cancel connecting {{name}}",
       "githubCliManagedTooltip": "Run `gh auth logout` in your terminal to disconnect",
@@ -2072,6 +2074,9 @@
       "install": "Get Lovcode",
       "desktopOnlyTitle": "Lovcode is installed",
       "desktopOnlyDescription": "The current desktop app does not expose the command-line search interface Yoda needs. You can continue searching sessions in Lovcode.",
+      "upgradeTitle": "Upgrade Lovcode to search",
+      "upgradeDescription": "Version {{version}} is installed; upgrade to search complete session content across every project.",
+      "upgrade": "Upgrade Lovcode",
       "matches": "Session content",
       "searchError": "Lovcode search is temporarily unavailable. Try again shortly."
     }

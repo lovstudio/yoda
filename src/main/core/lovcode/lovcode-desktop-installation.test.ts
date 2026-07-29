@@ -25,6 +25,7 @@ describe('detectLovcodeDesktopInstallation', () => {
 
     await expect(detectLovcodeDesktopInstallation(probe)).resolves.toEqual({
       version: '0.39.9',
+      executablePath: '/Applications/Lovcode.app/Contents/MacOS/lovcode',
     });
     expect(probe.accessExecutable).toHaveBeenCalledWith(
       '/Applications/Lovcode.app/Contents/MacOS/lovcode'
@@ -40,6 +41,7 @@ describe('detectLovcodeDesktopInstallation', () => {
 
     await expect(detectLovcodeDesktopInstallation(probe)).resolves.toEqual({
       version: '0.39.9',
+      executablePath: '/Users/tester/Applications/Lovcode.app/Contents/MacOS/lovcode',
     });
     expect(accessExecutable).toHaveBeenLastCalledWith(
       '/Users/tester/Applications/Lovcode.app/Contents/MacOS/lovcode'

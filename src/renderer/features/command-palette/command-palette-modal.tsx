@@ -227,6 +227,8 @@ export function CommandPaletteModal({
     inSessionsScope && searchText.length > 0 && lovcodeResult?.status === 'not-installed';
   const lovcodeDesktopOnly =
     inSessionsScope && searchText.length > 0 && lovcodeResult?.status === 'desktop-only';
+  const lovcodeUpgradeRequired =
+    inSessionsScope && searchText.length > 0 && lovcodeResult?.status === 'upgrade-required';
   const lovcodeSearchError =
     inSessionsScope && searchText.length > 0 && lovcodeResult?.status === 'error';
 
@@ -373,7 +375,9 @@ export function CommandPaletteModal({
           ) : lovcodeNotInstalled ? (
             <LovcodeInstallBanner />
           ) : lovcodeDesktopOnly ? (
-            <LovcodeInstallBanner desktopInstalled />
+            <LovcodeInstallBanner status="desktop-only" version={lovcodeResult.version} />
+          ) : lovcodeUpgradeRequired ? (
+            <LovcodeInstallBanner status="upgrade-required" version={lovcodeResult.version} />
           ) : lovcodeSearchError ? (
             <div className="py-8 text-center text-xs text-foreground/40">
               {t('commandPalette.lovcode.searchError')}

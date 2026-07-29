@@ -1,4 +1,4 @@
-import { Check, Download, Loader2, Plus, Settings2, Waypoints } from 'lucide-react';
+import { ArrowUpCircle, Check, Download, Loader2, Plus, Settings2, Waypoints } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import featurebaseSvg from '@/assets/images/Featurebase.svg?raw';
@@ -129,29 +129,43 @@ const IntegrationsCard: React.FC<{ onOpenLiteLlm: () => void }> = ({ onOpenLiteL
       name: 'Lovcode',
       description:
         lovcodeAvailability?.status === 'available'
-          ? lovcodeAvailability.source === 'desktop'
-            ? lovcodeAvailability.version
-              ? t('settings.integrationsTab.lovcodeDesktopConnectedDescription', {
-                  version: lovcodeAvailability.version,
-                })
-              : t('settings.integrationsTab.lovcodeDesktopInstalledDescription')
-            : t('settings.integrationsTab.lovcodeConnectedDescription', {
+          ? t('settings.integrationsTab.lovcodeConnectedDescription', {
+              version: lovcodeAvailability.version,
+            })
+          : lovcodeAvailability?.status === 'upgrade-required'
+            ? t('settings.integrationsTab.lovcodeUpgradeDescription', {
                 version: lovcodeAvailability.version,
               })
-          : t('settings.integrationsTab.lovcodeDescription'),
+            : lovcodeAvailability?.status === 'desktop-only'
+              ? lovcodeAvailability.version
+                ? t('settings.integrationsTab.lovcodeDesktopConnectedDescription', {
+                    version: lovcodeAvailability.version,
+                  })
+                : t('settings.integrationsTab.lovcodeDesktopInstalledDescription')
+              : t('settings.integrationsTab.lovcodeDescription'),
       logoSvg: lovcodeSvg,
-      connected: lovcodeAvailability?.status === 'available',
+      connected:
+        lovcodeAvailability?.status === 'available' ||
+        lovcodeAvailability?.status === 'desktop-only',
       loading: lovcodeLoading,
       onConnect: () => {
         void rpc.app.openExternal(LOVCODE_DOWNLOAD_URL);
       },
       disabledTooltip:
-        lovcodeAvailability?.status === 'available' && lovcodeAvailability.source === 'desktop'
+        lovcodeAvailability?.status === 'desktop-only'
           ? t('settings.integrationsTab.lovcodeDesktopTooltip')
           : t('settings.integrationsTab.lovcodeInstalledTooltip'),
-      connectLabel: t('settings.integrationsTab.install', { name: 'Lovcode' }),
+      connectLabel:
+        lovcodeAvailability?.status === 'upgrade-required'
+          ? t('settings.integrationsTab.upgrade', { name: 'Lovcode' })
+          : t('settings.integrationsTab.install', { name: 'Lovcode' }),
       connectingLabel: t('settings.integrationsTab.detecting', { name: 'Lovcode' }),
-      connectIcon: <Download className="h-4 w-4" />,
+      connectIcon:
+        lovcodeAvailability?.status === 'upgrade-required' ? (
+          <ArrowUpCircle className="h-4 w-4" />
+        ) : (
+          <Download className="h-4 w-4" />
+        ),
     },
     {
       id: 'litellm',

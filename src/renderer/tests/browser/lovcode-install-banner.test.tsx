@@ -35,7 +35,7 @@ describe('LovcodeInstallBanner', () => {
 
   it('acknowledges an installed desktop app without offering another download', async () => {
     await act(async () =>
-      root.render(createElement(LovcodeInstallBanner, { desktopInstalled: true }))
+      root.render(createElement(LovcodeInstallBanner, { status: 'desktop-only' }))
     );
 
     expect(host.textContent).toContain('commandPalette.lovcode.desktopOnlyTitle');

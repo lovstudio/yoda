@@ -11,6 +11,7 @@ const PLIST_TIMEOUT_MS = 3_000;
 
 export type LovcodeDesktopInstallation = {
   version: string | null;
+  executablePath: string;
 };
 
 export type LovcodeDesktopProbe = {
@@ -54,7 +55,8 @@ export async function detectLovcodeDesktopInstallation(
       if (bundleId !== LOVCODE_MAC_BUNDLE_ID) continue;
 
       const executableName = await probe.readPlistValue(infoPlistPath, 'CFBundleExecutable');
-      await probe.accessExecutable(path.join(appBundle, 'Contents', 'MacOS', executableName));
+      const executablePath = path.join(appBundle, 'Contents', 'MacOS', executableName);
+      await probe.accessExecutable(executablePath);
 
       let version: string | null = null;
       try {
@@ -62,7 +64,7 @@ export async function detectLovcodeDesktopInstallation(
       } catch {
         // The executable is enough to establish installation; version is optional.
       }
-      return { version };
+      return { version, executablePath };
     } catch {
       // Try the next standard application directory.
     }

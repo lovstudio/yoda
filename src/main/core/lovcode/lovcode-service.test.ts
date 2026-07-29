@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createLovcodeCommandRunner,
+  isVersionAtLeast,
   LovcodeService,
   mapLovcodeResults,
   parseSearchHits,
@@ -11,11 +13,14 @@ vi.mock('@main/db/client', () => ({
 }));
 
 describe('LovcodeService', () => {
-  it('detects the desktop app without claiming CLI search capability', async () => {
+  it('detects an older desktop app and offers the required upgrade', async () => {
     const runCommand = vi.fn(async () => {
       throw new Error('CLI missing');
     });
-    const detectDesktop = vi.fn(async () => ({ version: '0.39.9' }));
+    const detectDesktop = vi.fn(async () => ({
+      version: '0.39.9',
+      executablePath: '/Applications/Lovcode.app/Contents/MacOS/lovcode',
+    }));
     const service = new LovcodeService(
       runCommand,
       vi.fn(() => []),
@@ -23,16 +28,48 @@ describe('LovcodeService', () => {
     );
 
     await expect(service.checkAvailability()).resolves.toEqual({
-      status: 'available',
+      status: 'upgrade-required',
       version: '0.39.9',
-      source: 'desktop',
     });
     await expect(service.search('needle')).resolves.toEqual({
-      status: 'desktop-only',
+      status: 'upgrade-required',
       version: '0.39.9',
     });
     expect(runCommand).toHaveBeenCalledOnce();
     expect(detectDesktop).toHaveBeenCalledOnce();
+  });
+
+  it('acknowledges a desktop app whose search interface is unavailable', async () => {
+    const service = new LovcodeService(
+      vi.fn(async () => {
+        throw new Error('CLI missing');
+      }),
+      vi.fn(() => []),
+      vi.fn(async () => ({
+        version: null,
+        executablePath: '/Applications/Lovcode.app/Contents/MacOS/lovcode',
+      }))
+    );
+
+    await expect(service.checkAvailability()).resolves.toEqual({
+      status: 'desktop-only',
+      version: null,
+    });
+  });
+
+  it('requires an upgrade when the discovered CLI predates indexed search', async () => {
+    const detectDesktop = vi.fn(async () => null);
+    const service = new LovcodeService(
+      vi.fn(async () => ({ stdout: 'lovcode 0.39.9' })),
+      vi.fn(() => []),
+      detectDesktop
+    );
+
+    await expect(service.checkAvailability()).resolves.toEqual({
+      status: 'upgrade-required',
+      version: 'lovcode 0.39.9',
+    });
+    expect(detectDesktop).not.toHaveBeenCalled();
   });
 
   it('searches globally and returns directly openable Yoda conversations', async () => {
@@ -116,6 +153,38 @@ describe('LovcodeService', () => {
       vi.fn(() => [])
     );
     await expect(failing.search('needle')).resolves.toEqual({ status: 'error' });
+  });
+});
+
+describe('Lovcode executable discovery', () => {
+  it('falls back to the application bundle and reuses the resolved executable', async () => {
+    const bundleCommand = '/Applications/lovcode.app/Contents/MacOS/lovcode';
+    const discover = vi.fn(async () => ({ commands: ['lovcode', bundleCommand] }));
+    const execute = vi.fn(async (command: string) => {
+      if (command === 'lovcode') throw new Error('not in PATH');
+      return { stdout: 'lovcode 0.40.0' };
+    });
+    const runCommand = createLovcodeCommandRunner(discover, execute);
+
+    await expect(runCommand(['--version'], { timeout: 3_000 })).resolves.toEqual({
+      stdout: 'lovcode 0.40.0',
+    });
+    await expect(runCommand(['search', 'needle', '--json'], { timeout: 10_000 })).resolves.toEqual({
+      stdout: 'lovcode 0.40.0',
+    });
+
+    expect(execute.mock.calls.map(([command]) => command)).toEqual([
+      'lovcode',
+      bundleCommand,
+      bundleCommand,
+    ]);
+    expect(discover).toHaveBeenCalledOnce();
+  });
+
+  it('compares desktop versions against the indexed-search contract', () => {
+    expect(isVersionAtLeast('0.39.9', '0.40.0')).toBe(false);
+    expect(isVersionAtLeast('0.40.0', '0.40.0')).toBe(true);
+    expect(isVersionAtLeast('lovcode 0.41.2', '0.40.0')).toBe(true);
   });
 });
 
