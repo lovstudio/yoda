@@ -133,7 +133,7 @@ describe('Settings integrations', () => {
       dockerVersion: 'Docker version 28.0.0',
       endpoint: 'http://127.0.0.1:4000/v1',
       adminUrl: 'http://127.0.0.1:4000/ui',
-      imageVersion: 'v1.86.0',
+      imageVersion: 'v1.90.2',
       modelCount: null,
     };
     mocks.checkLovcodeAvailability.mockResolvedValue({ status: 'not-installed' });
