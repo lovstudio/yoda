@@ -4,6 +4,7 @@ export const LITELLM_DOCKER_DESKTOP_URL = 'https://www.docker.com/products/docke
 
 export type LiteLlmManagedState =
   | 'docker-missing'
+  | 'docker-starting'
   | 'docker-stopped'
   | 'not-installed'
   | 'stopped'

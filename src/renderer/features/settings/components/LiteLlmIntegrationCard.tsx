@@ -34,7 +34,9 @@ type LiteLlmIntegrationCardProps = {
 
 function stateTone(state: LiteLlmManagedState | undefined): string {
   if (state === 'running' || state === 'external-running') return 'bg-emerald-500';
-  if (state === 'stopped' || state === 'docker-stopped') return 'bg-amber-500';
+  if (state === 'stopped' || state === 'docker-stopped' || state === 'docker-starting') {
+    return 'bg-amber-500';
+  }
   return 'bg-muted-foreground/50';
 }
 
@@ -79,6 +81,8 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     switch (status.state) {
       case 'docker-missing':
         return t('settings.integrationsTab.litellmDockerMissingDescription');
+      case 'docker-starting':
+        return t('settings.integrationsTab.litellmDockerStartingDescription');
       case 'docker-stopped':
         return t('settings.integrationsTab.litellmDockerStoppedDescription');
       case 'not-installed':
@@ -108,9 +112,11 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
         ? t('settings.integrationsTab.litellmStatusDetected')
         : status?.state === 'stopped'
           ? t('settings.integrationsTab.litellmStatusStopped')
-          : status?.state === 'docker-stopped'
-            ? t('settings.integrationsTab.litellmStatusDockerStopped')
-            : t('settings.integrationsTab.litellmStatusNotInstalled');
+          : status?.state === 'docker-starting'
+            ? t('settings.integrationsTab.litellmStatusDockerStarting')
+            : status?.state === 'docker-stopped'
+              ? t('settings.integrationsTab.litellmStatusDockerStopped')
+              : t('settings.integrationsTab.litellmStatusNotInstalled');
 
   const runAction = async (
     action: () => Promise<unknown>,
@@ -209,7 +215,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
               onClick={() =>
                 void runAction(
                   () => startDocker.mutateAsync(),
-                  t('settings.integrationsTab.litellmDockerStarted'),
+                  t('settings.integrationsTab.litellmDockerStartRequested'),
                   t('settings.integrationsTab.litellmDockerStartFailed')
                 )
               }
@@ -222,6 +228,26 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
               {t('settings.integrationsTab.litellmStartDocker')}
             </Button>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void statusQuery.refetch()}
+          >
+            <RefreshCw className="mr-1.5 h-4 w-4" />
+            {t('settings.integrationsTab.litellmRecheck')}
+          </Button>
+        </>
+      );
+    }
+
+    if (status.state === 'docker-starting') {
+      return (
+        <>
+          <Button type="button" size="sm" disabled>
+            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            {t('settings.integrationsTab.litellmStartingDocker')}
+          </Button>
           <Button
             type="button"
             variant="outline"

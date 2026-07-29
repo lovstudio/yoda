@@ -22,7 +22,7 @@ const COMPOSE_FILENAME = 'compose.yaml';
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1_000;
 const STATUS_TIMEOUT_MS = 5_000;
 const STARTUP_TIMEOUT_MS = 2 * 60 * 1_000;
-const DOCKER_START_TIMEOUT_MS = 60_000;
+const DOCKER_START_GRACE_MS = 5 * 60 * 1_000;
 const HEALTH_POLL_INTERVAL_MS = 1_000;
 const MASTER_KEY_SECRET = 'yoda-litellm-master-key';
 const SALT_KEY_SECRET = 'yoda-litellm-salt-key';
@@ -130,8 +130,20 @@ function createDockerCommandRunner(platform: NodeJS.Platform): DockerCommandRunn
   };
 }
 
-async function defaultLaunchDockerDesktop(platform: NodeJS.Platform): Promise<void> {
+async function defaultLaunchDockerDesktop(
+  platform: NodeJS.Platform,
+  runDocker: DockerCommandRunner
+): Promise<void> {
   if (platform === 'darwin') {
+    try {
+      await runDocker(['desktop', 'start', '--detach'], {
+        timeout: STATUS_TIMEOUT_MS,
+      });
+      return;
+    } catch (error) {
+      log.warn('Docker Desktop CLI start failed; falling back to Launch Services:', error);
+    }
+
     await execFileAsync('/usr/bin/open', ['-a', 'Docker'], {
       encoding: 'utf8',
       timeout: STATUS_TIMEOUT_MS,
@@ -205,6 +217,7 @@ export class LiteLlmManagedService {
   private readonly launchDockerDesktop: () => Promise<void>;
   private readonly platform: NodeJS.Platform;
   private operationInProgress = false;
+  private dockerStartRequestedAt: number | null = null;
 
   constructor(options: LiteLlmManagedServiceOptions = {}) {
     this.platform = options.platform ?? process.platform;
@@ -217,7 +230,8 @@ export class LiteLlmManagedService {
     this.writeClipboard = options.writeClipboard ?? ((value) => clipboard.writeText(value));
     this.openExternal = options.openExternal ?? ((url) => shell.openExternal(url));
     this.launchDockerDesktop =
-      options.launchDockerDesktop ?? (() => defaultLaunchDockerDesktop(this.platform));
+      options.launchDockerDesktop ??
+      (() => defaultLaunchDockerDesktop(this.platform, this.runDocker));
   }
 
   async getStatus(): Promise<LiteLlmManagedStatus> {
@@ -226,6 +240,8 @@ export class LiteLlmManagedService {
       this.fileExists(this.composePath()),
       this.probeReadiness(),
     ]);
+
+    if (docker.running) this.dockerStartRequestedAt = null;
 
     if (healthy) {
       return this.createStatus({
@@ -237,6 +253,7 @@ export class LiteLlmManagedService {
     }
 
     if (!docker.installed) {
+      this.dockerStartRequestedAt = null;
       return this.createStatus({
         state: 'docker-missing',
         installed,
@@ -247,7 +264,7 @@ export class LiteLlmManagedService {
 
     if (!docker.running) {
       return this.createStatus({
-        state: 'docker-stopped',
+        state: this.isDockerStarting() ? 'docker-starting' : 'docker-stopped',
         installed,
         docker,
         modelCount: null,
@@ -272,7 +289,11 @@ export class LiteLlmManagedService {
           error: 'Port 4000 already has an existing LiteLLM service.',
         };
       }
-      if (status.state === 'docker-missing' || status.state === 'docker-stopped') {
+      if (
+        status.state === 'docker-missing' ||
+        status.state === 'docker-starting' ||
+        status.state === 'docker-stopped'
+      ) {
         return {
           success: false,
           status,
@@ -306,7 +327,11 @@ export class LiteLlmManagedService {
       if (!status.installed) {
         return { success: false, status, error: 'Managed LiteLLM is not installed.' };
       }
-      if (status.state === 'docker-missing' || status.state === 'docker-stopped') {
+      if (
+        status.state === 'docker-missing' ||
+        status.state === 'docker-starting' ||
+        status.state === 'docker-stopped'
+      ) {
         return { success: false, status, error: 'Docker Desktop is not ready.' };
       }
 
@@ -365,20 +390,10 @@ export class LiteLlmManagedService {
     return this.runExclusive(async () => {
       try {
         await this.launchDockerDesktop();
-        const deadline = Date.now() + DOCKER_START_TIMEOUT_MS;
-        while (Date.now() < deadline) {
-          const docker = await this.detectDocker();
-          if (docker.running) {
-            return { success: true, status: await this.getStatus() };
-          }
-          await delay(HEALTH_POLL_INTERVAL_MS);
-        }
-        return {
-          success: false,
-          status: await this.getStatus(),
-          error: 'Docker Desktop startup timed out.',
-        };
+        this.dockerStartRequestedAt = Date.now();
+        return { success: true, status: await this.getStatus() };
       } catch (error) {
+        this.dockerStartRequestedAt = null;
         log.error('Failed to start Docker Desktop:', error);
         return {
           success: false,
@@ -387,6 +402,13 @@ export class LiteLlmManagedService {
         };
       }
     });
+  }
+
+  private isDockerStarting(): boolean {
+    if (this.dockerStartRequestedAt === null) return false;
+    if (Date.now() - this.dockerStartRequestedAt <= DOCKER_START_GRACE_MS) return true;
+    this.dockerStartRequestedAt = null;
+    return false;
   }
 
   async openAdmin(): Promise<{ success: boolean; error?: string }> {
