@@ -136,7 +136,6 @@ Yoda 可以通过 SSH/SFTP 连接远程机器，让你在远程代码库上工�
 | [Droid (Factory)](https://docs.factory.ai/cli/getting-started/quickstart) | <code>curl -fsSL https://app.factory.ai/cli &#124; sh</code> |
 | [Gemini](https://github.com/google-gemini/gemini-cli) | `npm install -g @google/gemini-cli` |
 | [GitHub Copilot](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli) | `npm install -g @github/copilot` |
-| [GLM](https://docs.z.ai/scenario-example/develop-tools/claude) | <code>curl -fsSL https://claude.ai/install.sh &#124; bash</code> |
 | [Goose](https://block.github.io/goose/docs/quickstart/) | <code>curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh &#124; bash</code> |
 | [Grok](https://x.ai/cli) | <code>curl -fsSL https://x.ai/cli/install.sh &#124; bash</code> |
 | [Hermes Agent](https://hermes-agent.nousresearch.com/docs/) | <code>curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh &#124; bash</code> |

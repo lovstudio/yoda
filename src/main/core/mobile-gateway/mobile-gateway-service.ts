@@ -1008,11 +1008,23 @@ export class MobileGatewayService {
     };
   }
 
-  private async getSessionDetail(
+  /**
+   * Canonical renderable session snapshot used by both the mobile detail API
+   * and public session sharing.
+   */
+  async getSessionDetail(
     projectId: string,
     taskId: string,
     conversationId: string
   ): Promise<MobileSessionDetail> {
+    return (await this.getSessionShareSource(projectId, taskId, conversationId)).detail;
+  }
+
+  async getSessionShareSource(
+    projectId: string,
+    taskId: string,
+    conversationId: string
+  ): Promise<{ detail: MobileSessionDetail; cwd: string }> {
     const data = await this.loadTaskSessionData(projectId, taskId);
     const conversation = data.conversations.find((item) => item.id === conversationId);
     const session = data.sessions.find((item) => item.id === conversationId);
@@ -1030,14 +1042,17 @@ export class MobileGatewayService {
     const tailedTranscript = tailSessionTranscript(transcript);
 
     return {
-      generatedAt: new Date().toISOString(),
-      session,
-      content: tailed.content,
-      contentLength: tailed.contentLength,
-      truncated: tailed.truncated,
-      source: output.source,
-      transcript: tailedTranscript.transcript,
-      transcriptTruncated: tailedTranscript.truncated,
+      cwd: data.cwd,
+      detail: {
+        generatedAt: new Date().toISOString(),
+        session,
+        content: tailed.content,
+        contentLength: tailed.contentLength,
+        truncated: tailed.truncated,
+        source: output.source,
+        transcript: tailedTranscript.transcript,
+        transcriptTruncated: tailedTranscript.truncated,
+      },
     };
   }
 

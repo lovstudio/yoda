@@ -309,6 +309,7 @@ function resolveAgentSlot(args: {
 function agentSkillSelection(agent: Agent | null): SkillSelectionInput | undefined {
   if (!agent) return undefined;
   return normalizeSkillSelection({
+    restriction: agent.skillPolicyMode === 'allowlist' ? 'allowlist' : undefined,
     autoSkillKeys: agent.enabledSkillIds,
     manualSkillKeys: agent.manualSkillIds,
   });

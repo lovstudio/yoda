@@ -13,6 +13,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { AppRunningAgentSession } from '@shared/app-resource';
 import { getMaasPlatformDefinition } from '@shared/maas';
 import {
   getRuntime,
@@ -22,10 +23,13 @@ import {
   type RuntimeId,
 } from '@shared/runtime-registry';
 import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
+import { openTaskTarget } from '@renderer/app/open-task-target';
 import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
 import { useMaasConnections, useMaasGlobalBinding } from '@renderer/features/maas/useMaas';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { SkillQuickSearchPopover } from '@renderer/features/skills/components/SkillQuickSearchPopover';
+import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
+import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import {
   resolveSessionPrompts,
@@ -36,7 +40,9 @@ import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import type { RunningAgentRuntimeSession } from '@renderer/lib/stores/agent-runtime-store';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
 import { Button } from '@renderer/lib/ui/button';
@@ -44,7 +50,17 @@ import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popove
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
+import { WorkspaceResourceMetric } from './workspace-resource-metric';
 import { getQuotaWindowLabel } from './workspace-runtime-bar-format';
+
+type WorkspaceRunningAgentSession = RunningAgentRuntimeSession &
+  Partial<Pick<AppRunningAgentSession, 'runtimeId' | 'title' | 'taskTitle'>>;
+
+function runningAgentSessionKey(
+  session: Pick<RunningAgentRuntimeSession, 'projectId' | 'taskId' | 'conversationId'>
+): string {
+  return `${session.projectId}\0${session.taskId}\0${session.conversationId}`;
+}
 
 export function explicitConversationRuntimeId(value: unknown): RuntimeId | null {
   return typeof value === 'string' && isValidRuntimeId(value) ? value : null;
@@ -53,12 +69,14 @@ export function explicitConversationRuntimeId(value: unknown): RuntimeId | null 
 export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { navigate } = useNavigate();
   const showConfirmActionModal = useShowModal('confirmActionModal');
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
+  const [isRunningAgentListOpen, setIsRunningAgentListOpen] = useState(false);
   const [isSkillPopoverOpen, setIsSkillPopoverOpen] = useState(false);
   const [isCleaningWorktrees, setIsCleaningWorktrees] = useState(false);
   const [sessionPromptCount, setSessionPromptCount] = useState<{
@@ -214,6 +232,31 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
+  const resourceSessionByKey = new Map(
+    (resourceSnapshot?.runningAgentSessions ?? []).map((session) => [
+      runningAgentSessionKey(session),
+      session,
+    ])
+  );
+  const runningAgentSessions: WorkspaceRunningAgentSession[] = appState.agentRuntime
+    .runningSessions()
+    .map((session) => {
+      const resourceSession = resourceSessionByKey.get(runningAgentSessionKey(session));
+      const task = getTaskStore(session.projectId, session.taskId);
+      const conversation = asProvisioned(task)?.conversations.conversations.get(
+        session.conversationId
+      )?.data;
+      return {
+        ...session,
+        runtimeId:
+          resourceSession?.runtimeId ??
+          explicitConversationRuntimeId(conversation?.runtimeId) ??
+          undefined,
+        title: resourceSession?.title ?? conversation?.title,
+        taskTitle: resourceSession?.taskTitle ?? task?.data.name,
+      };
+    });
+  const runningAgentCount = runningAgentSessions.length;
 
   useEffect(() => {
     if (!activeConversation || !provisionedTask) return;
@@ -402,6 +445,35 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const openSkillsManagement = () => {
     setIsSkillPopoverOpen(false);
     appState.navigation.navigate('skills');
+  };
+
+  const openRunningAgentSession = (session: WorkspaceRunningAgentSession) => {
+    setIsResourcePopoverOpen(false);
+    setIsRunningAgentListOpen(false);
+    openTaskTarget(
+      {
+        projectId: session.projectId,
+        taskId: session.taskId,
+        conversationId: session.conversationId,
+      },
+      navigate
+    );
+  };
+
+  const handleRunningAgentMetricClick = () => {
+    const onlySession = runningAgentSessions.length === 1 ? runningAgentSessions[0] : undefined;
+    if (onlySession) {
+      openRunningAgentSession(onlySession);
+      return;
+    }
+    if (runningAgentSessions.length > 1) {
+      setIsRunningAgentListOpen((current) => !current);
+    }
+  };
+
+  const handleResourcePopoverOpenChange = (open: boolean) => {
+    setIsResourcePopoverOpen(open);
+    if (!open) setIsRunningAgentListOpen(false);
   };
 
   return (
@@ -698,16 +770,20 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         </div>
       ) : null}
       <span className="flex-1" />
-      <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>
+      <Popover open={isResourcePopoverOpen} onOpenChange={handleResourcePopoverOpenChange}>
         <PopoverTrigger
-          aria-label={t('workspaceRuntime.resources.title')}
+          aria-label={t('workspaceRuntime.resources.triggerLabel', {
+            count: runningAgentCount,
+          })}
           className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-          title={t('workspaceRuntime.resources.title')}
+          title={t('workspaceRuntime.resources.triggerLabel', {
+            count: runningAgentCount,
+          })}
         >
           <Activity className="size-3.5" />
           <span className="font-mono tabular-nums">
             {resourceSnapshot
-              ? `${formatBytes(resourceSnapshot.memoryBytes)} · ${Math.round(resourceSnapshot.cpuPercent)}%`
+              ? `${formatBytes(resourceSnapshot.memoryBytes)} · ${Math.round(resourceSnapshot.cpuPercent)}% · ${t('workspaceRuntime.resources.runningAgentsShort', { count: runningAgentCount })}`
               : '—'}
           </span>
         </PopoverTrigger>
@@ -724,19 +800,94 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             </div>
           </div>
           <div className="grid grid-cols-3 gap-px bg-border">
-            <ResourceMetric
+            <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.cpu')}
               value={resourceSnapshot ? `${Math.round(resourceSnapshot.cpuPercent)}%` : '—'}
             />
-            <ResourceMetric
+            <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.memory')}
               value={resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—'}
             />
-            <ResourceMetric
-              label={t('workspaceRuntime.resources.sessions')}
-              value={String(resourceSnapshot?.activeAgentSessions ?? 0)}
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.resources.runningAgents')}
+              value={String(runningAgentCount)}
+              ariaLabel={
+                runningAgentSessions.length === 1
+                  ? t('workspaceRuntime.resources.openOnlyRunningAgent')
+                  : isRunningAgentListOpen
+                    ? t('workspaceRuntime.resources.hideRunningAgents')
+                    : t('workspaceRuntime.resources.showRunningAgents', {
+                        count: runningAgentSessions.length,
+                      })
+              }
+              controls={
+                runningAgentSessions.length > 1 ? 'workspace-running-agent-list' : undefined
+              }
+              expanded={runningAgentSessions.length > 1 ? isRunningAgentListOpen : undefined}
+              onClick={runningAgentSessions.length > 0 ? handleRunningAgentMetricClick : undefined}
             />
           </div>
+          {runningAgentSessions.length > 1 && isRunningAgentListOpen ? (
+            <div id="workspace-running-agent-list" className="border-b border-border p-3">
+              <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
+                {t('workspaceRuntime.resources.runningAgents')}
+              </div>
+              <div className="max-h-56 space-y-1 overflow-y-auto">
+                {runningAgentSessions.map((session) => {
+                  const title =
+                    (session.runtimeId
+                      ? formatConversationTitleForDisplay(
+                          session.runtimeId,
+                          session.title ?? ''
+                        ).trim()
+                      : session.title?.trim()) ||
+                    t('workspaceRuntime.resources.sessionFallback', {
+                      id: session.conversationId.slice(0, 8),
+                    });
+                  const taskTitle =
+                    session.taskTitle?.trim() ||
+                    t('workspaceRuntime.resources.taskFallback', {
+                      id: session.taskId.slice(0, 8),
+                    });
+                  const config = session.runtimeId ? agentConfig[session.runtimeId] : undefined;
+                  return (
+                    <button
+                      key={runningAgentSessionKey(session)}
+                      type="button"
+                      aria-label={t('workspaceRuntime.resources.openSession', { title })}
+                      className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                      onClick={() => openRunningAgentSession(session)}
+                    >
+                      <span className="flex size-5 shrink-0 items-center justify-center">
+                        {config ? (
+                          <AgentLogo
+                            logo={config.logo}
+                            alt={config.alt}
+                            isSvg={config.isSvg}
+                            invertInDark={config.invertInDark}
+                            className="size-4"
+                          />
+                        ) : (
+                          <MessageSquare aria-hidden className="size-4" />
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-foreground">{title}</span>
+                        <span className="block truncate text-[11px] text-foreground-passive">
+                          {taskTitle} · {t(`agentStatus.${session.status}`)}
+                        </span>
+                      </span>
+                      <AgentStatusIndicator
+                        status={session.status}
+                        disableTooltip
+                        boxClassName="size-4"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           {resourceSnapshot?.processes.length ? (
             <div className="border-b border-border p-3">
               <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
@@ -855,7 +1006,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           <div className="grid gap-3 p-3">
             <MaasGlobalSelector
               onManagePlatform={() => appState.navigation.navigate('maas')}
-              onOpenMarketplace={() => appState.navigation.navigate('marketplace')}
+              onOpenMarketplace={() =>
+                appState.navigation.navigate('marketplace', { section: 'extensions' })
+              }
             />
             <div className="flex gap-2">
               <Button
@@ -947,15 +1100,6 @@ function ContextProgressBar({
         style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
       />
     </span>
-  );
-}
-
-function ResourceMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-background p-2.5">
-      <div className="text-[10px] uppercase tracking-wide text-foreground-passive">{label}</div>
-      <div className="mt-1 font-mono text-sm tabular-nums text-foreground">{value}</div>
-    </div>
   );
 }
 

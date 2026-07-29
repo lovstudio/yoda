@@ -5,6 +5,7 @@ import Database from 'better-sqlite3';
 import { log } from '@main/lib/logger';
 import { summarizeTitle } from './llm-summarizer';
 import type {
+  SessionBindingListener,
   SessionTitleContext,
   SessionTitleSource,
   SessionTitleWatcher,
@@ -55,7 +56,11 @@ export function getClaimedCodexThreadId(conversationId: string): string | undefi
 export class CodexSessionTitleSource implements SessionTitleSource {
   readonly runtimeId = 'codex' as const;
 
-  watch(ctx: SessionTitleContext, onTitle: TitleListener): SessionTitleWatcher {
+  watch(
+    ctx: SessionTitleContext,
+    onTitle: TitleListener,
+    onSessionBound?: SessionBindingListener
+  ): SessionTitleWatcher {
     const startedAtMs = ctx.startedAtMs ?? Date.now();
     return new CodexThreadTitlePoller({
       conversationId: ctx.conversationId,
@@ -65,6 +70,7 @@ export class CodexSessionTitleSource implements SessionTitleSource {
       isResuming: ctx.isResuming ?? false,
       threadId: ctx.agentSessionId,
       onTitle,
+      onSessionBound,
     });
   }
 }
@@ -393,6 +399,43 @@ export function findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt(params: {
   });
 }
 
+/**
+ * Recovers a renamed legacy conversation from the one Codex thread that was
+ * active when Yoda last interacted with it. This is deliberately stricter
+ * than "closest timestamp": parallel threads in the same cwd stay ambiguous.
+ */
+export function findUniqueCodexThreadRefByCwdAtActivity(params: {
+  statePath: string;
+  cwd: string;
+  activityAtMs: number;
+  includeArchived?: boolean;
+}): CodexThreadRef | undefined {
+  return withCodexState(params.statePath, (db) => {
+    const rows = db
+      .prepare(
+        `
+          SELECT
+            id,
+            cwd,
+            title,
+            first_user_message AS firstUserMessage,
+            COALESCE(created_at_ms, created_at * 1000) AS createdAtMs,
+            COALESCE(updated_at_ms, updated_at * 1000) AS updatedAtMs
+          FROM threads
+          WHERE cwd = ?
+            AND (? = 1 OR archived = 0)
+            AND COALESCE(created_at_ms, created_at * 1000) <= ?
+            AND COALESCE(updated_at_ms, updated_at * 1000) >= ?
+          ORDER BY COALESCE(updated_at_ms, updated_at * 1000) DESC, id DESC
+          LIMIT 2
+        `
+      )
+      .all(params.cwd, params.includeArchived ? 1 : 0, params.activityAtMs, params.activityAtMs);
+    if (!Array.isArray(rows) || rows.length !== 1) return undefined;
+    return parseCodexThreadRef(rows[0]);
+  });
+}
+
 export function findClosestCodexThreadRolloutByCreatedAt(params: {
   statePath: string;
   cwd: string;
@@ -566,6 +609,7 @@ type CodexThreadTitlePollerOptions = {
   isResuming: boolean;
   threadId?: string;
   onTitle: TitleListener;
+  onSessionBound?: SessionBindingListener;
 };
 
 const summarizedThreadIds = new Set<string>();
@@ -575,6 +619,7 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
   private readonly bindDeadline: number;
   private readonly minUpdatedAtMs: number;
   private threadId: string | undefined;
+  private notifiedSessionId: string | undefined;
   private lastTitle: string | undefined;
   private stopped = false;
 
@@ -708,7 +753,10 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
   }
 
   private tryBindThread(row: CodexThreadTitle): boolean {
-    if (this.threadId === row.id) return true;
+    if (this.threadId === row.id) {
+      this.notifySessionBound(row.id);
+      return true;
+    }
 
     const claimedBy = claimedCodexThreadOwners.get(row.id);
     if (claimedBy && claimedBy !== this.options.conversationId) return false;
@@ -718,7 +766,22 @@ class CodexThreadTitlePoller implements SessionTitleWatcher {
     claimedCodexThreadOwners.set(row.id, this.options.conversationId);
     claimedCodexThreadsByOwner.set(this.options.conversationId, row.id);
     this.threadId = row.id;
+    this.notifySessionBound(row.id);
     return true;
+  }
+
+  private notifySessionBound(sessionId: string): void {
+    if (this.notifiedSessionId === sessionId) return;
+    this.notifiedSessionId = sessionId;
+    try {
+      this.options.onSessionBound?.(sessionId);
+    } catch (error) {
+      log.warn('CodexSessionTitleSource: session binding listener threw', {
+        conversationId: this.options.conversationId,
+        sessionId,
+        error: String(error),
+      });
+    }
   }
 }
 

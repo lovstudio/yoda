@@ -1,7 +1,13 @@
 import type { RuntimeCustomConfig } from './app-settings';
 import type { AgentAccountProviderId, RuntimeId } from './runtime-registry';
 
-export const MAAS_PLATFORM_IDS = ['zenmux', 'openrouter', 'siliconflow', 'custom'] as const;
+export const MAAS_PLATFORM_IDS = [
+  'zenmux',
+  'openrouter',
+  'siliconflow',
+  'litellm',
+  'custom',
+] as const;
 
 export type MaasPlatformTemplateId = (typeof MAAS_PLATFORM_IDS)[number];
 export type CustomMaasPlatformId = `custom:${string}`;
@@ -244,6 +250,16 @@ export const MAAS_PLATFORMS: Record<MaasPlatformTemplateId, MaasPlatformDefiniti
     docsUrl: 'https://docs.siliconflow.cn/',
     officialDescriptionUrl: 'https://docs.siliconflow.cn/',
     capabilities: ['text', 'embedding', 'image'],
+  },
+  litellm: {
+    id: 'litellm',
+    name: 'LiteLLM',
+    description:
+      'Connect to a LiteLLM Gateway that routes requests across multiple model providers with load balancing and fallbacks.',
+    defaultEndpoint: 'http://127.0.0.1:4000/v1',
+    docsUrl: 'https://docs.litellm.ai/',
+    officialDescriptionUrl: 'https://docs.litellm.ai/',
+    capabilities: ['text', 'image', 'embedding'],
   },
   custom: {
     id: 'custom',

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { Conversation } from '@shared/conversations';
+import { isAgentSessionRunningStatus } from '@shared/events/agentEvents';
 import { taskProvisionProgressChannel, type ProvisionStep } from '@shared/events/taskEvents';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { err, ok, type Result } from '@shared/result';
@@ -40,6 +41,10 @@ export type ActiveAgentSessionSummary = {
   running: number;
   keepable: number;
   nonKeepableSessions: ActiveConversationSession[];
+};
+
+export type RunningAgentSession = ActiveConversationSession & {
+  status: ReturnType<typeof agentSessionRuntimeStore.getStatus>;
 };
 
 export type TaskManagerHooks = {
@@ -288,22 +293,25 @@ class TaskManager {
     return this._lifecycle.get(taskId)?.persistData.workspaceId;
   }
 
-  getActiveAgentSessionSummary(): ActiveAgentSessionSummary {
-    let running = 0;
-    let keepable = 0;
-    const nonKeepableSessions: ActiveConversationSession[] = [];
-
+  getRunningAgentSessions(): RunningAgentSession[] {
+    const sessions: RunningAgentSession[] = [];
     for (const stored of this._lifecycle.values()) {
-      const runningSessions = stored.taskProvider.conversations
-        .getActiveSessions()
-        .map((session) => ({ ...session, taskTitle: stored.taskName }))
-        .filter((session) => agentSessionRuntimeStore.isRunning(session));
-      running += runningSessions.length;
-      keepable += runningSessions.filter((session) => session.detachable).length;
-      nonKeepableSessions.push(...runningSessions.filter((session) => !session.detachable));
+      for (const session of stored.taskProvider.conversations.getActiveSessions()) {
+        const status = agentSessionRuntimeStore.getStatus(session);
+        if (!isAgentSessionRunningStatus(status)) continue;
+        sessions.push({ ...session, taskTitle: stored.taskName, status });
+      }
     }
+    return sessions;
+  }
 
-    return { running, keepable, nonKeepableSessions };
+  getActiveAgentSessionSummary(): ActiveAgentSessionSummary {
+    const runningSessions = this.getRunningAgentSessions();
+    return {
+      running: runningSessions.length,
+      keepable: runningSessions.filter((session) => session.detachable).length,
+      nonKeepableSessions: runningSessions.filter((session) => !session.detachable),
+    };
   }
 
   getBootstrapStatus(taskId: string): TaskBootstrapStatus {

@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>智能路径从文本猜测升级为真实解析，才能稳定打开正确目标</title>
+    <style>
+      :root {
+        --brand-primary: #24324a;
+        --brand-accent: #d97757;
+        --ink: #172033;
+        --muted: #566175;
+        --paper: #f7f4ef;
+        --white: #fffdf9;
+        --line: color-mix(in srgb, var(--ink) 19%, transparent);
+        --soft-line: color-mix(in srgb, var(--ink) 9%, transparent);
+        --accent-soft: color-mix(in srgb, var(--brand-accent) 11%, var(--paper));
+        --primary-soft: color-mix(in srgb, var(--brand-primary) 7%, var(--paper));
+        --font: Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #d8d8d6;
+        color: var(--ink);
+        font-family: var(--font);
+        text-rendering: geometricPrecision;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+      }
+
+      .poster {
+        width: 1600px;
+        height: 900px;
+        padding: 28px 50px 24px;
+        overflow: hidden;
+        display: grid;
+        grid-template-rows: 30px 112px minmax(0, 1fr) 48px;
+        gap: 12px;
+        background: var(--paper);
+        box-shadow: 0 28px 70px rgb(18 28 45 / 16%);
+      }
+
+      .topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        border-bottom: 1px solid var(--ink);
+        padding-bottom: 7px;
+      }
+
+      .figure-label {
+        margin: 0;
+        color: var(--brand-accent);
+        font-size: 12px;
+        line-height: 1;
+        font-weight: 780;
+        letter-spacing: 0.085em;
+        text-transform: uppercase;
+      }
+
+      .brand-lockup {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+      }
+
+      .brand-lockup img {
+        width: 132px;
+        max-height: 25px;
+        object-fit: contain;
+        object-position: right center;
+      }
+
+      .header {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 390px;
+        gap: 48px;
+        align-items: end;
+        padding: 2px 0 9px;
+      }
+
+      .poster__title {
+        margin: 0;
+        max-width: 1040px;
+        font-size: 40px;
+        line-height: 1.1;
+        font-weight: 780;
+        letter-spacing: -0.027em;
+        text-wrap: balance;
+      }
+
+      .poster__title span {
+        display: block;
+      }
+
+      .deck {
+        margin: 0 0 2px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.48;
+        font-weight: 480;
+      }
+
+      .deck strong {
+        color: var(--ink);
+        font-weight: 760;
+      }
+
+      .visual {
+        min-height: 0;
+        border-top: 1px solid var(--line);
+        padding-top: 12px;
+      }
+
+      .operating-model {
+        height: 100%;
+        display: grid;
+        grid-template-rows: 30px minmax(0, 1fr) 72px;
+        gap: 10px;
+      }
+
+      .reading-key {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        color: var(--muted);
+        font-size: 10.5px;
+        line-height: 1.2;
+      }
+
+      .reading-path {
+        color: var(--ink);
+        font-weight: 720;
+        letter-spacing: 0.02em;
+      }
+
+      .certainty-key {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        white-space: nowrap;
+      }
+
+      .key-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .key-mark {
+        width: 15px;
+        height: 5px;
+        background: var(--line);
+      }
+
+      .key-mark--exact {
+        background: var(--brand-accent);
+      }
+
+      .key-mark--system {
+        background: var(--brand-primary);
+      }
+
+      .system-grid {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 286px 52px minmax(0, 1fr) 52px 290px;
+        align-items: stretch;
+      }
+
+      .column {
+        min-width: 0;
+        min-height: 0;
+      }
+
+      .column-heading {
+        height: 32px;
+        margin: 0;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1;
+        font-weight: 780;
+        letter-spacing: 0.075em;
+        text-transform: uppercase;
+      }
+
+      .column-heading b {
+        color: var(--brand-accent);
+        font-size: 9px;
+        font-weight: 780;
+      }
+
+      .input-column {
+        display: grid;
+        grid-template-rows: 32px repeat(2, minmax(0, 1fr));
+      }
+
+      .actor {
+        position: relative;
+        min-height: 0;
+        padding: 24px 20px 18px 66px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 7px;
+        border-top: 2px solid var(--line);
+      }
+
+      .actor:last-child {
+        border-bottom: 1px solid var(--line);
+      }
+
+      .actor--exact {
+        border-top-color: var(--brand-accent);
+        background: linear-gradient(90deg, var(--accent-soft), transparent 74%);
+      }
+
+      .actor-index {
+        position: absolute;
+        left: 18px;
+        top: 23px;
+        color: var(--line);
+        font-size: 29px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+      }
+
+      .actor--exact .actor-index {
+        color: var(--brand-accent);
+      }
+
+      .actor-kicker {
+        color: var(--muted);
+        font-size: 9px;
+        line-height: 1;
+        font-weight: 760;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .actor-title {
+        margin: 0;
+        font-size: 20px;
+        line-height: 1.1;
+        font-weight: 780;
+      }
+
+      .actor-description {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .actor-signal {
+        display: inline-flex;
+        width: fit-content;
+        align-items: center;
+        gap: 6px;
+        margin-top: 3px;
+        padding-top: 6px;
+        border-top: 1px solid var(--soft-line);
+        color: var(--ink);
+        font-size: 10px;
+        line-height: 1.2;
+        font-weight: 680;
+      }
+
+      .actor--exact .actor-signal {
+        color: color-mix(in srgb, var(--brand-accent) 80%, var(--ink));
+      }
+
+      .flow-column {
+        display: grid;
+        align-items: stretch;
+      }
+
+      .flow-column--input {
+        grid-template-rows: 32px repeat(2, minmax(0, 1fr));
+      }
+
+      .flow-column--output {
+        grid-template-rows: 32px repeat(3, minmax(0, 1fr));
+      }
+
+      .flow-arrow {
+        position: relative;
+        align-self: center;
+        height: 1px;
+        margin: 0 9px;
+        background: var(--line);
+      }
+
+      .flow-arrow::after {
+        content: '';
+        position: absolute;
+        right: -1px;
+        top: -4px;
+        width: 8px;
+        height: 8px;
+        border-top: 1px solid currentColor;
+        border-right: 1px solid currentColor;
+        color: var(--muted);
+        transform: rotate(45deg);
+      }
+
+      .flow-arrow--exact {
+        height: 2px;
+        background: var(--brand-accent);
+      }
+
+      .flow-arrow--exact::after {
+        color: var(--brand-accent);
+        border-width: 2px;
+      }
+
+      .pipeline-column {
+        display: grid;
+        grid-template-rows: 32px minmax(0, 1fr);
+      }
+
+      .pipeline {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1.1fr) 34px minmax(0, 1fr);
+        border-top: 2px solid var(--ink);
+        border-bottom: 1px solid var(--ink);
+        background: color-mix(in srgb, white 37%, var(--paper));
+      }
+
+      .capability {
+        position: relative;
+        min-width: 0;
+        padding: 22px 17px 18px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .capability--gate {
+        background: var(--accent-soft);
+        box-shadow:
+          inset 4px 0 0 var(--brand-accent),
+          inset -1px 0 0 var(--soft-line);
+      }
+
+      .capability-step {
+        color: var(--brand-accent);
+        font-size: 10px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+
+      .capability-title {
+        margin: 9px 0 6px;
+        font-size: 19px;
+        line-height: 1.12;
+        font-weight: 790;
+      }
+
+      .capability-question {
+        margin: 0 0 17px;
+        color: var(--muted);
+        font-size: 10.5px;
+        line-height: 1.35;
+      }
+
+      .capability-list {
+        margin: auto 0 0;
+        padding: 0;
+        list-style: none;
+        border-top: 1px solid var(--soft-line);
+      }
+
+      .capability-list li {
+        position: relative;
+        padding: 8px 0 7px 13px;
+        border-bottom: 1px solid var(--soft-line);
+        color: var(--ink);
+        font-size: 10.5px;
+        line-height: 1.25;
+        font-weight: 620;
+      }
+
+      .capability-list li::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 12px;
+        width: 5px;
+        height: 5px;
+        border: 1px solid var(--muted);
+      }
+
+      .capability--gate .capability-list li::before {
+        border-color: var(--brand-accent);
+        background: var(--brand-accent);
+      }
+
+      .stage-connector {
+        position: relative;
+        display: grid;
+        place-items: center;
+      }
+
+      .stage-connector::before {
+        content: '';
+        width: 100%;
+        height: 1px;
+        background: var(--ink);
+      }
+
+      .stage-connector::after {
+        content: '';
+        position: absolute;
+        right: 3px;
+        width: 8px;
+        height: 8px;
+        border-top: 1px solid var(--ink);
+        border-right: 1px solid var(--ink);
+        transform: rotate(45deg);
+      }
+
+      .gate-label {
+        position: absolute;
+        right: 12px;
+        top: 15px;
+        padding: 4px 7px;
+        color: var(--white);
+        background: var(--brand-accent);
+        font-size: 8px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .outcome-column {
+        display: grid;
+        grid-template-rows: 32px repeat(3, minmax(0, 1fr));
+      }
+
+      .outcome {
+        position: relative;
+        min-height: 0;
+        padding: 14px 15px 13px 58px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 4px;
+        border-top: 1px solid var(--line);
+      }
+
+      .outcome:last-child {
+        border-bottom: 1px solid var(--line);
+      }
+
+      .outcome--high {
+        color: var(--white);
+        border-color: var(--brand-accent);
+        background: var(--brand-accent);
+      }
+
+      .outcome--medium {
+        border-top: 2px solid var(--brand-primary);
+        background: var(--primary-soft);
+      }
+
+      .outcome-rank {
+        position: absolute;
+        left: 15px;
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+        font-size: 9px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+      }
+
+      .outcome--low .outcome-rank {
+        color: var(--muted);
+      }
+
+      .outcome-title {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.12;
+        font-weight: 790;
+      }
+
+      .outcome-description {
+        margin: 0;
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.3;
+      }
+
+      .outcome--high .outcome-description {
+        color: rgb(255 255 255 / 79%);
+      }
+
+      .logic-strip {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 286px 52px minmax(0, 1fr) 52px 290px;
+        align-items: stretch;
+      }
+
+      .compatibility-note {
+        padding: 10px 12px 0 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .compatibility-note strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--ink);
+        font-size: 11px;
+        line-height: 1.2;
+      }
+
+      .compatibility-note span {
+        color: var(--muted);
+        font-size: 9.5px;
+        line-height: 1.3;
+      }
+
+      .logic-sequence {
+        grid-column: 3;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        border-top: 1px solid var(--ink);
+      }
+
+      .logic-item {
+        position: relative;
+        padding: 10px 16px 0;
+        border-right: 1px solid var(--soft-line);
+      }
+
+      .logic-item:last-child {
+        border-right: 0;
+      }
+
+      .logic-item b {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--brand-accent);
+        font-size: 10px;
+        line-height: 1.15;
+        font-weight: 790;
+      }
+
+      .logic-item span {
+        color: var(--muted);
+        font-size: 9.5px;
+        line-height: 1.3;
+      }
+
+      .decision-note {
+        grid-column: 5;
+        padding: 10px 0 0 16px;
+        border-top: 2px solid var(--brand-accent);
+      }
+
+      .decision-note strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--brand-accent);
+        font-size: 10px;
+        line-height: 1.2;
+        font-weight: 790;
+      }
+
+      .decision-note span {
+        color: var(--ink);
+        font-size: 11px;
+        line-height: 1.3;
+        font-weight: 640;
+      }
+
+      .footer {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(410px, auto);
+        gap: 28px;
+        align-items: end;
+        border-top: 1px solid var(--line);
+        padding-top: 7px;
+      }
+
+      .source-note,
+      .generation-note {
+        margin: 0;
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.32;
+      }
+
+      .generation-note {
+        text-align: right;
+      }
+
+      .site {
+        color: var(--ink);
+        font-weight: 680;
+      }
+
+      @media print {
+        html,
+        body {
+          background: transparent;
+        }
+
+        .poster {
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article
+      class="poster"
+      data-aspect="16:9"
+      data-template="operating-model"
+      data-mode="qualitative"
+    >
+      <div class="topline">
+        <p class="figure-label">Exhibit 01 · Smart Path Resolution</p>
+        <div class="brand-lockup">
+          <img
+            src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHN2ZyB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgdmlld0JveD0iMCAwIDQ5NSAxNjMuMyI+CjxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+Cgkuc3Qwe2ZpbGw6I0VCNjYzNzt9Cjwvc3R5bGU+CjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDM4LDApIj4KCTwhLS0gTG9nbyBtYXJrIC0tPgoJPGc+CgkJPHBhdGggY2xhc3M9InN0MCIgZD0iTTAsMzEuNHY1Ni43YzAsMTQuNSwxMS43LDI2LjIsMjYuMiwyNi4yVjU3LjZDMjYuMiw0My4yLDE0LjUsMzEuNCwwLDMxLjR6Ii8+CgkJPHBhdGggY2xhc3M9InN0MCIgZD0iTTMyLjcsNDguOXY1Ni43YzAsMTQuNSwxMS43LDI2LjIsMjYuMiwyNi4yVjc1LjFDNTguOSw2MC42LDQ3LjIsNDguOSwzMi43LDQ4Ljl6Ii8+CgkJPHBhdGggY2xhc3M9InN0MCIgZD0iTTY1LjUsMzkuOXY1Mi40YzE0LjUsMCwyNi4yLTExLjcsMjYuMi0yNi4yQzkxLjYsNTEuNiw3OS45LDM5LjksNjUuNSwzOS45eiIvPgoJPC9nPgoJPCEtLSBUZXh0OiBMb3ZTdHVkaW8gLS0+Cgk8dGV4dCB4PSIxMTYiIHk9IjEwOCIgZm9udC1mYW1pbHk9IidIZWx2ZXRpY2EgTmV1ZScsIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iNjgiIGZvbnQtd2VpZ2h0PSI1MDAiIGZpbGw9IiNFQjY2MzciIGxldHRlci1zcGFjaW5nPSItMC41Ij5Mb3ZTdWRpbzwvdGV4dD4KPC9nPgo8L3N2Zz4K"
+            alt="LovStudio Logo"
+          />
+        </div>
+      </div>
+
+      <header class="header" data-region="header">
+        <h1 class="poster__title" data-audit="title">
+          <span>智能路径从文本猜测升级为真实解析，</span>
+          <span>才能稳定打开正确目标</span>
+        </h1>
+        <p class="deck" data-audit="description">
+          <strong>OSC 8 负责精确边界；</strong
+          >普通文本经过语法、磁盘与上下文三层求解，按置信度执行。
+        </p>
+      </header>
+
+      <main class="visual" data-region="visual">
+        <section
+          class="operating-model"
+          data-primary-block
+          data-audit-container
+          data-encoding="position connection color containment"
+          aria-label="智能路径解析运营模型"
+        >
+          <div class="reading-key">
+            <span class="reading-path">阅读方向：信号入口 → 三层解析管线 → 分级用户动作</span>
+            <span class="certainty-key" aria-label="确定性图例">
+              <span class="key-item"><i class="key-mark key-mark--exact"></i>确定性证据</span>
+              <span class="key-item"><i class="key-mark key-mark--system"></i>系统执行</span>
+              <span class="key-item"><i class="key-mark"></i>启发式候选</span>
+            </span>
+          </div>
+
+          <div class="system-grid">
+            <div class="column input-column">
+              <h2 class="column-heading" data-audit="label">
+                信号入口
+                <b>2 条轨道</b>
+              </h2>
+
+              <div class="actor actor--exact" data-actor data-source-ref="S2">
+                <span class="actor-index">A</span>
+                <span class="actor-kicker">Exact metadata</span>
+                <h3 class="actor-title">OSC 8 原生链接</h3>
+                <p class="actor-description">输出方直接声明文字、URI 与范围。</p>
+                <span class="actor-signal">协议定边界 · 跳过猜测</span>
+              </div>
+
+              <div class="actor" data-actor data-source-ref="S1 S4">
+                <span class="actor-index">B</span>
+                <span class="actor-kicker">Heuristic text</span>
+                <h3 class="actor-title">普通文本与历史日志</h3>
+                <p class="actor-description">路径、URL、行列号与 TUI 折行均从字符恢复。</p>
+                <span class="actor-signal">正则给候选 · 仍需求证</span>
+              </div>
+            </div>
+
+            <div class="flow-column flow-column--input" aria-hidden="true">
+              <span></span>
+              <i class="flow-arrow flow-arrow--exact" data-flow data-connector></i>
+              <i class="flow-arrow" data-flow data-connector></i>
+            </div>
+
+            <div class="column pipeline-column">
+              <h2 class="column-heading" data-audit="label">
+                解析管线
+                <b>顺序执行</b>
+              </h2>
+
+              <div class="pipeline">
+                <section class="capability" data-capability data-source-ref="S1 S2 S4">
+                  <span class="capability-step">01 · Capture</span>
+                  <h3 class="capability-title">边界捕获</h3>
+                  <p class="capability-question">“哪一段看起来像路径？”</p>
+                  <ul class="capability-list">
+                    <li>OSC 8：读取精确范围</li>
+                    <li>文本：路径 / URL / 行列号</li>
+                    <li>兼容：TUI 视觉折行</li>
+                  </ul>
+                </section>
+
+                <i class="stage-connector" data-flow data-connector aria-hidden="true"></i>
+
+                <section
+                  class="capability capability--gate"
+                  data-capability
+                  data-source-ref="S3 S5"
+                  data-decision
+                >
+                  <span class="gate-label">Ground truth gate</span>
+                  <span class="capability-step">02 · Verify</span>
+                  <h3 class="capability-title">真实目标校验</h3>
+                  <p class="capability-question">“用户磁盘上究竟有没有？”</p>
+                  <ul class="capability-list">
+                    <li>存在性与文件 / 目录类型</li>
+                    <li>Workspace · Home · Worktree</li>
+                    <li>本地 / SSH 共用解析契约</li>
+                  </ul>
+                </section>
+
+                <i class="stage-connector" data-flow data-connector aria-hidden="true"></i>
+
+                <section class="capability" data-capability data-source-ref="S3 S5 S6">
+                  <span class="capability-step">03 · Rank</span>
+                  <h3 class="capability-title">上下文排序</h3>
+                  <p class="capability-question">“多个真实候选中最相关的是谁？”</p>
+                  <ul class="capability-list">
+                    <li>当前 cwd / worktree</li>
+                    <li>Git 改动 / 最近文件</li>
+                    <li>路径距离 / 模糊名称</li>
+                  </ul>
+                </section>
+              </div>
+            </div>
+
+            <div class="flow-column flow-column--output" aria-hidden="true">
+              <span></span>
+              <i class="flow-arrow flow-arrow--exact" data-flow data-connector></i>
+              <i class="flow-arrow" data-flow data-connector></i>
+              <i class="flow-arrow" data-flow data-connector></i>
+            </div>
+
+            <div class="column outcome-column">
+              <h2 class="column-heading" data-audit="label">
+                用户动作
+                <b>按置信度分级</b>
+              </h2>
+
+              <div class="outcome outcome--high" data-outcome data-decision data-source-ref="S5 S6">
+                <span class="outcome-rank">高</span>
+                <h3 class="outcome-title">直达真实目标</h3>
+                <p class="outcome-description">唯一存在且上下文一致 → 直接打开。</p>
+              </div>
+
+              <div class="outcome outcome--medium" data-outcome data-source-ref="S5 S6">
+                <span class="outcome-rank">中</span>
+                <h3 class="outcome-title">展示辅助候选</h3>
+                <p class="outcome-description">多个真实或近似结果 → 排序后供选择。</p>
+              </div>
+
+              <div class="outcome outcome--low" data-outcome data-source-ref="S1 S6">
+                <span class="outcome-rank">低</span>
+                <h3 class="outcome-title">保留文本或搜索</h3>
+                <p class="outcome-description">目标不存在或证据不足 → 保留文本。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="logic-strip">
+            <div class="compatibility-note" data-annotation data-source-ref="S4">
+              <strong data-audit="annotation">硬换行只做兼容恢复</strong>
+              <span>保留 TUI 折行能力，不进入核心决策层。</span>
+            </div>
+
+            <div class="logic-sequence">
+              <div class="logic-item">
+                <b>协议给边界</b>
+                <span>有 OSC 8 时使用确定范围。</span>
+              </div>
+              <div class="logic-item">
+                <b>磁盘给真相</b>
+                <span>存在，才从候选升级为目标。</span>
+              </div>
+              <div class="logic-item">
+                <b>上下文给优先级</b>
+                <span>只在真实候选之间排序。</span>
+              </div>
+            </div>
+
+            <div class="decision-note" data-annotation data-source-ref="S3 S5 S6">
+              <strong>决策原则</strong>
+              <span data-audit="annotation">精确优先 · 模糊辅助 · 置信度定交互</span>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer" data-region="footer">
+        <p class="source-note" data-audit="source">
+          来源：当前对话；Yoda main 实现（核验于 2026-07-29）；xterm.js OSC 8
+          官方文档。注：本图为定性系统设计，不表示实测命中率或延迟。
+        </p>
+        <p class="generation-note" data-audit="attribution">
+          本信息图由 LovStudio 的「专业信息图」Skill 生成 ·
+          <span class="site">https://lovstudio.ai</span>
+        </p>
+      </footer>
+    </article>
+
+    <script>
+      document.fonts.ready.finally(() => {
+        window.__INFOGRAPHIC_READY__ = true;
+      });
+    </script>
+  </body>
+</html>

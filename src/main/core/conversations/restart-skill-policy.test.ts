@@ -31,6 +31,7 @@ const policy: SkillSessionPolicy = {
 describe('skillSelectionForReload', () => {
   it('adds the installed skill while preserving existing invocation modes', () => {
     expect(skillSelectionForReload(policy, 'skill:local:new')).toEqual({
+      restriction: 'allowlist',
       autoSkillKeys: ['skill:local:auto', 'skill:local:new'],
       manualSkillKeys: ['skill:local:manual'],
     });
@@ -38,6 +39,7 @@ describe('skillSelectionForReload', () => {
 
   it('does not duplicate an already-enabled skill or restrict an unrestricted session', () => {
     expect(skillSelectionForReload(policy, 'skill:local:manual')).toEqual({
+      restriction: 'allowlist',
       autoSkillKeys: ['skill:local:auto'],
       manualSkillKeys: ['skill:local:manual'],
     });

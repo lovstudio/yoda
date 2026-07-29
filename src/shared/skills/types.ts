@@ -153,9 +153,10 @@ export interface ClawHubSkillSearchResult {
 
 /**
  * Agent-authored selection before paths and runtime capabilities are resolved.
- * When both lists are empty, callers normalize the profile to no restriction.
+ * An explicit allowlist remains restrictive even when both lists are empty.
  */
 export interface SkillSelectionInput {
+  restriction?: 'allowlist';
   autoSkillKeys: string[];
   manualSkillKeys: string[];
 }

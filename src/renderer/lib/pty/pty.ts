@@ -1,29 +1,19 @@
 import { Unicode11Addon } from '@xterm/addon-unicode11';
-import { WebglAddon } from '@xterm/addon-webgl';
-import { Terminal, type IDisposable, type ITerminalOptions } from '@xterm/xterm';
+import { Terminal, type ITerminalOptions } from '@xterm/xterm';
 import {
   PTY_CONSUMER_HEARTBEAT_INTERVAL_MS,
   ptyDataChannel,
   type PtyDataEvent,
 } from '@shared/events/ptyEvents';
 import {
-  DEFAULT_TERMINAL_RENDERER,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
-  normalizeTerminalRenderer,
   normalizeTerminalScrollbackLines,
-  type TerminalRenderer,
 } from '@shared/terminal-settings';
-import { toast } from '@renderer/lib/hooks/use-toast';
-import i18n from '@renderer/lib/i18n';
 import { events, rpc } from '@renderer/lib/ipc';
 import { cssVar } from '@renderer/utils/cssVars';
 import { log } from '@renderer/utils/logger';
 import { getCellMetrics } from './pty-dimensions';
 import { registerOsc52ClipboardHandler } from './terminal-clipboard';
-import {
-  resolveTerminalRendererEngine,
-  type TerminalRendererEngine,
-} from './terminal-renderer-selection';
 import { ensureXtermHost } from './xterm-host';
 
 // ── Theme helpers ─────────────────────────────────────────────────────────────
@@ -42,15 +32,6 @@ export interface SessionTheme {
  */
 export const TERMINAL_LINE_HEIGHT = 1.0;
 
-/**
- * Sole timer in the resize pipeline's unfreeze chain: reveals the resized
- * terminal when no TUI repaint ever arrives (plain shells, silent sessions —
- * their rewrapped plain text is already the correct final content).
- * Everything else is event-driven; see FrontendPty.commitResize().
- */
-const UNFREEZE_FALLBACK_MS = 300;
-/** Avoid a full-canvas GPU→2D copy on every high-frequency cursor repaint. */
-const FREEZE_SNAPSHOT_MIN_INTERVAL_MS = 150;
 /**
  * Bound each xterm parser job. 64 Ki UTF-16 code units is at most 192 KiB of
  * UTF-8 for BMP text (and less for paired supplementary code points), while
@@ -74,77 +55,6 @@ type TerminalWriteQueueItem = {
   readonly onWritten?: () => void;
   offset: number;
 };
-
-export type TerminalRendererIssue = 'webgl-unavailable' | 'webgl-context-lost';
-
-type TerminalRendererDiagnosticsEntry = {
-  preference: TerminalRenderer;
-  engine: TerminalRendererEngine;
-  issue: TerminalRendererIssue | null;
-};
-
-export type TerminalRendererDiagnostics = {
-  activeCount: number;
-  webglCount: number;
-  domCount: number;
-  fallbackCount: number;
-  strictFailureCount: number;
-  issueCounts: Record<TerminalRendererIssue, number>;
-};
-
-function createEmptyTerminalRendererDiagnostics(): TerminalRendererDiagnostics {
-  return {
-    activeCount: 0,
-    webglCount: 0,
-    domCount: 0,
-    fallbackCount: 0,
-    strictFailureCount: 0,
-    issueCounts: {
-      'webgl-unavailable': 0,
-      'webgl-context-lost': 0,
-    },
-  };
-}
-
-let terminalRendererDiagnosticsSnapshot = createEmptyTerminalRendererDiagnostics();
-const terminalRendererDiagnosticsListeners = new Set<() => void>();
-
-function recomputeTerminalRendererDiagnostics(): TerminalRendererDiagnostics {
-  const diagnostics = createEmptyTerminalRendererDiagnostics();
-  diagnostics.activeCount = FrontendPty.all.size;
-
-  for (const pty of FrontendPty.all) {
-    const entry = pty.getRendererDiagnosticsEntry();
-    if (entry.engine === 'webgl') diagnostics.webglCount += 1;
-    if (entry.engine === 'dom') diagnostics.domCount += 1;
-    if (!entry.issue) continue;
-
-    diagnostics.issueCounts[entry.issue] += 1;
-    if (entry.preference === 'webgl') {
-      diagnostics.strictFailureCount += 1;
-    } else {
-      diagnostics.fallbackCount += 1;
-    }
-  }
-
-  return diagnostics;
-}
-
-function notifyTerminalRendererDiagnosticsChanged(): void {
-  terminalRendererDiagnosticsSnapshot = recomputeTerminalRendererDiagnostics();
-  for (const listener of terminalRendererDiagnosticsListeners) {
-    listener();
-  }
-}
-
-export function getTerminalRendererDiagnostics(): TerminalRendererDiagnostics {
-  return terminalRendererDiagnosticsSnapshot;
-}
-
-export function subscribeTerminalRendererDiagnostics(listener: () => void): () => void {
-  terminalRendererDiagnosticsListeners.add(listener);
-  return () => terminalRendererDiagnosticsListeners.delete(listener);
-}
 
 export const DEFAULT_TERMINAL_FONT_FAMILY = [
   'Menlo',
@@ -205,7 +115,6 @@ export function buildTheme(theme?: SessionTheme): ITerminalOptions['theme'] {
 export class FrontendPty {
   /** All live FrontendPty instances — used for app-wide operations (e.g. theme updates). */
   static readonly all = new Set<FrontendPty>();
-  private static readonly reportedRendererFailures = new Set<string>();
 
   /**
    * Record the dimensions last sent to the backend for a session. Called by
@@ -270,28 +179,9 @@ export class FrontendPty {
   private savedAtBottom = true;
   /** Fractional wheel-scroll carry, so pixel-mode trackpad deltas don't quantize harshly. */
   private wheelPartialScroll = 0;
-  /** Snapshot overlay hiding resize transitions — see commitResize(). */
-  private freezeOverlay: HTMLCanvasElement | null = null;
-  /** Whether freezeOverlay holds a usable captured frame (see captureFreezeSnapshot). */
-  private hasFreezeSnapshot = false;
-  private lastFreezeSnapshotAt = Number.NEGATIVE_INFINITY;
-  /** Per-render snapshot capture into freezeOverlay; disposed with the terminal. */
-  private freezeSnapshotDisposable: IDisposable | null = null;
-  /** Unfreeze event chain state: idle → await-data → await-render → idle. */
-  private unfreezePhase: 'idle' | 'await-data' | 'await-render' = 'idle';
-  private unfreezeRenderDisposable: IDisposable | null = null;
-  private unfreezeFallbackTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Bumps on each resize chain so stale rAF / timeout callbacks cannot unfreeze a newer frame. */
-  private unfreezeGeneration = 0;
   /** Overrides OSC 8 hyperlink activation while a pane hosts this terminal; null = system browser. */
   private linkOpener: ((url: string) => void) | null = null;
   private readonly scrollDisposable: { dispose(): void };
-  private rendererPreference: TerminalRenderer = DEFAULT_TERMINAL_RENDERER;
-  private rendererEngine: TerminalRendererEngine = 'dom';
-  private rendererIssue: TerminalRendererIssue | null = null;
-  private webglAddon: WebglAddon | null = null;
-  private webglContextLossDisposable: IDisposable | null = null;
-  /** Off-screen sessions defer GPU recovery until mount(), avoiding background redraw work. */
   private isMounted = false;
   /** Lease protecting a newer host from an older React effect's late cleanup. */
   private mountGeneration = 0;
@@ -352,14 +242,11 @@ export class FrontendPty {
 
     this.terminal.open(this.ownedContainer);
     FrontendPty.all.add(this);
-    notifyTerminalRendererDiagnosticsChanged();
     this.attachWheelScrollPolicy();
     this.scrollDisposable = this.terminal.onScroll((viewportY) => {
       this.savedViewportY = viewportY;
       this.savedAtBottom = viewportY >= this.terminal.buffer.active.baseY;
-      this.invalidateFreezeSnapshot();
     });
-    this.freezeSnapshotDisposable = this.terminal.onRender(() => this.captureFreezeSnapshot());
 
     const el = (this.terminal as unknown as { element?: HTMLElement }).element;
     if (el) {
@@ -421,68 +308,6 @@ export class FrontendPty {
     this.linkOpener = opener;
   }
 
-  getRendererDiagnosticsEntry(): TerminalRendererDiagnosticsEntry {
-    return {
-      preference: this.rendererPreference,
-      engine: this.rendererEngine,
-      issue: this.rendererIssue,
-    };
-  }
-
-  setRendererPreference(renderer: unknown): void {
-    const next = normalizeTerminalRenderer(renderer);
-    const changed = this.rendererPreference !== next;
-    this.rendererPreference = next;
-    if (changed) notifyTerminalRendererDiagnosticsChanged();
-    this.applyRendererPreference();
-  }
-
-  private applyRendererPreference(): void {
-    const selectedEngine = resolveTerminalRendererEngine(this.rendererPreference);
-
-    if (selectedEngine === 'dom') {
-      this.disposeWebglRenderer();
-      this.hasFreezeSnapshot = false;
-      this.setRendererState('dom', null);
-      this.refreshAllRows();
-      return;
-    }
-
-    // Background sessions keep parsing into xterm's canonical buffer but do
-    // not retain a GPU context. A WebGL renderer is created only for the
-    // terminal that is actually mounted.
-    if (!this.isMounted) {
-      this.disposeWebglRenderer();
-      this.setRendererState('dom', null);
-      return;
-    }
-
-    if (this.webglAddon) {
-      this.setRendererState('webgl', null);
-      return;
-    }
-
-    this.loadWebglRenderer();
-  }
-
-  private setRendererState(
-    engine: TerminalRendererEngine,
-    issue: TerminalRendererIssue | null
-  ): void {
-    if (this.rendererEngine === engine && this.rendererIssue === issue) return;
-    this.rendererEngine = engine;
-    this.rendererIssue = issue;
-    notifyTerminalRendererDiagnosticsChanged();
-  }
-
-  private disposeWebglRenderer(): void {
-    this.invalidateFreezeSnapshot();
-    this.webglContextLossDisposable?.dispose();
-    this.webglContextLossDisposable = null;
-    this.webglAddon?.dispose();
-    this.webglAddon = null;
-  }
-
   private refreshAllRows(): void {
     try {
       this.terminal.refresh(0, Math.max(0, this.terminal.rows - 1));
@@ -490,99 +315,12 @@ export class FrontendPty {
   }
 
   /**
-   * A snapshot captured before the viewport moves no longer represents the
-   * visible rows. Never let a later resize replay it over the current buffer.
-   */
-  private invalidateFreezeSnapshot(): void {
-    this.hasFreezeSnapshot = false;
-    if (this.unfreezePhase === 'idle' && this.freezeOverlay) {
-      this.freezeOverlay.style.display = 'none';
-    }
-  }
-
-  /**
-   * Repaint visible rows from xterm's canonical buffer without clearing the
-   * glyph atlas. xterm shares atlas pages across terminals; clearing one from a
-   * scroll callback can leave sibling render models pointing at stale glyph
-   * coordinates and is far more expensive than xterm's own dirty-row renderer.
+   * Repaint every visible row from xterm's canonical buffer. The stable DOM
+   * renderer has no retained GPU frame or shared glyph atlas, so this is a
+   * deterministic model-to-view refresh.
    */
   private redrawViewportFromBuffer(): void {
     this.refreshAllRows();
-  }
-
-  private loadWebglRenderer(): void {
-    let webglAddon: WebglAddon | null = null;
-    let contextLossDisposable: IDisposable | null = null;
-
-    try {
-      // Default (preserveDrawingBuffer: false) — the drawing buffer is cleared
-      // on every composite, so the renderer cannot accumulate stale text rows.
-      // Resize freeze-frames replay snapshots captured during onRender instead
-      // of reading the live canvas at resize time.
-      webglAddon = new WebglAddon();
-      contextLossDisposable = webglAddon.onContextLoss(() => {
-        this.handleWebglRendererFailure('webgl-context-lost');
-      });
-      this.terminal.loadAddon(webglAddon);
-      this.webglAddon = webglAddon;
-      this.webglContextLossDisposable = contextLossDisposable;
-      this.setRendererState('webgl', null);
-      this.redrawViewportFromBuffer();
-    } catch (error) {
-      contextLossDisposable?.dispose();
-      webglAddon?.dispose();
-      this.handleWebglRendererFailure('webgl-unavailable', error);
-    }
-  }
-
-  private handleWebglRendererFailure(issue: TerminalRendererIssue, error?: unknown): void {
-    const strict = this.rendererPreference === 'webgl';
-    log.warn(
-      strict
-        ? 'FrontendPty: WebGL renderer failed in strict mode; DOM emergency renderer active'
-        : 'FrontendPty: WebGL renderer failed; using DOM compatibility renderer',
-      {
-        sessionId: this.sessionId,
-        issue,
-        error: error ? String(error) : undefined,
-      }
-    );
-
-    this.disposeWebglRenderer();
-    this.hasFreezeSnapshot = false;
-    this.setRendererState('dom', issue);
-    this.refreshAllRows();
-    this.notifyRendererFailure(issue, error);
-  }
-
-  private notifyRendererFailure(issue: TerminalRendererIssue, error?: unknown): void {
-    const strict = this.rendererPreference === 'webgl';
-    const toastKey = `${strict ? 'strict' : 'auto'}:${issue}`;
-    if (FrontendPty.reportedRendererFailures.has(toastKey)) return;
-    FrontendPty.reportedRendererFailures.add(toastKey);
-
-    const title = strict
-      ? i18n.t('terminal.renderer.strictFailureTitle')
-      : i18n.t('terminal.renderer.fallbackTitle');
-    const descriptionKey = strict
-      ? issue === 'webgl-context-lost'
-        ? 'terminal.renderer.strictContextLostDescription'
-        : 'terminal.renderer.strictUnavailableDescription'
-      : issue === 'webgl-context-lost'
-        ? 'terminal.renderer.fallbackContextLostDescription'
-        : 'terminal.renderer.fallbackUnavailableDescription';
-
-    toast({
-      title,
-      description: i18n.t(descriptionKey),
-      variant: strict ? 'destructive' : undefined,
-      debugInfo: {
-        sessionId: this.sessionId,
-        preference: this.rendererPreference,
-        issue,
-        error: error ? String(error) : undefined,
-      },
-    });
   }
 
   setScrollbackLines(scrollbackLines: unknown): void {
@@ -738,39 +476,11 @@ export class FrontendPty {
     });
   }
 
-  /**
-   * Does this chunk look like a TUI full-screen repaint rather than an
-   * incremental update?  Incremental writes use positioned CUPs only
-   * (`\x1b[35;1H…`), while a full repaint homes the cursor (bare `\x1b[H`),
-   * clears the screen, or switches the alt buffer.  Deliberately NO size
-   * heuristic: large chunks can be plain streamed output or OSC52 clipboard
-   * payloads, and a false positive advances the unfreeze chain on stale
-   * content.  Verified against live Claude Code traffic.
-   */
-  private static looksLikeRepaint(data: string): boolean {
-    return (
-      data.includes('\x1b[H') ||
-      data.includes('\x1b[1;1H') ||
-      data.includes('\x1b[1;1f') ||
-      data.includes('\x1b[2J') ||
-      data.includes('\x1b[3J') ||
-      data.includes('\x1b[?1049') ||
-      data.includes('\x1b[?2026h') ||
-      data.includes('\x1b[?2026l')
-    );
-  }
-
   private writeOrBuffer(
     data: string,
     acknowledgement?: { generation: number; sequence: number }
   ): void {
     if (this.hasFlushed) {
-      // Unfreeze chain step 1: the app's post-SIGWINCH repaint reaching us
-      // (in-flight pre-resize chunks — spinners, streamed rows — must NOT
-      // advance the chain; they would reveal the rewrapped buffer early).
-      if (this.unfreezePhase === 'await-data' && FrontendPty.looksLikeRepaint(data)) {
-        this.unfreezePhase = 'await-render';
-      }
       this.writeTerminalData(data, () => {
         if (acknowledgement) {
           this.acknowledgeOutput(acknowledgement.generation, acknowledgement.sequence);
@@ -858,180 +568,15 @@ export class FrontendPty {
   }
 
   /**
-   * Commit a resize as ONE atomic visual transition (rows + cols together).
-   *
-   * term.resize() synchronously clears the WebGL canvas and force-rewraps
-   * the buffer; painted raw that is the white flash / garbled layout
-   * (verified frame-by-frame via tracing screenshots).  The transition is
-   * hidden behind a snapshot of the last presented frame and revealed by an
-   * event chain — no timing assumptions:
-   *
-   *   freezeFrame()      snapshot canvas → overlay covers the terminal
-   *   terminal.resize()  clear + rewrap happen under the overlay
-   *   (caller sends rpc.pty.resize in the same tick → app repaints)
-   *   unfreeze chain — shrink resizes keep the snapshot up until the app's
-   *   post-SIGWINCH repaint; grow resizes keep it only until xterm has rendered
-   *   the wider grid. In both directions the old frame remains visible while
-   *   terminal.resize() clears and rebuilds the WebGL canvas underneath.
-   *   then: next FULL-viewport onRender (partial renders would expose the
-   *   cleared rest of the canvas) → one requestAnimationFrame (the redrawn
-   *   canvas is presented) → overlay hidden.
-   *   fallback timer: sessions with no TUI never send a repaint; their
-   *   plain-text rewrap IS the correct final content, so reveal after
-   *   UNFREEZE_FALLBACK_MS.
-   *
-   * A terminal that hasn't flushed its history yet has no frame worth
-   * protecting and resizes bare.
+   * Commit rows and columns as one canonical grid transition. The DOM renderer
+   * paints directly from xterm's buffer, so there is no retained GPU frame to
+   * freeze, stretch, or reveal later. A full refresh makes the new grid the only
+   * visible state in the next browser paint.
    */
   commitResize(cols: number, rows: number): void {
     if (this.terminal.cols === cols && this.terminal.rows === rows) return;
-    if (!this.hasFlushed) {
-      this.terminal.resize(cols, rows);
-      return;
-    }
-    const isShrink = cols < this.terminal.cols;
-    // If a previous commit is still frozen, keep ITS snapshot (the canvas
-    // underneath may be mid-transition garbage — re-snapshotting it would
-    // put that garbage on the overlay) and just restart the unfreeze chain.
-    const frozen = this.unfreezePhase !== 'idle' ? true : this.freezeFrame();
-    // Arm before resize so the first full-viewport render produced by xterm
-    // cannot race the subscription. Registering afterwards leaves the overlay
-    // stale until the timeout; hiding it beforehand exposes the cleared WebGL
-    // canvas as a visible blank flash.
-    if (frozen) this.armUnfreeze(isShrink ? 'await-data' : 'await-render');
     this.terminal.resize(cols, rows);
-  }
-
-  private getWebglCanvas(): HTMLCanvasElement | null {
-    if (!this.webglAddon) return null;
-    // .xterm-screen hosts canvas.xterm-link-layer (2d) first, then the
-    // unclassed WebGL render canvas. A bare `canvas` selector grabs the
-    // transparent link layer and the freeze snapshot would be empty.
-    return this.ownedContainer.querySelector<HTMLCanvasElement>(
-      '.xterm-screen canvas:not(.xterm-link-layer)'
-    );
-  }
-
-  private ensureFreezeOverlay(): HTMLCanvasElement {
-    let overlay = this.freezeOverlay;
-    if (!overlay) {
-      overlay = document.createElement('canvas');
-      overlay.className = 'terminal-freeze-overlay';
-      Object.assign(overlay.style, {
-        position: 'absolute',
-        left: '0',
-        top: '0',
-        pointerEvents: 'none',
-        zIndex: '10',
-        display: 'none',
-      });
-      this.ownedContainer.style.position = 'relative';
-      this.freezeOverlay = overlay;
-    }
-    if (overlay.parentElement !== this.ownedContainer) {
-      this.ownedContainer.appendChild(overlay);
-    }
-    return overlay;
-  }
-
-  private releaseFreezeOverlayBackingStore(): void {
-    const overlay = this.freezeOverlay;
-    if (!overlay) return;
-    overlay.remove();
-    // Resetting dimensions releases the full DPR-scaled pixel allocation.
-    overlay.width = 0;
-    overlay.height = 0;
-    this.freezeOverlay = null;
-    this.hasFreezeSnapshot = false;
-    this.lastFreezeSnapshotAt = Number.NEGATIVE_INFINITY;
-  }
-
-  /**
-   * Mirror the just-rendered WebGL frame onto the (hidden) freeze overlay. Runs
-   * on every onRender because the WebGL canvas uses preserveDrawingBuffer:false;
-   * that exposes valid pixels during the render frame without accumulating
-   * stale glyphs across later composites. Skipped while a freeze is active so
-   * the masking snapshot is never overwritten by mid-resize garbage.
-   */
-  private captureFreezeSnapshot(allowWhileFrozen = false): void {
-    const now = performance.now();
-    if (
-      !this.isMounted ||
-      (!allowWhileFrozen && now - this.lastFreezeSnapshotAt < FREEZE_SNAPSHOT_MIN_INTERVAL_MS) ||
-      (!allowWhileFrozen && this.unfreezePhase !== 'idle')
-    ) {
-      return;
-    }
-    const canvas = this.getWebglCanvas();
-    if (!canvas || canvas.width === 0 || canvas.height === 0) return;
-    const overlay = this.ensureFreezeOverlay();
-    try {
-      if (overlay.width !== canvas.width) overlay.width = canvas.width;
-      if (overlay.height !== canvas.height) overlay.height = canvas.height;
-      const ctx = overlay.getContext('2d');
-      if (!ctx) return;
-      ctx.clearRect(0, 0, overlay.width, overlay.height);
-      ctx.drawImage(canvas, 0, 0);
-    } catch {
-      return;
-    }
-    overlay.style.width = canvas.style.width || `${canvas.width}px`;
-    overlay.style.height = canvas.style.height || `${canvas.height}px`;
-    this.hasFreezeSnapshot = true;
-    this.lastFreezeSnapshotAt = now;
-  }
-
-  /**
-   * Reveal the last captured frame so it covers the terminal during a resize.
-   * Returns false when no usable snapshot exists yet (DOM renderer fallback,
-   * nothing rendered, context lost) — the caller then resizes bare instead of
-   * arming an unfreeze that has nothing to reveal.
-   */
-  private freezeFrame(): boolean {
-    if (!this.hasFreezeSnapshot || !this.freezeOverlay) {
-      return false;
-    }
-    this.freezeOverlay.style.display = 'block';
-    return true;
-  }
-
-  /** Start the event chain that reveals the resized terminal — see commitResize. */
-  private armUnfreeze(entryPhase: 'await-data' | 'await-render'): void {
-    const generation = ++this.unfreezeGeneration;
-    this.unfreezeRenderDisposable?.dispose();
-    if (this.unfreezeFallbackTimer) clearTimeout(this.unfreezeFallbackTimer);
-    this.unfreezePhase = entryPhase;
-    this.unfreezeRenderDisposable = this.terminal.onRender((e) => {
-      if (this.unfreezePhase !== 'await-render') return;
-      if (e.start > 0 || e.end < this.terminal.rows - 1) return;
-      // The full resized frame is valid now. Capture it while WebGL's drawing
-      // buffer is readable so the next resize never reuses the older geometry.
-      this.captureFreezeSnapshot(true);
-      requestAnimationFrame(() => {
-        if (generation === this.unfreezeGeneration) this.unfreeze();
-      });
-    });
-    this.unfreezeFallbackTimer = setTimeout(() => {
-      if (generation !== this.unfreezeGeneration) return;
-      this.unfreeze();
-      // Silent/plain-shell sessions may never send a repaint. Invalidate the
-      // pre-resize capture and request one fresh frame for the next transition.
-      this.invalidateFreezeSnapshot();
-      this.redrawViewportFromBuffer();
-    }, UNFREEZE_FALLBACK_MS);
-  }
-
-  /** Hide the overlay and reset the chain. Idempotent. */
-  private unfreeze(): void {
-    this.unfreezeGeneration += 1;
-    this.unfreezePhase = 'idle';
-    this.unfreezeRenderDisposable?.dispose();
-    this.unfreezeRenderDisposable = null;
-    if (this.unfreezeFallbackTimer) {
-      clearTimeout(this.unfreezeFallbackTimer);
-      this.unfreezeFallbackTimer = null;
-    }
-    if (this.freezeOverlay) this.freezeOverlay.style.display = 'none';
+    this.redrawViewportFromBuffer();
   }
 
   /**
@@ -1069,9 +614,6 @@ export class FrontendPty {
    */
   mount(mountTarget: HTMLElement, targetDims?: { cols: number; rows: number }): number {
     const mountLease = ++this.mountGeneration;
-    // Mount dims are authoritative — drop any stale freeze overlay.
-    this.unfreeze();
-    this.invalidateFreezeSnapshot();
     if (
       targetDims &&
       (this.terminal.cols !== targetDims.cols || this.terminal.rows !== targetDims.rows)
@@ -1080,7 +622,6 @@ export class FrontendPty {
     }
     mountTarget.appendChild(this.ownedContainer);
     this.isMounted = true;
-    this.applyRendererPreference();
     // Force a clean renderer repaint after reparenting in the DOM.
     const t = this.terminal;
     const savedViewportY = this.savedViewportY;
@@ -1113,11 +654,6 @@ export class FrontendPty {
     this.mountGeneration += 1;
     this.isMounted = false;
     this.cancelPendingConnect();
-    this.unfreeze();
-    this.invalidateFreezeSnapshot();
-    this.releaseFreezeOverlayBackingStore();
-    this.disposeWebglRenderer();
-    this.setRendererState('dom', null);
     ensureXtermHost().appendChild(this.ownedContainer);
   }
 
@@ -1137,10 +673,7 @@ export class FrontendPty {
     }
     this.mountGeneration += 1;
     FrontendPty.all.delete(this);
-    notifyTerminalRendererDiagnosticsChanged();
     this.isMounted = false;
-    this.unfreeze();
-    this.releaseFreezeOverlayBackingStore();
     this.terminalWriteQueue = [];
     this.terminalWriteActive = false;
     this.offData?.();
@@ -1148,12 +681,6 @@ export class FrontendPty {
     const connectedConsumerId = this.connectedConsumerId;
     this.connectedConsumerId = null;
     this.scrollDisposable.dispose();
-    this.freezeSnapshotDisposable?.dispose();
-    this.freezeSnapshotDisposable = null;
-    this.webglContextLossDisposable?.dispose();
-    this.webglContextLossDisposable = null;
-    this.webglAddon?.dispose();
-    this.webglAddon = null;
     if (connectedConsumerId) {
       void rpc.pty.unsubscribe(this.sessionId, connectedConsumerId).catch(() => {});
     }
@@ -1190,15 +717,6 @@ export function applyLineHeightToAll(): void {
 }
 
 applyLineHeightToAll();
-
-/** Apply and immediately redraw a renderer preference across every live terminal. */
-export function applyRendererPreferenceToAll(renderer: unknown): TerminalRenderer {
-  const normalized = normalizeTerminalRenderer(renderer);
-  for (const pty of FrontendPty.all) {
-    pty.setRendererPreference(normalized);
-  }
-  return normalized;
-}
 
 /** Dispose all live FrontendPty instances. Called on app teardown. */
 export function disposeAllPtys(): void {

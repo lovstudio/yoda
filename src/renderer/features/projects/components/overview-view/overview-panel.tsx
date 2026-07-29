@@ -7,6 +7,7 @@ import {
 import { useParams } from '@renderer/lib/layout/navigation-provider';
 import { FeaturesOverviewCard } from './features-overview-card';
 import { IssuesOverviewCard } from './issues-overview-card';
+import { ProjectPromptsCard } from './project-prompts-card';
 import { PullRequestsOverviewCard } from './pull-requests-overview-card';
 import { QuickActionsCard } from './quick-actions-card';
 import { RepoStatusCard } from './repo-status-card';
@@ -35,6 +36,7 @@ export const OverviewPanel = observer(function OverviewPanel() {
         <IssuesOverviewCard projectId={projectId} />
         <TokenUsageCard projectId={projectId} />
         <TasksOverviewCard projectId={projectId} />
+        <ProjectPromptsCard key={projectId} projectId={projectId} />
       </div>
     </div>
   );

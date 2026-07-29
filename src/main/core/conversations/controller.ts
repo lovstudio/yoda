@@ -4,6 +4,10 @@ import { archiveConversation } from './archiveConversation';
 import { getClaudeStatusline, setClaudeStatusline } from './claude-statusline';
 import { createConversation } from './createConversation';
 import { deleteConversation } from './deleteConversation';
+import {
+  getEditableRuntimeInstructionFiles,
+  saveEditableRuntimeInstructionFile,
+} from './editable-instruction-files';
 import { forkConversation } from './forkConversation';
 import { forkConversationAtPrompt } from './forkConversationAtPrompt';
 import {
@@ -34,6 +38,7 @@ import {
   listLocalAgentSessions,
 } from './local-agent-session-operations';
 import { moveConversation } from './moveConversation';
+import { getProjectConversationPrompts, getProjectPromptSources } from './project-prompts';
 import { renameConversation } from './renameConversation';
 import { restartConversation } from './restartConversation';
 import { resumeConversation } from './resumeConversation';
@@ -106,6 +111,8 @@ export const conversationController = createRPCController({
   getLocalAgentSessionTranscript,
   moveConversation,
   getConversationRuntimeStatuses,
+  getProjectPromptSources,
+  getProjectConversationPrompts,
   getConversationsForTask,
   getArchivedConversationsForTask,
   touchConversation,
@@ -116,6 +123,8 @@ export const conversationController = createRPCController({
   getCodexSessionContext: getConfiguredCodexSessionContext,
   getInstructionFiles,
   getRuntimeInstructionFiles,
+  getEditableRuntimeInstructionFiles,
+  saveEditableRuntimeInstructionFile,
   getConversationSessionInfo,
   getSessionSummary,
   getSessionSummaryPreview,

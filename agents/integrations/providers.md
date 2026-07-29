@@ -6,9 +6,9 @@
 - `src/main/core/dependencies/dependency-manager.ts`
 - `src/main/core/pty/`
 
-## Current Providers (28)
+## Current Providers (29)
 
-codex, claude, devin, qwen, droid, gemini, cursor, copilot, amp, opencode, hermes, charm, auggie, goose, kimi, kilocode, kiro, rovo, cline, continue, codebuff, mistral, jules, junie, pi, letta, autohand, antigravity
+codex, claude, devin, qwen, droid, gemini, cursor, copilot, amp, opencode, hermes, charm, auggie, goose, kimi, kilocode, kiro, rovo, cline, continue, codebuff, mistral, jules, junie, pi, letta, autohand, antigravity, grok
 
 ## Provider Metadata Includes
 

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { getCodexSessionContext } from './getCodexSessionContext';
+import { getCodexSessionContext, getCodexSessionPrompts } from './getCodexSessionContext';
 
 describe('getCodexSessionContext', () => {
   const previousCodexHome = process.env.CODEX_HOME;
@@ -66,6 +66,10 @@ describe('getCodexSessionContext', () => {
     insertDynamicTool(statePath, 'conversation-1');
 
     const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
+    const promptOnly = await getCodexSessionPrompts(cwd, 'conversation-1', undefined, undefined, {
+      codexHome,
+      reservedThreadIds: new Set(),
+    });
 
     expect(context).toEqual(
       expect.objectContaining({
@@ -87,6 +91,7 @@ describe('getCodexSessionContext', () => {
         restoreTarget: { kind: 'codex-turn', turnId: 'turn-1' },
       },
     ]);
+    expect(promptOnly).toEqual(context?.prompts);
     expect(context?.messages).toEqual([
       {
         id: '2026-06-02T11:00:03.000Z',
@@ -597,6 +602,33 @@ describe('getCodexSessionContext', () => {
     );
 
     expect(context?.threadId).toBe('thread-1');
+    expect(context?.rolloutPath).toBe(rolloutPath);
+  });
+
+  it('can resolve a renamed legacy thread by its unique activity window', async () => {
+    writeRollout(rolloutPath, { id: 'legacy-thread', cwd });
+    insertThread(statePath, rolloutPath, {
+      id: 'legacy-thread',
+      cwd,
+      title: 'Original long user prompt',
+      firstUserMessage: 'Original long user prompt',
+      createdAtMs: Date.parse('2026-07-27T10:10:43.000Z'),
+      updatedAtMs: Date.parse('2026-07-27T10:58:42.000Z'),
+    });
+
+    const context = await getCodexSessionContext(
+      cwd,
+      'legacy-yoda-conversation',
+      'Renamed Yoda title',
+      '2026-07-27 08:03:43',
+      {
+        codexHome,
+        conversationLastInteractedAt: '2026-07-27T10:49:21.067Z',
+        reservedThreadIds: new Set(),
+      }
+    );
+
+    expect(context?.threadId).toBe('legacy-thread');
     expect(context?.rolloutPath).toBe(rolloutPath);
   });
 

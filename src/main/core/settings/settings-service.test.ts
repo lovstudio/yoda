@@ -65,4 +65,24 @@ describe('SettingsStore', () => {
     expect(result.value).toEqual({ items: [] });
     expect(result.overrides).toEqual({});
   });
+
+  it('drops the legacy WebGL preference while preserving terminal settings', async () => {
+    mocks.selectExecute.mockResolvedValue([
+      {
+        key: 'terminal',
+        value: JSON.stringify({
+          renderer: 'webgl',
+          autoCopyOnSelection: false,
+          scrollbackLines: 10_000,
+        }),
+      },
+    ]);
+
+    const result = await new SettingsStore().get('terminal');
+
+    expect(result).toEqual({
+      autoCopyOnSelection: false,
+      scrollbackLines: 10_000,
+    });
+  });
 });

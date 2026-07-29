@@ -1,5 +1,5 @@
-import { Check, Loader2, Plus } from 'lucide-react';
-import React, { useEffect } from 'react';
+import { Check, Download, Loader2, Plus, Settings2, Waypoints } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import featurebaseSvg from '@/assets/images/Featurebase.svg?raw';
 import forgejoSvg from '@/assets/images/Forgejo.svg?raw';
@@ -7,9 +7,13 @@ import githubSvg from '@/assets/images/Github.svg?raw';
 import gitlabSvg from '@/assets/images/GitLab.svg?raw';
 import jiraSvg from '@/assets/images/Jira.svg?raw';
 import linearSvg from '@/assets/images/Linear.svg?raw';
+import lovcodeSvg from '@/assets/images/Lovcode.svg?raw';
 import plainSvg from '@/assets/images/Plain.svg?raw';
+import { LOVCODE_DOWNLOAD_URL, type LovcodeAvailability } from '@shared/lovcode';
 import { useIntegrationsContext } from '@renderer/features/integrations/integrations-provider';
+import { useMaasConnections } from '@renderer/features/maas/useMaas';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
+import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { useGithubContext } from '@renderer/lib/providers/github-context-provider';
 import { Button } from '@renderer/lib/ui/button';
@@ -34,8 +38,29 @@ const SvgLogo = ({ raw }: { raw: string }) => {
   );
 };
 
-const IntegrationsCard: React.FC = () => {
+type IntegrationItem = {
+  id: string;
+  name: string;
+  description: string;
+  logoSvg?: string;
+  icon?: React.ReactNode;
+  connected: boolean;
+  loading: boolean;
+  onConnect: () => void | Promise<void>;
+  onCancel?: () => void;
+  onDisconnect?: () => void | Promise<void>;
+  disabledTooltip?: string;
+  opensSettings?: boolean;
+  connectLabel?: string;
+  connectingLabel?: string;
+  connectIcon?: React.ReactNode;
+};
+
+const IntegrationsCard: React.FC<{ onOpenLiteLlm: () => void }> = ({ onOpenLiteLlm }) => {
   const { t } = useTranslation();
+  const { data: maasConnections, isLoading: maasLoading } = useMaasConnections();
+  const [lovcodeAvailability, setLovcodeAvailability] = useState<LovcodeAvailability | null>(null);
+  const [lovcodeLoading, setLovcodeLoading] = useState(true);
   const {
     authenticated,
     isLoading,
@@ -71,12 +96,68 @@ const IntegrationsCard: React.FC = () => {
   const showIntegrationSetup = useShowModal('integrationSetupModal');
 
   const isCliManaged = authenticated && tokenSource === 'cli';
+  const liteLlmConnection = maasConnections?.find(
+    (connection) => connection.platformId === 'litellm'
+  );
+  const refreshLovcodeAvailability = useCallback(async () => {
+    setLovcodeLoading(true);
+    try {
+      setLovcodeAvailability(await rpc.lovcode.checkAvailability());
+    } catch {
+      setLovcodeAvailability({ status: 'not-installed' });
+    } finally {
+      setLovcodeLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     void checkStatus();
   }, [checkStatus]);
 
-  const integrations = [
+  useEffect(() => {
+    void refreshLovcodeAvailability();
+    const handleFocus = () => {
+      void refreshLovcodeAvailability();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [refreshLovcodeAvailability]);
+
+  const integrations: IntegrationItem[] = [
+    {
+      id: 'lovcode',
+      name: 'Lovcode',
+      description:
+        lovcodeAvailability?.status === 'available'
+          ? t('settings.integrationsTab.lovcodeConnectedDescription', {
+              version: lovcodeAvailability.version,
+            })
+          : t('settings.integrationsTab.lovcodeDescription'),
+      logoSvg: lovcodeSvg,
+      connected: lovcodeAvailability?.status === 'available',
+      loading: lovcodeLoading,
+      onConnect: () => {
+        void rpc.app.openExternal(LOVCODE_DOWNLOAD_URL);
+      },
+      disabledTooltip: t('settings.integrationsTab.lovcodeInstalledTooltip'),
+      connectLabel: t('settings.integrationsTab.install', { name: 'Lovcode' }),
+      connectingLabel: t('settings.integrationsTab.detecting', { name: 'Lovcode' }),
+      connectIcon: <Download className="h-4 w-4" />,
+    },
+    {
+      id: 'litellm',
+      name: 'LiteLLM',
+      description: liteLlmConnection?.connected
+        ? t('settings.integrationsTab.litellmConnectedDescription', {
+            endpoint: liteLlmConnection.endpoint,
+          })
+        : t('settings.integrationsTab.litellmDescription'),
+      icon: <Waypoints className="h-8 w-8 text-primary" />,
+      connected: !!liteLlmConnection?.connected,
+      loading: maasLoading,
+      onConnect: onOpenLiteLlm,
+      opensSettings: true,
+    },
     {
       id: 'github',
       name: 'GitHub',
@@ -174,14 +255,27 @@ const IntegrationsCard: React.FC = () => {
         <div key={integration.id} className="flex h-full min-h-0">
           <div className="flex w-full items-center gap-4 rounded-lg border border-muted bg-muted/20 p-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted/50">
-              <SvgLogo raw={integration.logoSvg} />
+              {integration.logoSvg ? <SvgLogo raw={integration.logoSvg} /> : integration.icon}
             </div>
             <div className="flex flex-1 flex-col gap-0.5">
               <h3 className="text-sm font-medium text-foreground">{integration.name}</h3>
               <p className="text-sm text-muted-foreground">{integration.description}</p>
             </div>
             {integration.connected ? (
-              integration.disabledTooltip ? (
+              integration.opensSettings ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={integration.onConnect}
+                  aria-label={t('settings.integrationsTab.openSettings', {
+                    name: integration.name,
+                  })}
+                >
+                  <Settings2 className="h-4 w-4" />
+                </Button>
+              ) : integration.disabledTooltip ? (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger
@@ -201,7 +295,7 @@ const IntegrationsCard: React.FC = () => {
                   variant="outline"
                   size="icon"
                   className="h-8 w-8 shrink-0"
-                  onClick={integration.onDisconnect}
+                  onClick={() => integration.onDisconnect?.()}
                   aria-label={t('settings.integrationsTab.disconnect', { name: integration.name })}
                 >
                   <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -213,21 +307,22 @@ const IntegrationsCard: React.FC = () => {
                 variant="outline"
                 size="icon"
                 className="h-8 w-8 shrink-0"
-                onClick={
-                  integration.loading && integration.onCancel
-                    ? integration.onCancel
-                    : integration.onConnect
-                }
+                disabled={integration.loading && !integration.onCancel}
+                onClick={integration.loading ? integration.onCancel : integration.onConnect}
                 aria-label={
                   integration.loading
-                    ? t('settings.integrationsTab.cancelConnecting', { name: integration.name })
-                    : t('settings.integrationsTab.connect', { name: integration.name })
+                    ? integration.onCancel
+                      ? t('settings.integrationsTab.cancelConnecting', { name: integration.name })
+                      : (integration.connectingLabel ??
+                        t('settings.integrationsTab.connecting', { name: integration.name }))
+                    : (integration.connectLabel ??
+                      t('settings.integrationsTab.connect', { name: integration.name }))
                 }
               >
                 {integration.loading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Plus className="h-4 w-4" />
+                  (integration.connectIcon ?? <Plus className="h-4 w-4" />)
                 )}
               </Button>
             )}

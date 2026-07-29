@@ -29,6 +29,9 @@ const MINIMUM_ROWS = 1;
 // Embedded xterm viewport scrollbars are hidden in index.css, so subtracting
 // xterm's addon-fit 14px fallback creates visible fake padding on the right.
 export const DEFAULT_XTERM_SCROLLBAR_WIDTH = 0;
+// Keep the last drawable cell away from the clipping edge. Terminal TUIs can
+// paint wide CJK glyphs and rounded message backgrounds through that cell; an
+// exact edge-to-edge fit clips their right edge in narrow panes.
 export const TERMINAL_FIT_GUARD_COLUMNS = 1;
 
 export interface TerminalDimensions {
@@ -48,8 +51,32 @@ function toCellMetrics(dims: XtermCellDimensions | null): { width: number; heigh
   const width = dims?.css?.cell?.width;
   const height = dims?.css?.cell?.height;
   if (typeof width !== 'number' || typeof height !== 'number') return null;
-  if (width === 0 || height === 0) return null;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
   return { width, height };
+}
+
+function cssPixels(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getContentBox(container: HTMLElement): { width: number; height: number } {
+  const rect = container.getBoundingClientRect();
+  const style = window.getComputedStyle(container);
+  const horizontalInsets =
+    cssPixels(style.borderLeftWidth) +
+    cssPixels(style.borderRightWidth) +
+    cssPixels(style.paddingLeft) +
+    cssPixels(style.paddingRight);
+  const verticalInsets =
+    cssPixels(style.borderTopWidth) +
+    cssPixels(style.borderBottomWidth) +
+    cssPixels(style.paddingTop) +
+    cssPixels(style.paddingBottom);
+  return {
+    width: Math.max(0, rect.width - horizontalInsets),
+    height: Math.max(0, rect.height - verticalInsets),
+  };
 }
 
 export function getCellMetrics(terminal: Terminal): { width: number; height: number } | null {
@@ -98,12 +125,18 @@ export function measureDimensions(
   scrollbarWidth = 0,
   guardColumns = 0
 ): TerminalDimensions | null {
-  if (cellWidth === 0 || cellHeight === 0) return null;
-  const style = window.getComputedStyle(container);
-  const width = Math.max(0, Number.parseInt(style.width));
-  const height = Number.parseInt(style.height);
-  if (Number.isNaN(width) || Number.isNaN(height) || width === 0 || height === 0) return null;
-  const availableCols = Math.floor((width - scrollbarWidth) / cellWidth) - guardColumns;
+  if (
+    !Number.isFinite(cellWidth) ||
+    !Number.isFinite(cellHeight) ||
+    cellWidth <= 0 ||
+    cellHeight <= 0
+  ) {
+    return null;
+  }
+  const { width, height } = getContentBox(container);
+  if (width === 0 || height === 0) return null;
+  const availableWidth = Math.max(0, width - Math.max(0, scrollbarWidth));
+  const availableCols = Math.floor(availableWidth / cellWidth) - Math.max(0, guardColumns);
   return {
     cols: Math.max(MINIMUM_COLS, availableCols),
     rows: Math.max(MINIMUM_ROWS, Math.floor(height / cellHeight)),

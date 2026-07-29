@@ -128,13 +128,23 @@ class AppService implements IInitializable, IDisposable {
         memoryBytes: metric.memory.workingSetSize * 1024,
       }))
       .sort((left, right) => right.memoryBytes - left.memoryBytes);
+    const runningAgentSessions = taskManager.getRunningAgentSessions();
 
     return {
       sampledAt: new Date().toISOString(),
       cpuPercent:
         Math.round(processes.reduce((total, item) => total + item.cpuPercent, 0) * 10) / 10,
       memoryBytes: processes.reduce((total, item) => total + item.memoryBytes, 0),
-      activeAgentSessions: taskManager.getActiveAgentSessionSummary().running,
+      activeAgentSessions: runningAgentSessions.length,
+      runningAgentSessions: runningAgentSessions.map((session) => ({
+        projectId: session.projectId,
+        taskId: session.taskId,
+        conversationId: session.conversationId,
+        runtimeId: session.runtimeId,
+        title: session.title,
+        taskTitle: session.taskTitle ?? session.taskId,
+        status: session.status,
+      })),
       processes,
     };
   }

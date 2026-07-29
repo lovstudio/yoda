@@ -27,7 +27,6 @@ vi.mock('@renderer/lib/pty/pty', () => ({
       mocks.instances.push(this);
     }
 
-    setRendererPreference() {}
     setScrollbackLines() {}
   },
 }));

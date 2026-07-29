@@ -811,6 +811,90 @@ export class SkillsService {
     return updated;
   }
 
+  /**
+   * Update a group of installed skills from one catalog snapshot. File targets
+   * are validated before the first rename and catalog caches are invalidated
+   * once after the whole batch.
+   */
+  async setSkillsDisabled(skillKeys: string[], disabled: boolean): Promise<number> {
+    await this.initialize();
+    if (skillKeys.length === 0) return 0;
+
+    const catalog = await this.getCatalogIndex();
+    const operations: Array<{
+      skill: CatalogSkill;
+      activePath: string;
+      disabledPath: string;
+      yodaOwned: boolean;
+    }> = [];
+    const seenPaths = new Set<string>();
+
+    for (const skillKey of new Set(skillKeys)) {
+      const skill = this.findSkill(catalog.skills, skillKey);
+      if (!skill) throw new Error(`Skill "${skillKey}" not found in catalog`);
+      if (!skill.installed || !skill.localPath) {
+        throw new Error(`Skill "${skill.displayName}" is not installed`);
+      }
+      if (skill.scope === 'plugin') {
+        throw new Error('Plugin skills are enabled or disabled through their plugin.');
+      }
+      if (skill.disabled === disabled || seenPaths.has(skill.localPath)) continue;
+
+      seenPaths.add(skill.localPath);
+      operations.push({
+        skill,
+        activePath: path.join(skill.localPath, SKILL_MD_FILENAME),
+        disabledPath: path.join(skill.localPath, DISABLED_SKILL_MD_FILENAME),
+        yodaOwned: await this.isYodaOwnedSkillPath(skill.localPath),
+      });
+    }
+
+    for (const operation of operations) {
+      await this.assertMissingFile(
+        disabled ? operation.disabledPath : operation.activePath,
+        disabled ? 'disabled skill file' : 'active skill file'
+      );
+    }
+
+    const applied: typeof operations = [];
+    try {
+      for (const operation of operations) {
+        await fs.promises.rename(
+          disabled ? operation.activePath : operation.disabledPath,
+          disabled ? operation.disabledPath : operation.activePath
+        );
+        applied.push(operation);
+
+        if (disabled) {
+          await this.unsyncFromAgents(operation.skill.id);
+        } else if (operation.yodaOwned) {
+          await this.syncToAgents(operation.skill.id, operation.skill.localPath);
+        }
+      }
+    } catch (error) {
+      for (const operation of applied.reverse()) {
+        try {
+          await fs.promises.rename(
+            disabled ? operation.disabledPath : operation.activePath,
+            disabled ? operation.activePath : operation.disabledPath
+          );
+          if (disabled && operation.yodaOwned) {
+            await this.syncToAgents(operation.skill.id, operation.skill.localPath);
+          } else if (!disabled) {
+            await this.unsyncFromAgents(operation.skill.id);
+          }
+        } catch (rollbackError) {
+          log.error(`Failed to roll back skill "${operation.skill.id}":`, rollbackError);
+        }
+      }
+      this.invalidateCaches();
+      throw error;
+    }
+
+    this.invalidateCaches();
+    return operations.length;
+  }
+
   async syncToAgents(
     skillId: string,
     skillDir: string = path.join(SKILLS_ROOT, skillId)

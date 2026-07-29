@@ -1,6 +1,7 @@
 import { createElement, lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { homeView } from '@renderer/app/home-view';
+import type { MarketplaceSection } from '@renderer/features/extensions/marketplace-view';
 import type { LibrarySection } from '@renderer/features/library/library-view';
 import { projectFileView } from '@renderer/features/project-file/view';
 import { projectView } from '@renderer/features/projects/view';
@@ -58,7 +59,7 @@ const kanbanView = {
   MainPanel: deferredExport(kanbanModule, 'KanbanMainPanel'),
 };
 
-type LibraryViewParams = { children: ReactNode; section?: LibrarySection; appId?: string };
+type LibraryViewParams = { children: ReactNode; section?: LibrarySection };
 const libraryModule = () => import('@renderer/features/library/library-view');
 const libraryView = {
   WrapView: deferredExport<LibraryViewParams>(libraryModule, 'LibraryViewWrapper'),
@@ -68,9 +69,16 @@ const libraryView = {
 };
 
 const marketplaceModule = () => import('@renderer/features/extensions/marketplace-view');
+type MarketplaceViewParams = {
+  children: ReactNode;
+  section?: MarketplaceSection;
+  appId?: string;
+};
 const marketplaceView = {
+  WrapView: deferredExport<MarketplaceViewParams>(marketplaceModule, 'MarketplaceViewWrapper'),
   TitlebarSlot: deferredExport(marketplaceModule, 'MarketplaceTitlebar'),
   MainPanel: deferredExport(marketplaceModule, 'MarketplaceMainPanel'),
+  PaneHeaderSlot: deferredExport(marketplaceModule, 'MarketplacePaneHeaderSlot'),
 };
 
 const maasModule = () => import('@renderer/features/maas/maas-view');
