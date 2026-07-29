@@ -2,7 +2,7 @@ import { cpus, freemem, totalmem } from 'node:os';
 import type { AgentAdmissionSnapshot } from '@shared/app-resource';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { appSettingsService } from '@main/core/settings/settings-service';
-import { calculateAutomaticAgentLimit } from './agent-admission-policy';
+import { calculateAutomaticAgentLimit, countActiveAgentAdmissions } from './agent-admission-policy';
 
 const ADMISSION_POLL_MS = 500;
 
@@ -55,7 +55,10 @@ class AgentAdmissionScheduler {
         : settings.agentConcurrencyMode === 'fixed'
           ? settings.agentConcurrencyLimit
           : Number.MAX_SAFE_INTEGER;
-    const activeCount = agentSessionRuntimeStore.getAllStatuses().length + this.reservations.size;
+    const activeCount = countActiveAgentAdmissions(
+      agentSessionRuntimeStore.getAllStatuses(),
+      this.reservations.size
+    );
     const pausedReason =
       settings.agentConcurrencyMode !== 'unlimited' &&
       memoryUsedPercent >= settings.agentMemoryPausePercent

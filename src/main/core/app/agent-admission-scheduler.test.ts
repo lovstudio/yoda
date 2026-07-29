@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateAutomaticAgentLimit } from './agent-admission-policy';
+import { calculateAutomaticAgentLimit, countActiveAgentAdmissions } from './agent-admission-policy';
 
 describe('calculateAutomaticAgentLimit', () => {
   it('uses both memory and CPU budgets', () => {
@@ -9,5 +9,20 @@ describe('calculateAutomaticAgentLimit', () => {
 
   it('always leaves at least one admission slot', () => {
     expect(calculateAutomaticAgentLimit(2 * 1024 ** 3, 1)).toBe(1);
+  });
+
+  it('counts only sessions that are actively running', () => {
+    expect(
+      countActiveAgentAdmissions(
+        [
+          { status: 'idle' },
+          { status: 'completed' },
+          { status: 'error' },
+          { status: 'working' },
+          { status: 'awaiting-input' },
+        ],
+        1
+      )
+    ).toBe(3);
   });
 });
