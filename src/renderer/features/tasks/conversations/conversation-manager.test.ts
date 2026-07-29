@@ -256,6 +256,21 @@ describe('ConversationManagerStore', () => {
     expect(store.conversations.get('conversation-1')?.sessionExited).toBe(true);
   });
 
+  it('dismisses the stopped-session notice without changing exit state and shows it on a new exit', () => {
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+
+    item?.markSessionExited();
+    item?.dismissSessionExitNotice();
+
+    expect(item?.sessionExited).toBe(true);
+    expect(item?.sessionExitNoticeDismissed).toBe(true);
+
+    item?.markSessionExited();
+
+    expect(item?.sessionExitNoticeDismissed).toBe(false);
+  });
+
   it('restarts a conversation and reconnects the frontend PTY', async () => {
     const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
 

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check, Copy, Loader2, Power, RotateCcw } from 'lucide-react';
+import { Check, Copy, Loader2, Power, RotateCcw, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -281,7 +281,7 @@ export const ConversationSession = observer(function ConversationSession({
           fileLinks={fileLinks}
           webLinks={webLinks}
         />
-        {conversation.sessionExited ? (
+        {conversation.sessionExited && !conversation.sessionExitNoticeDismissed ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-3 duration-300 animate-in fade-in-0 slide-in-from-bottom-2">
             <div className="pointer-events-auto flex items-center gap-2.5 rounded-lg border border-border-primary/70 bg-background/85 py-1.5 pr-1.5 pl-3 shadow-sm ring-1 ring-foreground/5 backdrop-blur-md">
               <span className="flex items-center gap-2 pr-0.5 text-sm text-foreground-passive">
@@ -336,6 +336,15 @@ export const ConversationSession = observer(function ConversationSession({
                     ? 'tasks.conversations.continuingConversation'
                     : 'tasks.conversations.continueConversation'
                 )}
+              </Button>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                onClick={() => conversation.dismissSessionExitNotice()}
+                className="shrink-0 text-foreground-passive"
+                aria-label={t('common.close')}
+              >
+                <X className="size-3.5" aria-hidden />
               </Button>
             </div>
           </div>
