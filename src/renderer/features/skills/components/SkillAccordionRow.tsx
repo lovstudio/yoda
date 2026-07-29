@@ -19,7 +19,6 @@ import { cn } from '@renderer/utils/utils';
 import { skillFilePath } from '../skill-file-path';
 import { primarySkillHealthIssue } from '../skill-health';
 import SkillFamilyCount from './SkillFamilyCount';
-import SkillIconRenderer from './SkillIconRenderer';
 import SkillUsageSummary from './SkillUsageSummary';
 
 interface SkillAccordionRowProps {
@@ -70,7 +69,6 @@ const SkillAccordionRow: React.FC<SkillAccordionRowProps> = ({
             className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform group-data-[panel-open]:rotate-90"
             aria-hidden="true"
           />
-          <SkillIconRenderer skill={skill} size="xs" />
           <span className="flex min-w-0 flex-1 items-center gap-2">
             <span
               className={cn(
@@ -135,7 +133,7 @@ const SkillAccordionRow: React.FC<SkillAccordionRowProps> = ({
       </div>
 
       <CollapsibleContent>
-        <div className="border-t border-border/50 bg-background px-3 py-3 pl-[4.25rem]">
+        <div className="border-t border-border/50 bg-background px-3 py-3 pl-10">
           <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
             {description || t('skills.noDescription')}
           </p>

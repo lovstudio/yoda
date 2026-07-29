@@ -85,6 +85,7 @@ describe('SkillAccordionRow', () => {
 
     const trigger = host.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]');
     expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelector('[data-testid="skill-icon"]')).toBeNull();
 
     await act(async () => trigger?.click());
 
