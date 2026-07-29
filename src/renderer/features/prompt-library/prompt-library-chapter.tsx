@@ -17,7 +17,7 @@ export function PromptLibraryChapter({
   description: string;
   icon: LucideIcon;
   actions?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
   bodyClassName?: string;
 }) {
@@ -25,7 +25,7 @@ export function PromptLibraryChapter({
     <section
       data-slot={dataSlot}
       className={cn(
-        'overflow-hidden rounded-lg border border-border bg-background-secondary',
+        'shrink-0 overflow-hidden rounded-lg border border-border bg-background-secondary',
         className
       )}
     >
@@ -39,9 +39,11 @@ export function PromptLibraryChapter({
         </div>
         {actions ? <div className="w-full @3xl:w-auto">{actions}</div> : null}
       </div>
-      <div className={cn('border-t border-border bg-background p-3', bodyClassName)}>
-        {children}
-      </div>
+      {children ? (
+        <div className={cn('border-t border-border bg-background p-3', bodyClassName)}>
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }

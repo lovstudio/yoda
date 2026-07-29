@@ -709,8 +709,6 @@
       "lovcodeDescription": "Search session content across every project and open the matching Yoda session",
       "lovcodeConnectedDescription": "Global session search connected · {{version}}",
       "lovcodeInstalledTooltip": "Lovcode is connected to global session search",
-      "install": "Install {{name}}",
-      "detecting": "Detecting {{name}}…",
       "copyInstallCommand": "Copy install command",
       "commandCopied": "Command copied",
       "copyInstallFor": "Copy install command for {{name}}",
@@ -718,6 +716,8 @@
       "disconnect": "Disconnect {{name}}",
       "connect": "Connect {{name}}",
       "connecting": "Connecting {{name}}…",
+      "install": "Install {{name}}",
+      "detecting": "Detecting {{name}}…",
       "cancelConnecting": "Cancel connecting {{name}}",
       "githubCliManagedTooltip": "Run `gh auth logout` in your terminal to disconnect",
       "connectButton": "Connect",
@@ -2306,7 +2306,8 @@
     "collection": {
       "title": "Prompts",
       "description": "Create reusable prompts, sort them into groups, sync from files, URLs, or Git, and optionally inject them when a session starts.",
-      "all": "All prompts"
+      "all": "All prompts",
+      "allDescription": "Drag groups or prompts within a group to reorder them. Configure dynamic injection on the relevant group or prompt."
     },
     "new": "New prompt",
     "empty": "No saved prompts yet. Create one to reuse it when composing a task.",
@@ -3994,6 +3995,9 @@
       "runningAgentsShort": "{{count}} agents",
       "sessionFallback": "Session {{id}}",
       "openSession": "Open session “{{title}}”",
+      "openOnlyRunningAgent": "Open the running agent session",
+      "showRunningAgents": "Show {{count}} running agents",
+      "hideRunningAgents": "Hide running agents",
       "processes": "Processes",
       "worktrees": "Worktrees",
       "scanningWorktrees": "Scanning local worktree storage…",

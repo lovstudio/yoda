@@ -709,8 +709,6 @@
       "lovcodeDescription": "搜索所有项目的会话内容，并直接打开 Yoda 中的对应会话",
       "lovcodeConnectedDescription": "已接入全局会话搜索 · {{version}}",
       "lovcodeInstalledTooltip": "Lovcode 已接入全局会话搜索",
-      "install": "安装 {{name}}",
-      "detecting": "正在检测 {{name}}…",
       "copyInstallCommand": "复制安装命令",
       "commandCopied": "命令已复制",
       "copyInstallFor": "复制 {{name}} 的安装命令",
@@ -718,6 +716,8 @@
       "disconnect": "断开 {{name}}",
       "connect": "连接 {{name}}",
       "connecting": "连接 {{name}} 中…",
+      "install": "安装 {{name}}",
+      "detecting": "正在检测 {{name}}…",
       "cancelConnecting": "取消连接 {{name}}",
       "githubCliManagedTooltip": "在终端中执行 `gh auth logout` 即可断开连接",
       "connectButton": "连接",
@@ -2306,7 +2306,8 @@
     "collection": {
       "title": "提示词",
       "description": "创建可复用提示词并按分组排序；可从文件、网址或 Git 同步，也可选择在会话启动时自动注入。",
-      "all": "全部提示词"
+      "all": "全部提示词",
+      "allDescription": "拖动分组或组内提示词即可排序；动态注入直接在对应分组或提示词上设置。"
     },
     "new": "新建提示词",
     "empty": "还没有保存的提示词。新建一个，下次创建任务时即可复用。",
@@ -3994,6 +3995,9 @@
       "runningAgentsShort": "{{count}} Agent",
       "sessionFallback": "会话 {{id}}",
       "openSession": "打开会话“{{title}}”",
+      "openOnlyRunningAgent": "打开正在运行的 Agent 会话",
+      "showRunningAgents": "查看 {{count}} 个正在运行的 Agent",
+      "hideRunningAgents": "收起正在运行的 Agent",
       "processes": "进程",
       "worktrees": "Worktrees",
       "scanningWorktrees": "正在盘点本地 worktree 占用…",
