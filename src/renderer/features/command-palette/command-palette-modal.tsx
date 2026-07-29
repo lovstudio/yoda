@@ -225,6 +225,8 @@ export function CommandPaletteModal({
   const globalLovcodeItems = lovcodeItems.filter((item) => !indexedConversationIds.has(item.id));
   const lovcodeNotInstalled =
     inSessionsScope && searchText.length > 0 && lovcodeResult?.status === 'not-installed';
+  const lovcodeDesktopOnly =
+    inSessionsScope && searchText.length > 0 && lovcodeResult?.status === 'desktop-only';
   const lovcodeSearchError =
     inSessionsScope && searchText.length > 0 && lovcodeResult?.status === 'error';
 
@@ -370,6 +372,8 @@ export function CommandPaletteModal({
             )
           ) : lovcodeNotInstalled ? (
             <LovcodeInstallBanner />
+          ) : lovcodeDesktopOnly ? (
+            <LovcodeInstallBanner desktopInstalled />
           ) : lovcodeSearchError ? (
             <div className="py-8 text-center text-xs text-foreground/40">
               {t('commandPalette.lovcode.searchError')}

@@ -708,6 +708,9 @@
       "litellmConnectedDescription": "Gateway：{{endpoint}}",
       "lovcodeDescription": "搜索所有项目的会话内容，并直接打开 Yoda 中的对应会话",
       "lovcodeConnectedDescription": "已接入全局会话搜索 · {{version}}",
+      "lovcodeDesktopConnectedDescription": "已安装桌面应用 · {{version}}",
+      "lovcodeDesktopInstalledDescription": "已安装桌面应用",
+      "lovcodeDesktopTooltip": "已检测到本机 Lovcode 应用",
       "lovcodeInstalledTooltip": "Lovcode 已接入全局会话搜索",
       "copyInstallCommand": "复制安装命令",
       "commandCopied": "命令已复制",
@@ -2067,6 +2070,8 @@
       "title": "接入 Lovcode 全局搜索",
       "description": "安装 Lovcode 后，可搜索所有项目的会话内容并直接打开命中会话。",
       "install": "获取 Lovcode",
+      "desktopOnlyTitle": "Lovcode 已安装",
+      "desktopOnlyDescription": "当前桌面版尚未向 Yoda 提供命令行搜索接口，可继续在 Lovcode 中搜索会话。",
       "matches": "会话内容",
       "searchError": "Lovcode 搜索暂时不可用，请稍后重试。"
     }

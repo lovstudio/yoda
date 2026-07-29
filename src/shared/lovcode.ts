@@ -1,11 +1,12 @@
 import type { SearchItem } from './search';
 
 export type LovcodeAvailability =
-  | { status: 'available'; version: string }
+  | { status: 'available'; version: string | null; source: 'cli' | 'desktop' }
   | { status: 'not-installed' };
 
 export type LovcodeSearchResult =
   | { status: 'not-installed' }
+  | { status: 'desktop-only'; version: string | null }
   | { status: 'error' }
   | { status: 'ok'; items: SearchItem[] };
 

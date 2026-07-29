@@ -4,6 +4,10 @@ import type { LovcodeAvailability, LovcodeSearchResult } from '@shared/lovcode';
 import type { SearchItem } from '@shared/search';
 import { sqlite } from '@main/db/client';
 import { log } from '@main/lib/logger';
+import {
+  detectLovcodeDesktopInstallation,
+  type LovcodeDesktopInstallation,
+} from './lovcode-desktop-installation';
 
 const execFileAsync = promisify(execFile);
 const LOVCODE_BIN = 'lovcode';
@@ -44,6 +48,7 @@ export type LovcodeConversationRow = {
 };
 
 type LovcodeConversationLoader = (sessionIds: string[]) => LovcodeConversationRow[];
+type LovcodeDesktopDetector = () => Promise<LovcodeDesktopInstallation | null>;
 
 const runLovcodeCommand: LovcodeCommandRunner = async (args, options) => {
   const { stdout } = await execFileAsync(LOVCODE_BIN, args, {
@@ -56,27 +61,42 @@ const runLovcodeCommand: LovcodeCommandRunner = async (args, options) => {
 
 export class LovcodeService {
   private cachedAvailability: LovcodeAvailability | null = null;
+  private cachedCliAvailability: LovcodeAvailability | null = null;
 
   constructor(
     private readonly runCommand: LovcodeCommandRunner = runLovcodeCommand,
-    private readonly loadConversations: LovcodeConversationLoader = loadLovcodeConversations
+    private readonly loadConversations: LovcodeConversationLoader = loadLovcodeConversations,
+    private readonly detectDesktop: LovcodeDesktopDetector = detectLovcodeDesktopInstallation
   ) {}
 
   async checkAvailability(force = false): Promise<LovcodeAvailability> {
     if (!force && this.cachedAvailability) return this.cachedAvailability;
+    const cliAvailability = await this.checkCliAvailability(force);
+    if (cliAvailability.status === 'available') {
+      this.cachedAvailability = cliAvailability;
+      return this.cachedAvailability;
+    }
+
     try {
-      const { stdout } = await this.runCommand(['--version'], { timeout: VERSION_TIMEOUT_MS });
-      this.cachedAvailability = { status: 'available', version: stdout.trim() };
+      const desktop = await this.detectDesktop();
+      this.cachedAvailability = desktop
+        ? { status: 'available', version: desktop.version, source: 'desktop' }
+        : { status: 'not-installed' };
     } catch (err) {
-      log.debug('LovcodeService: lovcode binary not available', { error: String(err) });
+      log.debug('LovcodeService: Lovcode desktop detection failed', { error: String(err) });
       this.cachedAvailability = { status: 'not-installed' };
     }
     return this.cachedAvailability;
   }
 
   async search(query: string): Promise<LovcodeSearchResult> {
-    const availability = await this.checkAvailability();
-    if (availability.status !== 'available') return { status: 'not-installed' };
+    const cliAvailability = await this.checkCliAvailability();
+    if (cliAvailability.status !== 'available') {
+      const availability = await this.checkAvailability();
+      return availability.status === 'available' && availability.source === 'desktop'
+        ? { status: 'desktop-only', version: availability.version }
+        : { status: 'not-installed' };
+    }
 
     const trimmed = query.trim();
     if (!trimmed) return { status: 'ok', items: [] };
@@ -95,6 +115,22 @@ export class LovcodeService {
       log.warn('LovcodeService: search failed', { query: trimmed, error: String(err) });
       return { status: 'error' };
     }
+  }
+
+  private async checkCliAvailability(force = false): Promise<LovcodeAvailability> {
+    if (!force && this.cachedCliAvailability) return this.cachedCliAvailability;
+    try {
+      const { stdout } = await this.runCommand(['--version'], { timeout: VERSION_TIMEOUT_MS });
+      this.cachedCliAvailability = {
+        status: 'available',
+        version: stdout.trim() || null,
+        source: 'cli',
+      };
+    } catch (err) {
+      log.debug('LovcodeService: lovcode CLI not available', { error: String(err) });
+      this.cachedCliAvailability = { status: 'not-installed' };
+    }
+    return this.cachedCliAvailability;
   }
 }
 

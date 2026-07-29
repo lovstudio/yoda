@@ -129,9 +129,15 @@ const IntegrationsCard: React.FC<{ onOpenLiteLlm: () => void }> = ({ onOpenLiteL
       name: 'Lovcode',
       description:
         lovcodeAvailability?.status === 'available'
-          ? t('settings.integrationsTab.lovcodeConnectedDescription', {
-              version: lovcodeAvailability.version,
-            })
+          ? lovcodeAvailability.source === 'desktop'
+            ? lovcodeAvailability.version
+              ? t('settings.integrationsTab.lovcodeDesktopConnectedDescription', {
+                  version: lovcodeAvailability.version,
+                })
+              : t('settings.integrationsTab.lovcodeDesktopInstalledDescription')
+            : t('settings.integrationsTab.lovcodeConnectedDescription', {
+                version: lovcodeAvailability.version,
+              })
           : t('settings.integrationsTab.lovcodeDescription'),
       logoSvg: lovcodeSvg,
       connected: lovcodeAvailability?.status === 'available',
@@ -139,7 +145,10 @@ const IntegrationsCard: React.FC<{ onOpenLiteLlm: () => void }> = ({ onOpenLiteL
       onConnect: () => {
         void rpc.app.openExternal(LOVCODE_DOWNLOAD_URL);
       },
-      disabledTooltip: t('settings.integrationsTab.lovcodeInstalledTooltip'),
+      disabledTooltip:
+        lovcodeAvailability?.status === 'available' && lovcodeAvailability.source === 'desktop'
+          ? t('settings.integrationsTab.lovcodeDesktopTooltip')
+          : t('settings.integrationsTab.lovcodeInstalledTooltip'),
       connectLabel: t('settings.integrationsTab.install', { name: 'Lovcode' }),
       connectingLabel: t('settings.integrationsTab.detecting', { name: 'Lovcode' }),
       connectIcon: <Download className="h-4 w-4" />,

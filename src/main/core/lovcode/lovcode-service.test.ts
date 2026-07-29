@@ -11,6 +11,30 @@ vi.mock('@main/db/client', () => ({
 }));
 
 describe('LovcodeService', () => {
+  it('detects the desktop app without claiming CLI search capability', async () => {
+    const runCommand = vi.fn(async () => {
+      throw new Error('CLI missing');
+    });
+    const detectDesktop = vi.fn(async () => ({ version: '0.39.9' }));
+    const service = new LovcodeService(
+      runCommand,
+      vi.fn(() => []),
+      detectDesktop
+    );
+
+    await expect(service.checkAvailability()).resolves.toEqual({
+      status: 'available',
+      version: '0.39.9',
+      source: 'desktop',
+    });
+    await expect(service.search('needle')).resolves.toEqual({
+      status: 'desktop-only',
+      version: '0.39.9',
+    });
+    expect(runCommand).toHaveBeenCalledOnce();
+    expect(detectDesktop).toHaveBeenCalledOnce();
+  });
+
   it('searches globally and returns directly openable Yoda conversations', async () => {
     const runCommand = vi
       .fn<
@@ -73,7 +97,8 @@ describe('LovcodeService', () => {
     });
     const missing = new LovcodeService(
       missingRunner,
-      vi.fn(() => [])
+      vi.fn(() => []),
+      vi.fn(async () => null)
     );
     await expect(missing.search('needle')).resolves.toEqual({ status: 'not-installed' });
 
