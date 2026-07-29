@@ -706,6 +706,9 @@
       "featurebaseDescription": "Work on Featurebase posts",
       "litellmDescription": "Manage multiple model services with automatic routing, load balancing, and failover",
       "litellmConnectedDescription": "Gateway: {{endpoint}}",
+      "lovcodeDescription": "Search and manage local AI coding sessions",
+      "lovcodeConnectedDescription": "Installed ({{version}})",
+      "lovcodeInstalledTooltip": "Lovcode is ready for session search",
       "copyInstallCommand": "Copy install command",
       "commandCopied": "Command copied",
       "copyInstallFor": "Copy install command for {{name}}",
@@ -713,6 +716,8 @@
       "disconnect": "Disconnect {{name}}",
       "connect": "Connect {{name}}",
       "connecting": "Connecting {{name}}…",
+      "install": "Install {{name}}",
+      "detecting": "Detecting {{name}}",
       "cancelConnecting": "Cancel connecting {{name}}",
       "githubCliManagedTooltip": "Run `gh auth logout` in your terminal to disconnect",
       "connectButton": "Connect",
@@ -2061,9 +2066,9 @@
     "searchingTranscripts": "Searching transcripts...",
     "tasksSessions": "Tasks & sessions",
     "lovcode": {
-      "title": "Install LovCode",
-      "description": "LovCode is required to run this command.",
-      "install": "Install LovCode"
+      "title": "Install Lovcode",
+      "description": "Lovcode is required to run this command.",
+      "install": "Install Lovcode"
     }
   },
   "mcp": {
