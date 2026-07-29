@@ -1,3 +1,4 @@
+import { DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT } from '@shared/view-state';
 import { type PinnedSidebarEntry } from './sidebar-store';
 import {
   getSidebarTaskGroupDisclosure,
@@ -20,7 +21,8 @@ const pinnedProjectTaskGroupId = (projectId: string) => `pinned-project-tasks::$
 
 export function limitPinnedTaskListRows(
   entries: readonly PinnedSidebarEntry[],
-  expandedTaskGroupIds: ReadonlySet<string>
+  expandedTaskGroupIds: ReadonlySet<string>,
+  visibleLimit = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT
 ): PinnedTaskListRow[] {
   const rows: PinnedTaskListRow[] = [];
   let index = 0;
@@ -37,7 +39,8 @@ export function limitPinnedTaskListRows(
         projectTasks.entries,
         pinnedProjectTaskGroupId(entry.projectId),
         expandedTaskGroupIds,
-        'underProject'
+        'underProject',
+        visibleLimit
       );
       index = projectTasks.nextIndex;
       continue;
@@ -50,7 +53,8 @@ export function limitPinnedTaskListRows(
         directTasks.entries,
         DIRECT_PINNED_TASK_GROUP_ID,
         expandedTaskGroupIds,
-        'pinned'
+        'pinned',
+        visibleLimit
       );
       index = directTasks.nextIndex;
       continue;
@@ -69,7 +73,8 @@ export function findHiddenPinnedTaskGroupId(
   entries: readonly PinnedSidebarEntry[],
   expandedTaskGroupIds: ReadonlySet<string>,
   projectId: string,
-  taskId: string
+  taskId: string,
+  visibleLimit = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT
 ): string | null {
   let index = 0;
 
@@ -84,7 +89,8 @@ export function findHiddenPinnedTaskGroupId(
         !expandedTaskGroupIds.has(groupId) &&
         hiddenSidebarTaskGroupItemsContain(
           projectTasks.entries,
-          (task) => task.projectId === projectId && task.taskId === taskId
+          (task) => task.projectId === projectId && task.taskId === taskId,
+          visibleLimit
         )
       ) {
         return groupId;
@@ -99,7 +105,8 @@ export function findHiddenPinnedTaskGroupId(
         !expandedTaskGroupIds.has(DIRECT_PINNED_TASK_GROUP_ID) &&
         hiddenSidebarTaskGroupItemsContain(
           directTasks.entries,
-          (task) => task.projectId === projectId && task.taskId === taskId
+          (task) => task.projectId === projectId && task.taskId === taskId,
+          visibleLimit
         )
       ) {
         return DIRECT_PINNED_TASK_GROUP_ID;
@@ -119,12 +126,17 @@ function appendTaskGroupRows<T extends PinnedSidebarEntry>(
   entries: readonly T[],
   groupId: string,
   expandedTaskGroupIds: ReadonlySet<string>,
-  rowVariant: SidebarTaskGroupRowVariant
+  rowVariant: SidebarTaskGroupRowVariant,
+  visibleLimit: number
 ): void {
   if (entries.length === 0) return;
 
   const expanded = expandedTaskGroupIds.has(groupId);
-  const { visibleItems, hiddenCount } = getSidebarTaskGroupDisclosure(entries, expanded);
+  const { visibleItems, hiddenCount } = getSidebarTaskGroupDisclosure(
+    entries,
+    expanded,
+    visibleLimit
+  );
   target.push(...visibleItems);
 
   if (hiddenCount > 0) {

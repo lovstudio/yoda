@@ -152,6 +152,8 @@
     "groupByNone": "不分组",
     "groupByType": "按类型",
     "groupByActivity": "按活跃时间",
+    "collapseThreshold": "折叠阈值",
+    "collapseThresholdOption": "{{count}} 个任务",
     "branchDisplay": "分支显示",
     "branchDisplayHidden": "隐藏",
     "branchDisplayCompact": "简洁",

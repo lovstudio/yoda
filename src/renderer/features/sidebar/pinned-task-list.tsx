@@ -20,6 +20,7 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
   const { params: taskParams } = useParams('task');
   const collapsed = sidebarStore.pinnedCollapsed;
   const showList = !collapsed && entries.length > 0;
+  const taskGroupVisibleLimit = sidebarStore.taskGroupVisibleLimit;
   const activeTaskKey =
     taskParams.projectId && taskParams.taskId
       ? `${taskParams.projectId}::${taskParams.taskId}`
@@ -27,8 +28,8 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
   const autoExpandedActiveTaskKeyRef = useRef<string | null>(null);
   const [expandedTaskGroupIds, setExpandedTaskGroupIds] = useState<Set<string>>(() => new Set());
   const rows = useMemo(
-    () => limitPinnedTaskListRows(entries, expandedTaskGroupIds),
-    [entries, expandedTaskGroupIds]
+    () => limitPinnedTaskListRows(entries, expandedTaskGroupIds, taskGroupVisibleLimit),
+    [entries, expandedTaskGroupIds, taskGroupVisibleLimit]
   );
 
   useEffect(() => {
@@ -42,7 +43,8 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
       entries,
       expandedTaskGroupIds,
       taskParams.projectId,
-      taskParams.taskId
+      taskParams.taskId,
+      taskGroupVisibleLimit
     );
     if (!hiddenGroupId) return;
 
@@ -53,7 +55,14 @@ export const SidebarPinnedTaskList = observer(function SidebarPinnedTaskList() {
       next.add(hiddenGroupId);
       return next;
     });
-  }, [activeTaskKey, entries, expandedTaskGroupIds, taskParams.projectId, taskParams.taskId]);
+  }, [
+    activeTaskKey,
+    entries,
+    expandedTaskGroupIds,
+    taskGroupVisibleLimit,
+    taskParams.projectId,
+    taskParams.taskId,
+  ]);
 
   function toggleTaskGroupExpanded(groupId: string): void {
     setExpandedTaskGroupIds((previous) => {

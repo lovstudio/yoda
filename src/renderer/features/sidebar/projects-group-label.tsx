@@ -14,10 +14,13 @@ import {
 import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type {
-  SidebarBranchDisplay,
-  SidebarTaskGroupBy,
-  SidebarTaskSortBy,
+import {
+  DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT,
+  SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS,
+  type SidebarBranchDisplay,
+  type SidebarTaskGroupBy,
+  type SidebarTaskGroupVisibleLimit,
+  type SidebarTaskSortBy,
 } from '@shared/view-state';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -90,6 +93,7 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
     sidebarStore.projectTypeFilter !== 'all' ||
     sidebarStore.taskSortBy !== 'updated-at' ||
     sidebarStore.taskGroupBy !== 'project' ||
+    sidebarStore.taskGroupVisibleLimit !== DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT ||
     sidebarStore.taskBranchDisplay !== 'compact' ||
     sidebarStore.hideProjectsWithoutActiveTasks ||
     sidebarStore.hideTasksWithoutActiveConversations ||
@@ -158,6 +162,31 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
             {(Object.keys(groupByLabels) as SidebarTaskGroupBy[]).map((value) => (
               <SelectItem key={value} value={value}>
                 {groupByLabels[value]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </PanelRow>
+      <PanelRow label={t('sidebar.collapseThreshold')}>
+        <Select
+          value={sidebarStore.taskGroupVisibleLimit}
+          onValueChange={(value) => {
+            if (value !== null) {
+              sidebarStore.setTaskGroupVisibleLimit(value as SidebarTaskGroupVisibleLimit);
+            }
+          }}
+        >
+          <SelectTrigger size="sm" className="text-xs">
+            <SelectValue>
+              {(value: SidebarTaskGroupVisibleLimit) =>
+                t('sidebar.collapseThresholdOption', { count: value })
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent align="end">
+            {SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS.map((value) => (
+              <SelectItem key={value} value={value}>
+                {t('sidebar.collapseThresholdOption', { count: value })}
               </SelectItem>
             ))}
           </SelectContent>
