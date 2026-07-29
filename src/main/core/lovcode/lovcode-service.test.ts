@@ -3,7 +3,6 @@ import {
   createLovcodeCommandRunner,
   isVersionAtLeast,
   LovcodeService,
-  LovcodeUpgradeRequiredError,
   mapLovcodeResults,
   parseSearchHits,
   type LovcodeConversationRow,
@@ -14,6 +13,65 @@ vi.mock('@main/db/client', () => ({
 }));
 
 describe('LovcodeService', () => {
+  it('detects an older desktop app and offers the required upgrade', async () => {
+    const runCommand = vi.fn(async () => {
+      throw new Error('CLI missing');
+    });
+    const detectDesktop = vi.fn(async () => ({
+      version: '0.39.9',
+      executablePath: '/Applications/Lovcode.app/Contents/MacOS/lovcode',
+    }));
+    const service = new LovcodeService(
+      runCommand,
+      vi.fn(() => []),
+      detectDesktop
+    );
+
+    await expect(service.checkAvailability()).resolves.toEqual({
+      status: 'upgrade-required',
+      version: '0.39.9',
+    });
+    await expect(service.search('needle')).resolves.toEqual({
+      status: 'upgrade-required',
+      version: '0.39.9',
+    });
+    expect(runCommand).toHaveBeenCalledOnce();
+    expect(detectDesktop).toHaveBeenCalledOnce();
+  });
+
+  it('acknowledges a desktop app whose search interface is unavailable', async () => {
+    const service = new LovcodeService(
+      vi.fn(async () => {
+        throw new Error('CLI missing');
+      }),
+      vi.fn(() => []),
+      vi.fn(async () => ({
+        version: null,
+        executablePath: '/Applications/Lovcode.app/Contents/MacOS/lovcode',
+      }))
+    );
+
+    await expect(service.checkAvailability()).resolves.toEqual({
+      status: 'desktop-only',
+      version: null,
+    });
+  });
+
+  it('requires an upgrade when the discovered CLI predates indexed search', async () => {
+    const detectDesktop = vi.fn(async () => null);
+    const service = new LovcodeService(
+      vi.fn(async () => ({ stdout: 'lovcode 0.39.9' })),
+      vi.fn(() => []),
+      detectDesktop
+    );
+
+    await expect(service.checkAvailability()).resolves.toEqual({
+      status: 'upgrade-required',
+      version: 'lovcode 0.39.9',
+    });
+    expect(detectDesktop).not.toHaveBeenCalled();
+  });
+
   it('searches globally and returns directly openable Yoda conversations', async () => {
     const runCommand = vi
       .fn<
@@ -76,7 +134,8 @@ describe('LovcodeService', () => {
     });
     const missing = new LovcodeService(
       missingRunner,
-      vi.fn(() => [])
+      vi.fn(() => []),
+      vi.fn(async () => null)
     );
     await expect(missing.search('needle')).resolves.toEqual({ status: 'not-installed' });
 
@@ -94,17 +153,6 @@ describe('LovcodeService', () => {
       vi.fn(() => [])
     );
     await expect(failing.search('needle')).resolves.toEqual({ status: 'error' });
-
-    const upgradeRequired = new LovcodeService(
-      vi.fn(async () => {
-        throw new LovcodeUpgradeRequiredError('0.39.9');
-      }),
-      vi.fn(() => [])
-    );
-    await expect(upgradeRequired.search('needle')).resolves.toEqual({
-      status: 'upgrade-required',
-      version: '0.39.9',
-    });
   });
 });
 
