@@ -3999,6 +3999,7 @@
       "runningAgents": "运行中 Agent",
       "runningAgentsShort": "{{count}} Agent",
       "sessionFallback": "会话 {{id}}",
+      "taskFallback": "任务 {{id}}",
       "openSession": "打开会话“{{title}}”",
       "openOnlyRunningAgent": "打开正在运行的 Agent 会话",
       "showRunningAgents": "查看 {{count}} 个正在运行的 Agent",

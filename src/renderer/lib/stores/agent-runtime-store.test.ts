@@ -71,6 +71,29 @@ describe('AgentRuntimeStore task session display state', () => {
     ]);
   });
 
+  it('exposes routing identities for every globally running session', async () => {
+    const store = new AgentRuntimeStore();
+    await store.start();
+    emitStatus('completed', 'completed-1', 'project-3', 'task-3');
+    emitStatus('working', 'working-1', 'project-2', 'task-2');
+    emitStatus('awaiting-input', 'awaiting-1', 'project-1', 'task-1');
+
+    expect(store.runningSessions()).toEqual([
+      {
+        projectId: 'project-1',
+        taskId: 'task-1',
+        conversationId: 'awaiting-1',
+        status: 'awaiting-input',
+      },
+      {
+        projectId: 'project-2',
+        taskId: 'task-2',
+        conversationId: 'working-1',
+        status: 'working',
+      },
+    ]);
+  });
+
   it('hydrates active unopened tasks without mounting their task stores', async () => {
     mocks.getActiveRuntimeStatuses.mockResolvedValueOnce({
       coveredProjectIds: ['project-1'],
@@ -166,11 +189,16 @@ describe('AgentRuntimeStore task session display state', () => {
   });
 });
 
-function emitStatus(status: string, conversationId: string): void {
+function emitStatus(
+  status: string,
+  conversationId: string,
+  projectId = 'project-1',
+  taskId = 'task-1'
+): void {
   expect(mocks.listener, agentSessionStatusChangedChannel.name).toBeDefined();
   mocks.listener?.({
-    projectId: 'project-1',
-    taskId: 'task-1',
+    projectId,
+    taskId,
     conversationId,
     status,
   });
