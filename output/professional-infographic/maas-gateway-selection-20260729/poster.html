@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>异构 MaaS 默认选 LiteLLM；已有 K8s 且追求数据面稳定时转向 Higress</title>
+    <style>
+      :root {
+        --brand-primary: #24324a;
+        --brand-accent: #d97757;
+        --ink: #172033;
+        --muted: #566175;
+        --paper: #f7f4ef;
+        --line: color-mix(in srgb, var(--ink) 18%, transparent);
+        --soft-line: color-mix(in srgb, var(--ink) 9%, transparent);
+        --accent-soft: color-mix(in srgb, var(--brand-accent) 10%, var(--paper));
+        --font: Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #d7d7d5;
+        color: var(--ink);
+        font-family: var(--font);
+        text-rendering: geometricPrecision;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+      }
+
+      .poster {
+        width: 1600px;
+        height: 900px;
+        padding: 32px 54px 26px;
+        overflow: hidden;
+        display: grid;
+        grid-template-rows: 32px minmax(98px, auto) minmax(0, 1fr) 48px;
+        gap: 12px;
+        background: var(--paper);
+        box-shadow: 0 28px 70px rgb(18 28 45 / 16%);
+      }
+
+      .topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        border-bottom: 1px solid var(--ink);
+        padding-bottom: 8px;
+      }
+
+      .figure-label {
+        margin: 0;
+        color: var(--brand-accent);
+        font-size: 13px;
+        line-height: 1;
+        font-weight: 760;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .brand-lockup {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+      }
+
+      .brand-lockup img {
+        width: 132px;
+        max-height: 26px;
+        object-fit: contain;
+        object-position: right center;
+      }
+
+      .header {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(300px, 30%);
+        gap: 42px;
+        align-items: end;
+        padding: 2px 0 10px;
+      }
+
+      .poster__title {
+        margin: 0;
+        max-width: 1080px;
+        font-size: 40px;
+        line-height: 1.1;
+        font-weight: 760;
+        letter-spacing: -0.025em;
+        text-wrap: balance;
+      }
+
+      .deck {
+        margin: 0 0 2px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+        font-weight: 460;
+      }
+
+      .visual {
+        min-height: 0;
+        position: relative;
+        border-top: 1px solid var(--line);
+        padding-top: 13px;
+      }
+
+      .footer {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(360px, auto);
+        gap: 28px;
+        align-items: end;
+        border-top: 1px solid var(--line);
+        padding-top: 8px;
+      }
+
+      .source-note,
+      .generation-note {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.34;
+      }
+
+      .generation-note {
+        text-align: right;
+      }
+
+      .site {
+        color: var(--ink);
+        font-weight: 650;
+      }
+
+      .matrix-wrap {
+        height: 100%;
+        display: grid;
+        grid-template-rows: 32px minmax(0, 1fr) 52px;
+        gap: 9px;
+      }
+
+      .matrix-legend {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.25;
+      }
+
+      .legend-scale {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        white-space: nowrap;
+      }
+
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .legend-swatch {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 1px solid var(--line);
+        background: transparent;
+      }
+
+      .legend-swatch--decision {
+        border-color: var(--brand-accent);
+        background: var(--brand-accent);
+      }
+
+      .legend-swatch--condition {
+        border: 2px solid var(--brand-accent);
+        background: var(--accent-soft);
+      }
+
+      .matrix {
+        min-height: 0;
+        display: grid;
+        grid-template-columns:
+          minmax(190px, 1.08fr)
+          repeat(4, minmax(155px, 1fr))
+          minmax(270px, 1.48fr);
+        grid-template-rows: 46px repeat(4, minmax(0, 1fr));
+        border-top: 2px solid var(--ink);
+        border-bottom: 1px solid var(--ink);
+        background: color-mix(in srgb, white 34%, var(--paper));
+      }
+
+      .matrix > * {
+        min-width: 0;
+        padding: 8px 12px;
+        border-right: 1px solid var(--soft-line);
+        border-bottom: 1px solid var(--soft-line);
+      }
+
+      .matrix > *:nth-child(6n) {
+        border-right: 0;
+      }
+      .matrix > *:nth-last-child(-n + 6) {
+        border-bottom: 0;
+      }
+
+      .matrix-head {
+        display: flex;
+        align-items: flex-end;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.15;
+        font-weight: 760;
+        letter-spacing: 0.035em;
+      }
+
+      .matrix-head:first-child,
+      .matrix-head:last-child {
+        color: var(--ink);
+      }
+
+      .matrix-entity {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 3px;
+        padding-left: 18px;
+        font-size: 18px;
+        line-height: 1.12;
+        font-weight: 780;
+      }
+
+      .matrix-entity::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        width: 5px;
+        height: 44%;
+        background: var(--line);
+      }
+
+      .matrix-entity--primary::before,
+      .matrix-entity--conditional::before {
+        background: var(--brand-accent);
+      }
+
+      .matrix-entity small {
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.25;
+        font-weight: 520;
+      }
+
+      .matrix-cell {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 3px;
+        color: var(--ink);
+        font-size: 11px;
+        line-height: 1.2;
+      }
+
+      .cell-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 9px;
+        line-height: 1;
+        font-weight: 720;
+        letter-spacing: 0.055em;
+        text-transform: uppercase;
+      }
+
+      .cell-kicker::before {
+        content: '';
+        width: 7px;
+        height: 7px;
+        border: 1px solid currentColor;
+      }
+
+      .cell-value {
+        font-size: 14px;
+        line-height: 1.15;
+        font-weight: 760;
+      }
+
+      .cell-note {
+        color: var(--muted);
+        font-size: 9.5px;
+        line-height: 1.2;
+      }
+
+      .matrix-cell--key {
+        background: var(--accent-soft);
+        box-shadow: inset 4px 0 0 var(--brand-accent);
+      }
+
+      .matrix-cell--key .cell-kicker,
+      .matrix-cell--key .cell-note {
+        color: color-mix(in srgb, var(--brand-accent) 78%, var(--ink));
+      }
+
+      .matrix-cell--decision {
+        position: relative;
+        gap: 4px;
+        padding-left: 18px;
+        color: white;
+        background: var(--brand-primary);
+      }
+
+      .matrix-cell--decision::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 6px;
+        background: var(--brand-accent);
+      }
+
+      .matrix-cell--decision .cell-kicker,
+      .matrix-cell--decision .cell-note {
+        color: color-mix(in srgb, white 70%, transparent);
+      }
+
+      .matrix-cell--conditional {
+        position: relative;
+        gap: 4px;
+        padding-left: 18px;
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 2px var(--brand-accent);
+      }
+
+      .matrix-cell--conditional::before {
+        content: 'IF';
+        position: absolute;
+        top: 9px;
+        right: 10px;
+        color: var(--brand-accent);
+        font-size: 9px;
+        font-weight: 820;
+        letter-spacing: 0.08em;
+      }
+
+      .matrix-readout {
+        display: grid;
+        grid-template-columns: 105px minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: center;
+        padding: 0 16px;
+        color: white;
+        background: var(--brand-primary);
+        font-size: 12px;
+        line-height: 1.25;
+      }
+
+      .matrix-readout > strong {
+        color: color-mix(in srgb, white 66%, transparent);
+        font-size: 9px;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+      }
+
+      .route-flow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+        color: color-mix(in srgb, white 78%, transparent);
+        font-size: 10px;
+      }
+
+      .route-node {
+        padding: 4px 8px;
+        border: 1px solid rgb(255 255 255 / 28%);
+        font-weight: 680;
+      }
+
+      .route-node--gateway {
+        border-color: var(--brand-accent);
+        color: white;
+        background: rgb(217 119 87 / 22%);
+      }
+
+      .poster[data-aspect='4:5'],
+      .poster[data-aspect='1:1'],
+      .poster[data-aspect='A4'] {
+        grid-template-rows: 38px minmax(150px, auto) minmax(0, 1fr) 62px;
+        padding: 44px 52px 30px;
+        gap: 16px;
+      }
+
+      .poster[data-aspect='4:5'] .header,
+      .poster[data-aspect='1:1'] .header,
+      .poster[data-aspect='A4'] .header {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      @media print {
+        html,
+        body {
+          background: transparent;
+        }
+        .poster {
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article
+      class="poster"
+      data-aspect="16:9"
+      data-template="comparison-matrix"
+      data-mode="qualitative"
+    >
+      <div class="topline">
+        <p class="figure-label">Exhibit 01 · MaaS Gateway Selection</p>
+        <div class="brand-lockup">
+          <img
+            src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHN2ZyB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgdmlld0JveD0iMCAwIDQ5NSAxNjMuMyI+CjxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+Cgkuc3Qwe2ZpbGw6I0VCNjYzNzt9Cjwvc3R5bGU+CjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDM4LDApIj4KCTwhLS0gTG9nbyBtYXJrIC0tPgoJPGc+CgkJPHBhdGggY2xhc3M9InN0MCIgZD0iTTAsMzEuNHY1Ni43YzAsMTQuNSwxMS43LDI2LjIsMjYuMiwyNi4yVjU3LjZDMjYuMiw0My4yLDE0LjUsMzEuNCwwLDMxLjR6Ii8+CgkJPHBhdGggY2xhc3M9InN0MCIgZD0iTTMyLjcsNDguOXY1Ni43YzAsMTQuNSwxMS43LDI2LjIsMjYuMiwyNi4yVjc1LjFDNTguOSw2MC42LDQ3LjIsNDguOSwzMi43LDQ4Ljl6Ii8+CgkJPHBhdGggY2xhc3M9InN0MCIgZD0iTTY1LjUsMzkuOXY1Mi40YzE0LjUsMCwyNi4yLTExLjcsMjYuMi0yNi4yQzkxLjYsNTEuNiw3OS45LDM5LjksNjUuNSwzOS45eiIvPgoJPC9nPgoJPCEtLSBUZXh0OiBMb3ZTdHVkaW8gLS0+Cgk8dGV4dCB4PSIxMTYiIHk9IjEwOCIgZm9udC1mYW1pbHk9IidIZWx2ZXRpY2EgTmV1ZScsIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iNjgiIGZvbnQtd2VpZ2h0PSI1MDAiIGZpbGw9IiNFQjY2MzciIGxldHRlci1zcGFjaW5nPSItMC41Ij5Mb3ZTdHVkaW88L3RleHQ+CjwvZz4KPC9zdmc+Cg=="
+            alt="LovStudio Logo"
+          />
+        </div>
+      </div>
+
+      <header class="header" data-region="header">
+        <h1 class="poster__title" data-audit="title">
+          异构 MaaS 默认选 LiteLLM；已有 K8s 且追求数据面稳定时转向 Higress
+        </h1>
+        <p class="deck" data-audit="description">
+          个人／小团队自托管 · 截至 2026-07-29 官方资料 · 未做统一压测
+        </p>
+      </header>
+
+      <main class="visual" data-region="visual">
+        <section
+          class="matrix-wrap"
+          data-primary-block
+          data-audit-container
+          data-encoding="position color"
+          aria-label="同维比较矩阵"
+        >
+          <div
+            class="matrix-legend"
+            data-annotation
+            data-audit="annotation"
+            data-source-ref="S1 S2 S3 S4 S5"
+          >
+            <span>定性判断 · 同列同口径</span>
+            <span class="legend-scale">
+              <span class="legend-item"><i class="legend-swatch"></i>支持</span>
+              <span class="legend-item"
+                ><i class="legend-swatch legend-swatch--decision"></i>默认</span
+              >
+              <span class="legend-item"
+                ><i class="legend-swatch legend-swatch--condition"></i>条件</span
+              >
+            </span>
+          </div>
+
+          <div class="matrix">
+            <div class="matrix-head">比较对象</div>
+            <div class="matrix-head" data-dimension>异构接入与管理</div>
+            <div class="matrix-head" data-dimension>自动路由</div>
+            <div class="matrix-head" data-dimension>稳定性上限</div>
+            <div class="matrix-head" data-dimension>运维门槛</div>
+            <div class="matrix-head">选择边界</div>
+
+            <div class="matrix-entity matrix-entity--primary" data-entity data-source-ref="S1 S2">
+              LiteLLM
+              <small>集中式 LLM Gateway · MIT 核心</small>
+            </div>
+            <div class="matrix-cell matrix-cell--key" data-data-point data-source-ref="S1">
+              <span class="cell-kicker">完整</span>
+              <span class="cell-value">自定义端点＋管理面</span>
+              <span class="cell-note">模型别名 · UI · 虚拟密钥</span>
+            </div>
+            <div class="matrix-cell matrix-cell--key" data-data-point data-source-ref="S1">
+              <span class="cell-kicker">完整</span>
+              <span class="cell-value">优先级＋主动摘除</span>
+              <span class="cell-note">负载 · 重试 · 冷却 · Fallback</span>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S2">
+              <span class="cell-kicker">可高可用</span>
+              <span class="cell-value">2＋ 无状态副本</span>
+              <span class="cell-note">PostgreSQL＋Redis 共享状态</span>
+            </div>
+            <div class="matrix-cell matrix-cell--key" data-data-point data-source-ref="S1 S2">
+              <span class="cell-kicker">中低</span>
+              <span class="cell-value">Docker 起步</span>
+              <span class="cell-note">HA 时再增加 PG／Redis</span>
+            </div>
+            <div
+              class="matrix-cell matrix-cell--decision"
+              data-data-point
+              data-decision
+              data-source-ref="S1 S2"
+            >
+              <span class="cell-kicker">默认路线</span>
+              <span class="cell-value">个人／小团队＋多家 MaaS</span>
+              <span class="cell-note">完整度与运维成本最均衡</span>
+            </div>
+
+            <div class="matrix-entity matrix-entity--conditional" data-entity data-source-ref="S3">
+              Higress
+              <small>Envoy／Istio 数据面 · Apache-2.0</small>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S3">
+              <span class="cell-kicker">完整</span>
+              <span class="cell-value">统一协议＋控制台</span>
+              <span class="cell-note">100＋模型 · 插件化治理</span>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S3">
+              <span class="cell-kicker">完整</span>
+              <span class="cell-value">LB＋Fallback</span>
+              <span class="cell-note">Token 失效切换 · 热更新</span>
+            </div>
+            <div class="matrix-cell matrix-cell--key" data-data-point data-source-ref="S3">
+              <span class="cell-kicker">基础设施级</span>
+              <span class="cell-value">长连接数据面更强</span>
+              <span class="cell-note">SSE 流式 · 无损配置更新</span>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S3">
+              <span class="cell-kicker">高</span>
+              <span class="cell-value">K8s／Helm</span>
+              <span class="cell-note">需要网关与集群运维能力</span>
+            </div>
+            <div
+              class="matrix-cell matrix-cell--conditional"
+              data-data-point
+              data-decision
+              data-source-ref="S3"
+            >
+              <span class="cell-kicker">条件反超</span>
+              <span class="cell-value">已有 K8s＋高并发／SSE</span>
+              <span class="cell-note">稳定上限优先于接入速度</span>
+            </div>
+
+            <div class="matrix-entity" data-entity data-source-ref="S4">
+              Portkey
+              <small>配置驱动的开源 AI Gateway · MIT</small>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S4">
+              <span class="cell-kicker">广</span>
+              <span class="cell-value">自定义 Host</span>
+              <span class="cell-note">250＋模型 · 本地 Console</span>
+            </div>
+            <div class="matrix-cell matrix-cell--key" data-data-point data-source-ref="S4">
+              <span class="cell-kicker">强</span>
+              <span class="cell-value">嵌套条件路由</span>
+              <span class="cell-note">重试 · 熔断 · 负载 · Guardrails</span>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S4">
+              <span class="cell-kicker">高性能核心</span>
+              <span class="cell-value">轻量数据面</span>
+              <span class="cell-note">完整治理存在版本边界</span>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S4">
+              <span class="cell-kicker">中</span>
+              <span class="cell-value">核心易部署</span>
+              <span class="cell-note">企业治理需重新评估边界</span>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S4">
+              <span class="cell-kicker">适用边界</span>
+              <span class="cell-value">复杂路由表达力优先</span>
+              <span class="cell-note">接受托管／企业能力边界</span>
+            </div>
+
+            <div class="matrix-entity" data-entity data-source-ref="S5">
+              New API
+              <small>中文渠道与用户运营 · AGPLv3</small>
+            </div>
+            <div class="matrix-cell matrix-cell--key" data-data-point data-source-ref="S5">
+              <span class="cell-kicker">运营完整</span>
+              <span class="cell-value">用户＋渠道＋计费</span>
+              <span class="cell-note">中文管理与多租户能力突出</span>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S5">
+              <span class="cell-kicker">基础</span>
+              <span class="cell-value">优先级＋权重</span>
+              <span class="cell-note">多密钥轮询 · 自动禁用</span>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S5">
+              <span class="cell-kicker">应用级</span>
+              <span class="cell-value">偏运营而非数据面</span>
+              <span class="cell-note">开源版无稳定支持承诺</span>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S5">
+              <span class="cell-kicker">中低</span>
+              <span class="cell-value">Docker＋中文 UI</span>
+              <span class="cell-note">需接受 AGPL 与品牌义务</span>
+            </div>
+            <div class="matrix-cell" data-data-point data-source-ref="S5">
+              <span class="cell-kicker">适用边界</span>
+              <span class="cell-value">充值／分发／渠道运营</span>
+              <span class="cell-note">不是稳定性优先的默认网关</span>
+            </div>
+          </div>
+
+          <div class="matrix-readout" data-annotation data-source-ref="S1 S3">
+            <strong>落地原则</strong>
+            <span>固定 Gateway；先做健康路由，语义选模延后。</span>
+            <span class="route-flow" aria-label="客户端经统一网关路由到多个 MaaS">
+              <span class="route-node">客户端</span>
+              <span>→</span>
+              <span class="route-node route-node--gateway">统一 URL</span>
+              <span>→</span>
+              <span class="route-node">多 MaaS</span>
+            </span>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer" data-region="footer">
+        <p class="source-note" data-audit="source">
+          来源：S1 LiteLLM 路由／健康检查；S2 LiteLLM 部署／v1.94.0／安全公告；S3 Higress；S4
+          Portkey；S5 New API 官方资料。检索：2026-07-29。注：定性判断，未做统一压测。
+        </p>
+        <p class="generation-note" data-audit="attribution">
+          本信息图由 LovStudio 的「专业信息图」Skill 生成 ·
+          <span class="site">https://lovstudio.ai</span>
+        </p>
+      </footer>
+    </article>
+
+    <script>
+      document.fonts.ready.finally(() => {
+        window.__INFOGRAPHIC_READY__ = true;
+      });
+    </script>
+  </body>
+</html>
