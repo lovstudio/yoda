@@ -57,6 +57,8 @@ export type WorktreeStorageItem = {
   projectName: string;
   path: string;
   branch: string | null;
+  activeTaskId: string | null;
+  activeTaskName: string | null;
   sizeBytes: number;
   dirty: boolean;
   referencedByActiveTask: boolean;

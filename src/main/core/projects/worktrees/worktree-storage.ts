@@ -12,6 +12,7 @@ import { log } from '@main/lib/logger';
 import { projectManager } from '../project-manager';
 import type { ProjectProvider } from '../project-provider';
 import { parseWorktreePorcelain, type ListedWorktree } from './worktree-storage-parse';
+import { groupActiveTasksByBranch, type ActiveTaskReference } from './worktree-task-references';
 
 const STATUS_TIMEOUT_MS = 5_000;
 const SIZE_TIMEOUT_MS = 30_000;
@@ -58,9 +59,9 @@ async function measureWorktrees(
 async function inspectProjectWorktrees(args: {
   provider: ProjectProvider;
   projectName: string;
-  activeBranches: Set<string>;
+  activeTasksByBranch: Map<string, ActiveTaskReference>;
 }): Promise<WorktreeStorageItem[]> {
-  const { provider, projectName, activeBranches } = args;
+  const { provider, projectName, activeTasksByBranch } = args;
   if (!provider.ctx.supportsLocalSpawn) return [];
 
   let listed: ListedWorktree[];
@@ -86,12 +87,15 @@ async function inspectProjectWorktrees(args: {
       .exec('git', ['-C', item.path, 'status', '--porcelain'], { timeout: STATUS_TIMEOUT_MS })
       .then(({ stdout }) => stdout.trim().length > 0)
       .catch(() => true);
-    const referencedByActiveTask = item.branch !== null && activeBranches.has(item.branch);
+    const activeTask = item.branch === null ? undefined : activeTasksByBranch.get(item.branch);
+    const referencedByActiveTask = activeTask !== undefined;
     items.push({
       projectId: provider.projectId,
       projectName,
       path: item.path,
       branch: item.branch,
+      activeTaskId: activeTask?.id ?? null,
+      activeTaskName: activeTask?.name ?? null,
       sizeBytes: sizes.get(path.resolve(item.path)) ?? 0,
       dirty,
       referencedByActiveTask,
@@ -101,25 +105,23 @@ async function inspectProjectWorktrees(args: {
   return items;
 }
 
-async function activeTaskBranches(): Promise<Map<string, Set<string>>> {
+async function activeTasksByBranch(): Promise<Map<string, Map<string, ActiveTaskReference>>> {
   const rows = await db
-    .select({ projectId: tasks.projectId, taskBranch: tasks.taskBranch })
+    .select({
+      id: tasks.id,
+      name: tasks.name,
+      projectId: tasks.projectId,
+      taskBranch: tasks.taskBranch,
+    })
     .from(tasks)
     .where(and(isNull(tasks.archivedAt), isNotNull(tasks.taskBranch)));
-  const byProject = new Map<string, Set<string>>();
-  for (const row of rows) {
-    if (!row.taskBranch) continue;
-    const branches = byProject.get(row.projectId) ?? new Set<string>();
-    branches.add(row.taskBranch);
-    byProject.set(row.projectId, branches);
-  }
-  return byProject;
+  return groupActiveTasksByBranch(rows);
 }
 
 export async function getWorktreeStorageSnapshot(): Promise<WorktreeStorageSnapshot> {
-  const [projectRows, branchesByProject] = await Promise.all([
+  const [projectRows, tasksByProjectBranch] = await Promise.all([
     db.select({ id: projects.id, name: projects.name }).from(projects),
-    activeTaskBranches(),
+    activeTasksByBranch(),
   ]);
   const names = new Map(projectRows.map((project) => [project.id, project.name]));
   const items = (
@@ -128,7 +130,8 @@ export async function getWorktreeStorageSnapshot(): Promise<WorktreeStorageSnaps
         inspectProjectWorktrees({
           provider,
           projectName: names.get(provider.projectId) ?? provider.projectId,
-          activeBranches: branchesByProject.get(provider.projectId) ?? new Set<string>(),
+          activeTasksByBranch:
+            tasksByProjectBranch.get(provider.projectId) ?? new Map<string, ActiveTaskReference>(),
         })
       )
     )

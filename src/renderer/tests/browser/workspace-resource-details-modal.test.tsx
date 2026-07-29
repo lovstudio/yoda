@@ -17,6 +17,9 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(async () => undefined),
   showConfirm: vi.fn(),
   invalidateQueries: vi.fn(async () => undefined),
+  navigate: vi.fn(),
+  openTaskTarget: vi.fn(),
+  onClose: vi.fn(),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -45,6 +48,10 @@ vi.mock('@renderer/lib/components/file-path-actions', () => ({
     }),
 }));
 
+vi.mock('@renderer/app/open-task-target', () => ({
+  openTaskTarget: mocks.openTaskTarget,
+}));
+
 vi.mock('@renderer/lib/hooks/use-toast', () => ({
   useToast: () => ({
     toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
@@ -59,6 +66,10 @@ vi.mock('@renderer/lib/ipc', () => ({
       cleanupUnusedWorktrees: vi.fn(),
     },
   },
+}));
+
+vi.mock('@renderer/lib/layout/navigation-provider', () => ({
+  useNavigate: () => ({ navigate: mocks.navigate }),
 }));
 
 vi.mock('@renderer/lib/modal/modal-provider', () => ({
@@ -164,6 +175,8 @@ const storage: WorktreeStorageSnapshot = {
       projectName: 'Yoda',
       path: '/tmp/yoda-worktree',
       branch: 'feature/resources',
+      activeTaskId: 'task-1',
+      activeTaskName: 'Resource center',
       sizeBytes: 8_000_000_000,
       dirty: false,
       referencedByActiveTask: true,
@@ -200,7 +213,7 @@ describe('WorkspaceResourceDetailsModal', () => {
           initialHistory: history,
           initialWorktreeStorage: storage,
           onSuccess: vi.fn(),
-          onClose: vi.fn(),
+          onClose: mocks.onClose,
         })
       );
     });
@@ -236,5 +249,16 @@ describe('WorkspaceResourceDetailsModal', () => {
     expect(host.textContent).toContain('/tmp/yoda-worktree');
     expect(host.querySelector('[data-file-path="/tmp/yoda-worktree"]')).not.toBeNull();
     expect(host.textContent).toContain('workspaceRuntime.resources.cleanup');
+
+    const taskButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Resource center')
+    );
+    await act(async () => taskButton?.click());
+
+    expect(mocks.onClose).toHaveBeenCalledOnce();
+    expect(mocks.openTaskTarget).toHaveBeenCalledWith(
+      { projectId: 'project-1', taskId: 'task-1' },
+      mocks.navigate
+    );
   });
 });

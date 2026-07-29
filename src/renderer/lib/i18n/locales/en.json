@@ -4174,6 +4174,8 @@
         "noWorktrees": "No Worktrees found",
         "reclaimable": "Reclaimable",
         "activeTask": "Active task",
+        "openTask": "Open task “{{task}}”",
+        "taskFallback": "Task {{id}}",
         "hasChanges": "Has changes",
         "retained": "Retained",
         "yodaProcess": "Yoda process",

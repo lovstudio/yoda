@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
+  ArrowUpRight,
   Bot,
   Cpu,
   GitBranch,
@@ -17,12 +18,14 @@ import type {
   WorktreeStorageItem,
   WorktreeStorageSnapshot,
 } from '@shared/app-resource';
+import { openTaskTarget } from '@renderer/app/open-task-target';
 import {
   FilePathActionsDropdown,
   type FilePathTarget,
 } from '@renderer/lib/components/file-path-actions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal, type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
@@ -68,8 +71,10 @@ export function WorkspaceResourceDetailsModal({
   initialSnapshot,
   initialHistory,
   initialWorktreeStorage,
+  onClose,
 }: Props) {
   const { t } = useTranslation();
+  const { navigate } = useNavigate();
   const queryClient = useQueryClient();
   const resourceDetailsQueryKey = ['app', 'resourceDetails'] as const;
   const { data: resourceDetails } = useQuery<{
@@ -149,6 +154,11 @@ export function WorkspaceResourceDetailsModal({
             storage={worktreeStorage}
             isScanning={isScanningWorktrees}
             onRefresh={() => void refreshWorktreeStorage()}
+            onOpenTask={(item) => {
+              if (!item.activeTaskId) return;
+              onClose();
+              openTaskTarget({ projectId: item.projectId, taskId: item.activeTaskId }, navigate);
+            }}
           />
         )}
       </DialogContentArea>
@@ -427,10 +437,12 @@ function WorktreeDetails({
   storage,
   isScanning,
   onRefresh,
+  onOpenTask,
 }: {
   storage: WorktreeStorageSnapshot | undefined;
   isScanning: boolean;
   onRefresh: () => void;
+  onOpenTask: (item: WorktreeStorageItem) => void;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -539,7 +551,11 @@ function WorktreeDetails({
           ) : items.length > 0 ? (
             <div className="max-h-[22rem] divide-y divide-border overflow-y-auto">
               {items.map((item) => (
-                <WorktreeRow key={`${item.projectId}:${item.path}`} item={item} />
+                <WorktreeRow
+                  key={`${item.projectId}:${item.path}`}
+                  item={item}
+                  onOpenTask={onOpenTask}
+                />
               ))}
             </div>
           ) : (
@@ -551,32 +567,40 @@ function WorktreeDetails({
   );
 }
 
-function WorktreeRow({ item }: { item: WorktreeStorageItem }) {
+function WorktreeRow({
+  item,
+  onOpenTask,
+}: {
+  item: WorktreeStorageItem;
+  onOpenTask: (item: WorktreeStorageItem) => void;
+}) {
   const { t } = useTranslation();
   const target: FilePathTarget = {
     absolutePath: item.path,
     kind: 'directory',
     sshConnectionId: null,
   };
-  const status = item.reclaimable
+  const passiveStatus = item.reclaimable
     ? {
         label: t('workspaceRuntime.resources.details.reclaimable'),
         className: 'text-emerald-600 dark:text-emerald-400',
       }
-    : item.referencedByActiveTask
+    : item.dirty
       ? {
-          label: t('workspaceRuntime.resources.details.activeTask'),
-          className: 'text-status-in-review',
+          label: t('workspaceRuntime.resources.details.hasChanges'),
+          className: 'text-amber-600 dark:text-amber-400',
         }
-      : item.dirty
-        ? {
-            label: t('workspaceRuntime.resources.details.hasChanges'),
-            className: 'text-amber-600 dark:text-amber-400',
-          }
-        : {
-            label: t('workspaceRuntime.resources.details.retained'),
-            className: 'text-foreground-passive',
-          };
+      : {
+          label: t('workspaceRuntime.resources.details.retained'),
+          className: 'text-foreground-passive',
+        };
+  const taskLabel =
+    item.activeTaskName?.trim() ||
+    (item.activeTaskId
+      ? t('workspaceRuntime.resources.details.taskFallback', {
+          id: item.activeTaskId.slice(0, 8),
+        })
+      : null);
 
   return (
     <div className="flex min-w-0 items-center gap-3 px-3 py-2.5">
@@ -596,7 +620,22 @@ function WorktreeRow({ item }: { item: WorktreeStorageItem }) {
           {item.path}
         </div>
       </div>
-      <span className={cn('shrink-0 text-[10px]', status.className)}>{status.label}</span>
+      {item.activeTaskId && taskLabel ? (
+        <button
+          type="button"
+          aria-label={t('workspaceRuntime.resources.details.openTask', { task: taskLabel })}
+          title={t('workspaceRuntime.resources.details.openTask', { task: taskLabel })}
+          className="inline-flex max-w-36 shrink-0 items-center gap-1 rounded-md bg-status-in-review/10 px-2 py-1 text-[10px] text-status-in-review outline-none transition-colors hover:bg-status-in-review/15 focus-visible:ring-1 focus-visible:ring-ring"
+          onClick={() => onOpenTask(item)}
+        >
+          <span className="truncate">{taskLabel}</span>
+          <ArrowUpRight aria-hidden className="size-3 shrink-0" />
+        </button>
+      ) : (
+        <span className={cn('shrink-0 text-[10px]', passiveStatus.className)}>
+          {passiveStatus.label}
+        </span>
+      )}
       <span className="w-16 shrink-0 text-right font-mono text-xs tabular-nums text-foreground-muted">
         {formatBytes(item.sizeBytes)}
       </span>
