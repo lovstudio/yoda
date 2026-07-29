@@ -39,6 +39,21 @@ export interface TerminalDimensions {
   rows: number;
 }
 
+/**
+ * Resolve the box that actually clips xterm's rendered rows.
+ *
+ * Once mounted, xterm's direct parent is the same source of truth used by
+ * FitAddon. Pane wrappers remain useful before the owned terminal scene has
+ * been attached, but can be wider than a nested terminal host.
+ */
+export function resolveTerminalFitContainer(
+  terminalParent: HTMLElement | null,
+  mountTarget: HTMLElement | null,
+  paneContainer: HTMLElement | null
+): HTMLElement | null {
+  return terminalParent ?? mountTarget ?? paneContainer;
+}
+
 function readDimensions(read: () => XtermCellDimensions | undefined): XtermCellDimensions | null {
   try {
     return read() ?? null;

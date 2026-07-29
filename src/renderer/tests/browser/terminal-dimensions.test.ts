@@ -5,7 +5,11 @@
  * reflects genuine CSS layout — no stubs required for the DOM or CSSOM.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { measureDimensions, TERMINAL_FIT_GUARD_COLUMNS } from '@renderer/lib/pty/pty-dimensions';
+import {
+  measureDimensions,
+  resolveTerminalFitContainer,
+  TERMINAL_FIT_GUARD_COLUMNS,
+} from '@renderer/lib/pty/pty-dimensions';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -100,6 +104,27 @@ describe('measureDimensions', () => {
 
     expect(measureDimensions(container, CW, CH, 0, TERMINAL_FIT_GUARD_COLUMNS)).toEqual({
       cols: 98,
+      rows: 25,
+    });
+  });
+
+  it("fits xterm's clipping parent instead of a wider pane wrapper", () => {
+    const pane = makeContainer('800px', '400px');
+    const mountTarget = document.createElement('div');
+    const terminalParent = document.createElement('div');
+    Object.assign(mountTarget.style, { width: '768px', height: '400px' });
+    Object.assign(terminalParent.style, { width: '736px', height: '400px' });
+    pane.appendChild(mountTarget);
+    mountTarget.appendChild(terminalParent);
+    container = pane;
+
+    const fitContainer = resolveTerminalFitContainer(terminalParent, mountTarget, pane);
+
+    expect(fitContainer).toBe(terminalParent);
+    expect(
+      fitContainer ? measureDimensions(fitContainer, CW, CH, 0, TERMINAL_FIT_GUARD_COLUMNS) : null
+    ).toEqual({
+      cols: 90,
       rows: 25,
     });
   });
