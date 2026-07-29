@@ -1,0 +1,142 @@
+import { act, createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import type * as ReactI18nextModule from 'react-i18next';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MaasConnection } from '@shared/maas';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const mocks = vi.hoisted(() => ({
+  openLiteLlm: vi.fn(),
+  checkGithubStatus: vi.fn(async () => ({})),
+  maasConnections: [] as MaasConnection[],
+}));
+
+vi.mock('react-i18next', async (importOriginal) => ({
+  ...(await importOriginal<typeof ReactI18nextModule>()),
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock('@renderer/features/maas/useMaas', () => ({
+  useMaasConnections: () => ({ data: mocks.maasConnections, isLoading: false }),
+}));
+
+vi.mock('@renderer/features/integrations/integrations-provider', () => ({
+  useIntegrationsContext: () => ({
+    connectionStatus: {
+      linear: {},
+      jira: {},
+      gitlab: {},
+      plain: {},
+      forgejo: {},
+      featurebase: {},
+    },
+    isLinearConnected: false,
+    isLinearLoading: false,
+    disconnectLinear: vi.fn(),
+    isJiraConnected: false,
+    isJiraLoading: false,
+    disconnectJira: vi.fn(),
+    isGitlabConnected: false,
+    isGitlabLoading: false,
+    disconnectGitlab: vi.fn(),
+    isPlainConnected: false,
+    isPlainLoading: false,
+    disconnectPlain: vi.fn(),
+    isForgejoConnected: false,
+    isForgejoLoading: false,
+    disconnectForgejo: vi.fn(),
+    isFeaturebaseConnected: false,
+    isFeaturebaseLoading: false,
+    disconnectFeaturebase: vi.fn(),
+  }),
+}));
+
+vi.mock('@renderer/lib/providers/github-context-provider', () => ({
+  useGithubContext: () => ({
+    authenticated: false,
+    isLoading: false,
+    githubLoading: false,
+    handleGithubConnect: vi.fn(),
+    cancelGithubConnect: vi.fn(),
+    logout: vi.fn(),
+    tokenSource: null,
+    checkStatus: mocks.checkGithubStatus,
+  }),
+}));
+
+vi.mock('@renderer/lib/hooks/useTheme', () => ({
+  useTheme: () => ({ effectiveTheme: 'light' }),
+}));
+
+vi.mock('@renderer/lib/modal/modal-provider', () => ({
+  useShowModal: () => vi.fn(),
+}));
+
+describe('Settings integrations', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.maasConnections = [];
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it('shows LiteLLM and opens its MaaS configuration directly', async () => {
+    const { default: IntegrationsCard } = await import(
+      '@renderer/features/settings/components/IntegrationsCard'
+    );
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+    );
+
+    expect(host.textContent).toContain('LiteLLM');
+    expect(host.textContent).toContain('settings.integrationsTab.litellmDescription');
+
+    const connectButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.connect"]'
+    );
+    expect(connectButton).not.toBeNull();
+    await act(async () => connectButton?.click());
+    expect(mocks.openLiteLlm).toHaveBeenCalledOnce();
+  });
+
+  it('shows the saved LiteLLM Gateway and opens its settings', async () => {
+    mocks.maasConnections = [
+      {
+        platformId: 'litellm',
+        displayName: 'LiteLLM',
+        endpoint: 'http://127.0.0.1:4000/v1',
+        keyFingerprint: 'sk...test',
+        inferenceKeyFingerprint: 'sk...test',
+        connectedAt: '2026-07-29T00:00:00.000Z',
+        lastCheckedAt: '2026-07-29T00:00:00.000Z',
+        configured: true,
+        connected: true,
+        error: null,
+      },
+    ];
+    const { default: IntegrationsCard } = await import(
+      '@renderer/features/settings/components/IntegrationsCard'
+    );
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+    );
+
+    expect(host.textContent).toContain('settings.integrationsTab.litellmConnectedDescription');
+    const settingsButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.openSettings"]'
+    );
+    expect(settingsButton).not.toBeNull();
+    await act(async () => settingsButton?.click());
+    expect(mocks.openLiteLlm).toHaveBeenCalledOnce();
+  });
+});
