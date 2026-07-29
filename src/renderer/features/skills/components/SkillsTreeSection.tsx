@@ -19,6 +19,9 @@ import { buildSkillTree } from '../skill-tree';
 import SkillFamilyCount from './SkillFamilyCount';
 import SkillUsageSummary from './SkillUsageSummary';
 
+const registryGrid =
+  'grid grid-cols-[minmax(0,1fr)_7.75rem_1.5rem] @2xl:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)_7.75rem_1.5rem]';
+
 interface SkillsTreeSectionProps {
   /** Pre-sorted skills; tree grouping preserves this order. */
   skills: CatalogSkill[];
@@ -48,7 +51,7 @@ const SkillsTreeSection: React.FC<SkillsTreeSectionProps> = ({
   const entries = React.useMemo(() => buildSkillTree(skills, orderBy), [skills, orderBy]);
 
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/70 bg-background">
       {entries.map((entry) =>
         entry.kind === 'leaf' ? (
           <SkillTreeRow
@@ -60,6 +63,7 @@ const SkillsTreeSection: React.FC<SkillsTreeSectionProps> = ({
             onInstall={onInstall}
             setSkillRef={setSkillRef}
             highlighted={highlightedSkillId === entry.skill.key}
+            nested={false}
           />
         ) : (
           <SkillTreeGroup
@@ -121,25 +125,32 @@ const SkillTreeGroup: React.FC<SkillTreeGroupProps> = ({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <div className="group flex items-center rounded-md hover:bg-muted/40">
-        <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left">
+      <div
+        className={cn(
+          registryGrid,
+          'group min-h-10 items-center gap-x-3 bg-background-1/55 px-3 transition-colors hover:bg-muted/45'
+        )}
+      >
+        <CollapsibleTrigger className="col-span-1 flex min-w-0 items-center gap-2 self-stretch text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border @2xl:col-span-2">
           <ChevronRight
             className={cn(
-              'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
+              'h-3.5 w-3.5 shrink-0 text-foreground-muted transition-transform',
               open && 'rotate-90'
             )}
           />
-          <span className="truncate text-sm font-medium">{prefix}</span>
-          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+          <span className="truncate text-[13px] font-semibold text-foreground">{prefix}</span>
+          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-foreground-muted">
             {skills.length}
           </span>
+        </CollapsibleTrigger>
+        <span className="flex w-[7.75rem] items-center justify-end gap-1 text-[11px] tabular-nums text-foreground-muted">
           {groupTotal > 0 && (
-            <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-muted-foreground">
+            <>
               <ChartNoAxesColumn className="h-3 w-3" />
               {groupTotal}
-            </span>
+            </>
           )}
-        </CollapsibleTrigger>
+        </span>
         {editableSkills.length > 0 && (
           <Tooltip>
             <TooltipTrigger
@@ -148,7 +159,7 @@ const SkillTreeGroup: React.FC<SkillTreeGroupProps> = ({
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  className="mr-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                   aria-label={actionLabel}
                   disabled={updating}
                   onClick={() => void updateGroup()}
@@ -168,7 +179,7 @@ const SkillTreeGroup: React.FC<SkillTreeGroupProps> = ({
         )}
       </div>
       <CollapsibleContent>
-        <div className="ml-[1.0625rem] flex flex-col gap-0.5 border-l border-border/60 pl-2">
+        <div className="divide-y divide-border/50 border-t border-border/60 bg-background">
           {skills.map((skill) => (
             <SkillTreeRow
               key={skill.key}
@@ -179,6 +190,7 @@ const SkillTreeGroup: React.FC<SkillTreeGroupProps> = ({
               onInstall={onInstall}
               setSkillRef={setSkillRef}
               highlighted={highlightedSkillId === skill.key}
+              nested
             />
           ))}
         </div>
@@ -195,6 +207,7 @@ interface SkillTreeRowProps {
   onInstall: (skillKey: string) => void;
   setSkillRef: (skillKey: string) => (node: HTMLDivElement | null) => void;
   highlighted: boolean;
+  nested: boolean;
 }
 
 const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
@@ -205,7 +218,9 @@ const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
   onInstall,
   setSkillRef,
   highlighted,
+  nested,
 }) => {
+  const { t } = useTranslation();
   const description = skill.description || skill.frontmatter.description || '';
 
   return (
@@ -215,6 +230,7 @@ const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
       tabIndex={0}
       onClick={() => onSelect(skill)}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onSelect(skill);
@@ -222,54 +238,60 @@ const SkillTreeRow: React.FC<SkillTreeRowProps> = ({
       }}
       title={description}
       className={cn(
-        'group flex scroll-mt-20 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/40',
-        highlighted && 'ring-2 ring-amber-400 ring-offset-2 ring-offset-background'
+        registryGrid,
+        'group min-h-10 scroll-mt-20 cursor-pointer items-center gap-x-3 px-3 transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border',
+        nested && 'bg-background-1/15',
+        highlighted && 'ring-2 ring-inset ring-amber-400'
       )}
     >
-      <span
-        className={cn(
-          'truncate text-sm',
-          skill.disabled ? 'text-muted-foreground line-through decoration-border' : ''
-        )}
-      >
-        {skill.displayName}
+      <span className={cn('flex min-w-0 items-center gap-2', nested && 'pl-6')}>
+        <span
+          className={cn(
+            'min-w-0 truncate text-[13px] font-medium text-foreground',
+            skill.disabled && 'text-muted-foreground line-through decoration-border'
+          )}
+        >
+          {skill.displayName}
+        </span>
+        {family && <SkillFamilyCount family={family} />}
+        {skill.disabled && <PowerOff className="h-3 w-3 shrink-0 text-foreground-muted" />}
       </span>
-      {family && <SkillFamilyCount family={family} />}
-      {skill.disabled && <PowerOff className="h-3 w-3 shrink-0 text-muted-foreground" />}
-      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{description}</span>
-      {/* Usage / edit affordance — for installed skills the hover pen swaps
-          into the stat slot in place (stacked grid keeps the width stable) */}
-      {(skill.installed || (usage && usage.total > 0)) && (
-        <span className="grid shrink-0 place-items-center">
-          {usage && usage.total > 0 && (
-            <SkillUsageSummary
-              usage={usage}
-              className={cn(
-                'col-start-1 row-start-1',
-                skill.installed && 'transition-opacity group-hover:opacity-0'
-              )}
+      <span className="hidden min-w-0 truncate text-xs text-foreground-muted @2xl:block">
+        {description || t('skills.noDescription')}
+      </span>
+      <span className="flex w-[7.75rem] justify-end">
+        {usage && usage.total > 0 && (
+          <SkillUsageSummary usage={usage} className="w-full justify-end" />
+        )}
+      </span>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+              aria-label={t(skill.installed ? 'skills.openDetailsAria' : 'skills.installAria', {
+                name: skill.displayName,
+              })}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (skill.installed) {
+                  onSelect(skill);
+                } else {
+                  onInstall(skill.key);
+                }
+              }}
             />
-          )}
-          {skill.installed && (
-            <Pencil className="col-start-1 row-start-1 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-          )}
-        </span>
-      )}
-      {!skill.installed && (
-        <span className="shrink-0">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onInstall(skill.key);
-            }}
-            className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label={`Install ${skill.displayName}`}
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
-        </span>
-      )}
+          }
+        >
+          {skill.installed ? <Pencil /> : <Plus />}
+        </TooltipTrigger>
+        <TooltipContent>
+          {t(skill.installed ? 'skills.openDetails' : 'skills.install')}
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 };
