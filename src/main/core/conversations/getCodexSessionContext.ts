@@ -13,6 +13,7 @@ import type {
 import {
   findClosestCodexThreadRefByCreatedAt,
   findClosestCodexThreadRefByTitleAndCreatedAt,
+  findUniqueCodexThreadRefByCwdAtActivity,
   findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt,
   getClaimedCodexThreadId,
   resolveCodexStatePath,
@@ -86,6 +87,7 @@ export async function getCodexSessionContext(
     codexHome?: string;
     transcriptMode?: 'full' | 'harness';
     reservedThreadIds?: ReadonlySet<string>;
+    conversationLastInteractedAt?: string | null;
   } = {}
 ): Promise<CodexSessionContext | null> {
   const codexHome = options.codexHome ?? resolveCodexHome();
@@ -97,6 +99,7 @@ export async function getCodexSessionContext(
       conversationId,
       conversationTitle,
       conversationCreatedAt,
+      conversationLastInteractedAt: options.conversationLastInteractedAt,
     }) ??
     (await resolveCodexThreadFromRollouts({
       codexHome,
@@ -165,7 +168,11 @@ export async function getCodexSessionModel(
   conversationId: string,
   conversationTitle?: string,
   conversationCreatedAt?: string | null,
-  options: { codexHome?: string; reservedThreadIds?: ReadonlySet<string> } = {}
+  options: {
+    codexHome?: string;
+    reservedThreadIds?: ReadonlySet<string>;
+    conversationLastInteractedAt?: string | null;
+  } = {}
 ): Promise<string | null> {
   const codexHome = options.codexHome ?? resolveCodexHome();
   const statePath = resolveCodexStatePath(codexHome);
@@ -176,6 +183,7 @@ export async function getCodexSessionModel(
       conversationId,
       conversationTitle,
       conversationCreatedAt,
+      conversationLastInteractedAt: options.conversationLastInteractedAt,
     }) ??
     (await resolveCodexThreadFromRollouts({
       codexHome,
@@ -375,12 +383,14 @@ function resolveCodexThread({
   conversationId,
   conversationTitle,
   conversationCreatedAt,
+  conversationLastInteractedAt,
 }: {
   statePath: string;
   cwd: string;
   conversationId: string;
   conversationTitle?: string;
   conversationCreatedAt?: string | null;
+  conversationLastInteractedAt?: string | null;
 }): CodexThreadContextRow | null {
   const claimedThreadId = getClaimedCodexThreadId(conversationId);
   if (claimedThreadId) {
@@ -395,6 +405,17 @@ function resolveCodexThread({
   if (title) {
     const byTitle = findCodexThreadByTitle(statePath, cwd, title);
     if (byTitle) return byTitle;
+  }
+
+  const lastInteractedAtMs = parseTimestampMs(conversationLastInteractedAt);
+  if (lastInteractedAtMs !== undefined) {
+    const byActivity = findUniqueCodexThreadRefByCwdAtActivity({
+      statePath,
+      cwd,
+      activityAtMs: lastInteractedAtMs,
+      includeArchived: true,
+    });
+    if (byActivity) return readCodexThreadContext(statePath, byActivity.id);
   }
 
   const createdAtMs = parseTimestampMs(conversationCreatedAt);

@@ -180,6 +180,7 @@ describe('CodexSessionTitleSource helpers', () => {
     const source = new CodexSessionTitleSource();
     const oldTitles: string[] = [];
     const newTitles: string[] = [];
+    const newBindings: string[] = [];
     const oldWatcher = source.watch(
       {
         runtimeId: 'codex',
@@ -202,7 +203,8 @@ describe('CodexSessionTitleSource helpers', () => {
         startedAtMs: 5_000,
         isResuming: false,
       },
-      (title) => newTitles.push(title)
+      (title) => newTitles.push(title),
+      (sessionId) => newBindings.push(sessionId)
     );
 
     insertThread({
@@ -218,6 +220,7 @@ describe('CodexSessionTitleSource helpers', () => {
 
       expect(oldTitles).toEqual([]);
       expect(newTitles).toEqual(['New thread title']);
+      expect(newBindings).toEqual(['new-thread']);
     } finally {
       oldWatcher.stop();
       newWatcher.stop();

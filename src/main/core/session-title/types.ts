@@ -18,6 +18,7 @@ export interface SessionTitleContext {
 }
 
 export type TitleListener = (title: string) => void;
+export type SessionBindingListener = (sessionId: string) => void;
 
 export interface SessionTitleWatcher {
   stop(): void;
@@ -26,5 +27,9 @@ export interface SessionTitleWatcher {
 export interface SessionTitleSource {
   readonly runtimeId: RuntimeId;
   /** Start watching for title updates. Returns a watcher; call .stop() to detach. */
-  watch(ctx: SessionTitleContext, onTitle: TitleListener): SessionTitleWatcher;
+  watch(
+    ctx: SessionTitleContext,
+    onTitle: TitleListener,
+    onSessionBound?: SessionBindingListener
+  ): SessionTitleWatcher;
 }
