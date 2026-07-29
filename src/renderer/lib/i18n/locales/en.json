@@ -4089,6 +4089,7 @@
       "title": "Yoda resources",
       "description": "Live usage, one-minute trends, and on-demand worktree storage",
       "triggerLabel": "Yoda resources",
+      "triggerShort": "Resources",
       "cpu": "CPU",
       "memory": "Memory",
       "latency": "Latency",

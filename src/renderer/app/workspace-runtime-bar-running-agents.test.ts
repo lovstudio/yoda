@@ -36,6 +36,10 @@ describe('workspace agent sessions', () => {
   });
 
   it('keeps the resource overview focused on four expandable and time-aware metrics', () => {
+    expect(source).toContain("t('workspaceRuntime.resources.triggerShort')");
+    expect(source).not.toContain(
+      '`${formatBytes(resourceSnapshot.memoryBytes)} · ${Math.round(resourceSnapshot.cpuPercent)}%`'
+    );
     expect(source).toContain('<WorkspaceResourceTrend');
     expect(source).toContain("label={t('workspaceRuntime.resources.latency')}");
     expect(source).toContain('controls="workspace-worktree-details"');

@@ -979,12 +979,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
           title={t('workspaceRuntime.resources.triggerLabel')}
         >
-          <Activity className="size-3.5" />
-          <span className="font-mono tabular-nums">
-            {resourceSnapshot
-              ? `${formatBytes(resourceSnapshot.memoryBytes)} · ${Math.round(resourceSnapshot.cpuPercent)}%`
-              : '—'}
-          </span>
+          <Activity aria-hidden className="size-3.5" />
+          <span>{t('workspaceRuntime.resources.triggerShort')}</span>
         </PopoverTrigger>
         <PopoverContent
           align="end"

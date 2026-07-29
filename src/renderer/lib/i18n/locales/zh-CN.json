@@ -4089,6 +4089,7 @@
       "title": "Yoda 资源",
       "description": "实时占用、近一分钟趋势与 worktree 磁盘盘点",
       "triggerLabel": "Yoda 资源",
+      "triggerShort": "资源",
       "cpu": "CPU",
       "memory": "内存",
       "latency": "延迟",
