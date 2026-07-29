@@ -48,16 +48,36 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
 vi.mock('@renderer/features/prompt-library/prompt-system-section', async () => {
   const React = await import('react');
   return {
-    PromptSystemSection: () =>
-      React.createElement('section', { 'data-slot': 'prompt-system-section' }),
+    PromptRuntimeSelector: ({
+      onRuntimeIdChange,
+    }: {
+      onRuntimeIdChange: (runtimeId: 'codex' | 'claude') => void;
+    }) =>
+      React.createElement(
+        'section',
+        { 'data-slot': 'prompt-runtime-selector' },
+        React.createElement(
+          'button',
+          { type: 'button', onClick: () => onRuntimeIdChange('claude') },
+          'Claude Code'
+        )
+      ),
+    UserInstructionSection: ({ runtimeId }: { runtimeId: string | null }) =>
+      React.createElement('section', {
+        'data-slot': 'user-instruction-section',
+        'data-runtime-id': runtimeId ?? '',
+      }),
   };
 });
 
 vi.mock('@renderer/features/prompt-library/project-prompt-section', async () => {
   const React = await import('react');
   return {
-    ProjectPromptSection: () =>
-      React.createElement('section', { 'data-slot': 'project-prompt-section' }),
+    ProjectPromptSection: ({ runtimeId }: { runtimeId: string | null }) =>
+      React.createElement('section', {
+        'data-slot': 'project-prompt-section',
+        'data-runtime-id': runtimeId ?? '',
+      }),
   };
 });
 
@@ -381,7 +401,8 @@ describe('PromptLibraryPanel groups', () => {
     );
     await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
 
-    const system = host.querySelector('[data-slot="prompt-system-section"]');
+    const runtime = host.querySelector('[data-slot="prompt-runtime-selector"]');
+    const user = host.querySelector('[data-slot="user-instruction-section"]');
     const project = host.querySelector('[data-slot="project-prompt-section"]');
     const collection = host.querySelector('[data-slot="prompt-collection-section"]');
     const promptList = host.querySelector('[data-slot="prompt-list-section"]');
@@ -390,23 +411,32 @@ describe('PromptLibraryPanel groups', () => {
     );
 
     expect(collection).not.toBeNull();
-    expect(system).not.toBeNull();
+    expect(runtime).not.toBeNull();
+    expect(user).not.toBeNull();
     expect(project).not.toBeNull();
     expect(promptList).not.toBeNull();
     expect(promptListHeading).not.toBeNull();
     expect(promptListHeading?.closest('section')).toBe(promptList);
-    if (!collection || !system || !project || !promptList) {
+    if (!collection || !runtime || !user || !project || !promptList) {
       throw new Error('Prompt layer sections are missing');
     }
-    expect(collection.compareDocumentPosition(system) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    expect(collection.compareDocumentPosition(runtime) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
-    expect(system.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    expect(runtime.compareDocumentPosition(user) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(user.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
     expect(project.compareDocumentPosition(promptList) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
+
+    const claudeButton = runtime.querySelector<HTMLButtonElement>('button');
+    await act(async () => claudeButton?.click());
+    expect(user.getAttribute('data-runtime-id')).toBe('claude');
+    expect(project.getAttribute('data-runtime-id')).toBe('claude');
   });
 
   it('removes the separate injection order card and keyboard-sorts prompt rows within a group', async () => {

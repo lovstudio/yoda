@@ -27,6 +27,7 @@
   "fileActions": {
     "label": "文件操作",
     "openInMainArea": "在主区域打开",
+    "previewInSidePane": "在侧边栏预览",
     "openInApp": "在 {{app}} 中打开",
     "openFile": "打开文件",
     "revealInFolder": "在文件夹中显示",
@@ -2362,9 +2363,14 @@
       "extraInfo": "额外信息",
       "extraInfoPlaceholder": "可选：补充说明、参考网址或扩展入口"
     },
+    "runtime": {
+      "title": "当前 CLI",
+      "description": "下方用户级与项目级指令均随此选项切换。",
+      "label": "选择当前 CLI"
+    },
     "system": {
-      "title": "CLI 指令",
-      "description": "编辑当前 CLI 在所有项目中读取的用户级指令。仅显示本机已启用且支持标准指令文件的 CLI。",
+      "title": "用户级指令",
+      "description": "{{runtime}} 在所有项目中读取的标准用户级指令。",
       "noEnabledAgents": "当前没有已启用且支持标准指令文件的 Agent CLI。",
       "userPromptDescription": "以下是 {{runtime}} 的标准用户级指令路径；文件不存在时，展开对应行即可创建。",
       "codexFileDescription": "Codex 默认读取 AGENTS.md；同目录存在 AGENTS.override.md 时，后者会临时替代前者。",
@@ -2383,11 +2389,11 @@
       "fileLoadFailed": "读取指令文件失败：{{detail}}"
     },
     "project": {
-      "title": "项目指令与提示词",
-      "description": "选择项目后，编辑当前 CLI 的项目级指令，以及只对该项目生效的提示词。",
+      "title": "项目级指令与提示词",
+      "description": "项目级指令随当前 CLI 切换；项目专属提示词只跟随所选项目。",
       "selectProject": "选择一个项目后即可查看和编辑项目提示词。",
-      "instructionFiles": "Agent 项目指令",
-      "instructionFilesDescription": "这些是上方当前 Agent CLI 在项目中读取的标准指令路径；文件不存在时可直接创建。",
+      "instructionFiles": "{{runtime}} 项目级指令",
+      "instructionFilesDescription": "以下是 {{runtime}} 在当前项目中读取的标准指令路径；文件不存在时可直接创建。",
       "localPrompts": "项目专属提示词",
       "localPromptsDescription": "只属于当前项目，并在全局动态提示词之后注入。",
       "add": "添加项目提示词",
