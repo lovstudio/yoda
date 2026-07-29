@@ -107,6 +107,17 @@ export function useOpenLiteLlmAdmin() {
   });
 }
 
+export function useCopyLiteLlmAdminPassword() {
+  return useMutation({
+    mutationFn: async () => {
+      const result = await rpc.maas.copyLiteLlmAdminPassword();
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to copy LiteLLM administrator password.');
+      }
+    },
+  });
+}
+
 export function useMaasRuntimeBindings(platformId?: MaasPlatformId, enabled = true) {
   return useQuery<MaasRuntimeBindingStatus[]>({
     queryKey: maasQueryKeys.runtimeBindings(platformId),

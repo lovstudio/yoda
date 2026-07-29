@@ -265,7 +265,7 @@ describe('LiteLlmManagedService', () => {
     expect(dockerCalls.filter((args) => args.includes('up'))).toHaveLength(1);
   });
 
-  it('copies the managed administrator password before opening the console', async () => {
+  it('copies the managed administrator password on demand and before opening the console', async () => {
     const directory = await createTemporaryDirectory();
     const runDocker: DockerCommandRunner = vi.fn(async (args) =>
       args[0] === '--version'
@@ -293,6 +293,11 @@ describe('LiteLlmManagedService', () => {
     });
     await writeFile(join(directory, 'compose.yaml'), 'services: {}', 'utf8');
 
+    await expect(service.copyAdminPassword()).resolves.toEqual({ success: true });
+    expect(writeClipboard).toHaveBeenCalledWith('sk-managed-admin');
+    expect(openExternal).not.toHaveBeenCalled();
+
+    writeClipboard.mockClear();
     await expect(service.openAdmin()).resolves.toEqual({ success: true });
     expect(writeClipboard).toHaveBeenCalledWith('sk-managed-admin');
     expect(openExternal).toHaveBeenCalledWith(LITELLM_MANAGED_ADMIN_URL);

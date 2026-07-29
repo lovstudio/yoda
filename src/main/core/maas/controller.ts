@@ -91,5 +91,6 @@ export const maasController = createRPCController({
   startLiteLlm: () => liteLlmManagedService.start(),
   stopLiteLlm: () => liteLlmManagedService.stop(),
   startDockerForLiteLlm: () => liteLlmManagedService.startDockerDesktop(),
+  copyLiteLlmAdminPassword: () => liteLlmManagedService.copyAdminPassword(),
   openLiteLlmAdmin: () => liteLlmManagedService.openAdmin(),
 });
