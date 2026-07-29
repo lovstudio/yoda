@@ -125,6 +125,7 @@ describe('Settings integrations', () => {
     mocks.maasConnections = [];
     mocks.liteLlmStatus = {
       state: 'not-installed',
+      operation: null,
       managed: false,
       installed: false,
       dockerInstalled: true,
@@ -241,6 +242,31 @@ describe('Settings integrations', () => {
       button.textContent?.includes('settings.integrationsTab.litellmStartingDocker')
     );
     expect(startingButton?.disabled).toBe(true);
+  });
+
+  it('keeps installation progress visible after revisiting settings', async () => {
+    mocks.liteLlmStatus = {
+      ...mocks.liteLlmStatus!,
+      state: 'stopped',
+      operation: 'installing',
+      installed: true,
+      managed: true,
+    };
+    const { default: IntegrationsCard } = await import(
+      '@renderer/features/settings/components/IntegrationsCard'
+    );
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+    );
+
+    expect(host.textContent).toContain('settings.integrationsTab.litellmInstallingDescription');
+    expect(host.textContent).toContain('settings.integrationsTab.litellmStatusInstalling');
+    const progressButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('settings.integrationsTab.litellmInstalling')
+    );
+    expect(progressButton?.disabled).toBe(true);
+    expect(mocks.installLiteLlm).not.toHaveBeenCalled();
+    expect(mocks.startLiteLlm).not.toHaveBeenCalled();
   });
 
   it('opens the managed console with copied credentials and can stop the local gateway', async () => {

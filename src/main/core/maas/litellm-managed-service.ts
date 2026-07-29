@@ -8,6 +8,7 @@ import {
   LITELLM_MANAGED_ADMIN_URL,
   LITELLM_MANAGED_ENDPOINT,
   type LiteLlmManagedActionResult,
+  type LiteLlmManagedOperation,
   type LiteLlmManagedStatus,
 } from '@shared/litellm-managed';
 import { log } from '@main/lib/logger';
@@ -62,6 +63,14 @@ type DockerAvailability = {
   installed: boolean;
   running: boolean;
   version: string | null;
+};
+
+type LiteLlmManagedOperationTarget = 'running' | 'stopped' | 'docker-running';
+
+type ActiveOperation = {
+  kind: LiteLlmManagedOperation;
+  target: LiteLlmManagedOperationTarget;
+  promise: Promise<LiteLlmManagedActionResult>;
 };
 
 type ManagedSecrets = {
@@ -216,7 +225,7 @@ export class LiteLlmManagedService {
   private readonly openExternal: (url: string) => Promise<void>;
   private readonly launchDockerDesktop: () => Promise<void>;
   private readonly platform: NodeJS.Platform;
-  private operationInProgress = false;
+  private activeOperation: ActiveOperation | null = null;
   private dockerStartRequestedAt: number | null = null;
 
   constructor(options: LiteLlmManagedServiceOptions = {}) {
@@ -280,7 +289,7 @@ export class LiteLlmManagedService {
   }
 
   async install(): Promise<LiteLlmManagedActionResult> {
-    return this.runExclusive(async () => {
+    return this.runExclusive('installing', 'running', async () => {
       const status = await this.getStatus();
       if (status.state === 'external-running') {
         return {
@@ -322,7 +331,7 @@ export class LiteLlmManagedService {
   }
 
   async start(): Promise<LiteLlmManagedActionResult> {
-    return this.runExclusive(async () => {
+    return this.runExclusive('starting', 'running', async () => {
       const status = await this.getStatus();
       if (!status.installed) {
         return { success: false, status, error: 'Managed LiteLLM is not installed.' };
@@ -358,7 +367,7 @@ export class LiteLlmManagedService {
   }
 
   async stop(): Promise<LiteLlmManagedActionResult> {
-    return this.runExclusive(async () => {
+    return this.runExclusive('stopping', 'stopped', async () => {
       const status = await this.getStatus();
       if (!status.installed) {
         return { success: false, status, error: 'Managed LiteLLM is not installed.' };
@@ -387,7 +396,7 @@ export class LiteLlmManagedService {
   }
 
   async startDockerDesktop(): Promise<LiteLlmManagedActionResult> {
-    return this.runExclusive(async () => {
+    return this.runExclusive('starting-docker', 'docker-running', async () => {
       try {
         await this.launchDockerDesktop();
         this.dockerStartRequestedAt = Date.now();
@@ -434,22 +443,33 @@ export class LiteLlmManagedService {
   }
 
   private async runExclusive(
+    kind: LiteLlmManagedOperation,
+    target: LiteLlmManagedOperationTarget,
     operation: () => Promise<LiteLlmManagedActionResult>
   ): Promise<LiteLlmManagedActionResult> {
-    if (this.operationInProgress) {
-      return {
-        success: false,
-        status: await this.getStatus(),
-        error: 'Another LiteLLM operation is already running.',
-      };
+    const activeOperation = this.activeOperation;
+    if (activeOperation) {
+      if (activeOperation.target === target) {
+        return activeOperation.promise;
+      }
+
+      await activeOperation.promise.catch(() => undefined);
+      return this.runExclusive(kind, target, operation);
     }
 
-    this.operationInProgress = true;
-    try {
-      return await operation();
-    } finally {
-      this.operationInProgress = false;
-    }
+    const operationPromise = Promise.resolve().then(operation);
+    const trackedPromise = operationPromise
+      .finally(() => {
+        if (this.activeOperation?.promise === trackedPromise) {
+          this.activeOperation = null;
+        }
+      })
+      .then(async (result) => ({
+        ...result,
+        status: await this.getStatus(),
+      }));
+    this.activeOperation = { kind, target, promise: trackedPromise };
+    return trackedPromise;
   }
 
   private createStatus({
@@ -465,6 +485,7 @@ export class LiteLlmManagedService {
   }): LiteLlmManagedStatus {
     return {
       state,
+      operation: this.activeOperation?.kind ?? null,
       managed: installed,
       installed,
       dockerInstalled: docker.installed,

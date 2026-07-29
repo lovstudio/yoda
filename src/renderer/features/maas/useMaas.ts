@@ -64,7 +64,8 @@ export function useLiteLlmManagedStatus(enabled = true) {
     queryFn: () => rpc.maas.getLiteLlmManagedStatus(),
     enabled,
     staleTime: 5_000,
-    refetchInterval: (query) => (query.state.data?.state === 'docker-starting' ? 2_000 : 15_000),
+    refetchInterval: (query) =>
+      query.state.data?.operation || query.state.data?.state === 'docker-starting' ? 2_000 : 15_000,
     refetchOnWindowFocus: true,
   });
 }
