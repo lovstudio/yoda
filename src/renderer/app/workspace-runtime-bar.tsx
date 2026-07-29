@@ -54,8 +54,14 @@ import { startRendererPerformanceReporter } from './renderer-performance-reporte
 import { WorkspaceResourceMetric } from './workspace-resource-metric';
 import { getQuotaWindowLabel } from './workspace-runtime-bar-format';
 
-type WorkspaceRunningAgentSession = RunningAgentRuntimeSession &
-  Partial<Pick<AppRunningAgentSession, 'runtimeId' | 'title' | 'taskTitle'>>;
+type WorkspaceRunningAgentSession = Omit<
+  AppRunningAgentSession,
+  'runtimeId' | 'title' | 'taskTitle'
+> & {
+  runtimeId?: AppRunningAgentSession['runtimeId'];
+  title?: string;
+  taskTitle?: string;
+};
 
 function runningAgentSessionKey(
   session: Pick<RunningAgentRuntimeSession, 'projectId' | 'taskId' | 'conversationId'>
@@ -251,6 +257,15 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       )?.data;
       return {
         ...session,
+        pid: resourceSession?.pid ?? null,
+        cpuPercent: resourceSession?.cpuPercent ?? 0,
+        memoryBytes: resourceSession?.memoryBytes ?? 0,
+        outputBytesPerSecond: resourceSession?.outputBytesPerSecond ?? 0,
+        lastActivityAt: resourceSession?.lastActivityAt ?? null,
+        ringBufferBytes: resourceSession?.ringBufferBytes ?? 0,
+        ringBufferCapBytes: resourceSession?.ringBufferCapBytes ?? 0,
+        rendererConsumers: resourceSession?.rendererConsumers ?? 0,
+        lifecycle: resourceSession?.lifecycle ?? 'warm',
         runtimeId:
           resourceSession?.runtimeId ??
           explicitConversationRuntimeId(conversation?.runtimeId) ??
