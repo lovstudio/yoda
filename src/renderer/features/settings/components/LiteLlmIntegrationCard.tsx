@@ -1,4 +1,5 @@
 import {
+  Copy,
   Download,
   ExternalLink,
   Loader2,
@@ -11,12 +12,14 @@ import {
 import { useTranslation } from 'react-i18next';
 import {
   LITELLM_DOCKER_DESKTOP_URL,
+  LITELLM_MANAGED_ADMIN_USERNAME,
   LITELLM_MANAGED_ENDPOINT,
   type LiteLlmManagedOperation,
   type LiteLlmManagedState,
 } from '@shared/litellm-managed';
 import type { MaasConnection } from '@shared/maas';
 import {
+  useCopyLiteLlmAdminPassword,
   useInstallLiteLlm,
   useLiteLlmManagedStatus,
   useMaasConnections,
@@ -71,6 +74,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
   const start = useStartLiteLlm();
   const stop = useStopLiteLlm();
   const startDocker = useStartDockerForLiteLlm();
+  const copyAdminPassword = useCopyLiteLlmAdminPassword();
   const openAdmin = useOpenLiteLlmAdmin();
 
   const status = statusQuery.data;
@@ -80,6 +84,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     start.isPending ||
     stop.isPending ||
     startDocker.isPending ||
+    copyAdminPassword.isPending ||
     openAdmin.isPending;
   const remoteConnection =
     connection?.connected &&
@@ -175,6 +180,22 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     } catch (error) {
       toast({
         title: t('settings.integrationsTab.litellmOpenAdminFailed'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCopyAdminPassword = async () => {
+    try {
+      await copyAdminPassword.mutateAsync();
+      toast({
+        title: t('settings.integrationsTab.litellmAdminPasswordCopied'),
+        description: t('settings.integrationsTab.litellmAdminPasswordCopiedHint'),
+      });
+    } catch (error) {
+      toast({
+        title: t('settings.integrationsTab.litellmCopyAdminPasswordFailed'),
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
       });
@@ -377,9 +398,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
           ) : (
             <ExternalLink className="mr-1.5 h-4 w-4" />
           )}
-          {status.modelCount === 0
-            ? t('settings.integrationsTab.litellmAddFirstModel')
-            : t('settings.integrationsTab.litellmOpenConsole')}
+          {t('settings.integrationsTab.litellmCopyPasswordAndOpenConsole')}
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={onOpenManualSettings}>
           <Settings2 className="mr-1.5 h-4 w-4" />
@@ -433,6 +452,35 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
             </span>
           </div>
           <p className="mt-0.5 text-sm leading-5 text-muted-foreground">{description}</p>
+          {!remoteConnection && status?.state === 'running' && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-border/70 bg-background/60 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-foreground">
+                  {t('settings.integrationsTab.litellmAdminAccount')}
+                  <code className="ml-1.5 rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                    {LITELLM_MANAGED_ADMIN_USERNAME}
+                  </code>
+                </p>
+                <p className="mt-1 text-xs leading-4 text-muted-foreground">
+                  {t('settings.integrationsTab.litellmAdminPasswordDescription')}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={operationPending}
+                onClick={handleCopyAdminPassword}
+              >
+                {copyAdminPassword.isPending ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Copy className="mr-1.5 h-4 w-4" />
+                )}
+                {t('settings.integrationsTab.litellmCopyAdminPassword')}
+              </Button>
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-2">{renderActions()}</div>
         </div>
       </div>

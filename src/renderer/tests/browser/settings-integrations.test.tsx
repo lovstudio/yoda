@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   startLiteLlm: vi.fn(async () => undefined),
   stopLiteLlm: vi.fn(async () => undefined),
   startDockerForLiteLlm: vi.fn(async () => undefined),
+  copyLiteLlmAdminPassword: vi.fn(async () => undefined),
   openLiteLlmAdmin: vi.fn(async () => undefined),
   toast: vi.fn(),
 }));
@@ -55,6 +56,10 @@ vi.mock('@renderer/features/maas/useMaas', () => ({
   useStopLiteLlm: () => ({ mutateAsync: mocks.stopLiteLlm, isPending: false }),
   useStartDockerForLiteLlm: () => ({
     mutateAsync: mocks.startDockerForLiteLlm,
+    isPending: false,
+  }),
+  useCopyLiteLlmAdminPassword: () => ({
+    mutateAsync: mocks.copyLiteLlmAdminPassword,
     isPending: false,
   }),
   useOpenLiteLlmAdmin: () => ({ mutateAsync: mocks.openLiteLlmAdmin, isPending: false }),
@@ -269,7 +274,7 @@ describe('Settings integrations', () => {
     expect(mocks.startLiteLlm).not.toHaveBeenCalled();
   });
 
-  it('opens the managed console with copied credentials and can stop the local gateway', async () => {
+  it('makes managed credentials discoverable before opening the console', async () => {
     mocks.liteLlmStatus = {
       ...mocks.liteLlmStatus!,
       state: 'running',
@@ -285,10 +290,20 @@ describe('Settings integrations', () => {
     );
 
     expect(host.textContent).toContain('settings.integrationsTab.litellmNeedsModelDescription');
-    const addModelButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('settings.integrationsTab.litellmAddFirstModel')
+    expect(host.textContent).toContain('settings.integrationsTab.litellmAdminAccount');
+    expect(host.textContent).toContain('admin');
+    expect(host.textContent).toContain('settings.integrationsTab.litellmAdminPasswordDescription');
+
+    const copyPasswordButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('settings.integrationsTab.litellmCopyAdminPassword')
     );
-    await act(async () => addModelButton?.click());
+    await act(async () => copyPasswordButton?.click());
+    expect(mocks.copyLiteLlmAdminPassword).toHaveBeenCalledOnce();
+
+    const openConsoleButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('settings.integrationsTab.litellmCopyPasswordAndOpenConsole')
+    );
+    await act(async () => openConsoleButton?.click());
     expect(mocks.openLiteLlmAdmin).toHaveBeenCalledOnce();
 
     const stopButton = host.querySelector<HTMLButtonElement>(
