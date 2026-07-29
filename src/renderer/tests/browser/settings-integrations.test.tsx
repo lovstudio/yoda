@@ -2,13 +2,20 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type * as ReactI18nextModule from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LovcodeAvailability } from '@shared/lovcode';
 import type { MaasConnection } from '@shared/maas';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
   openLiteLlm: vi.fn(),
+  openExternal: vi.fn(async () => undefined),
   checkGithubStatus: vi.fn(async () => ({})),
+  checkLovcodeAvailability: vi.fn(
+    async (): Promise<LovcodeAvailability> => ({
+      status: 'not-installed',
+    })
+  ),
   maasConnections: [] as MaasConnection[],
 }));
 
@@ -73,6 +80,13 @@ vi.mock('@renderer/lib/modal/modal-provider', () => ({
   useShowModal: () => vi.fn(),
 }));
 
+vi.mock('@renderer/lib/ipc', () => ({
+  rpc: {
+    app: { openExternal: mocks.openExternal },
+    lovcode: { checkAvailability: mocks.checkLovcodeAvailability },
+  },
+}));
+
 describe('Settings integrations', () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -80,6 +94,7 @@ describe('Settings integrations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.maasConnections = [];
+    mocks.checkLovcodeAvailability.mockResolvedValue({ status: 'not-installed' });
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -138,5 +153,43 @@ describe('Settings integrations', () => {
     expect(settingsButton).not.toBeNull();
     await act(async () => settingsButton?.click());
     expect(mocks.openLiteLlm).toHaveBeenCalledOnce();
+  });
+
+  it('shows Lovcode as a first-class installable integration', async () => {
+    const { default: IntegrationsCard } = await import(
+      '@renderer/features/settings/components/IntegrationsCard'
+    );
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+    );
+
+    expect(host.textContent).toContain('Lovcode');
+    expect(host.textContent).toContain('settings.integrationsTab.lovcodeDescription');
+    const installButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.install"]'
+    );
+    expect(installButton).not.toBeNull();
+    await act(async () => installButton?.click());
+    expect(mocks.openExternal).toHaveBeenCalledWith(
+      'https://github.com/lovstudio/lovcode/releases/latest'
+    );
+  });
+
+  it('shows the detected Lovcode search integration as connected', async () => {
+    mocks.checkLovcodeAvailability.mockResolvedValue({
+      status: 'available',
+      version: 'lovcode 0.40.0',
+    });
+    const { default: IntegrationsCard } = await import(
+      '@renderer/features/settings/components/IntegrationsCard'
+    );
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+    );
+
+    expect(host.textContent).toContain('settings.integrationsTab.lovcodeConnectedDescription');
+    expect(
+      host.querySelector('[aria-label="settings.integrationsTab.lovcodeInstalledTooltip"]')
+    ).not.toBeNull();
   });
 });
