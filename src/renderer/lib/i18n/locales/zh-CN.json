@@ -1396,7 +1396,10 @@
       "moveFailed": "移动会话失败",
       "deleteTitle": "删除会话",
       "deleteDescription": "“{{title}}” 将被永久删除，此操作无法撤销。",
-      "sessionExited": "代理进程已退出。"
+      "sessionExited": "代理进程已退出。",
+      "sessionStopped": "会话已停止",
+      "continueConversation": "继续会话",
+      "continuingConversation": "正在继续…"
     },
     "sessionStatus": {
       "manage": "管理 {{count}} 个活跃或待处理会话",

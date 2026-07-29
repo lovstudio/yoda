@@ -1396,7 +1396,10 @@
       "moveFailed": "Failed to move session",
       "deleteTitle": "Delete conversation",
       "deleteDescription": "\"{{title}}\" will be permanently deleted. This action cannot be undone.",
-      "sessionExited": "The agent process exited."
+      "sessionExited": "The agent process exited.",
+      "sessionStopped": "Session stopped",
+      "continueConversation": "Continue",
+      "continuingConversation": "Continuing…"
     },
     "sessionStatus": {
       "manage": "Manage {{count}} active or pending sessions",

@@ -136,8 +136,7 @@ export class ConversationManagerStore {
       if (event.taskId !== this.taskId) return;
       const conversationStore = this.conversations.get(event.conversationId);
       if (!conversationStore) return;
-      conversationStore.clearWorking();
-      conversationStore.setSessionExited(true);
+      conversationStore.markSessionExited();
     });
   }
 
@@ -495,28 +494,35 @@ export class ConversationManagerStore {
   async resumeConversation(
     conversationId: string,
     initialSize?: { cols: number; rows: number }
-  ): Promise<void> {
+  ): Promise<boolean> {
     const store = this.conversations.get(conversationId);
-    if (!store) return;
+    if (!store) return false;
     try {
-      await rpc.conversations.resumeConversation(
+      const running = await rpc.conversations.resumeConversation(
         this.projectId,
         this.taskId,
         conversationId,
         initialSize
       );
+      if (!running) {
+        store.markSessionExited();
+        return false;
+      }
       store.setSessionExited(false);
       if (initialSize) {
         const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
         void rpc.pty.resize(sessionId, initialSize.cols, initialSize.rows);
       }
+      return true;
     } catch (error) {
+      store.markSessionExited();
       log.warn('ConversationManagerStore: failed to resume conversation', {
         projectId: this.projectId,
         taskId: this.taskId,
         conversationId,
         error,
       });
+      return false;
     }
   }
 
@@ -549,6 +555,7 @@ export class ConversationManagerStore {
         void rpc.pty.resize(sessionId, effectiveSize.cols, effectiveSize.rows);
       }
     } catch (error) {
+      store.markSessionExited();
       log.warn('ConversationManagerStore: failed to restart conversation', {
         projectId: this.projectId,
         taskId: this.taskId,
@@ -620,6 +627,7 @@ export class ConversationStore {
       isArchiving: observable,
       sessionExited: observable,
       setSessionExited: action,
+      markSessionExited: action,
       lastNotificationType: observable,
       pendingActionDescription: observable,
       setStatus: action,
@@ -735,6 +743,11 @@ export class ConversationStore {
 
   setSessionExited(value: boolean) {
     this.sessionExited = value;
+  }
+
+  markSessionExited() {
+    this.clearWorking();
+    this.sessionExited = true;
   }
 
   dispose() {
