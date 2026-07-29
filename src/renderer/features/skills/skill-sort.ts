@@ -10,13 +10,13 @@ import { parseFrontmatter } from '@shared/skills/validation';
  */
 export const SKILL_SORT_MODES = [
   'name',
+  'total',
+  'recent',
+  'manual',
+  'auto',
   'count',
   'trigger',
   'body',
-  'total',
-  'manual',
-  'auto',
-  'recent',
 ] as const;
 
 export type SkillSortMode = (typeof SKILL_SORT_MODES)[number];
