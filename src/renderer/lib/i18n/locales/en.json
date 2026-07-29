@@ -2301,7 +2301,8 @@
     "collection": {
       "title": "Prompts",
       "description": "Create reusable prompts, sort them into groups, sync from files, URLs, or Git, and optionally inject them when a session starts.",
-      "all": "All prompts"
+      "all": "All prompts",
+      "allDescription": "Drag groups or prompts within a group to reorder them. Configure dynamic injection on the relevant group or prompt."
     },
     "new": "New prompt",
     "empty": "No saved prompts yet. Create one to reuse it when composing a task.",
