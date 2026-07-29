@@ -52,6 +52,7 @@ import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
+import type { WorkspaceResourceDetailKind } from './workspace-resource-details-modal';
 import {
   appendWorkspaceResourceSnapshot,
   getWorkspaceLatencyP95,
@@ -82,15 +83,14 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { toast } = useToast();
   const { navigate } = useNavigate();
   const showConfirmActionModal = useShowModal('confirmActionModal');
+  const showResourceDetailsModal = useShowModal('workspaceResourceDetailsModal');
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
   const [isAgentPopoverOpen, setIsAgentPopoverOpen] = useState(false);
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
-  const [isWorktreeDetailsOpen, setIsWorktreeDetailsOpen] = useState(false);
   const [isSkillPopoverOpen, setIsSkillPopoverOpen] = useState(false);
-  const [isCleaningWorktrees, setIsCleaningWorktrees] = useState(false);
   const [resourceHistory, setResourceHistory] = useState<WorkspaceResourceHistoryPoint[]>([]);
   const [sessionPromptCount, setSessionPromptCount] = useState<{
     conversationId: string;
@@ -236,11 +236,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     refetchInterval: 5_000,
     refetchOnWindowFocus: false,
   });
-  const {
-    data: worktreeStorage,
-    isFetching: isScanningWorktrees,
-    refetch: refreshWorktreeStorage,
-  } = useQuery({
+  const { data: worktreeStorage, isFetching: isScanningWorktrees } = useQuery({
     queryKey: ['projects', 'worktreeStorage'],
     queryFn: () => rpc.projects.getWorktreeStorageSnapshot(),
     enabled: isResourcePopoverOpen,
@@ -441,49 +437,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     updateInterfaceSettings({ dockSessionHistory: !sessionHistoryDocked });
   };
 
-  const cleanupWorktrees = async () => {
-    setIsCleaningWorktrees(true);
-    try {
-      const result = await rpc.projects.cleanupUnusedWorktrees();
-      await refreshWorktreeStorage();
-      if (result.removedCount === 0) {
-        toast(t('workspaceRuntime.resources.worktreeCleanupNone'));
-      } else {
-        toast.success(
-          t('workspaceRuntime.resources.worktreeCleanupSuccess', {
-            count: result.removedCount,
-            size: formatBytes(result.reclaimedBytes),
-          })
-        );
-      }
-      if (result.failedPaths.length > 0) {
-        toast.error(
-          t('workspaceRuntime.resources.worktreeCleanupPartial', {
-            count: result.failedPaths.length,
-          })
-        );
-      }
-    } catch {
-      toast.error(t('workspaceRuntime.resources.worktreeCleanupFailed'));
-    } finally {
-      setIsCleaningWorktrees(false);
-    }
-  };
-
-  const confirmWorktreeCleanup = () => {
-    if (!worktreeStorage?.reclaimableCount) return;
-    showConfirmActionModal({
-      title: t('workspaceRuntime.resources.confirmCleanupTitle'),
-      description: t('workspaceRuntime.resources.confirmCleanupDescription', {
-        count: worktreeStorage.reclaimableCount,
-        size: formatBytes(worktreeStorage.reclaimableBytes),
-      }),
-      confirmLabel: t('workspaceRuntime.resources.cleanup'),
-      variant: 'default',
-      onSuccess: () => void cleanupWorktrees(),
-    });
-  };
-
   const handleSkillInstalled = (skill: { key: string; displayName: string }) => {
     setIsSkillPopoverOpen(false);
     if (!provisionedTask || !activeConversation || connectionId) return;
@@ -519,15 +472,14 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     );
   };
 
-  const handleWorktreeMetricClick = () => {
-    setIsWorktreeDetailsOpen((current) => !current);
-  };
-
-  const handleResourcePopoverOpenChange = (open: boolean) => {
-    setIsResourcePopoverOpen(open);
-    if (!open) {
-      setIsWorktreeDetailsOpen(false);
-    }
+  const openResourceDetails = (kind: WorkspaceResourceDetailKind) => {
+    setIsResourcePopoverOpen(false);
+    showResourceDetailsModal({
+      kind,
+      initialSnapshot: resourceSnapshot,
+      initialHistory: resourceHistory,
+      initialWorktreeStorage: worktreeStorage,
+    });
   };
 
   return (
@@ -973,7 +925,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           )}
         </PopoverContent>
       </Popover>
-      <Popover open={isResourcePopoverOpen} onOpenChange={handleResourcePopoverOpenChange}>
+      <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.resources.triggerLabel')}
           className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
@@ -998,28 +950,40 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.cpu')}
               value={resourceSnapshot ? `${Math.round(resourceSnapshot.cpuPercent)}%` : '—'}
+              ariaLabel={t('workspaceRuntime.resources.details.openMetric', {
+                metric: t('workspaceRuntime.resources.cpu'),
+              })}
+              opensDialog
+              onClick={() => openResourceDetails('cpu')}
             />
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.memory')}
               value={resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—'}
+              ariaLabel={t('workspaceRuntime.resources.details.openMetric', {
+                metric: t('workspaceRuntime.resources.memory'),
+              })}
+              opensDialog
+              onClick={() => openResourceDetails('memory')}
             />
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.latency')}
               value={resourceLatencyP95 == null ? '—' : `${resourceLatencyP95} ms`}
               title={latencyTitle}
+              ariaLabel={t('workspaceRuntime.resources.details.openMetric', {
+                metric: t('workspaceRuntime.resources.latency'),
+              })}
+              opensDialog
+              onClick={() => openResourceDetails('latency')}
             />
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.worktrees')}
               value={worktreeMetricValue}
               title={worktreeMetricTitle}
-              ariaLabel={
-                isWorktreeDetailsOpen
-                  ? t('workspaceRuntime.resources.hideWorktreeDetails')
-                  : t('workspaceRuntime.resources.showWorktreeDetails')
-              }
-              controls="workspace-worktree-details"
-              expanded={isWorktreeDetailsOpen}
-              onClick={handleWorktreeMetricClick}
+              ariaLabel={t('workspaceRuntime.resources.details.openMetric', {
+                metric: t('workspaceRuntime.resources.worktrees'),
+              })}
+              opensDialog
+              onClick={() => openResourceDetails('worktrees')}
             />
           </div>
           <WorkspaceResourceTrend
@@ -1037,39 +1001,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               value: resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—',
             })}
           />
-          {isWorktreeDetailsOpen ? (
-            <div id="workspace-worktree-details" className="p-3">
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <span className="font-medium">{t('workspaceRuntime.resources.worktrees')}</span>
-                <span className="font-mono tabular-nums text-foreground-muted">
-                  {worktreeMetricValue}
-                </span>
-              </div>
-              <div className="mt-1 text-[11px] leading-relaxed text-foreground-passive">
-                {isScanningWorktrees && !worktreeStorage
-                  ? t('workspaceRuntime.resources.scanningWorktrees')
-                  : t('workspaceRuntime.resources.worktreeSummary', {
-                      count: worktreeStorage?.worktreeCount ?? 0,
-                      reclaimable: worktreeStorage?.reclaimableCount ?? 0,
-                      size: formatBytes(worktreeStorage?.reclaimableBytes ?? 0),
-                    })}
-              </div>
-              {worktreeStorage?.reclaimableCount ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-2 w-full"
-                  disabled={isCleaningWorktrees || isScanningWorktrees}
-                  onClick={confirmWorktreeCleanup}
-                >
-                  {isCleaningWorktrees
-                    ? t('workspaceRuntime.resources.cleaning')
-                    : t('workspaceRuntime.resources.cleanup')}
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
         </PopoverContent>
       </Popover>
       <Popover>

@@ -42,4 +42,23 @@ describe('workspace resource history', () => {
     ).toBe(9.5);
     expect(getWorkspaceLatencyP95(undefined)).toBeNull();
   });
+
+  it('retains latency series for the resource detail dialog', () => {
+    const history = appendWorkspaceResourceSnapshot([], {
+      ...snapshotAt(5),
+      mainEventLoop: { p50Ms: 1, p95Ms: 3, p99Ms: 5, maxMs: 8 },
+      rendererPerformance: {
+        sampledAt: new Date().toISOString(),
+        eventLoop: { p50Ms: 2, p95Ms: 6, p99Ms: 9, maxMs: 12 },
+        inputLatency: { p50Ms: 3, p95Ms: 11, p99Ms: 16, maxMs: 21 },
+        longTaskCount: 1,
+      },
+    });
+
+    expect(history[0]).toMatchObject({
+      inputLatencyP95Ms: 11,
+      rendererLatencyP95Ms: 6,
+      mainLatencyP95Ms: 3,
+    });
+  });
 });

@@ -35,15 +35,20 @@ describe('workspace agent sessions', () => {
     expect(source).not.toContain("t('workspaceRuntime.agents.triggerShort'");
   });
 
-  it('keeps the resource overview focused on four expandable and time-aware metrics', () => {
+  it('keeps the resource overview focused on four dialog-backed, time-aware metrics', () => {
     expect(source).toContain("t('workspaceRuntime.resources.triggerShort')");
     expect(source).not.toContain(
       '`${formatBytes(resourceSnapshot.memoryBytes)} · ${Math.round(resourceSnapshot.cpuPercent)}%`'
     );
     expect(source).toContain('<WorkspaceResourceTrend');
     expect(source).toContain("label={t('workspaceRuntime.resources.latency')}");
-    expect(source).toContain('controls="workspace-worktree-details"');
     expect(source).toContain('grid grid-cols-2');
+    expect(source).toContain("openResourceDetails('cpu')");
+    expect(source).toContain("openResourceDetails('memory')");
+    expect(source).toContain("openResourceDetails('latency')");
+    expect(source).toContain("openResourceDetails('worktrees')");
+    expect(source).toContain('opensDialog');
+    expect(source).not.toContain('workspace-worktree-details');
     expect(source).not.toContain('resourceSnapshot.processes');
     expect(source).not.toContain('resourceSnapshot.admission');
     expect(source).not.toContain("t('workspaceRuntime.resources.mainLoop')");

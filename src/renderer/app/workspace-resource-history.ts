@@ -7,11 +7,15 @@ export type WorkspaceResourceHistoryPoint = {
   sampledAt: string;
   cpuPercent: number;
   memoryBytes: number;
+  inputLatencyP95Ms?: number | null;
+  rendererLatencyP95Ms?: number | null;
+  mainLatencyP95Ms?: number | null;
 };
 
 export function appendWorkspaceResourceSnapshot(
   history: WorkspaceResourceHistoryPoint[],
-  snapshot: Pick<AppResourceSnapshot, 'sampledAt' | 'cpuPercent' | 'memoryBytes'>
+  snapshot: Pick<AppResourceSnapshot, 'sampledAt' | 'cpuPercent' | 'memoryBytes'> &
+    Partial<Pick<AppResourceSnapshot, 'mainEventLoop' | 'rendererPerformance'>>
 ): WorkspaceResourceHistoryPoint[] {
   if (history.some((point) => point.sampledAt === snapshot.sampledAt)) return history;
 
@@ -19,6 +23,9 @@ export function appendWorkspaceResourceSnapshot(
     sampledAt: snapshot.sampledAt,
     cpuPercent: snapshot.cpuPercent,
     memoryBytes: snapshot.memoryBytes,
+    inputLatencyP95Ms: snapshot.rendererPerformance?.inputLatency.p95Ms ?? null,
+    rendererLatencyP95Ms: snapshot.rendererPerformance?.eventLoop.p95Ms ?? null,
+    mainLatencyP95Ms: snapshot.mainEventLoop?.p95Ms ?? null,
   };
   const sorted = [...history, nextPoint].sort(
     (left, right) => Date.parse(left.sampledAt) - Date.parse(right.sampledAt)

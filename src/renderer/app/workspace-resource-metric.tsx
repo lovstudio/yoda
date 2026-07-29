@@ -8,6 +8,7 @@ type WorkspaceResourceMetricProps = {
   ariaLabel?: string;
   controls?: string;
   expanded?: boolean;
+  opensDialog?: boolean;
   onClick?: () => void;
 };
 
@@ -18,6 +19,7 @@ export function WorkspaceResourceMetric({
   ariaLabel,
   controls,
   expanded,
+  opensDialog,
   onClick,
 }: WorkspaceResourceMetricProps) {
   const content = (
@@ -30,7 +32,7 @@ export function WorkspaceResourceMetric({
             aria-hidden
             className={cn(
               'size-3.5 text-foreground-passive transition-transform',
-              expanded && 'rotate-90'
+              !opensDialog && expanded && 'rotate-90'
             )}
           />
         ) : null}
@@ -42,7 +44,8 @@ export function WorkspaceResourceMetric({
     <button
       type="button"
       aria-controls={controls}
-      aria-expanded={expanded}
+      aria-expanded={opensDialog ? undefined : expanded}
+      aria-haspopup={opensDialog ? 'dialog' : undefined}
       aria-label={ariaLabel}
       title={title}
       className="bg-background p-2.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"

@@ -53,4 +53,22 @@ describe('WorkspaceResourceMetric', () => {
 
     expect(onClick).toHaveBeenCalledOnce();
   });
+
+  it('announces resource detail actions as dialogs', async () => {
+    await act(async () => {
+      root.render(
+        createElement(WorkspaceResourceMetric, {
+          label: 'CPU',
+          value: '18%',
+          ariaLabel: 'Open CPU details',
+          opensDialog: true,
+          onClick: vi.fn(),
+        })
+      );
+    });
+
+    const button = host.querySelector<HTMLButtonElement>('button');
+    expect(button?.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(button?.hasAttribute('aria-expanded')).toBe(false);
+  });
 });
