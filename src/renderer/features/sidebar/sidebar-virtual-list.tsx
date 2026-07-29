@@ -17,7 +17,6 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -43,6 +42,12 @@ import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
 import { SidebarProjectItem } from './project-item';
 import {
+  getSidebarTaskGroupDisclosure,
+  hiddenSidebarTaskGroupItemsContain,
+  type SidebarTaskGroupRowVariant,
+} from './sidebar-task-group';
+import { SidebarTaskGroupToggle } from './sidebar-task-group-toggle';
+import {
   getTreeProjection,
   projectedSiblingOrder,
   withParents,
@@ -50,8 +55,6 @@ import {
   type TreeProjection,
 } from './sidebar-tree-projection';
 import { SidebarTaskItem } from './task-item';
-
-const TASK_GROUP_VISIBLE_LIMIT = 5;
 
 export const SidebarVirtualList = observer(function SidebarVirtualList() {
   const { t } = useTranslation();
@@ -293,7 +296,9 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
               return (
                 <div key={`toggle:${row.groupId}`} className="min-w-0 overflow-hidden">
                   <SidebarTaskGroupToggle
-                    row={row}
+                    expanded={row.expanded}
+                    hiddenCount={row.hiddenCount}
+                    rowVariant={row.rowVariant}
                     onToggle={() => toggleTaskGroupExpanded(row.groupId)}
                   />
                 </div>
@@ -383,7 +388,7 @@ type SidebarTaskGroupToggleRow = {
   groupId: string;
   hiddenCount: number;
   expanded: boolean;
-  rowVariant: 'underProject' | 'flat';
+  rowVariant: SidebarTaskGroupRowVariant;
 };
 
 type SidebarRenderableRow = SidebarRow | SidebarTaskGroupToggleRow;
@@ -495,10 +500,8 @@ function appendLimitedTaskRows(
   if (taskRows.length === 0) return;
 
   const expanded = expandedTaskGroupIds.has(groupId);
-  const visibleRows = expanded ? taskRows : taskRows.slice(0, TASK_GROUP_VISIBLE_LIMIT);
-  target.push(...visibleRows);
-
-  const hiddenCount = taskRows.length - TASK_GROUP_VISIBLE_LIMIT;
+  const { visibleItems, hiddenCount } = getSidebarTaskGroupDisclosure(taskRows, expanded);
+  target.push(...visibleItems);
   if (hiddenCount > 0) {
     target.push({
       kind: 'task-group-toggle',
@@ -573,7 +576,7 @@ function findHiddenTaskGroupId(
 }
 
 function hiddenTaskRowsContain(rows: Extract<SidebarRow, { kind: 'task' }>[], targetDndId: string) {
-  return rows.slice(TASK_GROUP_VISIBLE_LIMIT).some((row) => rowToDndId(row) === targetDndId);
+  return hiddenSidebarTaskGroupItemsContain(rows, (row) => rowToDndId(row) === targetDndId);
 }
 
 function SidebarGroupHeader({ group }: { group: SidebarGroupKey }) {
@@ -588,37 +591,6 @@ function SidebarGroupHeader({ group }: { group: SidebarGroupKey }) {
     <div className="flex h-8 items-center px-2 text-xs font-medium uppercase tracking-wide text-foreground-tertiary-muted select-none">
       {label}
     </div>
-  );
-}
-
-function SidebarTaskGroupToggle({
-  row,
-  onToggle,
-}: {
-  row: SidebarTaskGroupToggleRow;
-  onToggle: () => void;
-}) {
-  const { t } = useTranslation();
-  const label = row.expanded
-    ? t('sidebar.collapseGroupItems')
-    : t('sidebar.showMoreGroupItems', { count: row.hiddenCount });
-
-  return (
-    <button
-      type="button"
-      aria-expanded={row.expanded}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onToggle}
-      className={cn(
-        'flex h-7 w-full min-w-0 items-center gap-1.5 overflow-hidden rounded-lg text-left text-xs font-medium text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        row.rowVariant === 'underProject' ? 'pl-8 pr-2' : 'px-2'
-      )}
-    >
-      <ChevronDown
-        className={`size-3.5 shrink-0 transition-transform ${row.expanded ? 'rotate-180' : ''}`}
-      />
-      <span className="truncate">{label}</span>
-    </button>
   );
 }
 
