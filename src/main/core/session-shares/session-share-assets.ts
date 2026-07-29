@@ -9,6 +9,7 @@ import {
   type YodaSessionShareAssetUpload,
   type YodaSessionShareUpload,
 } from '@shared/session-share';
+import type { CodexRolloutShareImageGroup } from '@main/core/conversations/codex-rollout-terminal-history';
 
 const MIME_BY_EXTENSION: Record<string, YodaSessionShareAssetContentType> = {
   '.png': 'image/png',
@@ -28,6 +29,12 @@ const MIME_BY_EXTENSION: Record<string, YodaSessionShareAssetContentType> = {
 };
 
 const SUPPORTED_EXTENSION_PATTERN = '(?:png|jpe?g|webp|gif|pdf|txt|md|json|csv|zip|docx|xlsx|pptx)';
+const EMBEDDED_IMAGE_EXTENSION: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
 const MARKDOWN_LINK_PATTERN = /(!?\[([^\]\n]*)\]\()(<[^>\n]+>|[^)\n]+)(\))/g;
 const IMAGE_TAG_PATTERN =
   /<image\s+name=(?:"([^"]+)"|(\[[^\]]+\])|([^\s>]+))\s+path=(?:"([^"]+)"|'([^']+)')\s*\/?>/gi;
@@ -43,10 +50,12 @@ type AssetReference =
 
 export async function attachLocalSessionAssets(
   upload: YodaSessionShareUpload,
-  cwd: string
+  cwd: string,
+  embeddedImages: readonly CodexRolloutShareImageGroup[] = []
 ): Promise<YodaSessionShareUpload> {
   const assets: YodaSessionShareAssetUpload[] = [];
   const resolvedByPath = new Map<string, Promise<AssetReference>>();
+  const pendingEmbeddedImages = [...embeddedImages];
   let totalBytes = 0;
   let omittedAssetCount = 0;
 
@@ -98,14 +107,61 @@ export async function attachLocalSessionAssets(
     return pending;
   };
 
+  const resolveEmbeddedImage = (
+    image: CodexRolloutShareImageGroup['images'][number]
+  ): AssetReference => {
+    const extension = EMBEDDED_IMAGE_EXTENSION[image.contentType];
+    if (!extension || assets.length >= YODA_SESSION_SHARE_ASSET_MAX_COUNT) {
+      omittedAssetCount += 1;
+      return { kind: 'unavailable', fileName: image.label };
+    }
+
+    const data = Buffer.from(image.dataBase64, 'base64');
+    const normalizedInput = image.dataBase64.replace(/=+$/, '');
+    if (
+      data.byteLength <= 0 ||
+      data.byteLength > YODA_SESSION_SHARE_ASSET_MAX_BYTES ||
+      totalBytes + data.byteLength > YODA_SESSION_SHARE_ASSET_TOTAL_MAX_BYTES ||
+      data.toString('base64').replace(/=+$/, '') !== normalizedInput ||
+      !hasExpectedImageSignature(data, image.contentType)
+    ) {
+      omittedAssetCount += 1;
+      return { kind: 'unavailable', fileName: image.label };
+    }
+
+    const assetId = `asset-${assets.length + 1}`;
+    const fileName = `${safeEmbeddedFileName(image.label)}.${extension}`;
+    assets.push({
+      id: assetId,
+      fileName,
+      contentType: image.contentType as YodaSessionShareAssetContentType,
+      dataBase64: image.dataBase64,
+    });
+    totalBytes += data.byteLength;
+    return {
+      kind: 'public',
+      token: `yoda-share-asset:${assetId}`,
+      fileName,
+      image: true,
+    };
+  };
+
   const blocks = [];
   for (const block of upload.blocks) {
+    let content = block.content;
+    if (block.role === 'user' && block.format === 'markdown') {
+      const embeddedGroupIndex = findEmbeddedImageGroupIndex(pendingEmbeddedImages, block);
+      if (embeddedGroupIndex >= 0) {
+        const [embeddedGroup] = pendingEmbeddedImages.splice(embeddedGroupIndex, 1);
+        if (embeddedGroup) {
+          content = rewriteEmbeddedImages(content, embeddedGroup, resolveEmbeddedImage);
+        }
+      }
+    }
     blocks.push({
       ...block,
       content:
-        block.format === 'markdown'
-          ? await rewriteMarkdownAssets(block.content, resolveAsset)
-          : block.content,
+        block.format === 'markdown' ? await rewriteMarkdownAssets(content, resolveAsset) : content,
     });
   }
 
@@ -115,6 +171,53 @@ export async function attachLocalSessionAssets(
     assets,
     omittedAssetCount,
   };
+}
+
+function findEmbeddedImageGroupIndex(
+  groups: readonly CodexRolloutShareImageGroup[],
+  block: YodaSessionShareUpload['blocks'][number]
+): number {
+  const content = block.content.trim();
+  const exactMatch = groups.findIndex((group) => group.message.trim() === content);
+  if (exactMatch >= 0) return exactMatch;
+
+  const blockTime = block.timestamp ? Date.parse(block.timestamp) : Number.NaN;
+  return groups.findIndex((group) => {
+    const groupTime = group.timestamp ? Date.parse(group.timestamp) : Number.NaN;
+    return (
+      Number.isFinite(blockTime) &&
+      Number.isFinite(groupTime) &&
+      Math.abs(blockTime - groupTime) <= 2_000 &&
+      group.images.some((image) => content.includes(`[${image.label}]`))
+    );
+  });
+}
+
+function rewriteEmbeddedImages(
+  content: string,
+  group: CodexRolloutShareImageGroup,
+  resolveImage: (image: CodexRolloutShareImageGroup['images'][number]) => AssetReference
+): string {
+  let rewritten = content;
+  const prepended: string[] = [];
+
+  for (const image of group.images) {
+    const markdownPlaceholder = `![${escapeMarkdownLabel(image.label)}]`;
+    if (rewritten.includes(markdownPlaceholder)) continue;
+    const placeholder = `[${image.label}]`;
+    const reference = resolveImage(image);
+    const rendered =
+      reference.kind === 'public'
+        ? `![${escapeMarkdownLabel(image.label)}](<${reference.token}>)`
+        : `${image.label}（本地素材未同步）`;
+    if (rewritten.includes(placeholder)) {
+      rewritten = rewritten.replace(placeholder, rendered);
+    } else {
+      prepended.push(rendered);
+    }
+  }
+
+  return prepended.length > 0 ? `${prepended.join('\n\n')}\n\n${rewritten}` : rewritten;
 }
 
 async function rewriteMarkdownAssets(
@@ -212,4 +315,35 @@ async function replaceAsync(
 
 function escapeMarkdownLabel(value: string): string {
   return value.replace(/[[\]\\]/g, '\\$&');
+}
+
+function safeEmbeddedFileName(value: string): string {
+  return (
+    value
+      .trim()
+      .replace(/[^\p{L}\p{N}._-]+/gu, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 180) || 'image'
+  );
+}
+
+function hasExpectedImageSignature(data: Buffer, contentType: string): boolean {
+  if (contentType === 'image/png') {
+    return data
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  }
+  if (contentType === 'image/jpeg') {
+    return data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
+  }
+  if (contentType === 'image/webp') {
+    return (
+      data.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      data.subarray(8, 12).toString('ascii') === 'WEBP'
+    );
+  }
+  if (contentType === 'image/gif') {
+    return /^GIF8[79]a$/.test(data.subarray(0, 6).toString('ascii'));
+  }
+  return false;
 }

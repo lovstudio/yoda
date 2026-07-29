@@ -28,6 +28,40 @@ function upload(content: string): YodaSessionShareUpload {
 }
 
 describe('attachLocalSessionAssets', () => {
+  it('restores embedded Codex images when the transcript only keeps a placeholder', async () => {
+    const source = upload('[Image #1] 那个 P 图汇总图应该上传');
+    source.blocks[0]!.role = 'user';
+    const dataBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X2NDNwAAAABJRU5ErkJggg==';
+
+    const prepared = await attachLocalSessionAssets(source, '/tmp', [
+      {
+        timestamp: null,
+        message: '[Image #1] 那个 P 图汇总图应该上传',
+        images: [
+          {
+            label: 'Image #1',
+            contentType: 'image/png',
+            dataBase64,
+          },
+        ],
+      },
+    ]);
+
+    expect(prepared.assets).toEqual([
+      {
+        id: 'asset-1',
+        fileName: 'Image-1.png',
+        contentType: 'image/png',
+        dataBase64,
+      },
+    ]);
+    expect(prepared.blocks[0]?.content).toBe(
+      '![Image #1](<yoda-share-asset:asset-1>) 那个 P 图汇总图应该上传'
+    );
+    expect(prepared.omittedAssetCount).toBe(0);
+  });
+
   it('uploads local markdown and @path assets once and removes private paths', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'yoda-session-share-assets-'));
     const original = path.join(directory, '原图.JPG');

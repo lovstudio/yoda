@@ -49,6 +49,16 @@ export type CodexRolloutTranscriptEntry = {
   content: string;
 };
 
+export type CodexRolloutShareImageGroup = {
+  timestamp: string | null;
+  message: string;
+  images: Array<{
+    label: string;
+    contentType: string;
+    dataBase64: string;
+  }>;
+};
+
 type HistoryOptions = {
   threadId: string;
   title: string;
@@ -173,6 +183,25 @@ export async function loadCodexRolloutTranscriptTailForConversation({
   }
   const transcript = parseCodexRolloutTranscript(snapshot.raw);
   return transcript.length > 0 ? transcript : null;
+}
+
+export async function loadCodexRolloutShareImagesTailForConversation({
+  conversation,
+  cwd,
+}: {
+  conversation: Conversation;
+  cwd: string;
+}): Promise<CodexRolloutShareImageGroup[]> {
+  const context = await resolveCodexRolloutContext(conversation, cwd);
+  if (!context) return [];
+
+  let snapshot: RolloutFileSnapshot;
+  try {
+    snapshot = await readRolloutTailSnapshot(context.rolloutPath);
+  } catch {
+    return [];
+  }
+  return parseCodexRolloutShareImages(snapshot.raw);
 }
 
 async function readRolloutSnapshot(rolloutPath: string): Promise<RolloutFileSnapshot> {
@@ -381,6 +410,61 @@ export function parseCodexRolloutTranscript(raw: string): CodexRolloutTranscript
     .map(({ entry }) => entry);
 
   return compactIncrementalAssistantBlocks(entries);
+}
+
+export function parseCodexRolloutShareImages(raw: string): CodexRolloutShareImageGroup[] {
+  const groups: CodexRolloutShareImageGroup[] = [];
+
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    const parsed = safeParse(line);
+    if (!parsed || parsed.type !== 'response_item') continue;
+    const payload = objectValue(parsed.payload);
+    if (!payload || payload.type !== 'message' || payload.role !== 'user') continue;
+    if (!Array.isArray(payload.content)) continue;
+
+    const textParts: string[] = [];
+    const images: CodexRolloutShareImageGroup['images'] = [];
+    let pendingLabel: string | null = null;
+
+    for (const rawBlock of payload.content) {
+      const block = objectValue(rawBlock);
+      if (!block) continue;
+      const type = nullableString(block.type);
+      if (type === 'input_text') {
+        const text = nullableString(block.text);
+        if (!text) continue;
+        const imageLabel = extractImageTagLabel(text);
+        if (imageLabel) pendingLabel = imageLabel;
+        const visibleText = text
+          .replace(/<image\b[^>]*>/giu, '')
+          .replace(/<\/image>/giu, '')
+          .trim();
+        if (visibleText) textParts.push(visibleText);
+        continue;
+      }
+      if (type !== 'input_image') continue;
+      const imageUrl = nullableString(block.image_url);
+      const embedded = imageUrl ? parseEmbeddedImageUrl(imageUrl) : null;
+      if (!embedded) continue;
+      images.push({
+        label: pendingLabel || `Image #${images.length + 1}`,
+        ...embedded,
+      });
+      pendingLabel = null;
+    }
+
+    const message = textParts.join('\n').trim();
+    if (message && images.length > 0) {
+      groups.push({
+        timestamp: nullableString(parsed.timestamp),
+        message,
+        images,
+      });
+    }
+  }
+
+  return groups;
 }
 
 function compactIncrementalAssistantBlocks(
@@ -732,6 +816,21 @@ function extractContentText(content: unknown): string | null {
     if (text) parts.push(text);
   }
   return parts.length > 0 ? parts.join('\n') : null;
+}
+
+function extractImageTagLabel(value: string): string | null {
+  const match = value.match(/<image\s+name=(?:"([^"]+)"|(\[[^\]]+\])|([^\s>]+))[^>]*>/iu);
+  const label = match?.[1] || match?.[2] || match?.[3];
+  return label?.replace(/^\[|\]$/g, '').trim() || null;
+}
+
+function parseEmbeddedImageUrl(value: string): { contentType: string; dataBase64: string } | null {
+  const match = value.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=\s]+)$/iu);
+  if (!match?.[1] || !match[2]) return null;
+  return {
+    contentType: match[1].toLowerCase(),
+    dataBase64: match[2].replace(/\s+/g, ''),
+  };
 }
 
 function extractToolInput(value: unknown): string | null {
