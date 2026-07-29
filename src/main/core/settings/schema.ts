@@ -32,12 +32,9 @@ import {
   TASK_NAMING_CONTEXT_SOURCE_IDS,
 } from '@shared/task-naming';
 import {
-  DEFAULT_AGENT_CONCURRENCY_LIMIT,
-  DEFAULT_AGENT_MEMORY_PAUSE_PERCENT,
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
-  MAX_AGENT_CONCURRENCY_LIMIT,
   MAX_HOT_TERMINAL_LIMIT,
   MAX_IDLE_SESSION_TIMEOUT_MINUTES,
   MAX_TERMINAL_SCROLLBACK_LINES,
@@ -300,19 +297,6 @@ export const terminalSettingsSchema = z.object({
     .min(0)
     .max(MAX_IDLE_SESSION_TIMEOUT_MINUTES)
     .catch(DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES),
-  agentConcurrencyMode: z.enum(['auto', 'fixed', 'unlimited']).catch('auto'),
-  agentConcurrencyLimit: z
-    .number()
-    .int()
-    .min(1)
-    .max(MAX_AGENT_CONCURRENCY_LIMIT)
-    .catch(DEFAULT_AGENT_CONCURRENCY_LIMIT),
-  agentMemoryPausePercent: z
-    .number()
-    .int()
-    .min(50)
-    .max(95)
-    .catch(DEFAULT_AGENT_MEMORY_PAUSE_PERCENT),
 });
 
 const legacyThemeSchema = z

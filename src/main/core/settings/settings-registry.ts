@@ -19,8 +19,6 @@ import {
   DEFAULT_TASK_NAMING_TIMEOUT_MS,
 } from '@shared/task-naming';
 import {
-  DEFAULT_AGENT_CONCURRENCY_LIMIT,
-  DEFAULT_AGENT_MEMORY_PAUSE_PERCENT,
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
@@ -103,9 +101,6 @@ export const SETTINGS_DEFAULTS = {
     scrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
     hotTerminalLimit: DEFAULT_HOT_TERMINAL_LIMIT,
     idleSessionTimeoutMinutes: DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
-    agentConcurrencyMode: 'auto' as const,
-    agentConcurrencyLimit: DEFAULT_AGENT_CONCURRENCY_LIMIT,
-    agentMemoryPausePercent: DEFAULT_AGENT_MEMORY_PAUSE_PERCENT,
   },
   // Fresh installs boot into the brand theme; null = explicit follow-system.
   theme: 'ygreen' as const,

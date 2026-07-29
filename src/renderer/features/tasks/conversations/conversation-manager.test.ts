@@ -250,6 +250,25 @@ describe('ConversationManagerStore', () => {
     expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 120, 30);
   });
 
+  it('dismisses the exited state as soon as a restart begins', async () => {
+    let finishRestart: (() => void) | undefined;
+    mocks.restartConversationMock.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishRestart = resolve;
+      })
+    );
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    item?.setSessionExited(true);
+
+    const restart = store.restartConversation('conversation-1');
+
+    expect(item?.sessionExited).toBe(false);
+    finishRestart?.();
+    await restart;
+    expect(item?.sessionExited).toBe(false);
+  });
+
   it('passes a newly installed skill when reloading the current session', async () => {
     const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
 

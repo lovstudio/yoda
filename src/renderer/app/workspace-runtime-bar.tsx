@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
+  Bot,
+  Boxes,
   Brain,
   Cloud,
   ExternalLink,
   Gauge,
-  HardDrive,
   MessageSquare,
   Sparkles,
   Terminal,
@@ -13,7 +14,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppRunningAgentSession } from '@shared/app-resource';
+import type { AppAgentSessionResource } from '@shared/app-resource';
 import { getMaasPlatformDefinition } from '@shared/maas';
 import {
   getRuntime,
@@ -42,7 +43,6 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import type { RunningAgentRuntimeSession } from '@renderer/lib/stores/agent-runtime-store';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
 import { Button } from '@renderer/lib/ui/button';
@@ -51,20 +51,24 @@ import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
+import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
+import {
+  appendWorkspaceResourceSnapshot,
+  getWorkspaceLatencyP95,
+  type WorkspaceResourceHistoryPoint,
+} from './workspace-resource-history';
 import { WorkspaceResourceMetric } from './workspace-resource-metric';
+import { WorkspaceResourceTrend } from './workspace-resource-trend';
 import { getQuotaWindowLabel } from './workspace-runtime-bar-format';
 
-type WorkspaceRunningAgentSession = Omit<
-  AppRunningAgentSession,
-  'runtimeId' | 'title' | 'taskTitle'
-> & {
-  runtimeId?: AppRunningAgentSession['runtimeId'];
+type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title' | 'taskTitle'> & {
+  runtimeId?: AppAgentSessionResource['runtimeId'];
   title?: string;
   taskTitle?: string;
 };
 
-function runningAgentSessionKey(
-  session: Pick<RunningAgentRuntimeSession, 'projectId' | 'taskId' | 'conversationId'>
+function agentSessionKey(
+  session: Pick<AppAgentSessionResource, 'projectId' | 'taskId' | 'conversationId'>
 ): string {
   return `${session.projectId}\0${session.taskId}\0${session.conversationId}`;
 }
@@ -82,10 +86,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     useAppSettingsKey('interface');
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
+  const [isAgentPopoverOpen, setIsAgentPopoverOpen] = useState(false);
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
-  const [isRunningAgentListOpen, setIsRunningAgentListOpen] = useState(false);
+  const [isWorktreeDetailsOpen, setIsWorktreeDetailsOpen] = useState(false);
   const [isSkillPopoverOpen, setIsSkillPopoverOpen] = useState(false);
   const [isCleaningWorktrees, setIsCleaningWorktrees] = useState(false);
+  const [resourceHistory, setResourceHistory] = useState<WorkspaceResourceHistoryPoint[]>([]);
   const [sessionPromptCount, setSessionPromptCount] = useState<{
     conversationId: string;
     count: number;
@@ -241,40 +247,64 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
-  const resourceSessionByKey = new Map(
-    (resourceSnapshot?.runningAgentSessions ?? []).map((session) => [
-      runningAgentSessionKey(session),
-      session,
-    ])
+  const agentSessionByKey = new Map<string, WorkspaceAgentSession>(
+    (resourceSnapshot?.agentSessions ?? []).map((session) => [agentSessionKey(session), session])
   );
-  const runningAgentSessions: WorkspaceRunningAgentSession[] = appState.agentRuntime
-    .runningSessions()
-    .map((session) => {
-      const resourceSession = resourceSessionByKey.get(runningAgentSessionKey(session));
-      const task = getTaskStore(session.projectId, session.taskId);
-      const conversation = asProvisioned(task)?.conversations.conversations.get(
-        session.conversationId
-      )?.data;
-      return {
-        ...session,
-        pid: resourceSession?.pid ?? null,
-        cpuPercent: resourceSession?.cpuPercent ?? 0,
-        memoryBytes: resourceSession?.memoryBytes ?? 0,
-        outputBytesPerSecond: resourceSession?.outputBytesPerSecond ?? 0,
-        lastActivityAt: resourceSession?.lastActivityAt ?? null,
-        ringBufferBytes: resourceSession?.ringBufferBytes ?? 0,
-        ringBufferCapBytes: resourceSession?.ringBufferCapBytes ?? 0,
-        rendererConsumers: resourceSession?.rendererConsumers ?? 0,
-        lifecycle: resourceSession?.lifecycle ?? 'warm',
-        runtimeId:
-          resourceSession?.runtimeId ??
-          explicitConversationRuntimeId(conversation?.runtimeId) ??
-          undefined,
-        title: resourceSession?.title ?? conversation?.title,
-        taskTitle: resourceSession?.taskTitle ?? task?.data.name,
-      };
+  for (const session of appState.agentRuntime.runningSessions()) {
+    const key = agentSessionKey(session);
+    if (agentSessionByKey.has(key)) continue;
+    const task = getTaskStore(session.projectId, session.taskId);
+    const conversation = asProvisioned(task)?.conversations.conversations.get(
+      session.conversationId
+    )?.data;
+    agentSessionByKey.set(key, {
+      ...session,
+      pid: null,
+      cpuPercent: 0,
+      memoryBytes: 0,
+      outputBytesPerSecond: 0,
+      lastActivityAt: null,
+      ringBufferBytes: 0,
+      ringBufferCapBytes: 0,
+      rendererConsumers: 0,
+      lifecycle: 'warm',
+      tmuxBacked: false,
+      runtimeId: explicitConversationRuntimeId(conversation?.runtimeId) ?? undefined,
+      title: conversation?.title,
+      taskTitle: task?.data.name,
     });
-  const runningAgentCount = runningAgentSessions.length;
+  }
+  const agentSessions = rankWorkspaceAgentSessions(Array.from(agentSessionByKey.values()));
+  const agentSessionCount = agentSessions.length;
+  const workingAgentCount = agentSessions.filter((session) => session.status === 'working').length;
+  const attentionAgentCount = agentSessions.filter(
+    (session) => session.status === 'awaiting-input'
+  ).length;
+  const tmuxSessionCount = agentSessions.filter((session) => session.tmuxBacked).length;
+  const resourceLatencyP95 = getWorkspaceLatencyP95(resourceSnapshot);
+  const latencyTitle = resourceSnapshot?.rendererPerformance
+    ? t('workspaceRuntime.resources.latencyDetails', {
+        input: resourceSnapshot.rendererPerformance.inputLatency.p95Ms,
+        renderer: resourceSnapshot.rendererPerformance.eventLoop.p95Ms,
+      })
+    : undefined;
+  const worktreeMetricValue = worktreeStorage
+    ? formatBytes(worktreeStorage.totalBytes)
+    : isScanningWorktrees
+      ? '…'
+      : '—';
+  const worktreeMetricTitle = worktreeStorage
+    ? t('workspaceRuntime.resources.worktreeSummary', {
+        count: worktreeStorage.worktreeCount,
+        reclaimable: worktreeStorage.reclaimableCount,
+        size: formatBytes(worktreeStorage.reclaimableBytes),
+      })
+    : t('workspaceRuntime.resources.scanningWorktrees');
+
+  useEffect(() => {
+    if (!resourceSnapshot) return;
+    setResourceHistory((history) => appendWorkspaceResourceSnapshot(history, resourceSnapshot));
+  }, [resourceSnapshot]);
 
   useEffect(() => {
     if (!activeConversation || !provisionedTask) return;
@@ -465,9 +495,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     appState.navigation.navigate('skills');
   };
 
-  const openRunningAgentSession = (session: WorkspaceRunningAgentSession) => {
-    setIsResourcePopoverOpen(false);
-    setIsRunningAgentListOpen(false);
+  const openAgentSession = (session: WorkspaceAgentSession) => {
+    setIsAgentPopoverOpen(false);
     openTaskTarget(
       {
         projectId: session.projectId,
@@ -478,15 +507,15 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     );
   };
 
-  const handleRunningAgentMetricClick = () => {
-    if (runningAgentSessions.length > 0) {
-      setIsRunningAgentListOpen((current) => !current);
-    }
+  const handleWorktreeMetricClick = () => {
+    setIsWorktreeDetailsOpen((current) => !current);
   };
 
   const handleResourcePopoverOpenChange = (open: boolean) => {
     setIsResourcePopoverOpen(open);
-    if (!open) setIsRunningAgentListOpen(false);
+    if (!open) {
+      setIsWorktreeDetailsOpen(false);
+    }
   };
 
   return (
@@ -783,20 +812,170 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         </div>
       ) : null}
       <span className="flex-1" />
+      <Popover open={isAgentPopoverOpen} onOpenChange={setIsAgentPopoverOpen}>
+        <PopoverTrigger
+          aria-label={t('workspaceRuntime.agents.triggerLabel', {
+            count: agentSessionCount,
+            working: workingAgentCount,
+          })}
+          className={cn(
+            'flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
+            attentionAgentCount > 0 ? 'text-foreground' : 'text-foreground-passive'
+          )}
+          title={t('workspaceRuntime.agents.triggerLabel', {
+            count: agentSessionCount,
+            working: workingAgentCount,
+          })}
+        >
+          <Bot className="size-3.5" />
+          <span className="tabular-nums">
+            {t('workspaceRuntime.agents.triggerShort', {
+              count: agentSessionCount,
+              working: workingAgentCount,
+            })}
+          </span>
+          <span
+            aria-hidden
+            className={cn(
+              'size-1.5 rounded-full',
+              attentionAgentCount > 0
+                ? 'bg-amber-500'
+                : workingAgentCount > 0
+                  ? 'bg-primary'
+                  : 'bg-foreground-disabled'
+            )}
+          />
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          side="top"
+          sideOffset={8}
+          className="w-[440px] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+        >
+          <div className="border-b border-border p-3">
+            <div className="text-sm font-medium">{t('workspaceRuntime.agents.title')}</div>
+            <div className="mt-0.5 text-xs text-foreground-passive">
+              {t('workspaceRuntime.agents.description')}
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-px bg-border">
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.agents.sessions')}
+              value={String(agentSessionCount)}
+            />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.agents.working')}
+              value={String(workingAgentCount)}
+            />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.agents.attention')}
+              value={String(attentionAgentCount)}
+            />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.agents.tmux')}
+              value={String(tmuxSessionCount)}
+            />
+          </div>
+          {agentSessions.length > 0 ? (
+            <div className="max-h-80 overflow-y-auto p-2">
+              {agentSessions.map((session) => {
+                const title =
+                  (session.runtimeId
+                    ? formatConversationTitleForDisplay(
+                        session.runtimeId,
+                        session.title ?? ''
+                      ).trim()
+                    : session.title?.trim()) ||
+                  t('workspaceRuntime.agents.sessionFallback', {
+                    id: session.conversationId.slice(0, 8),
+                  });
+                const taskTitle =
+                  session.taskTitle?.trim() ||
+                  t('workspaceRuntime.agents.taskFallback', {
+                    id: session.taskId.slice(0, 8),
+                  });
+                const config = session.runtimeId ? agentConfig[session.runtimeId] : undefined;
+                return (
+                  <button
+                    key={agentSessionKey(session)}
+                    type="button"
+                    aria-label={t('workspaceRuntime.agents.openSession', { title })}
+                    className="flex w-full min-w-0 items-start gap-2.5 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                    onClick={() => openAgentSession(session)}
+                  >
+                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center">
+                      {config ? (
+                        <AgentLogo
+                          logo={config.logo}
+                          alt={config.alt}
+                          isSvg={config.isSvg}
+                          invertInDark={config.invertInDark}
+                          className="size-4"
+                        />
+                      ) : (
+                        <Bot aria-hidden className="size-4" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                          {title}
+                        </span>
+                        <span className="shrink-0 font-mono text-[10px] tabular-nums text-foreground-passive">
+                          {formatBytes(session.memoryBytes)}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] text-foreground-passive">
+                        {taskTitle}
+                      </span>
+                      <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-background-2 px-1.5 py-0.5 text-foreground-muted">
+                          <AgentStatusIndicator
+                            status={session.status}
+                            disableTooltip
+                            boxClassName="size-3"
+                          />
+                          {t(`agentStatus.${session.status}`)}
+                        </span>
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5',
+                            session.tmuxBacked
+                              ? 'bg-status-in-review/10 text-status-in-review'
+                              : 'bg-background-2 text-foreground-passive'
+                          )}
+                        >
+                          <Boxes aria-hidden className="size-3" />
+                          {session.tmuxBacked
+                            ? t('workspaceRuntime.agents.tmuxRunning')
+                            : t('workspaceRuntime.agents.noTmux')}
+                        </span>
+                        <span className="font-mono tabular-nums text-foreground-passive">
+                          {Math.round(session.cpuPercent)}% CPU · PID {session.pid ?? '—'}
+                        </span>
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-3 py-6 text-center text-xs text-foreground-passive">
+              {t('workspaceRuntime.agents.empty')}
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
       <Popover open={isResourcePopoverOpen} onOpenChange={handleResourcePopoverOpenChange}>
         <PopoverTrigger
-          aria-label={t('workspaceRuntime.resources.triggerLabel', {
-            count: runningAgentCount,
-          })}
+          aria-label={t('workspaceRuntime.resources.triggerLabel')}
           className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-          title={t('workspaceRuntime.resources.triggerLabel', {
-            count: runningAgentCount,
-          })}
+          title={t('workspaceRuntime.resources.triggerLabel')}
         >
           <Activity className="size-3.5" />
           <span className="font-mono tabular-nums">
             {resourceSnapshot
-              ? `${formatBytes(resourceSnapshot.memoryBytes)} · ${Math.round(resourceSnapshot.cpuPercent)}% · ${t('workspaceRuntime.resources.runningAgentsShort', { count: runningAgentCount })}`
+              ? `${formatBytes(resourceSnapshot.memoryBytes)} · ${Math.round(resourceSnapshot.cpuPercent)}%`
               : '—'}
           </span>
         </PopoverTrigger>
@@ -812,7 +991,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               {t('workspaceRuntime.resources.description')}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-px bg-border">
+          <div className="grid grid-cols-2 gap-px bg-border">
             <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.cpu')}
               value={resourceSnapshot ? `${Math.round(resourceSnapshot.cpuPercent)}%` : '—'}
@@ -822,193 +1001,72 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               value={resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—'}
             />
             <WorkspaceResourceMetric
-              label={t('workspaceRuntime.resources.runningAgents')}
-              value={String(runningAgentCount)}
+              label={t('workspaceRuntime.resources.latency')}
+              value={resourceLatencyP95 == null ? '—' : `${resourceLatencyP95} ms`}
+              title={latencyTitle}
+            />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.resources.worktrees')}
+              value={worktreeMetricValue}
+              title={worktreeMetricTitle}
               ariaLabel={
-                runningAgentSessions.length === 1
-                  ? t('workspaceRuntime.resources.openOnlyRunningAgent')
-                  : isRunningAgentListOpen
-                    ? t('workspaceRuntime.resources.hideRunningAgents')
-                    : t('workspaceRuntime.resources.showRunningAgents', {
-                        count: runningAgentSessions.length,
-                      })
+                isWorktreeDetailsOpen
+                  ? t('workspaceRuntime.resources.hideWorktreeDetails')
+                  : t('workspaceRuntime.resources.showWorktreeDetails')
               }
-              controls={
-                runningAgentSessions.length > 1 ? 'workspace-running-agent-list' : undefined
-              }
-              expanded={runningAgentSessions.length > 1 ? isRunningAgentListOpen : undefined}
-              onClick={runningAgentSessions.length > 0 ? handleRunningAgentMetricClick : undefined}
-            />
-            <WorkspaceResourceMetric
-              label={t('workspaceRuntime.resources.inputLatency')}
-              value={
-                resourceSnapshot?.rendererPerformance
-                  ? `${resourceSnapshot.rendererPerformance.inputLatency.p95Ms} ms`
-                  : '—'
-              }
-            />
-            <WorkspaceResourceMetric
-              label={t('workspaceRuntime.resources.mainLoop')}
-              value={resourceSnapshot ? `${resourceSnapshot.mainEventLoop.p95Ms} ms` : '—'}
-            />
-            <WorkspaceResourceMetric
-              label={t('workspaceRuntime.resources.rendererLoop')}
-              value={
-                resourceSnapshot?.rendererPerformance
-                  ? `${resourceSnapshot.rendererPerformance.eventLoop.p95Ms} ms`
-                  : '—'
-              }
+              controls="workspace-worktree-details"
+              expanded={isWorktreeDetailsOpen}
+              onClick={handleWorktreeMetricClick}
             />
           </div>
-          {resourceSnapshot ? (
-            <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2 text-[11px]">
-              <span className="text-foreground-passive">
-                {t('workspaceRuntime.resources.scheduler')}
-              </span>
-              <span className="font-mono tabular-nums text-foreground-muted">
-                {resourceSnapshot.admission.mode === 'unlimited'
-                  ? t('workspaceRuntime.resources.schedulerUnlimited')
-                  : t('workspaceRuntime.resources.schedulerSummary', {
-                      active: runningAgentCount,
-                      limit: resourceSnapshot.admission.effectiveLimit,
-                      queued: resourceSnapshot.admission.queued,
-                      memory: resourceSnapshot.admission.memoryUsedPercent,
+          <WorkspaceResourceTrend
+            history={resourceHistory}
+            title={t('workspaceRuntime.resources.trendTitle')}
+            refreshLabel={t('workspaceRuntime.resources.trendRefresh')}
+            cpuLabel={t('workspaceRuntime.resources.cpu')}
+            cpuValue={resourceSnapshot ? `${Math.round(resourceSnapshot.cpuPercent)}%` : '—'}
+            cpuAriaLabel={t('workspaceRuntime.resources.cpuTrendLabel', {
+              value: resourceSnapshot ? `${Math.round(resourceSnapshot.cpuPercent)}%` : '—',
+            })}
+            memoryLabel={t('workspaceRuntime.resources.memory')}
+            memoryValue={resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—'}
+            memoryAriaLabel={t('workspaceRuntime.resources.memoryTrendLabel', {
+              value: resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—',
+            })}
+          />
+          {isWorktreeDetailsOpen ? (
+            <div id="workspace-worktree-details" className="p-3">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="font-medium">{t('workspaceRuntime.resources.worktrees')}</span>
+                <span className="font-mono tabular-nums text-foreground-muted">
+                  {worktreeMetricValue}
+                </span>
+              </div>
+              <div className="mt-1 text-[11px] leading-relaxed text-foreground-passive">
+                {isScanningWorktrees && !worktreeStorage
+                  ? t('workspaceRuntime.resources.scanningWorktrees')
+                  : t('workspaceRuntime.resources.worktreeSummary', {
+                      count: worktreeStorage?.worktreeCount ?? 0,
+                      reclaimable: worktreeStorage?.reclaimableCount ?? 0,
+                      size: formatBytes(worktreeStorage?.reclaimableBytes ?? 0),
                     })}
-              </span>
+              </div>
+              {worktreeStorage?.reclaimableCount ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 w-full"
+                  disabled={isCleaningWorktrees || isScanningWorktrees}
+                  onClick={confirmWorktreeCleanup}
+                >
+                  {isCleaningWorktrees
+                    ? t('workspaceRuntime.resources.cleaning')
+                    : t('workspaceRuntime.resources.cleanup')}
+                </Button>
+              ) : null}
             </div>
           ) : null}
-          {runningAgentSessions.length > 0 && isRunningAgentListOpen ? (
-            <div id="workspace-running-agent-list" className="border-b border-border p-3">
-              <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
-                {t('workspaceRuntime.resources.runningAgents')}
-              </div>
-              <div className="max-h-56 space-y-1 overflow-y-auto">
-                {runningAgentSessions.map((session) => {
-                  const title =
-                    (session.runtimeId
-                      ? formatConversationTitleForDisplay(
-                          session.runtimeId,
-                          session.title ?? ''
-                        ).trim()
-                      : session.title?.trim()) ||
-                    t('workspaceRuntime.resources.sessionFallback', {
-                      id: session.conversationId.slice(0, 8),
-                    });
-                  const taskTitle =
-                    session.taskTitle?.trim() ||
-                    t('workspaceRuntime.resources.taskFallback', {
-                      id: session.taskId.slice(0, 8),
-                    });
-                  const config = session.runtimeId ? agentConfig[session.runtimeId] : undefined;
-                  return (
-                    <button
-                      key={runningAgentSessionKey(session)}
-                      type="button"
-                      aria-label={t('workspaceRuntime.resources.openSession', { title })}
-                      className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-                      onClick={() => openRunningAgentSession(session)}
-                    >
-                      <span className="flex size-5 shrink-0 items-center justify-center">
-                        {config ? (
-                          <AgentLogo
-                            logo={config.logo}
-                            alt={config.alt}
-                            isSvg={config.isSvg}
-                            invertInDark={config.invertInDark}
-                            className="size-4"
-                          />
-                        ) : (
-                          <MessageSquare aria-hidden className="size-4" />
-                        )}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-foreground">{title}</span>
-                        <span className="block truncate text-[11px] text-foreground-passive">
-                          {taskTitle} · {t(`agentStatus.${session.status}`)}
-                        </span>
-                        <span className="block truncate font-mono text-[10px] text-foreground-passive">
-                          PID {session.pid ?? '—'} · {Math.round(session.cpuPercent)}% ·{' '}
-                          {formatBytes(session.memoryBytes)} ·{' '}
-                          {formatBytes(session.outputBytesPerSecond)}/s ·{' '}
-                          {formatBytes(session.ringBufferBytes)}/
-                          {formatBytes(session.ringBufferCapBytes)} buffer ·{' '}
-                          {t('workspaceRuntime.resources.lastActivity', {
-                            time: session.lastActivityAt
-                              ? new Date(session.lastActivityAt).toLocaleTimeString()
-                              : '—',
-                          })}{' '}
-                          · {t(`workspaceRuntime.resources.lifecycle.${session.lifecycle}`)}
-                        </span>
-                      </span>
-                      <AgentStatusIndicator
-                        status={session.status}
-                        disableTooltip
-                        boxClassName="size-4"
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-          {resourceSnapshot?.processes.length ? (
-            <div className="border-b border-border p-3">
-              <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
-                {t('workspaceRuntime.resources.processes')}
-              </div>
-              <div className="space-y-1.5">
-                {resourceSnapshot.processes.slice(0, 4).map((process) => (
-                  <div
-                    key={process.pid}
-                    className="flex items-center justify-between gap-3 text-xs"
-                  >
-                    <span className="truncate text-foreground-muted">
-                      {formatProcessType(process.type)}
-                    </span>
-                    <span className="shrink-0 font-mono tabular-nums text-foreground-passive">
-                      {formatBytes(process.memoryBytes)} · {Math.round(process.cpuPercent)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          <div className="p-3">
-            <div className="flex items-start gap-2.5">
-              <HardDrive className="mt-0.5 size-4 shrink-0 text-foreground-passive" />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3 text-xs">
-                  <span className="font-medium">{t('workspaceRuntime.resources.worktrees')}</span>
-                  <span className="font-mono tabular-nums text-foreground-muted">
-                    {worktreeStorage ? formatBytes(worktreeStorage.totalBytes) : '—'}
-                  </span>
-                </div>
-                <div className="mt-1 text-[11px] leading-relaxed text-foreground-passive">
-                  {isScanningWorktrees && !worktreeStorage
-                    ? t('workspaceRuntime.resources.scanningWorktrees')
-                    : t('workspaceRuntime.resources.worktreeSummary', {
-                        count: worktreeStorage?.worktreeCount ?? 0,
-                        reclaimable: worktreeStorage?.reclaimableCount ?? 0,
-                        size: formatBytes(worktreeStorage?.reclaimableBytes ?? 0),
-                      })}
-                </div>
-                {worktreeStorage?.reclaimableCount ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 w-full"
-                    disabled={isCleaningWorktrees || isScanningWorktrees}
-                    onClick={confirmWorktreeCleanup}
-                  >
-                    {isCleaningWorktrees
-                      ? t('workspaceRuntime.resources.cleaning')
-                      : t('workspaceRuntime.resources.cleanup')}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          </div>
         </PopoverContent>
       </Popover>
       <Popover>
@@ -1212,10 +1270,4 @@ function formatBytes(bytes: number): string {
   const value = bytes / 1024 ** unitIndex;
   const digits = value >= 100 || unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
-}
-
-function formatProcessType(type: string): string {
-  if (type === 'Browser') return 'Main';
-  if (type === 'Tab') return 'Renderer';
-  return type;
 }

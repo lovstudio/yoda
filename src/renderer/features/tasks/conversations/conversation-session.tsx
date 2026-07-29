@@ -25,6 +25,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import type { ConversationStore } from './conversation-manager';
+import { ConversationSessionPendingState } from './conversation-session-pending-state';
 import { shouldAutoResumeConversation } from './conversation-session-utils';
 
 export function getResumeInitialSize(
@@ -236,7 +237,15 @@ export const ConversationSession = observer(function ConversationSession({
   );
   const webLinks = useWorkspaceWebLinks();
 
-  if (!sessionId || session?.status !== 'ready' || !session.pty) return null;
+  if (!sessionId || session?.status !== 'ready' || !session.pty) {
+    return (
+      <ConversationSessionPendingState
+        title={conversation.data.title}
+        heading={t('tasks.conversations.startingTitle')}
+        description={t('tasks.conversations.startingDescription')}
+      />
+    );
+  }
 
   return (
     <div

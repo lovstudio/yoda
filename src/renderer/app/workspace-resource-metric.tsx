@@ -4,6 +4,7 @@ import { cn } from '@renderer/utils/utils';
 type WorkspaceResourceMetricProps = {
   label: string;
   value: string;
+  title?: string;
   ariaLabel?: string;
   controls?: string;
   expanded?: boolean;
@@ -13,6 +14,7 @@ type WorkspaceResourceMetricProps = {
 export function WorkspaceResourceMetric({
   label,
   value,
+  title,
   ariaLabel,
   controls,
   expanded,
@@ -42,12 +44,15 @@ export function WorkspaceResourceMetric({
       aria-controls={controls}
       aria-expanded={expanded}
       aria-label={ariaLabel}
+      title={title}
       className="bg-background p-2.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
       onClick={onClick}
     >
       {content}
     </button>
   ) : (
-    <div className="bg-background p-2.5">{content}</div>
+    <div className="bg-background p-2.5" title={title}>
+      {content}
+    </div>
   );
 }

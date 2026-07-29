@@ -306,13 +306,7 @@ describe('LocalConversationProvider', () => {
     });
     mocks.appSettingsGet.mockImplementation(async (key: string) => {
       if (key === 'promptPrinciples') return { items: [] };
-      if (key === 'terminal') {
-        return {
-          agentConcurrencyMode: 'unlimited',
-          agentConcurrencyLimit: 4,
-          agentMemoryPausePercent: 85,
-        };
-      }
+      if (key === 'terminal') return {};
       return { writeAgentConfigToGitIgnore: false };
     });
     mocks.maybeAutoTrustLocal.mockResolvedValue(undefined);

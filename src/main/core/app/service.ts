@@ -38,7 +38,9 @@ import {
 } from '@main/app/task-window-dock';
 import { openTaskWindowFromPool } from '@main/app/task-window-pool';
 import { createAiLabWindow, createComparisonWindow, getMainWindow } from '@main/app/window';
+import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
+import { decodeTmuxSessionName, listTmuxSessionMarkers } from '@main/core/pty/tmux-session-name';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { taskManager } from '@main/core/tasks/task-manager';
 import { db } from '@main/db/client';
@@ -57,7 +59,6 @@ import {
   buildRemoteSshCommand,
   buildRemoteTerminalExecArgs,
 } from '@main/utils/remoteOpenIn';
-import { agentAdmissionScheduler } from './agent-admission-scheduler';
 import { sampleProcessTrees } from './agent-process-sampler';
 import {
   checkCommand,
@@ -153,12 +154,33 @@ class AppService implements IInitializable, IDisposable {
       }))
       .sort((left, right) => right.memoryBytes - left.memoryBytes);
     const agentSessions = taskManager.getAgentSessions();
-    const processTrees = await sampleProcessTrees(
-      agentSessions.flatMap((session) => (session.pid === undefined ? [] : [session.pid]))
+    const tmuxPanePidBySessionId = new Map<string, number>();
+    if (agentSessions.some((session) => session.detachable)) {
+      const ctx = new LocalExecutionContext();
+      try {
+        const markers = await listTmuxSessionMarkers(ctx);
+        for (const marker of markers) {
+          const sessionId = decodeTmuxSessionName(marker.sessionName);
+          if (sessionId && marker.panePid !== undefined) {
+            tmuxPanePidBySessionId.set(sessionId, marker.panePid);
+          }
+        }
+      } finally {
+        ctx.dispose();
+      }
+    }
+    const resourceRootPidBySessionId = new Map(
+      agentSessions.flatMap((session) => {
+        const rootPid = tmuxPanePidBySessionId.get(session.sessionId) ?? session.pid;
+        return rootPid === undefined ? [] : [[session.sessionId, rootPid] as const];
+      })
     );
-    const runningAgentSessions = agentSessions.map((session) => {
+    const processTrees = await sampleProcessTrees(Array.from(resourceRootPidBySessionId.values()));
+    const agentSessionResources = agentSessions.map((session) => {
       const diagnostics = ptySessionRegistry.getDiagnostics(session.sessionId);
-      const processTree = session.pid === undefined ? undefined : processTrees.get(session.pid);
+      const resourceRootPid = resourceRootPidBySessionId.get(session.sessionId);
+      const processTree =
+        resourceRootPid === undefined ? undefined : processTrees.get(resourceRootPid);
       const lastActivityAt = Math.max(session.statusChangedAt, diagnostics?.lastOutputAt ?? 0);
       return {
         projectId: session.projectId,
@@ -177,18 +199,18 @@ class AppService implements IInitializable, IDisposable {
         ringBufferCapBytes: diagnostics?.ringBufferCapBytes ?? 0,
         rendererConsumers: diagnostics?.consumerCount ?? 0,
         lifecycle: diagnostics?.consumerCount ? ('hot' as const) : ('warm' as const),
+        tmuxBacked: session.detachable,
       };
     });
-    const agentCpuPercent = runningAgentSessions.reduce(
+    const agentCpuPercent = agentSessionResources.reduce(
       (total, session) => total + session.cpuPercent,
       0
     );
-    const agentMemoryBytes = runningAgentSessions.reduce(
+    const agentMemoryBytes = agentSessionResources.reduce(
       (total, session) => total + session.memoryBytes,
       0
     );
     const mainEventLoop = this.readMainEventLoopMetrics();
-    const admission = await agentAdmissionScheduler.getSnapshot();
 
     return {
       sampledAt: new Date().toISOString(),
@@ -198,12 +220,10 @@ class AppService implements IInitializable, IDisposable {
         ) / 10,
       memoryBytes:
         processes.reduce((total, item) => total + item.memoryBytes, 0) + agentMemoryBytes,
-      activeAgentSessions: taskManager.getRunningAgentSessions().length,
-      runningAgentSessions,
+      agentSessions: agentSessionResources,
       processes,
       mainEventLoop,
       rendererPerformance: this.rendererPerformance,
-      admission,
     };
   }
 

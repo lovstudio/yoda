@@ -17,6 +17,8 @@ const TMUX_LIST_OUTPUT_SEPARATOR = '\\037';
 export type TmuxSessionMarker = {
   sessionName: string;
   cwd: string;
+  /** Root process inside the pane, used to attribute resources to this tmux session. */
+  panePid?: number;
 };
 
 function tmuxShellPrefix(): string {
@@ -113,19 +115,20 @@ export async function listTmuxSessionMarkers(ctx: IExecutionContext): Promise<Tm
         'list-panes',
         '-a',
         '-F',
-        `#{session_name}${TMUX_LIST_FORMAT_SEPARATOR}#{pane_current_path}`,
+        `#{session_name}${TMUX_LIST_FORMAT_SEPARATOR}#{pane_current_path}${TMUX_LIST_FORMAT_SEPARATOR}#{pane_pid}`,
       ],
       { timeout: TMUX_LIST_TIMEOUT_MS, maxBuffer: TMUX_LIST_MAX_BUFFER }
     );
     const markers = new Map<string, TmuxSessionMarker>();
     for (const line of stdout.split('\n')) {
-      const separatorIndex = line.indexOf(TMUX_LIST_OUTPUT_SEPARATOR);
-      if (separatorIndex < 0) continue;
-      const sessionName = line.slice(0, separatorIndex).trim();
-      if (!decodeTmuxSessionName(sessionName) || markers.has(sessionName)) continue;
+      const [sessionNameValue, cwdValue, panePidValue] = line.split(TMUX_LIST_OUTPUT_SEPARATOR);
+      const sessionName = sessionNameValue?.trim();
+      if (!sessionName || !decodeTmuxSessionName(sessionName) || markers.has(sessionName)) continue;
+      const panePid = Number(panePidValue);
       markers.set(sessionName, {
         sessionName,
-        cwd: line.slice(separatorIndex + TMUX_LIST_OUTPUT_SEPARATOR.length).trim(),
+        cwd: cwdValue?.trim() ?? '',
+        ...(Number.isSafeInteger(panePid) && panePid > 0 ? { panePid } : {}),
       });
     }
     return [...markers.values()];

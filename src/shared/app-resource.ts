@@ -8,7 +8,7 @@ export type AppProcessResource = {
   memoryBytes: number;
 };
 
-export type AppRunningAgentSession = {
+export type AppAgentSessionResource = {
   projectId: string;
   taskId: string;
   conversationId: string;
@@ -25,6 +25,7 @@ export type AppRunningAgentSession = {
   ringBufferCapBytes: number;
   rendererConsumers: number;
   lifecycle: 'hot' | 'warm';
+  tmuxBacked: boolean;
 };
 
 export type AppEventLoopMetrics = {
@@ -41,25 +42,14 @@ export type RendererPerformanceSample = {
   longTaskCount: number;
 };
 
-export type AgentAdmissionSnapshot = {
-  mode: 'auto' | 'fixed' | 'unlimited';
-  configuredLimit: number;
-  effectiveLimit: number;
-  memoryUsedPercent: number;
-  queued: number;
-  pausedReason: 'memory' | 'concurrency' | null;
-};
-
 export type AppResourceSnapshot = {
   sampledAt: string;
   cpuPercent: number;
   memoryBytes: number;
-  activeAgentSessions: number;
-  runningAgentSessions: AppRunningAgentSession[];
+  agentSessions: AppAgentSessionResource[];
   processes: AppProcessResource[];
   mainEventLoop: AppEventLoopMetrics;
   rendererPerformance: RendererPerformanceSample | null;
-  admission: AgentAdmissionSnapshot;
 };
 
 export type WorktreeStorageItem = {

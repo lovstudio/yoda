@@ -2,11 +2,8 @@ import { Check, ChevronDown } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  DEFAULT_AGENT_CONCURRENCY_LIMIT,
-  DEFAULT_AGENT_MEMORY_PAUSE_PERCENT,
   DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
-  MAX_AGENT_CONCURRENCY_LIMIT,
   MAX_HOT_TERMINAL_LIMIT,
   MAX_IDLE_SESSION_TIMEOUT_MINUTES,
   MAX_TERMINAL_SCROLLBACK_LINES,
@@ -69,10 +66,6 @@ const TerminalSettingsCard: React.FC = () => {
   const hotTerminalLimit = terminal?.hotTerminalLimit ?? DEFAULT_HOT_TERMINAL_LIMIT;
   const idleSessionTimeoutMinutes =
     terminal?.idleSessionTimeoutMinutes ?? DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES;
-  const agentConcurrencyMode = terminal?.agentConcurrencyMode ?? 'auto';
-  const agentConcurrencyLimit = terminal?.agentConcurrencyLimit ?? DEFAULT_AGENT_CONCURRENCY_LIMIT;
-  const agentMemoryPausePercent =
-    terminal?.agentMemoryPausePercent ?? DEFAULT_AGENT_MEMORY_PAUSE_PERCENT;
   const scrollbackLines = normalizeTerminalScrollbackLines(terminal?.scrollbackLines);
   const [scrollbackDraft, setScrollbackDraft] = useState<string>(String(scrollbackLines));
   const skipScrollbackCommitRef = useRef(false);
@@ -411,66 +404,6 @@ const TerminalSettingsCard: React.FC = () => {
             <span className="shrink-0 text-xs text-foreground-passive">
               {t('settings.terminal.minutesUnit')}
             </span>
-          </div>
-        }
-      />
-      <SettingRow
-        title={t('settings.terminal.agentConcurrency')}
-        description={t('settings.terminal.agentConcurrencyDescription')}
-        control={
-          <div className="flex w-[240px] items-center gap-2">
-            <select
-              value={agentConcurrencyMode}
-              disabled={loading || saving}
-              className="h-8 flex-1 rounded-md border border-border bg-background px-2 text-sm"
-              aria-label={t('settings.terminal.agentConcurrency')}
-              onChange={(event) =>
-                update({
-                  agentConcurrencyMode: event.target.value as 'auto' | 'fixed' | 'unlimited',
-                })
-              }
-            >
-              <option value="auto">{t('settings.terminal.agentConcurrencyAuto')}</option>
-              <option value="fixed">{t('settings.terminal.agentConcurrencyFixed')}</option>
-              <option value="unlimited">{t('settings.terminal.agentConcurrencyUnlimited')}</option>
-            </select>
-            {agentConcurrencyMode === 'fixed' ? (
-              <Input
-                type="number"
-                min={1}
-                max={MAX_AGENT_CONCURRENCY_LIMIT}
-                value={agentConcurrencyLimit}
-                disabled={loading || saving}
-                className="h-8 w-16 text-right"
-                aria-label={t('settings.terminal.agentConcurrencyLimit')}
-                onChange={(event) => {
-                  const value = Number(event.target.value);
-                  if (Number.isInteger(value)) update({ agentConcurrencyLimit: value });
-                }}
-              />
-            ) : null}
-          </div>
-        }
-      />
-      <SettingRow
-        title={t('settings.terminal.memoryPauseThreshold')}
-        description={t('settings.terminal.memoryPauseThresholdDescription')}
-        control={
-          <div className="flex w-[183px] items-center gap-2">
-            <Input
-              type="number"
-              min={50}
-              max={95}
-              value={agentMemoryPausePercent}
-              disabled={loading || saving || agentConcurrencyMode === 'unlimited'}
-              className="h-8 text-right"
-              aria-label={t('settings.terminal.memoryPauseThreshold')}
-              onChange={(event) => {
-                const value = Number(event.target.value);
-                if (Number.isInteger(value)) update({ agentMemoryPausePercent: value });
-              }}
-            />
-            <span className="shrink-0 text-xs text-foreground-passive">%</span>
           </div>
         }
       />

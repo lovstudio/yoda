@@ -85,9 +85,6 @@ describe('SettingsStore', () => {
       scrollbackLines: 10_000,
       hotTerminalLimit: 4,
       idleSessionTimeoutMinutes: 5,
-      agentConcurrencyMode: 'auto',
-      agentConcurrencyLimit: 4,
-      agentMemoryPausePercent: 85,
     });
   });
 });

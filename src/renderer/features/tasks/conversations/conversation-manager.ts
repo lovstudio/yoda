@@ -498,6 +498,8 @@ export class ConversationManagerStore {
   ): Promise<void> {
     const store = this.conversations.get(conversationId);
     if (!store) return;
+    const previousSessionExited = store.sessionExited;
+    store.setSessionExited(false);
     try {
       await rpc.conversations.resumeConversation(
         this.projectId,
@@ -505,12 +507,12 @@ export class ConversationManagerStore {
         conversationId,
         initialSize
       );
-      store.setSessionExited(false);
       if (initialSize) {
         const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
         void rpc.pty.resize(sessionId, initialSize.cols, initialSize.rows);
       }
     } catch (error) {
+      store.setSessionExited(previousSessionExited);
       log.warn('ConversationManagerStore: failed to resume conversation', {
         projectId: this.projectId,
         taskId: this.taskId,
@@ -528,6 +530,8 @@ export class ConversationManagerStore {
   ): Promise<void> {
     const store = this.conversations.get(conversationId);
     if (!store) return;
+    const previousSessionExited = store.sessionExited;
+    store.setSessionExited(false);
     // Default to the live terminal's current size so the restarted session
     // (and, under tmux, the freshly created tmux window) is born at the real
     // pane width instead of the 80x24 main-process fallback — otherwise tmux
@@ -542,13 +546,13 @@ export class ConversationManagerStore {
         tmuxOverride,
         enableSkillKey
       );
-      store.setSessionExited(false);
       await store.session.reconnect();
       if (effectiveSize) {
         const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
         void rpc.pty.resize(sessionId, effectiveSize.cols, effectiveSize.rows);
       }
     } catch (error) {
+      store.setSessionExited(previousSessionExited);
       log.warn('ConversationManagerStore: failed to restart conversation', {
         projectId: this.projectId,
         taskId: this.taskId,
