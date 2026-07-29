@@ -609,6 +609,8 @@ export class ConversationStore {
    * Drives the "session exited → reload" affordance in the conversations panel.
    */
   sessionExited = false;
+  /** View-only dismissal; a new exit always makes the notice visible again. */
+  sessionExitNoticeDismissed = false;
   lastNotificationType: NotificationType | null = null;
   /** Human-readable "what is it waiting on" context for `awaiting-input`. */
   pendingActionDescription: string | null = null;
@@ -626,8 +628,10 @@ export class ConversationStore {
       seen: observable,
       isArchiving: observable,
       sessionExited: observable,
+      sessionExitNoticeDismissed: observable,
       setSessionExited: action,
       markSessionExited: action,
+      dismissSessionExitNotice: action,
       lastNotificationType: observable,
       pendingActionDescription: observable,
       setStatus: action,
@@ -743,11 +747,17 @@ export class ConversationStore {
 
   setSessionExited(value: boolean) {
     this.sessionExited = value;
+    this.sessionExitNoticeDismissed = false;
   }
 
   markSessionExited() {
     this.clearWorking();
     this.sessionExited = true;
+    this.sessionExitNoticeDismissed = false;
+  }
+
+  dismissSessionExitNotice() {
+    this.sessionExitNoticeDismissed = true;
   }
 
   dispose() {
