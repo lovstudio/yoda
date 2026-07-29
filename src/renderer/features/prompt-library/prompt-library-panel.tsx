@@ -74,7 +74,7 @@ import {
 } from './prompt-groups';
 import { PromptGroupInjectionToggle } from './prompt-injection-controls';
 import { PromptLibraryChapter } from './prompt-library-chapter';
-import { PromptSystemSection } from './prompt-system-section';
+import { PromptRuntimeSelector, UserInstructionSection } from './prompt-system-section';
 import {
   useCreatePrompt,
   useCreatePromptGroup,
@@ -995,7 +995,8 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
           ) : null}
         </PromptLibraryChapter>
 
-        <PromptSystemSection runtimeId={activeRuntimeId} onRuntimeIdChange={setActiveRuntimeId} />
+        <PromptRuntimeSelector runtimeId={activeRuntimeId} onRuntimeIdChange={setActiveRuntimeId} />
+        <UserInstructionSection runtimeId={activeRuntimeId} />
         <ProjectPromptSection
           projectId={selectedProjectId}
           runtimeId={activeRuntimeId}

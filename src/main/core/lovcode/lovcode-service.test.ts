@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createLovcodeCommandRunner,
+  isVersionAtLeast,
   LovcodeService,
+  LovcodeUpgradeRequiredError,
   mapLovcodeResults,
   parseSearchHits,
   type LovcodeConversationRow,
@@ -91,6 +94,49 @@ describe('LovcodeService', () => {
       vi.fn(() => [])
     );
     await expect(failing.search('needle')).resolves.toEqual({ status: 'error' });
+
+    const upgradeRequired = new LovcodeService(
+      vi.fn(async () => {
+        throw new LovcodeUpgradeRequiredError('0.39.9');
+      }),
+      vi.fn(() => [])
+    );
+    await expect(upgradeRequired.search('needle')).resolves.toEqual({
+      status: 'upgrade-required',
+      version: '0.39.9',
+    });
+  });
+});
+
+describe('Lovcode executable discovery', () => {
+  it('falls back to the application bundle and reuses the resolved executable', async () => {
+    const bundleCommand = '/Applications/lovcode.app/Contents/MacOS/lovcode';
+    const discover = vi.fn(async () => ({ commands: ['lovcode', bundleCommand] }));
+    const execute = vi.fn(async (command: string) => {
+      if (command === 'lovcode') throw new Error('not in PATH');
+      return { stdout: 'lovcode 0.40.0' };
+    });
+    const runCommand = createLovcodeCommandRunner(discover, execute);
+
+    await expect(runCommand(['--version'], { timeout: 3_000 })).resolves.toEqual({
+      stdout: 'lovcode 0.40.0',
+    });
+    await expect(runCommand(['search', 'needle', '--json'], { timeout: 10_000 })).resolves.toEqual({
+      stdout: 'lovcode 0.40.0',
+    });
+
+    expect(execute.mock.calls.map(([command]) => command)).toEqual([
+      'lovcode',
+      bundleCommand,
+      bundleCommand,
+    ]);
+    expect(discover).toHaveBeenCalledOnce();
+  });
+
+  it('compares desktop versions against the indexed-search contract', () => {
+    expect(isVersionAtLeast('0.39.9', '0.40.0')).toBe(false);
+    expect(isVersionAtLeast('0.40.0', '0.40.0')).toBe(true);
+    expect(isVersionAtLeast('lovcode 0.41.2', '0.40.0')).toBe(true);
   });
 });
 

@@ -4,8 +4,9 @@ import { LOVCODE_DOWNLOAD_URL } from '@shared/lovcode';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
 
-export function LovcodeInstallBanner() {
+export function LovcodeInstallBanner({ version }: { version?: string }) {
   const { t } = useTranslation();
+  const upgradeRequired = version !== undefined;
 
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
@@ -14,10 +15,17 @@ export function LovcodeInstallBanner() {
       </div>
       <div className="flex flex-col gap-1">
         <h2 className="text-sm font-medium font-mono text-foreground">
-          {t('commandPalette.lovcode.title')}
+          {t(
+            upgradeRequired ? 'commandPalette.lovcode.upgradeTitle' : 'commandPalette.lovcode.title'
+          )}
         </h2>
         <p className="text-xs leading-relaxed text-foreground-passive max-w-sm">
-          {t('commandPalette.lovcode.description')}
+          {t(
+            upgradeRequired
+              ? 'commandPalette.lovcode.upgradeDescription'
+              : 'commandPalette.lovcode.description',
+            { version }
+          )}
         </p>
       </div>
       <Button
@@ -25,7 +33,7 @@ export function LovcodeInstallBanner() {
         onClick={() => void rpc.app.openExternal(LOVCODE_DOWNLOAD_URL)}
         className="gap-1.5"
       >
-        {t('commandPalette.lovcode.install')}
+        {t(upgradeRequired ? 'commandPalette.lovcode.upgrade' : 'commandPalette.lovcode.install')}
         <ExternalLink className="size-3.5" />
       </Button>
     </div>

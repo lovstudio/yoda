@@ -42,6 +42,7 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
+import type { RunningAgentRuntimeSession } from '@renderer/lib/stores/agent-runtime-store';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
 import { Button } from '@renderer/lib/ui/button';
@@ -52,6 +53,15 @@ import { cn } from '@renderer/utils/utils';
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { WorkspaceResourceMetric } from './workspace-resource-metric';
 import { getQuotaWindowLabel } from './workspace-runtime-bar-format';
+
+type WorkspaceRunningAgentSession = RunningAgentRuntimeSession &
+  Partial<Pick<AppRunningAgentSession, 'runtimeId' | 'title' | 'taskTitle'>>;
+
+function runningAgentSessionKey(
+  session: Pick<RunningAgentRuntimeSession, 'projectId' | 'taskId' | 'conversationId'>
+): string {
+  return `${session.projectId}\0${session.taskId}\0${session.conversationId}`;
+}
 
 export function explicitConversationRuntimeId(value: unknown): RuntimeId | null {
   return typeof value === 'string' && isValidRuntimeId(value) ? value : null;
@@ -225,8 +235,31 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
-  const runningAgentSessions = resourceSnapshot?.runningAgentSessions ?? [];
-  const runningAgentCount = resourceSnapshot?.activeAgentSessions ?? 0;
+  const resourceSessionByKey = new Map(
+    (resourceSnapshot?.runningAgentSessions ?? []).map((session) => [
+      runningAgentSessionKey(session),
+      session,
+    ])
+  );
+  const runningAgentSessions: WorkspaceRunningAgentSession[] = appState.agentRuntime
+    .runningSessions()
+    .map((session) => {
+      const resourceSession = resourceSessionByKey.get(runningAgentSessionKey(session));
+      const task = getTaskStore(session.projectId, session.taskId);
+      const conversation = asProvisioned(task)?.conversations.conversations.get(
+        session.conversationId
+      )?.data;
+      return {
+        ...session,
+        runtimeId:
+          resourceSession?.runtimeId ??
+          explicitConversationRuntimeId(conversation?.runtimeId) ??
+          undefined,
+        title: resourceSession?.title ?? conversation?.title,
+        taskTitle: resourceSession?.taskTitle ?? task?.data.name,
+      };
+    });
+  const runningAgentCount = runningAgentSessions.length;
 
   useEffect(() => {
     if (!activeConversation || !provisionedTask) return;
@@ -417,7 +450,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     appState.navigation.navigate('skills');
   };
 
-  const openRunningAgentSession = (session: AppRunningAgentSession) => {
+  const openRunningAgentSession = (session: WorkspaceRunningAgentSession) => {
     setIsResourcePopoverOpen(false);
     setIsRunningAgentListOpen(false);
     openTaskTarget(
@@ -837,32 +870,46 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               <div className="max-h-56 space-y-1 overflow-y-auto">
                 {runningAgentSessions.map((session) => {
                   const title =
-                    formatConversationTitleForDisplay(session.runtimeId, session.title).trim() ||
+                    (session.runtimeId
+                      ? formatConversationTitleForDisplay(
+                          session.runtimeId,
+                          session.title ?? ''
+                        ).trim()
+                      : session.title?.trim()) ||
                     t('workspaceRuntime.resources.sessionFallback', {
                       id: session.conversationId.slice(0, 8),
                     });
-                  const config = agentConfig[session.runtimeId];
+                  const taskTitle =
+                    session.taskTitle?.trim() ||
+                    t('workspaceRuntime.resources.taskFallback', {
+                      id: session.taskId.slice(0, 8),
+                    });
+                  const config = session.runtimeId ? agentConfig[session.runtimeId] : undefined;
                   return (
                     <button
-                      key={session.conversationId}
+                      key={runningAgentSessionKey(session)}
                       type="button"
                       aria-label={t('workspaceRuntime.resources.openSession', { title })}
                       className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
                       onClick={() => openRunningAgentSession(session)}
                     >
                       <span className="flex size-5 shrink-0 items-center justify-center">
-                        <AgentLogo
-                          logo={config.logo}
-                          alt={config.alt}
-                          isSvg={config.isSvg}
-                          invertInDark={config.invertInDark}
-                          className="size-4"
-                        />
+                        {config ? (
+                          <AgentLogo
+                            logo={config.logo}
+                            alt={config.alt}
+                            isSvg={config.isSvg}
+                            invertInDark={config.invertInDark}
+                            className="size-4"
+                          />
+                        ) : (
+                          <MessageSquare aria-hidden className="size-4" />
+                        )}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm text-foreground">{title}</span>
                         <span className="block truncate text-[11px] text-foreground-passive">
-                          {session.taskTitle} · {t(`agentStatus.${session.status}`)}
+                          {taskTitle} · {t(`agentStatus.${session.status}`)}
                         </span>
                         <span className="block truncate font-mono text-[10px] text-foreground-passive">
                           PID {session.pid ?? '—'} · {Math.round(session.cpuPercent)}% ·{' '}
