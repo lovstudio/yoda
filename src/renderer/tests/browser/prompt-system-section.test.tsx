@@ -169,7 +169,8 @@ describe('PromptSystemSection', () => {
     expect(host.textContent).not.toContain('Grok');
     expect(host.querySelectorAll('[data-slot="tabs-tab"]')).toHaveLength(2);
     expect(host.querySelector('[data-slot="agent-system-prompt"]')).toBeNull();
-    expect(host.querySelectorAll('[data-slot="runtime-instruction-file"]')).toHaveLength(2);
+    expect(host.querySelectorAll('[data-slot="runtime-instruction-file"]')).toHaveLength(1);
+    expect(host.textContent).toContain('promptLibrary.system.addTemporaryOverride');
     expect(host.querySelector('textarea')).toBeNull();
 
     const regularAgentsRow = Array.from(
@@ -196,6 +197,75 @@ describe('PromptSystemSection', () => {
       path: '/fixture/.codex/AGENTS.md',
       content: 'Updated Codex user prompt',
     });
+  });
+
+  it('keeps a missing Codex override behind a temporary override action', async () => {
+    await renderSection();
+
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(host.textContent).toContain('promptLibrary.system.addTemporaryOverride')
+      );
+    });
+
+    const addOverrideButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes('promptLibrary.system.addTemporaryOverride')
+    );
+    await act(async () => addOverrideButton?.click());
+
+    expect(host.querySelectorAll('[data-slot="runtime-instruction-file"]')).toHaveLength(2);
+    const textarea = host.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="promptLibrary.system.filePromptLabel"]'
+    );
+    expect(textarea).not.toBeNull();
+    await act(async () => {
+      if (textarea) setTextareaValue(textarea, 'Temporary Codex override');
+    });
+
+    const createButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) =>
+        button.textContent?.includes('promptLibrary.system.createFile') && !button.disabled
+    );
+    await act(async () => createButton?.click());
+
+    expect(mocks.saveFile).toHaveBeenCalledWith({
+      runtimeId: 'codex',
+      projectId: null,
+      path: '/fixture/.codex/AGENTS.override.md',
+      content: 'Temporary Codex override',
+    });
+  });
+
+  it('marks an existing Codex override as active and its base file as overridden', async () => {
+    mocks.getFiles.mockResolvedValue([
+      {
+        kind: 'global-codex-agents',
+        path: '/fixture/.codex/AGENTS.override.md',
+        scope: 'user',
+        exists: true,
+        content: 'Temporary rules',
+        bytes: 15,
+      },
+      {
+        kind: 'global-codex-agents',
+        path: '/fixture/.codex/AGENTS.md',
+        scope: 'user',
+        exists: true,
+        content: 'Base rules',
+        bytes: 10,
+      },
+    ] satisfies EditableRuntimeInstructionFile[]);
+
+    await renderSection();
+
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(host.textContent).toContain('promptLibrary.system.activeOverride')
+      );
+    });
+    expect(host.textContent).toContain('promptLibrary.system.overriddenFile');
+    expect(host.textContent).not.toContain('promptLibrary.system.addTemporaryOverride');
+    expect(host.querySelectorAll('[data-slot="runtime-instruction-file"]')).toHaveLength(2);
   });
 
   it('switches to the standard Claude user instruction path without Agent cards', async () => {

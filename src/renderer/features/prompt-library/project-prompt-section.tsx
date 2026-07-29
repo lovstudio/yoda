@@ -20,6 +20,7 @@ import { Input } from '@renderer/lib/ui/input';
 import { Switch } from '@renderer/lib/ui/switch';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { cn } from '@renderer/utils/utils';
+import { PromptLibraryChapter } from './prompt-library-chapter';
 import { PromptInstructionFilesEditor } from './prompt-system-section';
 
 function navigationProjectId(): string | undefined {
@@ -147,40 +148,31 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
   };
 
   return (
-    <section
-      data-slot="project-prompt-section"
-      className="mt-10 rounded-lg border border-border bg-background-secondary"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <FolderCog className="mt-0.5 size-4 shrink-0 text-foreground-muted" />
-          <div>
-            <h2 className="text-sm font-medium text-foreground">
-              {t('promptLibrary.project.title')}
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-foreground-muted">
-              {t('promptLibrary.project.description')}
-            </p>
-          </div>
-        </div>
-        <div className="w-full @2xl:w-72">
+    <PromptLibraryChapter
+      dataSlot="project-prompt-section"
+      className="mt-6"
+      icon={FolderCog}
+      title={t('promptLibrary.project.title')}
+      description={t('promptLibrary.project.description')}
+      actions={
+        <div className="w-full @3xl:w-72">
           <ProjectSelector
             value={projectId ?? undefined}
             onChange={(next) => onProjectIdChange(next ?? null)}
           />
         </div>
-      </div>
-
+      }
+    >
       {!projectId ? (
-        <p className="px-4 py-5 text-sm text-foreground-muted">
+        <p className="py-1 text-sm text-foreground-muted">
           {t('promptLibrary.project.selectProject')}
         </p>
       ) : !mounted || !settings ? (
-        <div className="flex min-h-32 items-center justify-center">
+        <div className="flex min-h-20 items-center justify-center">
           <Loader2 className="size-5 animate-spin text-foreground-muted" />
         </div>
       ) : (
-        <div className="grid gap-5 p-4">
+        <div className="grid gap-4">
           {runtimeId ? (
             <div>
               <h3 className="text-xs font-medium text-foreground">
@@ -189,7 +181,7 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
               <p className="mt-1 text-xs leading-5 text-foreground-muted">
                 {t('promptLibrary.project.instructionFilesDescription')}
               </p>
-              <div className="mt-3">
+              <div className="mt-2">
                 <PromptInstructionFilesEditor
                   runtimeId={runtimeId}
                   projectId={projectId}
@@ -220,7 +212,7 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
                 {t('promptLibrary.project.empty')}
               </p>
             ) : (
-              <div className="mt-3 overflow-hidden rounded-lg border border-border bg-background">
+              <div className="mt-2 overflow-hidden rounded-lg border border-border bg-background-secondary">
                 {items.map((item) => {
                   const expanded = expandedItemIds.has(item.id);
                   const name = item.name || t('promptLibrary.project.untitled');
@@ -303,6 +295,6 @@ export const ProjectPromptSection = observer(function ProjectPromptSection({
           </div>
         </div>
       )}
-    </section>
+    </PromptLibraryChapter>
   );
 });

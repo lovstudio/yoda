@@ -24,7 +24,9 @@ import {
   FolderPlus,
   GitBranch,
   GripVertical,
+  LibraryBig,
   Link,
+  ListTree,
   Loader2,
   Pencil,
   Plus,
@@ -71,6 +73,7 @@ import {
   UNGROUPED_PROMPT_GROUP,
 } from './prompt-groups';
 import { PromptGroupInjectionToggle } from './prompt-injection-controls';
+import { PromptLibraryChapter } from './prompt-library-chapter';
 import { PromptSystemSection } from './prompt-system-section';
 import {
   useCreatePrompt,
@@ -647,19 +650,14 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
           <h1 className="text-4xl font-normal tracking-normal">{t('promptLibrary.title')}</h1>
         )}
 
-        <PromptSystemSection runtimeId={activeRuntimeId} onRuntimeIdChange={setActiveRuntimeId} />
-
-        <section className={cn(embedded ? 'mt-6' : 'mt-10')}>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-2xl">
-              <h2 className="text-base font-medium text-foreground">
-                {t('promptLibrary.collection.title')}
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-foreground-muted">
-                {t('promptLibrary.collection.description')}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
+        <PromptLibraryChapter
+          dataSlot="prompt-collection-section"
+          className={cn(embedded ? 'mt-6' : 'mt-8')}
+          icon={LibraryBig}
+          title={t('promptLibrary.collection.title')}
+          description={t('promptLibrary.collection.description')}
+          actions={
+            <div className="flex flex-wrap items-center gap-2 @3xl:justify-end">
               <Button type="button" variant="outline" size="sm" onClick={openCreate}>
                 <Plus className="size-4" />
                 {t('promptLibrary.source.manual')}
@@ -709,304 +707,319 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                 {t('promptLibrary.source.git')}
               </Button>
             </div>
-          </div>
-
-          {sourceForm && (
-            <form
-              onSubmit={handleSourceImport}
-              className="mt-5 grid gap-4 rounded-lg border border-border bg-background-secondary p-4"
-            >
-              {sourceForm.type === 'url' ? (
-                <label className="grid gap-1.5">
-                  <span className="text-xs text-foreground-muted">
-                    {t('promptLibrary.source.urlLabel')}
-                  </span>
-                  <Input
-                    value={sourceForm.url}
-                    onChange={(event) =>
-                      setSourceForm((current) =>
-                        current?.type === 'url' ? { ...current, url: event.target.value } : current
-                      )
-                    }
-                    placeholder={t('promptLibrary.source.urlPlaceholder')}
-                    autoFocus
-                  />
-                </label>
-              ) : (
-                <>
-                  <label className="grid gap-1.5">
-                    <span className="text-xs text-foreground-muted">
-                      {t('promptLibrary.source.repository')}
-                    </span>
-                    <Input
-                      value={sourceForm.repositoryUrl}
-                      onChange={(event) =>
-                        setSourceForm((current) =>
-                          current?.type === 'git'
-                            ? { ...current, repositoryUrl: event.target.value }
-                            : current
-                        )
-                      }
-                      placeholder="https://github.com/owner/repository.git"
-                      autoFocus
-                    />
-                  </label>
-                  <div className="grid gap-4 sm:grid-cols-[1fr_180px]">
+          }
+        >
+          {sourceForm || editorOpen ? (
+            <div className="grid gap-3">
+              {sourceForm && (
+                <form
+                  onSubmit={handleSourceImport}
+                  className="grid gap-3 rounded-lg border border-border bg-background-secondary p-3"
+                >
+                  {sourceForm.type === 'url' ? (
                     <label className="grid gap-1.5">
                       <span className="text-xs text-foreground-muted">
-                        {t('promptLibrary.source.filePath')}
+                        {t('promptLibrary.source.urlLabel')}
                       </span>
                       <Input
-                        value={sourceForm.filePath}
+                        value={sourceForm.url}
                         onChange={(event) =>
                           setSourceForm((current) =>
-                            current?.type === 'git'
-                              ? { ...current, filePath: event.target.value }
+                            current?.type === 'url'
+                              ? { ...current, url: event.target.value }
                               : current
                           )
                         }
-                        placeholder="prompts/review.md"
+                        placeholder={t('promptLibrary.source.urlPlaceholder')}
+                        autoFocus
+                      />
+                    </label>
+                  ) : (
+                    <>
+                      <label className="grid gap-1.5">
+                        <span className="text-xs text-foreground-muted">
+                          {t('promptLibrary.source.repository')}
+                        </span>
+                        <Input
+                          value={sourceForm.repositoryUrl}
+                          onChange={(event) =>
+                            setSourceForm((current) =>
+                              current?.type === 'git'
+                                ? { ...current, repositoryUrl: event.target.value }
+                                : current
+                            )
+                          }
+                          placeholder="https://github.com/owner/repository.git"
+                          autoFocus
+                        />
+                      </label>
+                      <div className="grid gap-3 @2xl:grid-cols-[1fr_180px]">
+                        <label className="grid gap-1.5">
+                          <span className="text-xs text-foreground-muted">
+                            {t('promptLibrary.source.filePath')}
+                          </span>
+                          <Input
+                            value={sourceForm.filePath}
+                            onChange={(event) =>
+                              setSourceForm((current) =>
+                                current?.type === 'git'
+                                  ? { ...current, filePath: event.target.value }
+                                  : current
+                              )
+                            }
+                            placeholder="prompts/review.md"
+                          />
+                        </label>
+                        <label className="grid gap-1.5">
+                          <span className="text-xs text-foreground-muted">
+                            {t('promptLibrary.source.ref')}
+                          </span>
+                          <Input
+                            value={sourceForm.ref}
+                            onChange={(event) =>
+                              setSourceForm((current) =>
+                                current?.type === 'git'
+                                  ? { ...current, ref: event.target.value }
+                                  : current
+                              )
+                            }
+                            placeholder="main"
+                          />
+                        </label>
+                      </div>
+                    </>
+                  )}
+                  <div className="grid gap-3 @2xl:grid-cols-2">
+                    <label className="grid gap-1.5">
+                      <span className="text-xs text-foreground-muted">
+                        {t('promptLibrary.source.refreshInterval')}
+                      </span>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={sourceForm.refreshMinutes}
+                        onChange={(event) =>
+                          setSourceForm((current) =>
+                            current ? { ...current, refreshMinutes: event.target.value } : current
+                          )
+                        }
                       />
                     </label>
                     <label className="grid gap-1.5">
                       <span className="text-xs text-foreground-muted">
-                        {t('promptLibrary.source.ref')}
+                        {t('promptLibrary.source.timeout')}
                       </span>
                       <Input
-                        value={sourceForm.ref}
+                        type="number"
+                        min={1}
+                        value={sourceForm.timeoutSeconds}
                         onChange={(event) =>
                           setSourceForm((current) =>
-                            current?.type === 'git'
-                              ? { ...current, ref: event.target.value }
-                              : current
+                            current ? { ...current, timeoutSeconds: event.target.value } : current
                           )
                         }
-                        placeholder="main"
                       />
                     </label>
                   </div>
-                </>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSourceForm(null)}
+                    >
+                      {t('common.cancel')}
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={
+                        sourceLoading ||
+                        (sourceForm.type === 'url'
+                          ? !sourceForm.url.trim()
+                          : !sourceForm.repositoryUrl.trim() || !sourceForm.filePath.trim())
+                      }
+                    >
+                      {sourceLoading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : sourceForm.type === 'url' ? (
+                        <Link className="size-4" />
+                      ) : (
+                        <GitBranch className="size-4" />
+                      )}
+                      {t('promptLibrary.source.load')}
+                    </Button>
+                  </div>
+                </form>
               )}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="grid gap-1.5">
-                  <span className="text-xs text-foreground-muted">
-                    {t('promptLibrary.source.refreshInterval')}
-                  </span>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={sourceForm.refreshMinutes}
-                    onChange={(event) =>
-                      setSourceForm((current) =>
-                        current ? { ...current, refreshMinutes: event.target.value } : current
-                      )
-                    }
-                  />
-                </label>
-                <label className="grid gap-1.5">
-                  <span className="text-xs text-foreground-muted">
-                    {t('promptLibrary.source.timeout')}
-                  </span>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={sourceForm.timeoutSeconds}
-                    onChange={(event) =>
-                      setSourceForm((current) =>
-                        current ? { ...current, timeoutSeconds: event.target.value } : current
-                      )
-                    }
-                  />
-                </label>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" size="sm" onClick={() => setSourceForm(null)}>
-                  {t('common.cancel')}
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={
-                    sourceLoading ||
-                    (sourceForm.type === 'url'
-                      ? !sourceForm.url.trim()
-                      : !sourceForm.repositoryUrl.trim() || !sourceForm.filePath.trim())
-                  }
-                >
-                  {sourceLoading ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : sourceForm.type === 'url' ? (
-                    <Link className="size-4" />
-                  ) : (
-                    <GitBranch className="size-4" />
-                  )}
-                  {t('promptLibrary.source.load')}
-                </Button>
-              </div>
-            </form>
-          )}
 
-          {editorOpen && (
-            <form
-              ref={editorRef}
-              data-slot="prompt-library-editor"
-              onSubmit={handleSave}
-              className="mt-5 grid gap-4 rounded-lg border border-border bg-background-secondary p-4"
-            >
-              {draft.source && (
-                <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
-                  {draft.source.type === 'file' ? (
-                    <FileText className="size-4 shrink-0 text-foreground-muted" />
-                  ) : draft.source.type === 'url' ? (
-                    <Link className="size-4 shrink-0 text-foreground-muted" />
-                  ) : (
-                    <GitBranch className="size-4 shrink-0 text-foreground-muted" />
+              {editorOpen && (
+                <form
+                  ref={editorRef}
+                  data-slot="prompt-library-editor"
+                  onSubmit={handleSave}
+                  className="grid gap-3 rounded-lg border border-border bg-background-secondary p-3"
+                >
+                  {draft.source && (
+                    <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
+                      {draft.source.type === 'file' ? (
+                        <FileText className="size-4 shrink-0 text-foreground-muted" />
+                      ) : draft.source.type === 'url' ? (
+                        <Link className="size-4 shrink-0 text-foreground-muted" />
+                      ) : (
+                        <GitBranch className="size-4 shrink-0 text-foreground-muted" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-xs text-foreground-muted">
+                        {sourceTarget(draft.source)}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => setDraft((current) => ({ ...current, source: undefined }))}
+                      >
+                        {t('promptLibrary.source.detach')}
+                      </Button>
+                    </div>
                   )}
-                  <span className="min-w-0 flex-1 truncate text-xs text-foreground-muted">
-                    {sourceTarget(draft.source)}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    onClick={() => setDraft((current) => ({ ...current, source: undefined }))}
-                  >
-                    {t('promptLibrary.source.detach')}
-                  </Button>
-                </div>
+                  <div className="grid gap-3 @2xl:grid-cols-2">
+                    <label className="grid gap-1.5">
+                      <span className="text-xs text-foreground-muted">
+                        {t('promptLibrary.form.title')}
+                      </span>
+                      <Input
+                        value={draft.title}
+                        onChange={(event) =>
+                          setDraft((current) => ({ ...current, title: event.target.value }))
+                        }
+                        placeholder={t('promptLibrary.form.titlePlaceholder')}
+                        autoFocus
+                      />
+                    </label>
+                    <label className="grid gap-1.5">
+                      <span className="text-xs text-foreground-muted">
+                        {t('promptLibrary.form.group')}
+                      </span>
+                      <Input
+                        list={groupOptionsId}
+                        value={draft.groupName}
+                        onChange={(event) =>
+                          setDraft((current) => ({ ...current, groupName: event.target.value }))
+                        }
+                        placeholder={t('promptLibrary.form.groupPlaceholder')}
+                      />
+                      <datalist id={groupOptionsId}>
+                        {namedGroups.map((groupName) => (
+                          <option key={groupName} value={groupName} />
+                        ))}
+                      </datalist>
+                    </label>
+                  </div>
+                  <label className="grid gap-1.5">
+                    <span className="text-xs text-foreground-muted">
+                      {t('promptLibrary.form.description')}
+                    </span>
+                    <Input
+                      value={draft.description}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, description: event.target.value }))
+                      }
+                      placeholder={t('promptLibrary.form.descriptionPlaceholder')}
+                    />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span className="text-xs text-foreground-muted">
+                      {t('promptLibrary.form.content')}
+                    </span>
+                    <Textarea
+                      value={draft.content}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, content: event.target.value }))
+                      }
+                      readOnly={Boolean(draft.source)}
+                      placeholder={t('promptLibrary.form.contentPlaceholder')}
+                      className="min-h-40 resize-y font-mono"
+                    />
+                    {draft.source && (
+                      <span className="text-xs text-foreground-passive">
+                        {t('promptLibrary.source.readOnlyHint')}
+                      </span>
+                    )}
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span className="text-xs text-foreground-muted">
+                      {t('promptLibrary.form.extraInfo')}
+                    </span>
+                    <Textarea
+                      value={draft.extraInfo}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, extraInfo: event.target.value }))
+                      }
+                      placeholder={t('promptLibrary.form.extraInfoPlaceholder')}
+                      className="min-h-20 resize-y"
+                    />
+                  </label>
+                  <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-background px-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {t('promptLibrary.injection.enable')}
+                      </p>
+                      <p className="mt-0.5 text-xs text-foreground-muted">
+                        {t('promptLibrary.injection.enableHint')}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={draft.injectionEnabled}
+                      onCheckedChange={(checked) =>
+                        setDraft((current) => ({ ...current, injectionEnabled: checked }))
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <Button type="button" variant="ghost" size="sm" onClick={closeEditor}>
+                      <X className="size-4" />
+                      {t('common.cancel')}
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={!canSave || createPrompt.isPending || updatePrompt.isPending}
+                    >
+                      <Save className="size-4" />
+                      {editingId !== 'new' ? t('common.save') : t('common.create')}
+                    </Button>
+                  </div>
+                </form>
               )}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="grid gap-1.5">
-                  <span className="text-xs text-foreground-muted">
-                    {t('promptLibrary.form.title')}
-                  </span>
-                  <Input
-                    value={draft.title}
-                    onChange={(event) =>
-                      setDraft((current) => ({ ...current, title: event.target.value }))
-                    }
-                    placeholder={t('promptLibrary.form.titlePlaceholder')}
-                    autoFocus
-                  />
-                </label>
-                <label className="grid gap-1.5">
-                  <span className="text-xs text-foreground-muted">
-                    {t('promptLibrary.form.group')}
-                  </span>
-                  <Input
-                    list={groupOptionsId}
-                    value={draft.groupName}
-                    onChange={(event) =>
-                      setDraft((current) => ({ ...current, groupName: event.target.value }))
-                    }
-                    placeholder={t('promptLibrary.form.groupPlaceholder')}
-                  />
-                  <datalist id={groupOptionsId}>
-                    {namedGroups.map((groupName) => (
-                      <option key={groupName} value={groupName} />
-                    ))}
-                  </datalist>
-                </label>
-              </div>
-              <label className="grid gap-1.5">
-                <span className="text-xs text-foreground-muted">
-                  {t('promptLibrary.form.description')}
-                </span>
-                <Input
-                  value={draft.description}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, description: event.target.value }))
-                  }
-                  placeholder={t('promptLibrary.form.descriptionPlaceholder')}
-                />
-              </label>
-              <label className="grid gap-1.5">
-                <span className="text-xs text-foreground-muted">
-                  {t('promptLibrary.form.content')}
-                </span>
-                <Textarea
-                  value={draft.content}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, content: event.target.value }))
-                  }
-                  readOnly={Boolean(draft.source)}
-                  placeholder={t('promptLibrary.form.contentPlaceholder')}
-                  className="min-h-40 resize-y font-mono"
-                />
-                {draft.source && (
-                  <span className="text-xs text-foreground-passive">
-                    {t('promptLibrary.source.readOnlyHint')}
-                  </span>
-                )}
-              </label>
-              <label className="grid gap-1.5">
-                <span className="text-xs text-foreground-muted">
-                  {t('promptLibrary.form.extraInfo')}
-                </span>
-                <Textarea
-                  value={draft.extraInfo}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, extraInfo: event.target.value }))
-                  }
-                  placeholder={t('promptLibrary.form.extraInfoPlaceholder')}
-                  className="min-h-20 resize-y"
-                />
-              </label>
-              <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-background px-3 py-2.5">
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {t('promptLibrary.injection.enable')}
-                  </p>
-                  <p className="mt-0.5 text-xs text-foreground-muted">
-                    {t('promptLibrary.injection.enableHint')}
-                  </p>
-                </div>
-                <Switch
-                  checked={draft.injectionEnabled}
-                  onCheckedChange={(checked) =>
-                    setDraft((current) => ({ ...current, injectionEnabled: checked }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-end gap-2">
-                <Button type="button" variant="ghost" size="sm" onClick={closeEditor}>
-                  <X className="size-4" />
-                  {t('common.cancel')}
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={!canSave || createPrompt.isPending || updatePrompt.isPending}
-                >
-                  <Save className="size-4" />
-                  {editingId !== 'new' ? t('common.save') : t('common.create')}
-                </Button>
-              </div>
-            </form>
-          )}
-        </section>
+            </div>
+          ) : null}
+        </PromptLibraryChapter>
 
+        <PromptSystemSection runtimeId={activeRuntimeId} onRuntimeIdChange={setActiveRuntimeId} />
         <ProjectPromptSection
           projectId={selectedProjectId}
           runtimeId={activeRuntimeId}
           onProjectIdChange={setSelectedProjectId}
         />
-        <section className="mt-10">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-medium text-foreground">
-              {t('promptLibrary.collection.all')}
-            </h2>
+
+        <PromptLibraryChapter
+          dataSlot="prompt-list-section"
+          className="mt-6"
+          icon={ListTree}
+          title={t('promptLibrary.collection.all')}
+          description={t('promptLibrary.collection.allDescription')}
+          actions={
             <Button type="button" variant="outline" size="sm" onClick={() => openGroupCreator()}>
               <FolderPlus className="size-4" />
               {t('promptLibrary.groups.create')}
             </Button>
-          </div>
-
+          }
+        >
           {groupFormOpen && (
             <form
               data-slot="prompt-group-form"
               onSubmit={handleCreateGroup}
-              className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-background-secondary p-3"
+              className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-background-secondary p-3"
             >
               <label className="grid min-w-48 flex-1 gap-1.5">
                 <span className="text-xs font-medium text-foreground">
@@ -1046,7 +1059,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                   items={groups.map((group) => promptGroupSortableId(group.name))}
                   strategy={verticalListSortingStrategy}
                 >
-                  <ul className="grid gap-3">
+                  <ul className="grid gap-2">
                     {groups.map((group) => {
                       const groupIsOpen = !collapsedGroups.has(group.name);
                       const groupLabel =
@@ -1438,7 +1451,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
               </DndContext>
             )}
           </div>
-        </section>
+        </PromptLibraryChapter>
         <div
           data-slot="prompt-library-bottom-space"
           aria-hidden

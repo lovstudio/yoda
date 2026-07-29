@@ -49,6 +49,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popove
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
+import { WorkspaceResourceMetric } from './workspace-resource-metric';
 import { getQuotaWindowLabel } from './workspace-runtime-bar-format';
 
 export function explicitConversationRuntimeId(value: unknown): RuntimeId | null {
@@ -65,6 +66,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
+  const [isRunningAgentListOpen, setIsRunningAgentListOpen] = useState(false);
   const [isSkillPopoverOpen, setIsSkillPopoverOpen] = useState(false);
   const [isCleaningWorktrees, setIsCleaningWorktrees] = useState(false);
   const [sessionPromptCount, setSessionPromptCount] = useState<{
@@ -414,6 +416,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
 
   const openRunningAgentSession = (session: AppRunningAgentSession) => {
     setIsResourcePopoverOpen(false);
+    setIsRunningAgentListOpen(false);
     openTaskTarget(
       {
         projectId: session.projectId,
@@ -422,6 +425,22 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       },
       navigate
     );
+  };
+
+  const handleRunningAgentMetricClick = () => {
+    const onlySession = runningAgentSessions.length === 1 ? runningAgentSessions[0] : undefined;
+    if (onlySession) {
+      openRunningAgentSession(onlySession);
+      return;
+    }
+    if (runningAgentSessions.length > 1) {
+      setIsRunningAgentListOpen((current) => !current);
+    }
+  };
+
+  const handleResourcePopoverOpenChange = (open: boolean) => {
+    setIsResourcePopoverOpen(open);
+    if (!open) setIsRunningAgentListOpen(false);
   };
 
   return (
@@ -718,7 +737,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         </div>
       ) : null}
       <span className="flex-1" />
-      <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>
+      <Popover open={isResourcePopoverOpen} onOpenChange={handleResourcePopoverOpenChange}>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.resources.triggerLabel', {
             count: runningAgentCount,
@@ -748,21 +767,35 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             </div>
           </div>
           <div className="grid grid-cols-3 gap-px bg-border">
-            <ResourceMetric
+            <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.cpu')}
               value={resourceSnapshot ? `${Math.round(resourceSnapshot.cpuPercent)}%` : '—'}
             />
-            <ResourceMetric
+            <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.memory')}
               value={resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—'}
             />
-            <ResourceMetric
+            <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.runningAgents')}
               value={String(runningAgentCount)}
+              ariaLabel={
+                runningAgentSessions.length === 1
+                  ? t('workspaceRuntime.resources.openOnlyRunningAgent')
+                  : isRunningAgentListOpen
+                    ? t('workspaceRuntime.resources.hideRunningAgents')
+                    : t('workspaceRuntime.resources.showRunningAgents', {
+                        count: runningAgentSessions.length,
+                      })
+              }
+              controls={
+                runningAgentSessions.length > 1 ? 'workspace-running-agent-list' : undefined
+              }
+              expanded={runningAgentSessions.length > 1 ? isRunningAgentListOpen : undefined}
+              onClick={runningAgentSessions.length > 0 ? handleRunningAgentMetricClick : undefined}
             />
           </div>
-          {runningAgentSessions.length > 0 ? (
-            <div className="border-b border-border p-3">
+          {runningAgentSessions.length > 1 && isRunningAgentListOpen ? (
+            <div id="workspace-running-agent-list" className="border-b border-border p-3">
               <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
                 {t('workspaceRuntime.resources.runningAgents')}
               </div>
@@ -1020,15 +1053,6 @@ function ContextProgressBar({
         style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
       />
     </span>
-  );
-}
-
-function ResourceMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-background p-2.5">
-      <div className="text-[10px] uppercase tracking-wide text-foreground-passive">{label}</div>
-      <div className="mt-1 font-mono text-sm tabular-nums text-foreground">{value}</div>
-    </div>
   );
 }
 
