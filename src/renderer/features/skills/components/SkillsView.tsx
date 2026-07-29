@@ -1,6 +1,6 @@
 import {
   ArrowDownWideNarrow,
-  LayoutGrid,
+  List,
   ListTree,
   Loader2,
   Plus,
@@ -32,22 +32,22 @@ import { cn } from '@renderer/utils/utils';
 import { skillNeedsAttention } from '../skill-health';
 import { isUsageSortMode, SKILL_SORT_MODES, sortSkills, type SkillSortMode } from '../skill-sort';
 import ExternalSkillMarketplaces from './ExternalSkillMarketplaces';
-import SkillCard from './SkillCard';
+import SkillAccordionRow from './SkillAccordionRow';
 import SkillsCatalogHint from './SkillsCatalogHint';
 import SkillsTreeSection from './SkillsTreeSection';
 import { useSkills } from './useSkills';
 import { useSkillUsage } from './useSkillUsage';
 
-type SkillsLayout = 'grid' | 'tree';
+type SkillsLayout = 'list' | 'tree';
 type SkillsSection = 'installed' | 'recommended' | 'attention';
 
 const LAYOUT_STORAGE_KEY = 'yoda.skillsLayout';
 
 function loadStoredLayout(): SkillsLayout {
   try {
-    return window.localStorage.getItem(LAYOUT_STORAGE_KEY) === 'tree' ? 'tree' : 'grid';
+    return window.localStorage.getItem(LAYOUT_STORAGE_KEY) === 'tree' ? 'tree' : 'list';
   } catch {
-    return 'grid';
+    return 'list';
   }
 }
 
@@ -83,8 +83,8 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
 
   const switchLayout = React.useCallback((value: SkillsLayout) => {
     setLayout(value);
-    // 'count' is a tree-only group order; fall back when returning to cards.
-    if (value === 'grid') setSortMode((mode) => (mode === 'count' ? 'name' : mode));
+    // 'count' is a tree-only group order; fall back when returning to the list.
+    if (value === 'list') setSortMode((mode) => (mode === 'count' ? 'name' : mode));
     try {
       window.localStorage.setItem(LAYOUT_STORAGE_KEY, value);
     } catch {
@@ -158,15 +158,15 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   );
 
   const showCreateSkillModal = useShowModal('createSkillModal');
-  const skillCardRefs = React.useRef(new Map<string, HTMLDivElement>());
+  const skillRefs = React.useRef(new Map<string, HTMLDivElement>());
   const [highlightedSkillId, setHighlightedSkillId] = React.useState<string | null>(null);
 
-  const setSkillCardRef = React.useCallback(
+  const setSkillRef = React.useCallback(
     (skillKey: string) => (node: HTMLDivElement | null) => {
       if (node) {
-        skillCardRefs.current.set(skillKey, node);
+        skillRefs.current.set(skillKey, node);
       } else {
-        skillCardRefs.current.delete(skillKey);
+        skillRefs.current.delete(skillKey);
       }
     },
     []
@@ -224,7 +224,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
           ? installedFamily
           : recommendedFamily;
     const visibleSkillKey = visibleFamily?.primary.key ?? focusedSkillId;
-    const node = skillCardRefs.current.get(visibleSkillKey);
+    const node = skillRefs.current.get(visibleSkillKey);
     if (!node) return;
 
     const frame = window.requestAnimationFrame(() => {
@@ -276,25 +276,24 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
           familiesByPrimaryKey={familiesByPrimaryKey}
           onSelect={openDetail}
           onInstall={install}
-          setSkillRef={setSkillCardRef}
+          setSkillRef={setSkillRef}
           highlightedSkillId={highlightedSkillId}
         />
       );
     }
 
     return (
-      <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
+      <div className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/70 bg-background">
         {skills.map((skill) => (
           <div
             key={skill.key}
-            ref={setSkillCardRef(skill.key)}
+            ref={setSkillRef(skill.key)}
             className={cn(
-              'scroll-mt-20 rounded-lg transition-shadow duration-300',
-              highlightedSkillId === skill.key &&
-                'ring-2 ring-amber-400 ring-offset-2 ring-offset-background'
+              'scroll-mt-20 transition-shadow duration-300',
+              highlightedSkillId === skill.key && 'ring-2 ring-inset ring-amber-400'
             )}
           >
-            <SkillCard
+            <SkillAccordionRow
               skill={skill}
               family={familiesByPrimaryKey.get(skill.key)}
               usage={lookupBrowseUsage(skill)}
@@ -327,7 +326,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
         !embedded && 'h-full overflow-y-auto'
       )}
     >
-      <div className={cn('w-full', !embedded && 'mx-auto max-w-3xl px-8 py-8')}>
+      <div className={cn('w-full', !embedded && 'mx-auto max-w-4xl px-8 py-8')}>
         {/* Header */}
         {!embedded && (
           <div className="mb-6">
@@ -366,8 +365,8 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
             }}
             aria-label={t('skills.layout.ariaLabel')}
           >
-            <ToggleGroupItem value="grid" aria-label={t('skills.layout.grid')}>
-              <LayoutGrid className="h-3.5 w-3.5" />
+            <ToggleGroupItem value="list" aria-label={t('skills.layout.list')}>
+              <List className="h-3.5 w-3.5" />
             </ToggleGroupItem>
             <ToggleGroupItem value="tree" aria-label={t('skills.layout.tree')}>
               <ListTree className="h-3.5 w-3.5" />

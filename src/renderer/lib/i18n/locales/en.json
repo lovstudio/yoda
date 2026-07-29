@@ -2516,7 +2516,12 @@
     "attention": "Needs attention",
     "noMatches": "No skills match your search.",
     "noSkills": "No skills available.",
+    "noDescription": "No description provided",
     "disabled": "Disabled",
+    "openDetails": "Open details",
+    "openDetailsAria": "Open details for {{name}}",
+    "install": "Install",
+    "installAria": "Install {{name}}",
     "quickSearch": {
       "title": "Skill search",
       "description": "Search locally first, then discover skills from ClawHub",
@@ -2561,7 +2566,7 @@
     "usageTitle": "{{manual}} manual / {{auto}} agent invocations",
     "layout": {
       "ariaLabel": "Switch layout",
-      "grid": "Card view",
+      "list": "List view",
       "tree": "Tree view"
     },
     "family": {
