@@ -706,9 +706,9 @@
       "featurebaseDescription": "Work on Featurebase posts",
       "litellmDescription": "Manage multiple model services with automatic routing, load balancing, and failover",
       "litellmConnectedDescription": "Gateway: {{endpoint}}",
-      "lovcodeDescription": "Search and manage local AI coding sessions",
-      "lovcodeConnectedDescription": "Installed ({{version}})",
-      "lovcodeInstalledTooltip": "Lovcode is ready for session search",
+      "lovcodeDescription": "Search session content across every project and open the matching Yoda session",
+      "lovcodeConnectedDescription": "Global session search connected · {{version}}",
+      "lovcodeInstalledTooltip": "Lovcode is connected to global session search",
       "copyInstallCommand": "Copy install command",
       "commandCopied": "Command copied",
       "copyInstallFor": "Copy install command for {{name}}",
@@ -717,7 +717,7 @@
       "connect": "Connect {{name}}",
       "connecting": "Connecting {{name}}…",
       "install": "Install {{name}}",
-      "detecting": "Detecting {{name}}",
+      "detecting": "Detecting {{name}}…",
       "cancelConnecting": "Cancel connecting {{name}}",
       "githubCliManagedTooltip": "Run `gh auth logout` in your terminal to disconnect",
       "connectButton": "Connect",
@@ -2052,8 +2052,7 @@
     "placeholder": "Search tasks, projects, actions…",
     "noResults": "No results",
     "noResultsFor": "No results for \"{{query}}\"",
-    "sessionsRequiresProject": "Sessions require an open project",
-    "sessionsToggleTitle": "Search task sessions",
+    "sessionsToggleTitle": "Search session content across every project",
     "inSessions": "in sessions",
     "scopeAll": "All",
     "tasksToggleTitle": "Limit search to tasks",
@@ -2064,11 +2063,12 @@
     "inActions": "in actions",
     "sessionsEmptyHint": "No matching task sessions",
     "searchingTranscripts": "Searching transcripts...",
-    "tasksSessions": "Tasks & sessions",
     "lovcode": {
-      "title": "Install Lovcode",
-      "description": "Lovcode is required to run this command.",
-      "install": "Install Lovcode"
+      "title": "Connect Lovcode global search",
+      "description": "Install Lovcode to search session content across every project and open the matching session.",
+      "install": "Get Lovcode",
+      "matches": "Session content",
+      "searchError": "Lovcode search is temporarily unavailable. Try again shortly."
     }
   },
   "mcp": {

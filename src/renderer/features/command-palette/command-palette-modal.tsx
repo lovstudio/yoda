@@ -14,8 +14,7 @@ import { useTranslation } from 'react-i18next';
 import type { SearchItem } from '@shared/search';
 import { ALL_WORKSPACES_ID } from '@shared/workspaces';
 import { openTaskTarget } from '@renderer/app/open-task-target';
-import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
-import { getTaskManagerStore, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
+import { getTaskManagerStore } from '@renderer/features/tasks/stores/task-selectors';
 import { commandRegistry } from '@renderer/lib/commands/registry';
 import { useMobxValue } from '@renderer/lib/hooks/use-mobx-value';
 import { APP_SHORTCUTS } from '@renderer/lib/hooks/useKeyboardShortcuts';
@@ -102,7 +101,12 @@ function PaletteItem({
       className="flex cursor-pointer items-center gap-2.5 text-foreground-muted aria-selected:text-foreground rounded-md px-2 py-2 text-sm aria-selected:bg-background-2"
     >
       {KIND_ICON[item.kind]}
-      <span className="flex-1 truncate">{item.title}</span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate">{item.title}</span>
+        {item.subtitle && (
+          <span className="truncate text-xs text-foreground/40">{item.subtitle}</span>
+        )}
+      </span>
       {searchItem?.archived && (
         <span className="shrink-0 rounded bg-background-quaternary px-1.5 py-0.5 text-[10px] text-foreground/50">
           Archived
@@ -149,14 +153,9 @@ export function CommandPaletteModal({
       ? workspaceStore.activeWorkspaceId
       : undefined;
 
-  const mounted = projectId ? asMounted(getProjectStore(projectId)) : undefined;
-  const projectPath = mounted?.data.type === 'local' ? mounted.data.path : null;
-
   const { data: lovcodeResult, isFetching: lovcodeFetching } = useLovcodeSearch(
-    projectId,
-    projectPath,
     searchText,
-    inSessionsScope
+    searchText.length > 0 && (inSessionsScope || scope === 'all')
   );
 
   // The "all" recents overview is global across projects and tasks so every
@@ -221,28 +220,13 @@ export function CommandPaletteModal({
   const projectResults = merged.filter((r): r is SearchItem => r.kind === 'project');
   const conversationResults = merged.filter((r): r is SearchItem => r.kind === 'conversation');
 
-  const lovcodeTaskItems: SearchItem[] =
-    inSessionsScope && projectId && lovcodeResult?.status === 'ok'
-      ? lovcodeResult.taskIds.flatMap((tid) => {
-          const task = getTaskStore(projectId, tid)?.data;
-          if (!task) return [];
-          return [
-            {
-              kind: 'task' as const,
-              id: tid,
-              projectId,
-              taskId: null,
-              title: task.name,
-              subtitle: '',
-              score: 0,
-              archived: 'archivedAt' in task && Boolean(task.archivedAt),
-            },
-          ];
-        })
-      : [];
+  const lovcodeItems = lovcodeResult?.status === 'ok' ? lovcodeResult.items : [];
+  const indexedConversationIds = new Set(conversationResults.map((item) => item.id));
+  const globalLovcodeItems = lovcodeItems.filter((item) => !indexedConversationIds.has(item.id));
   const lovcodeNotInstalled =
     inSessionsScope && searchText.length > 0 && lovcodeResult?.status === 'not-installed';
-  const lovcodeUnavailable = inSessionsScope && searchText.length > 0 && !projectPath;
+  const lovcodeSearchError =
+    inSessionsScope && searchText.length > 0 && lovcodeResult?.status === 'error';
 
   const handleSetScope = (next: SearchScope) => {
     setQuery((prev) => setScope(prev, next));
@@ -278,8 +262,6 @@ export function CommandPaletteModal({
     );
   };
 
-  const sessionsChipDisabled = !projectId || !projectPath;
-
   const scopeOptions: {
     value: SearchScope;
     label: string;
@@ -314,16 +296,13 @@ export function CommandPaletteModal({
     {
       value: 'sessions',
       label: t('commandPalette.inSessions'),
-      title: sessionsChipDisabled
-        ? t('commandPalette.sessionsRequiresProject')
-        : t('commandPalette.sessionsToggleTitle'),
+      title: t('commandPalette.sessionsToggleTitle'),
       icon:
         inSessionsScope && lovcodeFetching ? (
           <Loader2 className="size-3 animate-spin" />
         ) : (
           <MessagesSquare className="size-3" />
         ),
-      disabled: sessionsChipDisabled,
     },
   ];
 
@@ -389,12 +368,12 @@ export function CommandPaletteModal({
                 {t('commandPalette.sessionsEmptyHint')}
               </div>
             )
-          ) : lovcodeUnavailable ? (
-            <div className="py-8 text-center text-xs text-foreground/40">
-              {t('commandPalette.sessionsRequiresProject')}
-            </div>
           ) : lovcodeNotInstalled ? (
             <LovcodeInstallBanner />
+          ) : lovcodeSearchError ? (
+            <div className="py-8 text-center text-xs text-foreground/40">
+              {t('commandPalette.lovcode.searchError')}
+            </div>
           ) : (
             <>
               <Command.Empty className="py-8 text-center text-sm text-foreground/40">
@@ -402,14 +381,17 @@ export function CommandPaletteModal({
                   ? t('commandPalette.searchingTranscripts')
                   : t('commandPalette.noResultsFor', { query: searchText })}
               </Command.Empty>
-              {lovcodeTaskItems.length > 0 && (
-                <Command.Group heading={t('commandPalette.tasksSessions')} className={GROUP_CLASS}>
-                  {lovcodeTaskItems.map((item) => (
+              {lovcodeItems.length > 0 && (
+                <Command.Group
+                  heading={t('commandPalette.lovcode.matches')}
+                  className={GROUP_CLASS}
+                >
+                  {lovcodeItems.map((item) => (
                     <PaletteItem
-                      key={`session-task:${item.id}`}
-                      value={`session-task:${item.id}`}
+                      key={`lovcode:${item.id}`}
+                      value={`lovcode:${item.id}`}
                       item={item}
-                      onSelect={() => handleNavigateToTask(item)}
+                      onSelect={() => handleNavigateToConversation(item)}
                     />
                   ))}
                 </Command.Group>
@@ -476,7 +458,9 @@ export function CommandPaletteModal({
         ) : searchText ? (
           <>
             <Command.Empty className="py-8 text-center text-sm text-foreground/40">
-              {t('commandPalette.noResultsFor', { query: searchText })}
+              {lovcodeFetching
+                ? t('commandPalette.searchingTranscripts')
+                : t('commandPalette.noResultsFor', { query: searchText })}
             </Command.Empty>
             {actionResults.length > 0 && (
               <Command.Group heading="Actions" className={GROUP_CLASS}>
@@ -515,6 +499,18 @@ export function CommandPaletteModal({
                   <PaletteItem
                     key={item.id}
                     value={item.id}
+                    item={item}
+                    onSelect={() => handleNavigateToConversation(item)}
+                  />
+                ))}
+              </Command.Group>
+            )}
+            {globalLovcodeItems.length > 0 && (
+              <Command.Group heading={t('commandPalette.lovcode.matches')} className={GROUP_CLASS}>
+                {globalLovcodeItems.map((item) => (
+                  <PaletteItem
+                    key={`lovcode:${item.id}`}
+                    value={`lovcode:${item.id}`}
                     item={item}
                     onSelect={() => handleNavigateToConversation(item)}
                   />

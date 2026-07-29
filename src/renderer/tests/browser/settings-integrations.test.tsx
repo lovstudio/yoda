@@ -9,7 +9,7 @@ import type { MaasConnection } from '@shared/maas';
 
 const mocks = vi.hoisted(() => ({
   openLiteLlm: vi.fn(),
-  openExternal: vi.fn(async () => {}),
+  openExternal: vi.fn(async () => undefined),
   checkLovcodeAvailability: vi.fn<() => Promise<LovcodeAvailability>>(),
   checkGithubStatus: vi.fn(async () => ({})),
   maasConnections: [] as MaasConnection[],

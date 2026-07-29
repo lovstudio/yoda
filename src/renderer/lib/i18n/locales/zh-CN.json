@@ -706,9 +706,9 @@
       "featurebaseDescription": "在 Featurebase 帖子上协作",
       "litellmDescription": "统一管理多个模型服务，并提供自动路由、负载均衡与故障切换",
       "litellmConnectedDescription": "Gateway：{{endpoint}}",
-      "lovcodeDescription": "搜索和管理本地 AI 编程会话",
-      "lovcodeConnectedDescription": "已安装（{{version}}）",
-      "lovcodeInstalledTooltip": "Lovcode 已就绪，可用于搜索会话记录",
+      "lovcodeDescription": "搜索所有项目的会话内容，并直接打开 Yoda 中的对应会话",
+      "lovcodeConnectedDescription": "已接入全局会话搜索 · {{version}}",
+      "lovcodeInstalledTooltip": "Lovcode 已接入全局会话搜索",
       "copyInstallCommand": "复制安装命令",
       "commandCopied": "命令已复制",
       "copyInstallFor": "复制 {{name}} 的安装命令",
@@ -717,7 +717,7 @@
       "connect": "连接 {{name}}",
       "connecting": "连接 {{name}} 中…",
       "install": "安装 {{name}}",
-      "detecting": "正在检测 {{name}}",
+      "detecting": "正在检测 {{name}}…",
       "cancelConnecting": "取消连接 {{name}}",
       "githubCliManagedTooltip": "在终端中执行 `gh auth logout` 即可断开连接",
       "connectButton": "连接",
@@ -2052,8 +2052,7 @@
     "placeholder": "搜索任务、项目、动作…",
     "noResults": "未找到结果",
     "noResultsFor": "“{{query}}”没有结果",
-    "sessionsRequiresProject": "需要先打开项目才能搜索会话",
-    "sessionsToggleTitle": "搜索任务会话",
+    "sessionsToggleTitle": "搜索所有项目的会话内容",
     "inSessions": "在会话中",
     "scopeAll": "全部",
     "tasksToggleTitle": "仅在任务中搜索",
@@ -2064,11 +2063,12 @@
     "inActions": "在动作中",
     "sessionsEmptyHint": "没有匹配的任务会话",
     "searchingTranscripts": "正在搜索会话记录…",
-    "tasksSessions": "任务与会话",
     "lovcode": {
-      "title": "安装 Lovcode",
-      "description": "运行此命令需要安装 Lovcode。",
-      "install": "安装 Lovcode"
+      "title": "接入 Lovcode 全局搜索",
+      "description": "安装 Lovcode 后，可搜索所有项目的会话内容并直接打开命中会话。",
+      "install": "获取 Lovcode",
+      "matches": "会话内容",
+      "searchError": "Lovcode 搜索暂时不可用，请稍后重试。"
     }
   },
   "mcp": {
