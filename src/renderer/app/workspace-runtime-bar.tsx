@@ -13,6 +13,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { AppRunningAgentSession } from '@shared/app-resource';
 import { getMaasPlatformDefinition } from '@shared/maas';
 import {
   getRuntime,
@@ -22,10 +23,13 @@ import {
   type RuntimeId,
 } from '@shared/runtime-registry';
 import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
+import { openTaskTarget } from '@renderer/app/open-task-target';
 import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
 import { useMaasConnections, useMaasGlobalBinding } from '@renderer/features/maas/useMaas';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { SkillQuickSearchPopover } from '@renderer/features/skills/components/SkillQuickSearchPopover';
+import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
+import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import {
   resolveSessionPrompts,
@@ -36,6 +40,7 @@ import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
@@ -53,6 +58,7 @@ export function explicitConversationRuntimeId(value: unknown): RuntimeId | null 
 export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { navigate } = useNavigate();
   const showConfirmActionModal = useShowModal('confirmActionModal');
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
@@ -214,6 +220,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
+  const runningAgentSessions = resourceSnapshot?.runningAgentSessions ?? [];
+  const runningAgentCount = resourceSnapshot?.activeAgentSessions ?? 0;
 
   useEffect(() => {
     if (!activeConversation || !provisionedTask) return;
@@ -402,6 +410,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const openSkillsManagement = () => {
     setIsSkillPopoverOpen(false);
     appState.navigation.navigate('skills');
+  };
+
+  const openRunningAgentSession = (session: AppRunningAgentSession) => {
+    setIsResourcePopoverOpen(false);
+    openTaskTarget(
+      {
+        projectId: session.projectId,
+        taskId: session.taskId,
+        conversationId: session.conversationId,
+      },
+      navigate
+    );
   };
 
   return (
@@ -700,14 +720,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       <span className="flex-1" />
       <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>
         <PopoverTrigger
-          aria-label={t('workspaceRuntime.resources.title')}
+          aria-label={t('workspaceRuntime.resources.triggerLabel', {
+            count: runningAgentCount,
+          })}
           className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-          title={t('workspaceRuntime.resources.title')}
+          title={t('workspaceRuntime.resources.triggerLabel', {
+            count: runningAgentCount,
+          })}
         >
           <Activity className="size-3.5" />
           <span className="font-mono tabular-nums">
             {resourceSnapshot
-              ? `${formatBytes(resourceSnapshot.memoryBytes)} · ${Math.round(resourceSnapshot.cpuPercent)}%`
+              ? `${formatBytes(resourceSnapshot.memoryBytes)} · ${Math.round(resourceSnapshot.cpuPercent)}% · ${t('workspaceRuntime.resources.runningAgentsShort', { count: runningAgentCount })}`
               : '—'}
           </span>
         </PopoverTrigger>
@@ -733,10 +757,57 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               value={resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—'}
             />
             <ResourceMetric
-              label={t('workspaceRuntime.resources.sessions')}
-              value={String(resourceSnapshot?.activeAgentSessions ?? 0)}
+              label={t('workspaceRuntime.resources.runningAgents')}
+              value={String(runningAgentCount)}
             />
           </div>
+          {runningAgentSessions.length > 0 ? (
+            <div className="border-b border-border p-3">
+              <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
+                {t('workspaceRuntime.resources.runningAgents')}
+              </div>
+              <div className="max-h-56 space-y-1 overflow-y-auto">
+                {runningAgentSessions.map((session) => {
+                  const title =
+                    formatConversationTitleForDisplay(session.runtimeId, session.title).trim() ||
+                    t('workspaceRuntime.resources.sessionFallback', {
+                      id: session.conversationId.slice(0, 8),
+                    });
+                  const config = agentConfig[session.runtimeId];
+                  return (
+                    <button
+                      key={session.conversationId}
+                      type="button"
+                      aria-label={t('workspaceRuntime.resources.openSession', { title })}
+                      className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                      onClick={() => openRunningAgentSession(session)}
+                    >
+                      <span className="flex size-5 shrink-0 items-center justify-center">
+                        <AgentLogo
+                          logo={config.logo}
+                          alt={config.alt}
+                          isSvg={config.isSvg}
+                          invertInDark={config.invertInDark}
+                          className="size-4"
+                        />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-foreground">{title}</span>
+                        <span className="block truncate text-[11px] text-foreground-passive">
+                          {session.taskTitle} · {t(`agentStatus.${session.status}`)}
+                        </span>
+                      </span>
+                      <AgentStatusIndicator
+                        status={session.status}
+                        disableTooltip
+                        boxClassName="size-4"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           {resourceSnapshot?.processes.length ? (
             <div className="border-b border-border p-3">
               <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
