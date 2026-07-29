@@ -81,6 +81,47 @@ describe('LiteLlmManagedService', () => {
     });
   });
 
+  it('reports Docker as starting immediately after opening the desktop app', async () => {
+    const directory = await createTemporaryDirectory();
+    let dockerRunning = false;
+    const runDocker: DockerCommandRunner = vi.fn(async (args) => {
+      if (args[0] === '--version') {
+        return { stdout: 'Docker version 29.4.1', stderr: '' };
+      }
+      if (args[0] === 'info' && dockerRunning) {
+        return { stdout: '29.4.1', stderr: '' };
+      }
+      throw new Error('Docker daemon is still starting.');
+    });
+    const launchDockerDesktop = vi.fn(async () => undefined);
+    const { store } = createSecretStore();
+    const service = new LiteLlmManagedService({
+      getManagedDirectory: () => directory,
+      runDocker,
+      fetch: vi.fn(async () => jsonResponse({ status: 'offline' }, 503)),
+      secretStore: store,
+      maasConnector: { connectPlatform: vi.fn() },
+      launchDockerDesktop,
+      platform: 'darwin',
+    });
+
+    await expect(service.startDockerDesktop()).resolves.toMatchObject({
+      success: true,
+      status: {
+        state: 'docker-starting',
+        dockerInstalled: true,
+        dockerRunning: false,
+      },
+    });
+    expect(launchDockerDesktop).toHaveBeenCalledOnce();
+
+    dockerRunning = true;
+    await expect(service.getStatus()).resolves.toMatchObject({
+      state: 'not-installed',
+      dockerRunning: true,
+    });
+  });
+
   it('downloads the pinned stack, initializes credentials, and connects Yoda with a virtual key', async () => {
     const directory = await createTemporaryDirectory();
     let started = false;

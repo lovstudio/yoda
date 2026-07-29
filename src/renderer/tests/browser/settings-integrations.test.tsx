@@ -222,6 +222,27 @@ describe('Settings integrations', () => {
     expect(mocks.openExternal).toHaveBeenCalledWith(LITELLM_DOCKER_DESKTOP_URL);
   });
 
+  it('keeps checking while Docker Desktop starts instead of showing a timeout failure', async () => {
+    mocks.liteLlmStatus = {
+      ...mocks.liteLlmStatus!,
+      state: 'docker-starting',
+      dockerRunning: false,
+    };
+    const { default: IntegrationsCard } = await import(
+      '@renderer/features/settings/components/IntegrationsCard'
+    );
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+    );
+
+    expect(host.textContent).toContain('settings.integrationsTab.litellmDockerStartingDescription');
+    expect(host.textContent).toContain('settings.integrationsTab.litellmStartingDocker');
+    const startingButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('settings.integrationsTab.litellmStartingDocker')
+    );
+    expect(startingButton?.disabled).toBe(true);
+  });
+
   it('opens the managed console with copied credentials and can stop the local gateway', async () => {
     mocks.liteLlmStatus = {
       ...mocks.liteLlmStatus!,
