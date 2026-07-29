@@ -142,8 +142,10 @@ describe('LiteLlmManagedService', () => {
     expect(values.get('yoda-litellm-virtual-key')).toBe('sk-yoda-virtual');
 
     const composeFile = await readFile(join(directory, 'compose.yaml'), 'utf8');
-    expect(composeFile).toContain('ghcr.io/berriai/litellm-database:v1.86.0');
+    expect(composeFile).toContain('ghcr.io/berriai/litellm-database:v1.90.2');
     expect(composeFile).toContain('${LITELLM_MASTER_KEY}');
+    expect(composeFile).toContain('UI_USERNAME: "admin"');
+    expect(composeFile).toContain('UI_PASSWORD: "${LITELLM_MASTER_KEY}"');
     expect(composeFile).toContain('127.0.0.1:4000:4000');
     expect(composeFile).not.toContain(values.get('yoda-litellm-master-key')!);
     expect(composeFile).not.toContain(values.get('yoda-litellm-postgres-password')!);

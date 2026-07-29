@@ -15,7 +15,7 @@ import { encryptedAppSecretsStore } from '../secrets/encrypted-app-secrets-store
 import { maasService } from './maas-service';
 
 const execFileAsync = promisify(execFile);
-const LITELLM_IMAGE_VERSION = 'v1.86.0';
+const LITELLM_IMAGE_VERSION = 'v1.90.2';
 const LITELLM_IMAGE = `ghcr.io/berriai/litellm-database:${LITELLM_IMAGE_VERSION}`;
 const COMPOSE_PROJECT_NAME = 'yoda-litellm';
 const COMPOSE_FILENAME = 'compose.yaml';
@@ -152,6 +152,8 @@ services:
     environment:
       LITELLM_MASTER_KEY: "\${LITELLM_MASTER_KEY}"
       LITELLM_SALT_KEY: "\${LITELLM_SALT_KEY}"
+      UI_USERNAME: "admin"
+      UI_PASSWORD: "\${LITELLM_MASTER_KEY}"
       DATABASE_URL: "postgresql://litellm:\${LITELLM_POSTGRES_PASSWORD}@db:5432/litellm"
       STORE_MODEL_IN_DB: "True"
     depends_on:
