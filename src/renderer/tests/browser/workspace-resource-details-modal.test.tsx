@@ -250,9 +250,10 @@ describe('WorkspaceResourceDetailsModal', () => {
     expect(host.querySelector('[data-file-path="/tmp/yoda-worktree"]')).not.toBeNull();
     expect(host.textContent).toContain('workspaceRuntime.resources.cleanup');
 
-    const taskButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Resource center')
-    );
+    const taskButton = host.querySelector<HTMLButtonElement>('[data-worktree-task-id="task-1"]');
+    expect(taskButton?.textContent).toContain('Yoda');
+    expect(taskButton?.textContent).toContain('/tmp/yoda-worktree');
+    expect(taskButton?.textContent).toContain('Resource center');
     await act(async () => taskButton?.click());
 
     expect(mocks.onClose).toHaveBeenCalledOnce();

@@ -113,6 +113,7 @@ export function WorkspaceResourceDetailsModal({
     enabled: kind === 'worktrees',
     initialData: initialWorktreeStorage,
     staleTime: 60_000,
+    refetchOnMount: 'always',
     refetchOnWindowFocus: false,
   });
 
@@ -601,44 +602,59 @@ function WorktreeRow({
           id: item.activeTaskId.slice(0, 8),
         })
       : null);
-
-  return (
-    <div className="flex min-w-0 items-center gap-3 px-3 py-2.5">
+  const identity = (
+    <>
       <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-background-2 text-foreground-passive">
         <GitBranch aria-hidden className="size-3.5" />
       </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-xs font-medium text-foreground">{item.projectName}</span>
           {item.branch ? (
             <span className="shrink-0 truncate font-mono text-[10px] text-foreground-passive">
               {item.branch}
             </span>
           ) : null}
-        </div>
-        <div className="mt-0.5 truncate font-mono text-[10px] text-foreground-passive">
+        </span>
+        <span className="mt-0.5 block truncate font-mono text-[10px] text-foreground-passive">
           {item.path}
-        </div>
-      </div>
+        </span>
+      </span>
+    </>
+  );
+  const size = (
+    <span className="w-16 shrink-0 text-right font-mono text-xs tabular-nums text-foreground-muted">
+      {formatBytes(item.sizeBytes)}
+    </span>
+  );
+
+  return (
+    <div className="flex min-w-0 items-center gap-3 px-3 py-2.5">
       {item.activeTaskId && taskLabel ? (
         <button
           type="button"
           aria-label={t('workspaceRuntime.resources.details.openTask', { task: taskLabel })}
           title={t('workspaceRuntime.resources.details.openTask', { task: taskLabel })}
-          className="inline-flex max-w-36 shrink-0 items-center gap-1 rounded-md bg-status-in-review/10 px-2 py-1 text-[10px] text-status-in-review outline-none transition-colors hover:bg-status-in-review/15 focus-visible:ring-1 focus-visible:ring-ring"
+          data-worktree-task-id={item.activeTaskId}
+          className="-my-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-md px-1.5 py-1.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-ring"
           onClick={() => onOpenTask(item)}
         >
-          <span className="truncate">{taskLabel}</span>
-          <ArrowUpRight aria-hidden className="size-3 shrink-0" />
+          {identity}
+          <span className="inline-flex max-w-36 shrink-0 items-center gap-1 rounded-md bg-status-in-review/10 px-2 py-1 text-[10px] text-status-in-review">
+            <span className="truncate">{taskLabel}</span>
+            <ArrowUpRight aria-hidden className="size-3 shrink-0" />
+          </span>
+          {size}
         </button>
       ) : (
-        <span className={cn('shrink-0 text-[10px]', passiveStatus.className)}>
-          {passiveStatus.label}
-        </span>
+        <>
+          {identity}
+          <span className={cn('shrink-0 text-[10px]', passiveStatus.className)}>
+            {passiveStatus.label}
+          </span>
+          {size}
+        </>
       )}
-      <span className="w-16 shrink-0 text-right font-mono text-xs tabular-nums text-foreground-muted">
-        {formatBytes(item.sizeBytes)}
-      </span>
       <FilePathActionsDropdown target={target} />
     </div>
   );
