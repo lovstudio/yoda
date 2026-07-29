@@ -194,4 +194,25 @@ describe('Settings integrations', () => {
     ).not.toBeNull();
     expect(mocks.checkLovcodeAvailability).toHaveBeenCalledTimes(2);
   });
+
+  it('offers an upgrade when the installed Lovcode predates global search', async () => {
+    mocks.checkLovcodeAvailability.mockResolvedValue({
+      status: 'upgrade-required',
+      version: '0.39.9',
+    });
+    const { default: IntegrationsCard } = await import(
+      '@renderer/features/settings/components/IntegrationsCard'
+    );
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+    );
+
+    expect(host.textContent).toContain('settings.integrationsTab.lovcodeUpgradeDescription:0.39.9');
+    const upgradeButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.upgrade:Lovcode"]'
+    );
+    expect(upgradeButton).not.toBeNull();
+    await act(async () => upgradeButton?.click());
+    expect(mocks.openExternal).toHaveBeenCalledWith(LOVCODE_DOWNLOAD_URL);
+  });
 });
