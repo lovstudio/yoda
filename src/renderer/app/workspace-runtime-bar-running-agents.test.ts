@@ -16,4 +16,13 @@ describe('workspace running agent sessions', () => {
       /openTaskTarget\(\s*\{\s*projectId: session\.projectId,\s*taskId: session\.taskId,\s*conversationId: session\.conversationId,\s*\},\s*navigate\s*\)/
     );
   });
+
+  it('makes the agent metric actionable without turning passive resource metrics into buttons', () => {
+    expect(source).toContain('handleRunningAgentMetricClick');
+    expect(source).toContain(
+      'runningAgentSessions.length > 0 ? handleRunningAgentMetricClick : undefined'
+    );
+    expect(source).toContain('<WorkspaceResourceMetric');
+    expect(source).toContain('controls={\n                runningAgentSessions.length > 1');
+  });
 });
