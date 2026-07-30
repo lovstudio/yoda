@@ -1,6 +1,6 @@
 import { PanelRightClose, PanelRightOpen, PinOff } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import React from 'react';
+import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ViewId } from '@renderer/app/view-registry';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -20,7 +20,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/toolti
 export const GlobalSidePaneTarget = observer(function GlobalSidePaneTarget({
   viewId,
   params,
-  altHeld,
   tooltipSide = 'right',
   tooltipLabel,
   unpinAction,
@@ -28,7 +27,6 @@ export const GlobalSidePaneTarget = observer(function GlobalSidePaneTarget({
 }: {
   viewId: ViewId;
   params?: Record<string, unknown>;
-  altHeld: boolean;
   tooltipSide?: 'top' | 'right';
   tooltipLabel?: string;
   unpinAction?: {
@@ -36,26 +34,20 @@ export const GlobalSidePaneTarget = observer(function GlobalSidePaneTarget({
     disabled?: boolean;
     onSelect: () => void;
   };
-  children: React.ReactElement;
+  children: ReactElement;
 }) {
   const { t } = useTranslation();
-  const [hovered, setHovered] = React.useState(false);
   const targetParams = params ?? {};
   const isPinned = appState.sidePane.findViewPin(viewId, targetParams) !== undefined;
   const label = t(isPinned ? 'appTabs.unpinFromGlobalSidePane' : 'appTabs.openInGlobalSidePane');
-  const visibleTooltip = altHeld ? label : tooltipLabel;
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger
-        className="shrink-0"
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      >
-        {visibleTooltip ? (
-          <Tooltip open={altHeld ? hovered : undefined}>
+      <ContextMenuTrigger className="shrink-0">
+        {tooltipLabel ? (
+          <Tooltip>
             <TooltipTrigger render={children} />
-            <TooltipContent side={tooltipSide}>{visibleTooltip}</TooltipContent>
+            <TooltipContent side={tooltipSide}>{tooltipLabel}</TooltipContent>
           </Tooltip>
         ) : (
           children

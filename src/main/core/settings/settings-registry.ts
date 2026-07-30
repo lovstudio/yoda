@@ -19,7 +19,8 @@ import {
   DEFAULT_TASK_NAMING_TIMEOUT_MS,
 } from '@shared/task-naming';
 import {
-  DEFAULT_TERMINAL_RENDERER,
+  DEFAULT_HOT_TERMINAL_LIMIT,
+  DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
 } from '@shared/terminal-settings';
 import { getDefaultLocalWorktreeDirectory } from './worktree-defaults';
@@ -96,9 +97,10 @@ export const SETTINGS_DEFAULTS = {
     soundFocusMode: 'always' as const,
   },
   terminal: {
-    renderer: DEFAULT_TERMINAL_RENDERER,
     autoCopyOnSelection: true,
     scrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
+    hotTerminalLimit: DEFAULT_HOT_TERMINAL_LIMIT,
+    idleSessionTimeoutMinutes: DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
   },
   // Fresh installs boot into the brand theme; null = explicit follow-system.
   theme: 'ygreen' as const,
@@ -118,6 +120,7 @@ export const SETTINGS_DEFAULTS = {
   interface: {
     taskHoverAction: 'delete' as const,
     autoRightSidebarBehavior: false,
+    agentReplyDisplayLevel: 'concise' as const,
     dockSessionHistory: true,
     dockSessionHistoryRows: 3,
   },

@@ -45,7 +45,7 @@ type AiLabViewProps = {
   onActiveAppChange?: (appId: string | null) => void;
 };
 
-/** Apps library: generated apps are created by Home's Yoda Build mode and launched here. */
+/** Apps shelf: generated apps are created by Home's Yoda Build mode and launched here. */
 export const AiLabView: React.FC<AiLabViewProps> = ({
   embedded = false,
   activeAppId: controlledAppId,
@@ -98,7 +98,7 @@ function Launcher({
         {showHeader && (
           <header className="flex items-center gap-2">
             <AppWindow className="size-4 text-foreground-muted" />
-            <h1 className="text-sm font-semibold">{t('library.sections.apps')}</h1>
+            <h1 className="text-sm font-semibold">{t('marketplace.sections.apps')}</h1>
           </header>
         )}
 

@@ -35,6 +35,7 @@ import { normalizeSkillSelection } from '@shared/skills/selection';
 import type { CatalogIndex, SkillSelectionInput } from '@shared/skills/types';
 import { recordSkillInvocation } from '@renderer/features/skills/skill-usage-stats';
 import { toast } from '@renderer/lib/hooks/use-toast';
+import { isImagePath, pastedImagePathMention } from '@renderer/lib/image-path-mention';
 import { rpc } from '@renderer/lib/ipc';
 import {
   Combobox,
@@ -113,6 +114,7 @@ export interface ComposerPromptInputProps {
   runtimeId: RuntimeId | null;
   projectId?: string | null;
   projectPath?: string;
+  imagesAsPaths?: boolean;
   /** Agent profile for this session: auto skills may be suggested; manual skills remain explicit. */
   skillSelection?: SkillSelectionInput;
   runHostKind?: ComposerPromptInputRunHostKind;
@@ -127,7 +129,6 @@ export interface ComposerPromptInputProps {
   onSubmit?: () => void;
 }
 
-const IMAGE_ATTACHMENT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 const MENU_VIEWPORT_GUTTER = 8;
 const MENU_ANCHOR_INSET = 12;
 const MENU_SIDE_OFFSET = 4;
@@ -314,6 +315,7 @@ export function ComposerPromptInput({
   runtimeId,
   projectId = null,
   projectPath,
+  imagesAsPaths = false,
   skillSelection,
   runHostKind = 'local',
   className,
@@ -799,7 +801,7 @@ export function ComposerPromptInput({
       for (const file of files) {
         const filePath = window.electronAPI.getPathForFile(file).trim();
         if (!filePath) continue;
-        if (file.type.startsWith('image/') || IMAGE_ATTACHMENT_RE.test(filePath)) {
+        if (file.type.startsWith('image/') || isImagePath(filePath)) {
           insertAttachmentToken('image', filePath, file.name, URL.createObjectURL(file));
         } else {
           insertAttachmentToken('file', filePath, file.name);
@@ -815,7 +817,15 @@ export function ComposerPromptInput({
       const imageFiles = Array.from(event.clipboardData.files).filter((file) =>
         file.type.startsWith('image/')
       );
-      if (imageFiles.length === 0) return;
+      if (imageFiles.length === 0) {
+        const mention = imagesAsPaths
+          ? pastedImagePathMention(event.clipboardData.getData('text/plain'))
+          : null;
+        if (!mention) return;
+        event.preventDefault();
+        insertPromptSnippet(mention);
+        return;
+      }
       event.preventDefault();
       for (const file of imageFiles) {
         const existingPath = window.electronAPI.getPathForFile(file).trim();
@@ -842,7 +852,7 @@ export function ComposerPromptInput({
         })();
       }
     },
-    [disabled, insertAttachmentToken, t]
+    [disabled, imagesAsPaths, insertAttachmentToken, insertPromptSnippet, t]
   );
 
   const handleDrop = useCallback(

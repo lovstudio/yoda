@@ -19,7 +19,10 @@ const SkillFamilyCount: React.FC<{
   const label = parts.join(' · ');
   return (
     <span
-      className={cn('shrink-0 text-[10px] tabular-nums text-muted-foreground', className)}
+      className={cn(
+        'max-w-36 shrink-0 truncate rounded border border-border/70 bg-background-1 px-1.5 py-0.5 text-[9px] leading-none tabular-nums text-foreground-muted',
+        className
+      )}
       title={label}
     >
       {label}

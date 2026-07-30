@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { buildFilePathDefaultOpenRequest } from '@renderer/lib/components/file-path-open';
 import {
   extractTerminalFileLinkCandidates,
   getTerminalFileLinkMatches,
@@ -89,15 +90,14 @@ describe('terminal file links', () => {
       {
         originalText: paths[0],
         filePath: 'apps/mobile/src/App.tsx',
-        absolutePath: '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/apps/mobile/src/App.tsx',
+        absolutePath: '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/App.tsx',
         line: 1130,
         column: undefined,
       },
       {
         originalText: paths[1],
         filePath: 'apps/mobile/src/api-client.ts',
-        absolutePath:
-          '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/apps/mobile/src/api-client.ts',
+        absolutePath: '/Users/mark/lovstudio/coding/yoda/apps/mobile/src/api-client.ts',
         line: 59,
         column: undefined,
       },
@@ -105,7 +105,7 @@ describe('terminal file links', () => {
         originalText: paths[2],
         filePath: 'src/shared/mobile-retry-interaction.test.ts',
         absolutePath:
-          '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/src/shared/mobile-retry-interaction.test.ts',
+          '/Users/mark/lovstudio/coding/yoda/src/shared/mobile-retry-interaction.test.ts',
         line: 1,
         column: undefined,
       },
@@ -205,6 +205,48 @@ describe('terminal file links', () => {
     expect(extractTerminalFileLinkCandidates('路径：/Users/foo/bar.txt。')).toEqual([
       { text: '/Users/foo/bar.txt', index: '路径：'.length },
     ]);
+  });
+
+  it('terminates scored artifact paths before a trailing colon', () => {
+    const paths = [
+      '/Users/mark/lovstudio/coding/skills/professional-infographic-skill/examples/mobile-cross-platform-selection-v2/comparison-matrix/poster.png',
+      '/Users/mark/lovstudio/coding/skills/professional-infographic-skill/examples/mobile-cross-platform-selection-v2/positioning-map/poster.png',
+    ];
+    const line = paths
+      .map((path, index) => `- ${path}${index === 0 ? '：\n   ' : ':'} 98/100`)
+      .join('\n');
+
+    expect(extractTerminalFileLinkCandidates(line)).toEqual(
+      paths.map((text) => ({ text, index: line.indexOf(text) }))
+    );
+  });
+
+  it('opens a scored artifact from the checkout path that the terminal emitted', () => {
+    const text =
+      '/Users/mark/lovstudio/coding/skills/professional-infographic-skill/examples/mobile-cross-platform-selection-v2/comparison-matrix/poster.png';
+    const target = resolveTerminalFileLinkTarget(
+      text,
+      '/Users/mark/lovstudio/coding/skills/.worktrees/tqktx',
+      '/Users/mark',
+      ['/Users/mark/lovstudio/coding/skills']
+    );
+    if (!target?.absolutePath) throw new Error('Expected a resolved absolute artifact path');
+
+    expect(target).toMatchObject({
+      filePath:
+        'professional-infographic-skill/examples/mobile-cross-platform-selection-v2/comparison-matrix/poster.png',
+      absolutePath: text,
+    });
+    expect(
+      buildFilePathDefaultOpenRequest({
+        absolutePath: target.absolutePath,
+        kind: 'file',
+      })
+    ).toMatchObject({
+      app: 'finder',
+      path: text,
+      reveal: false,
+    });
   });
 
   it('drops a trailing sentence period after the extension', () => {
@@ -310,20 +352,21 @@ describe('terminal file links', () => {
     });
   });
 
-  it('maps absolute paths from the main checkout into the active worktree', () => {
+  it('maps main-checkout paths in-app while preserving the source path for OS actions', () => {
+    const text =
+      '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts:31';
     expect(
       resolveTerminalFileLinkTarget(
-        '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts:31',
+        text,
         '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln',
         undefined,
         ['/Users/mark/lovstudio/coding/yoda']
       )
     ).toEqual({
-      originalText:
-        '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts:31',
+      originalText: text,
       filePath: 'src/renderer/tests/terminal-file-links.test.ts',
       absolutePath:
-        '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/src/renderer/tests/terminal-file-links.test.ts',
+        '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts',
       line: 31,
       column: undefined,
     });
@@ -651,6 +694,47 @@ describe('terminal file links', () => {
     expect(getTerminalFileLinkMatches(terminal, 2, options)).toEqual([expected]);
   });
 
+  it('recognizes the screenshot PDF path across an early unindented TUI wrap', () => {
+    const upper = '/Users/mark/yoda/repositories/支付相关/香港个人Stripe开通与微信支付';
+    const lower = '宝收款SOP.pdf';
+    const text = `${upper}${lower}`;
+    const terminalColumns = upper.length + 2;
+    const terminal = makeTerminal([upper, lower], { cols: terminalColumns });
+    const expected = {
+      range: { start: { x: 1, y: 1 }, end: { x: terminalColumns, y: 2 } },
+      text,
+      target: {
+        originalText: text,
+        filePath: '香港个人Stripe开通与微信支付宝收款SOP.pdf',
+        absolutePath: text,
+        line: undefined,
+        column: undefined,
+      },
+    };
+    const options = {
+      workspaceRoot: '/Users/mark/yoda/repositories/支付相关',
+      onOpen: (): void => undefined,
+    };
+
+    expect(getTerminalFileLinkMatches(terminal, 1, options)).toEqual([expected]);
+    expect(getTerminalFileLinkMatches(terminal, 2, options)).toEqual([expected]);
+  });
+
+  it('does not join path-only rows beyond the narrow TUI wrap margin', () => {
+    const upper = '/Users/mark/yoda/repositories/支付相关/香港个人Stripe开通与微信支付';
+    const lower = '宝收款SOP.pdf';
+    const terminal = makeTerminal([upper, lower], { cols: upper.length + 3 });
+    const options = {
+      workspaceRoot: '/Users/mark/yoda/repositories/支付相关',
+      onOpen: (): void => undefined,
+    };
+
+    expect(getTerminalFileLinkMatches(terminal, 1, options)).toEqual([]);
+    expect(getTerminalFileLinkMatches(terminal, 2, options).map(({ text }) => text)).toEqual([
+      lower,
+    ]);
+  });
+
   it('keeps a hard-wrapped line suffix attached to the file path', () => {
     const text =
       '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts:31';
@@ -662,7 +746,7 @@ describe('terminal file links', () => {
         originalText: text,
         filePath: 'src/renderer/tests/terminal-file-links.test.ts',
         absolutePath:
-          '/Users/mark/lovstudio/coding/yoda/.worktrees/hr2ln/src/renderer/tests/terminal-file-links.test.ts',
+          '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts',
         line: 31,
         column: undefined,
       },
@@ -816,6 +900,34 @@ describe('terminal file links', () => {
     expect(getTerminalFileLinkMatches(terminal, 2, options).map((match) => match.text)).toEqual([
       text,
     ]);
+  });
+
+  it('preserves a path space at a soft-wrap boundary', () => {
+    const text = '/Users/mark/Project Files/final report.pdf';
+    const wrapAt = text.indexOf('report.pdf');
+    const terminal = makeTerminal(
+      [text.slice(0, wrapAt), { text: text.slice(wrapAt), isWrapped: true }],
+      { cols: wrapAt }
+    );
+    const options = {
+      workspaceRoot: '/Users/mark/Project Files',
+      onOpen: (): void => undefined,
+    };
+    const expected = {
+      text,
+      filePath: 'final report.pdf',
+      absolutePath: text,
+    };
+
+    for (const row of [1, 2]) {
+      expect(
+        getTerminalFileLinkMatches(terminal, row, options).map((match) => ({
+          text: match.text,
+          filePath: match.target.filePath,
+          absolutePath: match.target.absolutePath,
+        }))
+      ).toEqual([expected]);
+    }
   });
 
   it('maps a soft-wrapped link starting at the first cell of a row', () => {

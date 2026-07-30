@@ -108,7 +108,7 @@ describe('tmux session discovery', () => {
       root: undefined,
       supportsLocalSpawn: true,
       exec: vi.fn().mockResolvedValue({
-        stdout: `${sessionName}\\037/repo/worktree\n${sessionName}\\037/repo/worktree\nforeign\\037/tmp\n`,
+        stdout: `${sessionName}\\037/repo/worktree\\0374321\n${sessionName}\\037/repo/worktree\\0374321\nforeign\\037/tmp\\03799\n`,
         stderr: '',
       }),
       execStreaming: vi.fn(),
@@ -116,7 +116,7 @@ describe('tmux session discovery', () => {
     };
 
     await expect(listTmuxSessionMarkers(ctx)).resolves.toEqual([
-      { sessionName, cwd: '/repo/worktree' },
+      { sessionName, cwd: '/repo/worktree', panePid: 4321 },
     ]);
     expect(ctx.exec).toHaveBeenCalledWith(
       'tmux',

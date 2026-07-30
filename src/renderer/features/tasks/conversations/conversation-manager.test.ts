@@ -93,7 +93,7 @@ describe('ConversationManagerStore', () => {
       mocks.listeners.set(event.name, cb);
       return vi.fn();
     });
-    mocks.resumeConversationMock.mockResolvedValue(undefined);
+    mocks.resumeConversationMock.mockResolvedValue(true);
     mocks.restartConversationMock.mockResolvedValue(undefined);
     mocks.archiveConversationMock.mockResolvedValue(undefined);
     mocks.createConversationMock.mockResolvedValue(conversation);
@@ -222,7 +222,9 @@ describe('ConversationManagerStore', () => {
   it('passes current terminal size when resuming and reapplies it after spawn', async () => {
     const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
 
-    await store.resumeConversation('conversation-1', { cols: 132, rows: 37 });
+    await expect(store.resumeConversation('conversation-1', { cols: 132, rows: 37 })).resolves.toBe(
+      true
+    );
 
     expect(mocks.resumeConversationMock).toHaveBeenCalledWith(
       'project-1',
@@ -231,6 +233,42 @@ describe('ConversationManagerStore', () => {
       { cols: 132, rows: 37 }
     );
     expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 132, 37);
+  });
+
+  it('keeps a stopped session actionable when automatic resume does not start a process', async () => {
+    mocks.resumeConversationMock.mockResolvedValueOnce(false);
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    item?.setWorking();
+
+    await expect(store.resumeConversation('conversation-1')).resolves.toBe(false);
+
+    expect(item?.status).toBe('idle');
+    expect(item?.sessionExited).toBe(true);
+  });
+
+  it('keeps a stopped session actionable when automatic resume throws', async () => {
+    mocks.resumeConversationMock.mockRejectedValueOnce(new Error('resume failed'));
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+
+    await expect(store.resumeConversation('conversation-1')).resolves.toBe(false);
+
+    expect(store.conversations.get('conversation-1')?.sessionExited).toBe(true);
+  });
+
+  it('dismisses the stopped-session notice without changing exit state and shows it on a new exit', () => {
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+
+    item?.markSessionExited();
+    item?.dismissSessionExitNotice();
+
+    expect(item?.sessionExited).toBe(true);
+    expect(item?.sessionExitNoticeDismissed).toBe(true);
+
+    item?.markSessionExited();
+
+    expect(item?.sessionExitNoticeDismissed).toBe(false);
   });
 
   it('restarts a conversation and reconnects the frontend PTY', async () => {
@@ -248,6 +286,25 @@ describe('ConversationManagerStore', () => {
     );
     expect(mocks.ptyReconnectMock).toHaveBeenCalled();
     expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 120, 30);
+  });
+
+  it('dismisses the exited state as soon as a restart begins', async () => {
+    let finishRestart: (() => void) | undefined;
+    mocks.restartConversationMock.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishRestart = resolve;
+      })
+    );
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+    item?.setSessionExited(true);
+
+    const restart = store.restartConversation('conversation-1');
+
+    expect(item?.sessionExited).toBe(false);
+    finishRestart?.();
+    await restart;
+    expect(item?.sessionExited).toBe(false);
   });
 
   it('passes a newly installed skill when reloading the current session', async () => {

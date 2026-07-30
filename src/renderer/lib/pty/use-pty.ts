@@ -3,10 +3,8 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { AppSettings } from '@shared/app-settings';
 import { appPasteChannel } from '@shared/events/appEvents';
 import { ptyDataChannel, ptyExitChannel, type PtyExitEvent } from '@shared/events/ptyEvents';
-import {
-  DEFAULT_TERMINAL_RENDERER,
-  DEFAULT_TERMINAL_SCROLLBACK_LINES,
-} from '@shared/terminal-settings';
+import { DEFAULT_TERMINAL_SCROLLBACK_LINES } from '@shared/terminal-settings';
+import { imagePathMention, isImagePath } from '@renderer/lib/image-path-mention';
 import { events, rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
 import { usePaneSizingContext } from './pane-sizing-context';
@@ -15,6 +13,7 @@ import {
   getCellMetrics,
   getTerminalFitScrollbarWidth,
   measureDimensions,
+  resolveTerminalFitContainer,
   TERMINAL_FIT_GUARD_COLUMNS,
 } from './pty-dimensions';
 import { isRealTaskInput, SubmittedInputBuffer } from './pty-input-buffer';
@@ -34,6 +33,7 @@ import {
   registerTerminalFileLinkProvider,
   type TerminalFileLinkOptions,
 } from './terminal-file-links';
+import { transformTerminalPasteText } from './terminal-image-paste';
 import { registerTerminalImeDiagnostics } from './terminal-ime-diagnostics';
 import { registerTerminalImeNativePunctuation } from './terminal-ime-native-punctuation';
 import { isTerminalLinkActivation } from './terminal-link-activation';
@@ -45,18 +45,6 @@ import {
   type TerminalWebLinkOptions,
 } from './terminal-web-links';
 
-/**
- * Minimum spacing between terminal commits during a continuous resize
- * stream.  A commit (snapshot + grid reflow + PTY broadcast) costs 10-25ms
- * of main-thread time; committing on every RO event during a fast drag
- * saturated the thread and starved pointer handling — the panels themselves
- * lagged behind the mouse (measured: input 3000px/s, panel tracking
- * ~1500px/s with 70ms frame gaps).  Column crossings during normal-speed
- * drags stay under this rate and commit immediately; only fast bursts are
- * spaced out.  Enforced via an rAF chain — no timers, and the trailing
- * commit always lands on the final size.
- */
-const TERMINAL_COMMIT_MIN_INTERVAL_MS = 64;
 const MIN_TERMINAL_COLS = 2;
 const MIN_TERMINAL_ROWS = 1;
 /** Layout-not-ready retries advance one frame at a time (~400ms at 60fps). */
@@ -137,6 +125,34 @@ function hasEnterSubmit(data: string): boolean {
   return data.includes('\r') || /\x1b\[13(?:;[0-9]+)?u/.test(data);
 }
 
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        reject(new Error('Clipboard image did not produce a data URL'));
+        return;
+      }
+      resolve(result.slice(result.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read clipboard image'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function resolveClipboardImagePath(file: File): Promise<string | null> {
+  try {
+    const existingPath = window.electronAPI.getPathForFile(file).trim();
+    if (existingPath) return existingPath;
+  } catch {}
+
+  if (!file.type.startsWith('image/')) return null;
+  const base64 = await readFileAsBase64(file);
+  const result = await rpc.fs.saveClipboardImage(base64, file.type);
+  return result.success ? (result.data?.absPath ?? null) : null;
+}
+
 export interface UsePtyOptions {
   /** Deterministic PTY session ID: makePtySessionId(projectId, scopeId, leafId). */
   sessionId: string;
@@ -150,6 +166,8 @@ export interface UsePtyOptions {
   onEnterPress?: (message: string) => void;
   onSubmittedInput?: (message: string, isTaskInput: boolean) => void;
   onInterruptPress?: () => void;
+  /** Turn pasted image files/paths into backtick-wrapped textual @mentions. */
+  pasteImagesAsPaths?: boolean;
   fileLinks?: TerminalFileLinkOptions | null;
   /** Overrides URL link activation (smart web links + OSC 8 hyperlinks); defaults to the system browser. */
   webLinks?: TerminalWebLinkOptions | null;
@@ -191,6 +209,7 @@ export function usePty(
     onEnterPress,
     onSubmittedInput,
     onInterruptPress,
+    pasteImagesAsPaths,
     fileLinks,
     webLinks,
   } = options;
@@ -208,6 +227,8 @@ export function usePty(
   onSubmittedInputRef.current = onSubmittedInput;
   const onInterruptPressRef = useRef(onInterruptPress);
   onInterruptPressRef.current = onInterruptPress;
+  const pasteImagesAsPathsRef = useRef(pasteImagesAsPaths ?? false);
+  pasteImagesAsPathsRef.current = pasteImagesAsPaths ?? false;
   const fileLinksRef = useRef(fileLinks ?? null);
   fileLinksRef.current = fileLinks ?? null;
   const webLinksRef = useRef(webLinks ?? null);
@@ -277,10 +298,8 @@ export function usePty(
   );
 
   // measureAndResize is the single entry point for all DOM measurement + PTY
-  // resize work, and runs SYNCHRONOUSLY in the caller's tick: measure the
-  // live DOM, commit the grid resize (FrontendPty.commitResize hides the
-  // transition behind a snapshot overlay, so no frame-phase gymnastics are
-  // needed here), then broadcast the PTY resize in the same tick.
+  // resize work. ResizeObserver callers schedule it after layout, then this
+  // commits the xterm grid and PTY dimensions as one canonical transition.
   const measureAndResize = useCallback(
     (retries = 0, options: MeasureAndResizeOptions = {}) => {
       if (!termRef.current) return;
@@ -297,11 +316,15 @@ export function usePty(
           return;
         }
 
-        // Prefer the pane wrapper: it is stable before the terminal's owned
-        // container has fully settled after being reparented from the off-screen host.
+        // Fit the box that actually clips xterm's rows. A pane wrapper can be
+        // wider than the nested terminal host, which makes the final CJK cells
+        // exist in the buffer but render beyond the visible right edge.
         const termParent = (term as unknown as { element?: HTMLElement }).element?.parentElement;
-        const measureTarget =
-          pane?.containerRef.current ?? termParent ?? (containerRef.current as HTMLElement | null);
+        const measureTarget = resolveTerminalFitContainer(
+          termParent ?? null,
+          containerRef.current as HTMLElement | null,
+          pane?.containerRef.current ?? null
+        );
         if (!measureTarget) return;
         const scrollbarWidth = getTerminalFitScrollbarWidth(term);
 
@@ -365,36 +388,23 @@ export function usePty(
     [sessionId, containerRef, pty, retryMeasureAndResize]
   );
 
-  // Stable ref so the retry setTimeout inside measureAndResize always calls
+  // Stable ref so a scheduled/retried measurement always calls
   // the latest version without creating a circular useCallback dependency.
   const measureAndResizeRef = useRef(measureAndResize);
   measureAndResizeRef.current = measureAndResize;
 
-  // Frame-coalesced commit scheduler for the ResizeObserver stream: one
-  // pending commit at a time, executed on a rAF (latest layout wins), spaced
-  // by TERMINAL_COMMIT_MIN_INTERVAL_MS during bursts.  Keeps the expensive
-  // terminal work off the pointer-event hot path so panel drags stay glued
-  // to the mouse.
-  const pendingCommitRef = useRef(false);
-  const lastCommitAtRef = useRef(0);
+  // Exactly one commit per browser frame. ResizeObserver only marks the grid
+  // dirty; the next rAF reads the final post-layout size. This mirrors Warp's
+  // after-layout sizing model and avoids a delayed terminal lagging behind its
+  // pane during a drag.
+  const pendingCommitFrameRef = useRef<number | null>(null);
   const scheduleCommit = useCallback(() => {
-    if (pendingCommitRef.current) return;
-    pendingCommitRef.current = true;
-    const tick = () => {
-      if (!pendingCommitRef.current) return;
-      if (!termRef.current) {
-        pendingCommitRef.current = false;
-        return;
-      }
-      if (performance.now() - lastCommitAtRef.current < TERMINAL_COMMIT_MIN_INTERVAL_MS) {
-        requestAnimationFrame(tick);
-        return;
-      }
-      pendingCommitRef.current = false;
-      lastCommitAtRef.current = performance.now();
+    if (pendingCommitFrameRef.current !== null) return;
+    pendingCommitFrameRef.current = requestAnimationFrame(() => {
+      pendingCommitFrameRef.current = null;
+      if (!termRef.current) return;
       measureAndResizeRef.current();
-    };
-    requestAnimationFrame(tick);
+    });
   }, []);
 
   const applyTheme = useCallback((t?: SessionTheme) => {
@@ -492,7 +502,9 @@ export function usePty(
     navigator.clipboard
       .readText()
       .then((text) => {
-        if (text && target && termRef.current === target) target.paste(text);
+        if (text && target && termRef.current === target) {
+          target.paste(transformTerminalPasteText(text, pasteImagesAsPathsRef.current));
+        }
       })
       .catch(() => {});
   }, []);
@@ -551,9 +563,9 @@ export function usePty(
       mountLease = activeMountLease;
 
       // Always sync after mounting — targetDims may be stale if the pane was
-      // resized while this session was off-screen.  measureAndResize defers to
-      // rAF so it reads the live DOM and only calls term.resize() when needed.
-      measureAndResize();
+      // resized while this session was off-screen. Read the live post-layout
+      // DOM in the next frame.
+      scheduleCommit();
 
       // ── Load settings ──────────────────────────────────────────────────────
       let customFontFamily = '';
@@ -564,20 +576,12 @@ export function usePty(
             if (customFontFamily) {
               frontendPty.terminal.options.fontFamily = buildTerminalFontFamily(customFontFamily);
               const remeasureAfterFontLoad = () => {
-                if (mounted) {
-                  measureAndResizeRef.current(0, {
-                    forceRefresh: true,
-                    resetResizeDedup: true,
-                  });
-                }
+                if (mounted) scheduleCommit();
               };
-              requestAnimationFrame(remeasureAfterFontLoad);
+              scheduleCommit();
               void document.fonts?.ready.then(remeasureAfterFontLoad);
             }
           }
-          frontendPty.setRendererPreference(
-            terminalSettings?.renderer ?? DEFAULT_TERMINAL_RENDERER
-          );
           frontendPty.setScrollbackLines(
             terminalSettings?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
           );
@@ -763,6 +767,43 @@ export function usePty(
       const terminalElement = (terminal as unknown as { element?: HTMLElement }).element;
       if (terminalElement) {
         const terminalDocument = terminalElement.ownerDocument;
+        const handleTerminalPaste = (event: ClipboardEvent) => {
+          if (!pasteImagesAsPathsRef.current || !event.clipboardData) return;
+
+          const clipboardFiles = Array.from(event.clipboardData.files);
+          const imageFiles = clipboardFiles.filter((file) => {
+            if (file.type.startsWith('image/')) return true;
+            try {
+              return isImagePath(window.electronAPI.getPathForFile(file).trim());
+            } catch {
+              return false;
+            }
+          });
+          const text = event.clipboardData.getData('text/plain');
+          const transformedText = transformTerminalPasteText(text, true);
+          if (imageFiles.length === 0 && transformedText === text) return;
+
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+
+          if (imageFiles.length === 0) {
+            terminal.paste(transformedText);
+            return;
+          }
+
+          void Promise.all(imageFiles.map((file) => resolveClipboardImagePath(file)))
+            .then((paths) => {
+              if (termRef.current !== terminal) return;
+              const mentions = paths
+                .filter((path): path is string => Boolean(path))
+                .map(imagePathMention);
+              if (mentions.length > 0) terminal.paste(mentions.join(' '));
+            })
+            .catch((error) => {
+              log.warn('Failed to paste terminal images as paths', { sessionId, error });
+            });
+        };
         let forcedSelection: {
           active: boolean;
           anchor: BufferCellPosition;
@@ -878,6 +919,7 @@ export function usePty(
           selectionGestureStart = null;
         };
 
+        terminalElement.addEventListener('paste', handleTerminalPaste, true);
         terminalElement.addEventListener('mousedown', handleSelectionGestureStart, true);
         // passive: the touch path never calls preventDefault, so don't block scrolling.
         terminalElement.addEventListener('touchstart', handleSelectionGestureStart, {
@@ -892,6 +934,7 @@ export function usePty(
         cleanups.push(() => {
           forcedSelection = null;
           if (viewportRestoreTimeout) clearTimeout(viewportRestoreTimeout);
+          terminalElement.removeEventListener('paste', handleTerminalPaste, true);
           terminalElement.removeEventListener('mousedown', handleSelectionGestureStart, true);
           terminalElement.removeEventListener('touchstart', handleSelectionGestureStart, true);
           terminalDocument.removeEventListener('mousemove', handleForcedSelectionMouseMove, true);
@@ -923,7 +966,7 @@ export function usePty(
         const detail = (e as CustomEvent<{ fontFamily?: string }>).detail;
         customFontFamily = detail?.fontFamily?.trim() ?? '';
         terminal.options.fontFamily = buildTerminalFontFamily(customFontFamily);
-        measureAndResize();
+        scheduleCommit();
       };
       const handleAutoCopyChange = (e: Event) => {
         const detail = (e as CustomEvent<{ autoCopyOnSelection?: boolean }>).detail;
@@ -958,11 +1001,9 @@ export function usePty(
       );
 
       // ── ResizeObserver (observes the mount-target, not the owned container) ─
-      // Live per-column tracking (user-chosen), frame-coalesced: RO only
-      // marks dirty; the commit runs on a rAF with burst spacing so pointer
-      // handling never waits for terminal work.  commitResize dedupes until
-      // an integer col/row boundary is crossed, and its freeze overlay makes
-      // each commit flash-free regardless of execution phase.
+      // Frame-coalesced, post-layout sizing: RO only marks dirty and the next
+      // animation frame commits the latest grid once. The DOM renderer then
+      // repaints directly from xterm's canonical buffer.
       const resizeObserver = new ResizeObserver(() => {
         scheduleCommit();
       });
@@ -1002,8 +1043,10 @@ export function usePty(
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
     return () => {
-      // Drop any scheduled commit (the rAF tick no-ops on this flag).
-      pendingCommitRef.current = false;
+      if (pendingCommitFrameRef.current !== null) {
+        cancelAnimationFrame(pendingCommitFrameRef.current);
+        pendingCommitFrameRef.current = null;
+      }
       // Reset dedup so the next session always gets a resize on mount.
       lastSentResizeRef.current = null;
       // ResizeObserver.disconnect() and other cleanups run BEFORE unmount —

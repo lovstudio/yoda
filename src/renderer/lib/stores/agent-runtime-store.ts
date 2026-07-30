@@ -17,6 +17,13 @@ export type TaskAgentRuntimeSession = {
   status: Exclude<AgentSessionRuntimeStatus, 'idle'>;
 };
 
+export type RunningAgentRuntimeSession = {
+  projectId: string;
+  taskId: string;
+  conversationId: string;
+  status: Extract<AgentSessionRuntimeStatus, 'working' | 'awaiting-input'>;
+};
+
 function taskKey(projectId: string, taskId: string): string {
   return `${projectId}\0${taskId}`;
 }
@@ -183,6 +190,25 @@ export class AgentRuntimeStore {
       if (status === 'working' && key.startsWith(prefix)) ids.push(key.slice(prefix.length));
     }
     return ids;
+  }
+
+  /** Every globally tracked session that is currently working or waiting for user input. */
+  runningSessions(): RunningAgentRuntimeSession[] {
+    const sessions: RunningAgentRuntimeSession[] = [];
+    for (const [key, status] of this.statuses) {
+      if (status !== 'working' && status !== 'awaiting-input') continue;
+      const [projectId, taskId, conversationId] = key.split('\0');
+      if (!projectId || !taskId || !conversationId) continue;
+      sessions.push({ projectId, taskId, conversationId, status });
+    }
+    return sessions.sort((left, right) => {
+      if (left.status !== right.status) return left.status === 'awaiting-input' ? -1 : 1;
+      return (
+        left.projectId.localeCompare(right.projectId) ||
+        left.taskId.localeCompare(right.taskId) ||
+        left.conversationId.localeCompare(right.conversationId)
+      );
+    });
   }
 
   isTaskRunning(projectId: string, taskId: string): boolean {

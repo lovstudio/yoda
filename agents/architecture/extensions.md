@@ -2,8 +2,10 @@
 
 ## Product Boundary
 
-Yoda Marketplace is a top-level product surface alongside Library. It is the
-product-level extension catalog and is separate from `src/main/core/plugins/`,
+Yoda Marketplace is a top-level product surface alongside Library. It groups
+the Apps shelf with the product-level extension catalog. App creation and
+lifecycle remain owned by `src/renderer/features/ai-lab/`; extension
+distribution and lifecycle remain separate from `src/main/core/plugins/`,
 which manages Claude Code plugins inside Library.
 
 The extension contract is defined in `src/shared/extensions.ts`. Supported
@@ -27,6 +29,7 @@ and installation model rather than adding parallel lifecycle code.
 - `src/main/core/extensions/extension-state-store.ts` — installation state
 - `src/main/core/extensions/controller.ts` — typed Marketplace RPC
 - `src/renderer/features/extensions/` — Marketplace UI
+- `src/renderer/features/ai-lab/` — Apps shelf rendered inside Marketplace
 - `src/main/core/extensions/maas-gateway/` — Gateway utility process and proxy
 
 Marketplace owns distribution and lifecycle. Core domains retain authority for

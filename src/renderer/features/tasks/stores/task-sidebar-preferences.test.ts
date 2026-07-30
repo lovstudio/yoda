@@ -9,7 +9,7 @@ describe('TaskSidebarPreferenceStore', () => {
     expect(store.snapshot).toEqual({
       sidebarTab: 'conversations',
       isSidebarCollapsed: true,
-      sessionPanelOpenSectionIds: ['basic'],
+      sessionPanelOpenSectionIds: [],
       sessionPanelUnitOrder: [...SESSION_PANEL_UNITS],
       sessionPanelHiddenUnits: [],
       disclosureOpenIds: [],

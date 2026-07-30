@@ -5,6 +5,7 @@
 ### Patch Changes
 
 - 在 macOS DMG 打包前完成 App 公证与 ticket staple，并在 CI 中同时校验外部 App bundle、DMG 及挂载后的 App，确保离线 Gatekeeper 验证完整通过。
+- 简化新建快速操作界面，并让快速操作通过可继续对话的 Yoda 任务执行；生成、试跑与后续修复都保留在同一任务上下文中。
 
 ## 0.18.0
 

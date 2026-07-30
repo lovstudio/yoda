@@ -1,0 +1,121 @@
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FrontendPty } from '@renderer/lib/pty/pty';
+import { PtyPane } from '@renderer/lib/pty/pty-pane';
+
+const mocks = vi.hoisted(() => ({
+  sendInput: vi.fn<(sessionId: string, data: string) => Promise<{ success: true }>>(),
+  getPathForFile: vi.fn<(file: File) => string>(),
+}));
+
+vi.mock('@renderer/lib/ipc', () => ({
+  events: {
+    on: vi.fn(() => vi.fn()),
+  },
+  rpc: {
+    app: {
+      clipboardWriteText: vi.fn(async () => ({ success: true })),
+      openExternal: vi.fn(async () => undefined),
+    },
+    appSettings: {
+      get: vi.fn(async () => ({
+        autoCopyOnSelection: false,
+        scrollbackLines: 10_000,
+      })),
+    },
+    fs: {
+      saveClipboardImage: vi.fn(async () => ({
+        success: true,
+        data: { absPath: '/tmp/saved-clipboard.png' },
+      })),
+    },
+    pty: {
+      resize: vi.fn(async () => undefined),
+      sendInput: mocks.sendInput,
+      subscribe: vi.fn(async () => ({
+        success: true,
+        data: { buffer: '', generation: 1, sequence: 0 },
+      })),
+      unsubscribe: vi.fn(async () => undefined),
+      acknowledgeOutput: vi.fn(async () => undefined),
+      heartbeatConsumer: vi.fn(async () => undefined),
+    },
+  },
+}));
+
+vi.mock('@renderer/lib/pty/terminal-link-menu', () => ({
+  TerminalLinkMenu: () => null,
+}));
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+async function waitForTerminalInput(): Promise<string> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const input = mocks.sendInput.mock.calls.at(-1)?.[1];
+    if (input) return input;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  }
+  throw new Error('Terminal did not forward pasted input');
+}
+
+describe('active TUI image path paste', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+  let pty: FrontendPty;
+
+  beforeEach(async () => {
+    mocks.sendInput.mockReset().mockResolvedValue({ success: true });
+    mocks.getPathForFile.mockReset().mockImplementation((file) => `/tmp/${file.name}`);
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: { getPathForFile: mocks.getPathForFile },
+    });
+
+    host = document.createElement('div');
+    Object.assign(host.style, { width: '800px', height: '400px' });
+    document.body.appendChild(host);
+    root = createRoot(host);
+    pty = new FrontendPty('terminal-image-path-paste');
+    pty.flushPendingWrites();
+
+    await act(async () => {
+      root.render(<PtyPane sessionId="terminal-image-path-paste" pty={pty} pasteImagesAsPaths />);
+    });
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    pty.dispose();
+    host.remove();
+    Reflect.deleteProperty(window, 'electronAPI');
+  });
+
+  it('wraps pasted image path text and image files before PTY input', async () => {
+    const textarea = host.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
+    if (!textarea) throw new Error('xterm paste target was not mounted');
+
+    const pathClipboard = new DataTransfer();
+    pathClipboard.setData('text/plain', '/tmp/reference image.png');
+    textarea.dispatchEvent(
+      new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: pathClipboard,
+      })
+    );
+    expect(await waitForTerminalInput()).toContain('`@/tmp/reference image.png`');
+
+    mocks.sendInput.mockClear();
+    const fileClipboard = new DataTransfer();
+    fileClipboard.items.add(new File(['image'], 'clipboard.png', { type: 'image/png' }));
+    textarea.dispatchEvent(
+      new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: fileClipboard,
+      })
+    );
+    expect(await waitForTerminalInput()).toContain('`@/tmp/clipboard.png`');
+  });
+});

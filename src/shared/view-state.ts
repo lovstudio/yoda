@@ -174,6 +174,11 @@ export type SidebarTaskSortBy = 'created-at' | 'updated-at';
 
 export type SidebarTaskGroupBy = 'project' | 'none' | 'type' | 'activity';
 
+export const SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS = [3, 5, 10, 20] as const;
+export type SidebarTaskGroupVisibleLimit =
+  (typeof SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS)[number];
+export const DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT: SidebarTaskGroupVisibleLimit = 5;
+
 /**
  * How task rows render their branch name:
  * - `hidden`: no branch info.
@@ -194,6 +199,7 @@ export type SidebarSnapshot = {
   projectActivityById?: Record<string, string>;
   taskSortBy?: SidebarTaskSortBy;
   taskGroupBy?: SidebarTaskGroupBy;
+  taskGroupVisibleLimit?: SidebarTaskGroupVisibleLimit;
   taskBranchDisplay?: SidebarBranchDisplay;
   pinnedProjectIds?: string[];
   pinnedCollapsed?: boolean;

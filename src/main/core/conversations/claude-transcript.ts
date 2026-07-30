@@ -1,5 +1,8 @@
 import { readFile } from 'node:fs/promises';
-import type { MobileSessionTranscriptBlock } from '@shared/mobile-api';
+import type {
+  MobileSessionTranscriptAgentPhase,
+  MobileSessionTranscriptBlock,
+} from '@shared/mobile-api';
 import { resolveClaudeTranscriptPath } from '@main/core/session-title/claude-title-source';
 
 const MAX_TOOL_CONTENT_CHARS = 16 * 1024;
@@ -124,6 +127,7 @@ function extractAssistantBlocks(
   row: Record<string, unknown>,
   baseIndex: number
 ): MobileSessionTranscriptBlock[] {
+  const agentPhase = claudeAgentPhase(row);
   if (typeof content === 'string') {
     const text = cleanText(content);
     return text
@@ -131,6 +135,7 @@ function extractAssistantBlocks(
           {
             id: transcriptId(row, baseIndex, 'assistant'),
             role: 'assistant',
+            agentPhase,
             title: 'Claude',
             timestamp: nullableString(row.timestamp),
             format: 'markdown',
@@ -152,6 +157,7 @@ function extractAssistantBlocks(
     out.push({
       id: transcriptId(row, baseIndex + out.length, 'assistant'),
       role: 'assistant',
+      agentPhase,
       title: 'Claude',
       timestamp: nullableString(row.timestamp),
       format: 'markdown',
@@ -216,6 +222,7 @@ function compactIncrementalAssistantBlocks(
       previous &&
       previous.role === 'assistant' &&
       block.role === 'assistant' &&
+      previous.agentPhase === block.agentPhase &&
       (previous.format === 'markdown' || previous.format === 'plain') &&
       (block.format === 'markdown' || block.format === 'plain')
     ) {
@@ -227,6 +234,12 @@ function compactIncrementalAssistantBlocks(
     }
   }
   return compacted;
+}
+
+function claudeAgentPhase(row: Record<string, unknown>): MobileSessionTranscriptAgentPhase {
+  const message = objectValue(row.message);
+  const stopReason = nullableString(message?.stop_reason);
+  return stopReason && stopReason !== 'tool_use' ? 'final' : 'commentary';
 }
 
 function cleanText(value: string): string | null {

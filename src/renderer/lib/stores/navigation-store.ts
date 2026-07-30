@@ -1,5 +1,6 @@
 import { makeAutoObservable, toJS } from 'mobx';
 import type { NavigationSnapshot } from '@shared/view-state';
+import { migratePersistedViewRoute } from '@renderer/app/route-migrations';
 import { type ViewId, type WrapParams } from '@renderer/app/view-registry';
 import { modalStore } from '@renderer/lib/modal/modal-store';
 import type { HistoryEntry } from '@renderer/lib/stores/navigation-history-store';
@@ -127,7 +128,35 @@ export class NavigationStore implements Snapshottable<NavigationSnapshot> {
   }
 
   restoreSnapshot(snapshot: Partial<NavigationSnapshot>): void {
-    if (snapshot.currentViewId) this.currentViewId = snapshot.currentViewId as ViewId;
-    if (snapshot.viewParams) this.viewParamsStore = snapshot.viewParams as ViewParamsStore;
+    const restoredCurrent = snapshot.currentViewId
+      ? migratePersistedViewRoute({
+          viewId: snapshot.currentViewId,
+          params: asRouteParams(snapshot.viewParams?.[snapshot.currentViewId]),
+        })
+      : null;
+
+    if (snapshot.viewParams) {
+      const restoredParams = { ...snapshot.viewParams };
+      const legacyLibrary = migratePersistedViewRoute({
+        viewId: 'library',
+        params: asRouteParams(restoredParams.library),
+      });
+      if (legacyLibrary.viewId === 'marketplace') {
+        restoredParams.library = { section: 'prompts' };
+        if (restoredParams.marketplace === undefined || snapshot.currentViewId === 'library') {
+          restoredParams.marketplace = legacyLibrary.params;
+        }
+      }
+      if (restoredCurrent?.viewId === 'marketplace') {
+        restoredParams.marketplace = restoredCurrent.params;
+      }
+      this.viewParamsStore = restoredParams as ViewParamsStore;
+    }
+
+    if (restoredCurrent) this.currentViewId = restoredCurrent.viewId as ViewId;
   }
+}
+
+function asRouteParams(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 }

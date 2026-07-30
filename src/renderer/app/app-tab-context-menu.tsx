@@ -11,12 +11,17 @@ import {
   Pencil,
   RefreshCw,
   Settings2,
+  Share2,
   Sparkles,
   X,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { Fragment, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  AGENT_REPLY_DISPLAY_LEVELS,
+  type AgentReplyDisplayLevel,
+} from '@shared/agent-reply-display';
 import { buildTaskDeepLink } from '@shared/deep-links';
 import type { TaskWindowTabTarget } from '@shared/task-window';
 import {
@@ -50,7 +55,9 @@ import {
 } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { openTaskTabInWindow } from '@renderer/features/tasks/tabs/tab-meta';
 import { FilePathMenuItems, type FilePathTarget } from '@renderer/lib/components/file-path-actions';
+import { toast } from '@renderer/lib/hooks/use-toast';
 import { APP_SHORTCUTS } from '@renderer/lib/hooks/useKeyboardShortcuts';
+import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { showModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -442,6 +449,47 @@ export function buildConversationSections(
   }
 
   const copy: ReactNode[] = [
+    ...(provisioned
+      ? [
+          <ContextMenuSub key="share-public">
+            <ContextMenuSubTrigger className="whitespace-nowrap">
+              <Share2 className="size-4" />
+              {t('tasks.tabs.sharePublicLink')}
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="w-72">
+              {AGENT_REPLY_DISPLAY_LEVELS.map((replyDisplayLevel) => (
+                <ContextMenuItem
+                  key={replyDisplayLevel}
+                  data-reply-display-level={replyDisplayLevel}
+                  className="items-start py-2"
+                  onClick={() =>
+                    void shareConversationPublicly(
+                      projectId,
+                      taskId,
+                      conversationId,
+                      replyDisplayLevel,
+                      t
+                    )
+                  }
+                >
+                  <span className="grid min-w-0 gap-0.5">
+                    <span>
+                      {t(
+                        `tasks.sessionPanel.agentReplyDisplay.${replyDisplayLevel}.label` as const
+                      )}
+                    </span>
+                    <span className="text-xs whitespace-normal text-foreground-passive">
+                      {t(
+                        `tasks.sessionPanel.agentReplyDisplay.${replyDisplayLevel}.description` as const
+                      )}
+                    </span>
+                  </span>
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>,
+        ]
+      : []),
     <ContextMenuItem
       key="copy-link"
       className="whitespace-nowrap"
@@ -453,6 +501,58 @@ export function buildConversationSections(
   ];
 
   return [management, copy];
+}
+
+async function shareConversationPublicly(
+  projectId: string,
+  taskId: string,
+  conversationId: string,
+  replyDisplayLevel: AgentReplyDisplayLevel,
+  t: Translate
+): Promise<void> {
+  const toastId = toast.loading(t('tasks.tabs.creatingPublicShare'));
+  try {
+    const share = await rpc.sessionShares.create(
+      projectId,
+      taskId,
+      conversationId,
+      replyDisplayLevel
+    );
+    const copied = await rpc.app.clipboardWriteText(share.url);
+    toast.success(
+      t(copied.success ? 'tasks.tabs.publicShareCopied' : 'tasks.tabs.publicShareCreated'),
+      {
+        id: toastId,
+        description:
+          share.omittedAssetCount > 0
+            ? t('tasks.tabs.publicShareAssetsPartial', {
+                uploaded: share.assetCount,
+                omitted: share.omittedAssetCount,
+              })
+            : share.assetCount > 0
+              ? t('tasks.tabs.publicShareAssetsUploaded', { count: share.assetCount })
+              : copied.success
+                ? undefined
+                : t('tasks.tabs.publicShareCopyFailed'),
+        action: {
+          label: t('common.open'),
+          onClick: () => void rpc.app.openExternal(share.url),
+        },
+      }
+    );
+  } catch (error) {
+    log.warn('AppTabContextMenu: create public session share failed', {
+      projectId,
+      taskId,
+      conversationId,
+      replyDisplayLevel,
+      error,
+    });
+    toast.error(t('tasks.tabs.publicShareFailed'), {
+      id: toastId,
+      description: t('tasks.tabs.publicShareFailedDescription'),
+    });
+  }
 }
 
 /** Archive submenu — direct / run skill then archive / configure skill. */

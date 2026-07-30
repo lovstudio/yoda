@@ -4,6 +4,7 @@ import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { resumeConversation } from './resumeConversation';
 
 const mocks = vi.hoisted(() => ({
+  getActiveSessions: vi.fn(),
   startSession: vi.fn(),
   resolveTask: vi.fn(),
   selectChain: {
@@ -38,6 +39,7 @@ describe('resumeConversation', () => {
     vi.clearAllMocks();
     mocks.resolveTask.mockReturnValue({
       conversations: {
+        getActiveSessions: mocks.getActiveSessions,
         startSession: mocks.startSession,
       },
     });
@@ -51,6 +53,7 @@ describe('resumeConversation', () => {
       },
     ]);
     mocks.startSession.mockResolvedValue(undefined);
+    mocks.getActiveSessions.mockReturnValue([{ conversationId: 'conv-1' }]);
   });
 
   afterEach(() => {
@@ -58,12 +61,20 @@ describe('resumeConversation', () => {
   });
 
   it('coalesces concurrent resume requests for the same conversation', async () => {
-    await Promise.all([
-      resumeConversation('project-1', 'task-1', 'conv-1'),
-      resumeConversation('project-1', 'task-1', 'conv-1'),
-    ]);
+    await expect(
+      Promise.all([
+        resumeConversation('project-1', 'task-1', 'conv-1'),
+        resumeConversation('project-1', 'task-1', 'conv-1'),
+      ])
+    ).resolves.toEqual([true, true]);
 
     expect(mocks.startSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports when startup completes without a live provider session', async () => {
+    mocks.getActiveSessions.mockReturnValue([]);
+
+    await expect(resumeConversation('project-1', 'task-1', 'conv-1')).resolves.toBe(false);
   });
 
   it('does not restart after stop cancels registration during the database lookup', async () => {
@@ -83,7 +94,7 @@ describe('resumeConversation', () => {
         taskId: 'task-1',
       },
     ]);
-    await resumePromise;
+    await expect(resumePromise).resolves.toBe(false);
 
     expect(mocks.startSession).not.toHaveBeenCalled();
   });

@@ -43,15 +43,15 @@ describe('prompt groups', () => {
         [prompt('ungrouped', ''), prompt('review', 'Review'), prompt('build', 'Build')],
         ['Writing']
       )
-    ).toEqual(['Build', 'Review', 'Writing']);
+    ).toEqual(['Writing', 'Build', 'Review']);
   });
 
   it('keeps persisted groups visible when they do not contain prompts', () => {
-    const groups = groupPrompts([prompt('review', 'Review')], ['Build', 'Review']);
+    const groups = groupPrompts([prompt('review', 'Review')], ['Review', 'Build']);
 
-    expect(groups.map((group) => group.name)).toEqual(['Build', 'Review']);
-    expect(groups[0]?.prompts).toEqual([]);
-    expect(groups[1]?.prompts.map((entry) => entry.id)).toEqual(['review']);
+    expect(groups.map((group) => group.name)).toEqual(['Review', 'Build']);
+    expect(groups[0]?.prompts.map((entry) => entry.id)).toEqual(['review']);
+    expect(groups[1]?.prompts).toEqual([]);
   });
 
   it('reports all, partial, and empty group injection states', () => {

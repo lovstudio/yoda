@@ -64,12 +64,28 @@ type SessionState = {
   resumeRetryTimer: ReturnType<typeof setTimeout> | null;
   resumeRetryAttempt: number;
   pendingExit: { info: PtyExitInfo; preserveBuffer: boolean } | null;
+  outputBytesTotal: number;
+  outputRateSampleAt: number;
+  outputRateSampleBytes: number;
+  outputBytesPerSecond: number;
+  lastOutputAt: number | null;
 };
 
 export type PtySubscriptionSnapshot = {
   buffer: string;
   generation: number;
   sequence: number;
+};
+
+export type PtySessionDiagnostics = {
+  sessionId: string;
+  live: boolean;
+  outputBytesPerSecond: number;
+  lastOutputAt: number | null;
+  ringBufferBytes: number;
+  ringBufferCapBytes: number;
+  consumerCount: number;
+  pendingOutputBytes: number;
 };
 
 type PendingInput = {
@@ -125,6 +141,10 @@ class Utf8RingBuffer {
       .slice(this.head)
       .map((chunk) => chunk.data)
       .join('');
+  }
+
+  get sizeBytes(): number {
+    return this.byteLength;
   }
 
   clear(): void {
@@ -301,6 +321,11 @@ export class PtySessionRegistry {
       resumeRetryTimer: null,
       resumeRetryAttempt: 0,
       pendingExit: null,
+      outputBytesTotal: 0,
+      outputRateSampleAt: Date.now(),
+      outputRateSampleBytes: 0,
+      outputBytesPerSecond: 0,
+      lastOutputAt: null,
     };
     this.sessions.set(sessionId, state);
     for (const consumer of this.consumers.get(sessionId)?.values() ?? []) {
@@ -314,6 +339,8 @@ export class PtySessionRegistry {
       if (encoded.length === 0) return;
       state.pendingData.push(encoded);
       state.pendingByteLength += encoded.length;
+      state.outputBytesTotal += encoded.length;
+      state.lastOutputAt = Date.now();
       state.ringBuffer.append(data, encoded.length);
       if (state.flushTimer !== null && state.pendingByteLength >= PTY_OUTPUT_BATCH_MAX_BYTES) {
         clearTimeout(state.flushTimer);
@@ -441,6 +468,29 @@ export class PtySessionRegistry {
 
   snapshot(sessionId: string): string {
     return this.sessions.get(sessionId)?.ringBuffer.snapshot() ?? '';
+  }
+
+  getDiagnostics(sessionId: string): PtySessionDiagnostics | null {
+    const state = this.sessions.get(sessionId);
+    if (!state) return null;
+    const now = Date.now();
+    const elapsedMs = now - state.outputRateSampleAt;
+    if (elapsedMs >= 250) {
+      state.outputBytesPerSecond =
+        ((state.outputBytesTotal - state.outputRateSampleBytes) * 1_000) / elapsedMs;
+      state.outputRateSampleAt = now;
+      state.outputRateSampleBytes = state.outputBytesTotal;
+    }
+    return {
+      sessionId,
+      live: state.live,
+      outputBytesPerSecond: Math.round(state.outputBytesPerSecond),
+      lastOutputAt: state.lastOutputAt,
+      ringBufferBytes: state.ringBuffer.sizeBytes,
+      ringBufferCapBytes: this.ringBufferCapBytes,
+      consumerCount: this.consumers.get(sessionId)?.size ?? 0,
+      pendingOutputBytes: state.pendingByteLength + state.inflightByteLength,
+    };
   }
 
   /**

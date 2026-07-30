@@ -5,6 +5,7 @@ import { createRPCController } from '@shared/ipc/rpc';
 import { parsePtySessionId } from '@shared/ptySessionId';
 import { err, ok } from '@shared/result';
 import { loadCodexRolloutTerminalHistoryForConversation } from '@main/core/conversations/codex-rollout-terminal-history';
+import { resumeConversation } from '@main/core/conversations/resumeConversation';
 import { mapConversationRowToConversation } from '@main/core/conversations/utils';
 import { db } from '@main/db/client';
 import { conversations, projects } from '@main/db/schema';
@@ -17,7 +18,21 @@ import { normalizePlainTextTerminalEol } from './terminal-history-eol';
 export const ptyController = createRPCController({
   /** Send raw input data to a PTY session. */
   sendInput: (sessionId: string, data: string) => {
-    const status = ptySessionRegistry.writeOrQueue(sessionId, data);
+    let status = ptySessionRegistry.writeOrQueue(sessionId, data);
+    if (status === 'unavailable') {
+      const parsed = parsePtySessionId(sessionId);
+      if (parsed) {
+        const registrationEpoch = ptySessionRegistry.beginRegistration(sessionId);
+        status = ptySessionRegistry.writeOrQueue(sessionId, data);
+        void resumeConversation(parsed.projectId, parsed.scopeId, parsed.leafId).catch((error) => {
+          ptySessionRegistry.cancelRegistration(sessionId, registrationEpoch);
+          log.debug('ptyController.sendInput: transparent resume skipped', {
+            sessionId,
+            error: String(error),
+          });
+        });
+      }
+    }
     if (status === 'full') return err({ type: 'input_queue_full' as const });
     if (status === 'unavailable') return err({ type: 'not_found' as const });
     return ok({ queued: status === 'queued' });

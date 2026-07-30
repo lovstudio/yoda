@@ -36,18 +36,16 @@ import {
   SidebarMenu,
   SidebarMenuButton,
 } from './sidebar-primitives';
-import { findSidebarSelectionRow } from './sidebar-selection-sync';
+import { findSidebarSelectionRow, revealSidebarSelectionRow } from './sidebar-selection-sync';
 import { SidebarSpace } from './sidebar-space';
 import { SidebarStatusBar } from './sidebar-status-bar';
 import { SidebarVirtualList } from './sidebar-virtual-list';
-import { useAltKeyHeld } from './use-alt-key-held';
 import { useSidebarDrop } from './use-sidebar-drop';
 
 export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const { currentView } = useWorkspaceSlots();
-  const altHeld = useAltKeyHeld();
 
   const showCommandPalette = useShowModal('commandPaletteModal');
   const { count: skillIssueCount, firstIssue: firstSkillIssue } = useSkillValidationIssues();
@@ -70,11 +68,16 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         ? projectParams.projectId
         : undefined;
   const currentTaskId = currentView === 'task' ? taskParams.taskId : undefined;
-  const currentProject = currentProjectId ? getProjectStore(currentProjectId) : undefined;
+  const selectionRevealRequest = sidebarStore.selectionRevealRequest;
+  const selectionProjectId = currentProjectId ?? selectionRevealRequest?.projectId;
+  const selectionTaskId = currentProjectId ? currentTaskId : selectionRevealRequest?.taskId;
+  const currentProject = selectionProjectId ? getProjectStore(selectionProjectId) : undefined;
   const currentTask =
-    currentProjectId && currentTaskId ? getTaskStore(currentProjectId, currentTaskId) : undefined;
-  const currentProjectPinned = currentProjectId
-    ? sidebarStore.isProjectPinned(currentProjectId)
+    selectionProjectId && selectionTaskId
+      ? getTaskStore(selectionProjectId, selectionTaskId)
+      : undefined;
+  const currentProjectPinned = selectionProjectId
+    ? sidebarStore.isProjectPinned(selectionProjectId)
     : false;
   const currentTaskPinned = currentTask?.data.isPinned ?? false;
   const currentWorkspaceId =
@@ -84,32 +87,35 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const selectionKey =
     currentProjectId && (currentView === 'project' || currentView === 'task')
       ? `${currentView}:${currentProjectId}:${currentTaskId ?? ''}`
-      : null;
+      : selectionRevealRequest
+        ? `reveal:${selectionRevealRequest.requestId}`
+        : null;
 
   React.useEffect(() => {
-    if (!currentProjectId || (currentView !== 'project' && currentView !== 'task')) return;
-    sidebarStore.revealSelection(currentProjectId, currentTaskId);
+    if (!selectionProjectId) return;
+    sidebarStore.revealSelection(selectionProjectId, selectionTaskId);
   }, [
     currentProject,
-    currentProjectId,
     currentProjectPinned,
     currentTask,
-    currentTaskId,
     currentTaskPinned,
     currentView,
     currentWorkspaceId,
+    selectionProjectId,
+    selectionTaskId,
   ]);
 
   React.useEffect(() => {
     const root = sidebarContentRef.current;
-    if (!selectionKey || !currentProjectId || !root) {
+    if (!selectionKey || !selectionProjectId || !root) {
       lastScrolledSelectionRef.current = null;
       lastScrolledRowRef.current = null;
       return;
     }
 
     const scrollSelectionIntoView = () => {
-      const row = findSidebarSelectionRow(root, currentProjectId, currentTaskId);
+      const shouldFocus = selectionRevealRequest !== null && !currentProjectId;
+      const row = findSidebarSelectionRow(root, selectionProjectId, selectionTaskId);
       if (!row) {
         lastScrolledRowRef.current = null;
         return;
@@ -118,9 +124,12 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         return;
       }
 
+      revealSidebarSelectionRow(root, selectionProjectId, selectionTaskId, shouldFocus);
       lastScrolledSelectionRef.current = selectionKey;
       lastScrolledRowRef.current = row;
-      row.scrollIntoView({ block: 'nearest' });
+      if (shouldFocus) {
+        sidebarStore.completeSelectionReveal(selectionRevealRequest.requestId);
+      }
     };
 
     scrollSelectionIntoView();
@@ -132,7 +141,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       subtree: true,
     });
     return () => observer.disconnect();
-  }, [currentProjectId, currentTaskId, selectionKey]);
+  }, [currentProjectId, selectionKey, selectionProjectId, selectionRevealRequest, selectionTaskId]);
   const skillIssueLabel =
     skillIssueCount > 0 ? t('sidebar.skillIssues', { count: skillIssueCount }) : null;
   const skillIssueTitle =
@@ -209,7 +218,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               </span>
               <ShortcutHint settingsKey="commandPaletteTasks" />
             </SidebarMenuButton>
-            <GlobalSidePaneTarget viewId="library" params={libraryParams} altHeld={altHeld}>
+            <GlobalSidePaneTarget viewId="library" params={libraryParams}>
               <SidebarMenuButton
                 isActive={isCurrentView(currentView, 'library')}
                 onClick={(e) =>
@@ -230,44 +239,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </span>
               </SidebarMenuButton>
             </GlobalSidePaneTarget>
-            {pinnedApps.map((app) => (
-              <GlobalSidePaneTarget
-                key={app.id}
-                viewId="library"
-                params={{ section: 'apps', appId: app.id }}
-                altHeld={altHeld}
-                unpinAction={{
-                  label: t('aiLab.unpinFromNavigation'),
-                  disabled: updateAiLabApp.isPending,
-                  onSelect: () => updateAiLabApp.mutate({ id: app.id, pinned: false }),
-                }}
-              >
-                <SidebarMenuButton
-                  isActive={
-                    currentView === 'library' &&
-                    libraryParams.section === 'apps' &&
-                    libraryParams.appId === app.id
-                  }
-                  onClick={(event) =>
-                    event.altKey
-                      ? appState.sidePane.toggleView('library', {
-                          section: 'apps',
-                          appId: app.id,
-                        })
-                      : navigate('library', { section: 'apps', appId: app.id })
-                  }
-                  aria-label={app.name}
-                  title={app.description}
-                  className="w-full justify-start pl-7"
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <AppWindow className="size-3.5 shrink-0 text-sky-500" />
-                    <span className="min-w-0 truncate text-xs">{app.name}</span>
-                  </span>
-                </SidebarMenuButton>
-              </GlobalSidePaneTarget>
-            ))}
-            <GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams} altHeld={altHeld}>
+            <GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams}>
               <SidebarMenuButton
                 isActive={isCurrentView(currentView, 'marketplace')}
                 onClick={(event) =>
@@ -285,6 +257,42 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </span>
               </SidebarMenuButton>
             </GlobalSidePaneTarget>
+            {pinnedApps.map((app) => (
+              <GlobalSidePaneTarget
+                key={app.id}
+                viewId="marketplace"
+                params={{ section: 'apps', appId: app.id }}
+                unpinAction={{
+                  label: t('aiLab.unpinFromNavigation'),
+                  disabled: updateAiLabApp.isPending,
+                  onSelect: () => updateAiLabApp.mutate({ id: app.id, pinned: false }),
+                }}
+              >
+                <SidebarMenuButton
+                  isActive={
+                    currentView === 'marketplace' &&
+                    marketplaceParams.section === 'apps' &&
+                    marketplaceParams.appId === app.id
+                  }
+                  onClick={(event) =>
+                    event.altKey
+                      ? appState.sidePane.toggleView('marketplace', {
+                          section: 'apps',
+                          appId: app.id,
+                        })
+                      : navigate('marketplace', { section: 'apps', appId: app.id })
+                  }
+                  aria-label={app.name}
+                  title={app.description}
+                  className="w-full justify-start pl-7"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <AppWindow className="size-3.5 shrink-0 text-sky-500" />
+                    <span className="min-w-0 truncate text-xs">{app.name}</span>
+                  </span>
+                </SidebarMenuButton>
+              </GlobalSidePaneTarget>
+            ))}
             <div className="my-1 border-t border-border" />
           </SidebarMenu>
         </div>

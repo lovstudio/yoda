@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  LANGUAGE_STORAGE_KEY,
+  changeAppLanguage,
   normalizeSupportedLanguage,
   SUPPORTED_LANGUAGES,
   type SupportedLanguage,
@@ -37,12 +37,7 @@ const LanguageCard: React.FC = () => {
     if (!next) return;
     const language = normalizeSupportedLanguage(next);
     setCurrent(language);
-    try {
-      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
-    } catch {
-      /* ignore */
-    }
-    void i18n.changeLanguage(language);
+    void changeAppLanguage(language);
   };
 
   const renderLanguageLabel = (value: unknown) => {

@@ -1,5 +1,6 @@
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import {
+  ChevronDown,
   ChevronRight,
   FileText,
   Info,
@@ -10,7 +11,20 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  AGENT_REPLY_DISPLAY_LEVELS,
+  isAgentReplyDisplayLevel,
+  type AgentReplyDisplayLevel,
+} from '@shared/agent-reply-display';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
 import { HarnessSection } from '../context-panel';
 import {
   SessionInfoPanel,
@@ -209,6 +223,10 @@ const ConversationBlind = observer(function ConversationBlind({
 }) {
   // Load prompts regardless of open state so the header count is always live.
   const prompts = useSessionPrompts(true);
+  const { value: interfaceSettings, update: updateInterfaceSettings } =
+    useAppSettingsKey('interface');
+  const displayLevel = interfaceSettings?.agentReplyDisplayLevel ?? 'concise';
+  const transcriptFeed = useConversationTranscript(displayLevel === 'verbose');
   return (
     <Blind
       id="conversation"
@@ -216,12 +234,88 @@ const ConversationBlind = observer(function ConversationBlind({
       title={title}
       open={open}
       count={<SessionPromptsCount prompts={prompts} />}
-      actions={<SessionPromptsViewAllButton prompts={prompts} />}
+      actions={
+        <>
+          <AgentReplyDisplayLevelMenu
+            value={displayLevel}
+            onChange={(agentReplyDisplayLevel) =>
+              updateInterfaceSettings({ agentReplyDisplayLevel })
+            }
+          />
+          {displayLevel === 'verbose' ? (
+            <TranscriptFileActions feed={transcriptFeed} />
+          ) : (
+            <SessionPromptsViewAllButton prompts={prompts} displayLevel={displayLevel} />
+          )}
+        </>
+      }
     >
-      {() => <SessionPromptsContent prompts={prompts} />}
+      {() =>
+        displayLevel === 'verbose' ? (
+          <TranscriptContent feed={transcriptFeed} />
+        ) : (
+          <SessionPromptsContent prompts={prompts} displayLevel={displayLevel} />
+        )
+      }
     </Blind>
   );
 });
+
+function AgentReplyDisplayLevelMenu({
+  value,
+  onChange,
+}: {
+  value: AgentReplyDisplayLevel;
+  onChange: (value: AgentReplyDisplayLevel) => void;
+}) {
+  const { t } = useTranslation();
+  const valueLabel = t(agentReplyDisplayLevelLabelKey(value));
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={t('tasks.sessionPanel.agentReplyDisplayControl', { level: valueLabel })}
+        title={t('tasks.sessionPanel.agentReplyDisplayControl', { level: valueLabel })}
+        className="flex h-6 min-w-0 items-center gap-1 rounded-sm px-1.5 text-[11px] text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <span className="max-w-24 truncate">
+          {t('tasks.sessionPanel.agentReplyDisplayShort', { level: valueLabel })}
+        </span>
+        <ChevronDown className="size-3 shrink-0" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(next) => {
+            if (isAgentReplyDisplayLevel(next)) onChange(next);
+          }}
+        >
+          {AGENT_REPLY_DISPLAY_LEVELS.map((level) => (
+            <DropdownMenuRadioItem key={level} value={level} className="items-start" closeOnClick>
+              <span className="min-w-0">
+                <span className="block text-sm text-foreground">
+                  {t(agentReplyDisplayLevelLabelKey(level))}
+                </span>
+                <span className="mt-0.5 block whitespace-normal text-[11px] leading-snug text-foreground-passive">
+                  {t(agentReplyDisplayLevelDescriptionKey(level))}
+                </span>
+              </span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function agentReplyDisplayLevelLabelKey(level: AgentReplyDisplayLevel): string {
+  return `tasks.sessionPanel.agentReplyDisplay.${level}.label`;
+}
+
+function agentReplyDisplayLevelDescriptionKey(level: AgentReplyDisplayLevel): string {
+  return `tasks.sessionPanel.agentReplyDisplay.${level}.description`;
+}
 
 /**
  * The Transcript blind: a live mirror of the conversation's on-disk transcript
