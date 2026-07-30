@@ -29,7 +29,8 @@ vi.mock('@renderer/lib/ui/context-menu', () => ({
 
 vi.mock('@renderer/lib/ui/tooltip', () => ({
   Tooltip: ({ children }: { children: ReactNode }) => createElement('div', null, children),
-  TooltipContent: ({ children }: { children: ReactNode }) => createElement('span', null, children),
+  TooltipContent: ({ children }: { children: ReactNode }) =>
+    createElement('span', { 'data-tooltip-content': true }, children),
   TooltipTrigger: ({ render }: { render: ReactElement }) => render,
 }));
 
@@ -39,7 +40,6 @@ describe('GlobalSidePaneTarget', () => {
       createElement(GlobalSidePaneTarget, {
         viewId: 'marketplace',
         params: { section: 'apps', appId: 'app-1' },
-        altHeld: false,
         unpinAction: {
           label: 'Unpin from navigation',
           onSelect: vi.fn(),
@@ -50,5 +50,21 @@ describe('GlobalSidePaneTarget', () => {
 
     expect(html).toContain('appTabs.openInGlobalSidePane');
     expect(html).toContain('Unpin from navigation');
+    expect(html).not.toContain('data-tooltip-content');
+  });
+
+  it('keeps the owning item tooltip without showing the global sidebar action as a hint', () => {
+    const html = renderToStaticMarkup(
+      createElement(GlobalSidePaneTarget, {
+        viewId: 'settings',
+        tooltipLabel: 'Settings',
+        children: createElement('button', null, 'Open settings'),
+      })
+    );
+
+    expect(html).toContain('<span data-tooltip-content="true">Settings</span>');
+    expect(html).not.toContain(
+      '<span data-tooltip-content="true">appTabs.openInGlobalSidePane</span>'
+    );
   });
 });

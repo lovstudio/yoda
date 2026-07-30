@@ -28,13 +28,11 @@ import { appState } from '@renderer/lib/stores/app-state';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { cn } from '@renderer/utils/utils';
 import { GlobalSidePaneTarget } from './global-side-pane-target';
-import { useAltKeyHeld } from './use-alt-key-held';
 
 export const SidebarStatusBar = observer(function SidebarStatusBar() {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const { currentView } = useWorkspaceSlots();
-  const altHeld = useAltKeyHeld();
   const quickNavItems: Array<{
     viewId: Extract<ViewId, 'mobile' | 'settings'>;
     icon: LucideIcon;
@@ -56,13 +54,7 @@ export const SidebarStatusBar = observer(function SidebarStatusBar() {
         className="flex shrink-0 items-center gap-0.5 px-1"
       >
         {quickNavItems.map(({ viewId, icon: Icon, label }) => (
-          <GlobalSidePaneTarget
-            key={viewId}
-            viewId={viewId}
-            altHeld={altHeld}
-            tooltipSide="top"
-            tooltipLabel={label}
-          >
+          <GlobalSidePaneTarget key={viewId} viewId={viewId} tooltipSide="top" tooltipLabel={label}>
             <button
               type="button"
               onClick={(event) =>
