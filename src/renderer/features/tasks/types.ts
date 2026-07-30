@@ -142,9 +142,10 @@ export function sidebarTabForGroup(group: SidebarTabGroup): SidebarTab {
 /** Maps a session-family tab to the blind it should expand, if any. */
 export function sessionSectionForTab(tab: SidebarTab): SessionPanelSection | null {
   switch (tab) {
-    case 'session':
     case 'rename':
       return 'basic';
+    case 'session':
+      return null;
     case 'task':
       return 'tasks';
     case 'conversations':
