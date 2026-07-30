@@ -40,14 +40,12 @@ import { findSidebarSelectionRow } from './sidebar-selection-sync';
 import { SidebarSpace } from './sidebar-space';
 import { SidebarStatusBar } from './sidebar-status-bar';
 import { SidebarVirtualList } from './sidebar-virtual-list';
-import { useAltKeyHeld } from './use-alt-key-held';
 import { useSidebarDrop } from './use-sidebar-drop';
 
 export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const { currentView } = useWorkspaceSlots();
-  const altHeld = useAltKeyHeld();
 
   const showCommandPalette = useShowModal('commandPaletteModal');
   const { count: skillIssueCount, firstIssue: firstSkillIssue } = useSkillValidationIssues();
@@ -209,7 +207,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               </span>
               <ShortcutHint settingsKey="commandPaletteTasks" />
             </SidebarMenuButton>
-            <GlobalSidePaneTarget viewId="library" params={libraryParams} altHeld={altHeld}>
+            <GlobalSidePaneTarget viewId="library" params={libraryParams}>
               <SidebarMenuButton
                 isActive={isCurrentView(currentView, 'library')}
                 onClick={(e) =>
@@ -230,7 +228,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </span>
               </SidebarMenuButton>
             </GlobalSidePaneTarget>
-            <GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams} altHeld={altHeld}>
+            <GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams}>
               <SidebarMenuButton
                 isActive={isCurrentView(currentView, 'marketplace')}
                 onClick={(event) =>
@@ -253,7 +251,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 key={app.id}
                 viewId="marketplace"
                 params={{ section: 'apps', appId: app.id }}
-                altHeld={altHeld}
                 unpinAction={{
                   label: t('aiLab.unpinFromNavigation'),
                   disabled: updateAiLabApp.isPending,
