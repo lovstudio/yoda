@@ -15,6 +15,7 @@ import {
   GripVertical,
   Lightbulb,
   Loader2,
+  LocateFixed,
   Monitor,
   Puzzle,
   Repeat2,
@@ -89,6 +90,7 @@ import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Badge } from '@renderer/lib/ui/badge';
+import { Button } from '@renderer/lib/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import { ComboboxTrigger, ComboboxValue } from '@renderer/lib/ui/combobox';
 import {
@@ -399,6 +401,7 @@ export const HomeComposer = observer(function HomeComposer({
 }) {
   const { t, i18n } = useTranslation();
   const { navigate } = useNavigate();
+  const { setCollapsed } = useWorkspaceLayoutContext();
   const taskScopedTarget = submitTarget.kind === 'existing-task' ? submitTarget : null;
   // Subtask mode: still creates tasks, but locked to the parent's project and
   // linked via parentTaskId; new branches fork off the parent's branch.
@@ -440,6 +443,11 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [isProjectLocked, updateDraft]
   );
+  const revealSelectedProjectInSidebar = useCallback(() => {
+    if (!selectedProjectId) return;
+    setCollapsed('left', false);
+    appState.sidebar.requestSelectionReveal(selectedProjectId);
+  }, [selectedProjectId, setCollapsed]);
 
   const draftProjectId = draft?.selectedProjectId ?? null;
   useEffect(() => {
@@ -2221,18 +2229,38 @@ export const HomeComposer = observer(function HomeComposer({
                 }
               />
             ) : (
-              <ProjectSelector
-                value={selectedProjectId}
-                onChange={setSelectedProjectId}
-                allowProjectless
-                initializeGitRepositoryOnPick
-                trigger={
-                  <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
-                    <FolderOpen className="size-3.5 text-foreground-muted" />
-                    <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
-                  </ComboboxTrigger>
-                }
-              />
+              <div className="flex items-center gap-1">
+                <ProjectSelector
+                  value={selectedProjectId}
+                  onChange={setSelectedProjectId}
+                  allowProjectless
+                  initializeGitRepositoryOnPick
+                  trigger={
+                    <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+                      <FolderOpen className="size-3.5 text-foreground-muted" />
+                      <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
+                    </ComboboxTrigger>
+                  }
+                />
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon-xs"
+                        className="size-7 bg-background-1"
+                        disabled={!selectedProjectId}
+                        aria-label={t('home.revealProjectInSidebar')}
+                        onClick={revealSelectedProjectInSidebar}
+                      />
+                    }
+                  >
+                    <LocateFixed className="size-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent>{t('home.revealProjectInSidebar')}</TooltipContent>
+                </Tooltip>
+              </div>
             )}
             {runMode !== 'build' && (
               <RunHostSelector

@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { findSidebarSelectionRow } from '@renderer/features/sidebar/sidebar-selection-sync';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  findSidebarSelectionRow,
+  revealSidebarSelectionRow,
+} from '@renderer/features/sidebar/sidebar-selection-sync';
 
 describe('sidebar selection sync', () => {
   it('finds the selected project row across the whole sidebar', () => {
@@ -19,6 +22,20 @@ describe('sidebar selection sync', () => {
     root.append(other, selected);
 
     expect(findSidebarSelectionRow(root, 'project-2', 'task-1')).toBe(selected);
+  });
+
+  it('scrolls and focuses a project row for an explicit locator request', () => {
+    const root = document.createElement('div');
+    const project = document.createElement('button');
+    project.dataset.sidebarEntity = 'project';
+    project.dataset.sidebarProjectId = 'project-2';
+    project.scrollIntoView = vi.fn();
+    const focus = vi.spyOn(project, 'focus');
+    root.append(project);
+
+    expect(revealSidebarSelectionRow(root, 'project-2', undefined, true)).toBe(project);
+    expect(project.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
   });
 });
 

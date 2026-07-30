@@ -129,6 +129,12 @@ export type PinnedSidebarEntry =
 
 export type ProjectTypeFilter = 'all' | 'local' | 'ssh';
 
+export interface SidebarSelectionRevealRequest {
+  requestId: number;
+  projectId: string;
+  taskId?: string;
+}
+
 function isActiveSidebarTask(task: TaskStore): boolean {
   return task.state === 'unregistered' || !('archivedAt' in task.data && task.data.archivedAt);
 }
@@ -188,6 +194,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   private readonly reflowHoldReasons = new Set<string>();
   /** Global show/hide for the entire secondary nav section. */
   navSectionHidden = false;
+  selectionRevealRequest: SidebarSelectionRevealRequest | null = null;
+  private nextSelectionRevealRequestId = 1;
 
   constructor(
     private readonly projectManager: ProjectManagerStore,
@@ -815,6 +823,26 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       this.collapsedTaskIds.delete(parentTaskId);
       const parent = tasks.get(parentTaskId);
       parentTaskId = parent ? registeredTaskData(parent)?.parentTaskId : undefined;
+    }
+  }
+
+  /**
+   * Requests an explicit, one-shot sidebar reveal from a surface that stays on
+   * its current route, such as Home's selected-project locator.
+   */
+  requestSelectionReveal(projectId: string, taskId?: string): void {
+    this.revealSelection(projectId, taskId);
+    this.selectionRevealRequest = {
+      requestId: this.nextSelectionRevealRequestId,
+      projectId,
+      ...(taskId ? { taskId } : {}),
+    };
+    this.nextSelectionRevealRequestId += 1;
+  }
+
+  completeSelectionReveal(requestId: number): void {
+    if (this.selectionRevealRequest?.requestId === requestId) {
+      this.selectionRevealRequest = null;
     }
   }
 
