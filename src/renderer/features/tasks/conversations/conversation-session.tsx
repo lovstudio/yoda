@@ -4,6 +4,7 @@ import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
+import { useAttachImagesAsPaths } from '@renderer/features/tasks/hooks/use-attach-images-as-paths';
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { useWorkspaceWebLinks } from '@renderer/features/tasks/terminals/use-workspace-web-links';
@@ -70,6 +71,7 @@ export const ConversationSession = observer(function ConversationSession({
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
+  const attachImagesAsPaths = useAttachImagesAsPaths(projectId);
   const { conversations } = provisioned;
   const mountedProject = asMounted(getProjectStore(projectId));
   const projectRoot = mountedProject?.data.path;
@@ -286,6 +288,7 @@ export const ConversationSession = observer(function ConversationSession({
           onInterruptPress={onInterruptPress}
           onExit={() => conversation.markSessionExited()}
           mapShiftEnterToCtrlJ
+          pasteImagesAsPaths={attachImagesAsPaths}
           remoteConnectionId={remoteConnectionId}
           fileLinks={fileLinks}
           webLinks={webLinks}

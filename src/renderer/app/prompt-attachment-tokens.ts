@@ -13,6 +13,8 @@
  * into native clipboard pastes at exactly that position.
  */
 
+import { imagePathMention } from '@renderer/lib/image-path-mention';
+
 export type PromptTokenKind = 'image' | 'file';
 
 export type PromptToken = {
@@ -38,7 +40,6 @@ export type TokenRect = { left: number; top: number; width: number; height: numb
 // syntax never collides with hand-written text.
 const TOKEN_DELIM = '\u2002\u2002\u2002';
 const TOKEN_RE = /\u2002{3}([^\u2002\n]{1,126})\u2002{3}/g;
-const IMAGE_PATH_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 
 export function tokenText(label: string): string {
   return `${TOKEN_DELIM}${label}${TOKEN_DELIM}`;
@@ -120,35 +121,6 @@ export function snapSelectionToTokens(
 /** Marker the main process expands into a native clipboard paste. */
 export function imageMarker(index: number): string {
   return `{{yoda-image:${index}}}`;
-}
-
-/** Keep an image path textual so Agent clients do not promote it to an image input. */
-export function imagePathMention(path: string): string {
-  const normalized = path.startsWith('@') ? path.slice(1) : path;
-  return `\`@${normalized}\``;
-}
-
-/**
- * Convert a single pasted image pathname into the same textual transport used
- * by image attachment tokens. Other clipboard text is left to the textarea's
- * native paste behavior.
- */
-export function pastedImagePathMention(text: string): string | null {
-  const trimmed = text.trim();
-  if (!trimmed || trimmed.includes('\n')) return null;
-  if (trimmed.startsWith('`') && trimmed.endsWith('`')) {
-    const code = trimmed.slice(1, -1);
-    const path = code.startsWith('@') ? code.slice(1) : code;
-    return IMAGE_PATH_RE.test(path) ? imagePathMention(path) : null;
-  }
-
-  const withoutMention = trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
-  const path =
-    (withoutMention.startsWith('"') && withoutMention.endsWith('"')) ||
-    (withoutMention.startsWith("'") && withoutMention.endsWith("'"))
-      ? withoutMention.slice(1, -1)
-      : withoutMention;
-  return IMAGE_PATH_RE.test(path) ? imagePathMention(path) : null;
 }
 
 /**

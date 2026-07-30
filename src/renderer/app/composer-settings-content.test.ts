@@ -35,4 +35,22 @@ describe('shared composer settings surfaces', () => {
     expect(configIndex).toBeGreaterThan(0);
     expect(agentsIndex).toBeGreaterThan(configIndex);
   });
+
+  it('applies the image-path setting to the active conversation TUI paste boundary', () => {
+    const conversation = readFileSync(
+      new URL('../features/tasks/conversations/conversation-session.tsx', import.meta.url),
+      'utf8'
+    );
+    const pinnedConversation = readFileSync(
+      new URL('../features/tasks/view/sidebar-pinned-content.tsx', import.meta.url),
+      'utf8'
+    );
+    const pty = readFileSync(new URL('../lib/pty/use-pty.ts', import.meta.url), 'utf8');
+
+    expect(conversation).toContain('useAttachImagesAsPaths(projectId)');
+    expect(conversation).toContain('pasteImagesAsPaths={attachImagesAsPaths}');
+    expect(pinnedConversation).toContain('pasteImagesAsPaths={attachImagesAsPaths}');
+    expect(pty).toContain("terminalElement.addEventListener('paste', handleTerminalPaste, true)");
+    expect(pty).toContain('transformTerminalPasteText(text, pasteImagesAsPathsRef.current)');
+  });
 });
