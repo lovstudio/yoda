@@ -220,6 +220,14 @@ describe('terminal file links', () => {
     expect(extractTerminalFileLinkCandidates(line)).toEqual([{ text: expected, index: 0 }]);
   });
 
+  it('keeps a parenthesized filename suffix when the extension follows it', () => {
+    const text =
+      '/Users/mark/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_ck85xup8b1bj21_b222/msg/file/2026-07/lovstudio-bp-审查报告(1).md';
+    const line = `open -R '${text}'`;
+
+    expect(extractTerminalFileLinkCandidates(line)).toEqual([{ text, index: line.indexOf(text) }]);
+  });
+
   it('strips ASCII parens wrapping a path', () => {
     const line = '见 (src/foo.ts) 文件';
     expect(extractTerminalFileLinkCandidates(line)).toEqual([
@@ -754,6 +762,60 @@ describe('terminal file links', () => {
     expect(getTerminalFileLinkMatches(terminal, 1, options)).toEqual([expected]);
     expect(getTerminalFileLinkMatches(terminal, 2, options)).toEqual([expected]);
     expect(getTerminalFileLinkMatches(terminal, 3, options)).toEqual([expected]);
+  });
+
+  it('keeps a parenthesized absolute filename whole across hard-wrapped rows', () => {
+    const text =
+      '/Users/mark/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_ck85xup8b1bj21_b222/msg/file/2026-07/lovstudio-bp-审查报告(1).md';
+    const terminal = makeTerminal([text.slice(0, 72), text.slice(72, 144), text.slice(144)], {
+      cols: 72,
+    });
+    const options = {
+      workspaceRoot: '/Users/mark/yoda/repositories/qlmarkdown',
+      onOpen: (): void => undefined,
+    };
+
+    for (const row of [1, 2, 3]) {
+      expect(
+        getTerminalFileLinkMatches(terminal, row, options).map((match) => ({
+          text: match.text,
+          target: match.target,
+        }))
+      ).toEqual([
+        {
+          text,
+          target: {
+            originalText: text,
+            absolutePath: text,
+            line: undefined,
+            column: undefined,
+          },
+        },
+      ]);
+    }
+  });
+
+  it.each([
+    ['before the group', 0],
+    ['inside the group', 1],
+    ['before the extension', 3],
+    ['inside the extension', 5],
+  ])('joins a parenthesized filename wrapped %s', (_label, groupOffset) => {
+    const text =
+      '/Users/mark/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_ck85xup8b1bj21_b222/msg/file/2026-07/lovstudio-bp-审查报告(1).md';
+    const groupIndex = text.indexOf('(1)');
+    const splitIndex = groupIndex + groupOffset;
+    const terminal = makeTerminal([text.slice(0, splitIndex), text.slice(splitIndex)], {
+      cols: splitIndex,
+    });
+    const options = {
+      workspaceRoot: '/Users/mark/yoda/repositories/qlmarkdown',
+      onOpen: (): void => undefined,
+    };
+
+    expect(getTerminalFileLinkMatches(terminal, 2, options).map((match) => match.text)).toEqual([
+      text,
+    ]);
   });
 
   it('maps a soft-wrapped link starting at the first cell of a row', () => {
