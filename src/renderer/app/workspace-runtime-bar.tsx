@@ -79,6 +79,10 @@ type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title'
   taskTitle?: string;
 };
 
+const RUNTIME_BAR_ACTION_CLASS =
+  'flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border';
+const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';
+
 function agentSessionKey(
   session: Pick<AppAgentSessionResource, 'projectId' | 'taskId' | 'conversationId'>
 ): string {
@@ -558,10 +562,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   return (
     <footer
       data-yoda-surface="workspace-runtime-bar"
-      className="flex h-7 shrink-0 items-center gap-2 border-t border-border bg-background-secondary px-2 text-[11px] text-foreground-muted"
+      className="@container flex h-7 min-w-0 shrink-0 items-center gap-1 overflow-hidden whitespace-nowrap border-t border-border bg-background-secondary px-2 text-[11px] text-foreground-muted @min-[1441px]:gap-2"
     >
       {runtimeId ? (
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-0.5 overflow-hidden @min-[1121px]:gap-1.5">
           <Popover>
             <PopoverTrigger
               aria-label={t('workspaceRuntime.currentSessionTitle', {
@@ -581,7 +585,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   className="size-4 rounded-[2px]"
                 />
               ) : null}
-              <span className="truncate font-medium text-foreground">
+              <span className="truncate font-medium text-foreground @max-[720px]:hidden">
                 {runtime?.name ?? runtimeId}
               </span>
             </PopoverTrigger>
@@ -596,7 +600,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           </Popover>
           {activeConversationId ? (
             <>
-              <span aria-hidden>·</span>
+              <span aria-hidden className="@max-[1120px]:hidden">
+                ·
+              </span>
               <button
                 type="button"
                 aria-label={sessionHistoryLabel}
@@ -609,13 +615,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                 )}
               >
                 <MessageSquare className="size-3.5" />
-                <span className="tabular-nums">{sessionHistoryLabel}</span>
+                <span className="tabular-nums @max-[1120px]:hidden">{sessionHistoryLabel}</span>
+                <span className="hidden tabular-nums @max-[1120px]:inline">
+                  {displayedPromptCount ?? 0}
+                </span>
               </button>
             </>
           ) : null}
           {sessionContext && contextPercent != null ? (
             <>
-              <span aria-hidden>·</span>
+              <span aria-hidden className="@max-[1120px]:hidden">
+                ·
+              </span>
               <Popover>
                 <PopoverTrigger
                   aria-label={t('workspaceRuntime.contextUsage', {
@@ -627,7 +638,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   title={contextTitle ?? undefined}
                 >
                   <Brain className="size-3.5" />
-                  <span>{t('workspaceRuntime.contextUsageShort')}</span>
+                  <span className="@max-[1120px]:hidden">
+                    {t('workspaceRuntime.contextUsageShort')}
+                  </span>
                   <ContextProgressBar percent={contextPercent} tone={contextTone} compact />
                 </PopoverTrigger>
                 <PopoverContent
@@ -708,7 +721,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           ) : null}
           {shortAccountWindow || (runtimeId === 'codex' && !connectionId) ? (
             <>
-              <span aria-hidden>·</span>
+              <span aria-hidden className="@max-[1120px]:hidden">
+                ·
+              </span>
               <Popover onOpenChange={handleAccountUsagePopoverOpen}>
                 <PopoverTrigger
                   aria-label={t('workspaceRuntime.accountUsage')}
@@ -716,7 +731,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   title={t('workspaceRuntime.accountUsage')}
                 >
                   <Gauge className="size-3.5" />
-                  <span>{t('workspaceRuntime.accountUsageShort')}</span>
+                  <span className="@max-[1120px]:hidden">
+                    {t('workspaceRuntime.accountUsageShort')}
+                  </span>
                   {shortAccountWindow ? (
                     <ContextProgressBar
                       compact
@@ -853,13 +870,15 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         <PopoverTrigger
           aria-label={t('workspaceRuntime.config.title')}
           className={cn(
-            'flex h-5 shrink-0 items-center gap-1 rounded px-1.5 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
+            RUNTIME_BAR_ACTION_CLASS,
             isConfigPopoverOpen && 'bg-background-2 text-foreground'
           )}
           title={t('workspaceRuntime.config.title')}
         >
           <Settings2 className="size-3.5" />
-          <span>{t('workspaceRuntime.config.title')}</span>
+          <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>
+            {t('workspaceRuntime.config.title')}
+          </span>
         </PopoverTrigger>
         <PopoverContent
           align="end"
@@ -902,7 +921,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             attention: attentionAgentCount,
           })}
           className={cn(
-            'flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
+            RUNTIME_BAR_ACTION_CLASS,
             attentionAgentCount > 0 ? 'text-foreground' : 'text-foreground-passive'
           )}
           title={t('workspaceRuntime.agents.triggerLabel', {
@@ -912,7 +931,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           })}
         >
           <Bot className="size-3.5" />
-          <span className="tabular-nums">{agentTriggerText}</span>
+          <span className="tabular-nums @max-[1440px]:hidden">{agentTriggerText}</span>
+          <span className="hidden tabular-nums @max-[1440px]:inline">{agentSessionCount}</span>
           {attentionAgentCount > 0 || workingAgentCount > 0 ? (
             <span
               aria-hidden
@@ -1046,11 +1066,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.resources.triggerLabel')}
-          className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+          className={cn(RUNTIME_BAR_ACTION_CLASS, 'text-foreground-passive')}
           title={t('workspaceRuntime.resources.triggerLabel')}
         >
           <Activity aria-hidden className="size-3.5" />
-          <span>{t('workspaceRuntime.resources.triggerShort')}</span>
+          <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>
+            {t('workspaceRuntime.resources.triggerShort')}
+          </span>
         </PopoverTrigger>
         <PopoverContent
           align="end"
@@ -1125,13 +1147,20 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         <PopoverTrigger
           aria-label={t('workspaceRuntime.maas.title')}
           className={cn(
-            'flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
+            RUNTIME_BAR_ACTION_CLASS,
             globalMaasBinding.data?.enabled ? 'text-foreground' : 'text-foreground-passive'
           )}
           title={t('workspaceRuntime.maas.title')}
         >
           <Cloud className="size-3.5" />
-          <span>{selectedMaasLabel}</span>
+          <span
+            className={cn(
+              RUNTIME_BAR_ACTION_LABEL_CLASS,
+              'max-w-48 truncate @min-[1441px]:inline-block'
+            )}
+          >
+            {selectedMaasLabel}
+          </span>
           <span
             aria-hidden
             className={cn(
@@ -1210,13 +1239,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         <PopoverTrigger
           aria-label={t('workspaceRuntime.skill')}
           className={cn(
-            'flex h-5 items-center gap-1 rounded px-1.5 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
+            RUNTIME_BAR_ACTION_CLASS,
             isSkillPopoverOpen && 'bg-background-2 text-foreground'
           )}
           title={t('workspaceRuntime.skill')}
         >
           <Sparkles className="size-3.5" />
-          <span>{t('workspaceRuntime.skill')}</span>
+          <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.skill')}</span>
         </PopoverTrigger>
         <PopoverContent
           align="end"
@@ -1235,10 +1264,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         title={t('workspaceRuntime.doctor')}
         aria-label={t('workspaceRuntime.doctor')}
         onClick={() => showDoctorModal({})}
-        className="flex h-5 items-center gap-1 rounded px-1.5 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+        className={cn(RUNTIME_BAR_ACTION_CLASS, 'text-foreground-passive')}
       >
         <Stethoscope className="size-3.5" />
-        <span>{t('workspaceRuntime.doctor')}</span>
+        <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.doctor')}</span>
       </button>
       <button
         type="button"
@@ -1247,12 +1276,12 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         aria-pressed={terminalActive}
         onClick={toggleTerminal}
         className={cn(
-          'flex h-5 items-center gap-1 rounded px-1.5 transition-colors hover:bg-background-2 hover:text-foreground',
+          RUNTIME_BAR_ACTION_CLASS,
           terminalActive && 'bg-background-2 text-foreground'
         )}
       >
         <Terminal className="size-3.5" />
-        <span>{t('workspaceRuntime.terminal')}</span>
+        <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.terminal')}</span>
       </button>
     </footer>
   );
@@ -1274,7 +1303,7 @@ function ContextProgressBar({
       aria-valuenow={percent}
       className={cn(
         'overflow-hidden rounded-full bg-foreground-muted/20',
-        compact ? 'h-1 w-9' : 'h-1.5 w-full'
+        compact ? 'h-1 w-9 @max-[720px]:hidden' : 'h-1.5 w-full'
       )}
       role="progressbar"
     >
