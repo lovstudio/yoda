@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Settings2,
   Sparkles,
+  Stethoscope,
   Terminal,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
@@ -1228,6 +1229,16 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           />
         </PopoverContent>
       </Popover>
+      <button
+        type="button"
+        title={t('workspaceRuntime.doctor')}
+        aria-label={t('workspaceRuntime.doctor')}
+        onClick={() => void rpc.app.openDoctorWindow()}
+        className="flex h-5 items-center gap-1 rounded px-1.5 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+      >
+        <Stethoscope className="size-3.5" />
+        <span>{t('workspaceRuntime.doctor')}</span>
+      </button>
       <button
         type="button"
         title={t('workspaceRuntime.terminal')}

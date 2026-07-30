@@ -9,6 +9,7 @@ import { appController } from './core/app/controller';
 import { automationController } from './core/automation/controller';
 import { conversationController } from './core/conversations/controller';
 import { dependenciesController } from './core/dependencies/controller';
+import { doctorController } from './core/doctor/controller';
 import { editorBufferController } from './core/editor/controller';
 import { extensionsController } from './core/extensions/controller';
 import { featurebaseController } from './core/featurebase/controller';
@@ -97,6 +98,7 @@ export const rpcRouter = createRPCRouter({
   terminals: terminalsController,
   git: gitController,
   dependencies: dependenciesController,
+  doctor: doctorController,
   mcp: mcpController,
   editorBuffer: editorBufferController,
   extensions: extensionsController,
