@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import type { AiLabWindowTarget } from '@shared/ai-lab-window';
 import type { RendererPerformanceSample } from '@shared/app-resource';
 import type { ComparisonWindowTarget } from '@shared/comparison-window';
+import type { DoctorMainDestination } from '@shared/doctor-window';
 import type { TaskWindowReturnPayload } from '@shared/events/appEvents';
 import { createRPCController } from '@shared/ipc/rpc';
 import type { OpenInRequest } from '@shared/openInApps';
@@ -60,6 +61,22 @@ export const appController = createRPCController({
   openAiLabWindow: async (target: AiLabWindowTarget) => {
     try {
       appService.openAiLabWindow(target);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  openDoctorWindow: async () => {
+    try {
+      appService.openDoctorWindow();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  focusDoctorDestination: async (destination: DoctorMainDestination) => {
+    try {
+      appService.focusDoctorDestination(destination);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };

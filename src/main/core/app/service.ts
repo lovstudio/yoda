@@ -11,10 +11,12 @@ import type {
   RendererPerformanceSample,
 } from '@shared/app-resource';
 import { isComparisonWindowTarget, type ComparisonWindowTarget } from '@shared/comparison-window';
+import type { DoctorMainDestination } from '@shared/doctor-window';
 import {
   appPasteChannel,
   appRedoChannel,
   appUndoChannel,
+  doctorNavigateMainChannel,
   notificationFocusTaskChannel,
   taskWindowReturnedToTabChannel,
   type TaskWindowReturnPayload,
@@ -37,7 +39,13 @@ import {
   type TaskStripDropZone,
 } from '@main/app/task-window-dock';
 import { openTaskWindowFromPool } from '@main/app/task-window-pool';
-import { createAiLabWindow, createComparisonWindow, getMainWindow } from '@main/app/window';
+import {
+  createAiLabWindow,
+  createComparisonWindow,
+  createDoctorWindow,
+  createMainWindow,
+  getMainWindow,
+} from '@main/app/window';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { ptySessionRegistry } from '@main/core/pty/pty-session-registry';
 import { decodeTmuxSessionName, listTmuxSessionMarkers } from '@main/core/pty/tmux-session-name';
@@ -369,6 +377,25 @@ class AppService implements IInitializable, IDisposable {
   openAiLabWindow(target: AiLabWindowTarget): void {
     if (!isAiLabWindowTarget(target)) throw new Error('Invalid AI Lab window target');
     createAiLabWindow(target);
+  }
+
+  openDoctorWindow(): void {
+    createDoctorWindow();
+  }
+
+  focusDoctorDestination(destination: DoctorMainDestination): void {
+    const existing = getMainWindow();
+    const win = existing ?? createMainWindow();
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    if (!existing && win.webContents.isLoadingMainFrame()) {
+      win.webContents.once('did-finish-load', () => {
+        events.emit(doctorNavigateMainChannel, destination);
+      });
+      return;
+    }
+    events.emit(doctorNavigateMainChannel, destination);
   }
 
   /** From a comparison pane: route the main window to one of the compared tasks. */

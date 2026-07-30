@@ -68,6 +68,14 @@ describe('SkillUsageStatsService', () => {
     expect(runSkillusage).not.toHaveBeenCalled();
   });
 
+  it('peeks at usage data without starting the first history scan', async () => {
+    const runSkillusage = vi.fn(async () => output(8));
+    const service = new SkillUsageStatsService(runSkillusage, createStore());
+
+    await expect(service.peek()).resolves.toBeNull();
+    expect(runSkillusage).not.toHaveBeenCalled();
+  });
+
   it('refreshes the snapshot and indexes aliases', async () => {
     const store = createStore(snapshot(7));
     const service = new SkillUsageStatsService(
