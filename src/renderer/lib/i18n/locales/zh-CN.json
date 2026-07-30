@@ -3888,6 +3888,10 @@
     "skill": "Skill",
     "terminal": "终端",
     "quickAction": "快速操作：{{label}}",
+    "config": {
+      "title": "配置",
+      "description": "设置输入处理与 Agent CLI 默认行为。更改用于后续输入；CLI 启动配置在新建或恢复会话后生效。"
+    },
     "gateway": {
       "title": "Gateway",
       "description": "为每个 Agent Client 选择 MaaS、订阅账号或 API Key",
