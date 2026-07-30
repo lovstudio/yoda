@@ -185,6 +185,20 @@ const storage: WorktreeStorageSnapshot = {
       referencedByActiveTask: true,
       reclaimable: false,
     },
+    {
+      projectId: 'project-2',
+      projectName: 'lovstudio-app-generator-with-a-very-long-project-name',
+      path: '/tmp/lovstudio-app-generator/.worktrees/a-very-long-worktree-directory-name',
+      branch: 'yoda/lovstudio-app-generator-zhi-zuo-yi-kuan-zhuan-ye-de-zhuo-mian-du-ying-yong',
+      activeTaskId: 'task-long',
+      activeTaskName: '系统优化本项目的前端体验、后端设计与完整测试体系',
+      sizeBytes: 4_000_000_000,
+      dirty: false,
+      inspectedAt: snapshot.sampledAt,
+      inspectionPending: false,
+      referencedByActiveTask: true,
+      reclaimable: false,
+    },
   ],
 };
 
@@ -195,6 +209,7 @@ describe('WorkspaceResourceDetailsModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     host = document.createElement('div');
+    host.style.width = '640px';
     document.body.appendChild(host);
     root = createRoot(host);
   });
@@ -248,10 +263,11 @@ describe('WorkspaceResourceDetailsModal', () => {
     await renderModal('worktrees');
 
     expect(host.textContent).toContain('workspaceRuntime.resources.details.worktreesTitle');
+    expect(host.textContent).toContain('workspaceRuntime.resources.details.incremental');
     expect(host.textContent).toContain('Yoda');
     expect(host.textContent).toContain('/tmp/yoda-worktree');
     expect(host.querySelector('[data-file-path="/tmp/yoda-worktree"]')).not.toBeNull();
-    expect(host.textContent).toContain('workspaceRuntime.resources.cleanup');
+    expect(host.textContent).toContain('workspaceRuntime.resources.details.cleanupAvailable');
 
     const taskButton = host.querySelector<HTMLButtonElement>('[data-worktree-task-id="task-1"]');
     expect(taskButton?.textContent).toContain('Yoda');
@@ -264,5 +280,10 @@ describe('WorkspaceResourceDetailsModal', () => {
       { projectId: 'project-1', taskId: 'task-1' },
       mocks.navigate
     );
+
+    const longTaskButton = host.querySelector<HTMLButtonElement>(
+      '[data-worktree-task-id="task-long"]'
+    );
+    expect(longTaskButton?.scrollWidth).toBeLessThanOrEqual(longTaskButton?.clientWidth ?? 0);
   });
 });

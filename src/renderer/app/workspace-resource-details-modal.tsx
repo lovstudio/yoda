@@ -143,7 +143,11 @@ export function WorkspaceResourceDetailsModal({
             <DialogTitle className="text-lg font-semibold tracking-normal text-foreground normal-case">
               {copy.title}
             </DialogTitle>
-            <Badge variant="secondary">{t('workspaceRuntime.resources.details.live')}</Badge>
+            <Badge variant="secondary">
+              {kind === 'worktrees'
+                ? t('workspaceRuntime.resources.details.incremental')
+                : t('workspaceRuntime.resources.details.live')}
+            </Badge>
           </div>
           <DialogDescription className="mt-1 text-sm leading-relaxed">
             {copy.description}
@@ -506,29 +510,7 @@ function WorktreeDetails({
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <ResourceSummaryCard
-          label={t('workspaceRuntime.resources.details.totalStorage')}
-          value={storage ? formatBytes(storage.totalBytes) : '—'}
-          description={t('workspaceRuntime.resources.details.worktreeCount', {
-            count: storage?.worktreeCount ?? 0,
-          })}
-        />
-        <ResourceSummaryCard
-          label={t('workspaceRuntime.resources.details.reclaimableStorage')}
-          value={storage ? formatBytes(storage.reclaimableBytes) : '—'}
-          description={t('workspaceRuntime.resources.details.reclaimableCount', {
-            count: storage?.reclaimableCount ?? 0,
-          })}
-        />
-        <ResourceSummaryCard
-          label={t('workspaceRuntime.resources.details.protectedStorage')}
-          value={
-            storage ? formatBytes(Math.max(0, storage.totalBytes - storage.reclaimableBytes)) : '—'
-          }
-          description={t('workspaceRuntime.resources.details.protectedDescription')}
-        />
-      </div>
+      <WorktreeSummaryStrip storage={storage} />
       <section>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -536,7 +518,9 @@ function WorktreeDetails({
               {t('workspaceRuntime.resources.details.worktreeInventory')}
             </h2>
             <p className="mt-0.5 text-[10px] text-foreground-passive">
-              {t('workspaceRuntime.resources.details.sortedBySize')}
+              {t('workspaceRuntime.resources.details.inventorySummary', {
+                count: storage?.worktreeCount ?? 0,
+              })}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -560,7 +544,9 @@ function WorktreeDetails({
                 disabled={isScanning}
                 onClick={confirmCleanup}
               >
-                {t('workspaceRuntime.resources.cleanup')}
+                {t('workspaceRuntime.resources.details.cleanupAvailable', {
+                  size: formatBytes(storage.reclaimableBytes),
+                })}
               </Button>
             ) : null}
           </div>
@@ -584,6 +570,57 @@ function WorktreeDetails({
         </div>
       </section>
     </>
+  );
+}
+
+function WorktreeSummaryStrip({ storage }: { storage: WorktreeStorageSnapshot | undefined }) {
+  const { t } = useTranslation();
+  const metrics = [
+    {
+      label: t('workspaceRuntime.resources.details.totalStorage'),
+      value: storage ? formatBytes(storage.totalBytes) : '—',
+      description: t('workspaceRuntime.resources.details.worktreeCount', {
+        count: storage?.worktreeCount ?? 0,
+      }),
+    },
+    {
+      label: t('workspaceRuntime.resources.details.reclaimableStorage'),
+      value: storage ? formatBytes(storage.reclaimableBytes) : '—',
+      description: t('workspaceRuntime.resources.details.reclaimableCount', {
+        count: storage?.reclaimableCount ?? 0,
+      }),
+    },
+    {
+      label: t('workspaceRuntime.resources.details.protectedStorage'),
+      value: storage
+        ? formatBytes(Math.max(0, storage.totalBytes - storage.reclaimableBytes))
+        : '—',
+      description: t('workspaceRuntime.resources.details.protectedDescription'),
+    },
+  ];
+
+  return (
+    <div className="grid overflow-hidden rounded-lg border border-border bg-background sm:grid-cols-3 sm:divide-x sm:divide-border">
+      {metrics.map((metric) => (
+        <div
+          key={metric.label}
+          className="min-w-0 border-b border-border px-3 py-2.5 last:border-b-0 sm:border-b-0"
+        >
+          <div className="text-[9px] uppercase tracking-wide text-foreground-passive">
+            {metric.label}
+          </div>
+          <div className="mt-1 font-mono text-lg font-medium tabular-nums text-foreground">
+            {metric.value}
+          </div>
+          <div
+            className="mt-0.5 truncate text-[10px] text-foreground-passive"
+            title={metric.description}
+          >
+            {metric.description}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -628,57 +665,73 @@ function WorktreeRow({
         })
       : null);
   const identity = (
-    <>
+    <span className="flex min-w-0 items-center gap-2.5">
       <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-background-2 text-foreground-passive">
         <GitBranch aria-hidden className="size-3.5" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-xs font-medium text-foreground">{item.projectName}</span>
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span
+            className="max-w-28 shrink-0 truncate text-xs font-medium text-foreground"
+            title={item.projectName}
+          >
+            {item.projectName}
+          </span>
           {item.branch ? (
-            <span className="shrink-0 truncate font-mono text-[10px] text-foreground-passive">
+            <span
+              className="min-w-0 flex-1 truncate font-mono text-[10px] text-foreground-passive"
+              title={item.branch}
+            >
               {item.branch}
             </span>
           ) : null}
         </span>
-        <span className="mt-0.5 block truncate font-mono text-[10px] text-foreground-passive">
+        <span
+          className="mt-0.5 block truncate font-mono text-[10px] text-foreground-passive"
+          title={item.path}
+        >
           {item.path}
         </span>
       </span>
-    </>
+    </span>
   );
   const size = (
-    <span className="w-16 shrink-0 text-right font-mono text-xs tabular-nums text-foreground-muted">
+    <span className="text-right font-mono text-xs tabular-nums text-foreground-muted">
       {item.inspectedAt === null ? '…' : formatBytes(item.sizeBytes)}
+    </span>
+  );
+  const taskTarget = taskLabel ? (
+    <span className="inline-flex min-w-0 items-center justify-between gap-1 rounded-md bg-status-in-review/10 px-2 py-1 text-[10px] text-status-in-review">
+      <span className="truncate">{taskLabel}</span>
+      <ArrowUpRight aria-hidden className="size-3 shrink-0" />
+    </span>
+  ) : (
+    <span className={cn('truncate text-[10px]', passiveStatus.className)}>
+      {passiveStatus.label}
     </span>
   );
 
   return (
-    <div className="flex min-w-0 items-center gap-3 px-3 py-2.5">
+    <div className="group flex min-w-0 items-center gap-2 px-2.5 py-2">
       {item.activeTaskId && taskLabel ? (
         <button
           type="button"
           aria-label={t('workspaceRuntime.resources.details.openTask', { task: taskLabel })}
           title={t('workspaceRuntime.resources.details.openTask', { task: taskLabel })}
           data-worktree-task-id={item.activeTaskId}
-          className="-my-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-md px-1.5 py-1.5 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-ring"
+          className="-my-1 grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(7.5rem,9rem)_4.25rem] items-center gap-2.5 rounded-md px-1.5 py-1 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-ring"
           onClick={() => onOpenTask(item)}
         >
           {identity}
-          <span className="inline-flex max-w-36 shrink-0 items-center gap-1 rounded-md bg-status-in-review/10 px-2 py-1 text-[10px] text-status-in-review">
-            <span className="truncate">{taskLabel}</span>
-            <ArrowUpRight aria-hidden className="size-3 shrink-0" />
-          </span>
+          {taskTarget}
           {size}
         </button>
       ) : (
-        <>
+        <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(7.5rem,9rem)_4.25rem] items-center gap-2.5 px-1.5">
           {identity}
-          <span className={cn('shrink-0 text-[10px]', passiveStatus.className)}>
-            {passiveStatus.label}
-          </span>
+          {taskTarget}
           {size}
-        </>
+        </div>
       )}
       <FilePathActionsDropdown target={target} />
     </div>
