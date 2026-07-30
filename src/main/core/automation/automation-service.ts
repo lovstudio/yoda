@@ -172,6 +172,7 @@ export class AutomationService {
 
       for (const [index, item] of source.automations.entries()) {
         const row = existingById.get(item.id);
+        const nextRunAt = computeNextRun(item.triggerKind, item.cronExpr, item.timezone);
         const values = {
           id: item.id,
           title: item.title,
@@ -192,7 +193,7 @@ export class AutomationService {
         if (!row) {
           await db.insert(automations).values({
             ...values,
-            nextRunAt: computeNextRun(item.triggerKind, item.cronExpr, item.timezone),
+            nextRunAt,
             lastRunAt: null,
           });
           changed = true;
@@ -212,14 +213,15 @@ export class AutomationService {
           row.projectId === values.projectId &&
           row.sortOrder === values.sortOrder &&
           row.createdAt === values.createdAt &&
-          row.updatedAt === values.updatedAt;
+          row.updatedAt === values.updatedAt &&
+          row.nextRunAt === nextRunAt;
         if (isCurrent) continue;
 
         await db
           .update(automations)
           .set({
             ...values,
-            nextRunAt: computeNextRun(item.triggerKind, item.cronExpr, item.timezone),
+            nextRunAt,
           })
           .where(eq(automations.id, item.id));
         changed = true;

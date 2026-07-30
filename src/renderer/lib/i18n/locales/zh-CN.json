@@ -2657,7 +2657,7 @@
     "saveFailed": "自动化保存失败",
     "source": {
       "codex": "Codex 同步",
-      "codexHint": "配置保存在 Codex 自动化目录，执行与调度由 Yoda 托管"
+      "codexHint": "配置、调度和通知由 Codex 管理，Yoda 只读同步展示"
     },
     "status": {
       "active": "启用",

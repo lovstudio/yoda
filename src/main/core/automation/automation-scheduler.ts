@@ -3,6 +3,7 @@ import { automationsUpdatedChannel } from '@shared/events/appEvents';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { automationRunner } from './automation-runner';
+import { shouldScheduleInYoda } from './automation-schedule-policy';
 import { automationService } from './automation-service';
 
 /**
@@ -48,7 +49,9 @@ export class AutomationScheduler {
       this.clear();
       const list = await automationService.list();
       for (const auto of list) {
-        if (auto.status !== 'active' || auto.triggerKind !== 'cron' || !auto.cronExpr) continue;
+        // Codex-backed rows are library mirrors. Codex remains the sole scheduler
+        // so its target thread, notification policy, and run memory stay intact.
+        if (!shouldScheduleInYoda(auto) || !auto.cronExpr) continue;
         try {
           const job = new Cron(
             auto.cronExpr,

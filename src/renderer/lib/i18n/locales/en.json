@@ -2657,7 +2657,7 @@
     "saveFailed": "Failed to save automation",
     "source": {
       "codex": "Synced from Codex",
-      "codexHint": "Stored in the Codex automations directory and scheduled by Yoda"
+      "codexHint": "Configuration, scheduling, and notifications stay in Codex; Yoda mirrors it read-only"
     },
     "status": {
       "active": "Active",

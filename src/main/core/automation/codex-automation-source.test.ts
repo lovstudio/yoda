@@ -19,7 +19,7 @@ afterEach(async () => {
 });
 
 describe('Codex automation source', () => {
-  it('maps a daily heartbeat into a runnable Yoda cron automation', () => {
+  it('maps an opted-in daily heartbeat into a read-only Yoda mirror', () => {
     const automation = parseCodexAutomationToml(
       [
         'version = 1',
@@ -27,9 +27,8 @@ describe('Codex automation source', () => {
         'kind = "heartbeat"',
         'name = "每日检查 Lovstudio ICP 备案"',
         'prompt = "检查备案状态"',
-        'status = "PAUSED"',
-        'managed_by = "yoda"',
-        'yoda_status = "ACTIVE"',
+        'status = "ACTIVE"',
+        'sync_to_yoda = true',
         'rrule = "FREQ=DAILY;BYHOUR=10;BYMINUTE=0;BYSECOND=0"',
         'created_at = 1785405028000',
         'updated_at = 1785405028000',
@@ -46,6 +45,16 @@ describe('Codex automation source', () => {
       workspaceName: 'Codex',
       createdAt: '2026-07-30T09:50:28.000Z',
     });
+  });
+
+  it('ignores Codex automations that have not opted into the Yoda library', () => {
+    expect(
+      parseCodexAutomationToml(
+        ['id = "codex-only"', 'name = "Codex only"', 'prompt = "Run"', 'status = "ACTIVE"'].join(
+          '\n'
+        )
+      )
+    ).toBeNull();
   });
 
   it('supports the hourly and weekly schedules Codex commonly emits', () => {
@@ -81,8 +90,7 @@ describe('Codex automation source', () => {
           'name = "Valid task"',
           'prompt = "Run"',
           'status = "PAUSED"',
-          'managed_by = "yoda"',
-          'yoda_status = "PAUSED"',
+          'sync_to_yoda = true',
           'rrule = "FREQ=HOURLY;INTERVAL=1"',
           'cwds = ["/Users/mark/lovstudio/coding/web"]',
         ].join('\n')

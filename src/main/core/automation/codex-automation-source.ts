@@ -13,8 +13,7 @@ const codexAutomationSchema = z
     name: z.string().trim().min(1),
     prompt: z.string().min(1),
     status: z.enum(['ACTIVE', 'PAUSED', 'DELETED']),
-    managed_by: z.string().optional(),
-    yoda_status: z.enum(['ACTIVE', 'PAUSED']).optional(),
+    sync_to_yoda: z.boolean().optional(),
     rrule: z.string().trim().min(1).optional(),
     timezone: z.string().trim().min(1).optional(),
     cwds: z.array(z.string()).optional(),
@@ -201,18 +200,17 @@ export function parseCodexAutomationToml(
   options: { fallbackTimestamp?: Date } = {}
 ): CodexAutomationSnapshot | null {
   const file = codexAutomationSchema.parse(parseToml(input));
-  if (file.status === 'DELETED' || file.managed_by !== 'yoda') return null;
+  if (file.status === 'DELETED' || file.sync_to_yoda !== true) return null;
 
   const fallbackTimestamp = options.fallbackTimestamp ?? new Date();
   const cronExpr = file.rrule ? codexRruleToCron(file.rrule) : null;
-  const effectiveStatus = file.yoda_status ?? file.status;
   return {
     id: `${CODEX_AUTOMATION_ID_PREFIX}${file.id}`,
     sourceId: file.id,
     title: file.name,
     workspaceName: workspaceName(file),
     prompt: file.prompt,
-    status: effectiveStatus === 'PAUSED' ? 'paused' : 'active',
+    status: file.status === 'PAUSED' ? 'paused' : 'active',
     triggerKind: cronExpr ? 'cron' : 'manual',
     cronExpr,
     timezone: file.timezone ?? null,
