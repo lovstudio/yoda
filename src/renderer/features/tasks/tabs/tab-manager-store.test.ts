@@ -159,6 +159,39 @@ describe('TabManagerStore sidebar file locations', () => {
     if (entry?.kind !== 'file') throw new Error('Expected a sidebar file entry');
     expect(entry.pendingReveal).toEqual({ requestId: 1, lineNumber: 31, column: 4 });
   });
+
+  it('reuses one clean sidebar preview while inspecting files', () => {
+    const store = new TabManagerStore(makeConversationManager([]), 'workspace-1');
+
+    store.openFilePreviewInSidebar('docs/brief.pdf');
+    const previewId = store.activeSidebarTabId;
+    expect(previewId).toBeDefined();
+    expect(store.sidebarTabIds).toEqual([previewId]);
+
+    store.openFilePreviewInSidebar('assets/mockup.png');
+
+    expect(store.sidebarTabIds).toEqual([previewId]);
+    const entry = previewId ? store.entries.get(previewId) : undefined;
+    expect(entry?.kind).toBe('file');
+    if (entry?.kind !== 'file') throw new Error('Expected a sidebar file preview');
+    expect(entry.path).toBe('assets/mockup.png');
+    expect(entry.isPreview).toBe(true);
+  });
+
+  it('promotes a sidebar preview when the file is opened in the main area', () => {
+    const store = new TabManagerStore(makeConversationManager([]), 'workspace-1');
+
+    store.openFilePreviewInSidebar('docs/brief.pdf');
+    const previewId = store.activeSidebarTabId;
+    store.openFile('docs/brief.pdf');
+
+    expect(store.sidebarTabIds).not.toContain(previewId);
+    expect(store.activeTabId).toBe(previewId);
+    const entry = previewId ? store.entries.get(previewId) : undefined;
+    expect(entry?.kind).toBe('file');
+    if (entry?.kind !== 'file') throw new Error('Expected an opened file');
+    expect(entry.isPreview).toBe(false);
+  });
 });
 
 function makeConversation(id: string, lastInteractedAt: string, isInitialConversation: boolean) {

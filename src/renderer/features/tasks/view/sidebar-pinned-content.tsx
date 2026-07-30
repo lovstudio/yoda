@@ -10,6 +10,7 @@ import { FileDiffView } from '@renderer/features/tasks/diff-view/main-panel/file
 import { OtherFileRenderer } from '@renderer/features/tasks/editor/editor-main-panel';
 import { LeasedMonacoEditor } from '@renderer/features/tasks/editor/leased-monaco-editor';
 import { MarkdownSourceToggleOverlay } from '@renderer/features/tasks/editor/markdown-editor-panel';
+import { useAttachImagesAsPaths } from '@renderer/features/tasks/hooks/use-attach-images-as-paths';
 import { useIsActiveTask } from '@renderer/features/tasks/hooks/use-is-active-task';
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import type { FileTabStore } from '@renderer/features/tasks/tabs/file-tab-store';
@@ -116,6 +117,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
 }) {
   const { projectId, taskId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
+  const attachImagesAsPaths = useAttachImagesAsPaths(projectId);
   const { conversations } = provisioned;
   const isActive = useIsActiveTask(taskId);
   const mountedProject = asMounted(getProjectStore(projectId));
@@ -220,6 +222,7 @@ const SidebarPinnedConversation = observer(function SidebarPinnedConversation({
               }}
               onInterruptPress={() => conversation.clearWorking()}
               mapShiftEnterToCtrlJ
+              pasteImagesAsPaths={attachImagesAsPaths}
               remoteConnectionId={remoteConnectionId}
               fileLinks={fileLinks}
               webLinks={webLinks}

@@ -140,6 +140,7 @@ async function resolveMemberSeedProfile(member: AgentTeamMember): Promise<Member
         systemPrompt: agent.systemPrompt,
         icon: agent.icon,
         skillSelection: {
+          restriction: agent.skillPolicyMode === 'allowlist' ? 'allowlist' : undefined,
           autoSkillKeys: agent.enabledSkillIds,
           manualSkillKeys: agent.manualSkillIds,
         },

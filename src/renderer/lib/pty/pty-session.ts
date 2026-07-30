@@ -1,15 +1,21 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import type { AppSettings } from '@shared/app-settings';
 import {
-  DEFAULT_TERMINAL_RENDERER,
+  DEFAULT_HOT_TERMINAL_LIMIT,
   DEFAULT_TERMINAL_SCROLLBACK_LINES,
+  MAX_HOT_TERMINAL_LIMIT,
+  MIN_HOT_TERMINAL_LIMIT,
 } from '@shared/terminal-settings';
 import { rpc } from '@renderer/lib/ipc';
 import { FrontendPty } from '@renderer/lib/pty/pty';
+import { selectTerminalLruEvictions } from './terminal-lru';
 
 export type PtySessionStatus = 'disconnected' | 'connecting' | 'ready';
 
 export class PtySession {
+  private static hotLimit = DEFAULT_HOT_TERMINAL_LIMIT;
+  private static hotSessions: PtySession[] = [];
+
   pty: FrontendPty | null = null;
   status: PtySessionStatus = 'disconnected';
   private connectionEnabled: boolean;
@@ -46,7 +52,10 @@ export class PtySession {
     this.connectionRequested = true;
     if (!this.connectionEnabled) return;
     if (this.connectPromise) return this.connectPromise;
-    if (this.pty) return;
+    if (this.pty) {
+      PtySession.touchHotSession(this);
+      return;
+    }
 
     const promise = this.connectInternal();
     this.connectPromise = promise;
@@ -60,17 +69,17 @@ export class PtySession {
   private async connectInternal(): Promise<void> {
     this.pty = new FrontendPty(this.sessionId);
     const pty = this.pty;
+    PtySession.touchHotSession(this);
     runInAction(() => {
       this.status = 'connecting';
     });
     try {
       const terminalSettings = (await rpc.appSettings.get('terminal')) as AppSettings['terminal'];
-      pty.setRendererPreference(terminalSettings?.renderer ?? DEFAULT_TERMINAL_RENDERER);
+      PtySession.setHotTerminalLimit(terminalSettings.hotTerminalLimit);
       pty.setScrollbackLines(
         terminalSettings?.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK_LINES
       );
     } catch {
-      pty.setRendererPreference(DEFAULT_TERMINAL_RENDERER);
       pty.setScrollbackLines(DEFAULT_TERMINAL_SCROLLBACK_LINES);
     }
     if (this.pty !== pty) {
@@ -101,6 +110,52 @@ export class PtySession {
   }
 
   dispose() {
+    this.connectionRequested = false;
+    this.connectPromise = null;
+    this.pty?.dispose();
+    PtySession.hotSessions = PtySession.hotSessions.filter((session) => session !== this);
+    runInAction(() => {
+      this.pty = null;
+      this.status = 'disconnected';
+    });
+  }
+
+  static setHotTerminalLimit(limit: number): void {
+    PtySession.hotLimit = Math.min(
+      MAX_HOT_TERMINAL_LIMIT,
+      Math.max(MIN_HOT_TERMINAL_LIMIT, Math.floor(limit))
+    );
+    PtySession.enforceHotLimit();
+  }
+
+  private static touchHotSession(session: PtySession): void {
+    PtySession.hotSessions = PtySession.hotSessions.filter((candidate) => candidate !== session);
+    PtySession.hotSessions.push(session);
+    PtySession.enforceHotLimit(session.sessionId);
+  }
+
+  private static enforceHotLimit(protectedSessionId?: string): void {
+    const evictions = new Set(
+      selectTerminalLruEvictions(
+        PtySession.hotSessions.map((session) => ({
+          sessionId: session.sessionId,
+          mounted: session.pty?.mounted ?? false,
+        })),
+        PtySession.hotLimit,
+        protectedSessionId
+      )
+    );
+    if (evictions.size === 0) return;
+    for (const session of PtySession.hotSessions) {
+      if (evictions.has(session.sessionId)) session.evictRenderer();
+    }
+    PtySession.hotSessions = PtySession.hotSessions.filter(
+      (session) => !evictions.has(session.sessionId)
+    );
+  }
+
+  private evictRenderer(): void {
+    if (this.pty?.mounted) return;
     this.connectionRequested = false;
     this.connectPromise = null;
     this.pty?.dispose();

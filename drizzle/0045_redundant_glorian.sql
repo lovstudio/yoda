@@ -1,0 +1,1 @@
+ALTER TABLE `prompt_groups` ADD `sort_order` integer DEFAULT 0 NOT NULL;

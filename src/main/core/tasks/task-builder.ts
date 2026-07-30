@@ -2,6 +2,8 @@ import type { Conversation } from '@shared/conversations';
 import { taskProvisionProgressChannel } from '@shared/events/taskEvents';
 import type { Task } from '@shared/tasks';
 import type { Terminal } from '@shared/terminals';
+import { hydratedConversationStart } from '@main/core/conversations/pending-initial-prompt';
+import { clearPendingInitialPrompt } from '@main/core/conversations/pending-initial-prompt-store';
 import type { ConversationProvider } from '@main/core/conversations/types';
 import type { GitFetchService } from '@main/core/git/git-fetch-service';
 import type { GitRepositoryService } from '@main/core/git/repository-service';
@@ -193,14 +195,29 @@ export async function buildTaskFromWorkspace(
   );
 
   void Promise.all(
-    hydrate.conversations.map((conv) =>
-      conversationProvider.startSession(conv, undefined, true).catch((e) => {
+    hydrate.conversations.map(async (conv) => {
+      const pending = conv.pendingInitialPrompt;
+      const start = hydratedConversationStart(conv);
+      try {
+        await conversationProvider.startSession(
+          conv,
+          undefined,
+          start.isResuming,
+          start.initialPrompt,
+          undefined,
+          start.imagePaths,
+          start.model
+        );
+        if (pending) {
+          await clearPendingInitialPrompt(conv.id);
+        }
+      } catch (e) {
         log.error(`${logPrefix}: failed to hydrate conversation`, {
           conversationId: conv.id,
           error: String(e),
         });
-      })
-    )
+      }
+    })
   );
 
   return { taskProvider, conversationProvider, terminalProvider };

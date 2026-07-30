@@ -134,6 +134,55 @@ describe('resolveCodexThreadIdForConversation', () => {
     ).toBe('delayed-codex-thread');
   });
 
+  it('resolves a renamed legacy thread by its unique activity window', () => {
+    insertThread(statePath, {
+      id: 'legacy-codex-thread',
+      cwd: '/repo',
+      title: 'Original long user prompt',
+      createdAtMs: Date.parse('2026-07-27T10:10:43.000Z'),
+      updatedAtMs: Date.parse('2026-07-27T10:58:42.000Z'),
+    });
+
+    expect(
+      resolveCodexThreadForConversation({
+        conversationId: 'legacy-yoda-conversation',
+        cwd: '/repo',
+        title: 'Renamed Yoda title',
+        createdAt: '2026-07-27 08:03:43',
+        lastInteractedAt: '2026-07-27T10:49:21.067Z',
+        statePath,
+      })
+    ).toEqual({ id: 'legacy-codex-thread', title: 'Original long user prompt' });
+  });
+
+  it('keeps overlapping renamed legacy threads ambiguous', () => {
+    insertThread(statePath, {
+      id: 'legacy-codex-thread-1',
+      cwd: '/repo',
+      title: 'Original prompt one',
+      createdAtMs: Date.parse('2026-07-27T10:10:43.000Z'),
+      updatedAtMs: Date.parse('2026-07-27T10:58:42.000Z'),
+    });
+    insertThread(statePath, {
+      id: 'legacy-codex-thread-2',
+      cwd: '/repo',
+      title: 'Original prompt two',
+      createdAtMs: Date.parse('2026-07-27T10:20:00.000Z'),
+      updatedAtMs: Date.parse('2026-07-27T11:00:00.000Z'),
+    });
+
+    expect(
+      resolveCodexThreadForConversation({
+        conversationId: 'legacy-yoda-conversation',
+        cwd: '/repo',
+        title: 'Renamed Yoda title',
+        createdAt: '2026-07-27 08:03:43',
+        lastInteractedAt: '2026-07-27T10:49:21.067Z',
+        statePath,
+      })
+    ).toBeUndefined();
+  });
+
   it('resolves a moved-path Codex thread by title prefix and creation time', () => {
     insertThread(statePath, {
       id: 'moved-path-thread',

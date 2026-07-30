@@ -28,6 +28,8 @@ type Props = {
   onEnterPress?: (message: string) => void;
   onSubmittedInput?: (message: string, isTaskInput: boolean) => void;
   onInterruptPress?: () => void;
+  /** Turn pasted image files/paths into backtick-wrapped textual @mentions. */
+  pasteImagesAsPaths?: boolean;
   fileLinks?: TerminalFileLinkOptions | null;
   webLinks?: TerminalWebLinkOptions | null;
 };
@@ -48,6 +50,7 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
       onEnterPress,
       onSubmittedInput,
       onInterruptPress,
+      pasteImagesAsPaths,
       fileLinks,
       webLinks,
     },
@@ -70,6 +73,7 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
         onEnterPress,
         onSubmittedInput,
         onInterruptPress,
+        pasteImagesAsPaths,
         fileLinks,
         webLinks,
       },

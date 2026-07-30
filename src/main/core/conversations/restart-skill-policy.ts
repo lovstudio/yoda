@@ -12,5 +12,5 @@ export function skillSelectionForReload(
     .filter((entry) => entry.mode === 'manual')
     .map((entry) => entry.key);
   if (![...autoSkillKeys, ...manualSkillKeys].includes(skillKey)) autoSkillKeys.push(skillKey);
-  return { autoSkillKeys, manualSkillKeys };
+  return { restriction: 'allowlist', autoSkillKeys, manualSkillKeys };
 }

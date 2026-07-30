@@ -1,6 +1,7 @@
 export type ListedWorktree = {
   path: string;
   branch: string | null;
+  head: string | null;
 };
 
 export function parseWorktreePorcelain(output: string): ListedWorktree[] {
@@ -9,7 +10,8 @@ export function parseWorktreePorcelain(output: string): ListedWorktree[] {
     const worktreePath = /^worktree (.+)$/m.exec(block)?.[1];
     if (!worktreePath) continue;
     const branchRef = /^branch refs\/heads\/(.+)$/m.exec(block)?.[1] ?? null;
-    worktrees.push({ path: worktreePath, branch: branchRef });
+    const head = /^HEAD (.+)$/m.exec(block)?.[1] ?? null;
+    worktrees.push({ path: worktreePath, branch: branchRef, head });
   }
   return worktrees;
 }

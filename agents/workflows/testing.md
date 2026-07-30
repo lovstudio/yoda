@@ -24,8 +24,8 @@ pnpm run test
   - `node` — all `src/**/*.test.ts` files excluding `_*` dirs and browser tests
   - `browser` — `src/renderer/tests/browser/**/*.test.{ts,tsx}` via `@vitest/browser-playwright`
 - `pnpm test` runs the Node project first, then runs browser files serially. This prevents
-  Chromium's shared renderer/GPU work from starving Node integration tests and keeps
-  layout/WebGL browser tests isolated from each other.
+  Chromium rendering work from starving Node integration tests and keeps layout/terminal
+  browser tests isolated from each other.
 - Tests use per-file `vi.mock()` setup.
 - Integration-style tests create temporary repos and worktrees in `os.tmpdir()`.
 

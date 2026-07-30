@@ -26,5 +26,6 @@ export function mapConversationRowToConversation(
     isInitialConversation: row.isInitialConversation,
     forkedFromConversationId: row.forkedFromConversationId ?? undefined,
     forkedFromPromptIndex: row.forkedFromPromptIndex ?? undefined,
+    pendingInitialPrompt: resume ? config?.pendingInitialPrompt : undefined,
   };
 }

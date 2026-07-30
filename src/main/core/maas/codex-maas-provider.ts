@@ -19,6 +19,12 @@ const CODEX_MAAS_PROVIDER_METADATA: Record<MaasPlatformTemplateId, CodexMaasProv
   siliconflow: {
     providerId: 'siliconflow',
   },
+  litellm: {
+    providerId: 'litellm',
+  },
+  newapi: {
+    providerId: 'newapi',
+  },
   custom: {
     providerId: 'custom',
   },

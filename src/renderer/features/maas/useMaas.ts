@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
+import type { LiteLlmManagedActionResult, LiteLlmManagedStatus } from '@shared/litellm-managed';
 import type {
   MaasConnectInput,
   MaasConnection,
@@ -12,6 +13,7 @@ import type {
   MaasSetRuntimeBindingInput,
   MaasUsageSummary,
 } from '@shared/maas';
+import type { NewApiManagedActionResult, NewApiManagedStatus } from '@shared/new-api-managed';
 import { rpc } from '@renderer/lib/ipc';
 
 const PAGE_SIZE = 24;
@@ -28,6 +30,8 @@ export const maasQueryKeys = {
   runtimeBindings: (platformId?: MaasPlatformId) =>
     ['maas', 'runtime-bindings', platformId ?? 'all'] as const,
   globalBinding: ['maas', 'global-binding'] as const,
+  liteLlmManaged: ['maas', 'litellm-managed'] as const,
+  newApiManaged: ['maas', 'new-api-managed'] as const,
   records: (platformId: MaasPlatformId, kind: MaasInvocationFilterKind, refreshSequence = 0) =>
     ['maas', 'records', REAL_USAGE_QUERY_VERSION, platformId, kind, refreshSequence] as const,
   summary: (
@@ -48,6 +52,144 @@ export const maasQueryKeys = {
       refreshSequence,
     ] as const,
 };
+
+function assertLiteLlmActionSucceeded(result: LiteLlmManagedActionResult): LiteLlmManagedStatus {
+  if (!result.success) {
+    throw new Error(result.error ?? 'LiteLLM operation failed.');
+  }
+  return result.status;
+}
+
+export function useLiteLlmManagedStatus(enabled = true) {
+  return useQuery<LiteLlmManagedStatus>({
+    queryKey: maasQueryKeys.liteLlmManaged,
+    queryFn: () => rpc.maas.getLiteLlmManagedStatus(),
+    enabled,
+    staleTime: 5_000,
+    refetchInterval: (query) =>
+      query.state.data?.operation || query.state.data?.state === 'docker-starting' ? 2_000 : 15_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+function useLiteLlmManagedAction(action: () => Promise<LiteLlmManagedActionResult>) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => assertLiteLlmActionSucceeded(await action()),
+    onSuccess: (status) => {
+      queryClient.setQueryData(maasQueryKeys.liteLlmManaged, status);
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
+    },
+  });
+}
+
+export function useInstallLiteLlm() {
+  return useLiteLlmManagedAction(() => rpc.maas.installLiteLlm());
+}
+
+export function useStartLiteLlm() {
+  return useLiteLlmManagedAction(() => rpc.maas.startLiteLlm());
+}
+
+export function useStopLiteLlm() {
+  return useLiteLlmManagedAction(() => rpc.maas.stopLiteLlm());
+}
+
+export function useStartDockerForLiteLlm() {
+  return useLiteLlmManagedAction(() => rpc.maas.startDockerForLiteLlm());
+}
+
+export function useOpenLiteLlmAdmin() {
+  return useMutation({
+    mutationFn: async () => {
+      const result = await rpc.maas.openLiteLlmAdmin();
+      if (!result.success) throw new Error(result.error ?? 'Failed to open LiteLLM Admin UI.');
+    },
+  });
+}
+
+export function useCopyLiteLlmAdminPassword() {
+  return useMutation({
+    mutationFn: async () => {
+      const result = await rpc.maas.copyLiteLlmAdminPassword();
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to copy LiteLLM administrator password.');
+      }
+    },
+  });
+}
+
+function assertNewApiActionSucceeded(result: NewApiManagedActionResult): NewApiManagedStatus {
+  if (!result.success) {
+    throw new Error(result.error ?? 'New API operation failed.');
+  }
+  return result.status;
+}
+
+export function useNewApiManagedStatus(enabled = true) {
+  return useQuery<NewApiManagedStatus>({
+    queryKey: maasQueryKeys.newApiManaged,
+    queryFn: () => rpc.maas.getNewApiManagedStatus(),
+    enabled,
+    staleTime: 5_000,
+    refetchInterval: (query) =>
+      query.state.data?.operation || query.state.data?.state === 'docker-starting' ? 2_000 : 15_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+function useNewApiManagedAction(action: () => Promise<NewApiManagedActionResult>) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => assertNewApiActionSucceeded(await action()),
+    onSuccess: (status) => {
+      queryClient.setQueryData(maasQueryKeys.newApiManaged, status);
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
+    },
+  });
+}
+
+export function useInstallNewApi() {
+  return useNewApiManagedAction(() => rpc.maas.installNewApi());
+}
+
+export function useInitializeNewApi() {
+  return useNewApiManagedAction(() => rpc.maas.initializeNewApi());
+}
+
+export function useStartNewApi() {
+  return useNewApiManagedAction(() => rpc.maas.startNewApi());
+}
+
+export function useStopNewApi() {
+  return useNewApiManagedAction(() => rpc.maas.stopNewApi());
+}
+
+export function useStartDockerForNewApi() {
+  return useNewApiManagedAction(() => rpc.maas.startDockerForNewApi());
+}
+
+export function useOpenNewApiAdmin() {
+  return useMutation({
+    mutationFn: async () => {
+      const result = await rpc.maas.openNewApiAdmin();
+      if (!result.success) throw new Error(result.error ?? 'Failed to open New API console.');
+    },
+  });
+}
+
+export function useCopyNewApiAdminPassword() {
+  return useMutation({
+    mutationFn: async () => {
+      const result = await rpc.maas.copyNewApiAdminPassword();
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to copy New API administrator password.');
+      }
+    },
+  });
+}
 
 export function useMaasRuntimeBindings(platformId?: MaasPlatformId, enabled = true) {
   return useQuery<MaasRuntimeBindingStatus[]>({

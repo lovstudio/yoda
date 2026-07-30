@@ -3,13 +3,12 @@ import {
   Info,
   Loader2,
   Maximize2,
-  MoreHorizontal,
   RefreshCw,
   SlidersHorizontal,
   Sparkles,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   ClaudeSessionPrompt,
@@ -20,6 +19,7 @@ import type {
   SessionSummaryScope,
   SessionSummarySnapshot,
   SessionSummaryStatus,
+  SessionTranscriptMessage,
 } from '@shared/conversations';
 import { conversationNamingUpdatedChannel } from '@shared/events/conversationEvents';
 import {
@@ -47,15 +47,15 @@ import {
   resolveTaskMenuSessionFields,
   type TaskMenuSessionFields,
 } from '@renderer/features/tasks/components/task-menu-session-info';
-import { displaySessionPromptText } from '@renderer/features/tasks/context-panel-prompt-display';
-import { SessionPromptRestoreButton } from '@renderer/features/tasks/conversations/session-prompt-restore-button';
 import { useConversationPromptRestore } from '@renderer/features/tasks/conversations/use-conversation-prompt-restore';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
+import type { AgentReplyDisplayLevel } from '@renderer/features/tasks/session-conversation';
+import { SessionConversationList } from '@renderer/features/tasks/session-conversation-list';
 import {
-  resolveSessionPrompts,
+  resolveSessionConversation,
   SESSION_PROMPTS_REFRESH_MS,
+  type SessionConversationData,
 } from '@renderer/features/tasks/session-prompts';
-import { buildPromptPreviewItems } from '@renderer/features/tasks/session-prompts-preview';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { syncNoteToSessionInput } from '@renderer/features/tasks/use-session-note-sync';
 import { toast } from '@renderer/lib/hooks/use-toast';
@@ -435,19 +435,20 @@ export const SessionInfoPanel = observer(function SessionInfoPanel({
  */
 export function useSessionPrompts(active: boolean): {
   prompts: ClaudeSessionPrompt[];
+  messages: SessionTranscriptMessage[];
   isLoading: boolean;
   hasPrompts: boolean;
   hasConversation: boolean;
   restoringPromptId: string | null;
   requestRestorePrompt: (prompt: ClaudeSessionPrompt, index: number) => void;
-  openPromptsModal: () => void;
+  openPromptsModal: (displayLevel?: Exclude<AgentReplyDisplayLevel, 'verbose'>) => void;
 } {
   const provisionedTask = useProvisionedTask();
   const conversation = getTaskMenuConversation(provisionedTask);
   const sessionStatus = conversation
     ? provisionedTask.conversations.conversations.get(conversation.id)?.session.status
     : undefined;
-  const [prompts, setPrompts] = useState<ClaudeSessionPrompt[] | undefined>();
+  const [conversationData, setConversationData] = useState<SessionConversationData | undefined>();
   const [isLoading, setIsLoading] = useState(false);
   const showSessionPrompts = useShowModal('sessionPromptsModal');
   const { restoringPrompt, requestRestorePrompt: requestConversationPromptRestore } =
@@ -455,7 +456,7 @@ export function useSessionPrompts(active: boolean): {
 
   useEffect(() => {
     // Reset on conversation switch so a stale preview never flashes.
-    setPrompts(undefined); // eslint-disable-line react-hooks/set-state-in-effect
+    setConversationData(undefined); // eslint-disable-line react-hooks/set-state-in-effect
   }, [conversation?.id]);
 
   useEffect(() => {
@@ -463,12 +464,12 @@ export function useSessionPrompts(active: boolean): {
     let cancelled = false;
     setIsLoading(true); // eslint-disable-line react-hooks/set-state-in-effect
     const load = () =>
-      resolveSessionPrompts(conversation, provisionedTask.path)
+      resolveSessionConversation(conversation, provisionedTask.path)
         .then((next) => {
-          if (!cancelled) setPrompts(next);
+          if (!cancelled) setConversationData(next);
         })
         .catch(() => {
-          if (!cancelled) setPrompts([]);
+          if (!cancelled) setConversationData({ prompts: [], messages: [] });
         })
         .finally(() => {
           if (!cancelled) setIsLoading(false);
@@ -500,19 +501,24 @@ export function useSessionPrompts(active: boolean): {
       ? restoringPrompt.promptId
       : null;
 
-  const openPromptsModal = () => {
+  const openPromptsModal = (
+    displayLevel: Exclude<AgentReplyDisplayLevel, 'verbose'> = 'hidden'
+  ) => {
     if (!conversation) return;
     showSessionPrompts({
-      prompts: prompts ?? [],
+      prompts: conversationData?.prompts ?? [],
+      messages: conversationData?.messages ?? [],
+      displayLevel,
       sessionTitle: conversation.title,
       onRestorePrompt: requestRestorePrompt,
     });
   };
 
   return {
-    prompts: prompts ?? [],
-    isLoading: isLoading && prompts === undefined,
-    hasPrompts: (prompts?.length ?? 0) > 0,
+    prompts: conversationData?.prompts ?? [],
+    messages: conversationData?.messages ?? [],
+    isLoading: isLoading && conversationData === undefined,
+    hasPrompts: (conversationData?.prompts.length ?? 0) > 0,
     hasConversation: Boolean(conversation),
     restoringPromptId,
     requestRestorePrompt,
@@ -537,8 +543,10 @@ export const SessionPromptsCount = observer(function SessionPromptsCount({
 /** Header action for the 对话 blind: opens the full prompt history modal. */
 export const SessionPromptsViewAllButton = observer(function SessionPromptsViewAllButton({
   prompts,
+  displayLevel = 'hidden',
 }: {
   prompts: ReturnType<typeof useSessionPrompts>;
+  displayLevel?: Exclude<AgentReplyDisplayLevel, 'verbose'>;
 }) {
   const { t } = useTranslation();
   if (!prompts.hasPrompts) return null;
@@ -550,7 +558,7 @@ export const SessionPromptsViewAllButton = observer(function SessionPromptsViewA
         // The button lives in the accordion header; stop the click from also
         // toggling the blind open/closed.
         e.stopPropagation();
-        prompts.openPromptsModal();
+        prompts.openPromptsModal(displayLevel);
       }}
     >
       <Maximize2 className="size-3" />
@@ -562,8 +570,10 @@ export const SessionPromptsViewAllButton = observer(function SessionPromptsViewA
 /** Content of the 对话 blind — the prompt history preview. */
 export const SessionPromptsContent = observer(function SessionPromptsContent({
   prompts,
+  displayLevel = 'hidden',
 }: {
   prompts: ReturnType<typeof useSessionPrompts>;
+  displayLevel?: Exclude<AgentReplyDisplayLevel, 'verbose'>;
 }) {
   const { t } = useTranslation();
 
@@ -580,10 +590,13 @@ export const SessionPromptsContent = observer(function SessionPromptsContent({
 
   return (
     <div className="min-w-0 px-2.5 py-2">
-      <SessionPromptsPreview
+      <SessionConversationList
         prompts={prompts.prompts}
+        messages={prompts.messages}
+        displayLevel={displayLevel}
+        variant="preview"
         isLoading={prompts.isLoading}
-        onOpenAll={prompts.openPromptsModal}
+        onOpenAll={() => prompts.openPromptsModal(displayLevel)}
         onRestorePrompt={prompts.requestRestorePrompt}
         restoringPromptId={prompts.restoringPromptId}
       />
@@ -905,112 +918,6 @@ async function resolveSessionSummary(
   } catch {
     return { summary: null, status: 'failed' };
   }
-}
-
-function SessionPromptsPreview({
-  prompts,
-  isLoading,
-  onOpenAll,
-  onRestorePrompt,
-  restoringPromptId,
-}: {
-  prompts: ClaudeSessionPrompt[];
-  isLoading: boolean;
-  onOpenAll: () => void;
-  onRestorePrompt: (prompt: ClaudeSessionPrompt, index: number) => void;
-  restoringPromptId: string | null;
-}) {
-  const { t } = useTranslation();
-  const previewItems = useMemo(() => buildPromptPreviewItems(prompts), [prompts]);
-  const hasPrompts = prompts.length > 0;
-
-  return (
-    <div className="grid gap-1">
-      {isLoading ? (
-        <div className="flex items-center gap-1.5 px-1 py-1.5 text-xs text-foreground-passive">
-          <Loader2 className="size-3 animate-spin" />
-          {t('common.loading')}
-        </div>
-      ) : !hasPrompts ? (
-        <div className="px-1 py-1.5 text-xs text-foreground-passive">
-          {t('tasks.panel.noPrompts')}
-        </div>
-      ) : (
-        <div className="grid gap-1">
-          {previewItems.map((item, index) =>
-            item.type === 'truncated' ? (
-              <button
-                key="truncated"
-                type="button"
-                className="flex min-w-0 items-center justify-center gap-1.5 rounded-sm px-2 py-1 text-[11px] text-foreground-passive hover:bg-background-1 hover:text-foreground-muted focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                onClick={onOpenAll}
-              >
-                <MoreHorizontal className="size-3.5" />
-                {t('tasks.sessionInfo.truncatedPrompts', { count: item.hiddenCount })}
-              </button>
-            ) : (
-              <PromptPreviewRow
-                key={item.prompt.id || `${item.promptIndex}-${index}`}
-                prompt={item.prompt}
-                promptIndex={item.promptIndex}
-                onClick={onOpenAll}
-                onRestore={onRestorePrompt}
-                isRestoring={restoringPromptId === item.prompt.id}
-              />
-            )
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PromptPreviewRow({
-  prompt,
-  promptIndex,
-  onClick,
-  onRestore,
-  isRestoring = false,
-}: {
-  prompt: ClaudeSessionPrompt;
-  promptIndex: number;
-  onClick: () => void;
-  onRestore?: (prompt: ClaudeSessionPrompt, index: number) => void;
-  isRestoring?: boolean;
-}) {
-  const displayText = displaySessionPromptText(prompt.text);
-  const timestamp = prompt.timestamp ? new Date(prompt.timestamp).toLocaleTimeString() : null;
-  const canRestore = Boolean(onRestore && prompt.restoreTarget);
-  return (
-    <div className="group flex min-w-0 items-start rounded-sm hover:bg-background-1 focus-within:bg-background-1">
-      <button
-        type="button"
-        className="grid min-w-0 flex-1 grid-cols-[1.1rem_minmax(0,1fr)] gap-1.5 py-1 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        onClick={onClick}
-        title={displayText}
-      >
-        <span className="shrink-0 pt-0.5 text-right font-mono text-[10px] text-foreground-passive">
-          #{promptIndex}
-        </span>
-        <span className="max-h-32 min-w-0 overflow-hidden whitespace-pre-wrap break-words text-[11px] leading-snug text-foreground-muted">
-          {displayText}
-        </span>
-      </button>
-      {canRestore && onRestore ? (
-        <SessionPromptRestoreButton
-          prompt={prompt}
-          index={promptIndex}
-          isRestoring={isRestoring}
-          onRestore={onRestore}
-          className="mt-0.5 mr-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-        />
-      ) : timestamp ? (
-        <span className="mt-1 mr-1.5 shrink-0 font-mono text-[10px] text-foreground-passive opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          {timestamp}
-        </span>
-      ) : null}
-    </div>
-  );
 }
 
 /**

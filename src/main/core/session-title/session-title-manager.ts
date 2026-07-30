@@ -3,6 +3,8 @@ import { conversationRenamedChannel } from '@shared/events/conversationEvents';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { normalizeTaskDisplayName as normalizeSessionTitle } from '@shared/task-name';
 import { conversationEvents } from '@main/core/conversations/conversation-events';
+import { createLocalAgentSessionCatalogId } from '@main/core/conversations/local-agent-session-catalog';
+import { storeConversationSessionSource } from '@main/core/conversations/stored-conversation-session-source';
 import { db } from '@main/db/client';
 import { conversations } from '@main/db/schema';
 import { events } from '@main/lib/events';
@@ -29,15 +31,28 @@ class SessionTitleManager {
     if (!source) return;
     const key = ctx.conversationId;
     this.stop(key);
-    const watcher = source.watch(ctx, (title) => {
-      void this.applyTitle(ctx, title).catch((err) => {
-        log.warn('SessionTitleManager: applyTitle failed', {
-          conversationId: ctx.conversationId,
-          runtimeId: ctx.runtimeId,
-          error: String(err),
+    const watcher = source.watch(
+      ctx,
+      (title) => {
+        void this.applyTitle(ctx, title).catch((err) => {
+          log.warn('SessionTitleManager: applyTitle failed', {
+            conversationId: ctx.conversationId,
+            runtimeId: ctx.runtimeId,
+            error: String(err),
+          });
         });
-      });
-    });
+      },
+      (sessionId) => {
+        void this.applySessionBinding(ctx, sessionId).catch((err) => {
+          log.warn('SessionTitleManager: applySessionBinding failed', {
+            conversationId: ctx.conversationId,
+            runtimeId: ctx.runtimeId,
+            sessionId,
+            error: String(err),
+          });
+        });
+      }
+    );
     this.watchers.set(key, watcher);
   }
 
@@ -94,6 +109,16 @@ class SessionTitleManager {
         title: displayTitle,
       });
     }
+  }
+
+  private async applySessionBinding(ctx: SessionTitleContext, sessionId: string): Promise<void> {
+    if (ctx.runtimeId !== 'codex' || !ctx.stateRoot) return;
+    await storeConversationSessionSource(ctx.conversationId, {
+      catalogId: createLocalAgentSessionCatalogId('codex', ctx.stateRoot, sessionId),
+      runtimeId: 'codex',
+      sessionId,
+      stateRoot: ctx.stateRoot,
+    });
   }
 }
 

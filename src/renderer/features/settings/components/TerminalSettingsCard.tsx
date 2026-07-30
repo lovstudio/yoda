@@ -1,33 +1,23 @@
 import { Check, ChevronDown } from 'lucide-react';
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  DEFAULT_TERMINAL_RENDERER,
+  DEFAULT_HOT_TERMINAL_LIMIT,
+  DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES,
+  MAX_HOT_TERMINAL_LIMIT,
+  MAX_IDLE_SESSION_TIMEOUT_MINUTES,
   MAX_TERMINAL_SCROLLBACK_LINES,
+  MIN_HOT_TERMINAL_LIMIT,
   MIN_TERMINAL_SCROLLBACK_LINES,
   normalizeTerminalScrollbackLines,
-  TERMINAL_RENDERERS,
-  type TerminalRenderer,
 } from '@shared/terminal-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { rpc } from '@renderer/lib/ipc';
-import {
-  applyRendererPreferenceToAll,
-  getTerminalRendererDiagnostics,
-  subscribeTerminalRendererDiagnostics,
-} from '@renderer/lib/pty/pty';
+import { PtySession } from '@renderer/lib/pty/pty-session';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { Switch } from '@renderer/lib/ui/switch';
-import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { SettingRow } from './SettingRow';
 
 type FontOption = {
@@ -46,12 +36,6 @@ const POPULAR_FONTS = [
   'Source Code Pro',
   'MesloLGS NF',
 ];
-
-const RENDERER_LABEL_KEYS = {
-  auto: 'settings.terminal.rendererAuto',
-  webgl: 'settings.terminal.rendererWebgl',
-  dom: 'settings.terminal.rendererDom',
-} satisfies Record<TerminalRenderer, string>;
 
 const toOptionId = (font: string) =>
   `font-${font
@@ -78,53 +62,13 @@ const TerminalSettingsCard: React.FC = () => {
   const [loadingFonts, setLoadingFonts] = useState<boolean>(false);
 
   const fontFamily = terminal?.fontFamily ?? '';
-  const renderer = terminal?.renderer ?? DEFAULT_TERMINAL_RENDERER;
   const autoCopyOnSelection = terminal?.autoCopyOnSelection ?? true;
+  const hotTerminalLimit = terminal?.hotTerminalLimit ?? DEFAULT_HOT_TERMINAL_LIMIT;
+  const idleSessionTimeoutMinutes =
+    terminal?.idleSessionTimeoutMinutes ?? DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES;
   const scrollbackLines = normalizeTerminalScrollbackLines(terminal?.scrollbackLines);
-  const rendererDiagnostics = useSyncExternalStore(
-    subscribeTerminalRendererDiagnostics,
-    getTerminalRendererDiagnostics,
-    getTerminalRendererDiagnostics
-  );
   const [scrollbackDraft, setScrollbackDraft] = useState<string>(String(scrollbackLines));
   const skipScrollbackCommitRef = useRef(false);
-
-  const rendererStatusText = useMemo(() => {
-    if (rendererDiagnostics.activeCount === 0) {
-      return t('settings.terminal.rendererNoActive');
-    }
-    if (rendererDiagnostics.strictFailureCount > 0) {
-      return t('settings.terminal.rendererStrictFailureActive', {
-        count: rendererDiagnostics.strictFailureCount,
-      });
-    }
-    if (rendererDiagnostics.fallbackCount > 0) {
-      return t('settings.terminal.rendererFallbackActive', {
-        count: rendererDiagnostics.fallbackCount,
-      });
-    }
-    if (rendererDiagnostics.webglCount > 0 && rendererDiagnostics.domCount > 0) {
-      return t('settings.terminal.rendererActiveMixed', {
-        webgl: rendererDiagnostics.webglCount,
-        dom: rendererDiagnostics.domCount,
-      });
-    }
-    if (rendererDiagnostics.webglCount > 0) {
-      return t('settings.terminal.rendererActiveWebgl', {
-        count: rendererDiagnostics.webglCount,
-      });
-    }
-    return t('settings.terminal.rendererActiveDom', {
-      count: rendererDiagnostics.domCount,
-    });
-  }, [rendererDiagnostics, t]);
-
-  const rendererStatusClass =
-    rendererDiagnostics.strictFailureCount > 0
-      ? 'text-foreground-destructive'
-      : rendererDiagnostics.fallbackCount > 0
-        ? 'text-foreground-muted'
-        : 'text-foreground-passive';
 
   const popularOptions = useMemo<FontOption[]>(() => {
     return [
@@ -206,21 +150,20 @@ const TerminalSettingsCard: React.FC = () => {
     [update]
   );
 
-  const applyRenderer = useCallback(
-    (next: TerminalRenderer) => {
-      if (next === renderer) return;
-      update({ renderer: next });
-      applyRendererPreferenceToAll(next);
-    },
-    [renderer, update]
-  );
-
   const toggleAutoCopy = useCallback(
     (next: boolean) => {
       update({ autoCopyOnSelection: next });
       window.dispatchEvent(
         new CustomEvent('terminal-auto-copy-changed', { detail: { autoCopyOnSelection: next } })
       );
+    },
+    [update]
+  );
+
+  const updateHotTerminalLimit = useCallback(
+    (next: number) => {
+      update({ hotTerminalLimit: next });
+      PtySession.setHotTerminalLimit(next);
     },
     [update]
   );
@@ -371,36 +314,6 @@ const TerminalSettingsCard: React.FC = () => {
         }
       />
       <SettingRow
-        title={t('settings.terminal.renderer')}
-        description={t('settings.terminal.rendererDescription')}
-        control={
-          <div className="flex w-[183px] flex-shrink-0 flex-col gap-1.5">
-            <ToggleGroup
-              value={[renderer]}
-              onValueChange={([next]) => {
-                if (next) applyRenderer(next as TerminalRenderer);
-              }}
-              className="w-full"
-            >
-              {TERMINAL_RENDERERS.map((option) => (
-                <ToggleGroupItem
-                  key={option}
-                  value={option}
-                  disabled={loading || saving}
-                  aria-label={t(RENDERER_LABEL_KEYS[option])}
-                  className="flex-1 text-xs"
-                >
-                  {t(RENDERER_LABEL_KEYS[option])}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            <span className={`text-[11px] leading-snug ${rendererStatusClass}`}>
-              {rendererStatusText}
-            </span>
-          </div>
-        }
-      />
-      <SettingRow
         title={t('settings.terminal.scrollbackLines')}
         description={t('settings.terminal.scrollbackLinesDescription')}
         control={
@@ -449,6 +362,49 @@ const TerminalSettingsCard: React.FC = () => {
             disabled={loading || saving}
             onCheckedChange={toggleAutoCopy}
           />
+        }
+      />
+      <SettingRow
+        title={t('settings.terminal.hotTerminalLimit')}
+        description={t('settings.terminal.hotTerminalLimitDescription')}
+        control={
+          <Input
+            type="number"
+            min={MIN_HOT_TERMINAL_LIMIT}
+            max={MAX_HOT_TERMINAL_LIMIT}
+            value={hotTerminalLimit}
+            disabled={loading || saving}
+            className="h-8 w-[100px] text-right"
+            aria-label={t('settings.terminal.hotTerminalLimit')}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (Number.isInteger(value)) updateHotTerminalLimit(value);
+            }}
+          />
+        }
+      />
+      <SettingRow
+        title={t('settings.terminal.idleSessionTimeout')}
+        description={t('settings.terminal.idleSessionTimeoutDescription')}
+        control={
+          <div className="flex w-[183px] items-center gap-2">
+            <Input
+              type="number"
+              min={0}
+              max={MAX_IDLE_SESSION_TIMEOUT_MINUTES}
+              value={idleSessionTimeoutMinutes}
+              disabled={loading || saving}
+              className="h-8 text-right"
+              aria-label={t('settings.terminal.idleSessionTimeout')}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                if (Number.isInteger(value)) update({ idleSessionTimeoutMinutes: value });
+              }}
+            />
+            <span className="shrink-0 text-xs text-foreground-passive">
+              {t('settings.terminal.minutesUnit')}
+            </span>
+          </div>
         }
       />
     </div>

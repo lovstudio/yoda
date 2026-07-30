@@ -13,6 +13,8 @@
  * into native clipboard pastes at exactly that position.
  */
 
+import { imagePathMention } from '@renderer/lib/image-path-mention';
+
 export type PromptTokenKind = 'image' | 'file';
 
 export type PromptToken = {
@@ -123,9 +125,10 @@ export function imageMarker(index: number): string {
 
 /**
  * Replace sentinels with their transport form. File tokens (and image tokens
- * when `imagesAsPaths` is set) become `@path` mentions; remaining image tokens
- * become `{{yoda-image:N}}` markers with `imagePaths[N]` carrying the path —
- * ordering follows the text. Unregistered `[...]` text is left untouched.
+ * when `imagesAsPaths` is set) become path mentions. Image paths are wrapped in
+ * backticks so Agent clients keep them as text; remaining image tokens become
+ * `{{yoda-image:N}}` markers with `imagePaths[N]` carrying the path. Ordering
+ * follows the text. Unregistered `[...]` text is left untouched.
  */
 export function serializePromptWithTokens(
   text: string,
@@ -138,7 +141,8 @@ export function serializePromptWithTokens(
   const serialized = text.replace(TOKEN_RE, (match, label: string) => {
     const token = byLabel.get(label);
     if (!token) return match;
-    if (token.kind === 'file' || options.imagesAsPaths) return `@${token.path}`;
+    if (token.kind === 'file') return `@${token.path}`;
+    if (options.imagesAsPaths) return imagePathMention(token.path);
     imagePaths.push(token.path);
     return imageMarker(imagePaths.length - 1);
   });

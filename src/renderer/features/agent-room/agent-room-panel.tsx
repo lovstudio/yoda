@@ -14,6 +14,7 @@ import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { AvatarValue } from '@renderer/lib/components/avatar-value';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
+import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import {
   ACCENT_AVATAR,
@@ -177,7 +178,7 @@ export const RoomChat = observer(function RoomChat({ snapshot }: { snapshot: Roo
           />
         ))}
       </div>
-      <Composer members={snapshot.members} />
+      <AgentRoomComposer members={snapshot.members} />
     </section>
   );
 });
@@ -536,7 +537,11 @@ type MentionItem = {
 type CommandItem = { kind: 'command'; name: string; label: string; desc: string };
 type SuggestItem = MentionItem | CommandItem;
 
-const Composer = observer(function Composer({ members }: { members: RoomMember[] }) {
+export const AgentRoomComposer = observer(function AgentRoomComposer({
+  members,
+}: {
+  members: RoomMember[];
+}) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
   const [suggestOpen, setSuggestOpen] = useState(false);
@@ -680,6 +685,7 @@ const Composer = observer(function Composer({ members }: { members: RoomMember[]
             setSel(0);
           }}
           onKeyDown={(e) => {
+            if (e.key === 'Enter' && isImeComposing(e)) return;
             if (open) {
               if (e.key === 'ArrowDown') {
                 e.preventDefault();

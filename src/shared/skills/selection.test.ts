@@ -15,4 +15,14 @@ describe('normalizeSkillSelection', () => {
 
     expect(normalizeSkillSelection(selection)).toBe(selection);
   });
+
+  it('preserves an explicitly empty allowlist', () => {
+    const selection: SkillSelectionInput = {
+      restriction: 'allowlist',
+      autoSkillKeys: [],
+      manualSkillKeys: [],
+    };
+
+    expect(normalizeSkillSelection(selection)).toBe(selection);
+  });
 });

@@ -1,10 +1,13 @@
 import { computed, makeAutoObservable, observable, reaction, runInAction } from 'mobx';
 import { type LocalProject, type SshProject } from '@shared/projects';
-import type {
-  SidebarBranchDisplay,
-  SidebarSnapshot,
-  SidebarTaskGroupBy,
-  SidebarTaskSortBy,
+import {
+  DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT,
+  SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS,
+  type SidebarBranchDisplay,
+  type SidebarSnapshot,
+  type SidebarTaskGroupBy,
+  type SidebarTaskGroupVisibleLimit,
+  type SidebarTaskSortBy,
 } from '@shared/view-state';
 import { DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
 import {
@@ -27,6 +30,15 @@ function parseSidebarTaskSortBy(value: unknown): SidebarTaskSortBy | undefined {
 function parseSidebarTaskGroupBy(value: unknown): SidebarTaskGroupBy | undefined {
   return value === 'project' || value === 'none' || value === 'type' || value === 'activity'
     ? value
+    : undefined;
+}
+
+function parseSidebarTaskGroupVisibleLimit(
+  value: unknown
+): SidebarTaskGroupVisibleLimit | undefined {
+  return typeof value === 'number' &&
+    SIDEBAR_TASK_GROUP_VISIBLE_LIMIT_OPTIONS.some((option) => option === value)
+    ? (value as SidebarTaskGroupVisibleLimit)
     : undefined;
 }
 
@@ -117,6 +129,12 @@ export type PinnedSidebarEntry =
 
 export type ProjectTypeFilter = 'all' | 'local' | 'ssh';
 
+export interface SidebarSelectionRevealRequest {
+  requestId: number;
+  projectId: string;
+  taskId?: string;
+}
+
 function isActiveSidebarTask(task: TaskStore): boolean {
   return task.state === 'unregistered' || !('archivedAt' in task.data && task.data.archivedAt);
 }
@@ -152,6 +170,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   pinnedProjectIds = observable.set<string>();
   taskSortBy: SidebarTaskSortBy = 'updated-at';
   taskGroupBy: SidebarTaskGroupBy = 'project';
+  taskGroupVisibleLimit = DEFAULT_SIDEBAR_TASK_GROUP_VISIBLE_LIMIT;
   taskBranchDisplay: SidebarBranchDisplay = 'compact';
   pinnedCollapsed = false;
   projectsCollapsed = false;
@@ -175,6 +194,8 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
   private readonly reflowHoldReasons = new Set<string>();
   /** Global show/hide for the entire secondary nav section. */
   navSectionHidden = false;
+  selectionRevealRequest: SidebarSelectionRevealRequest | null = null;
+  private nextSelectionRevealRequestId = 1;
 
   constructor(
     private readonly projectManager: ProjectManagerStore,
@@ -569,6 +590,7 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       projectActivityById: { ...this.projectActivityById },
       taskSortBy: this.taskSortBy,
       taskGroupBy: this.taskGroupBy,
+      taskGroupVisibleLimit: this.taskGroupVisibleLimit,
       taskBranchDisplay: this.taskBranchDisplay,
       pinnedProjectIds: [...this.pinnedProjectIds],
       pinnedCollapsed: this.pinnedCollapsed,
@@ -608,6 +630,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     if (snapshot.taskGroupBy !== undefined) {
       const v = parseSidebarTaskGroupBy(snapshot.taskGroupBy);
       if (v !== undefined) this.taskGroupBy = v;
+    }
+    if (snapshot.taskGroupVisibleLimit !== undefined) {
+      const v = parseSidebarTaskGroupVisibleLimit(snapshot.taskGroupVisibleLimit);
+      if (v !== undefined) this.taskGroupVisibleLimit = v;
     }
     if (snapshot.taskBranchDisplay !== undefined) {
       const v = parseSidebarBranchDisplay(snapshot.taskBranchDisplay);
@@ -800,6 +826,26 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
     }
   }
 
+  /**
+   * Requests an explicit, one-shot sidebar reveal from a surface that stays on
+   * its current route, such as Home's selected-project locator.
+   */
+  requestSelectionReveal(projectId: string, taskId?: string): void {
+    this.revealSelection(projectId, taskId);
+    this.selectionRevealRequest = {
+      requestId: this.nextSelectionRevealRequestId,
+      projectId,
+      ...(taskId ? { taskId } : {}),
+    };
+    this.nextSelectionRevealRequestId += 1;
+  }
+
+  completeSelectionReveal(requestId: number): void {
+    if (this.selectionRevealRequest?.requestId === requestId) {
+      this.selectionRevealRequest = null;
+    }
+  }
+
   setTaskSortBy(sortBy: SidebarTaskSortBy): void {
     this.taskSortBy = sortBy;
   }
@@ -819,6 +865,10 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
       this.taskOrderByProject = {};
       this.taskOrderByParent = {};
     }
+  }
+
+  setTaskGroupVisibleLimit(limit: SidebarTaskGroupVisibleLimit): void {
+    this.taskGroupVisibleLimit = limit;
   }
 
   setProjectOrder(ids: string[]): void {

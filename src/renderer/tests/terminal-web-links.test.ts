@@ -24,6 +24,24 @@ describe('terminal web links', () => {
     ]);
   });
 
+  it('stops a parenthesized URL before adjacent Chinese prose', () => {
+    const url = 'https://lovstudio.ai/yoda/session/yss_jwNYhuQC7vOzOuHim41RoMtQgkVwnMxkxOu8T0p5Z6Y';
+    const line = `这条会话 (${url})现在会：`;
+
+    expect(extractTerminalWebLinkCandidates(line)).toEqual([
+      { url, index: line.indexOf(url), length: url.length },
+    ]);
+  });
+
+  it('keeps balanced ASCII delimiters that belong to the URL', () => {
+    const url = 'https://en.wikipedia.org/wiki/Function_(mathematics)?range=[0,1]&set={real}';
+    const line = `see (${url}) now`;
+
+    expect(extractTerminalWebLinkCandidates(line)).toEqual([
+      { url, index: line.indexOf(url), length: url.length },
+    ]);
+  });
+
   it('makes the whole markdown link span clickable and opens the inner URL', () => {
     const line = 'see [Anthropic docs](https://docs.anthropic.com/foo) here';
     const span = '[Anthropic docs](https://docs.anthropic.com/foo)';

@@ -1,5 +1,4 @@
 import {
-  AppWindow,
   Bot,
   Boxes,
   Check,
@@ -15,7 +14,6 @@ import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AgentTeamsMainPanel } from '@renderer/features/agent-teams/agent-teams-panel';
 import { AgentManagerMainPanel } from '@renderer/features/agents-config/agent-manager-view';
-import { AiLabView } from '@renderer/features/ai-lab/components/AiLabView';
 import { AutomationMainPanel } from '@renderer/features/automation/automation-view';
 import { McpMainPanel } from '@renderer/features/mcp/mcp-view';
 import PluginsView from '@renderer/features/plugins/PluginsView';
@@ -33,7 +31,6 @@ import { cn } from '@renderer/utils/utils';
 
 /** The Library groups the user's reusable resources behind one nav entry. */
 export type LibrarySection =
-  | 'apps'
   | 'prompts'
   | 'agents'
   | 'agentTeams'
@@ -47,7 +44,6 @@ const SECTIONS: {
   icon: LucideIcon;
   labelKey: string;
 }[] = [
-  { id: 'apps', icon: AppWindow, labelKey: 'library.sections.apps' },
   { id: 'prompts', icon: FileText, labelKey: 'library.sections.prompts' },
   { id: 'agents', icon: Bot, labelKey: 'library.sections.agents' },
   { id: 'agentTeams', icon: Users, labelKey: 'library.sections.agentTeams' },
@@ -60,39 +56,30 @@ const SECTIONS: {
 const LibrarySectionContext = createContext<{
   section: LibrarySection;
   onSectionChange: (section: LibrarySection) => void;
-  appId: string | null;
-  onAppChange: (appId: string | null) => void;
-}>({ section: 'apps', onSectionChange: () => {}, appId: null, onAppChange: () => {} });
+}>({ section: 'prompts', onSectionChange: () => {} });
 
 export function LibraryViewWrapper({
   children,
-  section = 'apps',
-  appId,
+  section = 'prompts',
 }: {
   children: ReactNode;
   section?: LibrarySection;
-  appId?: string;
 }) {
   const { setParams } = useParams('library');
-  // Navigation snapshots from earlier placements may still carry `aiLab` or
-  // `marketplace`; migrate those hidden legacy values into the Apps shelf.
-  const resolvedSection =
-    (section as string) === 'aiLab' || (section as string) === 'marketplace' ? 'apps' : section;
+  const resolvedSection = isLibrarySection(section) ? section : 'prompts';
   const onSectionChange = useCallback(
     (next: LibrarySection) => setParams({ section: next }),
     [setParams]
   );
-  const onAppChange = useCallback(
-    (next: string | null) => setParams({ appId: next ?? undefined }),
-    [setParams]
-  );
   return (
-    <LibrarySectionContext.Provider
-      value={{ section: resolvedSection, onSectionChange, appId: appId ?? null, onAppChange }}
-    >
+    <LibrarySectionContext.Provider value={{ section: resolvedSection, onSectionChange }}>
       {children}
     </LibrarySectionContext.Provider>
   );
+}
+
+function isLibrarySection(section: unknown): section is LibrarySection {
+  return SECTIONS.some(({ id }) => id === section);
 }
 
 function useLibrarySection() {
@@ -103,18 +90,8 @@ export function LibraryTitlebar() {
   return <Titlebar />;
 }
 
-function LibrarySectionContent({
-  section,
-  appId,
-  onAppChange,
-}: {
-  section: LibrarySection;
-  appId: string | null;
-  onAppChange: (appId: string | null) => void;
-}) {
+function LibrarySectionContent({ section }: { section: LibrarySection }) {
   switch (section) {
-    case 'apps':
-      return <AiLabView embedded activeAppId={appId} onActiveAppChange={onAppChange} />;
     case 'prompts':
       return <PromptLibraryPanel />;
     case 'agents':
@@ -177,7 +154,7 @@ export function LibraryPaneHeaderSlot() {
 
 export function LibraryMainPanel() {
   const { t } = useTranslation();
-  const { section, onSectionChange, appId, onAppChange } = useLibrarySection();
+  const { section, onSectionChange } = useLibrarySection();
   // In the side pane the chip-strip row hosts the picker — don't double it.
   const isPinHosted = useIsPinHosted();
   return (
@@ -216,7 +193,7 @@ export function LibraryMainPanel() {
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
-          <LibrarySectionContent section={section} appId={appId} onAppChange={onAppChange} />
+          <LibrarySectionContent section={section} />
         </div>
       </div>
     </div>

@@ -1,9 +1,11 @@
 export const DEFAULT_TERMINAL_SCROLLBACK_LINES = 200_000;
 export const MIN_TERMINAL_SCROLLBACK_LINES = 1_000;
 export const MAX_TERMINAL_SCROLLBACK_LINES = 500_000;
-export const TERMINAL_RENDERERS = ['auto', 'webgl', 'dom'] as const;
-export type TerminalRenderer = (typeof TERMINAL_RENDERERS)[number];
-export const DEFAULT_TERMINAL_RENDERER: TerminalRenderer = 'auto';
+export const DEFAULT_HOT_TERMINAL_LIMIT = 4;
+export const MIN_HOT_TERMINAL_LIMIT = 1;
+export const MAX_HOT_TERMINAL_LIMIT = 12;
+export const DEFAULT_IDLE_SESSION_TIMEOUT_MINUTES = 5;
+export const MAX_IDLE_SESSION_TIMEOUT_MINUTES = 120;
 
 const RING_BUFFER_BYTES_PER_LINE = 128;
 const MIN_TERMINAL_RING_BUFFER_BYTES = 1024 * 1024;
@@ -22,14 +24,6 @@ export function normalizeTerminalScrollbackLines(value: unknown): number {
     MAX_TERMINAL_SCROLLBACK_LINES,
     Math.max(MIN_TERMINAL_SCROLLBACK_LINES, Math.floor(numeric))
   );
-}
-
-export function normalizeTerminalRenderer(value: unknown): TerminalRenderer {
-  if (typeof value !== 'string') return DEFAULT_TERMINAL_RENDERER;
-  const normalized = value.trim().toLowerCase();
-  return TERMINAL_RENDERERS.includes(normalized as TerminalRenderer)
-    ? (normalized as TerminalRenderer)
-    : DEFAULT_TERMINAL_RENDERER;
 }
 
 export function getTerminalRingBufferCapBytes(scrollbackLines: unknown): number {

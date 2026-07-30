@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { CatalogIndex } from '@shared/skills/types';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
@@ -8,6 +9,7 @@ import { captureTelemetry } from '@renderer/utils/telemetryClient';
 import { fetchSkillsCatalog, skillsCatalogQueryKey } from '../skills-query';
 
 export function useSkills() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
@@ -147,6 +149,41 @@ export function useSkills() {
     [setDisabledMutation]
   );
 
+  const setDisabledBatchMutation = useMutation({
+    mutationFn: async ({ skillKeys, disabled }: { skillKeys: string[]; disabled: boolean }) => {
+      const result = await rpc.skills.setDisabledBatch({ skillKeys, disabled });
+      if (!result.success) throw new Error(result.error ?? t('skills.batchUpdateFailed'));
+      return { disabled, updatedCount: result.data?.updatedCount ?? 0 };
+    },
+    onError: (error) => {
+      toast({
+        title: t('skills.batchUpdateFailed'),
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+    onSuccess: ({ disabled, updatedCount }) => {
+      toast({
+        title: t(disabled ? 'skills.batchDisableSuccess' : 'skills.batchEnableSuccess', {
+          count: updatedCount,
+        }),
+      });
+      void queryClient.invalidateQueries({ queryKey: ['skills'] });
+    },
+  });
+
+  const setDisabledBatch = useCallback(
+    async (skillKeys: string[], disabled: boolean): Promise<boolean> => {
+      try {
+        await setDisabledBatchMutation.mutateAsync({ skillKeys, disabled });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [setDisabledBatchMutation]
+  );
+
   const filteredSkills = useMemo(() => {
     if (!catalog) return [];
     const q = searchQuery.toLowerCase().trim();
@@ -182,5 +219,6 @@ export function useSkills() {
     install,
     uninstall,
     setDisabled,
+    setDisabledBatch,
   };
 }

@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@renderer/utils/utils';
+import { LanguageStep } from './language-step';
 import { MaasGatewayStep } from './maas-gateway-step';
+import type { OnboardingStep } from './onboarding-steps';
 import { SignInStep } from './sign-in-step';
-
-type OnboardingStep = 'sign-in' | 'maas-gateway';
 
 const stepConfig: Record<
   OnboardingStep,
   { labelKey: string; component: React.ComponentType<{ onComplete: () => void }> }
 > = {
+  language: {
+    labelKey: 'onboarding.language.stepTitle',
+    component: LanguageStep,
+  },
   'sign-in': {
     labelKey: 'onboarding.signInTitle',
     component: SignInStep,
@@ -65,8 +69,8 @@ export function OnboardingShell({
   };
 
   return (
-    <div className="flex flex-col items-start justify-center max-w-5xl mx-auto w-full h-full max-h-[70vh] min-h-0 [-webkit-app-region:no-drag]">
-      <div className="flex flex-row border border-b-0">
+    <div className="@container flex h-full max-h-[70vh] min-h-0 w-full max-w-5xl flex-col items-start justify-center mx-auto [-webkit-app-region:no-drag]">
+      <div className="flex max-w-full flex-row overflow-hidden border border-b-0">
         {steps.map((step, index) => (
           <StepHeader
             key={step}

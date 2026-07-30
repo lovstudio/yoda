@@ -4,6 +4,7 @@ import {
   findClosestCodexThreadRefByTitleAndCreatedAt,
   findCodexThreadTitleByTitle,
   findUniqueCodexThreadRefByCreatedAt,
+  findUniqueCodexThreadRefByCwdAtActivity,
   findUniqueUntitledCodexThreadRefByCwdAfterCreatedAt,
   getClaimedCodexThreadId,
   readCodexThreadRef,
@@ -51,6 +52,7 @@ export function resolveAgentResumeSession(
     cwd,
     title: conversation.title,
     createdAt: conversation.createdAt,
+    lastInteractedAt: conversation.lastInteractedAt,
     reservedThreadIds: options.reservedThreadIds,
   });
   return {
@@ -72,6 +74,7 @@ export function resolveCodexThreadIdForConversation({
   cwd,
   title,
   createdAt,
+  lastInteractedAt,
   statePath = resolveCodexStatePath(),
   reservedThreadIds,
 }: {
@@ -79,6 +82,7 @@ export function resolveCodexThreadIdForConversation({
   cwd?: string;
   title?: string;
   createdAt?: string | null;
+  lastInteractedAt?: string | null;
   statePath?: string;
   reservedThreadIds?: ReadonlySet<string>;
 }): string | undefined {
@@ -87,6 +91,7 @@ export function resolveCodexThreadIdForConversation({
     cwd,
     title,
     createdAt,
+    lastInteractedAt,
     statePath,
     reservedThreadIds,
   })?.id;
@@ -97,6 +102,7 @@ export function resolveCodexThreadForConversation({
   cwd,
   title,
   createdAt,
+  lastInteractedAt,
   statePath = resolveCodexStatePath(),
   reservedThreadIds,
 }: {
@@ -104,6 +110,7 @@ export function resolveCodexThreadForConversation({
   cwd?: string;
   title?: string;
   createdAt?: string | null;
+  lastInteractedAt?: string | null;
   statePath?: string;
   reservedThreadIds?: ReadonlySet<string>;
 }): ResolvedCodexThread | undefined {
@@ -128,6 +135,17 @@ export function resolveCodexThreadForConversation({
       includeArchived: true,
     });
     if (byTitle) return resolveCurrent(byTitle);
+  }
+
+  const lastInteractedAtMs = parseTimestampMs(lastInteractedAt);
+  if (lastInteractedAtMs !== undefined) {
+    const byActivity = findUniqueCodexThreadRefByCwdAtActivity({
+      statePath,
+      cwd: trimmedCwd,
+      activityAtMs: lastInteractedAtMs,
+      includeArchived: true,
+    });
+    if (byActivity) return resolveCurrent(byActivity);
   }
 
   const createdAtMs = parseTimestampMs(createdAt);

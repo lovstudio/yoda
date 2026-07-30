@@ -12,7 +12,9 @@ import {
   formatCompactNumber,
   formatCompactNumberParts,
 } from '@renderer/utils/format-compact-number';
+import { log } from '@renderer/utils/logger';
 import { cn } from '@renderer/utils/utils';
+import { openTokenUsageTask } from './open-token-usage-task';
 
 const DAILY_WINDOW_DAYS = 30;
 const TOP_TASKS_LIMIT = 5;
@@ -199,7 +201,7 @@ function TokenUsageContent({
               {overview.topTasks.slice(0, TOP_TASKS_LIMIT).map((task) => (
                 <TopTaskRow
                   key={task.taskId}
-                  projectId={projectId}
+                  projectId={task.projectId}
                   taskId={task.taskId}
                   name={task.name}
                   archived={task.archived}
@@ -412,7 +414,13 @@ function TopTaskRow({
   return (
     <button
       type="button"
-      onClick={() => navigate('task', { projectId, taskId })}
+      onClick={() => {
+        void openTokenUsageTask({ projectId, taskId, archived }, navigate).catch(
+          (error: unknown) => {
+            log.warn('TokenUsageCard: failed to open task', { projectId, taskId, error });
+          }
+        );
+      }}
       className="group flex items-center gap-2 border-b border-border/40 py-1.5 text-left last:border-b-0"
     >
       <span className="flex min-w-0 flex-1 items-center gap-1.5">

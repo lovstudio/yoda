@@ -136,8 +136,7 @@ export class ConversationManagerStore {
       if (event.taskId !== this.taskId) return;
       const conversationStore = this.conversations.get(event.conversationId);
       if (!conversationStore) return;
-      conversationStore.clearWorking();
-      conversationStore.setSessionExited(true);
+      conversationStore.markSessionExited();
     });
   }
 
@@ -495,28 +494,36 @@ export class ConversationManagerStore {
   async resumeConversation(
     conversationId: string,
     initialSize?: { cols: number; rows: number }
-  ): Promise<void> {
+  ): Promise<boolean> {
     const store = this.conversations.get(conversationId);
-    if (!store) return;
+    if (!store) return false;
+    store.setSessionExited(false);
     try {
-      await rpc.conversations.resumeConversation(
+      const running = await rpc.conversations.resumeConversation(
         this.projectId,
         this.taskId,
         conversationId,
         initialSize
       );
+      if (!running) {
+        store.markSessionExited();
+        return false;
+      }
       store.setSessionExited(false);
       if (initialSize) {
         const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
         void rpc.pty.resize(sessionId, initialSize.cols, initialSize.rows);
       }
+      return true;
     } catch (error) {
+      store.markSessionExited();
       log.warn('ConversationManagerStore: failed to resume conversation', {
         projectId: this.projectId,
         taskId: this.taskId,
         conversationId,
         error,
       });
+      return false;
     }
   }
 
@@ -528,6 +535,7 @@ export class ConversationManagerStore {
   ): Promise<void> {
     const store = this.conversations.get(conversationId);
     if (!store) return;
+    store.setSessionExited(false);
     // Default to the live terminal's current size so the restarted session
     // (and, under tmux, the freshly created tmux window) is born at the real
     // pane width instead of the 80x24 main-process fallback — otherwise tmux
@@ -542,13 +550,13 @@ export class ConversationManagerStore {
         tmuxOverride,
         enableSkillKey
       );
-      store.setSessionExited(false);
       await store.session.reconnect();
       if (effectiveSize) {
         const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
         void rpc.pty.resize(sessionId, effectiveSize.cols, effectiveSize.rows);
       }
     } catch (error) {
+      store.markSessionExited();
       log.warn('ConversationManagerStore: failed to restart conversation', {
         projectId: this.projectId,
         taskId: this.taskId,
@@ -602,6 +610,8 @@ export class ConversationStore {
    * Drives the "session exited → reload" affordance in the conversations panel.
    */
   sessionExited = false;
+  /** View-only dismissal; a new exit always makes the notice visible again. */
+  sessionExitNoticeDismissed = false;
   lastNotificationType: NotificationType | null = null;
   /** Human-readable "what is it waiting on" context for `awaiting-input`. */
   pendingActionDescription: string | null = null;
@@ -619,7 +629,10 @@ export class ConversationStore {
       seen: observable,
       isArchiving: observable,
       sessionExited: observable,
+      sessionExitNoticeDismissed: observable,
       setSessionExited: action,
+      markSessionExited: action,
+      dismissSessionExitNotice: action,
       lastNotificationType: observable,
       pendingActionDescription: observable,
       setStatus: action,
@@ -735,6 +748,17 @@ export class ConversationStore {
 
   setSessionExited(value: boolean) {
     this.sessionExited = value;
+    this.sessionExitNoticeDismissed = false;
+  }
+
+  markSessionExited() {
+    this.clearWorking();
+    this.sessionExited = true;
+    this.sessionExitNoticeDismissed = false;
+  }
+
+  dismissSessionExitNotice() {
+    this.sessionExitNoticeDismissed = true;
   }
 
   dispose() {

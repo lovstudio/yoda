@@ -1,0 +1,26 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+describe('Workspace runtime bar responsive layout', () => {
+  const source = readFileSync(new URL('./workspace-runtime-bar.tsx', import.meta.url), 'utf8');
+
+  it('uses its own container width and never wraps the single-line status bar', () => {
+    expect(source).toContain('@container flex h-7 min-w-0');
+    expect(source).toContain('overflow-hidden whitespace-nowrap');
+  });
+
+  it('compacts the right-side action group together while preserving accessible triggers', () => {
+    expect(source).toContain(
+      "const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';"
+    );
+    expect(source).toContain('className="tabular-nums @max-[1440px]:hidden"');
+    expect(source).toContain('className="hidden tabular-nums @max-[1440px]:inline"');
+    expect(source.match(/className=\{RUNTIME_BAR_ACTION_LABEL_CLASS\}/g)).toHaveLength(5);
+  });
+
+  it('progressively removes secondary session copy before compact status visuals', () => {
+    expect(source).toContain('@max-[1120px]:hidden');
+    expect(source).toContain('truncate font-medium text-foreground @max-[720px]:hidden');
+    expect(source).toContain("compact ? 'h-1 w-9 @max-[720px]:hidden'");
+  });
+});

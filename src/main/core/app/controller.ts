@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import type { AiLabWindowTarget } from '@shared/ai-lab-window';
+import type { RendererPerformanceSample } from '@shared/app-resource';
 import type { ComparisonWindowTarget } from '@shared/comparison-window';
 import type { TaskWindowReturnPayload } from '@shared/events/appEvents';
 import { createRPCController } from '@shared/ipc/rpc';
@@ -133,6 +134,10 @@ export const appController = createRPCController({
   },
   getAppVersion: () => appService.getCachedAppVersion(),
   getResourceSnapshot: () => appService.getResourceSnapshot(),
+  reportRendererPerformance: (sample: RendererPerformanceSample) => {
+    appService.reportRendererPerformance(sample);
+    return { success: true };
+  },
   getElectronVersion: () => process.versions.electron,
   getPlatform: () => process.platform,
   getHomeDir: () => homedir(),

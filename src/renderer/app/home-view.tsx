@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ClipboardCheck,
   Code2,
-  FileText,
   Folder,
   FolderOpen,
   GitBranch,
@@ -16,6 +15,7 @@ import {
   GripVertical,
   Lightbulb,
   Loader2,
+  LocateFixed,
   Monitor,
   Puzzle,
   Repeat2,
@@ -46,14 +46,9 @@ import {
 } from '@shared/agent-team';
 import { agentToDraft, type Agent } from '@shared/agents';
 import { BUILTIN_AGENT_KEYS } from '@shared/builtin-agents';
-import type { RuntimeInstructionFile } from '@shared/conversations';
 import { FEATURE_WORKFLOW_STAGES, hasFeatureWorkflowContract } from '@shared/feature-workflow';
 import type { Branch } from '@shared/git';
-import type {
-  ComposerDefaults,
-  ProjectPromptPrinciples,
-  TaskOutputLanguage,
-} from '@shared/project-settings';
+import type { ComposerDefaults, TaskOutputLanguage } from '@shared/project-settings';
 import { INTERNAL_PROJECT_ID } from '@shared/projects';
 import { withSystemPrompt } from '@shared/prompt-format';
 import { REVIEW_MAX_ROUNDS } from '@shared/review-protocol';
@@ -68,28 +63,14 @@ import { useAgents } from '@renderer/features/agents-config/use-agents';
 import { createAiLabProject } from '@renderer/features/ai-lab/create-ai-lab-project';
 import { startAiLabBuildTask } from '@renderer/features/ai-lab/start-ai-lab-build-task';
 import {
-  effectiveGlobalEnabled,
-  setGlobalOverride,
-  setGlobalOverrides,
-  setProjectItems,
-} from '@renderer/features/projects/project-prompt-principles';
-import {
   asMounted,
   getProjectManagerStore,
   getProjectSettingsStore,
   getRepositoryStore,
   projectDisplayName,
 } from '@renderer/features/projects/stores/project-selectors';
-import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
-import {
-  usePrompts,
-  useSetPromptGroupInjectionEnabled,
-  useUpdatePrompt,
-} from '@renderer/features/prompt-library/use-prompts';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
-import { ContextItem, memoryFileLabel } from '@renderer/features/tasks/components/context-item';
-import { PermissionModeSelect } from '@renderer/features/tasks/components/permission-mode-select';
 import { initialConversationTitle } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { ProjectSelector } from '@renderer/features/tasks/create-task-modal/project-selector';
@@ -109,6 +90,7 @@ import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Badge } from '@renderer/lib/ui/badge';
+import { Button } from '@renderer/lib/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@renderer/lib/ui/collapsible';
 import { ComboboxTrigger, ComboboxValue } from '@renderer/lib/ui/combobox';
 import {
@@ -125,19 +107,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
-import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import { MicroLabel } from '@renderer/lib/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/lib/ui/select';
-import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
-import { formatBytes } from '@renderer/utils/formatBytes';
 import { cn } from '@renderer/utils/utils';
 import {
   dualField,
@@ -145,6 +117,12 @@ import {
   type ComposerOverrideScope,
 } from './composer-project-overrides';
 import { ComposerPromptInput } from './composer-prompt-input';
+import {
+  ComposerSettingsContent,
+  DEFAULT_INPUT_PROMPT_LANGUAGE,
+  DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
+  DEFAULT_TASK_OUTPUT_LANGUAGE,
+} from './composer-settings-content';
 import { resolveProjectSubmitSourceBranch } from './home-project-submit';
 import { serializePromptWithTokens, type PromptToken } from './prompt-attachment-tokens';
 import { promptRewriteFailureDescription } from './submit-prompt-rewrite';
@@ -218,11 +196,6 @@ interface RunModeInputChrome {
 
 const MAX_COMPARE_VARIANTS = 5;
 const DEFAULT_REVIEWER_RUNTIME: RuntimeId = 'claude';
-const DEFAULT_TASK_OUTPUT_LANGUAGE: TaskOutputLanguage = 'skip';
-const DEFAULT_SUMMARY_OUTPUT_LANGUAGE: TaskOutputLanguage = 'app';
-const DEFAULT_INPUT_PROMPT_LANGUAGE: TaskOutputLanguage = 'skip';
-const TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'prompt', 'zh-CN', 'en'];
-const INPUT_PROMPT_ENABLED_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'zh-CN', 'en'];
 type ExplicitTaskOutputLanguage = Extract<TaskOutputLanguage, 'en' | 'zh-CN'>;
 
 const NORMAL_PROMPT_KEY = 'normal:agent';
@@ -309,6 +282,7 @@ function resolveAgentSlot(args: {
 function agentSkillSelection(agent: Agent | null): SkillSelectionInput | undefined {
   if (!agent) return undefined;
   return normalizeSkillSelection({
+    restriction: agent.skillPolicyMode === 'allowlist' ? 'allowlist' : undefined,
     autoSkillKeys: agent.enabledSkillIds,
     manualSkillKeys: agent.manualSkillIds,
   });
@@ -427,6 +401,7 @@ export const HomeComposer = observer(function HomeComposer({
 }) {
   const { t, i18n } = useTranslation();
   const { navigate } = useNavigate();
+  const { setCollapsed } = useWorkspaceLayoutContext();
   const taskScopedTarget = submitTarget.kind === 'existing-task' ? submitTarget : null;
   // Subtask mode: still creates tasks, but locked to the parent's project and
   // linked via parentTaskId; new branches fork off the parent's branch.
@@ -468,6 +443,11 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [isProjectLocked, updateDraft]
   );
+  const revealSelectedProjectInSidebar = useCallback(() => {
+    if (!selectedProjectId) return;
+    setCollapsed('left', false);
+    appState.sidebar.requestSelectionReveal(selectedProjectId);
+  }, [selectedProjectId, setCollapsed]);
 
   const draftProjectId = draft?.selectedProjectId ?? null;
   useEffect(() => {
@@ -965,37 +945,9 @@ export const HomeComposer = observer(function HomeComposer({
     },
     [updateDraft]
   );
-  const { data: promptLibraryItems } = usePrompts();
-  const updateLibraryPrompt = useUpdatePrompt();
-  const setLibraryPromptGroup = useSetPromptGroupInjectionEnabled();
-  const promptPrinciples = useMemo(
-    () =>
-      (promptLibraryItems ?? [])
-        .slice()
-        .sort((left, right) => left.injectionOrder - right.injectionOrder),
-    [promptLibraryItems]
-  );
   // Run-defaults section is collapsed by default — it is rarely changed and its
   // eight rows otherwise dominate the popover.
   const [runDefaultsOpen, setRunDefaultsOpen] = useState(false);
-  const setPromptPrincipleEnabled = useCallback(
-    (id: string, enabled: boolean) => {
-      updateLibraryPrompt.mutate({ id, patch: { injectionEnabled: enabled } });
-    },
-    [updateLibraryPrompt]
-  );
-  // When a project is selected, prompt-principle toggles operate on the
-  // project's layer (override globals + its own items) stored in project
-  // settings; with no project they edit the global defaults above.
-  const projectPromptPrinciples = projectSettings?.promptPrinciples;
-  const projectPrincipleItems = projectPromptPrinciples?.items ?? [];
-  const saveProjectPromptPrinciples = useCallback(
-    (next: ProjectPromptPrinciples | undefined) => {
-      if (!projectSettingsStore || !projectSettings) return;
-      void projectSettingsStore.save({ ...projectSettings, promptPrinciples: next });
-    },
-    [projectSettingsStore, projectSettings]
-  );
   const attachImagesField = dualField<boolean>({
     override: composerDefaults?.attachImagesAsPaths,
     globalValue: draft?.attachImagesAsPaths ?? false,
@@ -1025,30 +977,6 @@ export const HomeComposer = observer(function HomeComposer({
     setOverride: (value) => setComposerDefault('summaryLanguage', value),
     hasProject: hasProjectOverrideTarget,
   });
-  const setGlobalPrincipleProjectOverride = useCallback(
-    (principle: { id: string; injectionEnabled: boolean }, enabled: boolean) => {
-      saveProjectPromptPrinciples(setGlobalOverride(projectPromptPrinciples, principle, enabled));
-    },
-    [projectPromptPrinciples, saveProjectPromptPrinciples]
-  );
-  const setGlobalPrincipleGroupProjectOverride = useCallback(
-    (principles: Array<{ id: string; injectionEnabled: boolean }>, enabled: boolean) => {
-      saveProjectPromptPrinciples(setGlobalOverrides(projectPromptPrinciples, principles, enabled));
-    },
-    [projectPromptPrinciples, saveProjectPromptPrinciples]
-  );
-  const setProjectPrincipleEnabled = useCallback(
-    (id: string, enabled: boolean) => {
-      const items = projectPromptPrinciples?.items ?? [];
-      saveProjectPromptPrinciples(
-        setProjectItems(
-          projectPromptPrinciples,
-          items.map((item) => (item.id === id ? { ...item, enabled } : item))
-        )
-      );
-    },
-    [projectPromptPrinciples, saveProjectPromptPrinciples]
-  );
   const modeCanRunWithoutProject =
     runMode === 'normal' || runMode === 'brainstorm' || runMode === 'build';
   const modeRequiresWorktree =
@@ -1130,11 +1058,12 @@ export const HomeComposer = observer(function HomeComposer({
         onSubmitted?.({ kind: 'task', projectId, taskId });
       };
       // Attachment transport: inline sentinel tokens are replaced in place —
-      // file tokens (and image tokens when the user prefers paths) become
-      // @path mentions; remaining image tokens become {{yoda-image:N}} markers
-      // the main process expands per runtime (native clipboard paste for TUIs
-      // that support it, @path substitution for the rest). Ordering always
-      // follows the text.
+      // File tokens become @path mentions. When the user prefers image paths,
+      // image tokens become backtick-wrapped @path text so Agent clients do not
+      // promote them back into image inputs. Remaining image tokens become
+      // {{yoda-image:N}} markers the main process expands per runtime (native
+      // clipboard paste for TUIs that support it, @path substitution for the
+      // rest). Ordering always follows the text.
       //
       // Serialize the RAW prompt, not `trimmed`: token sentinels are wrapped in
       // en-space (U+2002) delimiters, which `String.trim()` strips — so a
@@ -2026,83 +1955,6 @@ export const HomeComposer = observer(function HomeComposer({
   }, [canSubmit, needsInitialCommit, selectedProjectId, showInitialCommitModal, handleSubmit, t]);
 
   const promptInputChrome = getRunModeInputChrome(runMode);
-  const renderSystemPromptSection = (activeRuntimeId: RuntimeId): ReactNode => {
-    const runtime = getRuntime(activeRuntimeId);
-    if (!runtime?.appendSystemPromptFlag && !runtime?.appendSystemPromptConfigKey) return null;
-    const hintKey =
-      activeRuntimeId === 'codex'
-        ? 'home.systemPromptHintCodex'
-        : runtime.appendSystemPromptFlag === '--append-system-prompt'
-          ? 'home.systemPromptHintClaude'
-          : 'home.systemPromptHint';
-
-    return (
-      <div className="flex flex-col gap-1">
-        <ComposerSettingsHeader
-          label={t('home.systemPromptLabel')}
-          hint={t(hintKey)}
-          action={
-            <button
-              type="button"
-              className="font-mono text-[10px] uppercase tracking-widest text-foreground-passive transition-colors hover:text-foreground"
-              onClick={() => navigate('library', { section: 'prompts' })}
-            >
-              {t('home.manage')}
-            </button>
-          }
-        />
-        <PromptInjectionControls
-          prompts={promptPrinciples}
-          isPromptEnabled={(prompt) =>
-            selectedProjectId
-              ? effectiveGlobalEnabled(projectPromptPrinciples, prompt)
-              : prompt.injectionEnabled
-          }
-          onPromptEnabledChange={(prompt, checked) =>
-            selectedProjectId
-              ? setGlobalPrincipleProjectOverride(prompt, checked)
-              : setPromptPrincipleEnabled(prompt.id, checked)
-          }
-          onGroupEnabledChange={(groupName, principles, enabled) =>
-            selectedProjectId
-              ? setGlobalPrincipleGroupProjectOverride(principles, enabled)
-              : setLibraryPromptGroup.mutate({ groupName, enabled })
-          }
-          disabled={updateLibraryPrompt.isPending || setLibraryPromptGroup.isPending}
-          empty={<p className="text-xs text-foreground-passive">{t('settings.prompts.empty')}</p>}
-        />
-        {selectedProjectId && projectPrincipleItems.length > 0 ? (
-          <>
-            <div className="mt-1 text-[10px] font-medium uppercase tracking-wide text-foreground-passive">
-              {t('home.promptPrinciplesProjectHeading')}
-            </div>
-            {projectPrincipleItems.map((principle) => (
-              <div key={principle.id} className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="min-w-0 truncate text-xs text-foreground">
-                    {principle.name || t('home.promptPrincipleUnnamed')}
-                  </span>
-                  {principle.text ? (
-                    <InfoTooltip
-                      label={principle.name || t('home.promptPrincipleUnnamed')}
-                      content={<span className="whitespace-pre-wrap">{principle.text}</span>}
-                    />
-                  ) : null}
-                </div>
-                <Switch
-                  size="sm"
-                  checked={principle.enabled}
-                  onCheckedChange={(checked) => setProjectPrincipleEnabled(principle.id, checked)}
-                  aria-label={t('settings.prompts.toggle')}
-                />
-              </div>
-            ))}
-          </>
-        ) : null}
-      </div>
-    );
-  };
-
   // The composer-settings gear belongs to a config row (the base row in normal
   // mode, every config row in compare mode), so it is a render helper reused
   // across rows rather than a single global control.
@@ -2116,163 +1968,124 @@ export const HomeComposer = observer(function HomeComposer({
         <Settings2 className="size-3.5 text-foreground-muted" />
         <span className="hidden @lg/composer:inline">{t('home.composerSettingsLabel')}</span>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 gap-0 p-2.5">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <span className="text-xs text-foreground">{t('home.attachImagesAsPathsLabel')}</span>
-              <InfoTooltip
-                label={t('home.attachImagesAsPathsLabel')}
-                content={t('home.attachImagesAsPathsDesc')}
-              />
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <Switch
-                size="sm"
-                checked={attachImagesAsPaths}
-                onCheckedChange={attachImagesField.setValue}
-              />
-            </div>
-          </div>
-          <ComposerScopeSelectRow
-            label={t('settings.tasks.inputPromptLanguageLabel')}
-            value={inputPromptLanguageField.value}
-            options={INPUT_PROMPT_ENABLED_LANGUAGE_OPTIONS}
-            disabledValues={['skip', 'prompt']}
-            onValueChange={inputPromptLanguageField.setValue}
-          />
-          <ComposerScopeSelectRow
-            label={t('settings.tasks.sessionTitleLanguageLabel')}
-            value={namingLanguageField.value}
-            options={TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS}
-            onValueChange={namingLanguageField.setValue}
-          />
-          <ComposerScopeSelectRow
-            label={t('settings.tasks.summaryLanguageLabel')}
-            value={summaryLanguageField.value}
-            options={TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS}
-            onValueChange={summaryLanguageField.setValue}
-          />
-        </div>
-        {runtimeId && (
-          <div className="mt-2 flex flex-col gap-2 border-t border-border/60 pt-2">
-            <ComposerSettingsHeader
-              label={`${t('home.agentCliConfigLabel')} · ${getRuntime(runtimeId)?.name ?? runtimeId}`}
-              hint={t('home.agentCliConfigHint')}
-            />
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span className="text-xs text-foreground">{t('home.permissionModeLabel')}</span>
-                <InfoTooltip
-                  label={t('home.permissionModeLabel')}
-                  content={t('home.permissionModeDesc')}
+      <PopoverContent
+        align="end"
+        className="max-h-[min(32rem,calc(100vh-3rem))] w-96 gap-0 overflow-y-auto p-2.5"
+      >
+        <ComposerSettingsContent
+          runtimeId={runtimeId}
+          projectId={selectedProjectId}
+          projectPath={skillProjectPath}
+          attachImagesAsPaths={attachImagesAsPaths}
+          inputPromptLanguage={inputPromptLanguageField.value}
+          namingLanguage={namingLanguageField.value}
+          summaryLanguage={summaryLanguageField.value}
+          onAttachImagesAsPathsChange={attachImagesField.setValue}
+          onInputPromptLanguageChange={inputPromptLanguageField.setValue}
+          onNamingLanguageChange={namingLanguageField.setValue}
+          onSummaryLanguageChange={summaryLanguageField.setValue}
+          footer={
+            <Collapsible
+              open={runDefaultsOpen}
+              onOpenChange={setRunDefaultsOpen}
+              className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2"
+            >
+              <CollapsibleTrigger
+                title={t('home.composerRunDefaultsHint')}
+                className="group flex items-center justify-between gap-2 text-left"
+              >
+                <MicroLabel className="text-[10px]">
+                  {t('home.composerRunDefaultsLabel')}
+                </MicroLabel>
+                <ChevronDown
+                  className={cn(
+                    'size-3.5 shrink-0 text-foreground-passive transition-transform',
+                    runDefaultsOpen && 'rotate-180'
+                  )}
                 />
-              </div>
-              <PermissionModeSelect
-                runtimeId={runtimeId}
-                className="shrink-0"
-                contentPortaled={false}
-                alignContentWithTrigger={false}
-              />
-            </div>
-            {renderSystemPromptSection(runtimeId)}
-            <InstructionFilesSection runtimeId={runtimeId} projectPath={skillProjectPath} />
-          </div>
-        )}
-        <Collapsible
-          open={runDefaultsOpen}
-          onOpenChange={setRunDefaultsOpen}
-          className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2"
-        >
-          <CollapsibleTrigger
-            title={t('home.composerRunDefaultsHint')}
-            className="group flex items-center justify-between gap-2 text-left"
-          >
-            <MicroLabel className="text-[10px]">{t('home.composerRunDefaultsLabel')}</MicroLabel>
-            <ChevronDown
-              className={cn(
-                'size-3.5 shrink-0 text-foreground-passive transition-transform',
-                runDefaultsOpen && 'rotate-180'
-              )}
-            />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="flex flex-col gap-1">
-            <ComposerScopeRow
-              label={t('home.composerDefaultRuntimeLabel')}
-              value={runtimeId ? (getRuntime(runtimeId)?.name ?? runtimeId) : undefined}
-              source={runtimeOverridden ? 'project' : 'global'}
-              canOverride={hasProjectOverrideTarget}
-              onChange={(scope) =>
-                setComposerDefault(
-                  'runtimeId',
-                  scope === 'project' ? (runtimeId ?? undefined) : undefined
-                )
-              }
-            />
-            <ComposerScopeRow
-              label={t('home.composerDefaultRunModeLabel')}
-              source={runModeOverridden ? 'project' : 'global'}
-              canOverride={hasProjectOverrideTarget}
-              onChange={(scope) =>
-                setComposerDefault('runMode', scope === 'project' ? persistedRunMode : undefined)
-              }
-            />
-            <ComposerScopeRow
-              label={t('home.composerDefaultBaseBranchLabel')}
-              value={selectedBranchLabel}
-              source={baseBranchOverridden ? 'project' : 'global'}
-              canOverride={hasProjectOverrideTarget}
-              onChange={(scope) =>
-                setComposerDefault(
-                  'baseBranch',
-                  scope === 'project' && selectedBranch
-                    ? {
-                        type: selectedBranch.type,
-                        branch: selectedBranch.branch,
-                        ...(selectedBranch.type === 'remote'
-                          ? { remoteName: selectedBranch.remote.name }
-                          : {}),
-                      }
-                    : undefined
-                )
-              }
-            />
-            <ComposerScopeRow
-              label={t('home.composerDefaultStrategyLabel')}
-              source={standardStrategyOverridden ? 'project' : 'global'}
-              canOverride={hasProjectOverrideTarget}
-              onChange={(scope) =>
-                setComposerDefault(
-                  'standardStrategyKind',
-                  scope === 'project' ? strategyKind : undefined
-                )
-              }
-            />
-            <ComposerScopeRow
-              label={t('home.composerDefaultReviewStrategyLabel')}
-              source={reviewStrategyOverridden ? 'project' : 'global'}
-              canOverride={hasProjectOverrideTarget}
-              onChange={(scope) =>
-                setComposerDefault(
-                  'reviewStrategyKind',
-                  scope === 'project' ? reviewStrategyKind : undefined
-                )
-              }
-            />
-            <ComposerScopeRow
-              label={t('home.composerDefaultReviewerLabel')}
-              value={getRuntime(reviewerRuntime)?.name ?? reviewerRuntime}
-              source={reviewerOverridden ? 'project' : 'global'}
-              canOverride={hasProjectOverrideTarget}
-              onChange={(scope) =>
-                setComposerDefault(
-                  'reviewerRuntime',
-                  scope === 'project' ? reviewerRuntime : undefined
-                )
-              }
-            />
-          </CollapsibleContent>
-        </Collapsible>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="flex flex-col gap-1">
+                <ComposerScopeRow
+                  label={t('home.composerDefaultRuntimeLabel')}
+                  value={runtimeId ? (getRuntime(runtimeId)?.name ?? runtimeId) : undefined}
+                  source={runtimeOverridden ? 'project' : 'global'}
+                  canOverride={hasProjectOverrideTarget}
+                  onChange={(scope) =>
+                    setComposerDefault(
+                      'runtimeId',
+                      scope === 'project' ? (runtimeId ?? undefined) : undefined
+                    )
+                  }
+                />
+                <ComposerScopeRow
+                  label={t('home.composerDefaultRunModeLabel')}
+                  source={runModeOverridden ? 'project' : 'global'}
+                  canOverride={hasProjectOverrideTarget}
+                  onChange={(scope) =>
+                    setComposerDefault(
+                      'runMode',
+                      scope === 'project' ? persistedRunMode : undefined
+                    )
+                  }
+                />
+                <ComposerScopeRow
+                  label={t('home.composerDefaultBaseBranchLabel')}
+                  value={selectedBranchLabel}
+                  source={baseBranchOverridden ? 'project' : 'global'}
+                  canOverride={hasProjectOverrideTarget}
+                  onChange={(scope) =>
+                    setComposerDefault(
+                      'baseBranch',
+                      scope === 'project' && selectedBranch
+                        ? {
+                            type: selectedBranch.type,
+                            branch: selectedBranch.branch,
+                            ...(selectedBranch.type === 'remote'
+                              ? { remoteName: selectedBranch.remote.name }
+                              : {}),
+                          }
+                        : undefined
+                    )
+                  }
+                />
+                <ComposerScopeRow
+                  label={t('home.composerDefaultStrategyLabel')}
+                  source={standardStrategyOverridden ? 'project' : 'global'}
+                  canOverride={hasProjectOverrideTarget}
+                  onChange={(scope) =>
+                    setComposerDefault(
+                      'standardStrategyKind',
+                      scope === 'project' ? strategyKind : undefined
+                    )
+                  }
+                />
+                <ComposerScopeRow
+                  label={t('home.composerDefaultReviewStrategyLabel')}
+                  source={reviewStrategyOverridden ? 'project' : 'global'}
+                  canOverride={hasProjectOverrideTarget}
+                  onChange={(scope) =>
+                    setComposerDefault(
+                      'reviewStrategyKind',
+                      scope === 'project' ? reviewStrategyKind : undefined
+                    )
+                  }
+                />
+                <ComposerScopeRow
+                  label={t('home.composerDefaultReviewerLabel')}
+                  value={getRuntime(reviewerRuntime)?.name ?? reviewerRuntime}
+                  source={reviewerOverridden ? 'project' : 'global'}
+                  canOverride={hasProjectOverrideTarget}
+                  onChange={(scope) =>
+                    setComposerDefault(
+                      'reviewerRuntime',
+                      scope === 'project' ? reviewerRuntime : undefined
+                    )
+                  }
+                />
+              </CollapsibleContent>
+            </Collapsible>
+          }
+        />
       </PopoverContent>
     </Popover>
   );
@@ -2341,6 +2154,7 @@ export const HomeComposer = observer(function HomeComposer({
           runtimeId={runtimeId}
           projectId={projectData?.id ?? null}
           projectPath={skillProjectPath}
+          imagesAsPaths={attachImagesAsPaths}
           skillSelection={composerSkillSelection}
           placeholder={runMode === 'build' ? t('home.buildPromptPlaceholder') : undefined}
           disabled={runMode === 'build' && submitting}
@@ -2415,18 +2229,38 @@ export const HomeComposer = observer(function HomeComposer({
                 }
               />
             ) : (
-              <ProjectSelector
-                value={selectedProjectId}
-                onChange={setSelectedProjectId}
-                allowProjectless
-                initializeGitRepositoryOnPick
-                trigger={
-                  <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
-                    <FolderOpen className="size-3.5 text-foreground-muted" />
-                    <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
-                  </ComboboxTrigger>
-                }
-              />
+              <div className="flex items-center gap-1">
+                <ProjectSelector
+                  value={selectedProjectId}
+                  onChange={setSelectedProjectId}
+                  allowProjectless
+                  initializeGitRepositoryOnPick
+                  trigger={
+                    <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+                      <FolderOpen className="size-3.5 text-foreground-muted" />
+                      <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
+                    </ComboboxTrigger>
+                  }
+                />
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon-xs"
+                        className="size-7 bg-background-1"
+                        disabled={!selectedProjectId}
+                        aria-label={t('home.revealProjectInSidebar')}
+                        onClick={revealSelectedProjectInSidebar}
+                      />
+                    }
+                  >
+                    <LocateFixed className="size-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent>{t('home.revealProjectInSidebar')}</TooltipContent>
+                </Tooltip>
+              </div>
             )}
             {runMode !== 'build' && (
               <RunHostSelector
@@ -2749,165 +2583,8 @@ function ComposerScopeRow({
   );
 }
 
-function taskOutputLanguageLabel(t: ReturnType<typeof useTranslation>['t'], value: string): string {
-  switch (value) {
-    case 'skip':
-      return t('settings.tasks.namingLanguageSkip');
-    case 'app':
-      return t('settings.tasks.namingLanguageApp');
-    case 'prompt':
-      return t('settings.tasks.namingLanguagePrompt');
-    case 'zh-CN':
-      return t('settings.tasks.namingLanguageZh');
-    case 'en':
-      return t('settings.tasks.namingLanguageEn');
-    default:
-      return value;
-  }
-}
-
 function explicitTaskOutputLanguageFromI18n(language?: string | null): ExplicitTaskOutputLanguage {
   return language?.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
-}
-
-function ComposerScopeSelectRow({
-  label,
-  value,
-  options,
-  disabledValues = ['skip'],
-  onValueChange,
-}: {
-  label: string;
-  value: TaskOutputLanguage;
-  options: TaskOutputLanguage[];
-  disabledValues?: TaskOutputLanguage[];
-  onValueChange: (value: TaskOutputLanguage) => void;
-}) {
-  const { t } = useTranslation();
-  const enabled = !disabledValues.includes(value);
-  return (
-    <div
-      className={cn(
-        'flex min-h-8 items-center justify-between gap-3 rounded-md py-1 transition-colors',
-        enabled ? 'bg-background-1/50' : 'bg-transparent'
-      )}
-    >
-      <span
-        className={cn(
-          'min-w-0 truncate text-xs transition-colors',
-          enabled ? 'text-foreground' : 'text-foreground-passive'
-        )}
-      >
-        {label}
-      </span>
-      <div className="flex shrink-0 items-center justify-end gap-1.5">
-        {enabled ? (
-          <Select value={value} onValueChange={(next) => onValueChange(next as TaskOutputLanguage)}>
-            <SelectTrigger size="sm" className="h-6 w-28 text-[11px]">
-              <SelectValue>{taskOutputLanguageLabel(t, value)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {options.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {taskOutputLanguageLabel(t, option)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
-        <Switch
-          size="sm"
-          checked={enabled}
-          aria-label={t(
-            enabled ? 'home.composerLanguageCallDisable' : 'home.composerLanguageCallEnable',
-            {
-              label,
-            }
-          )}
-          title={t(
-            enabled ? 'home.composerLanguageCallDisable' : 'home.composerLanguageCallEnable',
-            {
-              label,
-            }
-          )}
-          onCheckedChange={(next) => onValueChange(next ? 'app' : 'skip')}
-        />
-      </div>
-    </div>
-  );
-}
-
-/** Quiet micro-header for a composer-settings popover section: label + optional hint + trailing action. */
-function ComposerSettingsHeader({
-  label,
-  hint,
-  action,
-}: {
-  label: string;
-  hint?: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <MicroLabel className="text-[10px]">{label}</MicroLabel>
-        {hint ? <InfoTooltip label={label} content={hint} /> : null}
-      </div>
-      {action}
-    </div>
-  );
-}
-
-/**
- * Composer-settings view onto the human-authored instruction files that the
- * selected runtime CLI reads before the next session starts. The data source is
- * runtime-aware: Claude-compatible CLIs expose CLAUDE.md files, while Codex
- * exposes AGENTS.md files.
- */
-function InstructionFilesSection({
-  runtimeId,
-  projectPath,
-}: {
-  runtimeId: RuntimeId;
-  projectPath?: string;
-}) {
-  const { t } = useTranslation();
-  const runtimeCli = getRuntime(runtimeId)?.cli;
-  const supportsInstructionFiles = runtimeCli === 'claude' || runtimeCli === 'codex';
-  const hintKey =
-    runtimeCli === 'codex'
-      ? 'home.instructionFilesHintCodex'
-      : runtimeCli === 'claude'
-        ? 'home.instructionFilesHintClaude'
-        : 'home.instructionFilesHint';
-  const { data: files = [] } = useQuery<RuntimeInstructionFile[]>({
-    queryKey: ['instructionFiles', runtimeId, projectPath ?? null],
-    queryFn: () => rpc.conversations.getRuntimeInstructionFiles({ runtimeId, cwd: projectPath }),
-    enabled: supportsInstructionFiles,
-    refetchOnWindowFocus: false,
-  });
-
-  if (!supportsInstructionFiles) return null;
-
-  return (
-    <div className="flex flex-col gap-1">
-      <ComposerSettingsHeader label={t('home.instructionFilesLabel')} hint={t(hintKey)} />
-      {files.length === 0 ? (
-        <p className="text-xs text-foreground-passive">{t('home.noInstructionFiles')}</p>
-      ) : (
-        files.map((file) => (
-          <ContextItem
-            key={file.path}
-            icon={<FileText className="size-3.5" />}
-            label={memoryFileLabel(file, t)}
-            meta={formatBytes(file.bytes)}
-            text={file.content}
-            sourcePath={file.path}
-          />
-        ))
-      )}
-    </div>
-  );
 }
 
 interface ChipProps {

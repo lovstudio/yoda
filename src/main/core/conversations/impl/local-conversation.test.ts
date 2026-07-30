@@ -98,6 +98,7 @@ vi.mock('@main/core/agent-hooks/inspect/hook-overrides-store', () => ({
 vi.mock('@main/core/conversations/agent-session-runtime', () => ({
   agentSessionRuntimeStore: {
     dispatch: mocks.dispatchRuntimeStatus,
+    getAllStatuses: vi.fn(() => []),
     remove: mocks.removeRuntimeStatus,
     setStatus: mocks.setRuntimeStatus,
   },
@@ -303,9 +304,11 @@ describe('LocalConversationProvider', () => {
       initialPromptFlag: '',
       sessionIdFlag: '--session-id',
     });
-    mocks.appSettingsGet.mockImplementation(async (key: string) =>
-      key === 'promptPrinciples' ? { items: [] } : { writeAgentConfigToGitIgnore: false }
-    );
+    mocks.appSettingsGet.mockImplementation(async (key: string) => {
+      if (key === 'promptPrinciples') return { items: [] };
+      if (key === 'terminal') return {};
+      return { writeAgentConfigToGitIgnore: false };
+    });
     mocks.maybeAutoTrustLocal.mockResolvedValue(undefined);
     mocks.prepareHookConfig.mockResolvedValue(undefined);
     mocks.promptLibraryList.mockResolvedValue([]);
@@ -426,7 +429,7 @@ describe('LocalConversationProvider', () => {
     const first = provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
     const second = provider.startSession(conversation, { cols: 80, rows: 24 }, false, 'Fix this');
 
-    expect(mocks.maybeAutoTrustLocal).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(mocks.maybeAutoTrustLocal).toHaveBeenCalledTimes(1));
     finishTrust();
     await Promise.all([first, second]);
 

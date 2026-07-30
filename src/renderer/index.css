@@ -117,6 +117,19 @@
   color: var(--selection-foreground);
 }
 
+/*
+ * A terminal is a fixed character grid, so browser typography must not
+ * compress CJK punctuation or inject script-boundary spacing. xterm's DOM
+ * width cache measures repeated glyphs; Chromium's normal CJK punctuation
+ * trimming otherwise under-measures runs like "，，" and pushes isolated
+ * punctuation plus the final wide glyphs past the row's clipping edge.
+ */
+.xterm {
+  font-kerning: none;
+  text-autospace: no-autospace;
+  text-spacing-trim: space-all;
+}
+
 /* Hide xterm viewport scrollbars in embedded terminals */
 .xterm .xterm-viewport {
   background-color: transparent !important;

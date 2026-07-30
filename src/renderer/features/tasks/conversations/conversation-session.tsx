@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check, Copy, Power, RotateCcw } from 'lucide-react';
+import { Check, Copy, Loader2, Power, RotateCcw, X } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
+import { useAttachImagesAsPaths } from '@renderer/features/tasks/hooks/use-attach-images-as-paths';
 import { getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
 import { useWorkspaceWebLinks } from '@renderer/features/tasks/terminals/use-workspace-web-links';
@@ -25,6 +26,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import type { ConversationStore } from './conversation-manager';
+import { ConversationSessionPendingState } from './conversation-session-pending-state';
 import { shouldAutoResumeConversation } from './conversation-session-utils';
 
 export function getResumeInitialSize(
@@ -69,6 +71,7 @@ export const ConversationSession = observer(function ConversationSession({
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const provisioned = useProvisionedTask();
+  const attachImagesAsPaths = useAttachImagesAsPaths(projectId);
   const { conversations } = provisioned;
   const mountedProject = asMounted(getProjectStore(projectId));
   const projectRoot = mountedProject?.data.path;
@@ -147,7 +150,11 @@ export const ConversationSession = observer(function ConversationSession({
     }
     lastAutoResumePtyRef.current = sessionPty;
     const initialSize = getResumeInitialSize(sessionPty, terminalContainerRef.current);
-    void conversations.resumeConversation(conversation.data.id, initialSize);
+    void conversations.resumeConversation(conversation.data.id, initialSize).then((running) => {
+      if (!running && lastAutoResumePtyRef.current === sessionPty) {
+        lastAutoResumePtyRef.current = null;
+      }
+    });
   }, [conversation, conversations, isVisible, sessionId, sessionPty, sessionStatus]);
 
   const markConversationSubmitted = (forceWorking = false) => {
@@ -162,10 +169,15 @@ export const ConversationSession = observer(function ConversationSession({
   const onEnterPress = () => markConversationSubmitted(conversation.status === 'awaiting-input');
   const onInterruptPress = () => conversation.clearWorking();
 
+  const [isRestarting, setIsRestarting] = useState(false);
   const handleReloadExitedSession = () => {
+    if (isRestarting) return;
     const pty = conversation.session.pty;
     const initialSize = pty ? getResumeInitialSize(pty, terminalContainerRef.current) : undefined;
-    void conversations.restartConversation(conversation.data.id, initialSize);
+    setIsRestarting(true);
+    void conversations
+      .restartConversation(conversation.data.id, initialSize)
+      .finally(() => setIsRestarting(false));
   };
 
   // Snapshot of the dead session for a bug report / paste into the agent.
@@ -236,7 +248,15 @@ export const ConversationSession = observer(function ConversationSession({
   );
   const webLinks = useWorkspaceWebLinks();
 
-  if (!sessionId || session?.status !== 'ready' || !session.pty) return null;
+  if (!sessionId || session?.status !== 'ready' || !session.pty) {
+    return (
+      <ConversationSessionPendingState
+        title={conversation.data.title}
+        heading={t('tasks.conversations.startingTitle')}
+        description={t('tasks.conversations.startingDescription')}
+      />
+    );
+  }
 
   return (
     <div
@@ -266,12 +286,14 @@ export const ConversationSession = observer(function ConversationSession({
           onEnterPress={onEnterPress}
           onSubmittedInput={onSubmittedInput}
           onInterruptPress={onInterruptPress}
+          onExit={() => conversation.markSessionExited()}
           mapShiftEnterToCtrlJ
+          pasteImagesAsPaths={attachImagesAsPaths}
           remoteConnectionId={remoteConnectionId}
           fileLinks={fileLinks}
           webLinks={webLinks}
         />
-        {conversation.sessionExited ? (
+        {conversation.sessionExited && !conversation.sessionExitNoticeDismissed ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-3 duration-300 animate-in fade-in-0 slide-in-from-bottom-2">
             <div className="pointer-events-auto flex items-center gap-2.5 rounded-lg border border-border-primary/70 bg-background/85 py-1.5 pr-1.5 pl-3 shadow-sm ring-1 ring-foreground/5 backdrop-blur-md">
               <span className="flex items-center gap-2 pr-0.5 text-sm text-foreground-passive">
@@ -284,7 +306,7 @@ export const ConversationSession = observer(function ConversationSession({
                 </span>
                 <Power className="size-3.5 shrink-0 text-foreground-passive" aria-hidden />
                 <span className="font-medium text-foreground-muted">
-                  {t('tasks.conversations.sessionExited')}
+                  {t('tasks.conversations.sessionStopped')}
                 </span>
               </span>
               <span className="h-4 w-px shrink-0 bg-border-primary/60" aria-hidden />
@@ -313,10 +335,28 @@ export const ConversationSession = observer(function ConversationSession({
                 size="sm"
                 variant="outline"
                 onClick={handleReloadExitedSession}
+                disabled={isRestarting}
                 className="h-7 gap-1.5"
               >
-                <RotateCcw className="size-3.5" aria-hidden />
-                {t('tasks.tabs.reloadConversation')}
+                {isRestarting ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <RotateCcw className="size-3.5" aria-hidden />
+                )}
+                {t(
+                  isRestarting
+                    ? 'tasks.conversations.continuingConversation'
+                    : 'tasks.conversations.continueConversation'
+                )}
+              </Button>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                onClick={() => conversation.dismissSessionExitNotice()}
+                className="shrink-0 text-foreground-passive"
+                aria-label={t('common.close')}
+              >
+                <X className="size-3.5" aria-hidden />
               </Button>
             </div>
           </div>
