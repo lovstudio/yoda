@@ -686,6 +686,47 @@ describe('terminal file links', () => {
     expect(getTerminalFileLinkMatches(terminal, 2, options)).toEqual([expected]);
   });
 
+  it('recognizes the screenshot PDF path across an early unindented TUI wrap', () => {
+    const upper = '/Users/mark/yoda/repositories/支付相关/香港个人Stripe开通与微信支付';
+    const lower = '宝收款SOP.pdf';
+    const text = `${upper}${lower}`;
+    const terminalColumns = upper.length + 2;
+    const terminal = makeTerminal([upper, lower], { cols: terminalColumns });
+    const expected = {
+      range: { start: { x: 1, y: 1 }, end: { x: terminalColumns, y: 2 } },
+      text,
+      target: {
+        originalText: text,
+        filePath: '香港个人Stripe开通与微信支付宝收款SOP.pdf',
+        absolutePath: text,
+        line: undefined,
+        column: undefined,
+      },
+    };
+    const options = {
+      workspaceRoot: '/Users/mark/yoda/repositories/支付相关',
+      onOpen: (): void => undefined,
+    };
+
+    expect(getTerminalFileLinkMatches(terminal, 1, options)).toEqual([expected]);
+    expect(getTerminalFileLinkMatches(terminal, 2, options)).toEqual([expected]);
+  });
+
+  it('does not join path-only rows beyond the narrow TUI wrap margin', () => {
+    const upper = '/Users/mark/yoda/repositories/支付相关/香港个人Stripe开通与微信支付';
+    const lower = '宝收款SOP.pdf';
+    const terminal = makeTerminal([upper, lower], { cols: upper.length + 3 });
+    const options = {
+      workspaceRoot: '/Users/mark/yoda/repositories/支付相关',
+      onOpen: (): void => undefined,
+    };
+
+    expect(getTerminalFileLinkMatches(terminal, 1, options)).toEqual([]);
+    expect(getTerminalFileLinkMatches(terminal, 2, options).map(({ text }) => text)).toEqual([
+      lower,
+    ]);
+  });
+
   it('keeps a hard-wrapped line suffix attached to the file path', () => {
     const text =
       '/Users/mark/lovstudio/coding/yoda/src/renderer/tests/terminal-file-links.test.ts:31';

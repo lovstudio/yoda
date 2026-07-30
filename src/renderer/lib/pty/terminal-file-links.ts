@@ -214,6 +214,7 @@ export function getTerminalFileLinkMatches(
 // ---------------------------------------------------------------------------
 
 const HARD_WRAP_JOIN_MAX = 4;
+const EARLY_TUI_WRAP_MAX_TRAILING_CELLS = 2;
 const PATH_SEG_EXCLUDED_RE = new RegExp(`[${PATH_SEG_EXCLUDED}]`, 'u');
 const TRAILING_PATH_RUN_RE = new RegExp(`[^${PATH_SEG_EXCLUDED}]+$`, 'u');
 const COMPLETE_EXT_RE = /\.[A-Za-z0-9]{1,8}$/;
@@ -306,6 +307,17 @@ function canHardJoin(
   continuationIndent: number
 ): boolean {
   if (hasIndentedPathContinuation(upperText, lowerStripped, continuationIndent)) return true;
+  if (
+    hasEarlyPathOnlyTuiContinuation(
+      terminal,
+      upperBottomRowIndex,
+      upperText,
+      lowerStripped,
+      continuationIndent
+    )
+  ) {
+    return true;
+  }
   if (!isRowFull(terminal, upperBottomRowIndex)) return false;
   if (hasHardWrappedLocationCandidate(upperText, lowerStripped)) return true;
   const tail = TRAILING_PATH_RUN_RE.exec(upperText)?.[0];
@@ -325,6 +337,40 @@ function canHardJoin(
     return false;
   }
   return true;
+}
+
+/**
+ * Codex/Ink may wrap a path-only row at its inner content width, leaving the
+ * final two xterm cells unused by the surrounding rounded card. This is still
+ * a real newline (`isWrapped=false`), so accept it only when the row contains
+ * nothing except an absolute path fragment and joining the unindented next row
+ * produces one complete file candidate across the boundary.
+ */
+function hasEarlyPathOnlyTuiContinuation(
+  terminal: Terminal,
+  upperBottomRowIndex: number,
+  upperText: string,
+  lowerStripped: string,
+  continuationIndent: number
+): boolean {
+  if (
+    continuationIndent !== 0 ||
+    !lowerStripped ||
+    URL_IN_PROGRESS_RE.test(upperText) ||
+    !isRowWithinTrailingCellMargin(terminal, upperBottomRowIndex, EARLY_TUI_WRAP_MAX_TRAILING_CELLS)
+  ) {
+    return false;
+  }
+
+  const tail = TRAILING_PATH_RUN_RE.exec(upperText)?.[0];
+  if (!tail || !tail.startsWith('/') || upperText.trim() !== tail || COMPLETE_EXT_RE.test(tail)) {
+    return false;
+  }
+
+  return extractTerminalFileLinkCandidates(`${tail}${lowerStripped}`).some(
+    (candidate) =>
+      candidate.index === 0 && candidate.text.length > tail.length && !candidate.text.endsWith('/')
+  );
 }
 
 /**
@@ -412,6 +458,27 @@ function isRowFull(terminal: Terminal, rowIndex: number): boolean {
     line.getCell(line.length - 2, cell);
     if (cell.getWidth() === 2) return true;
   }
+  return false;
+}
+
+function isRowWithinTrailingCellMargin(
+  terminal: Terminal,
+  rowIndex: number,
+  maxTrailingCells: number
+): boolean {
+  const line = terminal.buffer.active.getLine(rowIndex);
+  if (!line || line.length === 0) return false;
+  const cell = terminal.buffer.active.getNullCell();
+  const firstCandidateIndex = Math.max(0, line.length - maxTrailingCells - 1);
+
+  for (let index = line.length - 1; index >= firstCandidateIndex; index -= 1) {
+    line.getCell(index, cell);
+    const chars = cell.getChars();
+    if (chars === '' || chars === ' ') continue;
+    const occupiedWidth = Math.max(1, cell.getWidth());
+    return line.length - (index + occupiedWidth) <= maxTrailingCells;
+  }
+
   return false;
 }
 
