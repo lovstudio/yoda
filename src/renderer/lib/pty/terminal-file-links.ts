@@ -694,14 +694,14 @@ function getWindowedLineStrings(lineIndex: number, terminal: Terminal): [string[
   line = terminal.buffer.active.getLine(lineIndex);
   if (!line) return [lines, topIndex];
 
-  const currentContent = line.translateToString(true);
+  const currentContent = translateWrappedLineToString(terminal, lineIndex, line);
   if (line.isWrapped) {
     length = 0;
     while (
       (line = terminal.buffer.active.getLine(--topIndex)) &&
       length < MAX_WRAPPED_LINE_LENGTH
     ) {
-      content = line.translateToString(true);
+      content = translateWrappedLineToString(terminal, topIndex, line);
       length += content.length;
       lines.push(content);
       if (!line.isWrapped) break;
@@ -717,12 +717,27 @@ function getWindowedLineStrings(lineIndex: number, terminal: Terminal): [string[
     line.isWrapped &&
     length < MAX_WRAPPED_LINE_LENGTH
   ) {
-    content = line.translateToString(true);
+    content = translateWrappedLineToString(terminal, bottomIndex, line);
     length += content.length;
     lines.push(content);
   }
 
   return [lines, topIndex];
+}
+
+/**
+ * Preserve the complete cell contents of every row that has a soft-wrapped
+ * continuation. Trimming such a row drops meaningful trailing spaces inside
+ * paths (`Project Files/`, `final report.pdf`) and silently resolves the link
+ * to a different file. Only the final row of the logical line may be trimmed.
+ */
+function translateWrappedLineToString(
+  terminal: Terminal,
+  lineIndex: number,
+  line: IBufferLine
+): string {
+  const continuesOnNextRow = terminal.buffer.active.getLine(lineIndex + 1)?.isWrapped === true;
+  return line.translateToString(!continuesOnNextRow);
 }
 
 function mapStringIndexToBufferCell(

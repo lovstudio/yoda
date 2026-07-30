@@ -799,6 +799,34 @@ describe('terminal file links', () => {
     expect(getTerminalFileLinkMatches(terminal, 3, options)).toEqual([expected]);
   });
 
+  it('preserves a path space at a soft-wrap boundary', () => {
+    const text = '/Users/mark/Project Files/final report.pdf';
+    const wrapAt = text.indexOf('report.pdf');
+    const terminal = makeTerminal(
+      [text.slice(0, wrapAt), { text: text.slice(wrapAt), isWrapped: true }],
+      { cols: wrapAt }
+    );
+    const options = {
+      workspaceRoot: '/Users/mark/Project Files',
+      onOpen: (): void => undefined,
+    };
+    const expected = {
+      text,
+      filePath: 'final report.pdf',
+      absolutePath: text,
+    };
+
+    for (const row of [1, 2]) {
+      expect(
+        getTerminalFileLinkMatches(terminal, row, options).map((match) => ({
+          text: match.text,
+          filePath: match.target.filePath,
+          absolutePath: match.target.absolutePath,
+        }))
+      ).toEqual([expected]);
+    }
+  });
+
   it('maps a soft-wrapped link starting at the first cell of a row', () => {
     const terminal = makeTerminal([
       `${'a'.repeat(79)}(`,
