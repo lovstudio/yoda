@@ -8,26 +8,28 @@ import {
   Plus,
   Power,
   RefreshCw,
+  Route,
   Settings2,
-  Waypoints,
+  WandSparkles,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import {
-  LITELLM_DOCKER_DESKTOP_URL,
-  LITELLM_MANAGED_ADMIN_USERNAME,
-  LITELLM_MANAGED_ENDPOINT,
-  type LiteLlmManagedOperation,
-} from '@shared/litellm-managed';
 import type { MaasConnection } from '@shared/maas';
 import {
-  useCopyLiteLlmAdminPassword,
-  useInstallLiteLlm,
-  useLiteLlmManagedStatus,
+  NEW_API_DOCKER_DESKTOP_URL,
+  NEW_API_MANAGED_ADMIN_USERNAME,
+  NEW_API_MANAGED_ENDPOINT,
+  type NewApiManagedOperation,
+} from '@shared/new-api-managed';
+import {
+  useCopyNewApiAdminPassword,
+  useInitializeNewApi,
+  useInstallNewApi,
   useMaasConnections,
-  useOpenLiteLlmAdmin,
-  useStartDockerForLiteLlm,
-  useStartLiteLlm,
-  useStopLiteLlm,
+  useNewApiManagedStatus,
+  useOpenNewApiAdmin,
+  useStartDockerForNewApi,
+  useStartNewApi,
+  useStopNewApi,
 } from '@renderer/features/maas/useMaas';
 import { HeaderActionButton, HeaderActionToolbar } from '@renderer/lib/components/header-actions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -45,40 +47,43 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { IntegrationCardShell } from './IntegrationCardShell';
 
-type LiteLlmIntegrationCardProps = {
+type NewApiIntegrationCardProps = {
   onOpenManualSettings: () => void;
 };
 
-const operationActionKeys: Record<LiteLlmManagedOperation, string> = {
-  installing: 'settings.integrationsTab.litellmInstalling',
-  starting: 'settings.integrationsTab.litellmStarting',
-  stopping: 'settings.integrationsTab.litellmStopping',
-  'starting-docker': 'settings.integrationsTab.litellmStartingDocker',
+const operationActionKeys: Record<NewApiManagedOperation, string> = {
+  installing: 'settings.integrationsTab.newApiInstalling',
+  initializing: 'settings.integrationsTab.newApiInitializing',
+  starting: 'settings.integrationsTab.newApiStarting',
+  stopping: 'settings.integrationsTab.newApiStopping',
+  'starting-docker': 'settings.integrationsTab.newApiStartingDocker',
 };
 
 function normalizeEndpoint(endpoint: string): string {
   return endpoint.trim().replace(/\/+$/, '');
 }
 
-export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrationCardProps) {
+export function NewApiIntegrationCard({ onOpenManualSettings }: NewApiIntegrationCardProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { data: connections } = useMaasConnections();
   const connection = connections?.find(
-    (candidate: MaasConnection) => candidate.platformId === 'litellm'
+    (candidate: MaasConnection) => candidate.platformId === 'newapi'
   );
-  const statusQuery = useLiteLlmManagedStatus();
-  const install = useInstallLiteLlm();
-  const start = useStartLiteLlm();
-  const stop = useStopLiteLlm();
-  const startDocker = useStartDockerForLiteLlm();
-  const copyAdminPassword = useCopyLiteLlmAdminPassword();
-  const openAdmin = useOpenLiteLlmAdmin();
+  const statusQuery = useNewApiManagedStatus();
+  const install = useInstallNewApi();
+  const initialize = useInitializeNewApi();
+  const start = useStartNewApi();
+  const stop = useStopNewApi();
+  const startDocker = useStartDockerForNewApi();
+  const copyAdminPassword = useCopyNewApiAdminPassword();
+  const openAdmin = useOpenNewApiAdmin();
 
   const status = statusQuery.data;
   const operationPending =
     Boolean(status?.operation) ||
     install.isPending ||
+    initialize.isPending ||
     start.isPending ||
     stop.isPending ||
     startDocker.isPending ||
@@ -86,48 +91,55 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     openAdmin.isPending;
   const remoteConnection =
     connection?.connected &&
-    normalizeEndpoint(connection.endpoint) !== normalizeEndpoint(LITELLM_MANAGED_ENDPOINT);
+    normalizeEndpoint(connection.endpoint) !== normalizeEndpoint(NEW_API_MANAGED_ENDPOINT);
 
   const description = (() => {
     if (remoteConnection) {
-      return t('settings.integrationsTab.litellmRemoteConnectedDescription', {
+      return t('settings.integrationsTab.newApiRemoteConnectedDescription', {
         endpoint: connection.endpoint,
       });
     }
-    if (statusQuery.isLoading) return t('settings.integrationsTab.litellmDetecting');
-    if (statusQuery.isError || !status) return t('settings.integrationsTab.litellmDetectionFailed');
+    if (statusQuery.isLoading) return t('settings.integrationsTab.newApiDetecting');
+    if (statusQuery.isError || !status) {
+      return t('settings.integrationsTab.newApiDetectionFailed');
+    }
     if (status.operation === 'installing') {
-      return t('settings.integrationsTab.litellmInstallingDescription');
+      return t('settings.integrationsTab.newApiInstallingDescription');
+    }
+    if (status.operation === 'initializing') {
+      return t('settings.integrationsTab.newApiInitializingDescription');
     }
     if (status.operation === 'starting') {
-      return t('settings.integrationsTab.litellmStartingDescription');
+      return t('settings.integrationsTab.newApiStartingDescription');
     }
     if (status.operation === 'stopping') {
-      return t('settings.integrationsTab.litellmStoppingDescription');
+      return t('settings.integrationsTab.newApiStoppingDescription');
     }
     if (status.operation === 'starting-docker') {
-      return t('settings.integrationsTab.litellmDockerStartingDescription');
+      return t('settings.integrationsTab.newApiDockerStartingDescription');
     }
 
     switch (status.state) {
       case 'docker-missing':
-        return t('settings.integrationsTab.litellmDockerMissingDescription');
+        return t('settings.integrationsTab.newApiDockerMissingDescription');
       case 'docker-starting':
-        return t('settings.integrationsTab.litellmDockerStartingDescription');
+        return t('settings.integrationsTab.newApiDockerStartingDescription');
       case 'docker-stopped':
-        return t('settings.integrationsTab.litellmDockerStoppedDescription');
+        return t('settings.integrationsTab.newApiDockerStoppedDescription');
       case 'not-installed':
-        return t('settings.integrationsTab.litellmManagedDescription');
+        return t('settings.integrationsTab.newApiManagedDescription');
       case 'stopped':
-        return t('settings.integrationsTab.litellmStoppedDescription');
+        return t('settings.integrationsTab.newApiStoppedDescription');
+      case 'needs-setup':
+        return t('settings.integrationsTab.newApiNeedsSetupDescription');
       case 'external-running':
-        return t('settings.integrationsTab.litellmExternalDescription');
+        return t('settings.integrationsTab.newApiExternalDescription');
       case 'running':
         return status.modelCount === 0
-          ? t('settings.integrationsTab.litellmNeedsModelDescription')
+          ? t('settings.integrationsTab.newApiNeedsChannelDescription')
           : status.modelCount === null
-            ? t('settings.integrationsTab.litellmRunningDescription')
-            : t('settings.integrationsTab.litellmReadyDescription', {
+            ? t('settings.integrationsTab.newApiRunningDescription')
+            : t('settings.integrationsTab.newApiReadyDescription', {
                 count: status.modelCount,
               });
     }
@@ -154,12 +166,12 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     try {
       await openAdmin.mutateAsync();
       toast({
-        title: t('settings.integrationsTab.litellmAdminOpened'),
-        description: t('settings.integrationsTab.litellmAdminCredentialsHint'),
+        title: t('settings.integrationsTab.newApiAdminOpened'),
+        description: t('settings.integrationsTab.newApiAdminCredentialsHint'),
       });
     } catch (error) {
       toast({
-        title: t('settings.integrationsTab.litellmOpenAdminFailed'),
+        title: t('settings.integrationsTab.newApiOpenAdminFailed'),
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
       });
@@ -170,12 +182,12 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     try {
       await copyAdminPassword.mutateAsync();
       toast({
-        title: t('settings.integrationsTab.litellmAdminPasswordCopied'),
-        description: t('settings.integrationsTab.litellmAdminPasswordCopiedHint'),
+        title: t('settings.integrationsTab.newApiAdminPasswordCopied'),
+        description: t('settings.integrationsTab.newApiAdminPasswordCopiedHint'),
       });
     } catch (error) {
       toast({
-        title: t('settings.integrationsTab.litellmCopyAdminPasswordFailed'),
+        title: t('settings.integrationsTab.newApiCopyAdminPasswordFailed'),
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
       });
@@ -186,7 +198,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     if (remoteConnection) {
       return (
         <HeaderActionButton
-          label={t('settings.integrationsTab.litellmManageConnection')}
+          label={t('settings.integrationsTab.newApiManageConnection')}
           variant="outline"
           onClick={onOpenManualSettings}
         >
@@ -200,8 +212,8 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
         <HeaderActionButton
           label={t(
             statusQuery.isLoading
-              ? 'settings.integrationsTab.litellmDetecting'
-              : 'settings.integrationsTab.litellmRecheck'
+              ? 'settings.integrationsTab.newApiDetecting'
+              : 'settings.integrationsTab.newApiRecheck'
           )}
           variant="outline"
           disabled={statusQuery.isLoading}
@@ -231,9 +243,9 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     if (status.state === 'docker-missing') {
       return (
         <HeaderActionButton
-          label={t('settings.integrationsTab.litellmDownloadDocker')}
+          label={t('settings.integrationsTab.newApiDownloadDocker')}
           variant="outline"
-          onClick={() => void rpc.app.openExternal(LITELLM_DOCKER_DESKTOP_URL)}
+          onClick={() => void rpc.app.openExternal(NEW_API_DOCKER_DESKTOP_URL)}
         >
           <Download className="size-4" />
         </HeaderActionButton>
@@ -244,7 +256,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
       if (!status.canStartDocker) {
         return (
           <HeaderActionButton
-            label={t('settings.integrationsTab.litellmRecheck')}
+            label={t('settings.integrationsTab.newApiRecheck')}
             variant="outline"
             onClick={() => void statusQuery.refetch()}
           >
@@ -254,14 +266,14 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
       }
       return (
         <HeaderActionButton
-          label={t('settings.integrationsTab.litellmStartDocker')}
+          label={t('settings.integrationsTab.newApiStartDocker')}
           variant="outline"
           disabled={operationPending}
           onClick={() =>
             void runAction(
               () => startDocker.mutateAsync(),
-              t('settings.integrationsTab.litellmDockerStartRequested'),
-              t('settings.integrationsTab.litellmDockerStartFailed')
+              t('settings.integrationsTab.newApiDockerStartRequested'),
+              t('settings.integrationsTab.newApiDockerStartFailed')
             )
           }
         >
@@ -277,7 +289,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     if (status.state === 'docker-starting') {
       return (
         <HeaderActionButton
-          label={t('settings.integrationsTab.litellmStartingDocker')}
+          label={t('settings.integrationsTab.newApiStartingDocker')}
           variant="outline"
           disabled
         >
@@ -291,16 +303,16 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
         <HeaderActionButton
           label={t(
             install.isPending
-              ? 'settings.integrationsTab.litellmInstalling'
-              : 'settings.integrationsTab.litellmOneClickInstall'
+              ? 'settings.integrationsTab.newApiInstalling'
+              : 'settings.integrationsTab.newApiOneClickInstall'
           )}
           variant="outline"
           disabled={operationPending}
           onClick={() =>
             void runAction(
               () => install.mutateAsync(),
-              t('settings.integrationsTab.litellmInstalled'),
-              t('settings.integrationsTab.litellmInstallFailed')
+              t('settings.integrationsTab.newApiInstalled'),
+              t('settings.integrationsTab.newApiInstallFailed')
             )
           }
         >
@@ -316,14 +328,14 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     if (status.state === 'stopped') {
       return (
         <HeaderActionButton
-          label={t('settings.integrationsTab.litellmStart')}
+          label={t('settings.integrationsTab.newApiStart')}
           variant="outline"
           disabled={operationPending}
           onClick={() =>
             void runAction(
               () => start.mutateAsync(),
-              t('settings.integrationsTab.litellmStarted'),
-              t('settings.integrationsTab.litellmStartFailed')
+              t('settings.integrationsTab.newApiStarted'),
+              t('settings.integrationsTab.newApiStartFailed')
             )
           }
         >
@@ -336,10 +348,33 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
       );
     }
 
+    if (status.state === 'needs-setup') {
+      return (
+        <HeaderActionButton
+          label={t('settings.integrationsTab.newApiCompleteSetup')}
+          variant="outline"
+          disabled={operationPending}
+          onClick={() =>
+            void runAction(
+              () => initialize.mutateAsync(),
+              t('settings.integrationsTab.newApiInitialized'),
+              t('settings.integrationsTab.newApiInitializeFailed')
+            )
+          }
+        >
+          {initialize.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <WandSparkles className="size-4" />
+          )}
+        </HeaderActionButton>
+      );
+    }
+
     if (status.state === 'external-running') {
       return (
         <HeaderActionButton
-          label={t('settings.integrationsTab.litellmConnectExisting')}
+          label={t('settings.integrationsTab.newApiConnectExisting')}
           variant="outline"
           onClick={onOpenManualSettings}
         >
@@ -352,8 +387,8 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
       <HeaderActionButton
         label={t(
           status.modelCount === 0
-            ? 'settings.integrationsTab.litellmAddFirstModel'
-            : 'settings.integrationsTab.litellmOpenConsole'
+            ? 'settings.integrationsTab.newApiAddFirstChannel'
+            : 'settings.integrationsTab.newApiOpenConsole'
         )}
         variant="outline"
         disabled={operationPending}
@@ -380,7 +415,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
       status.state === 'docker-missing' ||
       status.state === 'docker-stopped' ||
       status.state === 'docker-starting';
-    const menuLabel = t('settings.integrationsTab.litellmManageActions');
+    const menuLabel = t('settings.integrationsTab.newApiManageActions');
 
     return (
       <DropdownMenu>
@@ -407,34 +442,34 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuGroup>
             <DropdownMenuLabel>
-              <span className="block">{t('settings.integrationsTab.litellmManagement')}</span>
-              {running && (
+              <span className="block">{t('settings.integrationsTab.newApiManagement')}</span>
+              {running && status.credentialsAvailable && (
                 <span className="mt-1 block font-normal text-muted-foreground">
-                  {t('settings.integrationsTab.litellmAdminAccount')}
+                  {t('settings.integrationsTab.newApiAdminAccount')}
                   <code className="ml-1 font-mono text-foreground">
-                    {LITELLM_MANAGED_ADMIN_USERNAME}
+                    {NEW_API_MANAGED_ADMIN_USERNAME}
                   </code>
                 </span>
               )}
             </DropdownMenuLabel>
-            {running && (
+            {running && status.credentialsAvailable && (
               <DropdownMenuItem onClick={() => void handleCopyAdminPassword()}>
                 <Copy className="size-4" />
-                {t('settings.integrationsTab.litellmCopyAdminPassword')}
+                {t('settings.integrationsTab.newApiCopyAdminPassword')}
               </DropdownMenuItem>
             )}
             <DropdownMenuItem onClick={onOpenManualSettings}>
               <Settings2 className="size-4" />
               {t(
                 status.state === 'not-installed'
-                  ? 'settings.integrationsTab.litellmUseExisting'
-                  : 'settings.integrationsTab.litellmConnectionSettings'
+                  ? 'settings.integrationsTab.newApiUseExisting'
+                  : 'settings.integrationsTab.newApiConnectionSettings'
               )}
             </DropdownMenuItem>
             {showRecheck && (
               <DropdownMenuItem onClick={() => void statusQuery.refetch()}>
                 <RefreshCw className="size-4" />
-                {t('settings.integrationsTab.litellmRecheck')}
+                {t('settings.integrationsTab.newApiRecheck')}
               </DropdownMenuItem>
             )}
             {running && (
@@ -445,13 +480,13 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
                   onClick={() =>
                     void runAction(
                       () => stop.mutateAsync(),
-                      t('settings.integrationsTab.litellmStopped'),
-                      t('settings.integrationsTab.litellmStopFailed')
+                      t('settings.integrationsTab.newApiStopped'),
+                      t('settings.integrationsTab.newApiStopFailed')
                     )
                   }
                 >
                   <Power className="size-4" />
-                  {t('settings.integrationsTab.litellmStopService')}
+                  {t('settings.integrationsTab.newApiStopService')}
                 </DropdownMenuItem>
               </>
             )}
@@ -463,12 +498,12 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
 
   return (
     <IntegrationCardShell
-      testId="litellm-integration-card"
-      icon={<Waypoints className="h-8 w-8 text-primary" />}
-      name="LiteLLM"
+      testId="new-api-integration-card"
+      icon={<Route className="h-8 w-8 text-primary" />}
+      name="New API"
       description={description}
       actions={
-        <HeaderActionToolbar label={t('settings.integrationsTab.litellmActions')}>
+        <HeaderActionToolbar label={t('settings.integrationsTab.newApiActions')}>
           {renderPrimaryAction()}
           {renderManagementMenu()}
         </HeaderActionToolbar>

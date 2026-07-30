@@ -213,10 +213,13 @@ export function SettingsPage({
   const isPinHosted = useIsPinHosted();
   const [requestedMaasPlatformId, setRequestedMaasPlatformId] =
     React.useState<MaasPlatformTemplateId>();
-  const handleOpenLiteLlm = React.useCallback(() => {
-    setRequestedMaasPlatformId('litellm');
-    onTabChange('maas');
-  }, [onTabChange]);
+  const handleOpenMaasPlatform = React.useCallback(
+    (platformId: MaasPlatformTemplateId) => {
+      setRequestedMaasPlatformId(platformId);
+      onTabChange('maas');
+    },
+    [onTabChange]
+  );
 
   const tabContent: Record<string, TabContentConfig> = {
     general: {
@@ -415,7 +418,7 @@ export function SettingsPage({
         {
           id: 'integrations',
           title: t('settings.integrationsTab.title'),
-          component: <IntegrationsCard onOpenLiteLlm={handleOpenLiteLlm} />,
+          component: <IntegrationsCard onOpenMaasPlatform={handleOpenMaasPlatform} />,
         },
       ],
     },

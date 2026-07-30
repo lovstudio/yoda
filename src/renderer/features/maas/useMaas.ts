@@ -13,6 +13,7 @@ import type {
   MaasSetRuntimeBindingInput,
   MaasUsageSummary,
 } from '@shared/maas';
+import type { NewApiManagedActionResult, NewApiManagedStatus } from '@shared/new-api-managed';
 import { rpc } from '@renderer/lib/ipc';
 
 const PAGE_SIZE = 24;
@@ -30,6 +31,7 @@ export const maasQueryKeys = {
     ['maas', 'runtime-bindings', platformId ?? 'all'] as const,
   globalBinding: ['maas', 'global-binding'] as const,
   liteLlmManaged: ['maas', 'litellm-managed'] as const,
+  newApiManaged: ['maas', 'new-api-managed'] as const,
   records: (platformId: MaasPlatformId, kind: MaasInvocationFilterKind, refreshSequence = 0) =>
     ['maas', 'records', REAL_USAGE_QUERY_VERSION, platformId, kind, refreshSequence] as const,
   summary: (
@@ -113,6 +115,77 @@ export function useCopyLiteLlmAdminPassword() {
       const result = await rpc.maas.copyLiteLlmAdminPassword();
       if (!result.success) {
         throw new Error(result.error ?? 'Failed to copy LiteLLM administrator password.');
+      }
+    },
+  });
+}
+
+function assertNewApiActionSucceeded(result: NewApiManagedActionResult): NewApiManagedStatus {
+  if (!result.success) {
+    throw new Error(result.error ?? 'New API operation failed.');
+  }
+  return result.status;
+}
+
+export function useNewApiManagedStatus(enabled = true) {
+  return useQuery<NewApiManagedStatus>({
+    queryKey: maasQueryKeys.newApiManaged,
+    queryFn: () => rpc.maas.getNewApiManagedStatus(),
+    enabled,
+    staleTime: 5_000,
+    refetchInterval: (query) =>
+      query.state.data?.operation || query.state.data?.state === 'docker-starting' ? 2_000 : 15_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+function useNewApiManagedAction(action: () => Promise<NewApiManagedActionResult>) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => assertNewApiActionSucceeded(await action()),
+    onSuccess: (status) => {
+      queryClient.setQueryData(maasQueryKeys.newApiManaged, status);
+      void queryClient.invalidateQueries({ queryKey: maasQueryKeys.connections });
+    },
+  });
+}
+
+export function useInstallNewApi() {
+  return useNewApiManagedAction(() => rpc.maas.installNewApi());
+}
+
+export function useInitializeNewApi() {
+  return useNewApiManagedAction(() => rpc.maas.initializeNewApi());
+}
+
+export function useStartNewApi() {
+  return useNewApiManagedAction(() => rpc.maas.startNewApi());
+}
+
+export function useStopNewApi() {
+  return useNewApiManagedAction(() => rpc.maas.stopNewApi());
+}
+
+export function useStartDockerForNewApi() {
+  return useNewApiManagedAction(() => rpc.maas.startDockerForNewApi());
+}
+
+export function useOpenNewApiAdmin() {
+  return useMutation({
+    mutationFn: async () => {
+      const result = await rpc.maas.openNewApiAdmin();
+      if (!result.success) throw new Error(result.error ?? 'Failed to open New API console.');
+    },
+  });
+}
+
+export function useCopyNewApiAdminPassword() {
+  return useMutation({
+    mutationFn: async () => {
+      const result = await rpc.maas.copyNewApiAdminPassword();
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to copy New API administrator password.');
       }
     },
   });

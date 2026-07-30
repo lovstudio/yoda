@@ -32,4 +32,13 @@ describe('MaaS platform instances', () => {
       defaultEndpoint: 'http://127.0.0.1:4000/v1',
     });
   });
+
+  it('provides a separate local New API preset for its lightweight managed container', () => {
+    expect(isMaasPlatformId('newapi')).toBe(true);
+    expect(getMaasPlatformDefinition('newapi')).toMatchObject({
+      id: 'newapi',
+      name: 'New API',
+      defaultEndpoint: 'http://127.0.0.1:4001/v1',
+    });
+  });
 });

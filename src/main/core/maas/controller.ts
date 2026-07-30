@@ -10,6 +10,7 @@ import type {
 } from '@shared/maas';
 import { liteLlmManagedService } from './litellm-managed-service';
 import { maasService } from './maas-service';
+import { newApiManagedService } from './new-api-managed-service';
 
 async function listConnections() {
   return maasService.listConnections();
@@ -93,4 +94,12 @@ export const maasController = createRPCController({
   startDockerForLiteLlm: () => liteLlmManagedService.startDockerDesktop(),
   copyLiteLlmAdminPassword: () => liteLlmManagedService.copyAdminPassword(),
   openLiteLlmAdmin: () => liteLlmManagedService.openAdmin(),
+  getNewApiManagedStatus: () => newApiManagedService.getStatus(),
+  installNewApi: () => newApiManagedService.install(),
+  initializeNewApi: () => newApiManagedService.initialize(),
+  startNewApi: () => newApiManagedService.start(),
+  stopNewApi: () => newApiManagedService.stop(),
+  startDockerForNewApi: () => newApiManagedService.startDockerDesktop(),
+  copyNewApiAdminPassword: () => newApiManagedService.copyAdminPassword(),
+  openNewApiAdmin: () => newApiManagedService.openAdmin(),
 });

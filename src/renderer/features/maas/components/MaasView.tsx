@@ -802,7 +802,9 @@ const ConnectionPanel: React.FC<{
       ? t('maas.connection.zenmuxManagementKeyPlaceholder')
       : connection.platformId === 'litellm'
         ? t('maas.connection.litellmKeyPlaceholder')
-        : t('maas.connection.apiKeyPlaceholder');
+        : connection.platformId === 'newapi'
+          ? t('maas.connection.newApiKeyPlaceholder')
+          : t('maas.connection.apiKeyPlaceholder');
   const platformDescription =
     officialDescription?.source === 'fallback' || !officialDescription
       ? t(`maas.platforms.${getMaasPlatformTemplateId(connection.platformId)}.description`)
@@ -909,6 +911,11 @@ const ConnectionPanel: React.FC<{
         {connection.platformId === 'litellm' && (
           <div className="max-w-2xl rounded-lg border border-border/60 bg-background-secondary px-3 py-2 text-xs leading-relaxed text-foreground-muted">
             {t('maas.connection.litellmSetupHelper')}
+          </div>
+        )}
+        {connection.platformId === 'newapi' && (
+          <div className="max-w-2xl rounded-lg border border-border/60 bg-background-secondary px-3 py-2 text-xs leading-relaxed text-foreground-muted">
+            {t('maas.connection.newApiSetupHelper')}
           </div>
         )}
 

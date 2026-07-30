@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LITELLM_MANAGED_ADMIN_URL, LITELLM_MANAGED_ENDPOINT } from '@shared/litellm-managed';
-import { LiteLlmManagedService, type DockerCommandRunner } from './litellm-managed-service';
+import type { DockerCommandRunner } from './docker-managed-runtime';
+import { LiteLlmManagedService } from './litellm-managed-service';
 
 vi.mock('../secrets/encrypted-app-secrets-store', () => ({
   encryptedAppSecretsStore: {
