@@ -4047,6 +4047,10 @@
     "skill": "Skill",
     "terminal": "Terminal",
     "quickAction": "Quick action: {{label}}",
+    "config": {
+      "title": "Config",
+      "description": "Set input handling and Agent CLI defaults. Changes apply to later input; CLI startup settings take effect after starting or resuming a session."
+    },
     "gateway": {
       "title": "Gateway",
       "description": "Choose MaaS, a subscription account, or an API key for each Agent Client",
