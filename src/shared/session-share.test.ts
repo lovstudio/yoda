@@ -75,7 +75,7 @@ function detail(overrides: Partial<MobileSessionDetail> = {}): MobileSessionDeta
 
 describe('createYodaSessionShareUpload', () => {
   it('keeps renderable transcript content without leaking local session coordinates', () => {
-    const upload = createYodaSessionShareUpload(detail(), 'verbose');
+    const upload = createYodaSessionShareUpload(detail());
     const serialized = JSON.stringify(upload);
 
     expect(upload.blocks.map((block) => block.id)).toEqual([
@@ -86,37 +86,15 @@ describe('createYodaSessionShareUpload', () => {
       'block-5',
     ]);
     expect(upload.blocks[2]?.timestamp).toBeNull();
+    expect(upload.blocks[1]?.agentPhase).toBe('commentary');
+    expect(upload.blocks[3]?.agentPhase).toBe('final');
     expect(upload.assets).toEqual([]);
     expect(upload.omittedAssetCount).toBe(0);
-    expect(serialized).not.toContain('agentPhase');
     expect(serialized).not.toContain('private-project-id');
     expect(serialized).not.toContain('private-task-id');
     expect(serialized).not.toContain('private-conversation-id');
     expect(serialized).not.toContain('private-runtime-session-id');
     expect(serialized).not.toContain('private-transcript-id');
-  });
-
-  it.each([
-    ['hidden', ['Build the public page.']],
-    ['concise', ['Build the public page.', 'The public page is ready.']],
-    [
-      'detailed',
-      ['Build the public page.', 'I will inspect the implementation.', 'The public page is ready.'],
-    ],
-    [
-      'verbose',
-      [
-        'Build the public page.',
-        'I will inspect the implementation.',
-        'pnpm test',
-        'The public page is ready.',
-        'Task complete',
-      ],
-    ],
-  ] as const)('filters the public snapshot at the %s display level', (level, contents) => {
-    const upload = createYodaSessionShareUpload(detail(), level);
-
-    expect(upload.blocks.map((block) => block.content)).toEqual(contents);
   });
 
   it('falls back to sanitized mobile terminal content when no transcript is available', () => {
@@ -126,8 +104,7 @@ describe('createYodaSessionShareUpload', () => {
         contentLength: 21,
         truncated: true,
         transcript: [],
-      }),
-      'verbose'
+      })
     );
 
     expect(upload.blocks).toEqual([
@@ -140,18 +117,5 @@ describe('createYodaSessionShareUpload', () => {
       },
     ]);
     expect(upload.truncated).toBe(true);
-  });
-
-  it('does not expose terminal fallback content at filtered display levels', () => {
-    const upload = createYodaSessionShareUpload(
-      detail({
-        content: 'Raw terminal output',
-        contentLength: 19,
-        transcript: [],
-      }),
-      'detailed'
-    );
-
-    expect(upload.blocks).toEqual([]);
   });
 });
