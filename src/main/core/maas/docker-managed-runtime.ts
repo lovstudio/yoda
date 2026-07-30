@@ -16,6 +16,8 @@ export type DockerCommandRunner = (
   options: { timeout: number; env?: NodeJS.ProcessEnv }
 ) => Promise<DockerCommandResult>;
 
+type DockerDesktopOpener = () => Promise<void>;
+
 export type DockerAvailability = {
   installed: boolean;
   running: boolean;
@@ -78,9 +80,29 @@ export function createDockerCommandRunner(platform: NodeJS.Platform): DockerComm
   };
 }
 
+function isLaunchServicesTransitionError(error: unknown): boolean {
+  const commandError = error as NodeJS.ErrnoException & {
+    stderr?: string | Buffer;
+    stdout?: string | Buffer;
+  };
+  const output = [
+    error instanceof Error ? error.message : '',
+    String(commandError.stderr ?? ''),
+    String(commandError.stdout ?? ''),
+  ].join('\n');
+
+  return /(?:^|\D)-600(?:\D|$)/.test(output);
+}
+
 export async function launchDockerDesktop(
   platform: NodeJS.Platform,
-  runDocker: DockerCommandRunner
+  runDocker: DockerCommandRunner,
+  openDockerDesktop: DockerDesktopOpener = async () => {
+    await execFileAsync('/usr/bin/open', ['-a', 'Docker'], {
+      encoding: 'utf8',
+      timeout: DOCKER_STATUS_TIMEOUT_MS,
+    });
+  }
 ): Promise<void> {
   if (platform === 'darwin') {
     try {
@@ -92,10 +114,16 @@ export async function launchDockerDesktop(
       log.warn('Docker Desktop CLI start failed; falling back to Launch Services:', error);
     }
 
-    await execFileAsync('/usr/bin/open', ['-a', 'Docker'], {
-      encoding: 'utf8',
-      timeout: DOCKER_STATUS_TIMEOUT_MS,
-    });
+    try {
+      await openDockerDesktop();
+    } catch (error) {
+      if (!isLaunchServicesTransitionError(error)) throw error;
+
+      // Launch Services can report -600 while Docker's backend is already
+      // transitioning into a running state. The managed-service status poll is
+      // the source of truth, so keep the request in its "starting" state.
+      log.warn('Docker Desktop is already transitioning after the launch request:', error);
+    }
     return;
   }
 
