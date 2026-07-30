@@ -1286,7 +1286,7 @@
     "composerSettingsAria": "输入设置",
     "composerSettingsLabel": "配置",
     "attachImagesAsPathsLabel": "图片以文件路径发送",
-    "attachImagesAsPathsDesc": "以 @路径 形式引用图片，而不是把图片原生粘贴进 agent 终端。",
+    "attachImagesAsPathsDesc": "以反引号包裹的 `@路径` 文本引用图片，避免 Agent 将路径直接转换成图片输入。",
     "permissionModeLabel": "权限模式",
     "permissionModeDesc": "所选 agent 无需询问可执行的范围。每个 agent CLI 会套用各自对应的参数（如 Claude --permission-mode、Codex 沙箱）。Bypass 为完全无沙箱运行。",
     "composerScopeGlobal": "全局",

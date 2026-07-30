@@ -69,6 +69,7 @@ import {
   fileTokenLabel,
   findTokenRanges,
   measureTokenRects,
+  pastedImagePathMention,
   snapSelectionToTokens,
   tokenAtPoint,
   tokenText,
@@ -113,6 +114,7 @@ export interface ComposerPromptInputProps {
   runtimeId: RuntimeId | null;
   projectId?: string | null;
   projectPath?: string;
+  imagesAsPaths?: boolean;
   /** Agent profile for this session: auto skills may be suggested; manual skills remain explicit. */
   skillSelection?: SkillSelectionInput;
   runHostKind?: ComposerPromptInputRunHostKind;
@@ -314,6 +316,7 @@ export function ComposerPromptInput({
   runtimeId,
   projectId = null,
   projectPath,
+  imagesAsPaths = false,
   skillSelection,
   runHostKind = 'local',
   className,
@@ -815,7 +818,15 @@ export function ComposerPromptInput({
       const imageFiles = Array.from(event.clipboardData.files).filter((file) =>
         file.type.startsWith('image/')
       );
-      if (imageFiles.length === 0) return;
+      if (imageFiles.length === 0) {
+        const mention = imagesAsPaths
+          ? pastedImagePathMention(event.clipboardData.getData('text/plain'))
+          : null;
+        if (!mention) return;
+        event.preventDefault();
+        insertPromptSnippet(mention);
+        return;
+      }
       event.preventDefault();
       for (const file of imageFiles) {
         const existingPath = window.electronAPI.getPathForFile(file).trim();
@@ -842,7 +853,7 @@ export function ComposerPromptInput({
         })();
       }
     },
-    [disabled, insertAttachmentToken, t]
+    [disabled, imagesAsPaths, insertAttachmentToken, insertPromptSnippet, t]
   );
 
   const handleDrop = useCallback(

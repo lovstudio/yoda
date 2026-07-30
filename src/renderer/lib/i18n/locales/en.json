@@ -1286,7 +1286,7 @@
     "composerSettingsAria": "Input settings",
     "composerSettingsLabel": "Config",
     "attachImagesAsPathsLabel": "Send images as file paths",
-    "attachImagesAsPathsDesc": "Reference images as @path mentions instead of pasting them natively into the agent terminal.",
+    "attachImagesAsPathsDesc": "Reference images as backtick-wrapped `@path` text so the Agent keeps the path instead of converting it into image input.",
     "permissionModeLabel": "Permission mode",
     "permissionModeDesc": "How much the selected agent can do without asking. Each agent CLI gets its matching flag (e.g. Claude --permission-mode, Codex sandbox). Bypass runs fully unsandboxed.",
     "composerScopeGlobal": "Global",
