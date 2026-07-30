@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AppResourceSnapshot } from '@shared/app-resource';
 import {
   appendWorkspaceResourceSnapshot,
+  createWorkspaceResourceHistoryStore,
   getWorkspaceLatencyP95,
   WORKSPACE_RESOURCE_HISTORY_MAX_POINTS,
 } from './workspace-resource-history';
@@ -27,6 +28,24 @@ describe('workspace resource history', () => {
     expect(history[0]?.sampledAt).toBe(snapshotAt(10).sampledAt);
     expect(history.at(-1)?.sampledAt).toBe(snapshotAt(70).sampledAt);
     expect(appendWorkspaceResourceSnapshot(history, snapshotAt(70))).toBe(history);
+  });
+
+  it('keeps samples when every UI subscriber is unmounted', () => {
+    const store = createWorkspaceResourceHistoryStore();
+    let notificationCount = 0;
+    const unsubscribe = store.subscribe(() => {
+      notificationCount += 1;
+    });
+
+    store.append(snapshotAt(0));
+    unsubscribe();
+    store.append(snapshotAt(5));
+
+    expect(notificationCount).toBe(1);
+    expect(store.getSnapshot().map((point) => point.sampledAt)).toEqual([
+      snapshotAt(0).sampledAt,
+      snapshotAt(5).sampledAt,
+    ]);
   });
 
   it('uses the slower user-facing renderer signal for the compact latency metric', () => {

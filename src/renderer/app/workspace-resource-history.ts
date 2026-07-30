@@ -12,6 +12,15 @@ export type WorkspaceResourceHistoryPoint = {
   mainLatencyP95Ms?: number | null;
 };
 
+export type WorkspaceResourceHistoryStore = {
+  append: (
+    snapshot: Pick<AppResourceSnapshot, 'sampledAt' | 'cpuPercent' | 'memoryBytes'> &
+      Partial<Pick<AppResourceSnapshot, 'mainEventLoop' | 'rendererPerformance'>>
+  ) => void;
+  getSnapshot: () => WorkspaceResourceHistoryPoint[];
+  subscribe: (listener: () => void) => () => void;
+};
+
 export function appendWorkspaceResourceSnapshot(
   history: WorkspaceResourceHistoryPoint[],
   snapshot: Pick<AppResourceSnapshot, 'sampledAt' | 'cpuPercent' | 'memoryBytes'> &
@@ -37,6 +46,31 @@ export function appendWorkspaceResourceSnapshot(
     .filter((point) => Date.parse(point.sampledAt) >= windowStart)
     .slice(-WORKSPACE_RESOURCE_HISTORY_MAX_POINTS);
 }
+
+export function createWorkspaceResourceHistoryStore(
+  initialHistory: WorkspaceResourceHistoryPoint[] = []
+): WorkspaceResourceHistoryStore {
+  let history = initialHistory;
+  const listeners = new Set<() => void>();
+
+  return {
+    append: (snapshot) => {
+      const nextHistory = appendWorkspaceResourceSnapshot(history, snapshot);
+      if (nextHistory === history) return;
+      history = nextHistory;
+      for (const listener of listeners) listener();
+    },
+    getSnapshot: () => history,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+// The runtime bar is remounted when route wrappers change. Keep the rolling
+// minute outside React so opening another task or view does not erase it.
+export const workspaceResourceHistoryStore = createWorkspaceResourceHistoryStore();
 
 export function getWorkspaceLatencyP95(
   snapshot: Pick<AppResourceSnapshot, 'rendererPerformance'> | undefined

@@ -13,7 +13,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppAgentSessionResource } from '@shared/app-resource';
 import { getMaasPlatformDefinition } from '@shared/maas';
@@ -64,11 +64,11 @@ import { startRendererPerformanceReporter } from './renderer-performance-reporte
 import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
 import type { WorkspaceResourceDetailKind } from './workspace-resource-details-modal';
 import {
-  appendWorkspaceResourceSnapshot,
   getWorkspaceLatencyP95,
-  type WorkspaceResourceHistoryPoint,
+  workspaceResourceHistoryStore,
 } from './workspace-resource-history';
 import { WorkspaceResourceMetric } from './workspace-resource-metric';
+import { WORKSPACE_RESOURCE_QUERY_TIMING } from './workspace-resource-monitoring';
 import { WorkspaceResourceTrend } from './workspace-resource-trend';
 import { getQuotaWindowLabel } from './workspace-runtime-bar-format';
 
@@ -105,7 +105,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
   const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
   const [isSkillPopoverOpen, setIsSkillPopoverOpen] = useState(false);
-  const [resourceHistory, setResourceHistory] = useState<WorkspaceResourceHistoryPoint[]>([]);
+  const resourceHistory = useSyncExternalStore(
+    workspaceResourceHistoryStore.subscribe,
+    workspaceResourceHistoryStore.getSnapshot,
+    workspaceResourceHistoryStore.getSnapshot
+  );
   const [sessionPromptCount, setSessionPromptCount] = useState<{
     conversationId: string;
     count: number;
@@ -295,9 +299,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { data: resourceSnapshot } = useQuery({
     queryKey: ['app', 'resourceSnapshot'],
     queryFn: () => rpc.app.getResourceSnapshot(),
-    staleTime: 2_000,
-    refetchInterval: 5_000,
-    refetchOnWindowFocus: false,
+    ...WORKSPACE_RESOURCE_QUERY_TIMING,
   });
   const { data: worktreeStorage, isFetching: isFetchingWorktreeStorage } = useQuery({
     queryKey: ['projects', 'worktreeStorage'],
@@ -380,7 +382,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
 
   useEffect(() => {
     if (!resourceSnapshot) return;
-    setResourceHistory((history) => appendWorkspaceResourceSnapshot(history, resourceSnapshot));
+    workspaceResourceHistoryStore.append(resourceSnapshot);
   }, [resourceSnapshot]);
 
   useEffect(() => {

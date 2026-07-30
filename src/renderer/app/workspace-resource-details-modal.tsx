@@ -47,6 +47,7 @@ import {
   getWorkspaceLatencyP95,
   type WorkspaceResourceHistoryPoint,
 } from './workspace-resource-history';
+import { WORKSPACE_RESOURCE_QUERY_TIMING } from './workspace-resource-monitoring';
 
 export type WorkspaceResourceDetailKind = 'cpu' | 'memory' | 'latency' | 'worktrees';
 
@@ -101,9 +102,7 @@ export function WorkspaceResourceDetailsModal({
         ? appendWorkspaceResourceSnapshot(initialHistory, initialSnapshot)
         : initialHistory,
     },
-    staleTime: 2_000,
-    refetchInterval: 5_000,
-    refetchOnWindowFocus: false,
+    ...WORKSPACE_RESOURCE_QUERY_TIMING,
   });
   const {
     data: worktreeStorage,
