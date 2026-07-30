@@ -8,14 +8,16 @@ import {
   ExternalLink,
   Gauge,
   MessageSquare,
+  Settings2,
   Sparkles,
   Terminal,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppAgentSessionResource } from '@shared/app-resource';
 import { getMaasPlatformDefinition } from '@shared/maas';
+import type { ComposerDefaults } from '@shared/project-settings';
 import {
   getRuntime,
   getRuntimeAccountProfile,
@@ -27,6 +29,7 @@ import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
 import { openTaskTarget } from '@renderer/app/open-task-target';
 import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
 import { useMaasConnections, useMaasGlobalBinding } from '@renderer/features/maas/useMaas';
+import { getProjectSettingsStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { SkillQuickSearchPopover } from '@renderer/features/skills/components/SkillQuickSearchPopover';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
@@ -50,6 +53,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popove
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
+import { dualField, withComposerDefault } from './composer-project-overrides';
+import {
+  ComposerSettingsContent,
+  DEFAULT_INPUT_PROMPT_LANGUAGE,
+  DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
+  DEFAULT_TASK_OUTPUT_LANGUAGE,
+} from './composer-settings-content';
 import { startRendererPerformanceReporter } from './renderer-performance-reporter';
 import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
 import type { WorkspaceResourceDetailKind } from './workspace-resource-details-modal';
@@ -86,10 +96,14 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const showResourceDetailsModal = useShowModal('workspaceResourceDetailsModal');
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
+  const { value: homeDraft, update: updateHomeDraft } = useAppSettingsKey('homeDraft');
+  const { value: taskSettings, update: updateTaskSettings } = useAppSettingsKey('tasks');
+  const { value: defaultRuntime } = useAppSettingsKey('defaultRuntime');
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
   const [isAgentPopoverOpen, setIsAgentPopoverOpen] = useState(false);
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
+  const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
   const [isSkillPopoverOpen, setIsSkillPopoverOpen] = useState(false);
   const [resourceHistory, setResourceHistory] = useState<WorkspaceResourceHistoryPoint[]>([]);
   const [sessionPromptCount, setSessionPromptCount] = useState<{
@@ -106,9 +120,58 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     route === 'task' && params?.projectId && params.taskId
       ? asProvisioned(getTaskStore(params.projectId, params.taskId))
       : undefined;
+  const activeProjectId = params?.projectId;
+  const projectSettingsStore = activeProjectId
+    ? getProjectSettingsStore(activeProjectId)
+    : undefined;
+  const projectSettings = projectSettingsStore?.settings ?? null;
+  const composerDefaults = projectSettings?.composerDefaults;
+  const setComposerDefault = useCallback(
+    <K extends keyof ComposerDefaults>(field: K, value: ComposerDefaults[K] | undefined) => {
+      if (!projectSettingsStore || !projectSettings) return;
+      void projectSettingsStore.save({
+        ...projectSettings,
+        composerDefaults: withComposerDefault(projectSettings.composerDefaults, field, value),
+      });
+    },
+    [projectSettingsStore, projectSettings]
+  );
+  const attachImagesField = dualField<boolean>({
+    override: composerDefaults?.attachImagesAsPaths,
+    globalValue: homeDraft?.attachImagesAsPaths ?? false,
+    setGlobal: (value) => updateHomeDraft({ attachImagesAsPaths: value }),
+    setOverride: (value) => setComposerDefault('attachImagesAsPaths', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const inputPromptLanguageField = dualField({
+    override: composerDefaults?.inputPromptLanguage,
+    globalValue: taskSettings?.inputPromptLanguage ?? DEFAULT_INPUT_PROMPT_LANGUAGE,
+    setGlobal: (value) => updateTaskSettings({ inputPromptLanguage: value }),
+    setOverride: (value) => setComposerDefault('inputPromptLanguage', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const namingLanguageField = dualField({
+    override: composerDefaults?.namingLanguage,
+    globalValue: taskSettings?.namingLanguage ?? DEFAULT_TASK_OUTPUT_LANGUAGE,
+    setGlobal: (value) => updateTaskSettings({ namingLanguage: value }),
+    setOverride: (value) => setComposerDefault('namingLanguage', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const summaryLanguageField = dualField({
+    override: composerDefaults?.summaryLanguage,
+    globalValue: taskSettings?.summaryLanguage ?? DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
+    setGlobal: (value) => updateTaskSettings({ summaryLanguage: value }),
+    setOverride: (value) => setComposerDefault('summaryLanguage', value),
+    hasProject: Boolean(activeProjectId),
+  });
   const runtimeId = explicitConversationRuntimeId(
     provisionedTask?.taskView.tabManager.activeConversation?.data.runtimeId
   );
+  const configRuntimeId =
+    runtimeId ??
+    composerDefaults?.runtimeId ??
+    (isValidRuntimeId(homeDraft?.runtimeOverride) ? homeDraft.runtimeOverride : null) ??
+    (isValidRuntimeId(defaultRuntime) ? defaultRuntime : 'claude');
   const activeConversation = provisionedTask?.taskView.tabManager.activeConversation?.data ?? null;
   const runtime = runtimeId ? getRuntime(runtimeId) : null;
   const officialUsageUrl = runtimeId
@@ -782,6 +845,51 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         </div>
       ) : null}
       <span className="flex-1" />
+      <Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>
+        <PopoverTrigger
+          aria-label={t('workspaceRuntime.config.title')}
+          className={cn(
+            'flex h-5 shrink-0 items-center gap-1 rounded px-1.5 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
+            isConfigPopoverOpen && 'bg-background-2 text-foreground'
+          )}
+          title={t('workspaceRuntime.config.title')}
+        >
+          <Settings2 className="size-3.5" />
+          <span>{t('workspaceRuntime.config.title')}</span>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          side="top"
+          sideOffset={8}
+          className="max-h-[min(32rem,calc(100vh-3rem))] w-96 gap-0 overflow-y-auto border border-border bg-background p-0 text-foreground shadow-lg"
+        >
+          <div className="border-b border-border p-3">
+            <div className="text-sm font-medium">{t('workspaceRuntime.config.title')}</div>
+            <div className="mt-0.5 text-xs text-foreground-passive">
+              {t('workspaceRuntime.config.description')}
+            </div>
+          </div>
+          <div className="p-3">
+            <ComposerSettingsContent
+              runtimeId={configRuntimeId}
+              projectId={activeProjectId}
+              projectPath={connectionId ? undefined : provisionedTask?.path}
+              attachImagesAsPaths={attachImagesField.value}
+              inputPromptLanguage={inputPromptLanguageField.value}
+              namingLanguage={namingLanguageField.value}
+              summaryLanguage={summaryLanguageField.value}
+              onAttachImagesAsPathsChange={attachImagesField.setValue}
+              onInputPromptLanguageChange={inputPromptLanguageField.setValue}
+              onNamingLanguageChange={namingLanguageField.setValue}
+              onSummaryLanguageChange={summaryLanguageField.setValue}
+              onManagePrompts={() => {
+                setIsConfigPopoverOpen(false);
+                appState.navigation.navigate('library', { section: 'prompts' });
+              }}
+            />
+          </div>
+        </PopoverContent>
+      </Popover>
       <Popover open={isAgentPopoverOpen} onOpenChange={setIsAgentPopoverOpen}>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.agents.triggerLabel', {
