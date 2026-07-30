@@ -12,7 +12,6 @@ import {
   encodeComparisonWindowTarget,
   type ComparisonWindowTarget,
 } from '@shared/comparison-window';
-import { DOCTOR_WINDOW_PARAM } from '@shared/doctor-window';
 import {
   encodeTaskWindowTarget,
   TASK_WINDOW_TARGET_PARAM,
@@ -25,7 +24,6 @@ import { registerExternalLinkHandlers } from '@main/utils/externalLinks';
 import { APP_ORIGIN } from './protocol';
 
 let mainWindow: BrowserWindow | null = null;
-let doctorWindow: BrowserWindow | null = null;
 /** All full-app windows (the main window plus Window > Duplicate copies). */
 const fullAppWindows = new Set<BrowserWindow>();
 /** Set once a real quit begins so close-to-hide yields to actual teardown. */
@@ -92,21 +90,6 @@ export function createAiLabWindow(aiLab: AiLabWindowTarget): BrowserWindow {
   return createAppWindow({ aiLab });
 }
 
-/** Open the singleton Harness Doctor as a detached utility window. */
-export function createDoctorWindow(): BrowserWindow {
-  if (doctorWindow && !doctorWindow.isDestroyed()) {
-    if (doctorWindow.isMinimized()) doctorWindow.restore();
-    doctorWindow.show();
-    doctorWindow.focus();
-    return doctorWindow;
-  }
-  doctorWindow = createAppWindow({ doctor: true });
-  doctorWindow.on('closed', () => {
-    doctorWindow = null;
-  });
-  return doctorWindow;
-}
-
 /** Spawn an empty, hidden task window that boots its renderer shell and parks. */
 export function createWarmTaskWindow(): BrowserWindow {
   return createAppWindow({ warm: true });
@@ -128,35 +111,31 @@ function createAppWindow(
     target?: TaskWindowTarget;
     comparison?: ComparisonWindowTarget;
     aiLab?: AiLabWindowTarget;
-    doctor?: boolean;
     warm?: boolean;
   } = {}
 ): BrowserWindow {
   const isComparisonWindow = Boolean(options.comparison);
   const isAiLabWindow = Boolean(options.aiLab);
-  const isDoctorWindow = options.doctor === true;
   const isTaskWindow = Boolean(options.target) || options.warm === true;
   // Comparison windows are detached surfaces like task windows (no app-tab strip)
   // but want a larger default footprint to fit several tiled panes.
-  const isDetachedWindow = isTaskWindow || isComparisonWindow || isAiLabWindow || isDoctorWindow;
+  const isDetachedWindow = isTaskWindow || isComparisonWindow || isAiLabWindow;
   const bounds = isComparisonWindow
     ? resolveComparisonWindowBounds()
-    : isDoctorWindow
-      ? resolveDoctorWindowBounds()
-      : isAiLabWindow
-        ? resolveTaskWindowBounds(undefined)
-        : isTaskWindow && !options.warm
-          ? resolveTaskWindowBounds(options.target?.bounds)
-          : isTaskWindow
-            ? resolveTaskWindowBounds(undefined)
-            : { width: 1400, height: 900, x: undefined, y: undefined };
+    : isAiLabWindow
+      ? resolveTaskWindowBounds(undefined)
+      : isTaskWindow && !options.warm
+        ? resolveTaskWindowBounds(options.target?.bounds)
+        : isTaskWindow
+          ? resolveTaskWindowBounds(undefined)
+          : { width: 1400, height: 900, x: undefined, y: undefined };
 
   const win = new BrowserWindow({
     width: bounds.width,
     height: bounds.height,
     ...(bounds.x !== undefined && bounds.y !== undefined ? { x: bounds.x, y: bounds.y } : {}),
-    minWidth: isDoctorWindow ? 720 : isDetachedWindow ? 480 : 700,
-    minHeight: isDoctorWindow ? 560 : isDetachedWindow ? 320 : 500,
+    minWidth: isDetachedWindow ? 480 : 700,
+    minHeight: isDetachedWindow ? 320 : 500,
     title: PRODUCT_NAME,
     backgroundColor: '#111111',
     // In production, electron-builder injects the icon from the app bundle.
@@ -270,7 +249,6 @@ function rendererUrl(options: {
   target?: TaskWindowTarget;
   comparison?: ComparisonWindowTarget;
   aiLab?: AiLabWindowTarget;
-  doctor?: boolean;
   warm?: boolean;
 }): string {
   const base = import.meta.env.DEV
@@ -289,25 +267,10 @@ function rendererUrl(options: {
   if (options.aiLab) {
     url.searchParams.set(AI_LAB_WINDOW_TARGET_PARAM, encodeAiLabWindowTarget(options.aiLab));
   }
-  if (options.doctor) {
-    url.searchParams.set(DOCTOR_WINDOW_PARAM, '1');
-  }
   if (options.warm) {
     url.searchParams.set(TASK_WINDOW_WARM_PARAM, '1');
   }
   return url.toString();
-}
-
-function resolveDoctorWindowBounds(): {
-  width: number;
-  height: number;
-  x?: number;
-  y?: number;
-} {
-  const workArea = screen.getPrimaryDisplay().workAreaSize;
-  const width = clamp(1120, 720, Math.max(720, workArea.width - 80));
-  const height = clamp(760, 560, Math.max(560, workArea.height - 80));
-  return { width, height, x: undefined, y: undefined };
 }
 
 function resolveComparisonWindowBounds(): {

@@ -11,7 +11,6 @@ import { SettingsSyncAgent } from './app/settings-sync-agent';
 import { WelcomeScreen } from './app/welcome';
 import { Workspace } from './app/workspace';
 import { AiLabAppWindow } from './features/ai-lab/ai-lab-window';
-import { DoctorWindow } from './features/doctor/doctor-window';
 import {
   EXTENSION_MARKETPLACE_QUERY_KEY,
   listMarketplaceExtensions,
@@ -26,7 +25,6 @@ import {
   getComparisonWindowLaunchTarget,
   isComparisonWindowLaunch,
 } from './lib/comparison-window-launch-target';
-import { isDoctorWindowLaunch } from './lib/doctor-window-launch';
 import { useAccountSession } from './lib/hooks/useAccount';
 import { WorkspaceLayoutContextProvider } from './lib/layout/layout-provider';
 import { WorkspaceViewProvider } from './lib/layout/provider';
@@ -60,7 +58,7 @@ const AppContent = observer(function AppContent() {
   // Boot splash: main/full-app windows only — detached task/comparison/AI Lab windows
   // pop open instantly without the kernel boot screen.
   const [bootScreenDone, setBootScreenDone] = useState(
-    isTaskWindowLaunch || isComparisonWindowLaunch || isAiLabWindowLaunch || isDoctorWindowLaunch
+    isTaskWindowLaunch || isComparisonWindowLaunch || isAiLabWindowLaunch
   );
 
   // Computed once when queries first resolve while in onboarding. Never updated
@@ -91,22 +89,13 @@ const AppContent = observer(function AppContent() {
   };
 
   const handleOpenSettingsFromMenu = useCallback(() => {
-    if (
-      isTaskWindowLaunch ||
-      isComparisonWindowLaunch ||
-      isAiLabWindowLaunch ||
-      isDoctorWindowLaunch
-    )
-      return false;
+    if (isTaskWindowLaunch || isComparisonWindowLaunch || isAiLabWindowLaunch) return false;
     if (view === 'onboarding' && stepsNeeded.length > 0) return false;
     setView('workspace');
     return true;
   }, [view, stepsNeeded.length]);
 
   const renderContent = () => {
-    if (isDoctorWindowLaunch) {
-      return <DoctorWindow />;
-    }
     if (isAiLabWindowLaunch) {
       const target = getAiLabWindowLaunchTarget();
       return target ? <AiLabAppWindow target={target} /> : null;
@@ -141,10 +130,9 @@ const AppContent = observer(function AppContent() {
               <WorkspaceViewProvider>
                 <AppMenuEvents onOpenSettings={handleOpenSettingsFromMenu} />
                 <ReviewOrchestrationEvents />
-                {!isTaskWindowLaunch &&
-                  !isComparisonWindowLaunch &&
-                  !isAiLabWindowLaunch &&
-                  !isDoctorWindowLaunch && <AiLabBuildEvents />}
+                {!isTaskWindowLaunch && !isComparisonWindowLaunch && !isAiLabWindowLaunch && (
+                  <AiLabBuildEvents />
+                )}
                 <RightSidebarProvider>
                   <ThemeProvider>
                     {renderContent()}

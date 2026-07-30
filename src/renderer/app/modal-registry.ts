@@ -4,6 +4,7 @@ import { NewTaskModal } from '@renderer/app/new-task-modal';
 import { WorkspaceResourceDetailsModal } from '@renderer/app/workspace-resource-details-modal';
 import { AgentEditModal } from '@renderer/features/agents-config/agent-edit-modal';
 import { CommandPaletteModal } from '@renderer/features/command-palette/command-palette-modal';
+import { DoctorModal } from '@renderer/features/doctor/doctor-modal';
 import { CreateFeatureModal } from '@renderer/features/features/create-feature-modal';
 import { FeatureArtifactModal } from '@renderer/features/features/feature-artifact-modal';
 import { IntegrationSetupModal } from '@renderer/features/integrations/integration-setup-modal';
@@ -65,6 +66,7 @@ export function createModal<TProps, TResult>(
 }
 
 export const modalRegistry = {
+  doctorModal: createModal(DoctorModal, { size: 'xl' }),
   commandPaletteModal: createModal(CommandPaletteModal, { size: 'md' }),
   workspaceResourceDetailsModal: createModal(WorkspaceResourceDetailsModal, { size: 'lg' }),
   createFeatureModal: createModal(CreateFeatureModal, { size: 'md' }),
