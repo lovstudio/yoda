@@ -6,8 +6,10 @@ import { promisify } from 'node:util';
 import { app, clipboard, shell } from 'electron';
 import {
   LITELLM_MANAGED_ADMIN_URL,
+  LITELLM_MANAGED_ADMIN_USERNAME,
   LITELLM_MANAGED_ENDPOINT,
   type LiteLlmManagedActionResult,
+  type LiteLlmManagedCredentialActionResult,
   type LiteLlmManagedOperation,
   type LiteLlmManagedStatus,
 } from '@shared/litellm-managed';
@@ -173,7 +175,7 @@ services:
     environment:
       LITELLM_MASTER_KEY: "\${LITELLM_MASTER_KEY}"
       LITELLM_SALT_KEY: "\${LITELLM_SALT_KEY}"
-      UI_USERNAME: "admin"
+      UI_USERNAME: "${LITELLM_MANAGED_ADMIN_USERNAME}"
       UI_PASSWORD: "\${LITELLM_MASTER_KEY}"
       DATABASE_URL: "postgresql://litellm:\${LITELLM_POSTGRES_PASSWORD}@db:5432/litellm"
       STORE_MODEL_IN_DB: "True"
@@ -420,17 +422,26 @@ export class LiteLlmManagedService {
     return false;
   }
 
-  async openAdmin(): Promise<{ success: boolean; error?: string }> {
+  async copyAdminPassword(): Promise<LiteLlmManagedCredentialActionResult> {
+    try {
+      await this.copyAdminPasswordToClipboard();
+      return { success: true };
+    } catch (error) {
+      log.error('Failed to copy LiteLLM administrator password:', error);
+      return {
+        success: false,
+        error: errorMessage(error, 'Failed to copy LiteLLM administrator password.'),
+      };
+    }
+  }
+
+  async openAdmin(): Promise<LiteLlmManagedCredentialActionResult> {
     try {
       const status = await this.getStatus();
       if (status.state !== 'running') {
         return { success: false, error: 'LiteLLM is not running.' };
       }
-      const masterKey = await this.secretStore.getSecret(MASTER_KEY_SECRET);
-      if (!masterKey) {
-        return { success: false, error: 'LiteLLM administrator credential is missing.' };
-      }
-      this.writeClipboard(masterKey);
+      await this.copyAdminPasswordToClipboard();
       await this.openExternal(LITELLM_MANAGED_ADMIN_URL);
       return { success: true };
     } catch (error) {
@@ -440,6 +451,14 @@ export class LiteLlmManagedService {
         error: errorMessage(error, 'Failed to open LiteLLM Admin UI.'),
       };
     }
+  }
+
+  private async copyAdminPasswordToClipboard(): Promise<void> {
+    const masterKey = await this.secretStore.getSecret(MASTER_KEY_SECRET);
+    if (!masterKey) {
+      throw new Error('LiteLLM administrator credential is missing.');
+    }
+    this.writeClipboard(masterKey);
   }
 
   private async runExclusive(

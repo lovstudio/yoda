@@ -1,4 +1,5 @@
 import {
+  Copy,
   Download,
   ExternalLink,
   Loader2,
@@ -11,12 +12,14 @@ import {
 import { useTranslation } from 'react-i18next';
 import {
   LITELLM_DOCKER_DESKTOP_URL,
+  LITELLM_MANAGED_ADMIN_USERNAME,
   LITELLM_MANAGED_ENDPOINT,
   type LiteLlmManagedOperation,
   type LiteLlmManagedState,
 } from '@shared/litellm-managed';
 import type { MaasConnection } from '@shared/maas';
 import {
+  useCopyLiteLlmAdminPassword,
   useInstallLiteLlm,
   useLiteLlmManagedStatus,
   useMaasConnections,
@@ -71,6 +74,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
   const start = useStartLiteLlm();
   const stop = useStopLiteLlm();
   const startDocker = useStartDockerForLiteLlm();
+  const copyAdminPassword = useCopyLiteLlmAdminPassword();
   const openAdmin = useOpenLiteLlmAdmin();
 
   const status = statusQuery.data;
@@ -80,6 +84,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     start.isPending ||
     stop.isPending ||
     startDocker.isPending ||
+    copyAdminPassword.isPending ||
     openAdmin.isPending;
   const remoteConnection =
     connection?.connected &&
@@ -175,6 +180,22 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     } catch (error) {
       toast({
         title: t('settings.integrationsTab.litellmOpenAdminFailed'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCopyAdminPassword = async () => {
+    try {
+      await copyAdminPassword.mutateAsync();
+      toast({
+        title: t('settings.integrationsTab.litellmAdminPasswordCopied'),
+        description: t('settings.integrationsTab.litellmAdminPasswordCopiedHint'),
+      });
+    } catch (error) {
+      toast({
+        title: t('settings.integrationsTab.litellmCopyAdminPasswordFailed'),
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
       });
@@ -388,8 +409,7 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
         <Button
           type="button"
           variant="ghost"
-          size="icon"
-          className="h-8 w-8"
+          size="sm"
           disabled={operationPending}
           aria-label={t('settings.integrationsTab.litellmStop')}
           onClick={() =>
@@ -401,20 +421,21 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
           }
         >
           {stop.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
           ) : (
-            <Power className="h-4 w-4" />
+            <Power className="mr-1.5 h-4 w-4" />
           )}
+          {t('settings.integrationsTab.litellmStopService')}
         </Button>
       </>
     );
   };
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex w-full items-start gap-4 rounded-lg border border-muted bg-muted/20 p-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted/50">
-          <Waypoints className="h-8 w-8 text-primary" />
+    <div className="@container self-start" data-testid="litellm-integration-card">
+      <div className="flex w-full items-start gap-3 rounded-lg border border-muted bg-muted/20 p-4">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/50">
+          <Waypoints className="h-6 w-6 text-primary" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -433,6 +454,35 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
             </span>
           </div>
           <p className="mt-0.5 text-sm leading-5 text-muted-foreground">{description}</p>
+          {!remoteConnection && status?.state === 'running' && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-l-2 border-primary/30 pl-3">
+              <div className="flex shrink-0 items-center gap-2 text-xs">
+                <span className="text-muted-foreground">
+                  {t('settings.integrationsTab.litellmAdminAccount')}
+                </span>
+                <code className="rounded bg-muted px-1.5 py-0.5 font-mono font-medium text-foreground">
+                  {LITELLM_MANAGED_ADMIN_USERNAME}
+                </code>
+              </div>
+              <p className="min-w-48 flex-1 text-xs leading-4 text-muted-foreground">
+                {t('settings.integrationsTab.litellmAdminPasswordDescription')}
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                disabled={operationPending}
+                onClick={handleCopyAdminPassword}
+              >
+                {copyAdminPassword.isPending ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Copy className="mr-1 h-3.5 w-3.5" />
+                )}
+                {t('settings.integrationsTab.litellmCopyAdminPassword')}
+              </Button>
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-2">{renderActions()}</div>
         </div>
       </div>
