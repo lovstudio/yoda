@@ -10,6 +10,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { AgentReplyDisplayLevel } from '@shared/agent-reply-display';
 import type {
   ClaudeSessionPrompt,
   Conversation,
@@ -49,7 +50,6 @@ import {
 } from '@renderer/features/tasks/components/task-menu-session-info';
 import { useConversationPromptRestore } from '@renderer/features/tasks/conversations/use-conversation-prompt-restore';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
-import type { AgentReplyDisplayLevel } from '@renderer/features/tasks/session-conversation';
 import { SessionConversationList } from '@renderer/features/tasks/session-conversation-list';
 import {
   resolveSessionConversation,

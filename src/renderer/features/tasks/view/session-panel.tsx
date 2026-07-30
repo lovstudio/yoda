@@ -11,12 +11,12 @@ import {
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
   AGENT_REPLY_DISPLAY_LEVELS,
   isAgentReplyDisplayLevel,
   type AgentReplyDisplayLevel,
-} from '@renderer/features/tasks/session-conversation';
+} from '@shared/agent-reply-display';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import {
   DropdownMenu,

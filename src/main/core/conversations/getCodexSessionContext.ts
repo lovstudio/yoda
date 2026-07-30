@@ -927,6 +927,25 @@ function pushMessage(
   message: SessionTranscriptMessage,
   turnId: string | null
 ): void {
+  if (message.role === 'assistant' && message.phase === 'final' && turnId) {
+    let existingFinalIndex = -1;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const entry = messages[index];
+      if (
+        entry?.turnId === turnId &&
+        entry.value.role === 'assistant' &&
+        entry.value.phase === 'final'
+      ) {
+        existingFinalIndex = index;
+        break;
+      }
+    }
+    if (existingFinalIndex >= 0) {
+      messages[existingFinalIndex] = { value: message, turnId };
+      return;
+    }
+  }
+
   const previous = messages[messages.length - 1]?.value;
   if (previous?.role === message.role && previous.text === message.text) {
     if (

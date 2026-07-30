@@ -1,13 +1,13 @@
 import { Loader2, MoreHorizontal } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { AgentReplyDisplayLevel } from '@shared/agent-reply-display';
 import type { ClaudeSessionPrompt, SessionTranscriptMessage } from '@shared/conversations';
 import { displaySessionPromptText } from '@renderer/features/tasks/context-panel-prompt-display';
 import { SessionPromptRestoreButton } from '@renderer/features/tasks/conversations/session-prompt-restore-button';
 import {
   buildSessionConversationItems,
   buildSessionConversationPreviewItems,
-  type AgentReplyDisplayLevel,
   type SessionConversationItem,
 } from '@renderer/features/tasks/session-conversation';
 import { MarkdownRenderer } from '@renderer/lib/ui/markdown-renderer';

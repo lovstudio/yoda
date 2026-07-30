@@ -551,7 +551,12 @@ describe('getCodexSessionContext', () => {
         codexEvent('task_started', { turn_id: 'turn-1' }),
         codexEvent('user_message', { message: 'Build it' }),
         codexResponse('assistant', 'I will inspect the code.', 'turn-1', 'commentary'),
-        codexResponse('assistant', 'Implemented and tested.', 'turn-1', 'final_answer'),
+        codexResponse(
+          'assistant',
+          'Implemented and tested.\n\n<oai-mem-citation>internal metadata</oai-mem-citation>',
+          'turn-1',
+          'final_answer'
+        ),
         codexEvent('task_complete', {
           turn_id: 'turn-1',
           last_agent_message: 'Implemented and tested.',

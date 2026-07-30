@@ -1,5 +1,6 @@
 import { open, readFile, stat } from 'node:fs/promises';
 import type { Conversation } from '@shared/conversations';
+import type { MobileSessionTranscriptAgentPhase } from '@shared/mobile-api';
 import {
   readCodexThreadRolloutPath,
   resolveCodexStatePath,
@@ -44,6 +45,7 @@ export type CodexRolloutTranscriptEntry = {
   id: string;
   timestamp: string | null;
   role: CodexRolloutTranscriptEntryRole;
+  agentPhase?: MobileSessionTranscriptAgentPhase;
   title?: string;
   format: 'markdown' | 'code' | 'plain';
   content: string;
@@ -477,6 +479,7 @@ function compactIncrementalAssistantBlocks(
       previous &&
       previous.role === 'assistant' &&
       block.role === 'assistant' &&
+      previous.agentPhase === block.agentPhase &&
       (previous.format === 'markdown' || previous.format === 'plain') &&
       (block.format === 'markdown' || block.format === 'plain')
     ) {
@@ -563,6 +566,7 @@ function parseEventTranscriptEntry(
           index,
           timestamp,
           role: 'assistant',
+          agentPhase: codexAgentPhase(payload.phase),
           title: 'Codex',
           content: message,
         })
@@ -696,6 +700,7 @@ function parseResponseTranscriptEntry(
         index,
         timestamp,
         role: role === 'user' ? 'user' : 'assistant',
+        agentPhase: role === 'assistant' ? codexAgentPhase(payload.phase) : undefined,
         title: role === 'user' ? 'You' : 'Codex',
         content,
       }),
@@ -745,6 +750,7 @@ function transcriptEntry({
   index,
   timestamp,
   role,
+  agentPhase,
   title,
   format = 'markdown',
   content,
@@ -752,6 +758,7 @@ function transcriptEntry({
   index: number;
   timestamp: string | null;
   role: CodexRolloutTranscriptEntryRole;
+  agentPhase?: MobileSessionTranscriptAgentPhase;
   title?: string;
   format?: CodexRolloutTranscriptEntry['format'];
   content: string;
@@ -760,10 +767,17 @@ function transcriptEntry({
     id: `${timestamp ?? 'no-time'}-${role}-${index}`,
     timestamp,
     role,
+    ...(agentPhase ? { agentPhase } : {}),
     title,
     format,
     content: content.trimEnd(),
   };
+}
+
+function codexAgentPhase(value: unknown): MobileSessionTranscriptAgentPhase | undefined {
+  if (value === 'final_answer') return 'final';
+  if (value === 'commentary') return 'commentary';
+  return undefined;
 }
 
 function formatEntry(entry: HistoryEntry): string {
