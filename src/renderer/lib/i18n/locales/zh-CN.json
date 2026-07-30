@@ -2655,6 +2655,10 @@
     "nextRunLabel": "下次 {{time}}",
     "runFailed": "自动化运行失败",
     "saveFailed": "自动化保存失败",
+    "source": {
+      "codex": "Codex 同步",
+      "codexHint": "配置保存在 Codex 自动化目录，执行与调度由 Yoda 托管"
+    },
     "status": {
       "active": "启用",
       "paused": "暂停"

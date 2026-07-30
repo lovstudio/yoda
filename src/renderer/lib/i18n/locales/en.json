@@ -2655,6 +2655,10 @@
     "nextRunLabel": "Next {{time}}",
     "runFailed": "Automation failed",
     "saveFailed": "Failed to save automation",
+    "source": {
+      "codex": "Synced from Codex",
+      "codexHint": "Stored in the Codex automations directory and scheduled by Yoda"
+    },
     "status": {
       "active": "Active",
       "paused": "Paused"

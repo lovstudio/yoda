@@ -328,6 +328,7 @@ function prepareShutdown(mode: TeardownMode): Promise<void> {
       updateService.dispose();
       prSyncScheduler.dispose();
       promptSourceService.dispose();
+      automationScheduler.dispose();
       const [extensionResult, gitWatcherResult, projectManagerResult] = await Promise.allSettled([
         extensionMarketplaceService.dispose(),
         gitWatcherRegistry.dispose(),

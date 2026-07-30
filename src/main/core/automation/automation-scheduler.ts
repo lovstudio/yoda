@@ -20,6 +20,7 @@ export class AutomationScheduler {
     if (this.initialized) return;
     this.initialized = true;
     automationRunner.initialize();
+    await automationService.initialize();
     await automationService.sweepInterruptedRuns();
     await this.reload();
     // Rebuild whenever automations change (CRUD). Run-state events use a
@@ -32,6 +33,12 @@ export class AutomationScheduler {
   private clear(): void {
     for (const job of this.jobs.values()) job.stop();
     this.jobs.clear();
+  }
+
+  dispose(): void {
+    this.clear();
+    automationService.dispose();
+    this.initialized = false;
   }
 
   async reload(): Promise<void> {

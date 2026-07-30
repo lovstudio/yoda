@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Cron } from 'croner';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, like, sql } from 'drizzle-orm';
 import {
   automationCreateInputSchema,
   automationUpdateInputSchema,
@@ -18,6 +18,10 @@ import { db } from '@main/db/client';
 import { automationRuns, automations } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
+import {
+  CODEX_AUTOMATION_ID_PREFIX,
+  readCodexAutomationSnapshots,
+} from './codex-automation-source';
 
 type AutomationRow = typeof automations.$inferSelect;
 type AutomationRunRow = typeof automationRuns.$inferSelect;
@@ -25,6 +29,7 @@ type AutomationRunRow = typeof automationRuns.$inferSelect;
 function toAutomation(row: AutomationRow): Automation {
   return {
     id: row.id,
+    source: row.id.startsWith(CODEX_AUTOMATION_ID_PREFIX) ? 'codex' : 'yoda',
     title: row.title,
     workspaceName: row.workspaceName,
     prompt: row.prompt,
@@ -86,6 +91,24 @@ export function computeNextRun(
 export class AutomationService {
   private migration: Promise<void> | null = null;
   private runSweep: Promise<void> | null = null;
+  private codexSync: Promise<boolean> | null = null;
+  private codexSyncTimer: NodeJS.Timeout | null = null;
+  private codexSyncErrors = new Set<string>();
+
+  async initialize(): Promise<void> {
+    await this.ensureMigrated();
+    await this.syncCodexAutomations();
+    if (this.codexSyncTimer) return;
+    this.codexSyncTimer = setInterval(() => {
+      void this.syncCodexAutomations();
+    }, 60_000);
+    this.codexSyncTimer.unref();
+  }
+
+  dispose(): void {
+    if (this.codexSyncTimer) clearInterval(this.codexSyncTimer);
+    this.codexSyncTimer = null;
+  }
 
   /** Moves any legacy app_settings entries into the table exactly once. */
   private async ensureMigrated(): Promise<void> {
@@ -121,8 +144,110 @@ export class AutomationService {
     return this.migration;
   }
 
+  /**
+   * Reconciles Codex's file-backed automations into Yoda's runnable automation
+   * table. A deterministic ID makes the operation idempotent, while source
+   * rows remain read-only in the renderer so the TOML file stays authoritative.
+   */
+  private async syncCodexAutomations(): Promise<boolean> {
+    if (this.codexSync) return this.codexSync;
+    this.codexSync = (async () => {
+      const source = await readCodexAutomationSnapshots();
+      const currentErrors = new Set(source.errors.map((item) => `${item.path}\0${item.message}`));
+      for (const item of source.errors) {
+        const key = `${item.path}\0${item.message}`;
+        if (!this.codexSyncErrors.has(key)) {
+          log.warn('[automation] failed to read Codex automation', item);
+        }
+      }
+      this.codexSyncErrors = currentErrors;
+      if (!source.available) return false;
+
+      const existing = await db
+        .select()
+        .from(automations)
+        .where(like(automations.id, `${CODEX_AUTOMATION_ID_PREFIX}%`));
+      const existingById = new Map(existing.map((row) => [row.id, row]));
+      let changed = false;
+
+      for (const [index, item] of source.automations.entries()) {
+        const row = existingById.get(item.id);
+        const values = {
+          id: item.id,
+          title: item.title,
+          workspaceName: item.workspaceName,
+          prompt: item.prompt,
+          runtime: 'codex',
+          scheduleLabel: item.scheduleLabel,
+          status: item.status,
+          triggerKind: item.triggerKind,
+          cronExpr: item.cronExpr,
+          timezone: item.timezone,
+          projectId: null,
+          sortOrder: -10_000 + index,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        } satisfies Partial<AutomationRow> & Pick<AutomationRow, 'id'>;
+
+        if (!row) {
+          await db.insert(automations).values({
+            ...values,
+            nextRunAt: computeNextRun(item.triggerKind, item.cronExpr, item.timezone),
+            lastRunAt: null,
+          });
+          changed = true;
+          continue;
+        }
+
+        const isCurrent =
+          row.title === values.title &&
+          row.workspaceName === values.workspaceName &&
+          row.prompt === values.prompt &&
+          row.runtime === values.runtime &&
+          row.scheduleLabel === values.scheduleLabel &&
+          row.status === values.status &&
+          row.triggerKind === values.triggerKind &&
+          row.cronExpr === values.cronExpr &&
+          row.timezone === values.timezone &&
+          row.projectId === values.projectId &&
+          row.sortOrder === values.sortOrder &&
+          row.createdAt === values.createdAt &&
+          row.updatedAt === values.updatedAt;
+        if (isCurrent) continue;
+
+        await db
+          .update(automations)
+          .set({
+            ...values,
+            nextRunAt: computeNextRun(item.triggerKind, item.cronExpr, item.timezone),
+          })
+          .where(eq(automations.id, item.id));
+        changed = true;
+      }
+
+      const managedIds = new Set(source.managedIds);
+      const staleIds = existing.filter((row) => !managedIds.has(row.id)).map((row) => row.id);
+      if (staleIds.length > 0) {
+        await db.delete(automations).where(inArray(automations.id, staleIds));
+        changed = true;
+      }
+
+      if (changed) {
+        log.info('[automation] synchronized Codex automations', {
+          count: source.automations.length,
+        });
+        events.emit(automationsUpdatedChannel, undefined);
+      }
+      return changed;
+    })().finally(() => {
+      this.codexSync = null;
+    });
+    return this.codexSync;
+  }
+
   async list(): Promise<Automation[]> {
     await this.ensureMigrated();
+    await this.syncCodexAutomations();
     const rows = await db
       .select()
       .from(automations)
@@ -132,6 +257,7 @@ export class AutomationService {
 
   async get(id: string): Promise<Automation | null> {
     await this.ensureMigrated();
+    if (id.startsWith(CODEX_AUTOMATION_ID_PREFIX)) await this.syncCodexAutomations();
     const [row] = await db.select().from(automations).where(eq(automations.id, id)).limit(1);
     return row ? toAutomation(row) : null;
   }
@@ -170,6 +296,7 @@ export class AutomationService {
 
   async update(id: string, patch: AutomationUpdateInput): Promise<Automation | null> {
     await this.ensureMigrated();
+    if (id.startsWith(CODEX_AUTOMATION_ID_PREFIX)) return this.get(id);
     const parsed = automationUpdateInputSchema.parse(patch);
     const [existing] = await db.select().from(automations).where(eq(automations.id, id)).limit(1);
     if (!existing) return null;
@@ -195,6 +322,10 @@ export class AutomationService {
 
   async remove(id: string): Promise<void> {
     await this.ensureMigrated();
+    if (id.startsWith(CODEX_AUTOMATION_ID_PREFIX)) {
+      await this.syncCodexAutomations();
+      return;
+    }
     await db.delete(automations).where(eq(automations.id, id));
     events.emit(automationsUpdatedChannel, undefined);
   }
