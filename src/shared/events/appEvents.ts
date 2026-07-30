@@ -1,6 +1,5 @@
 import type { DeepLinkTarget } from '@shared/deep-links';
 import type { DependencyStatusUpdatedEvent } from '@shared/dependencies';
-import type { DoctorMainDestination } from '@shared/doctor-window';
 import { defineEvent } from '@shared/ipc/events';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { TaskWindowTarget } from '@shared/task-window';
@@ -31,8 +30,6 @@ export const notificationFocusTaskChannel = defineEvent<{
   taskId: string;
   conversationId?: string;
 }>('notification:focus-task');
-
-export const doctorNavigateMainChannel = defineEvent<DoctorMainDestination>('doctor:navigate-main');
 
 export const deepLinkOpenChannel = defineEvent<DeepLinkTarget>('deep-link:open');
 

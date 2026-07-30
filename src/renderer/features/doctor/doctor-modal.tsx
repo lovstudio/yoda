@@ -32,7 +32,6 @@ import type {
   DoctorSnapshot,
   DoctorWorkspaceReport,
 } from '@shared/doctor';
-import type { DoctorMainDestination } from '@shared/doctor-window';
 import type { RuntimeId } from '@shared/runtime-registry';
 import { RuntimeLogo } from '@renderer/features/agents/components/RuntimeLogo';
 import {
@@ -40,19 +39,23 @@ import {
   getAgentUninstallErrorMessage,
 } from '@renderer/lib/components/agent-selector/agent-install';
 import { useToast } from '@renderer/lib/hooks/use-toast';
-import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { rpc } from '@renderer/lib/ipc';
-import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { ModalRenderer } from '@renderer/lib/modal/modal-renderer';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
+import { useShowModal, type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
+import { DialogHeader, DialogTitle } from '@renderer/lib/ui/dialog';
 import { Input } from '@renderer/lib/ui/input';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
-import { Toaster } from '@renderer/lib/ui/toaster';
 import { cn } from '@renderer/utils/utils';
 
 type DoctorStep = 'environment' | 'configuration' | 'workspace' | 'score';
+type DoctorDestination =
+  | { view: 'agents'; runtimeId?: RuntimeId }
+  | { view: 'skills' }
+  | { view: 'mcp' }
+  | { view: 'projects' };
 
 const STEP_ICONS = {
   environment: MonitorCheck,
@@ -63,14 +66,16 @@ const STEP_ICONS = {
 
 const QUERY_KEY = ['doctor', 'snapshot'] as const;
 
-export const DoctorWindow = observer(function DoctorWindow() {
-  useTheme();
+export const DoctorModal = observer(function DoctorModal(_props: BaseModalProps<void>) {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { navigate } = useNavigate();
   const queryClient = useQueryClient();
-  const showConfirm = useShowModal('confirmActionModal');
+  const showAddProject = useShowModal('addProjectModal');
   const [step, setStep] = useState<DoctorStep>('environment');
   const [selectedRuntimeId, setSelectedRuntimeId] = useState<RuntimeId | null>(null);
+  const [pendingUninstallId, setPendingUninstallId] = useState<RuntimeId | null>(null);
+  const [uninstallingId, setUninstallingId] = useState<RuntimeId | null>(null);
   const [runtimeSearch, setRuntimeSearch] = useState('');
   const [projectSearch, setProjectSearch] = useState('');
   const snapshotQuery = useQuery<DoctorSnapshot>({
@@ -99,10 +104,6 @@ export const DoctorWindow = observer(function DoctorWindow() {
     snapshot?.runtimes.find((runtime) => runtime.id === selectedRuntimeId) ??
     snapshot?.runtimes.find((runtime) => runtime.installed) ??
     null;
-
-  useEffect(() => {
-    document.title = t('doctor.title');
-  }, [t]);
 
   useEffect(() => {
     if (!selectedRuntimeId && snapshot) {
@@ -138,40 +139,50 @@ export const DoctorWindow = observer(function DoctorWindow() {
     await refresh();
   };
 
-  const uninstallRuntime = (runtime: DoctorRuntimeReport) => {
-    showConfirm({
-      title: t('doctor.uninstallTitle', { name: runtime.name }),
-      description: t('doctor.uninstallDescription', { name: runtime.name }),
-      confirmLabel: t('doctor.uninstall'),
-      onSuccess: () => {
-        void appState.dependencies.uninstall(runtime.id).then(async (result) => {
-          if (!result.success) {
-            toast({
-              title: t('doctor.uninstallFailed', { name: runtime.name }),
-              description: getAgentUninstallErrorMessage(result.error),
-              variant: 'destructive',
-            });
-            return;
-          }
-          toast({ title: t('doctor.uninstallSuccess', { name: runtime.name }) });
-          await refresh();
-        });
-      },
-    });
+  const uninstallRuntime = async (runtime: DoctorRuntimeReport) => {
+    setUninstallingId(runtime.id);
+    const result = await appState.dependencies.uninstall(runtime.id);
+    setUninstallingId(null);
+    if (!result.success) {
+      toast({
+        title: t('doctor.uninstallFailed', { name: runtime.name }),
+        description: getAgentUninstallErrorMessage(result.error),
+        variant: 'destructive',
+      });
+      return;
+    }
+    setPendingUninstallId(null);
+    toast({ title: t('doctor.uninstallSuccess', { name: runtime.name }) });
+    await refresh();
   };
 
-  const openMain = (destination: DoctorMainDestination) => {
-    void rpc.app.focusDoctorDestination(destination);
+  const openDestination = (destination: DoctorDestination) => {
+    if (destination.view === 'skills') {
+      navigate('skills');
+      return;
+    }
+    if (destination.view === 'mcp') {
+      navigate('settings', { tab: 'mcp' });
+      return;
+    }
+    if (destination.view === 'agents') {
+      navigate('settings', { tab: 'clis-models', runtimeId: destination.runtimeId });
+      return;
+    }
+    navigate('projectsOverview');
+    showAddProject({ strategy: 'local', mode: 'pick' });
   };
 
   return (
     <>
-      <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
-        <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background-secondary pl-20 pr-2 [-webkit-app-region:drag] dark:bg-background">
-          <Stethoscope className="size-4 text-foreground-muted" />
-          <span className="text-xs font-medium">{t('doctor.title')}</span>
+      <DialogHeader className="min-w-0 flex-1">
+        <Stethoscope className="size-4 shrink-0 text-foreground-muted" />
+        <DialogTitle className="shrink-0 text-sm font-medium normal-case tracking-normal text-foreground">
+          {t('doctor.title')}
+        </DialogTitle>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <span className="text-xs text-foreground-passive">{t('doctor.windowSubtitle')}</span>
-          <div className="ml-auto flex items-center gap-2 [-webkit-app-region:no-drag]">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             {snapshot ? (
               <span className="text-[11px] text-foreground-passive">
                 {t('doctor.scannedAt', { time: formatTime(snapshot.generatedAt) })}
@@ -188,8 +199,9 @@ export const DoctorWindow = observer(function DoctorWindow() {
               <RefreshCw className={cn('size-3.5', rescan.isPending && 'animate-spin')} />
             </Button>
           </div>
-        </header>
-
+        </div>
+      </DialogHeader>
+      <div className="flex h-[min(700px,calc(100dvh-7rem))] min-h-0 w-full overflow-hidden border-t border-border bg-background text-foreground">
         {snapshotQuery.isPending ? (
           <WindowState>
             <Loader2 className="size-5 animate-spin" />
@@ -224,10 +236,17 @@ export const DoctorWindow = observer(function DoctorWindow() {
                   <ConfigurationStep
                     snapshot={snapshot}
                     selected={selectedRuntime}
-                    onSelect={setSelectedRuntimeId}
+                    onSelect={(runtimeId) => {
+                      setPendingUninstallId(null);
+                      setSelectedRuntimeId(runtimeId);
+                    }}
                     onToggle={toggleRuntime}
                     onUninstall={uninstallRuntime}
-                    onOpenMain={openMain}
+                    pendingUninstallId={pendingUninstallId}
+                    uninstallingId={uninstallingId}
+                    onRequestUninstall={setPendingUninstallId}
+                    onCancelUninstall={() => setPendingUninstallId(null)}
+                    onOpenMain={openDestination}
                   />
                 ) : null}
                 {step === 'workspace' ? (
@@ -239,7 +258,7 @@ export const DoctorWindow = observer(function DoctorWindow() {
                     scanningProjectId={workspaceScan.isPending ? workspaceScan.variables : null}
                     error={workspaceScan.isError ? workspaceScan.error : null}
                     onScan={(projectId) => workspaceScan.mutate(projectId)}
-                    onAddProject={() => openMain({ view: 'projects' })}
+                    onAddProject={() => openDestination({ view: 'projects' })}
                   />
                 ) : null}
                 {step === 'score' ? <ScoreStep snapshot={snapshot} /> : null}
@@ -248,8 +267,6 @@ export const DoctorWindow = observer(function DoctorWindow() {
           </div>
         )}
       </div>
-      <ModalRenderer />
-      <Toaster />
     </>
   );
 });
@@ -314,22 +331,17 @@ function DoctorRail({
 
 function StepHeader({
   eyebrow,
-  title,
   description,
   action,
 }: {
   eyebrow: string;
-  title: string;
   description: string;
   action?: React.ReactNode;
 }) {
   return (
     <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
       <div>
-        <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.16em] text-foreground-passive">
-          {eyebrow}
-        </div>
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{eyebrow}</h1>
         <p className="mt-1 max-w-2xl text-sm leading-relaxed text-foreground-muted">
           {description}
         </p>
@@ -364,7 +376,6 @@ function EnvironmentStep({
     <>
       <StepHeader
         eyebrow={`01 · ${t('doctor.steps.environment')}`}
-        title={t('doctor.environment.title')}
         description={t('doctor.environment.description')}
       />
       <div className="mb-4 grid grid-cols-3 divide-x divide-border rounded-lg border border-border">
@@ -466,14 +477,22 @@ function ConfigurationStep({
   onSelect,
   onToggle,
   onUninstall,
+  pendingUninstallId,
+  uninstallingId,
+  onRequestUninstall,
+  onCancelUninstall,
   onOpenMain,
 }: {
   snapshot: DoctorSnapshot;
   selected: DoctorRuntimeReport | null;
   onSelect: (id: RuntimeId) => void;
   onToggle: (runtime: DoctorRuntimeReport) => Promise<void>;
-  onUninstall: (runtime: DoctorRuntimeReport) => void;
-  onOpenMain: (destination: DoctorMainDestination) => void;
+  onUninstall: (runtime: DoctorRuntimeReport) => Promise<void>;
+  pendingUninstallId: RuntimeId | null;
+  uninstallingId: RuntimeId | null;
+  onRequestUninstall: (id: RuntimeId) => void;
+  onCancelUninstall: () => void;
+  onOpenMain: (destination: DoctorDestination) => void;
 }) {
   const { t } = useTranslation();
   const installed = snapshot.runtimes.filter((runtime) => runtime.installed);
@@ -481,7 +500,6 @@ function ConfigurationStep({
     <>
       <StepHeader
         eyebrow={`02 · ${t('doctor.steps.configuration')}`}
-        title={t('doctor.configuration.title')}
         description={t('doctor.configuration.description')}
       />
       {installed.length === 0 ? (
@@ -517,6 +535,10 @@ function ConfigurationStep({
               runtime={selected}
               onToggle={onToggle}
               onUninstall={onUninstall}
+              uninstallPending={pendingUninstallId === selected.id}
+              uninstalling={uninstallingId === selected.id}
+              onRequestUninstall={() => onRequestUninstall(selected.id)}
+              onCancelUninstall={onCancelUninstall}
               onOpenMain={onOpenMain}
             />
           ) : null}
@@ -530,12 +552,20 @@ function RuntimeConfiguration({
   runtime,
   onToggle,
   onUninstall,
+  uninstallPending,
+  uninstalling,
+  onRequestUninstall,
+  onCancelUninstall,
   onOpenMain,
 }: {
   runtime: DoctorRuntimeReport;
   onToggle: (runtime: DoctorRuntimeReport) => Promise<void>;
-  onUninstall: (runtime: DoctorRuntimeReport) => void;
-  onOpenMain: (destination: DoctorMainDestination) => void;
+  onUninstall: (runtime: DoctorRuntimeReport) => Promise<void>;
+  uninstallPending: boolean;
+  uninstalling: boolean;
+  onRequestUninstall: () => void;
+  onCancelUninstall: () => void;
+  onOpenMain: (destination: DoctorDestination) => void;
 }) {
   const { t } = useTranslation();
   const [changing, setChanging] = useState(false);
@@ -565,9 +595,29 @@ function RuntimeConfiguration({
           {runtime.disabled ? <Power /> : <PowerOff />}
           {t(runtime.disabled ? 'doctor.enable' : 'doctor.disable')}
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => onUninstall(runtime)}>
-          {t('doctor.uninstall')}
-        </Button>
+        {uninstallPending ? (
+          <>
+            <span className="text-xs text-foreground-muted">
+              {t('doctor.uninstallConfirmInline', { name: runtime.name })}
+            </span>
+            <Button size="sm" variant="ghost" disabled={uninstalling} onClick={onCancelUninstall}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={uninstalling}
+              onClick={() => void onUninstall(runtime)}
+            >
+              {uninstalling ? <Loader2 className="animate-spin" /> : null}
+              {t('doctor.uninstall')}
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" variant="ghost" onClick={onRequestUninstall}>
+            {t('doctor.uninstall')}
+          </Button>
+        )}
         <Button
           size="sm"
           variant="ghost"
@@ -780,7 +830,6 @@ function WorkspaceStep({
     <>
       <StepHeader
         eyebrow={`03 · ${t('doctor.steps.workspace')}`}
-        title={t('doctor.workspace.title')}
         description={t('doctor.workspace.description')}
         action={
           <Button size="sm" variant="outline" onClick={onAddProject}>
@@ -907,7 +956,6 @@ function ScoreStep({ snapshot }: { snapshot: DoctorSnapshot }) {
     <>
       <StepHeader
         eyebrow={`04 · ${t('doctor.steps.score')}`}
-        title={t('doctor.score.title')}
         description={t('doctor.score.description')}
       />
       <div className="grid grid-cols-1 gap-5 @2xl:grid-cols-[220px_1fr]">

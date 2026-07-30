@@ -5221,7 +5221,6 @@
     },
     "staticProbeNote": "Doctor 默认执行只读静态检查：客户端可执行文件、Prompt、Skills 与 MCP 配置。远程 MCP 连接状态暂不计分。",
     "environment": {
-      "title": "先确认本机有哪些 Agent 客户端",
       "description": "已安装的客户端优先显示；缺少的客户端可以直接安装。Doctor 只把已启用客户端计入总分。",
       "installed": "已安装",
       "available": "可安装",
@@ -5240,8 +5239,7 @@
     "enableSuccess": "{{name}} 已启用",
     "disableSuccess": "{{name}} 已禁用",
     "uninstall": "卸载",
-    "uninstallTitle": "卸载 {{name}}？",
-    "uninstallDescription": "将调用该客户端登记的包管理器卸载命令。全局 Prompt、Skills 和 MCP 配置文件会保留。",
+    "uninstallConfirmInline": "确认卸载 {{name}}？配置会保留。",
     "uninstallFailed": "{{name}} 卸载失败",
     "uninstallSuccess": "{{name}} 已卸载",
     "advanced": "高级设置",
@@ -5249,7 +5247,6 @@
     "findings": "诊断结果",
     "notConfigured": "未配置",
     "configuration": {
-      "title": "查看一个 Agent 的完整全局 Harness",
       "description": "把客户端、Prompt、Skills 与 MCP 放在同一视图中，避免在多个设置页面之间来回寻找。",
       "emptyTitle": "尚未发现 Agent 客户端",
       "emptyDescription": "先在第一步安装至少一个客户端，再检查它的全局 Harness。",
@@ -5267,7 +5264,6 @@
       "noMcp": "尚未配置 MCP Server。"
     },
     "workspace": {
-      "title": "按需检查一个工作区",
       "description": "选择已有项目后，扫描其 Agent Prompt、Skills、Commands、子 Agent 与 MCP；这一步可以跳过。",
       "add": "添加项目",
       "search": "搜索工作区…",
@@ -5281,7 +5277,6 @@
       "noIssues": "当前工作区未发现结构性问题。"
     },
     "score": {
-      "title": "环境健康度",
       "description": "总分汇总所有已安装且启用的 Agent；禁用客户端和未使用的可选配置不会拖低分数。",
       "caption": "这是配置健康度，不是 Agent 能力或模型质量评分。",
       "byRuntime": "按客户端",

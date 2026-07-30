@@ -15,7 +15,6 @@ import { setupAppCommandProvider } from '@renderer/lib/commands/app-commands';
 import { setupViewCommandProvider } from '@renderer/lib/commands/registry';
 import { wireCommitHistoryInvalidation } from '@renderer/lib/commit-history-invalidation';
 import { isComparisonWindowLaunch } from '@renderer/lib/comparison-window-launch-target';
-import { isDoctorWindowLaunch } from '@renderer/lib/doctor-window-launch';
 import { rpc } from '@renderer/lib/ipc';
 import { wireModelRegistryInvalidation } from '@renderer/lib/monaco/invalidation-bridges';
 import { codeEditorPool } from '@renderer/lib/monaco/monaco-code-pool';
@@ -41,10 +40,7 @@ async function bootstrap() {
   appState.update.start();
   initSoundPlayer();
   const isPrimaryAppWindow =
-    !isTaskWindowLaunch &&
-    !isComparisonWindowLaunch &&
-    !isAiLabWindowLaunch &&
-    !isDoctorWindowLaunch;
+    !isTaskWindowLaunch && !isComparisonWindowLaunch && !isAiLabWindowLaunch;
   if (isPrimaryAppWindow) {
     // Subscribe happens during AppState construction. Hydrate the primary shell
     // immediately, but keep warm/detached windows from duplicating the scan.
@@ -92,17 +88,12 @@ async function bootstrap() {
         },
       },
     });
-  } else if (
-    navResult &&
-    !isComparisonWindowLaunch &&
-    !isAiLabWindowLaunch &&
-    !isDoctorWindowLaunch
-  ) {
+  } else if (navResult && !isComparisonWindowLaunch && !isAiLabWindowLaunch) {
     appState.navigation.restoreSnapshot(navResult);
   }
   // Detached windows are not the app-tab surface — comparison windows tile their
   // own panes, while task and AI Lab windows are single-route, so skip restore.
-  if (!launchTarget && !isComparisonWindowLaunch && !isAiLabWindowLaunch && !isDoctorWindowLaunch) {
+  if (!launchTarget && !isComparisonWindowLaunch && !isAiLabWindowLaunch) {
     const appTabsResult = (allViewState as Record<string, unknown>)?.appTabs;
     if (appTabsResult) {
       appState.appTabs.restoreSnapshot(appTabsResult as Partial<AppTabsSnapshot>);

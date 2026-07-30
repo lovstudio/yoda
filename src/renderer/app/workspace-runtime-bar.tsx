@@ -93,6 +93,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { navigate } = useNavigate();
+  const showDoctorModal = useShowModal('doctorModal');
   const showConfirmActionModal = useShowModal('confirmActionModal');
   const showResourceDetailsModal = useShowModal('workspaceResourceDetailsModal');
   const { value: interfaceSettings, update: updateInterfaceSettings } =
@@ -1233,7 +1234,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         type="button"
         title={t('workspaceRuntime.doctor')}
         aria-label={t('workspaceRuntime.doctor')}
-        onClick={() => void rpc.app.openDoctorWindow()}
+        onClick={() => showDoctorModal({})}
         className="flex h-5 items-center gap-1 rounded px-1.5 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
       >
         <Stethoscope className="size-3.5" />
