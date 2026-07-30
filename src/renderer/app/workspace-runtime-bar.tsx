@@ -865,7 +865,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           ) : null}
         </div>
       ) : null}
-      <span className="flex-1" />
       <Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.config.title')}
@@ -881,7 +880,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           </span>
         </PopoverTrigger>
         <PopoverContent
-          align="end"
+          align="start"
           side="top"
           sideOffset={8}
           className="max-h-[min(32rem,calc(100vh-3rem))] w-96 gap-0 overflow-y-auto border border-border bg-background p-0 text-foreground shadow-lg"
@@ -913,6 +912,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           </div>
         </PopoverContent>
       </Popover>
+      <span className="flex-1" />
       <Popover open={isAgentPopoverOpen} onOpenChange={setIsAgentPopoverOpen}>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.agents.triggerLabel', {

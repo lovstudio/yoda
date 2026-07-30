@@ -9,13 +9,25 @@ describe('Workspace runtime bar responsive layout', () => {
     expect(source).toContain('overflow-hidden whitespace-nowrap');
   });
 
-  it('compacts the right-side action group together while preserving accessible triggers', () => {
+  it('compacts action labels together while preserving accessible triggers', () => {
     expect(source).toContain(
       "const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';"
     );
     expect(source).toContain('className="tabular-nums @max-[1440px]:hidden"');
     expect(source).toContain('className="hidden tabular-nums @max-[1440px]:inline"');
     expect(source.match(/className=\{RUNTIME_BAR_ACTION_LABEL_CLASS\}/g)).toHaveLength(5);
+  });
+
+  it('keeps configuration in the left group and aligns its popover to that group', () => {
+    const configStart = source.indexOf(
+      '<Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>'
+    );
+    const groupSpacer = source.indexOf('<span className="flex-1" />');
+    const configEnd = source.indexOf('</Popover>', configStart);
+
+    expect(configStart).toBeGreaterThan(-1);
+    expect(configStart).toBeLessThan(groupSpacer);
+    expect(source.slice(configStart, configEnd)).toContain('align="start"');
   });
 
   it('progressively removes secondary session copy before compact status visuals', () => {
