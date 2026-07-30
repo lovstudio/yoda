@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  CODEX_AUTOMATION_YODA_MIRROR_MARKER,
   codexRruleToCron,
   parseCodexAutomationToml,
   readCodexAutomationSnapshots,
@@ -19,7 +20,7 @@ afterEach(async () => {
 });
 
 describe('Codex automation source', () => {
-  it('maps an opted-in daily heartbeat into a read-only Yoda mirror', () => {
+  it('maps a native daily heartbeat into a read-only Yoda mirror snapshot', () => {
     const automation = parseCodexAutomationToml(
       [
         'version = 1',
@@ -28,7 +29,6 @@ describe('Codex automation source', () => {
         'name = "每日检查 Lovstudio ICP 备案"',
         'prompt = "检查备案状态"',
         'status = "ACTIVE"',
-        'sync_to_yoda = true',
         'rrule = "FREQ=DAILY;BYHOUR=10;BYMINUTE=0;BYSECOND=0"',
         'created_at = 1785405028000',
         'updated_at = 1785405028000',
@@ -45,16 +45,6 @@ describe('Codex automation source', () => {
       workspaceName: 'Codex',
       createdAt: '2026-07-30T09:50:28.000Z',
     });
-  });
-
-  it('ignores Codex automations that have not opted into the Yoda library', () => {
-    expect(
-      parseCodexAutomationToml(
-        ['id = "codex-only"', 'name = "Codex only"', 'prompt = "Run"', 'status = "ACTIVE"'].join(
-          '\n'
-        )
-      )
-    ).toBeNull();
   });
 
   it('supports the hourly and weekly schedules Codex commonly emits', () => {
@@ -78,9 +68,11 @@ describe('Codex automation source', () => {
     temporaryDirectories.push(root);
     const validDir = join(root, 'valid-task');
     const brokenDir = join(root, 'broken-task');
+    const ignoredDir = join(root, 'codex-only-task');
     await Promise.all([
       mkdir(validDir, { recursive: true }),
       mkdir(brokenDir, { recursive: true }),
+      mkdir(ignoredDir, { recursive: true }),
     ]);
     await Promise.all([
       writeFile(
@@ -90,12 +82,22 @@ describe('Codex automation source', () => {
           'name = "Valid task"',
           'prompt = "Run"',
           'status = "PAUSED"',
-          'sync_to_yoda = true',
           'rrule = "FREQ=HOURLY;INTERVAL=1"',
           'cwds = ["/Users/mark/lovstudio/coding/web"]',
         ].join('\n')
       ),
       writeFile(join(brokenDir, 'automation.toml'), 'id = "broken-task"\nstatus = "ACTIVE"\n'),
+      writeFile(
+        join(ignoredDir, 'automation.toml'),
+        [
+          'id = "codex-only-task"',
+          'name = "Codex only"',
+          'prompt = "Run"',
+          'status = "ACTIVE"',
+        ].join('\n')
+      ),
+      writeFile(join(validDir, CODEX_AUTOMATION_YODA_MIRROR_MARKER), ''),
+      writeFile(join(brokenDir, CODEX_AUTOMATION_YODA_MIRROR_MARKER), ''),
     ]);
 
     const result = await readCodexAutomationSnapshots(root);
@@ -111,6 +113,7 @@ describe('Codex automation source', () => {
     expect(result.managedIds).toEqual(
       expect.arrayContaining(['codex:valid-task', 'codex:broken-task'])
     );
+    expect(result.managedIds).not.toContain('codex:codex-only-task');
     expect(result.errors).toHaveLength(1);
   });
 });

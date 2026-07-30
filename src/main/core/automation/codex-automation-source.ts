@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { AutomationStatus, AutomationTriggerKind } from '@shared/automation';
 
 export const CODEX_AUTOMATION_ID_PREFIX = 'codex:';
+export const CODEX_AUTOMATION_YODA_MIRROR_MARKER = '.yoda-mirror';
 
 const codexAutomationSchema = z
   .object({
@@ -13,7 +14,6 @@ const codexAutomationSchema = z
     name: z.string().trim().min(1),
     prompt: z.string().min(1),
     status: z.enum(['ACTIVE', 'PAUSED', 'DELETED']),
-    sync_to_yoda: z.boolean().optional(),
     rrule: z.string().trim().min(1).optional(),
     timezone: z.string().trim().min(1).optional(),
     cwds: z.array(z.string()).optional(),
@@ -200,7 +200,7 @@ export function parseCodexAutomationToml(
   options: { fallbackTimestamp?: Date } = {}
 ): CodexAutomationSnapshot | null {
   const file = codexAutomationSchema.parse(parseToml(input));
-  if (file.status === 'DELETED' || file.sync_to_yoda !== true) return null;
+  if (file.status === 'DELETED') return null;
 
   const fallbackTimestamp = options.fallbackTimestamp ?? new Date();
   const cronExpr = file.rrule ? codexRruleToCron(file.rrule) : null;
@@ -250,7 +250,20 @@ export async function readCodexAutomationSnapshots(
 
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     if (!entry.isDirectory()) continue;
-    const filePath = join(root, entry.name, 'automation.toml');
+    const directory = join(root, entry.name);
+    const mirrorMarkerPath = join(directory, CODEX_AUTOMATION_YODA_MIRROR_MARKER);
+    try {
+      await stat(mirrorMarkerPath);
+    } catch (error) {
+      const code = error instanceof Error && 'code' in error ? String(error.code) : '';
+      if (code === 'ENOENT') continue;
+      errors.push({
+        path: mirrorMarkerPath,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+    const filePath = join(directory, 'automation.toml');
     try {
       const [input, fileStat] = await Promise.all([readFile(filePath, 'utf8'), stat(filePath)]);
       const snapshot = parseCodexAutomationToml(input, { fallbackTimestamp: fileStat.mtime });
