@@ -22,9 +22,9 @@ describe('parseWorktreePorcelain', () => {
         ].join('\n')
       )
     ).toEqual([
-      { path: '/repo', branch: 'main' },
-      { path: '/worktrees/task-one', branch: 'yoda/task-one' },
-      { path: '/worktrees/detached', branch: null },
+      { path: '/repo', branch: 'main', head: 'abc' },
+      { path: '/worktrees/task-one', branch: 'yoda/task-one', head: 'def' },
+      { path: '/worktrees/detached', branch: null, head: '123' },
     ]);
   });
 

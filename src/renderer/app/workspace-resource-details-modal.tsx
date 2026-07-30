@@ -11,6 +11,7 @@ import {
   Timer,
   type LucideIcon,
 } from 'lucide-react';
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   AppEventLoopMetrics,
@@ -76,6 +77,7 @@ export function WorkspaceResourceDetailsModal({
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const queryClient = useQueryClient();
+  const forceWorktreeRefreshRef = useRef(false);
   const resourceDetailsQueryKey = ['app', 'resourceDetails'] as const;
   const { data: resourceDetails } = useQuery<{
     snapshot: AppResourceSnapshot | undefined;
@@ -109,11 +111,19 @@ export function WorkspaceResourceDetailsModal({
     refetch: refreshWorktreeStorage,
   } = useQuery<WorktreeStorageSnapshot>({
     queryKey: ['projects', 'worktreeStorage'],
-    queryFn: () => rpc.projects.getWorktreeStorageSnapshot(),
+    queryFn: () => {
+      const forceRefresh = forceWorktreeRefreshRef.current;
+      forceWorktreeRefreshRef.current = false;
+      return rpc.projects.getWorktreeStorageSnapshot({ forceRefresh });
+    },
     enabled: kind === 'worktrees',
     initialData: initialWorktreeStorage,
     staleTime: 60_000,
     refetchOnMount: 'always',
+    refetchInterval: (query) =>
+      query.state.data?.pendingInspectionCount && query.state.data.pendingInspectionCount > 0
+        ? 1_000
+        : false,
     refetchOnWindowFocus: false,
   });
 
@@ -153,8 +163,11 @@ export function WorkspaceResourceDetailsModal({
         ) : (
           <WorktreeDetails
             storage={worktreeStorage}
-            isScanning={isScanningWorktrees}
-            onRefresh={() => void refreshWorktreeStorage()}
+            isScanning={isScanningWorktrees || (worktreeStorage?.pendingInspectionCount ?? 0) > 0}
+            onRefresh={() => {
+              forceWorktreeRefreshRef.current = true;
+              void refreshWorktreeStorage();
+            }}
             onOpenTask={(item) => {
               if (!item.activeTaskId) return;
               onClose();
@@ -540,7 +553,13 @@ function WorktreeDetails({
                 : t('workspaceRuntime.resources.details.refresh')}
             </Button>
             {storage?.reclaimableCount ? (
-              <Button type="button" variant="outline" size="sm" onClick={confirmCleanup}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isScanning}
+                onClick={confirmCleanup}
+              >
                 {t('workspaceRuntime.resources.cleanup')}
               </Button>
             ) : null}
@@ -581,20 +600,26 @@ function WorktreeRow({
     kind: 'directory',
     sshConnectionId: null,
   };
-  const passiveStatus = item.reclaimable
-    ? {
-        label: t('workspaceRuntime.resources.details.reclaimable'),
-        className: 'text-emerald-600 dark:text-emerald-400',
-      }
-    : item.dirty
+  const passiveStatus =
+    item.inspectedAt === null
       ? {
-          label: t('workspaceRuntime.resources.details.hasChanges'),
-          className: 'text-amber-600 dark:text-amber-400',
-        }
-      : {
-          label: t('workspaceRuntime.resources.details.retained'),
+          label: t('workspaceRuntime.resources.details.pendingInspection'),
           className: 'text-foreground-passive',
-        };
+        }
+      : item.reclaimable
+        ? {
+            label: t('workspaceRuntime.resources.details.reclaimable'),
+            className: 'text-emerald-600 dark:text-emerald-400',
+          }
+        : item.dirty
+          ? {
+              label: t('workspaceRuntime.resources.details.hasChanges'),
+              className: 'text-amber-600 dark:text-amber-400',
+            }
+          : {
+              label: t('workspaceRuntime.resources.details.retained'),
+              className: 'text-foreground-passive',
+            };
   const taskLabel =
     item.activeTaskName?.trim() ||
     (item.activeTaskId
@@ -624,7 +649,7 @@ function WorktreeRow({
   );
   const size = (
     <span className="w-16 shrink-0 text-right font-mono text-xs tabular-nums text-foreground-muted">
-      {formatBytes(item.sizeBytes)}
+      {item.inspectedAt === null ? '…' : formatBytes(item.sizeBytes)}
     </span>
   );
 

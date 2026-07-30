@@ -236,13 +236,19 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     refetchInterval: 5_000,
     refetchOnWindowFocus: false,
   });
-  const { data: worktreeStorage, isFetching: isScanningWorktrees } = useQuery({
+  const { data: worktreeStorage, isFetching: isFetchingWorktreeStorage } = useQuery({
     queryKey: ['projects', 'worktreeStorage'],
     queryFn: () => rpc.projects.getWorktreeStorageSnapshot(),
     enabled: isResourcePopoverOpen,
     staleTime: 60_000,
+    refetchInterval: (query) =>
+      query.state.data?.pendingInspectionCount && query.state.data.pendingInspectionCount > 0
+        ? 1_000
+        : false,
     refetchOnWindowFocus: false,
   });
+  const isScanningWorktrees =
+    isFetchingWorktreeStorage || (worktreeStorage?.pendingInspectionCount ?? 0) > 0;
   const agentSessionByKey = new Map<string, WorkspaceAgentSession>(
     (resourceSnapshot?.agentSessions ?? []).map((session) => [agentSessionKey(session), session])
   );

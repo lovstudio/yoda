@@ -169,6 +169,7 @@ const storage: WorktreeStorageSnapshot = {
   reclaimableBytes: 2_000_000_000,
   worktreeCount: 2,
   reclaimableCount: 1,
+  pendingInspectionCount: 0,
   items: [
     {
       projectId: 'project-1',
@@ -179,6 +180,8 @@ const storage: WorktreeStorageSnapshot = {
       activeTaskName: 'Resource center',
       sizeBytes: 8_000_000_000,
       dirty: false,
+      inspectedAt: snapshot.sampledAt,
+      inspectionPending: false,
       referencedByActiveTask: true,
       reclaimable: false,
     },

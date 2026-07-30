@@ -61,6 +61,8 @@ export type WorktreeStorageItem = {
   activeTaskName: string | null;
   sizeBytes: number;
   dirty: boolean;
+  inspectedAt: string | null;
+  inspectionPending: boolean;
   referencedByActiveTask: boolean;
   reclaimable: boolean;
 };
@@ -71,7 +73,12 @@ export type WorktreeStorageSnapshot = {
   reclaimableBytes: number;
   worktreeCount: number;
   reclaimableCount: number;
+  pendingInspectionCount: number;
   items: WorktreeStorageItem[];
+};
+
+export type WorktreeStorageSnapshotOptions = {
+  forceRefresh?: boolean;
 };
 
 export type WorktreeCleanupResult = {

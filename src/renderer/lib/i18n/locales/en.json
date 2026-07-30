@@ -4176,6 +4176,7 @@
         "activeTask": "Active task",
         "openTask": "Open task “{{task}}”",
         "taskFallback": "Task {{id}}",
+        "pendingInspection": "Pending",
         "hasChanges": "Has changes",
         "retained": "Retained",
         "yodaProcess": "Yoda process",

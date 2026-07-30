@@ -4176,6 +4176,7 @@
         "activeTask": "活动任务",
         "openTask": "打开任务“{{task}}”",
         "taskFallback": "任务 {{id}}",
+        "pendingInspection": "待盘点",
         "hasChanges": "有改动",
         "retained": "保留",
         "yodaProcess": "Yoda 进程",
