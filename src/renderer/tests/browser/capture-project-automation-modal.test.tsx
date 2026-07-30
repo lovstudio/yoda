@@ -5,13 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 type ChildrenProps = { children?: ReactNode };
+
 const mocks = vi.hoisted(() => {
   const pageLoad = vi.fn();
-  const localLoad = vi.fn();
-  const remoteLoad = vi.fn();
   const save = vi.fn();
+  const compile = vi.fn();
   const runProjectQuickAction = vi.fn();
-  const navigate = vi.fn();
   const translate = (key: string) => key;
   const mountedProject = {
     data: {
@@ -19,11 +18,6 @@ const mocks = vi.hoisted(() => {
       name: 'Example project',
       type: 'local' as const,
       path: '/tmp/example-project',
-    },
-    repository: {
-      localData: { load: localLoad },
-      remoteData: { load: remoteLoad },
-      defaultBranch: { type: 'local' as const, branch: 'main' },
     },
   };
   const settingsStore = {
@@ -41,18 +35,21 @@ const mocks = vi.hoisted(() => {
     },
     save,
   };
+  const runtime: { runtimeId: 'codex' | null; createDisabled: boolean } = {
+    runtimeId: 'codex',
+    createDisabled: false,
+  };
 
   return {
     pageLoad,
-    localLoad,
-    remoteLoad,
     save,
+    compile,
     runProjectQuickAction,
-    navigate,
     translate,
     mountedProject,
     projectStore: { mountedProject },
     settingsStore,
+    runtime,
   };
 });
 
@@ -72,7 +69,6 @@ vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
   asMounted: () => mocks.mountedProject,
   getProjectSettingsStore: () => mocks.settingsStore,
   getProjectStore: () => mocks.projectStore,
-  getRepositoryStore: () => mocks.mountedProject.repository,
 }));
 
 vi.mock('@renderer/features/settings/use-app-settings-key', () => ({
@@ -80,11 +76,15 @@ vi.mock('@renderer/features/settings/use-app-settings-key', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/conversations/use-effective-runtime', () => ({
-  useEffectiveRuntime: () => ({ runtimeId: 'codex', createDisabled: false }),
+  useEffectiveRuntime: () => mocks.runtime,
 }));
 
-vi.mock('@renderer/lib/layout/navigation-provider', () => ({
-  useNavigate: () => ({ navigate: mocks.navigate }),
+vi.mock('@renderer/lib/ipc', () => ({
+  rpc: {
+    quickActions: {
+      compile: mocks.compile,
+    },
+  },
 }));
 
 vi.mock('@renderer/lib/ui/confirm-button', async () => {
@@ -134,13 +134,15 @@ describe('CaptureProjectAutomationModal', () => {
 
   beforeEach(() => {
     mocks.pageLoad.mockReset().mockResolvedValue(undefined);
-    mocks.localLoad.mockReset().mockResolvedValue(undefined);
-    mocks.remoteLoad.mockReset().mockResolvedValue(undefined);
     mocks.save.mockReset();
-    mocks.runProjectQuickAction
-      .mockReset()
-      .mockResolvedValue({ kind: 'agent', taskId: 'quick-action-task' });
-    mocks.navigate.mockReset();
+    mocks.compile.mockReset().mockResolvedValue({
+      label: 'Start project',
+      command: 'pnpm run dev',
+      explanation: 'package.json defines the dev script',
+    });
+    mocks.runProjectQuickAction.mockReset().mockResolvedValue({ kind: 'shell' });
+    mocks.runtime.runtimeId = 'codex';
+    mocks.runtime.createDisabled = false;
     mocks.settingsStore.settings = {
       scripts: {},
       quickActions: [
@@ -190,34 +192,58 @@ describe('CaptureProjectAutomationModal', () => {
     return buttons.item(buttons.length - 1) || undefined;
   }
 
+  function buttonWithText(text: string): HTMLButtonElement {
+    const button = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((item) =>
+      item.textContent?.includes(text)
+    );
+    if (!button) throw new Error(`button was not rendered: ${text}`);
+    return button;
+  }
+
   function intentTextarea(): HTMLTextAreaElement {
     const textarea = host.querySelector<HTMLTextAreaElement>('#quick-action-intent');
     if (!textarea) throw new Error('natural-language operation input was not rendered');
     return textarea;
   }
 
-  async function enterIntentAndSubmit(intent: string): Promise<void> {
-    await act(async () => setTextareaValue(intentTextarea(), intent));
-    const submit = primaryButton();
-    if (!submit) throw new Error('quick-action submit button was not rendered');
-    expect(submit.disabled).toBe(false);
-    expect(submit.textContent).toContain('sidebar.captureAutomation.saveAndRun');
-    await act(async () => submit.click());
+  function commandTextarea(): HTMLTextAreaElement {
+    const textarea = host.querySelector<HTMLTextAreaElement>('#quick-action-command');
+    if (!textarea) throw new Error('command input was not rendered');
+    return textarea;
   }
 
-  it('saves an Agent action and opens its inspectable task', async () => {
+  async function generateCommand(intent: string): Promise<void> {
+    await act(async () => setTextareaValue(intentTextarea(), intent));
+    const generate = primaryButton();
+    expect(generate?.disabled).toBe(false);
+    expect(generate?.textContent).toContain('sidebar.captureAutomation.generateCommand');
+    await act(async () => generate?.click());
+    await waitFor(
+      () => commandTextarea().value === 'pnpm run dev',
+      'compiled command was not rendered'
+    );
+  }
+
+  it('compiles natural language once, then saves and runs the resulting shell command', async () => {
     mocks.save.mockResolvedValue({ success: true });
     await renderModal();
 
-    await enterIntentAndSubmit('Start this project and verify the local URL.');
+    await generateCommand('Start this project and verify the local URL.');
+
+    expect(mocks.compile).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      intent: 'Start this project and verify the local URL.',
+      runtimeId: 'codex',
+    });
+    expect(host.textContent).toContain('sidebar.captureAutomation.generatedCommandDescription');
+    expect(primaryButton()?.textContent).toContain('sidebar.captureAutomation.saveAndRun');
+
+    await act(async () => primaryButton()?.click());
     await waitFor(
       () => mocks.runProjectQuickAction.mock.calls.length === 1,
       'saved quick action was not executed'
     );
 
-    expect(mocks.localLoad).toHaveBeenCalledTimes(1);
-    expect(mocks.remoteLoad).toHaveBeenCalledTimes(1);
-    expect(mocks.save).toHaveBeenCalledTimes(1);
     const savedSettings = mocks.save.mock.calls[0]?.[0] as {
       quickActions: Array<{
         id: string;
@@ -235,53 +261,83 @@ describe('CaptureProjectAutomationModal', () => {
     });
     const savedAction = savedSettings.quickActions[1];
     expect(savedAction).toMatchObject({
-      label: 'start-project',
-      command: expect.stringContaining('Start this project and verify the local URL.'),
-      kind: 'agent',
+      label: 'Start project',
+      command: 'pnpm run dev',
+      kind: 'shell',
       sourceIntent: 'Start this project and verify the local URL.',
     });
     expect(mocks.runProjectQuickAction).toHaveBeenCalledWith({
       project: mocks.mountedProject,
       action: savedAction,
-      runtimeId: 'codex',
-      defaultBranch: { type: 'local', branch: 'main' },
     });
     expect(onSuccess).toHaveBeenCalledTimes(1);
-    expect(mocks.navigate).toHaveBeenCalledWith('task', {
-      projectId: 'project-1',
-      taskId: 'quick-action-task',
+  });
+
+  it('accepts a direct command without calling an Agent, even when no runtime is available', async () => {
+    mocks.runtime.runtimeId = null;
+    mocks.runtime.createDisabled = true;
+    mocks.save.mockResolvedValue({ success: true });
+    await renderModal();
+
+    await act(async () => buttonWithText('sidebar.captureAutomation.commandMode').click());
+    await act(async () => setTextareaValue(commandTextarea(), 'pnpm run preview'));
+
+    expect(primaryButton()?.disabled).toBe(false);
+    expect(primaryButton()?.textContent).toContain('sidebar.captureAutomation.saveAndRun');
+    await act(async () => primaryButton()?.click());
+    await waitFor(
+      () => mocks.runProjectQuickAction.mock.calls.length === 1,
+      'direct command quick action was not executed'
+    );
+
+    expect(mocks.compile).not.toHaveBeenCalled();
+    const savedSettings = mocks.save.mock.calls[0]?.[0] as {
+      quickActions: Array<Record<string, unknown>>;
+    };
+    const savedAction = savedSettings.quickActions[1];
+    expect(savedAction).toMatchObject({
+      label: 'start-project',
+      command: 'pnpm run preview',
+      kind: 'shell',
+    });
+    expect(savedAction).not.toHaveProperty('sourceIntent');
+    expect(mocks.runProjectQuickAction).toHaveBeenCalledWith({
+      project: mocks.mountedProject,
+      action: savedAction,
     });
   });
 
-  it('keeps the form focused on the operation instead of exposing execution internals', async () => {
+  it('requires regeneration when the natural-language description changes', async () => {
     await renderModal();
+    await generateCommand('Start this project.');
 
-    expect(host.querySelector('#quick-action-label')).toBeNull();
-    expect(host.querySelector('#quick-action-command')).toBeNull();
-    expect(host.textContent).not.toContain('sidebar.captureAutomation.quickActionTarget');
-    expect(host.textContent).not.toContain('sidebar.captureAutomation.runScriptTarget');
-    expect(host.textContent).not.toContain('sidebar.captureAutomation.skillTarget');
-    expect(host.querySelector('[aria-label="sidebar.captureAutomation.workflowLabel"]')).toBeNull();
+    await act(async () =>
+      setTextareaValue(intentTextarea(), 'Start this project and open the preview.')
+    );
 
-    await act(async () => setTextareaValue(intentTextarea(), 'Start this project.'));
+    expect(primaryButton()?.disabled).toBe(false);
+    expect(primaryButton()?.textContent).toContain('sidebar.captureAutomation.regenerateCommand');
+    expect(host.textContent).toContain('sidebar.captureAutomation.commandNeedsRefresh');
 
-    expect(host.querySelector('#quick-action-label')).not.toBeNull();
-    expect(host.querySelector('#quick-action-command')).toBeNull();
-    expect(primaryButton()?.textContent).toContain('sidebar.captureAutomation.saveAndRun');
+    await act(async () => primaryButton()?.click());
+    await waitFor(() => mocks.compile.mock.calls.length === 2, 'command was not regenerated');
+    expect(mocks.compile).toHaveBeenLastCalledWith({
+      projectId: 'project-1',
+      intent: 'Start this project and open the preview.',
+      runtimeId: 'codex',
+    });
   });
 
-  it('does not execute or navigate when saving the quick action fails', async () => {
+  it('does not execute when saving the command fails', async () => {
     mocks.save.mockResolvedValue({ success: false });
     await renderModal();
 
-    await enterIntentAndSubmit('Start this project.');
+    await act(async () => buttonWithText('sidebar.captureAutomation.commandMode').click());
+    await act(async () => setTextareaValue(commandTextarea(), 'pnpm run dev'));
+    await act(async () => primaryButton()?.click());
     await waitFor(() => mocks.save.mock.calls.length === 1, 'quick action was not saved');
-    await act(async () => {
-      await Promise.resolve();
-    });
 
     expect(mocks.runProjectQuickAction).not.toHaveBeenCalled();
-    expect(mocks.navigate).not.toHaveBeenCalled();
     expect(onSuccess).not.toHaveBeenCalled();
     expect(host.textContent).toContain('projects.settings.saveFailed');
   });
