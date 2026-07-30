@@ -208,6 +208,7 @@ describe('WorkspaceResourceDetailsModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    document.documentElement.classList.add('ylight');
     host = document.createElement('div');
     host.style.width = '640px';
     document.body.appendChild(host);
@@ -217,6 +218,7 @@ describe('WorkspaceResourceDetailsModal', () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     host.remove();
+    document.documentElement.classList.remove('ylight');
   });
 
   async function renderModal(kind: 'cpu' | 'memory' | 'latency' | 'worktrees') {
@@ -242,7 +244,9 @@ describe('WorkspaceResourceDetailsModal', () => {
 
     expect(host.textContent).toContain('workspaceRuntime.resources.details.cpuTitle');
     expect(host.textContent).toContain('Build resource details');
-    expect(host.querySelector('[data-resource-detail-trend="cpu"]')).not.toBeNull();
+    const cpuLine = host.querySelector<SVGPolylineElement>('[data-resource-detail-trend="cpu"]');
+    expect(cpuLine).not.toBeNull();
+    expect(getComputedStyle(cpuLine!).stroke).not.toBe('none');
 
     await renderModal('memory');
 

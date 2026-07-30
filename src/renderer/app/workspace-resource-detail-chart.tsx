@@ -12,8 +12,7 @@ export type WorkspaceResourceDetailSeries = {
   key: string;
   label: string;
   value: string;
-  lineClassName: string;
-  dotClassName: string;
+  color: string;
   valueForPoint: (point: WorkspaceResourceHistoryPoint) => number | null | undefined;
 };
 
@@ -83,8 +82,8 @@ export function WorkspaceResourceDetailChart({
                   <polyline
                     data-resource-detail-trend={item.key}
                     points={item.coordinates.map((point) => `${point.x},${point.y}`).join(' ')}
-                    className={item.lineClassName}
                     fill="none"
+                    style={{ stroke: item.color }}
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
@@ -95,7 +94,7 @@ export function WorkspaceResourceDetailChart({
                       cx={lastPoint.x}
                       cy={lastPoint.y}
                       r={3}
-                      className={item.dotClassName}
+                      style={{ fill: item.color }}
                       vectorEffect="non-scaling-stroke"
                     />
                   ) : null}
@@ -110,7 +109,11 @@ export function WorkspaceResourceDetailChart({
           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
             {seriesCoordinates.map((item) => (
               <div key={item.key} className="flex items-center gap-2 text-xs">
-                <span aria-hidden className={`size-2 rounded-full ${item.dotClassName}`} />
+                <span
+                  aria-hidden
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: item.color }}
+                />
                 <span className="text-foreground-muted">{item.label}</span>
                 <span className="font-mono tabular-nums text-foreground">{item.value}</span>
               </div>

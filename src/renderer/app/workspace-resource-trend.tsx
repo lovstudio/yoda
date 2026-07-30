@@ -26,9 +26,7 @@ type TrendRowProps = {
   ariaLabel: string;
   valueForPoint: (point: WorkspaceResourceHistoryPoint) => number;
   ceiling: number;
-  lineClassName: string;
-  dotClassName: string;
-  legendClassName: string;
+  color: string;
 };
 
 export function WorkspaceResourceTrend({
@@ -59,9 +57,7 @@ export function WorkspaceResourceTrend({
           ariaLabel={cpuAriaLabel}
           valueForPoint={(point) => point.cpuPercent}
           ceiling={cpuCeiling}
-          lineClassName="stroke-accent"
-          dotClassName="fill-accent"
-          legendClassName="bg-accent"
+          color="var(--foreground)"
         />
         <TrendRow
           history={history}
@@ -70,9 +66,7 @@ export function WorkspaceResourceTrend({
           ariaLabel={memoryAriaLabel}
           valueForPoint={(point) => point.memoryBytes}
           ceiling={memoryCeiling}
-          lineClassName="stroke-foreground-diff-added"
-          dotClassName="fill-foreground-diff-added"
-          legendClassName="bg-foreground-diff-added"
+          color="var(--foreground-diff-added)"
         />
       </div>
     </section>
@@ -86,9 +80,7 @@ function TrendRow({
   ariaLabel,
   valueForPoint,
   ceiling,
-  lineClassName,
-  dotClassName,
-  legendClassName,
+  color,
 }: TrendRowProps) {
   const coordinates = buildTrendCoordinates(history, valueForPoint, ceiling);
   const lastPoint = coordinates.at(-1);
@@ -100,7 +92,12 @@ function TrendRow({
       className="grid grid-cols-[3rem_minmax(0,1fr)_4.75rem] items-center gap-2"
     >
       <span className="flex items-center gap-1.5 text-[10px] text-foreground-passive">
-        <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${legendClassName}`} />
+        <span
+          aria-hidden
+          data-resource-trend-legend={label}
+          className="size-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: color }}
+        />
         {label}
       </span>
       <svg
@@ -121,8 +118,8 @@ function TrendRow({
         <polyline
           data-resource-trend={label}
           points={coordinates.map((point) => `${point.x},${point.y}`).join(' ')}
-          className={lineClassName}
           fill="none"
+          style={{ stroke: color }}
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth={1.5}
@@ -133,7 +130,7 @@ function TrendRow({
             cx={lastPoint.x}
             cy={lastPoint.y}
             r={1.8}
-            className={dotClassName}
+            style={{ fill: color }}
             vectorEffect="non-scaling-stroke"
           />
         ) : null}
