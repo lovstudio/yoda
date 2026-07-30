@@ -10,6 +10,8 @@ const MAX_WRAPPED_LINE_LENGTH = 2048;
 // below). Includes ASCII whitespace/quotes/shell metas/parens plus CJK
 // punctuation and brackets so paths like `bar.txt。` or `foo.md(…)` /
 // `foo.md（…）` terminate cleanly instead of swallowing trailing prose.
+// Balanced parens that occur before the final extension are handled separately
+// below so generated filenames such as `report(1).md` remain one link.
 const PATH_SEG_EXCLUDED = `\\s"'\`$<>|\\\\:：()（）「」『』【】〈〉《》，、。；！？`;
 const PATH_LEADING = `\\s"'([{<:：（「『【〈《、`;
 const PATH_TRAILING = `\\s"')\\]}>,:：，、。；;!?！？.(（）「」『』【】〈〉《》`;
@@ -17,6 +19,11 @@ const PATH_TRAILING = `\\s"')\\]}>,:：，、。；;!?！？.(（）「」『』
 // dot so a trailing sentence period (`foo.md.`) is left out of the link.
 const PATH_EXT = `[^${PATH_SEG_EXCLUDED}\\/]{0,31}[^${PATH_SEG_EXCLUDED}\\/.]`;
 const PATH_SEG_TOKEN = `[^${PATH_SEG_EXCLUDED}\\/]+`;
+const PAREN_CONTENT = `[^\\r\\n"'\`$<>|\\\\/:()（）]+`;
+const PAREN_GROUP = `(?:\\(${PAREN_CONTENT}\\)|（${PAREN_CONTENT}）)`;
+const PLAIN_FILENAME_PART = `[^${PATH_SEG_EXCLUDED}\\/]*`;
+const PARENTHESIZED_FILENAME = `${PLAIN_FILENAME_PART}${PAREN_GROUP}(?:${PLAIN_FILENAME_PART}${PAREN_GROUP})*${PLAIN_FILENAME_PART}\\.${PATH_EXT}`;
+const FILE_PATH_FILENAME = `(?:${PLAIN_FILENAME_PART}\\.${PATH_EXT}|${PARENTHESIZED_FILENAME})`;
 // A slash is normally the strongest signal that prose contains a file path.
 // Bare workspace-root filenames do not have that signal, so keep them to
 // common source/document/config/media extensions. This covers outputs such as
@@ -54,11 +61,11 @@ const SPACED_ABSOLUTE_FILENAME = `${SPACED_FILENAME_TOKEN}(?: +${SPACED_FILENAME
 // trailing slash a path still needs an extension to count (so `src/main` is
 // not a link but `src/main/` and `src/main/index.ts` are).
 const FILE_PATH_CANDIDATE_REGEX = new RegExp(
-  `(^|[${PATH_LEADING}])(@?(?:(?:~|\\.{1,2})\\/|\\/)?(?:[^${PATH_SEG_EXCLUDED}]+\\/)+(?:[^${PATH_SEG_EXCLUDED}\\/]*\\.${PATH_EXT}(?::\\d+(?::\\d+)?)?)?)(?=$|[${PATH_TRAILING}])`,
+  `(^|[${PATH_LEADING}])(@?(?:(?:~|\\.{1,2})\\/|\\/)?(?:[^${PATH_SEG_EXCLUDED}]+\\/)+(?:${FILE_PATH_FILENAME}(?::\\d+(?::\\d+)?)?)?)(?=$|[${PATH_TRAILING}])`,
   'gu'
 );
 const ROOTED_FILE_PATH_CANDIDATE_REGEX = new RegExp(
-  `(^|[${PATH_LEADING}])(@?\\/(?:${ABSOLUTE_PATH_SEGMENT}\\/)+?[^${PATH_SEG_EXCLUDED}\\/]*\\.${PATH_EXT}(?::\\d+(?::\\d+)?)?)(?!(?:\\.| +)${PATH_SEG_TOKEN}\\/)(?=$|[${PATH_TRAILING}])`,
+  `(^|[${PATH_LEADING}])(@?\\/(?:${ABSOLUTE_PATH_SEGMENT}\\/)+?${FILE_PATH_FILENAME}(?::\\d+(?::\\d+)?)?)(?!(?:\\.| +)${PATH_SEG_TOKEN}\\/)(?=$|[${PATH_TRAILING}])`,
   'gu'
 );
 const ROOTED_SPACED_FILENAME_CANDIDATE_REGEX = new RegExp(
@@ -320,6 +327,7 @@ function canHardJoin(
   }
   if (!isRowFull(terminal, upperBottomRowIndex)) return false;
   if (hasHardWrappedLocationCandidate(upperText, lowerStripped)) return true;
+  if (hasHardWrappedParenthesizedFilenameCandidate(upperText, lowerStripped)) return true;
   const tail = TRAILING_PATH_RUN_RE.exec(upperText)?.[0];
   if (!tail || !tail.includes('/')) return false;
   if (!lowerStripped || PATH_SEG_EXCLUDED_RE.test(lowerStripped[0])) return false;
@@ -337,6 +345,30 @@ function canHardJoin(
     return false;
   }
   return true;
+}
+
+/**
+ * Parentheses usually terminate a path because `foo.md(notes)` is prose, but a
+ * filename such as `report(1).md` can hard-wrap immediately before, inside, or
+ * after the group. Join only when the combined rows produce a complete file
+ * candidate whose balanced group occurs before the final extension.
+ */
+function hasHardWrappedParenthesizedFilenameCandidate(
+  upperText: string,
+  lowerStripped: string
+): boolean {
+  if (!lowerStripped || URL_IN_PROGRESS_RE.test(upperText)) return false;
+
+  const boundary = upperText.length;
+  return extractTerminalFileLinkCandidates(`${upperText}${lowerStripped}`).some((candidate) => {
+    const end = candidate.index + candidate.text.length;
+    return (
+      candidate.index < boundary &&
+      end > boundary &&
+      candidate.text.includes('/') &&
+      /(?:\([^()\r\n]+\)|（[^（）\r\n]+）)[^/]*\.[^./]+$/u.test(candidate.text)
+    );
+  });
 }
 
 /**

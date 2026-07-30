@@ -3,6 +3,7 @@ import {
   findSidebarSelectionRow,
   revealSidebarSelectionRow,
 } from '@renderer/features/sidebar/sidebar-selection-sync';
+import '../../index.css';
 
 describe('sidebar selection sync', () => {
   it('finds the selected project row across the whole sidebar', () => {
@@ -25,6 +26,7 @@ describe('sidebar selection sync', () => {
   });
 
   it('scrolls and focuses a project row for an explicit locator request', () => {
+    vi.useFakeTimers();
     const root = document.createElement('div');
     const project = document.createElement('button');
     project.dataset.sidebarEntity = 'project';
@@ -32,10 +34,18 @@ describe('sidebar selection sync', () => {
     project.scrollIntoView = vi.fn();
     const focus = vi.spyOn(project, 'focus');
     root.append(project);
+    document.body.append(root);
 
     expect(revealSidebarSelectionRow(root, 'project-2', undefined, true)).toBe(project);
     expect(project.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
     expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(project.dataset.sidebarLocateHighlight).toBe('true');
+    expect(getComputedStyle(project).animationName).toBe('sidebar-locate-highlight');
+
+    vi.advanceTimersByTime(1600);
+    expect(project.dataset.sidebarLocateHighlight).toBeUndefined();
+    root.remove();
+    vi.useRealTimers();
   });
 });
 
