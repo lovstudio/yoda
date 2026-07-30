@@ -2,6 +2,7 @@ import { observable, runInAction } from 'mobx';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LocalProject } from '@shared/projects';
 import type { Task } from '@shared/tasks';
+import type { SidebarTaskGroupVisibleLimit } from '@shared/view-state';
 import { DEFAULT_WORKSPACE_ID } from '@shared/workspaces';
 import type { ProjectStore } from '@renderer/features/projects/stores/project';
 import type { ProjectManagerStore } from '@renderer/features/projects/stores/project-manager';
@@ -193,6 +194,23 @@ describe('SidebarStore task recency ordering', () => {
     restored.setNavSectionHidden(false);
 
     expect(restored.navSectionHidden).toBe(false);
+  });
+
+  it('defaults, persists, and validates the task-group collapse threshold', () => {
+    const store = makeSidebarStore([makeProject('project-1', [])]);
+    expect(store.taskGroupVisibleLimit).toBe(5);
+
+    store.setTaskGroupVisibleLimit(10);
+    expect(store.snapshot.taskGroupVisibleLimit).toBe(10);
+
+    const restored = makeSidebarStore([makeProject('project-1', [])]);
+    restored.restoreSnapshot({ taskGroupVisibleLimit: store.snapshot.taskGroupVisibleLimit });
+    expect(restored.taskGroupVisibleLimit).toBe(10);
+
+    restored.restoreSnapshot({
+      taskGroupVisibleLimit: 7 as SidebarTaskGroupVisibleLimit,
+    });
+    expect(restored.taskGroupVisibleLimit).toBe(10);
   });
 
   it('keeps a project visible while its sessions load when empty projects are hidden', () => {

@@ -46,6 +46,7 @@ type CatalogTranscript = {
 export class LocalAgentSessionCatalog {
   private cachedAt = 0;
   private cache = new Map<string, LocalAgentSession>();
+  private refreshPromise: Promise<LocalAgentSession[]> | null = null;
 
   constructor(
     private readonly rootsCatalog: SessionStateRootsResolver,
@@ -53,24 +54,27 @@ export class LocalAgentSessionCatalog {
   ) {}
 
   async list(options: { projectPath?: string } = {}): Promise<LocalAgentSession[]> {
-    const [claude, codex] = await Promise.all([
-      this.listRuntime('claude'),
-      this.listRuntime('codex'),
-    ]);
-    const sessions = [...claude, ...codex]
+    const sessions =
+      Date.now() - this.cachedAt <= CACHE_TTL_MS ? [...this.cache.values()] : await this.refresh();
+    return sessions
       .filter((session) => matchesProjectPath(session.cwd, options.projectPath))
       .sort((left, right) => timestampMs(right.updatedAt) - timestampMs(left.updatedAt))
       .slice(0, MAX_SESSIONS_PER_RUNTIME * 2);
-    this.remember(sessions);
-    return sessions;
   }
 
   async get(catalogId: string): Promise<LocalAgentSession | undefined> {
-    if (Date.now() - this.cachedAt <= CACHE_TTL_MS) {
-      const cached = this.cache.get(catalogId);
-      if (cached) return cached;
+    const cached = this.cache.get(catalogId);
+    if (cached) {
+      if (Date.now() - this.cachedAt > CACHE_TTL_MS) {
+        void this.refresh().catch((error) => {
+          log.debug('LocalAgentSessionCatalog: background refresh failed', {
+            error: String(error),
+          });
+        });
+      }
+      return cached;
     }
-    await this.list();
+    await this.refresh();
     return this.cache.get(catalogId);
   }
 
@@ -104,6 +108,26 @@ export class LocalAgentSessionCatalog {
     return deduplicateSessions(nested.flat())
       .sort((left, right) => timestampMs(right.updatedAt) - timestampMs(left.updatedAt))
       .slice(0, MAX_SESSIONS_PER_RUNTIME);
+  }
+
+  private refresh(): Promise<LocalAgentSession[]> {
+    if (this.refreshPromise) return this.refreshPromise;
+
+    const request = Promise.all([this.listRuntime('claude'), this.listRuntime('codex')])
+      .then(([claude, codex]) =>
+        deduplicateSessions([...claude, ...codex])
+          .sort((left, right) => timestampMs(right.updatedAt) - timestampMs(left.updatedAt))
+          .slice(0, MAX_SESSIONS_PER_RUNTIME * 2)
+      )
+      .then((sessions) => {
+        this.remember(sessions);
+        return sessions;
+      })
+      .finally(() => {
+        if (this.refreshPromise === request) this.refreshPromise = null;
+      });
+    this.refreshPromise = request;
+    return request;
   }
 
   private remember(sessions: LocalAgentSession[]): void {

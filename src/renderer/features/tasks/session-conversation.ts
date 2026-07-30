@@ -38,7 +38,8 @@ export type SessionConversationPreviewItem =
 export function buildSessionConversationItems(
   prompts: ClaudeSessionPrompt[],
   messages: SessionTranscriptMessage[],
-  level: Exclude<AgentReplyDisplayLevel, 'verbose'>
+  level: Exclude<AgentReplyDisplayLevel, 'verbose'>,
+  promptNumbers?: number[]
 ): SessionConversationItem[] {
   if (level === 'hidden' || messages.length === 0) {
     return prompts.map((prompt, index) => ({
@@ -50,7 +51,7 @@ export function buildSessionConversationItems(
         timestamp: prompt.timestamp,
       },
       prompt,
-      promptIndex: index + 1,
+      promptIndex: promptNumbers?.[index] ?? index + 1,
     }));
   }
 
@@ -70,7 +71,7 @@ export function buildSessionConversationItems(
         ...(match
           ? {
               prompt: match.prompt,
-              promptIndex: match.index + 1,
+              promptIndex: promptNumbers?.[match.index] ?? match.index + 1,
             }
           : {}),
       };

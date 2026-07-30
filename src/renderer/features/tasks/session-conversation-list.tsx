@@ -18,6 +18,7 @@ export function SessionConversationList({
   messages,
   displayLevel,
   variant,
+  promptNumbers,
   isLoading = false,
   onOpenAll,
   onRestorePrompt,
@@ -27,6 +28,8 @@ export function SessionConversationList({
   messages: SessionTranscriptMessage[];
   displayLevel: Exclude<AgentReplyDisplayLevel, 'verbose'>;
   variant: 'preview' | 'full';
+  /** Optional one-based transcript positions when displaying a prompt subset. */
+  promptNumbers?: number[];
   isLoading?: boolean;
   onOpenAll?: () => void;
   onRestorePrompt?: (prompt: ClaudeSessionPrompt, index: number) => void;
@@ -34,8 +37,8 @@ export function SessionConversationList({
 }) {
   const { t } = useTranslation();
   const items = useMemo(
-    () => buildSessionConversationItems(prompts, messages, displayLevel),
-    [displayLevel, messages, prompts]
+    () => buildSessionConversationItems(prompts, messages, displayLevel, promptNumbers),
+    [displayLevel, messages, promptNumbers, prompts]
   );
   const visibleItems = useMemo(
     () =>

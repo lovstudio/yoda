@@ -17,6 +17,7 @@ export interface LovStudioApiRequestOptions {
   allowDuringSignOut?: boolean;
   expectedUserId?: string;
   expectedGeneration?: number;
+  timeoutMs?: number;
 }
 
 export class LovStudioApiClient {
@@ -26,10 +27,22 @@ export class LovStudioApiClient {
     options: LovStudioApiRequestOptions = {}
   ): Promise<T> {
     let session = await yodaAccountService.getRequestSession(options);
-    let response = await this.fetch(path, session.accessToken, init, session.signal);
+    let response = await this.fetch(
+      path,
+      session.accessToken,
+      init,
+      session.signal,
+      options.timeoutMs
+    );
     if (response.status === 401 && !options.allowDuringSignOut) {
       session = await yodaAccountService.refreshRequestSession(session);
-      response = await this.fetch(path, session.accessToken, init, session.signal);
+      response = await this.fetch(
+        path,
+        session.accessToken,
+        init,
+        session.signal,
+        options.timeoutMs
+      );
     }
     if (!options.allowDuringSignOut && !yodaAccountService.isRequestSessionCurrent(session)) {
       throw new Error('LovStudio account changed while the request was in progress');
@@ -55,9 +68,10 @@ export class LovStudioApiClient {
     path: string,
     token: string,
     init: RequestInit,
-    accountSignal: AbortSignal
+    accountSignal: AbortSignal,
+    timeoutMs = 15_000
   ): Promise<Response> {
-    const signals = [accountSignal, AbortSignal.timeout(15_000)];
+    const signals = [accountSignal, AbortSignal.timeout(timeoutMs)];
     if (init.signal) signals.push(init.signal);
     return fetch(`${ACCOUNT_CONFIG.authServer.baseUrl}${path}`, {
       ...init,

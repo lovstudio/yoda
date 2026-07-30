@@ -1,5 +1,4 @@
 import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type {
   ClaudeMemoryFile,
@@ -7,20 +6,23 @@ import type {
   RuntimeInstructionFile,
 } from '@shared/conversations';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
+import { resolveRuntimeStateDirectory } from './impl/runtime-env';
 
 /**
  * Loads the human-authored instruction files that feed the Claude prompt:
- * the user-global ~/.claude/CLAUDE.md plus the project's CLAUDE.md / AGENTS.md.
+ * the user-global CLAUDE.md plus the standard project CLAUDE.md variants.
  * Works pre-session — pass no cwd (e.g. SSH projects) to get the global file only.
  */
 export async function getInstructionFiles(cwd?: string | null): Promise<ClaudeMemoryFile[]> {
+  const stateDirectory = resolveRuntimeStateDirectory('claude', undefined);
   const candidates: { kind: ClaudeMemoryFile['kind']; path: string }[] = [
-    { kind: 'global-claude', path: join(homedir(), '.claude', 'CLAUDE.md') },
+    { kind: 'global-claude', path: join(stateDirectory, 'CLAUDE.md') },
   ];
   if (cwd) {
     candidates.push(
       { kind: 'project-claude', path: join(cwd, 'CLAUDE.md') },
-      { kind: 'project-agents', path: join(cwd, 'AGENTS.md') }
+      { kind: 'project-claude', path: join(cwd, '.claude', 'CLAUDE.md') },
+      { kind: 'project-claude', path: join(cwd, 'CLAUDE.local.md') }
     );
   }
 
@@ -38,13 +40,18 @@ export async function getInstructionFiles(cwd?: string | null): Promise<ClaudeMe
 }
 
 export async function getCodexInstructionFiles(cwd?: string | null): Promise<CodexMemoryFile[]> {
+  const stateDirectory = resolveRuntimeStateDirectory('codex', undefined);
   const candidates: { kind: CodexMemoryFile['kind']; path: string }[] = [
-    { kind: 'global-codex-agents', path: join(homedir(), '.codex', 'AGENTS.md') },
+    {
+      kind: 'global-codex-agents',
+      path: join(stateDirectory, 'AGENTS.override.md'),
+    },
+    { kind: 'global-codex-agents', path: join(stateDirectory, 'AGENTS.md') },
   ];
   if (cwd) {
     candidates.push(
-      { kind: 'project-agents', path: join(cwd, 'AGENTS.md') },
-      { kind: 'project-codex-agents', path: join(cwd, '.codex', 'AGENTS.md') }
+      { kind: 'project-agents', path: join(cwd, 'AGENTS.override.md') },
+      { kind: 'project-agents', path: join(cwd, 'AGENTS.md') }
     );
   }
 

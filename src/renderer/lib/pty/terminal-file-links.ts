@@ -12,7 +12,7 @@ const MAX_WRAPPED_LINE_LENGTH = 2048;
 // `foo.md（…）` terminate cleanly instead of swallowing trailing prose.
 const PATH_SEG_EXCLUDED = `\\s"'\`$<>|\\\\:：()（）「」『』【】〈〉《》，、。；！？`;
 const PATH_LEADING = `\\s"'([{<:：（「『【〈《、`;
-const PATH_TRAILING = `\\s"')\\]}>,，、。；;!?！？.(（）「」『』【】〈〉《》`;
+const PATH_TRAILING = `\\s"')\\]}>,:：，、。；;!?！？.(（）「」『』【】〈〉《》`;
 // File extension: 1–32 path chars after a dot, but the final char may not be a
 // dot so a trailing sentence period (`foo.md.`) is left out of the link.
 const PATH_EXT = `[^${PATH_SEG_EXCLUDED}\\/]{0,31}[^${PATH_SEG_EXCLUDED}\\/.]`;
@@ -214,6 +214,7 @@ export function getTerminalFileLinkMatches(
 // ---------------------------------------------------------------------------
 
 const HARD_WRAP_JOIN_MAX = 4;
+const EARLY_TUI_WRAP_MAX_TRAILING_CELLS = 2;
 const PATH_SEG_EXCLUDED_RE = new RegExp(`[${PATH_SEG_EXCLUDED}]`, 'u');
 const TRAILING_PATH_RUN_RE = new RegExp(`[^${PATH_SEG_EXCLUDED}]+$`, 'u');
 const COMPLETE_EXT_RE = /\.[A-Za-z0-9]{1,8}$/;
@@ -306,6 +307,17 @@ function canHardJoin(
   continuationIndent: number
 ): boolean {
   if (hasIndentedPathContinuation(upperText, lowerStripped, continuationIndent)) return true;
+  if (
+    hasEarlyPathOnlyTuiContinuation(
+      terminal,
+      upperBottomRowIndex,
+      upperText,
+      lowerStripped,
+      continuationIndent
+    )
+  ) {
+    return true;
+  }
   if (!isRowFull(terminal, upperBottomRowIndex)) return false;
   if (hasHardWrappedLocationCandidate(upperText, lowerStripped)) return true;
   const tail = TRAILING_PATH_RUN_RE.exec(upperText)?.[0];
@@ -325,6 +337,40 @@ function canHardJoin(
     return false;
   }
   return true;
+}
+
+/**
+ * Codex/Ink may wrap a path-only row at its inner content width, leaving the
+ * final two xterm cells unused by the surrounding rounded card. This is still
+ * a real newline (`isWrapped=false`), so accept it only when the row contains
+ * nothing except an absolute path fragment and joining the unindented next row
+ * produces one complete file candidate across the boundary.
+ */
+function hasEarlyPathOnlyTuiContinuation(
+  terminal: Terminal,
+  upperBottomRowIndex: number,
+  upperText: string,
+  lowerStripped: string,
+  continuationIndent: number
+): boolean {
+  if (
+    continuationIndent !== 0 ||
+    !lowerStripped ||
+    URL_IN_PROGRESS_RE.test(upperText) ||
+    !isRowWithinTrailingCellMargin(terminal, upperBottomRowIndex, EARLY_TUI_WRAP_MAX_TRAILING_CELLS)
+  ) {
+    return false;
+  }
+
+  const tail = TRAILING_PATH_RUN_RE.exec(upperText)?.[0];
+  if (!tail || !tail.startsWith('/') || upperText.trim() !== tail || COMPLETE_EXT_RE.test(tail)) {
+    return false;
+  }
+
+  return extractTerminalFileLinkCandidates(`${tail}${lowerStripped}`).some(
+    (candidate) =>
+      candidate.index === 0 && candidate.text.length > tail.length && !candidate.text.endsWith('/')
+  );
 }
 
 /**
@@ -412,6 +458,27 @@ function isRowFull(terminal: Terminal, rowIndex: number): boolean {
     line.getCell(line.length - 2, cell);
     if (cell.getWidth() === 2) return true;
   }
+  return false;
+}
+
+function isRowWithinTrailingCellMargin(
+  terminal: Terminal,
+  rowIndex: number,
+  maxTrailingCells: number
+): boolean {
+  const line = terminal.buffer.active.getLine(rowIndex);
+  if (!line || line.length === 0) return false;
+  const cell = terminal.buffer.active.getNullCell();
+  const firstCandidateIndex = Math.max(0, line.length - maxTrailingCells - 1);
+
+  for (let index = line.length - 1; index >= firstCandidateIndex; index -= 1) {
+    line.getCell(index, cell);
+    const chars = cell.getChars();
+    if (chars === '' || chars === ' ') continue;
+    const occupiedWidth = Math.max(1, cell.getWidth());
+    return line.length - (index + occupiedWidth) <= maxTrailingCells;
+  }
+
   return false;
 }
 
@@ -557,7 +624,10 @@ function resolveFileTarget(
         return {
           originalText: text,
           filePath: normalizedRelative,
-          absolutePath: `${normalizedRoot}/${normalizedRelative}`,
+          // Keep the exact emitted checkout path for OS-level actions
+          // (open/reveal/copy). The workspace-relative filePath still routes
+          // in-app navigation to the active worktree equivalent.
+          absolutePath: rawPath,
           line: parsed.line,
           column: parsed.column,
         };
@@ -691,14 +761,14 @@ function getWindowedLineStrings(lineIndex: number, terminal: Terminal): [string[
   line = terminal.buffer.active.getLine(lineIndex);
   if (!line) return [lines, topIndex];
 
-  const currentContent = line.translateToString(true);
+  const currentContent = translateWrappedLineToString(terminal, lineIndex, line);
   if (line.isWrapped) {
     length = 0;
     while (
       (line = terminal.buffer.active.getLine(--topIndex)) &&
       length < MAX_WRAPPED_LINE_LENGTH
     ) {
-      content = line.translateToString(true);
+      content = translateWrappedLineToString(terminal, topIndex, line);
       length += content.length;
       lines.push(content);
       if (!line.isWrapped) break;
@@ -714,12 +784,27 @@ function getWindowedLineStrings(lineIndex: number, terminal: Terminal): [string[
     line.isWrapped &&
     length < MAX_WRAPPED_LINE_LENGTH
   ) {
-    content = line.translateToString(true);
+    content = translateWrappedLineToString(terminal, bottomIndex, line);
     length += content.length;
     lines.push(content);
   }
 
   return [lines, topIndex];
+}
+
+/**
+ * Preserve the complete cell contents of every row that has a soft-wrapped
+ * continuation. Trimming such a row drops meaningful trailing spaces inside
+ * paths (`Project Files/`, `final report.pdf`) and silently resolves the link
+ * to a different file. Only the final row of the logical line may be trimmed.
+ */
+function translateWrappedLineToString(
+  terminal: Terminal,
+  lineIndex: number,
+  line: IBufferLine
+): string {
+  const continuesOnNextRow = terminal.buffer.active.getLine(lineIndex + 1)?.isWrapped === true;
+  return line.translateToString(!continuesOnNextRow);
 }
 
 function mapStringIndexToBufferCell(

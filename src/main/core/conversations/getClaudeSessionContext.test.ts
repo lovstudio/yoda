@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getClaudeSessionContext } from './getClaudeSessionContext';
+import { getClaudeSessionContext, getClaudeSessionPrompts } from './getClaudeSessionContext';
 
 const mocks = vi.hoisted(() => ({
   resolveClaudeTranscriptPathFromConfigDir: vi.fn(() => ''),
@@ -64,6 +64,9 @@ describe('getClaudeSessionContext restore checkpoints', () => {
     const context = await getClaudeSessionContext('/repo', 'session-1', {
       claudeConfigDir: directory,
     });
+    const promptOnly = await getClaudeSessionPrompts('/repo', 'session-1', {
+      claudeConfigDir: directory,
+    });
 
     expect(mocks.resolveClaudeTranscriptPathFromConfigDir).toHaveBeenCalledWith(
       '/repo',
@@ -80,6 +83,7 @@ describe('getClaudeSessionContext restore checkpoints', () => {
       },
       { id: 'prompt-2', text: 'Second prompt', timestamp: null },
     ]);
+    expect(promptOnly).toEqual(context?.prompts);
     expect(context?.messages.filter((message) => message.role === 'user')).toEqual([
       { id: 'prompt-1', role: 'user', text: 'First prompt', timestamp: null },
       { id: 'prompt-2', role: 'user', text: 'Second prompt', timestamp: null },

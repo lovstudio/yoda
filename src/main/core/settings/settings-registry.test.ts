@@ -13,8 +13,11 @@ describe('settings defaults', () => {
     expect(tasks.summaryLanguage).toBe('app');
   });
 
-  it('uses automatic terminal renderer selection by default', () => {
-    expect(getDefaultForKey('terminal').renderer).toBe('auto');
+  it('uses stable terminal defaults without exposing a renderer switch', () => {
+    expect(getDefaultForKey('terminal')).toMatchObject({
+      autoCopyOnSelection: true,
+    });
+    expect(getDefaultForKey('terminal')).not.toHaveProperty('renderer');
   });
 
   it('shows only final agent replies in the conversation panel by default', () => {

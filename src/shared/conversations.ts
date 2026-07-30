@@ -29,6 +29,17 @@ export type Conversation = {
   forkedFromConversationId?: string;
   /** Zero-based prompt index in the direct parent conversation. */
   forkedFromPromptIndex?: number;
+  /**
+   * Main-process-only recovery payload. Included while provisioning a persisted
+   * conversation whose first prompt never reached the Agent process.
+   */
+  pendingInitialPrompt?: PendingInitialPrompt;
+};
+
+export type PendingInitialPrompt = {
+  prompt?: string;
+  imagePaths?: string[];
+  model?: string | null;
 };
 
 export type AgentSessionSource = {
@@ -111,6 +122,17 @@ export type ClaudeSessionPrompt = {
   restoreTarget?: SessionContextRestoreTarget;
 };
 
+/**
+ * Lightweight database-backed catalog row for progressively loading a
+ * project's prompt history. Prompt bodies remain sourced from provider
+ * transcripts so this index cannot drift from the actual Agent session.
+ */
+export type ProjectPromptSource = {
+  conversation: Conversation;
+  taskName: string;
+  taskArchivedAt: string | null;
+};
+
 export type SessionContextRestoreTarget =
   | { kind: 'claude-message'; messageId: string }
   | { kind: 'codex-turn'; turnId: string };
@@ -147,6 +169,23 @@ export type CodexMemoryFile = {
 };
 
 export type RuntimeInstructionFile = ClaudeMemoryFile | CodexMemoryFile;
+
+export type EditableRuntimeInstructionFile = RuntimeInstructionFile & {
+  /** User-level files live in the Agent CLI home; project files live in the selected project. */
+  scope: 'user' | 'project';
+  /** Missing candidates are returned with empty content so the editor can create them. */
+  exists: boolean;
+};
+
+export type EditableRuntimeInstructionFilesRequest = {
+  runtimeId: RuntimeId;
+  projectId?: string | null;
+};
+
+export type SaveEditableRuntimeInstructionFileRequest = EditableRuntimeInstructionFilesRequest & {
+  path: string;
+  content: string;
+};
 
 /**
  * One entry of Claude Code's self-maintained memory store

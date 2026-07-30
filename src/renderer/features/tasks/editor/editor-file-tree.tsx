@@ -5,11 +5,15 @@ import { observer } from 'mobx-react-lite';
 import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { FileNode } from '@shared/fs';
+import {
+  FileActionsContextMenu,
+  FilePreviewInSidebarButton,
+} from '@renderer/features/tasks/components/file-actions';
 import { buildVisibleRows } from '@renderer/features/tasks/editor/stores/files-store-utils';
 import { useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { FileIcon } from '@renderer/lib/editor/file-icon';
+import { getFileKind, isPreviewableKind } from '@renderer/lib/editor/fileKind';
 import { cn } from '@renderer/utils/utils';
-import { FileActionsContextMenu } from '../components/file-actions';
 
 const FileTreeRow = observer(function FileTreeRow({
   node,
@@ -26,6 +30,7 @@ const FileTreeRow = observer(function FileTreeRow({
   const isSelected = taskView.tabManager.activeFilePath === node.path;
   const fileStatus = taskState.workspace.git.fileChanges?.find((c) => c.path === node.path)?.status;
   const paddingLeft = node.depth * 12 + 4;
+  const canPreview = node.type === 'file' && isPreviewableKind(getFileKind(node.path));
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -74,7 +79,7 @@ const FileTreeRow = observer(function FileTreeRow({
       <div
         style={{ ...style, paddingLeft }}
         className={cn(
-          'flex h-7 cursor-pointer select-none items-center gap-1.5 rounded-md pr-2 hover:bg-background-1',
+          'group/file-row flex h-7 cursor-pointer select-none items-center gap-1.5 rounded-md pr-1 hover:bg-background-1',
           isSelected && 'bg-background-2 hover:bg-background-2',
           node.isHidden && 'opacity-60'
         )}
@@ -121,6 +126,12 @@ const FileTreeRow = observer(function FileTreeRow({
         >
           {node.name}
         </span>
+        {canPreview ? (
+          <FilePreviewInSidebarButton
+            path={node.path}
+            className="opacity-0 group-hover/file-row:opacity-100 group-focus-within/file-row:opacity-100"
+          />
+        ) : null}
       </div>
     </FileActionsContextMenu>
   );

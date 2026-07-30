@@ -15,6 +15,8 @@ export type SessionPromptsModalArgs = {
   prompts: ClaudeSessionPrompt[];
   messages?: SessionTranscriptMessage[];
   displayLevel?: Exclude<AgentReplyDisplayLevel, 'verbose'>;
+  /** Optional one-based transcript positions when displaying a prompt subset. */
+  promptNumbers?: number[];
   sessionTitle?: string;
   onRestorePrompt?: (prompt: ClaudeSessionPrompt, index: number) => void;
 };
@@ -25,6 +27,7 @@ export function SessionPromptsModal({
   prompts,
   messages = [],
   displayLevel = 'hidden',
+  promptNumbers,
   sessionTitle,
   onRestorePrompt,
   onClose,
@@ -44,6 +47,7 @@ export function SessionPromptsModal({
           messages={messages}
           displayLevel={displayLevel}
           variant="full"
+          promptNumbers={promptNumbers}
           onRestorePrompt={onRestorePrompt}
         />
       </DialogContentArea>

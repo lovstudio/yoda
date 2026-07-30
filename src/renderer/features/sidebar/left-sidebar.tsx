@@ -40,14 +40,12 @@ import { findSidebarSelectionRow } from './sidebar-selection-sync';
 import { SidebarSpace } from './sidebar-space';
 import { SidebarStatusBar } from './sidebar-status-bar';
 import { SidebarVirtualList } from './sidebar-virtual-list';
-import { useAltKeyHeld } from './use-alt-key-held';
 import { useSidebarDrop } from './use-sidebar-drop';
 
 export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const { t } = useTranslation();
   const { navigate } = useNavigate();
   const { currentView } = useWorkspaceSlots();
-  const altHeld = useAltKeyHeld();
 
   const showCommandPalette = useShowModal('commandPaletteModal');
   const { count: skillIssueCount, firstIssue: firstSkillIssue } = useSkillValidationIssues();
@@ -209,7 +207,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
               </span>
               <ShortcutHint settingsKey="commandPaletteTasks" />
             </SidebarMenuButton>
-            <GlobalSidePaneTarget viewId="library" params={libraryParams} altHeld={altHeld}>
+            <GlobalSidePaneTarget viewId="library" params={libraryParams}>
               <SidebarMenuButton
                 isActive={isCurrentView(currentView, 'library')}
                 onClick={(e) =>
@@ -230,44 +228,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </span>
               </SidebarMenuButton>
             </GlobalSidePaneTarget>
-            {pinnedApps.map((app) => (
-              <GlobalSidePaneTarget
-                key={app.id}
-                viewId="library"
-                params={{ section: 'apps', appId: app.id }}
-                altHeld={altHeld}
-                unpinAction={{
-                  label: t('aiLab.unpinFromNavigation'),
-                  disabled: updateAiLabApp.isPending,
-                  onSelect: () => updateAiLabApp.mutate({ id: app.id, pinned: false }),
-                }}
-              >
-                <SidebarMenuButton
-                  isActive={
-                    currentView === 'library' &&
-                    libraryParams.section === 'apps' &&
-                    libraryParams.appId === app.id
-                  }
-                  onClick={(event) =>
-                    event.altKey
-                      ? appState.sidePane.toggleView('library', {
-                          section: 'apps',
-                          appId: app.id,
-                        })
-                      : navigate('library', { section: 'apps', appId: app.id })
-                  }
-                  aria-label={app.name}
-                  title={app.description}
-                  className="w-full justify-start pl-7"
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <AppWindow className="size-3.5 shrink-0 text-sky-500" />
-                    <span className="min-w-0 truncate text-xs">{app.name}</span>
-                  </span>
-                </SidebarMenuButton>
-              </GlobalSidePaneTarget>
-            ))}
-            <GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams} altHeld={altHeld}>
+            <GlobalSidePaneTarget viewId="marketplace" params={marketplaceParams}>
               <SidebarMenuButton
                 isActive={isCurrentView(currentView, 'marketplace')}
                 onClick={(event) =>
@@ -285,6 +246,42 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 </span>
               </SidebarMenuButton>
             </GlobalSidePaneTarget>
+            {pinnedApps.map((app) => (
+              <GlobalSidePaneTarget
+                key={app.id}
+                viewId="marketplace"
+                params={{ section: 'apps', appId: app.id }}
+                unpinAction={{
+                  label: t('aiLab.unpinFromNavigation'),
+                  disabled: updateAiLabApp.isPending,
+                  onSelect: () => updateAiLabApp.mutate({ id: app.id, pinned: false }),
+                }}
+              >
+                <SidebarMenuButton
+                  isActive={
+                    currentView === 'marketplace' &&
+                    marketplaceParams.section === 'apps' &&
+                    marketplaceParams.appId === app.id
+                  }
+                  onClick={(event) =>
+                    event.altKey
+                      ? appState.sidePane.toggleView('marketplace', {
+                          section: 'apps',
+                          appId: app.id,
+                        })
+                      : navigate('marketplace', { section: 'apps', appId: app.id })
+                  }
+                  aria-label={app.name}
+                  title={app.description}
+                  className="w-full justify-start pl-7"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <AppWindow className="size-3.5 shrink-0 text-sky-500" />
+                    <span className="min-w-0 truncate text-xs">{app.name}</span>
+                  </span>
+                </SidebarMenuButton>
+              </GlobalSidePaneTarget>
+            ))}
             <div className="my-1 border-t border-border" />
           </SidebarMenu>
         </div>

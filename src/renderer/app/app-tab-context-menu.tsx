@@ -11,6 +11,7 @@ import {
   Pencil,
   RefreshCw,
   Settings2,
+  Share2,
   Sparkles,
   X,
 } from 'lucide-react';
@@ -50,7 +51,9 @@ import {
 } from '@renderer/features/tasks/tabs/tab-manager-store';
 import { openTaskTabInWindow } from '@renderer/features/tasks/tabs/tab-meta';
 import { FilePathMenuItems, type FilePathTarget } from '@renderer/lib/components/file-path-actions';
+import { toast } from '@renderer/lib/hooks/use-toast';
 import { APP_SHORTCUTS } from '@renderer/lib/hooks/useKeyboardShortcuts';
+import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { showModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -442,6 +445,18 @@ export function buildConversationSections(
   }
 
   const copy: ReactNode[] = [
+    ...(provisioned
+      ? [
+          <ContextMenuItem
+            key="share-public"
+            className="whitespace-nowrap"
+            onClick={() => void shareConversationPublicly(projectId, taskId, conversationId, t)}
+          >
+            <Share2 className="size-4" />
+            {t('tasks.tabs.sharePublicLink')}
+          </ContextMenuItem>,
+        ]
+      : []),
     <ContextMenuItem
       key="copy-link"
       className="whitespace-nowrap"
@@ -453,6 +468,51 @@ export function buildConversationSections(
   ];
 
   return [management, copy];
+}
+
+async function shareConversationPublicly(
+  projectId: string,
+  taskId: string,
+  conversationId: string,
+  t: Translate
+): Promise<void> {
+  const toastId = toast.loading(t('tasks.tabs.creatingPublicShare'));
+  try {
+    const share = await rpc.sessionShares.create(projectId, taskId, conversationId);
+    const copied = await rpc.app.clipboardWriteText(share.url);
+    toast.success(
+      t(copied.success ? 'tasks.tabs.publicShareCopied' : 'tasks.tabs.publicShareCreated'),
+      {
+        id: toastId,
+        description:
+          share.omittedAssetCount > 0
+            ? t('tasks.tabs.publicShareAssetsPartial', {
+                uploaded: share.assetCount,
+                omitted: share.omittedAssetCount,
+              })
+            : share.assetCount > 0
+              ? t('tasks.tabs.publicShareAssetsUploaded', { count: share.assetCount })
+              : copied.success
+                ? undefined
+                : t('tasks.tabs.publicShareCopyFailed'),
+        action: {
+          label: t('common.open'),
+          onClick: () => void rpc.app.openExternal(share.url),
+        },
+      }
+    );
+  } catch (error) {
+    log.warn('AppTabContextMenu: create public session share failed', {
+      projectId,
+      taskId,
+      conversationId,
+      error,
+    });
+    toast.error(t('tasks.tabs.publicShareFailed'), {
+      id: toastId,
+      description: t('tasks.tabs.publicShareFailedDescription'),
+    });
+  }
 }
 
 /** Archive submenu — direct / run skill then archive / configure skill. */

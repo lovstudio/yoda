@@ -1,6 +1,6 @@
 import {
   ArrowDownWideNarrow,
-  LayoutGrid,
+  List,
   ListTree,
   Loader2,
   Plus,
@@ -18,36 +18,41 @@ import type { CatalogSkill } from '@shared/skills/types';
 import { useOpenViewTab, useParams } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
-import { Input } from '@renderer/lib/ui/input';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/lib/ui/select';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
+import { Input } from '@renderer/lib/ui/input';
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@renderer/lib/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@renderer/lib/ui/toggle-group';
 import { cn } from '@renderer/utils/utils';
 import { skillNeedsAttention } from '../skill-health';
-import { SKILL_SORT_MODES, sortSkills, type SkillSortMode } from '../skill-sort';
+import { isUsageSortMode, SKILL_SORT_MODES, sortSkills, type SkillSortMode } from '../skill-sort';
 import ExternalSkillMarketplaces from './ExternalSkillMarketplaces';
-import SkillCard from './SkillCard';
+import SkillAccordionRow from './SkillAccordionRow';
 import SkillsCatalogHint from './SkillsCatalogHint';
 import SkillsTreeSection from './SkillsTreeSection';
 import { useSkills } from './useSkills';
 import { useSkillUsage } from './useSkillUsage';
 
-type SkillsLayout = 'grid' | 'tree';
+type SkillsLayout = 'list' | 'tree';
 type SkillsSection = 'installed' | 'recommended' | 'attention';
 
 const LAYOUT_STORAGE_KEY = 'yoda.skillsLayout';
+const USAGE_SORT_OPTIONS = ['total', 'recent', 'manual', 'auto'] as const;
+const CONTENT_SORT_OPTIONS = ['trigger', 'body'] as const;
 
 function loadStoredLayout(): SkillsLayout {
   try {
-    return window.localStorage.getItem(LAYOUT_STORAGE_KEY) === 'tree' ? 'tree' : 'grid';
+    return window.localStorage.getItem(LAYOUT_STORAGE_KEY) === 'tree' ? 'tree' : 'list';
   } catch {
-    return 'grid';
+    return 'list';
   }
 }
 
@@ -65,10 +70,16 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     setSearchQuery,
     installedSkills,
     recommendedSkills,
-    refresh,
+    refresh: refreshCatalog,
     install,
+    setDisabledBatch,
   } = useSkills();
-  const { usage, lookupUsage } = useSkillUsage();
+  const {
+    usage,
+    isRefreshing: isUsageRefreshing,
+    refresh: refreshUsage,
+    lookupUsage,
+  } = useSkillUsage();
   const [sortMode, setSortMode] = React.useState<SkillSortMode>('name');
   const [layout, setLayout] = React.useState<SkillsLayout>(loadStoredLayout);
   const [section, setSection] = React.useState<SkillsSection>('installed');
@@ -78,8 +89,8 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
 
   const switchLayout = React.useCallback((value: SkillsLayout) => {
     setLayout(value);
-    // 'count' is a tree-only group order; fall back when returning to cards.
-    if (value === 'grid') setSortMode((mode) => (mode === 'count' ? 'name' : mode));
+    // 'count' is a tree-only group order; fall back when returning to the list.
+    if (value === 'list') setSortMode((mode) => (mode === 'count' ? 'name' : mode));
     try {
       window.localStorage.setItem(LAYOUT_STORAGE_KEY, value);
     } catch {
@@ -87,17 +98,16 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
     }
   }, []);
 
-  // 'name' and the length rankings always work; 'count' needs the tree;
-  // usage modes need stats.
+  // Keep the menu shape stable while the first usage snapshot is being built.
   const visibleSortModes = React.useMemo(
-    () =>
-      SKILL_SORT_MODES.filter((mode) => {
-        if (mode === 'count') return layout === 'tree';
-        if (mode === 'name' || mode === 'trigger' || mode === 'body') return true;
-        return usageAvailable;
-      }),
-    [layout, usageAvailable]
+    () => SKILL_SORT_MODES.filter((mode) => mode !== 'count' || layout === 'tree'),
+    [layout]
   );
+  const refreshing = isRefreshing || isUsageRefreshing;
+  const refresh = React.useCallback(() => {
+    refreshCatalog();
+    void refreshUsage();
+  }, [refreshCatalog, refreshUsage]);
 
   const installedFamilies = React.useMemo(
     () => groupSkillFamilies(installedSkills),
@@ -154,15 +164,15 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
   );
 
   const showCreateSkillModal = useShowModal('createSkillModal');
-  const skillCardRefs = React.useRef(new Map<string, HTMLDivElement>());
+  const skillRefs = React.useRef(new Map<string, HTMLDivElement>());
   const [highlightedSkillId, setHighlightedSkillId] = React.useState<string | null>(null);
 
-  const setSkillCardRef = React.useCallback(
+  const setSkillRef = React.useCallback(
     (skillKey: string) => (node: HTMLDivElement | null) => {
       if (node) {
-        skillCardRefs.current.set(skillKey, node);
+        skillRefs.current.set(skillKey, node);
       } else {
-        skillCardRefs.current.delete(skillKey);
+        skillRefs.current.delete(skillKey);
       }
     },
     []
@@ -220,7 +230,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
           ? installedFamily
           : recommendedFamily;
     const visibleSkillKey = visibleFamily?.primary.key ?? focusedSkillId;
-    const node = skillCardRefs.current.get(visibleSkillKey);
+    const node = skillRefs.current.get(visibleSkillKey);
     if (!node) return;
 
     const frame = window.requestAnimationFrame(() => {
@@ -272,25 +282,25 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
           familiesByPrimaryKey={familiesByPrimaryKey}
           onSelect={openDetail}
           onInstall={install}
-          setSkillRef={setSkillCardRef}
+          onSetDisabledBatch={setDisabledBatch}
+          setSkillRef={setSkillRef}
           highlightedSkillId={highlightedSkillId}
         />
       );
     }
 
     return (
-      <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
+      <div className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/70 bg-background">
         {skills.map((skill) => (
           <div
             key={skill.key}
-            ref={setSkillCardRef(skill.key)}
+            ref={setSkillRef(skill.key)}
             className={cn(
-              'scroll-mt-20 rounded-lg transition-shadow duration-300',
-              highlightedSkillId === skill.key &&
-                'ring-2 ring-amber-400 ring-offset-2 ring-offset-background'
+              'scroll-mt-20 transition-shadow duration-300',
+              highlightedSkillId === skill.key && 'ring-2 ring-inset ring-amber-400'
             )}
           >
-            <SkillCard
+            <SkillAccordionRow
               skill={skill}
               family={familiesByPrimaryKey.get(skill.key)}
               usage={lookupBrowseUsage(skill)}
@@ -323,7 +333,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
         !embedded && 'h-full overflow-y-auto'
       )}
     >
-      <div className={cn('w-full', !embedded && 'mx-auto max-w-3xl px-8 py-8')}>
+      <div className={cn('w-full', !embedded && 'mx-auto max-w-4xl px-8 py-8')}>
         {/* Header */}
         {!embedded && (
           <div className="mb-6">
@@ -340,7 +350,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
         {/* Toolbar */}
         <div
           className={cn(
-            'sticky top-0 z-20 mb-6 flex items-center gap-2 border-b border-border/60 bg-background/95 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80',
+            'sticky top-0 z-20 mb-3 flex items-center gap-2 border-b border-border/60 bg-background/95 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80',
             !embedded && '-mx-8 px-8'
           )}
         >
@@ -350,7 +360,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
               placeholder={t('skills.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
+              className="h-7 pl-9"
             />
           </div>
           <ToggleGroup
@@ -362,43 +372,99 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
             }}
             aria-label={t('skills.layout.ariaLabel')}
           >
-            <ToggleGroupItem value="grid" aria-label={t('skills.layout.grid')}>
-              <LayoutGrid className="h-3.5 w-3.5" />
+            <ToggleGroupItem value="list" aria-label={t('skills.layout.list')}>
+              <List className="h-3.5 w-3.5" />
             </ToggleGroupItem>
             <ToggleGroupItem value="tree" aria-label={t('skills.layout.tree')}>
               <ListTree className="h-3.5 w-3.5" />
             </ToggleGroupItem>
           </ToggleGroup>
           {visibleSortModes.length > 1 && (
-            <Select value={sortMode} onValueChange={(value) => setSortMode(value as SkillSortMode)}>
-              <SelectTrigger
-                className="w-auto shrink-0 gap-1.5 text-xs text-muted-foreground"
-                aria-label={t('skills.sort.ariaLabel')}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 max-w-40 gap-1.5 px-2 text-xs text-foreground-muted"
+                    aria-label={t('skills.sort.ariaLabel')}
+                  />
+                }
               >
                 <ArrowDownWideNarrow className="h-3.5 w-3.5 shrink-0" />
-                {/* Narrow containers keep the icon-only trigger */}
-                <span className="hidden @xl:contents">
-                  <SelectValue />
-                </span>
-              </SelectTrigger>
-              <SelectContent align="end">
-                {visibleSortModes.map((mode) => (
-                  <SelectItem key={mode} value={mode} className="text-xs">
-                    {t(`skills.sort.${mode}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <span className="hidden truncate @xl:inline">{t(`skills.sort.${sortMode}`)}</span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-36">
+                <DropdownMenuRadioGroup
+                  value={sortMode}
+                  onValueChange={(value) => setSortMode(value as SkillSortMode)}
+                >
+                  <DropdownMenuRadioItem value="name" className="py-1 text-xs">
+                    {t('skills.sort.name')}
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="py-1 text-xs">
+                    {t('skills.sort.usageGroup')}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-40">
+                    <DropdownMenuRadioGroup
+                      value={sortMode}
+                      onValueChange={(value) => setSortMode(value as SkillSortMode)}
+                    >
+                      {USAGE_SORT_OPTIONS.map((mode) => (
+                        <DropdownMenuRadioItem
+                          key={mode}
+                          value={mode}
+                          disabled={!usageAvailable && isUsageSortMode(mode)}
+                          className="py-1 text-xs"
+                        >
+                          {t(`skills.sort.${mode}`)}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                {layout === 'tree' && (
+                  <DropdownMenuRadioGroup
+                    value={sortMode}
+                    onValueChange={(value) => setSortMode(value as SkillSortMode)}
+                  >
+                    <DropdownMenuRadioItem value="count" className="py-1 text-xs">
+                      {t('skills.sort.count')}
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                )}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="py-1 text-xs">
+                    {t('skills.sort.contentGroup')}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-40">
+                    <DropdownMenuRadioGroup
+                      value={sortMode}
+                      onValueChange={(value) => setSortMode(value as SkillSortMode)}
+                    >
+                      {CONTENT_SORT_OPTIONS.map((mode) => (
+                        <DropdownMenuRadioItem key={mode} value={mode} className="py-1 text-xs">
+                          {t(`skills.sort.${mode}`)}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             onClick={refresh}
-            disabled={isRefreshing}
+            disabled={refreshing}
             aria-label={t('skills.refreshAria')}
           >
             <RefreshCw
-              className={`h-4 w-4 text-muted-foreground ${isRefreshing ? 'animate-spin' : ''}`}
+              className={`h-4 w-4 text-muted-foreground ${refreshing ? 'animate-spin' : ''}`}
             />
           </Button>
           <Button
@@ -417,7 +483,7 @@ const SkillsView: React.FC<{ embedded?: boolean; surfaceControl?: React.ReactNod
         <Tabs
           value={section}
           onValueChange={(value) => setSection(value as SkillsSection)}
-          className="gap-4"
+          className="gap-3"
         >
           <TabsList>
             <TabsIndicator />

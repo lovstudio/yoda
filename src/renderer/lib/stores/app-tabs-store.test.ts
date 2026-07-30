@@ -111,6 +111,34 @@ describe('AppTabsStore navigation history integration', () => {
   });
 });
 
+describe('AppTabsStore persisted route migration', () => {
+  it('moves restored Library app tabs into the Marketplace scope', () => {
+    const navigation = createNavigationStub();
+    const tabs = new AppTabsStore(navigation);
+
+    tabs.restoreSnapshot({
+      tabs: [
+        {
+          id: 'app-tab',
+          viewId: 'library',
+          params: { section: 'apps', appId: 'app-1' },
+        },
+      ],
+      activeTabId: 'app-tab',
+      stripScope: 'view:library',
+    });
+
+    expect(tabs.tabs).toEqual([
+      {
+        id: 'app-tab',
+        viewId: 'marketplace',
+        params: { section: 'apps', appId: 'app-1' },
+      },
+    ]);
+    expect(tabs.stripScope).toBe('view:marketplace');
+  });
+});
+
 describe('AppTabsStore task scope entry', () => {
   it('restores the task scope session with the latest activation sequence', () => {
     const overviewParams = {

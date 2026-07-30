@@ -1,5 +1,7 @@
 import type { RuntimeId } from './runtime-registry';
 
+export type AgentSkillPolicyMode = 'runtime-defaults' | 'allowlist';
+
 /**
  * A user-configurable Agent: a reusable bundle of a system prompt, a set of
  * enabled skills, and an optional preferred runtime/model. This is distinct
@@ -24,6 +26,12 @@ export interface Agent {
   /** Skills exposed for explicit invocation but hidden from implicit routing. */
   manualSkillIds: string[];
   /**
+   * `runtime-defaults` leaves skill discovery to the selected client.
+   * `allowlist` exposes only the configured automatic/manual skills; an empty
+   * allowlist intentionally exposes no standalone skills.
+   */
+  skillPolicyMode: AgentSkillPolicyMode;
+  /**
    * Preferred Agent Runtime. At execution time we use this runtime when it is
    * available/supported, otherwise we fall back to the run-mode default.
    */
@@ -46,6 +54,7 @@ export interface AgentDraft {
   systemPrompt: string;
   enabledSkillIds: string[];
   manualSkillIds: string[];
+  skillPolicyMode: AgentSkillPolicyMode;
   preferredRuntime: RuntimeId | null;
   model: string | null;
 }
@@ -60,6 +69,7 @@ export function emptyAgentDraft(): AgentDraft {
     systemPrompt: '',
     enabledSkillIds: [],
     manualSkillIds: [],
+    skillPolicyMode: 'runtime-defaults',
     preferredRuntime: null,
     model: null,
   };
@@ -73,6 +83,7 @@ export function agentToDraft(agent: Agent): AgentDraft {
     systemPrompt: agent.systemPrompt,
     enabledSkillIds: [...agent.enabledSkillIds],
     manualSkillIds: [...agent.manualSkillIds],
+    skillPolicyMode: agent.skillPolicyMode,
     preferredRuntime: agent.preferredRuntime,
     model: agent.model,
   };

@@ -6,14 +6,14 @@ import { conversations } from '@main/db/schema';
 import { resolveTask } from '../projects/utils';
 import { mapConversationRowToConversation } from './utils';
 
-const inFlightResumes = new Map<string, Promise<void>>();
+const inFlightResumes = new Map<string, Promise<boolean>>();
 
 export async function resumeConversation(
   projectId: string,
   taskId: string,
   conversationId: string,
   initialSize?: { cols: number; rows: number }
-): Promise<void> {
+): Promise<boolean> {
   const sessionKey = `${projectId}:${taskId}:${conversationId}`;
   const existing = inFlightResumes.get(sessionKey);
   if (existing) return existing;
@@ -44,9 +44,12 @@ export async function resumeConversation(
         throw new Error(`Task not provisioned: ${taskId}`);
       }
 
-      if (!ptySessionRegistry.isRegistrationCurrent(sessionKey, registrationEpoch)) return;
+      if (!ptySessionRegistry.isRegistrationCurrent(sessionKey, registrationEpoch)) return false;
       const conversation = mapConversationRowToConversation(row, true);
       await task.conversations.startSession(conversation, initialSize, true);
+      return task.conversations
+        .getActiveSessions()
+        .some((session) => session.conversationId === conversationId);
     } finally {
       ptySessionRegistry.cancelRegistration(sessionKey, registrationEpoch);
     }

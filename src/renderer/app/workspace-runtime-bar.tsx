@@ -1,19 +1,24 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
+  Bot,
+  Boxes,
   Brain,
   Cloud,
   ExternalLink,
   Gauge,
-  HardDrive,
   MessageSquare,
+  Settings2,
   Sparkles,
+  Stethoscope,
   Terminal,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { AppAgentSessionResource } from '@shared/app-resource';
 import { getMaasPlatformDefinition } from '@shared/maas';
+import type { ComposerDefaults } from '@shared/project-settings';
 import {
   getRuntime,
   getRuntimeAccountProfile,
@@ -22,10 +27,14 @@ import {
   type RuntimeId,
 } from '@shared/runtime-registry';
 import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
+import { openTaskTarget } from '@renderer/app/open-task-target';
 import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
 import { useMaasConnections, useMaasGlobalBinding } from '@renderer/features/maas/useMaas';
+import { getProjectSettingsStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { SkillQuickSearchPopover } from '@renderer/features/skills/components/SkillQuickSearchPopover';
+import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
+import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conversations/conversation-title-utils';
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import {
   resolveSessionPrompts,
@@ -36,6 +45,7 @@ import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
+import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
 import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
@@ -44,7 +54,40 @@ import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popove
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { formatCompactNumber } from '@renderer/utils/format-compact-number';
 import { cn } from '@renderer/utils/utils';
+import { dualField, withComposerDefault } from './composer-project-overrides';
+import {
+  ComposerSettingsContent,
+  DEFAULT_INPUT_PROMPT_LANGUAGE,
+  DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
+  DEFAULT_TASK_OUTPUT_LANGUAGE,
+} from './composer-settings-content';
+import { startRendererPerformanceReporter } from './renderer-performance-reporter';
+import { rankWorkspaceAgentSessions } from './workspace-agent-sessions';
+import type { WorkspaceResourceDetailKind } from './workspace-resource-details-modal';
+import {
+  getWorkspaceLatencyP95,
+  workspaceResourceHistoryStore,
+} from './workspace-resource-history';
+import { WorkspaceResourceMetric } from './workspace-resource-metric';
+import { WORKSPACE_RESOURCE_QUERY_TIMING } from './workspace-resource-monitoring';
+import { WorkspaceResourceTrend } from './workspace-resource-trend';
 import { getQuotaWindowLabel } from './workspace-runtime-bar-format';
+
+type WorkspaceAgentSession = Omit<AppAgentSessionResource, 'runtimeId' | 'title' | 'taskTitle'> & {
+  runtimeId?: AppAgentSessionResource['runtimeId'];
+  title?: string;
+  taskTitle?: string;
+};
+
+const RUNTIME_BAR_ACTION_CLASS =
+  'flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border';
+const RUNTIME_BAR_ACTION_LABEL_CLASS = 'hidden @min-[1441px]:inline';
+
+function agentSessionKey(
+  session: Pick<AppAgentSessionResource, 'projectId' | 'taskId' | 'conversationId'>
+): string {
+  return `${session.projectId}\0${session.taskId}\0${session.conversationId}`;
+}
 
 export function explicitConversationRuntimeId(value: unknown): RuntimeId | null {
   return typeof value === 'string' && isValidRuntimeId(value) ? value : null;
@@ -53,18 +96,32 @@ export function explicitConversationRuntimeId(value: unknown): RuntimeId | null 
 export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { navigate } = useNavigate();
+  const showDoctorModal = useShowModal('doctorModal');
   const showConfirmActionModal = useShowModal('confirmActionModal');
+  const showResourceDetailsModal = useShowModal('workspaceResourceDetailsModal');
   const { value: interfaceSettings, update: updateInterfaceSettings } =
     useAppSettingsKey('interface');
+  const { value: homeDraft, update: updateHomeDraft } = useAppSettingsKey('homeDraft');
+  const { value: taskSettings, update: updateTaskSettings } = useAppSettingsKey('tasks');
+  const { value: defaultRuntime } = useAppSettingsKey('defaultRuntime');
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
+  const [isAgentPopoverOpen, setIsAgentPopoverOpen] = useState(false);
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
+  const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
   const [isSkillPopoverOpen, setIsSkillPopoverOpen] = useState(false);
-  const [isCleaningWorktrees, setIsCleaningWorktrees] = useState(false);
+  const resourceHistory = useSyncExternalStore(
+    workspaceResourceHistoryStore.subscribe,
+    workspaceResourceHistoryStore.getSnapshot,
+    workspaceResourceHistoryStore.getSnapshot
+  );
   const [sessionPromptCount, setSessionPromptCount] = useState<{
     conversationId: string;
     count: number;
   } | null>(null);
+
+  useEffect(() => startRendererPerformanceReporter(), []);
   const route = appState.navigation.currentViewId;
   const params = appState.navigation.viewParamsStore[route] as
     | { projectId?: string; taskId?: string }
@@ -73,9 +130,58 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     route === 'task' && params?.projectId && params.taskId
       ? asProvisioned(getTaskStore(params.projectId, params.taskId))
       : undefined;
+  const activeProjectId = params?.projectId;
+  const projectSettingsStore = activeProjectId
+    ? getProjectSettingsStore(activeProjectId)
+    : undefined;
+  const projectSettings = projectSettingsStore?.settings ?? null;
+  const composerDefaults = projectSettings?.composerDefaults;
+  const setComposerDefault = useCallback(
+    <K extends keyof ComposerDefaults>(field: K, value: ComposerDefaults[K] | undefined) => {
+      if (!projectSettingsStore || !projectSettings) return;
+      void projectSettingsStore.save({
+        ...projectSettings,
+        composerDefaults: withComposerDefault(projectSettings.composerDefaults, field, value),
+      });
+    },
+    [projectSettingsStore, projectSettings]
+  );
+  const attachImagesField = dualField<boolean>({
+    override: composerDefaults?.attachImagesAsPaths,
+    globalValue: homeDraft?.attachImagesAsPaths ?? false,
+    setGlobal: (value) => updateHomeDraft({ attachImagesAsPaths: value }),
+    setOverride: (value) => setComposerDefault('attachImagesAsPaths', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const inputPromptLanguageField = dualField({
+    override: composerDefaults?.inputPromptLanguage,
+    globalValue: taskSettings?.inputPromptLanguage ?? DEFAULT_INPUT_PROMPT_LANGUAGE,
+    setGlobal: (value) => updateTaskSettings({ inputPromptLanguage: value }),
+    setOverride: (value) => setComposerDefault('inputPromptLanguage', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const namingLanguageField = dualField({
+    override: composerDefaults?.namingLanguage,
+    globalValue: taskSettings?.namingLanguage ?? DEFAULT_TASK_OUTPUT_LANGUAGE,
+    setGlobal: (value) => updateTaskSettings({ namingLanguage: value }),
+    setOverride: (value) => setComposerDefault('namingLanguage', value),
+    hasProject: Boolean(activeProjectId),
+  });
+  const summaryLanguageField = dualField({
+    override: composerDefaults?.summaryLanguage,
+    globalValue: taskSettings?.summaryLanguage ?? DEFAULT_SUMMARY_OUTPUT_LANGUAGE,
+    setGlobal: (value) => updateTaskSettings({ summaryLanguage: value }),
+    setOverride: (value) => setComposerDefault('summaryLanguage', value),
+    hasProject: Boolean(activeProjectId),
+  });
   const runtimeId = explicitConversationRuntimeId(
     provisionedTask?.taskView.tabManager.activeConversation?.data.runtimeId
   );
+  const configRuntimeId =
+    runtimeId ??
+    composerDefaults?.runtimeId ??
+    (isValidRuntimeId(homeDraft?.runtimeOverride) ? homeDraft.runtimeOverride : null) ??
+    (isValidRuntimeId(defaultRuntime) ? defaultRuntime : 'claude');
   const activeConversation = provisionedTask?.taskView.tabManager.activeConversation?.data ?? null;
   const runtime = runtimeId ? getRuntime(runtimeId) : null;
   const officialUsageUrl = runtimeId
@@ -199,21 +305,91 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { data: resourceSnapshot } = useQuery({
     queryKey: ['app', 'resourceSnapshot'],
     queryFn: () => rpc.app.getResourceSnapshot(),
-    staleTime: 2_000,
-    refetchInterval: 5_000,
-    refetchOnWindowFocus: false,
+    ...WORKSPACE_RESOURCE_QUERY_TIMING,
   });
-  const {
-    data: worktreeStorage,
-    isFetching: isScanningWorktrees,
-    refetch: refreshWorktreeStorage,
-  } = useQuery({
+  const { data: worktreeStorage, isFetching: isFetchingWorktreeStorage } = useQuery({
     queryKey: ['projects', 'worktreeStorage'],
     queryFn: () => rpc.projects.getWorktreeStorageSnapshot(),
     enabled: isResourcePopoverOpen,
     staleTime: 60_000,
+    refetchInterval: (query) =>
+      query.state.data?.pendingInspectionCount && query.state.data.pendingInspectionCount > 0
+        ? 1_000
+        : false,
     refetchOnWindowFocus: false,
   });
+  const isScanningWorktrees =
+    isFetchingWorktreeStorage || (worktreeStorage?.pendingInspectionCount ?? 0) > 0;
+  const agentSessionByKey = new Map<string, WorkspaceAgentSession>(
+    (resourceSnapshot?.agentSessions ?? []).map((session) => [agentSessionKey(session), session])
+  );
+  for (const session of appState.agentRuntime.runningSessions()) {
+    const key = agentSessionKey(session);
+    if (agentSessionByKey.has(key)) continue;
+    const task = getTaskStore(session.projectId, session.taskId);
+    const conversation = asProvisioned(task)?.conversations.conversations.get(
+      session.conversationId
+    )?.data;
+    agentSessionByKey.set(key, {
+      ...session,
+      pid: null,
+      cpuPercent: 0,
+      memoryBytes: 0,
+      outputBytesPerSecond: 0,
+      lastActivityAt: null,
+      ringBufferBytes: 0,
+      ringBufferCapBytes: 0,
+      rendererConsumers: 0,
+      lifecycle: 'warm',
+      tmuxBacked: false,
+      runtimeId: explicitConversationRuntimeId(conversation?.runtimeId) ?? undefined,
+      title: conversation?.title,
+      taskTitle: task?.data.name,
+    });
+  }
+  const agentSessions = rankWorkspaceAgentSessions(Array.from(agentSessionByKey.values()));
+  const agentSessionCount = agentSessions.length;
+  const workingAgentCount = agentSessions.filter((session) => session.status === 'working').length;
+  const attentionAgentCount = agentSessions.filter(
+    (session) => session.status === 'awaiting-input'
+  ).length;
+  const tmuxSessionCount = agentSessions.filter((session) => session.tmuxBacked).length;
+  const agentTriggerText =
+    attentionAgentCount > 0
+      ? t('workspaceRuntime.agents.triggerAttention', {
+          count: agentSessionCount,
+          attention: attentionAgentCount,
+        })
+      : workingAgentCount > 0
+        ? t('workspaceRuntime.agents.triggerWorking', {
+            count: agentSessionCount,
+            working: workingAgentCount,
+          })
+        : String(agentSessionCount);
+  const resourceLatencyP95 = getWorkspaceLatencyP95(resourceSnapshot);
+  const latencyTitle = resourceSnapshot?.rendererPerformance
+    ? t('workspaceRuntime.resources.latencyDetails', {
+        input: resourceSnapshot.rendererPerformance.inputLatency.p95Ms,
+        renderer: resourceSnapshot.rendererPerformance.eventLoop.p95Ms,
+      })
+    : undefined;
+  const worktreeMetricValue = worktreeStorage
+    ? formatBytes(worktreeStorage.totalBytes)
+    : isScanningWorktrees
+      ? '…'
+      : '—';
+  const worktreeMetricTitle = worktreeStorage
+    ? t('workspaceRuntime.resources.worktreeSummary', {
+        count: worktreeStorage.worktreeCount,
+        reclaimable: worktreeStorage.reclaimableCount,
+        size: formatBytes(worktreeStorage.reclaimableBytes),
+      })
+    : t('workspaceRuntime.resources.scanningWorktrees');
+
+  useEffect(() => {
+    if (!resourceSnapshot) return;
+    workspaceResourceHistoryStore.append(resourceSnapshot);
+  }, [resourceSnapshot]);
 
   useEffect(() => {
     if (!activeConversation || !provisionedTask) return;
@@ -338,49 +514,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     updateInterfaceSettings({ dockSessionHistory: !sessionHistoryDocked });
   };
 
-  const cleanupWorktrees = async () => {
-    setIsCleaningWorktrees(true);
-    try {
-      const result = await rpc.projects.cleanupUnusedWorktrees();
-      await refreshWorktreeStorage();
-      if (result.removedCount === 0) {
-        toast(t('workspaceRuntime.resources.worktreeCleanupNone'));
-      } else {
-        toast.success(
-          t('workspaceRuntime.resources.worktreeCleanupSuccess', {
-            count: result.removedCount,
-            size: formatBytes(result.reclaimedBytes),
-          })
-        );
-      }
-      if (result.failedPaths.length > 0) {
-        toast.error(
-          t('workspaceRuntime.resources.worktreeCleanupPartial', {
-            count: result.failedPaths.length,
-          })
-        );
-      }
-    } catch {
-      toast.error(t('workspaceRuntime.resources.worktreeCleanupFailed'));
-    } finally {
-      setIsCleaningWorktrees(false);
-    }
-  };
-
-  const confirmWorktreeCleanup = () => {
-    if (!worktreeStorage?.reclaimableCount) return;
-    showConfirmActionModal({
-      title: t('workspaceRuntime.resources.confirmCleanupTitle'),
-      description: t('workspaceRuntime.resources.confirmCleanupDescription', {
-        count: worktreeStorage.reclaimableCount,
-        size: formatBytes(worktreeStorage.reclaimableBytes),
-      }),
-      confirmLabel: t('workspaceRuntime.resources.cleanup'),
-      variant: 'default',
-      onSuccess: () => void cleanupWorktrees(),
-    });
-  };
-
   const handleSkillInstalled = (skill: { key: string; displayName: string }) => {
     setIsSkillPopoverOpen(false);
     if (!provisionedTask || !activeConversation || connectionId) return;
@@ -404,13 +537,35 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     appState.navigation.navigate('skills');
   };
 
+  const openAgentSession = (session: WorkspaceAgentSession) => {
+    setIsAgentPopoverOpen(false);
+    openTaskTarget(
+      {
+        projectId: session.projectId,
+        taskId: session.taskId,
+        conversationId: session.conversationId,
+      },
+      navigate
+    );
+  };
+
+  const openResourceDetails = (kind: WorkspaceResourceDetailKind) => {
+    setIsResourcePopoverOpen(false);
+    showResourceDetailsModal({
+      kind,
+      initialSnapshot: resourceSnapshot,
+      initialHistory: resourceHistory,
+      initialWorktreeStorage: worktreeStorage,
+    });
+  };
+
   return (
     <footer
       data-yoda-surface="workspace-runtime-bar"
-      className="flex h-7 shrink-0 items-center gap-2 border-t border-border bg-background-secondary px-2 text-[11px] text-foreground-muted"
+      className="@container flex h-7 min-w-0 shrink-0 items-center gap-1 overflow-hidden whitespace-nowrap border-t border-border bg-background-secondary px-2 text-[11px] text-foreground-muted @min-[1441px]:gap-2"
     >
       {runtimeId ? (
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-0.5 overflow-hidden @min-[1121px]:gap-1.5">
           <Popover>
             <PopoverTrigger
               aria-label={t('workspaceRuntime.currentSessionTitle', {
@@ -430,7 +585,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   className="size-4 rounded-[2px]"
                 />
               ) : null}
-              <span className="truncate font-medium text-foreground">
+              <span className="truncate font-medium text-foreground @max-[720px]:hidden">
                 {runtime?.name ?? runtimeId}
               </span>
             </PopoverTrigger>
@@ -445,7 +600,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           </Popover>
           {activeConversationId ? (
             <>
-              <span aria-hidden>·</span>
+              <span aria-hidden className="@max-[1120px]:hidden">
+                ·
+              </span>
               <button
                 type="button"
                 aria-label={sessionHistoryLabel}
@@ -458,13 +615,18 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                 )}
               >
                 <MessageSquare className="size-3.5" />
-                <span className="tabular-nums">{sessionHistoryLabel}</span>
+                <span className="tabular-nums @max-[1120px]:hidden">{sessionHistoryLabel}</span>
+                <span className="hidden tabular-nums @max-[1120px]:inline">
+                  {displayedPromptCount ?? 0}
+                </span>
               </button>
             </>
           ) : null}
           {sessionContext && contextPercent != null ? (
             <>
-              <span aria-hidden>·</span>
+              <span aria-hidden className="@max-[1120px]:hidden">
+                ·
+              </span>
               <Popover>
                 <PopoverTrigger
                   aria-label={t('workspaceRuntime.contextUsage', {
@@ -476,7 +638,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   title={contextTitle ?? undefined}
                 >
                   <Brain className="size-3.5" />
-                  <span>{t('workspaceRuntime.contextUsageShort')}</span>
+                  <span className="@max-[1120px]:hidden">
+                    {t('workspaceRuntime.contextUsageShort')}
+                  </span>
                   <ContextProgressBar percent={contextPercent} tone={contextTone} compact />
                 </PopoverTrigger>
                 <PopoverContent
@@ -557,7 +721,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           ) : null}
           {shortAccountWindow || (runtimeId === 'codex' && !connectionId) ? (
             <>
-              <span aria-hidden>·</span>
+              <span aria-hidden className="@max-[1120px]:hidden">
+                ·
+              </span>
               <Popover onOpenChange={handleAccountUsagePopoverOpen}>
                 <PopoverTrigger
                   aria-label={t('workspaceRuntime.accountUsage')}
@@ -565,7 +731,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
                   title={t('workspaceRuntime.accountUsage')}
                 >
                   <Gauge className="size-3.5" />
-                  <span>{t('workspaceRuntime.accountUsageShort')}</span>
+                  <span className="@max-[1120px]:hidden">
+                    {t('workspaceRuntime.accountUsageShort')}
+                  </span>
                   {shortAccountWindow ? (
                     <ContextProgressBar
                       compact
@@ -698,24 +866,219 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         </div>
       ) : null}
       <span className="flex-1" />
-      <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>
+      <Popover open={isConfigPopoverOpen} onOpenChange={setIsConfigPopoverOpen}>
         <PopoverTrigger
-          aria-label={t('workspaceRuntime.resources.title')}
-          className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
-          title={t('workspaceRuntime.resources.title')}
+          aria-label={t('workspaceRuntime.config.title')}
+          className={cn(
+            RUNTIME_BAR_ACTION_CLASS,
+            isConfigPopoverOpen && 'bg-background-2 text-foreground'
+          )}
+          title={t('workspaceRuntime.config.title')}
         >
-          <Activity className="size-3.5" />
-          <span className="font-mono tabular-nums">
-            {resourceSnapshot
-              ? `${formatBytes(resourceSnapshot.memoryBytes)} · ${Math.round(resourceSnapshot.cpuPercent)}%`
-              : '—'}
+          <Settings2 className="size-3.5" />
+          <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>
+            {t('workspaceRuntime.config.title')}
           </span>
         </PopoverTrigger>
         <PopoverContent
           align="end"
           side="top"
           sideOffset={8}
-          className="w-80 gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+          className="max-h-[min(32rem,calc(100vh-3rem))] w-96 gap-0 overflow-y-auto border border-border bg-background p-0 text-foreground shadow-lg"
+        >
+          <div className="border-b border-border p-3">
+            <div className="text-sm font-medium">{t('workspaceRuntime.config.title')}</div>
+            <div className="mt-0.5 text-xs text-foreground-passive">
+              {t('workspaceRuntime.config.description')}
+            </div>
+          </div>
+          <div className="p-3">
+            <ComposerSettingsContent
+              runtimeId={configRuntimeId}
+              projectId={activeProjectId}
+              projectPath={connectionId ? undefined : provisionedTask?.path}
+              attachImagesAsPaths={attachImagesField.value}
+              inputPromptLanguage={inputPromptLanguageField.value}
+              namingLanguage={namingLanguageField.value}
+              summaryLanguage={summaryLanguageField.value}
+              onAttachImagesAsPathsChange={attachImagesField.setValue}
+              onInputPromptLanguageChange={inputPromptLanguageField.setValue}
+              onNamingLanguageChange={namingLanguageField.setValue}
+              onSummaryLanguageChange={summaryLanguageField.setValue}
+              onManagePrompts={() => {
+                setIsConfigPopoverOpen(false);
+                appState.navigation.navigate('library', { section: 'prompts' });
+              }}
+            />
+          </div>
+        </PopoverContent>
+      </Popover>
+      <Popover open={isAgentPopoverOpen} onOpenChange={setIsAgentPopoverOpen}>
+        <PopoverTrigger
+          aria-label={t('workspaceRuntime.agents.triggerLabel', {
+            count: agentSessionCount,
+            working: workingAgentCount,
+            attention: attentionAgentCount,
+          })}
+          className={cn(
+            RUNTIME_BAR_ACTION_CLASS,
+            attentionAgentCount > 0 ? 'text-foreground' : 'text-foreground-passive'
+          )}
+          title={t('workspaceRuntime.agents.triggerLabel', {
+            count: agentSessionCount,
+            working: workingAgentCount,
+            attention: attentionAgentCount,
+          })}
+        >
+          <Bot className="size-3.5" />
+          <span className="tabular-nums @max-[1440px]:hidden">{agentTriggerText}</span>
+          <span className="hidden tabular-nums @max-[1440px]:inline">{agentSessionCount}</span>
+          {attentionAgentCount > 0 || workingAgentCount > 0 ? (
+            <span
+              aria-hidden
+              className={cn(
+                'size-1.5 rounded-full',
+                attentionAgentCount > 0 ? 'bg-amber-500' : 'bg-primary'
+              )}
+            />
+          ) : null}
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          side="top"
+          sideOffset={8}
+          className="w-[440px] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
+        >
+          <div className="border-b border-border p-3">
+            <div className="text-sm font-medium">{t('workspaceRuntime.agents.title')}</div>
+            <div className="mt-0.5 text-xs text-foreground-passive">
+              {t('workspaceRuntime.agents.description')}
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-px bg-border">
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.agents.sessions')}
+              value={String(agentSessionCount)}
+            />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.agents.working')}
+              value={String(workingAgentCount)}
+            />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.agents.attention')}
+              value={String(attentionAgentCount)}
+            />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.agents.tmux')}
+              value={String(tmuxSessionCount)}
+            />
+          </div>
+          {agentSessions.length > 0 ? (
+            <div className="max-h-80 overflow-y-auto p-2">
+              {agentSessions.map((session) => {
+                const title =
+                  (session.runtimeId
+                    ? formatConversationTitleForDisplay(
+                        session.runtimeId,
+                        session.title ?? ''
+                      ).trim()
+                    : session.title?.trim()) ||
+                  t('workspaceRuntime.agents.sessionFallback', {
+                    id: session.conversationId.slice(0, 8),
+                  });
+                const taskTitle =
+                  session.taskTitle?.trim() ||
+                  t('workspaceRuntime.agents.taskFallback', {
+                    id: session.taskId.slice(0, 8),
+                  });
+                const config = session.runtimeId ? agentConfig[session.runtimeId] : undefined;
+                return (
+                  <button
+                    key={agentSessionKey(session)}
+                    type="button"
+                    aria-label={t('workspaceRuntime.agents.openSession', { title })}
+                    className="flex w-full min-w-0 items-start gap-2.5 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                    onClick={() => openAgentSession(session)}
+                  >
+                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center">
+                      {config ? (
+                        <AgentLogo
+                          logo={config.logo}
+                          alt={config.alt}
+                          isSvg={config.isSvg}
+                          invertInDark={config.invertInDark}
+                          className="size-4"
+                        />
+                      ) : (
+                        <Bot aria-hidden className="size-4" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                          {title}
+                        </span>
+                        <span className="shrink-0 font-mono text-[10px] tabular-nums text-foreground-passive">
+                          {formatBytes(session.memoryBytes)}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] text-foreground-passive">
+                        {taskTitle}
+                      </span>
+                      <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-background-2 px-1.5 py-0.5 text-foreground-muted">
+                          <AgentStatusIndicator
+                            status={session.status}
+                            disableTooltip
+                            boxClassName="size-3"
+                          />
+                          {t(`agentStatus.${session.status}`)}
+                        </span>
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5',
+                            session.tmuxBacked
+                              ? 'bg-status-in-review/10 text-status-in-review'
+                              : 'bg-background-2 text-foreground-passive'
+                          )}
+                        >
+                          <Boxes aria-hidden className="size-3" />
+                          {session.tmuxBacked
+                            ? t('workspaceRuntime.agents.tmuxRunning')
+                            : t('workspaceRuntime.agents.noTmux')}
+                        </span>
+                        <span className="font-mono tabular-nums text-foreground-passive">
+                          {Math.round(session.cpuPercent)}% CPU · PID {session.pid ?? '—'}
+                        </span>
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-3 py-6 text-center text-xs text-foreground-passive">
+              {t('workspaceRuntime.agents.empty')}
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+      <Popover open={isResourcePopoverOpen} onOpenChange={setIsResourcePopoverOpen}>
+        <PopoverTrigger
+          aria-label={t('workspaceRuntime.resources.triggerLabel')}
+          className={cn(RUNTIME_BAR_ACTION_CLASS, 'text-foreground-passive')}
+          title={t('workspaceRuntime.resources.triggerLabel')}
+        >
+          <Activity aria-hidden className="size-3.5" />
+          <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>
+            {t('workspaceRuntime.resources.triggerShort')}
+          </span>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          side="top"
+          sideOffset={8}
+          className="w-[420px] gap-0 border border-border bg-background p-0 text-foreground shadow-lg"
         >
           <div className="border-b border-border p-3">
             <div className="text-sm font-medium">{t('workspaceRuntime.resources.title')}</div>
@@ -723,91 +1086,81 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               {t('workspaceRuntime.resources.description')}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-px bg-border">
-            <ResourceMetric
+          <div className="grid grid-cols-2 gap-px bg-border">
+            <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.cpu')}
               value={resourceSnapshot ? `${Math.round(resourceSnapshot.cpuPercent)}%` : '—'}
+              ariaLabel={t('workspaceRuntime.resources.details.openMetric', {
+                metric: t('workspaceRuntime.resources.cpu'),
+              })}
+              opensDialog
+              onClick={() => openResourceDetails('cpu')}
             />
-            <ResourceMetric
+            <WorkspaceResourceMetric
               label={t('workspaceRuntime.resources.memory')}
               value={resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—'}
+              ariaLabel={t('workspaceRuntime.resources.details.openMetric', {
+                metric: t('workspaceRuntime.resources.memory'),
+              })}
+              opensDialog
+              onClick={() => openResourceDetails('memory')}
             />
-            <ResourceMetric
-              label={t('workspaceRuntime.resources.sessions')}
-              value={String(resourceSnapshot?.activeAgentSessions ?? 0)}
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.resources.latency')}
+              value={resourceLatencyP95 == null ? '—' : `${resourceLatencyP95} ms`}
+              title={latencyTitle}
+              ariaLabel={t('workspaceRuntime.resources.details.openMetric', {
+                metric: t('workspaceRuntime.resources.latency'),
+              })}
+              opensDialog
+              onClick={() => openResourceDetails('latency')}
+            />
+            <WorkspaceResourceMetric
+              label={t('workspaceRuntime.resources.worktrees')}
+              value={worktreeMetricValue}
+              title={worktreeMetricTitle}
+              ariaLabel={t('workspaceRuntime.resources.details.openMetric', {
+                metric: t('workspaceRuntime.resources.worktrees'),
+              })}
+              opensDialog
+              onClick={() => openResourceDetails('worktrees')}
             />
           </div>
-          {resourceSnapshot?.processes.length ? (
-            <div className="border-b border-border p-3">
-              <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
-                {t('workspaceRuntime.resources.processes')}
-              </div>
-              <div className="space-y-1.5">
-                {resourceSnapshot.processes.slice(0, 4).map((process) => (
-                  <div
-                    key={process.pid}
-                    className="flex items-center justify-between gap-3 text-xs"
-                  >
-                    <span className="truncate text-foreground-muted">
-                      {formatProcessType(process.type)}
-                    </span>
-                    <span className="shrink-0 font-mono tabular-nums text-foreground-passive">
-                      {formatBytes(process.memoryBytes)} · {Math.round(process.cpuPercent)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          <div className="p-3">
-            <div className="flex items-start gap-2.5">
-              <HardDrive className="mt-0.5 size-4 shrink-0 text-foreground-passive" />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3 text-xs">
-                  <span className="font-medium">{t('workspaceRuntime.resources.worktrees')}</span>
-                  <span className="font-mono tabular-nums text-foreground-muted">
-                    {worktreeStorage ? formatBytes(worktreeStorage.totalBytes) : '—'}
-                  </span>
-                </div>
-                <div className="mt-1 text-[11px] leading-relaxed text-foreground-passive">
-                  {isScanningWorktrees && !worktreeStorage
-                    ? t('workspaceRuntime.resources.scanningWorktrees')
-                    : t('workspaceRuntime.resources.worktreeSummary', {
-                        count: worktreeStorage?.worktreeCount ?? 0,
-                        reclaimable: worktreeStorage?.reclaimableCount ?? 0,
-                        size: formatBytes(worktreeStorage?.reclaimableBytes ?? 0),
-                      })}
-                </div>
-                {worktreeStorage?.reclaimableCount ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 w-full"
-                    disabled={isCleaningWorktrees || isScanningWorktrees}
-                    onClick={confirmWorktreeCleanup}
-                  >
-                    {isCleaningWorktrees
-                      ? t('workspaceRuntime.resources.cleaning')
-                      : t('workspaceRuntime.resources.cleanup')}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          </div>
+          <WorkspaceResourceTrend
+            history={resourceHistory}
+            title={t('workspaceRuntime.resources.trendTitle')}
+            refreshLabel={t('workspaceRuntime.resources.trendRefresh')}
+            cpuLabel={t('workspaceRuntime.resources.cpu')}
+            cpuValue={resourceSnapshot ? `${Math.round(resourceSnapshot.cpuPercent)}%` : '—'}
+            cpuAriaLabel={t('workspaceRuntime.resources.cpuTrendLabel', {
+              value: resourceSnapshot ? `${Math.round(resourceSnapshot.cpuPercent)}%` : '—',
+            })}
+            memoryLabel={t('workspaceRuntime.resources.memory')}
+            memoryValue={resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—'}
+            memoryAriaLabel={t('workspaceRuntime.resources.memoryTrendLabel', {
+              value: resourceSnapshot ? formatBytes(resourceSnapshot.memoryBytes) : '—',
+            })}
+          />
         </PopoverContent>
       </Popover>
       <Popover>
         <PopoverTrigger
           aria-label={t('workspaceRuntime.maas.title')}
           className={cn(
-            'flex h-5 shrink-0 items-center gap-1 rounded-sm px-1 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
+            RUNTIME_BAR_ACTION_CLASS,
             globalMaasBinding.data?.enabled ? 'text-foreground' : 'text-foreground-passive'
           )}
           title={t('workspaceRuntime.maas.title')}
         >
           <Cloud className="size-3.5" />
-          <span>{selectedMaasLabel}</span>
+          <span
+            className={cn(
+              RUNTIME_BAR_ACTION_LABEL_CLASS,
+              'max-w-48 truncate @min-[1441px]:inline-block'
+            )}
+          >
+            {selectedMaasLabel}
+          </span>
           <span
             aria-hidden
             className={cn(
@@ -855,7 +1208,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
           <div className="grid gap-3 p-3">
             <MaasGlobalSelector
               onManagePlatform={() => appState.navigation.navigate('maas')}
-              onOpenMarketplace={() => appState.navigation.navigate('marketplace')}
+              onOpenMarketplace={() =>
+                appState.navigation.navigate('marketplace', { section: 'extensions' })
+              }
             />
             <div className="flex gap-2">
               <Button
@@ -884,13 +1239,13 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         <PopoverTrigger
           aria-label={t('workspaceRuntime.skill')}
           className={cn(
-            'flex h-5 items-center gap-1 rounded px-1.5 transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border',
+            RUNTIME_BAR_ACTION_CLASS,
             isSkillPopoverOpen && 'bg-background-2 text-foreground'
           )}
           title={t('workspaceRuntime.skill')}
         >
           <Sparkles className="size-3.5" />
-          <span>{t('workspaceRuntime.skill')}</span>
+          <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.skill')}</span>
         </PopoverTrigger>
         <PopoverContent
           align="end"
@@ -906,17 +1261,27 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       </Popover>
       <button
         type="button"
+        title={t('workspaceRuntime.doctor')}
+        aria-label={t('workspaceRuntime.doctor')}
+        onClick={() => showDoctorModal({})}
+        className={cn(RUNTIME_BAR_ACTION_CLASS, 'text-foreground-passive')}
+      >
+        <Stethoscope className="size-3.5" />
+        <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.doctor')}</span>
+      </button>
+      <button
+        type="button"
         title={t('workspaceRuntime.terminal')}
         aria-label={t('workspaceRuntime.terminal')}
         aria-pressed={terminalActive}
         onClick={toggleTerminal}
         className={cn(
-          'flex h-5 items-center gap-1 rounded px-1.5 transition-colors hover:bg-background-2 hover:text-foreground',
+          RUNTIME_BAR_ACTION_CLASS,
           terminalActive && 'bg-background-2 text-foreground'
         )}
       >
         <Terminal className="size-3.5" />
-        <span>{t('workspaceRuntime.terminal')}</span>
+        <span className={RUNTIME_BAR_ACTION_LABEL_CLASS}>{t('workspaceRuntime.terminal')}</span>
       </button>
     </footer>
   );
@@ -938,7 +1303,7 @@ function ContextProgressBar({
       aria-valuenow={percent}
       className={cn(
         'overflow-hidden rounded-full bg-foreground-muted/20',
-        compact ? 'h-1 w-9' : 'h-1.5 w-full'
+        compact ? 'h-1 w-9 @max-[720px]:hidden' : 'h-1.5 w-full'
       )}
       role="progressbar"
     >
@@ -947,15 +1312,6 @@ function ContextProgressBar({
         style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
       />
     </span>
-  );
-}
-
-function ResourceMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-background p-2.5">
-      <div className="text-[10px] uppercase tracking-wide text-foreground-passive">{label}</div>
-      <div className="mt-1 font-mono text-sm tabular-nums text-foreground">{value}</div>
-    </div>
   );
 }
 
@@ -1005,10 +1361,4 @@ function formatBytes(bytes: number): string {
   const value = bytes / 1024 ** unitIndex;
   const digits = value >= 100 || unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
-}
-
-function formatProcessType(type: string): string {
-  if (type === 'Browser') return 'Main';
-  if (type === 'Tab') return 'Renderer';
-  return type;
 }

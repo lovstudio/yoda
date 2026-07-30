@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { ModalRenderer } from '@renderer/lib/modal/modal-renderer';
 import { OnboardingShell } from './onboarding-shell';
-
-type OnboardingStep = 'sign-in' | 'maas-gateway';
+import type { OnboardingStep } from './onboarding-steps';
 
 export function Onboarding({
   steps: initialSteps,

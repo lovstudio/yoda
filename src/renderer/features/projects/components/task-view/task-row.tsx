@@ -24,6 +24,7 @@ import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { Checkbox } from '@renderer/lib/ui/checkbox';
 import { RelativeTime } from '@renderer/lib/ui/relative-time';
 import { cn } from '@renderer/utils/utils';
+import { restoreArchivedTaskAndOpen } from './restore-archived-task-and-open';
 
 export type ReadyTask = TaskStore & { data: Task };
 
@@ -60,22 +61,13 @@ export const TaskRow = observer(function TaskRow({
   };
 
   const handleOpenDetails = () => {
-    if (isArchived) return;
+    if (isArchived) {
+      void restoreArchivedTaskAndOpen(task.data.projectId, task.data.id, navigate);
+      return;
+    }
     handleProvision();
     openPreferredConversationIfEmpty();
     navigate('task', { projectId: task.data.projectId, taskId: task.data.id });
-  };
-
-  // Double-clicking an archived row restores it and opens the task, so an
-  // archived task can be reactivated without going through the context menu.
-  const handleRestoreAndOpen = () => {
-    if (!isArchived) return;
-    void (async () => {
-      await taskManager?.restoreTask(task.data.id);
-      await taskManager?.provisionTask(task.data.id);
-      asProvisioned(task)?.taskView.tabManager.openPreferredConversation();
-      navigate('task', { projectId: task.data.projectId, taskId: task.data.id });
-    })();
   };
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -90,15 +82,11 @@ export const TaskRow = observer(function TaskRow({
   return (
     <TaskContextMenu {...menuActions}>
       <div
-        role={isArchived ? undefined : 'button'}
-        tabIndex={isArchived ? undefined : 0}
+        role="button"
+        tabIndex={0}
         onClick={handleOpenDetails}
-        onDoubleClick={isArchived ? handleRestoreAndOpen : undefined}
-        onKeyDown={isArchived ? undefined : handleRowKeyDown}
-        className={cn(
-          'group flex items-center gap-2 rounded-lg p-3 hover:bg-background-1 transition-colors w-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-          isArchived ? 'cursor-default' : 'cursor-pointer'
-        )}
+        onKeyDown={handleRowKeyDown}
+        className="group flex w-full cursor-pointer items-center gap-2 rounded-lg p-3 outline-none transition-colors hover:bg-background-1 focus-visible:ring-2 focus-visible:ring-ring/40"
       >
         <div
           onClick={(e) => e.stopPropagation()}

@@ -35,6 +35,8 @@ describe('MaaS platform list', () => {
     expect(getAvailableMaasPlatformIds(['zenmux', 'custom'])).toEqual([
       'openrouter',
       'siliconflow',
+      'litellm',
+      'newapi',
       'custom',
     ]);
   });

@@ -6,11 +6,20 @@ import {
 } from './terminal-link-activation';
 import { isTerminalLinkCellInRange, type TerminalLinkCellPosition } from './terminal-link-target';
 
-// Mirrors @xterm/addon-web-links' URL regex (RFC-style), with CJK punctuation
-// treated as hard delimiters because Chinese/Japanese prose often has no
-// whitespace after punctuation.
+// Starts from @xterm/addon-web-links' RFC-style URL matching, with CJK
+// punctuation treated as hard delimiters because Chinese prose often has no
+// whitespace after punctuation. ASCII closing delimiters stay in the raw
+// candidate so balanced URL content can be distinguished from surrounding
+// prose below.
 const URL_REGEX =
-  /(?:https?|HTTPS?|ftp|FTP|file|FILE):\/\/[^\s"'<>`、，。；：！？（）「」『』【】〈〉《》“”‘’]+[^\s"'<>`、，。；：！？（）「」『』【】〈〉《》“”‘’.,;:!?)\]}]/g;
+  /(?:https?|HTTPS?|ftp|FTP|file|FILE):\/\/[^\s"'<>`、，。；：！？（）「」『』【】〈〉《》“”‘’]+/g;
+const TRAILING_URL_PUNCTUATION_RE = /[.,;:!?]+$/u;
+type AsciiOpeningDelimiter = '(' | '[' | '{';
+const ASCII_CLOSING_DELIMITERS: Readonly<Record<string, AsciiOpeningDelimiter>> = {
+  ')': '(',
+  ']': '[',
+  '}': '{',
+};
 
 // Markdown inline links `[label](url)` — the agent's ink renderer often prints
 // these literally, where only the bare URL inside the parens was clickable.
@@ -35,6 +44,31 @@ export interface TerminalWebLinkMatch {
   url: string;
 }
 
+function trimTerminalWebUrl(rawUrl: string): string {
+  const delimiterDepth: Record<AsciiOpeningDelimiter, number> = {
+    '(': 0,
+    '[': 0,
+    '{': 0,
+  };
+
+  for (let index = 0; index < rawUrl.length; index++) {
+    const character = rawUrl[index];
+    if (character === '(' || character === '[' || character === '{') {
+      delimiterDepth[character]++;
+      continue;
+    }
+
+    const openingDelimiter = character ? ASCII_CLOSING_DELIMITERS[character] : undefined;
+    if (!openingDelimiter) continue;
+    if (delimiterDepth[openingDelimiter] === 0) {
+      return rawUrl.slice(0, index).replace(TRAILING_URL_PUNCTUATION_RE, '');
+    }
+    delimiterDepth[openingDelimiter]--;
+  }
+
+  return rawUrl.replace(TRAILING_URL_PUNCTUATION_RE, '');
+}
+
 export function extractTerminalWebLinkCandidates(line: string): TerminalWebLinkCandidate[] {
   const candidates: TerminalWebLinkCandidate[] = [];
   // Spans already claimed by a markdown link, so the bare-URL pass below skips
@@ -54,7 +88,7 @@ export function extractTerminalWebLinkCandidates(line: string): TerminalWebLinkC
 
   URL_REGEX.lastIndex = 0;
   for (const match of line.matchAll(URL_REGEX)) {
-    const url = match[0];
+    const url = match[0] ? trimTerminalWebUrl(match[0]) : '';
     if (!url) continue;
     const index = match.index ?? 0;
     if (consumed.some(([start, end]) => index >= start && index < end)) continue;

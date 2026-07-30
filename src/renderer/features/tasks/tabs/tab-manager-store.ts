@@ -289,6 +289,7 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       openRoomMemberInSidebar: action,
       openFile: action,
       openFileInSidebar: action,
+      openFilePreviewInSidebar: action,
       openFileInShellPin: action,
       openFilePreview: action,
       openDiff: action,
@@ -733,6 +734,50 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
       return;
     }
     const tab = new FileTabStore(path, false);
+    tab.revealLocation(options?.line, options?.column);
+    this.entries.set(tab.tabId, tab);
+    this.sidebarTabIds.push(tab.tabId);
+    this.activeSidebarTabId = tab.tabId;
+  }
+
+  /**
+   * Preview a file in the task sidebar without accumulating a chip for every
+   * file inspected. A clean preview is replaced in-place; a preview with
+   * unsaved edits is promoted before the next one is created.
+   */
+  openFilePreviewInSidebar(path: string, options?: OpenFileOptions): void {
+    const existing = this._findFileEntryByPath(path);
+    if (existing) {
+      existing.revealLocation(options?.line, options?.column);
+      if (this.sidebarTabIds.includes(existing.tabId)) {
+        this.activeSidebarTabId = existing.tabId;
+      } else {
+        removeTabId(this, existing.tabId);
+        this._unpinShellTab(existing.tabId);
+        this.sidebarTabIds.push(existing.tabId);
+        this.activeSidebarTabId = existing.tabId;
+        scheduleTerminalRelayout();
+      }
+      return;
+    }
+
+    const previousPreview = this._findSidebarFilePreviewEntry();
+    const previousUri = previousPreview
+      ? buildMonacoModelPath(this.modelRootPath, previousPreview.path)
+      : null;
+    const canReplace =
+      previousPreview !== undefined && previousUri !== null && !modelRegistry.isDirty(previousUri);
+
+    if (canReplace) {
+      previousPreview.resetForPath(path);
+      previousPreview.revealLocation(options?.line, options?.column);
+      this.activeSidebarTabId = previousPreview.tabId;
+      return;
+    }
+
+    if (previousPreview) previousPreview.isPreview = false;
+
+    const tab = new FileTabStore(path, true);
     tab.revealLocation(options?.line, options?.column);
     this.entries.set(tab.tabId, tab);
     this.sidebarTabIds.push(tab.tabId);
@@ -1352,6 +1397,14 @@ export class TabManagerStore implements Snapshottable<TabManagerSnapshot> {
     for (const id of this._allTabIds()) {
       const entry = this.entries.get(id);
       if (entry?.kind === 'file' && entry.path === path) return entry;
+    }
+    return undefined;
+  }
+
+  private _findSidebarFilePreviewEntry(): FileTabStore | undefined {
+    for (const id of this.sidebarTabIds) {
+      const entry = this.entries.get(id);
+      if (entry?.kind === 'file' && entry.isPreview) return entry;
     }
     return undefined;
   }

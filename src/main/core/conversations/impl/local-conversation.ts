@@ -211,6 +211,10 @@ export class LocalConversationProvider implements ConversationProvider {
         (conversation.runtimeId === 'codex' || conversation.runtimeId === 'claude')
           ? withRuntimeStateRoot(conversation.runtimeId, providerConfig, runtimeStateRoot)
           : providerConfig;
+      const titleStateRoot =
+        conversation.runtimeId === 'codex' || conversation.runtimeId === 'claude'
+          ? resolveRuntimeStateDirectory(conversation.runtimeId, sessionProviderConfig)
+          : undefined;
       if (isResuming && conversation.runtimeId === 'codex' && runtimeStateRoot) {
         await import('@main/core/maas/maas-service').then(({ maasService }) =>
           maasService.reconcileCodexStateRoot(runtimeStateRoot)
@@ -274,6 +278,7 @@ export class LocalConversationProvider implements ConversationProvider {
               cwd: this.taskPath,
               title: conversation.title,
               createdAt: conversation.createdAt,
+              lastInteractedAt: conversation.lastInteractedAt,
               statePath: resolveCodexStatePath(
                 resolveRuntimeStateDirectory('codex', sessionProviderConfig)
               ),
@@ -585,7 +590,7 @@ export class LocalConversationProvider implements ConversationProvider {
         startedAtMs: sessionStartedAtMs,
         isResuming: effectiveIsResuming,
         agentSessionId: effectiveIsResuming ? agentSessionId : undefined,
-        stateRoot: runtimeStateRoot,
+        stateRoot: titleStateRoot,
       });
       this.startRunStateWatcher(
         conversation,

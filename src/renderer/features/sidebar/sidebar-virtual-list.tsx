@@ -17,7 +17,6 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -43,6 +42,12 @@ import { sidebarStore } from '@renderer/lib/stores/app-state';
 import { cn } from '@renderer/utils/utils';
 import { SidebarProjectItem } from './project-item';
 import {
+  getSidebarTaskGroupDisclosure,
+  hiddenSidebarTaskGroupItemsContain,
+  type SidebarTaskGroupRowVariant,
+} from './sidebar-task-group';
+import { SidebarTaskGroupToggle } from './sidebar-task-group-toggle';
+import {
   getTreeProjection,
   projectedSiblingOrder,
   withParents,
@@ -51,8 +56,6 @@ import {
 } from './sidebar-tree-projection';
 import { SidebarTaskItem } from './task-item';
 
-const TASK_GROUP_VISIBLE_LIMIT = 5;
-
 export const SidebarVirtualList = observer(function SidebarVirtualList() {
   const { t } = useTranslation();
   const rows = sidebarStore.sidebarRows;
@@ -60,6 +63,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
   const { currentView } = useWorkspaceSlots();
   const { params: taskParams } = useParams('task');
   const { params: projectParams } = useParams('project');
+  const taskGroupVisibleLimit = sidebarStore.taskGroupVisibleLimit;
 
   const autoExpandedActiveIdRef = useRef<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -98,8 +102,8 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
       )
     : null;
   const renderRows = useMemo(
-    () => limitTaskGroupRows(displayRows, expandedTaskGroupIds),
-    [displayRows, expandedTaskGroupIds]
+    () => limitTaskGroupRows(displayRows, expandedTaskGroupIds, taskGroupVisibleLimit),
+    [displayRows, expandedTaskGroupIds, taskGroupVisibleLimit]
   );
 
   const dndEnabled = sidebarStore.taskGroupBy === 'project';
@@ -133,7 +137,8 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     const hiddenGroupId = findHiddenTaskGroupId(
       displayRows,
       expandedTaskGroupIds,
-      activeSidebarDndId
+      activeSidebarDndId,
+      taskGroupVisibleLimit
     );
     if (!hiddenGroupId) return;
 
@@ -149,6 +154,7 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
     currentView,
     displayRows,
     expandedTaskGroupIds,
+    taskGroupVisibleLimit,
     taskParams.projectId,
     taskParams.taskId,
   ]);
@@ -293,7 +299,9 @@ export const SidebarVirtualList = observer(function SidebarVirtualList() {
               return (
                 <div key={`toggle:${row.groupId}`} className="min-w-0 overflow-hidden">
                   <SidebarTaskGroupToggle
-                    row={row}
+                    expanded={row.expanded}
+                    hiddenCount={row.hiddenCount}
+                    rowVariant={row.rowVariant}
                     onToggle={() => toggleTaskGroupExpanded(row.groupId)}
                   />
                 </div>
@@ -383,7 +391,7 @@ type SidebarTaskGroupToggleRow = {
   groupId: string;
   hiddenCount: number;
   expanded: boolean;
-  rowVariant: 'underProject' | 'flat';
+  rowVariant: SidebarTaskGroupRowVariant;
 };
 
 type SidebarRenderableRow = SidebarRow | SidebarTaskGroupToggleRow;
@@ -447,7 +455,11 @@ function getActiveSidebarDndId(
   return null;
 }
 
-function limitTaskGroupRows(rows: SidebarRow[], expandedTaskGroupIds: ReadonlySet<string>) {
+function limitTaskGroupRows(
+  rows: SidebarRow[],
+  expandedTaskGroupIds: ReadonlySet<string>,
+  visibleLimit: number
+) {
   const limitedRows: SidebarRenderableRow[] = [];
   let index = 0;
 
@@ -463,7 +475,8 @@ function limitTaskGroupRows(rows: SidebarRow[], expandedTaskGroupIds: ReadonlySe
         taskRows.rows,
         toProjectTaskGroupId(row.projectId),
         expandedTaskGroupIds,
-        'underProject'
+        'underProject',
+        visibleLimit
       );
       index = taskRows.nextIndex;
       continue;
@@ -477,7 +490,8 @@ function limitTaskGroupRows(rows: SidebarRow[], expandedTaskGroupIds: ReadonlySe
       taskRows.rows,
       toDirectTaskGroupId(row.group),
       expandedTaskGroupIds,
-      'flat'
+      'flat',
+      visibleLimit
     );
     index = taskRows.nextIndex;
   }
@@ -490,15 +504,18 @@ function appendLimitedTaskRows(
   taskRows: Extract<SidebarRow, { kind: 'task' }>[],
   groupId: string,
   expandedTaskGroupIds: ReadonlySet<string>,
-  rowVariant: SidebarTaskGroupToggleRow['rowVariant']
+  rowVariant: SidebarTaskGroupToggleRow['rowVariant'],
+  visibleLimit: number
 ) {
   if (taskRows.length === 0) return;
 
   const expanded = expandedTaskGroupIds.has(groupId);
-  const visibleRows = expanded ? taskRows : taskRows.slice(0, TASK_GROUP_VISIBLE_LIMIT);
-  target.push(...visibleRows);
-
-  const hiddenCount = taskRows.length - TASK_GROUP_VISIBLE_LIMIT;
+  const { visibleItems, hiddenCount } = getSidebarTaskGroupDisclosure(
+    taskRows,
+    expanded,
+    visibleLimit
+  );
+  target.push(...visibleItems);
   if (hiddenCount > 0) {
     target.push({
       kind: 'task-group-toggle',
@@ -541,7 +558,8 @@ function takeDirectTaskRows(rows: SidebarRow[], startIndex: number) {
 function findHiddenTaskGroupId(
   rows: SidebarRow[],
   expandedTaskGroupIds: ReadonlySet<string>,
-  targetDndId: string
+  targetDndId: string,
+  visibleLimit: number
 ) {
   let index = 0;
 
@@ -552,7 +570,10 @@ function findHiddenTaskGroupId(
     if (row.kind === 'project') {
       const groupId = toProjectTaskGroupId(row.projectId);
       const taskRows = takeProjectTaskRows(rows, index, row.projectId);
-      if (!expandedTaskGroupIds.has(groupId) && hiddenTaskRowsContain(taskRows.rows, targetDndId)) {
+      if (
+        !expandedTaskGroupIds.has(groupId) &&
+        hiddenTaskRowsContain(taskRows.rows, targetDndId, visibleLimit)
+      ) {
         return groupId;
       }
       index = taskRows.nextIndex;
@@ -563,7 +584,10 @@ function findHiddenTaskGroupId(
 
     const groupId = toDirectTaskGroupId(row.group);
     const taskRows = takeDirectTaskRows(rows, index);
-    if (!expandedTaskGroupIds.has(groupId) && hiddenTaskRowsContain(taskRows.rows, targetDndId)) {
+    if (
+      !expandedTaskGroupIds.has(groupId) &&
+      hiddenTaskRowsContain(taskRows.rows, targetDndId, visibleLimit)
+    ) {
       return groupId;
     }
     index = taskRows.nextIndex;
@@ -572,8 +596,16 @@ function findHiddenTaskGroupId(
   return null;
 }
 
-function hiddenTaskRowsContain(rows: Extract<SidebarRow, { kind: 'task' }>[], targetDndId: string) {
-  return rows.slice(TASK_GROUP_VISIBLE_LIMIT).some((row) => rowToDndId(row) === targetDndId);
+function hiddenTaskRowsContain(
+  rows: Extract<SidebarRow, { kind: 'task' }>[],
+  targetDndId: string,
+  visibleLimit: number
+) {
+  return hiddenSidebarTaskGroupItemsContain(
+    rows,
+    (row) => rowToDndId(row) === targetDndId,
+    visibleLimit
+  );
 }
 
 function SidebarGroupHeader({ group }: { group: SidebarGroupKey }) {
@@ -588,37 +620,6 @@ function SidebarGroupHeader({ group }: { group: SidebarGroupKey }) {
     <div className="flex h-8 items-center px-2 text-xs font-medium uppercase tracking-wide text-foreground-tertiary-muted select-none">
       {label}
     </div>
-  );
-}
-
-function SidebarTaskGroupToggle({
-  row,
-  onToggle,
-}: {
-  row: SidebarTaskGroupToggleRow;
-  onToggle: () => void;
-}) {
-  const { t } = useTranslation();
-  const label = row.expanded
-    ? t('sidebar.collapseGroupItems')
-    : t('sidebar.showMoreGroupItems', { count: row.hiddenCount });
-
-  return (
-    <button
-      type="button"
-      aria-expanded={row.expanded}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onToggle}
-      className={cn(
-        'flex h-7 w-full min-w-0 items-center gap-1.5 overflow-hidden rounded-lg text-left text-xs font-medium text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        row.rowVariant === 'underProject' ? 'pl-8 pr-2' : 'px-2'
-      )}
-    >
-      <ChevronDown
-        className={`size-3.5 shrink-0 transition-transform ${row.expanded ? 'rotate-180' : ''}`}
-      />
-      <span className="truncate">{label}</span>
-    </button>
   );
 }
 

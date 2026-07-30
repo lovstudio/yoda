@@ -76,6 +76,12 @@ describe('buildSessionConversationItems', () => {
       turnId: 'turn-1',
     });
   });
+
+  it('keeps original transcript positions for prompt subsets', () => {
+    const items = buildSessionConversationItems([prompts[0]!], [], 'hidden', [5]);
+
+    expect(items[0]?.promptIndex).toBe(5);
+  });
 });
 
 describe('buildSessionConversationPreviewItems', () => {

@@ -11,8 +11,6 @@ export type RuntimePaths = {
 /** Canonical per-runtime paths. Tilde expansion is intentionally left to the caller. */
 export function resolveRuntimePaths(id: RuntimeId): RuntimePaths {
   switch (id) {
-    // GLM runs through the Claude Code CLI, so it shares ~/.claude.
-    case 'glm':
     case 'claude':
       return {
         config: '~/.claude',

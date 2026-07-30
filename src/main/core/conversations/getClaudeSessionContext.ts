@@ -118,6 +118,37 @@ export async function getClaudeSessionContext(
   };
 }
 
+/** Prompt-only transcript reader for progressive project-history surfaces. */
+export async function getClaudeSessionPrompts(
+  cwd: string,
+  sessionId: string,
+  options: { claudeConfigDir?: string } = {}
+): Promise<ClaudeSessionPrompt[]> {
+  const claudeConfigDir =
+    options.claudeConfigDir ?? resolveRuntimeStateDirectory('claude', undefined);
+  const transcriptPath = resolveClaudeTranscriptPathFromConfigDir(cwd, sessionId, claudeConfigDir);
+  let raw: string;
+  try {
+    raw = await readFile(transcriptPath, 'utf8');
+  } catch {
+    return [];
+  }
+
+  const completedTurnTargets = getClaudeCompletedTurnTargets(raw);
+  const currentBranchMessageIds = getClaudeCurrentBranchMessageIds(raw);
+  const prompts: ClaudeSessionPrompt[] = [];
+  for (const line of raw.split('\n')) {
+    if (!line) continue;
+    const parsed = safeParse(line);
+    if (!parsed || parsed.type !== 'user' || extractCompactSummary(parsed)) continue;
+    const rowId = typeof parsed.uuid === 'string' ? parsed.uuid : null;
+    if (rowId && !currentBranchMessageIds.has(rowId)) continue;
+    const prompt = extractPrompt(parsed, completedTurnTargets);
+    if (prompt) prompts.push(prompt);
+  }
+  return prompts;
+}
+
 /**
  * Claude Code writes a compaction summary back into the transcript as a
  * `user` row flagged `isCompactSummary`. The message content holds the full

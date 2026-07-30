@@ -9,11 +9,14 @@ import {
 } from './runtime-registry';
 
 describe('built-in runtimes', () => {
-  it('does not register Step because it has no standalone CLI', () => {
-    expect(RUNTIME_IDS).not.toContain('step');
-    expect(RUNTIMES.map((runtime) => runtime.id)).not.toContain('step');
-    expect(isValidRuntimeId('step')).toBe(false);
-  });
+  it.each(['step', 'glm'] as const)(
+    'does not register %s because it has no standalone coding agent CLI',
+    (id) => {
+      expect(RUNTIME_IDS).not.toContain(id);
+      expect(RUNTIMES.map((runtime) => runtime.id)).not.toContain(id);
+      expect(isValidRuntimeId(id)).toBe(false);
+    }
+  );
 });
 
 describe('runtime update commands', () => {

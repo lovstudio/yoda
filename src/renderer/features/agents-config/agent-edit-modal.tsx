@@ -2,9 +2,10 @@ import { AlertTriangle, MousePointer2, Sparkles, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { agentToDraft, emptyAgentDraft, type Agent, type AgentDraft } from '@shared/agents';
-import { groupSkillFamilies } from '@shared/skills/grouping';
+import { groupSkillFamilies, type SkillFamily } from '@shared/skills/grouping';
 import SkillFamilyCount from '@renderer/features/skills/components/SkillFamilyCount';
 import { useSkills } from '@renderer/features/skills/components/useSkills';
+import { buildSkillTree } from '@renderer/features/skills/skill-tree';
 import { AgentSelector } from '@renderer/lib/components/agent-selector/agent-selector';
 import { AvatarInput, type AvatarFileError } from '@renderer/lib/components/avatar-input';
 import { useToast } from '@renderer/lib/hooks/use-toast';
@@ -32,6 +33,45 @@ import { cn } from '@renderer/utils/utils';
 import { useAgents } from './use-agents';
 
 type Props = BaseModalProps<Agent> & { agent?: Agent };
+type SkillMode = 'auto' | 'manual' | 'off';
+
+function SkillModeSelect({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: SkillMode | 'mixed';
+  onChange: (mode: SkillMode) => void;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Select value={value} onValueChange={(next) => onChange(next as SkillMode)} disabled={disabled}>
+      <SelectTrigger className="h-7 w-28 shrink-0 text-[11px]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="end">
+        {value === 'mixed' && (
+          <SelectItem value="mixed" disabled className="text-xs">
+            {t('agentManager.skillModeMixed')}
+          </SelectItem>
+        )}
+        <SelectItem value="auto" className="text-xs">
+          <Sparkles className="size-3" />
+          {t('agentManager.skillModeAuto')}
+        </SelectItem>
+        <SelectItem value="manual" className="text-xs">
+          <MousePointer2 className="size-3" />
+          {t('agentManager.skillModeManual')}
+        </SelectItem>
+        <SelectItem value="off" className="text-xs">
+          <X className="size-3" />
+          {t('agentManager.skillModeOff')}
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
 
 export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
   const { t } = useTranslation();
@@ -51,6 +91,14 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
     );
     return groupSkillFamilies(installedSkills, { preferredKeys });
   }, [draft.enabledSkillIds, draft.manualSkillIds, installedSkills]);
+  const skillFamilyByKey = useMemo(
+    () => new Map(installedSkillFamilies.map((family) => [family.primary.key, family])),
+    [installedSkillFamilies]
+  );
+  const skillTree = useMemo(
+    () => buildSkillTree(installedSkillFamilies.map((family) => family.primary)),
+    [installedSkillFamilies]
+  );
 
   useCloseGuard(saving);
 
@@ -67,19 +115,14 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
     toast({ title: t(key), variant: 'destructive' });
   };
 
-  const skillMode = (
-    family: (typeof installedSkillFamilies)[number]
-  ): 'auto' | 'manual' | 'off' => {
+  const skillMode = (family: (typeof installedSkillFamilies)[number]): SkillMode => {
     const identifiers = new Set(family.members.flatMap((skill) => [skill.key, skill.id]));
     if (draft.enabledSkillIds.some((identifier) => identifiers.has(identifier))) return 'auto';
     if (draft.manualSkillIds.some((identifier) => identifiers.has(identifier))) return 'manual';
     return 'off';
   };
 
-  const setSkillMode = (
-    family: (typeof installedSkillFamilies)[number],
-    mode: 'auto' | 'manual' | 'off'
-  ) => {
+  const setSkillMode = (family: (typeof installedSkillFamilies)[number], mode: SkillMode) => {
     const identifiers = new Set(family.members.flatMap((skill) => [skill.key, skill.id]));
     setDraft((prev) => ({
       ...prev,
@@ -91,7 +134,35 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
         ...prev.manualSkillIds.filter((identifier) => !identifiers.has(identifier)),
         ...(mode === 'manual' ? [family.primary.key] : []),
       ],
+      skillPolicyMode: 'allowlist',
     }));
+  };
+
+  const setSkillGroupMode = (families: SkillFamily[], mode: SkillMode) => {
+    const editableFamilies = families.filter((family) => family.primary.scope !== 'plugin');
+    const identifiers = new Set(
+      editableFamilies.flatMap((family) => family.members.flatMap((skill) => [skill.key, skill.id]))
+    );
+    const selectedKeys = editableFamilies.map((family) => family.primary.key);
+    setDraft((prev) => ({
+      ...prev,
+      enabledSkillIds: [
+        ...prev.enabledSkillIds.filter((identifier) => !identifiers.has(identifier)),
+        ...(mode === 'auto' ? selectedKeys : []),
+      ],
+      manualSkillIds: [
+        ...prev.manualSkillIds.filter((identifier) => !identifiers.has(identifier)),
+        ...(mode === 'manual' ? selectedKeys : []),
+      ],
+      skillPolicyMode: 'allowlist',
+    }));
+  };
+
+  const groupSkillMode = (families: SkillFamily[]): SkillMode | 'mixed' => {
+    const modes = families
+      .filter((family) => family.primary.scope !== 'plugin')
+      .map((family) => skillMode(family));
+    return modes.length > 0 && modes.every((mode) => mode === modes[0]) ? modes[0] : 'mixed';
   };
 
   const knownSkillIdentifiers = new Set(
@@ -106,7 +177,16 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
     installedSkillFamilies.filter((family) => skillMode(family) === 'manual').length +
     draft.manualSkillIds.filter((identifier) => !knownSkillIdentifiers.has(identifier)).length;
   const configuredSkillCount = enabledSkillCount + manualSkillCount;
-  const usesRuntimeSkillDefaults = configuredSkillCount === 0;
+  const usesRuntimeSkillDefaults = draft.skillPolicyMode === 'runtime-defaults';
+
+  const setSkillPolicyMode = (mode: AgentDraft['skillPolicyMode']) => {
+    setDraft((prev) => ({
+      ...prev,
+      skillPolicyMode: mode,
+      enabledSkillIds: mode === 'runtime-defaults' ? [] : prev.enabledSkillIds,
+      manualSkillIds: mode === 'runtime-defaults' ? [] : prev.manualSkillIds,
+    }));
+  };
 
   const handleSave = async () => {
     if (!draft.name.trim()) {
@@ -224,7 +304,9 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
               <span className="text-[10px] text-muted-foreground">
                 {usesRuntimeSkillDefaults
                   ? t('agentManager.skillsRuntimeDefault')
-                  : t('agentManager.skillsEnabledCount', { count: configuredSkillCount })}
+                  : configuredSkillCount === 0
+                    ? t('agentManager.skillsAllOff')
+                    : t('agentManager.skillsEnabledCount', { count: configuredSkillCount })}
               </span>
             </div>
             <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/20 px-2.5 py-2">
@@ -233,82 +315,115 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
                   {t('agentManager.skillProfileTitle')}
                 </p>
                 <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
-                  {t('agentManager.skillProfileHint')}
+                  {t(
+                    usesRuntimeSkillDefaults
+                      ? 'agentManager.skillProfileRuntimeHint'
+                      : 'agentManager.skillProfileAllowlistHint'
+                  )}
                 </p>
               </div>
-              <span
-                className={cn(
-                  'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium',
-                  enabledSkillCount > 8
-                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                    : 'border-border bg-background text-muted-foreground'
-                )}
+              <Select
+                value={draft.skillPolicyMode}
+                onValueChange={(value) =>
+                  setSkillPolicyMode(value as AgentDraft['skillPolicyMode'])
+                }
               >
-                {enabledSkillCount}/8 {t('agentManager.skillBudget')}
-              </span>
+                <SelectTrigger className="h-7 w-32 shrink-0 text-[11px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="runtime-defaults" className="text-xs">
+                    {t('agentManager.skillPolicyRuntimeDefaults')}
+                  </SelectItem>
+                  <SelectItem value="allowlist" className="text-xs">
+                    {t('agentManager.skillPolicyAllowlist')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            {enabledSkillCount > 8 && (
+            {!usesRuntimeSkillDefaults && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] text-muted-foreground">
+                  {configuredSkillCount === 0
+                    ? t('agentManager.skillsAllOff')
+                    : t('agentManager.skillsEnabledCount', { count: configuredSkillCount })}
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                    enabledSkillCount > 8
+                      ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                      : 'border-border bg-background text-muted-foreground'
+                  )}
+                >
+                  {enabledSkillCount}/8 {t('agentManager.skillBudget')}
+                </span>
+              </div>
+            )}
+            {!usesRuntimeSkillDefaults && enabledSkillCount > 8 && (
               <p className="flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400">
                 <AlertTriangle className="size-3 shrink-0" />
                 {t('agentManager.skillBudgetWarning')}
               </p>
             )}
-            {skillsLoading ? (
+            {usesRuntimeSkillDefaults ? null : skillsLoading ? (
               <p className="text-xs text-muted-foreground">{t('common.loading')}</p>
             ) : installedSkillFamilies.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t('agentManager.noSkills')}</p>
             ) : (
-              <div className="max-h-56 divide-y divide-border overflow-y-auto rounded-md border border-border">
-                {installedSkillFamilies.map((family) => {
-                  const skill = family.primary;
-                  const mode = skillMode(family);
-                  return (
-                    <div key={skill.key} className="flex items-center gap-2 px-2.5 py-2">
-                      <div className="min-w-0 flex-1" title={skill.description}>
-                        <p className="truncate text-xs font-medium text-foreground">
-                          {skill.displayName}
-                        </p>
-                        <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                          {skill.scope === 'project'
-                            ? t('agentManager.skillScopeProject')
-                            : skill.managed
-                              ? t('agentManager.skillScopeManaged')
-                              : t('agentManager.skillScopeExternal')}
-                          <SkillFamilyCount family={family} className="ml-1" />
-                        </p>
+              <div className="max-h-64 overflow-y-auto rounded-md border border-border">
+                {skillTree.map((entry) => {
+                  const families =
+                    entry.kind === 'group'
+                      ? entry.skills.flatMap((skill) => {
+                          const family = skillFamilyByKey.get(skill.key);
+                          return family ? [family] : [];
+                        })
+                      : [];
+                  if (entry.kind === 'group') {
+                    const editableCount = families.filter(
+                      (family) => family.primary.scope !== 'plugin'
+                    ).length;
+                    return (
+                      <div key={entry.prefix} className="border-b border-border last:border-b-0">
+                        <div className="flex items-center gap-2 bg-muted/25 px-2.5 py-1.5">
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[11px] font-medium text-foreground">
+                              {entry.prefix}
+                            </span>
+                            <span className="ml-1.5 text-[10px] tabular-nums text-muted-foreground">
+                              {families.length}
+                            </span>
+                          </div>
+                          <SkillModeSelect
+                            value={groupSkillMode(families)}
+                            onChange={(mode) => setSkillGroupMode(families, mode)}
+                            disabled={editableCount === 0}
+                          />
+                        </div>
+                        <div className="divide-y divide-border/60 border-t border-border/60 pl-3">
+                          {families.map((family) => (
+                            <AgentSkillModeRow
+                              key={family.primary.key}
+                              family={family}
+                              mode={skillMode(family)}
+                              onChange={(mode) => setSkillMode(family, mode)}
+                            />
+                          ))}
+                        </div>
                       </div>
-                      {skill.scope === 'plugin' ? (
-                        <span className="w-28 shrink-0 rounded-md border border-border bg-muted/30 px-2 py-1 text-center text-[10px] text-muted-foreground">
-                          {t('agentManager.skillModePlugin')}
-                        </span>
-                      ) : (
-                        <Select
-                          value={mode}
-                          onValueChange={(value) =>
-                            setSkillMode(family, value as 'auto' | 'manual' | 'off')
-                          }
-                        >
-                          <SelectTrigger className="h-7 w-28 shrink-0 text-[11px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent align="end">
-                            <SelectItem value="auto" className="text-xs">
-                              <Sparkles className="size-3" />
-                              {t('agentManager.skillModeAuto')}
-                            </SelectItem>
-                            <SelectItem value="manual" className="text-xs">
-                              <MousePointer2 className="size-3" />
-                              {t('agentManager.skillModeManual')}
-                            </SelectItem>
-                            <SelectItem value="off" className="text-xs">
-                              <X className="size-3" />
-                              {t('agentManager.skillModeOff')}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                  );
+                    );
+                  }
+
+                  const family = skillFamilyByKey.get(entry.skill.key);
+                  return family ? (
+                    <AgentSkillModeRow
+                      key={family.primary.key}
+                      family={family}
+                      mode={skillMode(family)}
+                      onChange={(mode) => setSkillMode(family, mode)}
+                    />
+                  ) : null;
                 })}
               </div>
             )}
@@ -325,5 +440,40 @@ export function AgentEditModal({ agent, onSuccess, onClose }: Props) {
         </ConfirmButton>
       </DialogFooter>
     </>
+  );
+}
+
+function AgentSkillModeRow({
+  family,
+  mode,
+  onChange,
+}: {
+  family: SkillFamily;
+  mode: SkillMode;
+  onChange: (mode: SkillMode) => void;
+}) {
+  const { t } = useTranslation();
+  const skill = family.primary;
+  return (
+    <div className="flex items-center gap-2 px-2.5 py-2">
+      <div className="min-w-0 flex-1" title={skill.description}>
+        <p className="truncate text-xs font-medium text-foreground">{skill.displayName}</p>
+        <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+          {skill.scope === 'project'
+            ? t('agentManager.skillScopeProject')
+            : skill.managed
+              ? t('agentManager.skillScopeManaged')
+              : t('agentManager.skillScopeExternal')}
+          <SkillFamilyCount family={family} className="ml-1" />
+        </p>
+      </div>
+      {skill.scope === 'plugin' ? (
+        <span className="w-28 shrink-0 rounded-md border border-border bg-muted/30 px-2 py-1 text-center text-[10px] text-muted-foreground">
+          {t('agentManager.skillModePlugin')}
+        </span>
+      ) : (
+        <SkillModeSelect value={mode} onChange={onChange} />
+      )}
+    </div>
   );
 }
