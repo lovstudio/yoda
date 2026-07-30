@@ -2229,14 +2229,14 @@ export const HomeComposer = observer(function HomeComposer({
                 }
               />
             ) : (
-              <div className="flex items-center gap-1">
+              <div className="flex h-7 items-stretch overflow-hidden rounded-md border border-border bg-background-1 transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
                 <ProjectSelector
                   value={selectedProjectId}
                   onChange={setSelectedProjectId}
                   allowProjectless
                   initializeGitRepositoryOnPick
                   trigger={
-                    <ComboboxTrigger className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2">
+                    <ComboboxTrigger className="flex h-full items-center gap-1.5 rounded-none border-0 bg-transparent px-2.5 text-xs text-foreground outline-none transition-colors hover:bg-background-2">
                       <FolderOpen className="size-3.5 text-foreground-muted" />
                       <ComboboxValue placeholder={t('home.selectProjectPlaceholder')} />
                     </ComboboxTrigger>
@@ -2247,9 +2247,9 @@ export const HomeComposer = observer(function HomeComposer({
                     render={
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         size="icon-xs"
-                        className="size-7 bg-background-1"
+                        className="h-full w-7 rounded-none border-l border-border bg-transparent focus-visible:border-l-border focus-visible:bg-background-2 focus-visible:ring-0"
                         disabled={!selectedProjectId}
                         aria-label={t('home.revealProjectInSidebar')}
                         onClick={revealSelectedProjectInSidebar}
