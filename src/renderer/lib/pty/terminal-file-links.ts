@@ -228,6 +228,19 @@ const COMPLETE_EXT_RE = /\.[A-Za-z0-9]{1,8}$/;
 const URL_IN_PROGRESS_RE = /(?:https?|ftp|file):\/\/\S+$/i;
 const URL_CONTINUATION_START_RE = /[A-Za-z0-9._~:/?#@!$&'*+,;=%-]/;
 const URL_CONTINUATION_HINT_RE = /[/:?#&=%]/;
+const URL_FINAL_SEGMENT_WITH_CLOSER_RE = /^[A-Za-z0-9._~!$&'*+,;=:@%-]+([)\]}>）】〉》」』])$/u;
+const URL_WRAPPER_OPENERS: Readonly<Record<string, string>> = {
+  ')': '(',
+  ']': '[',
+  '}': '{',
+  '>': '<',
+  '）': '（',
+  '】': '【',
+  '〉': '〈',
+  '》': '《',
+  '」': '「',
+  '』': '『',
+};
 const HARD_WRAP_LOCATION_RE = new RegExp(`^:\\d+(?::\\d+)?(?=$|[${PATH_TRAILING}])`, 'u');
 
 export interface ScanChunk {
@@ -470,11 +483,25 @@ function canHardJoinUrl(upperText: string, lowerStripped: string): boolean {
   if (!first || !URL_CONTINUATION_START_RE.test(first)) return false;
   if (/^[._~:/?#@!$&'*+,;=%-]$/.test(first)) return true;
   if (/[?&=#%]$/.test(upperText)) return true;
+  if (upperText.endsWith('/') && hasWrappedUrlFinalSegment(upperText, lowerStripped)) return true;
 
   const leadingToken = /^[^\s"'<>`、，。；：！？（）「」『』【】〈〉《》“”‘’.,;:!?)\]}]+/u.exec(
     lowerStripped
   )?.[0];
   return Boolean(leadingToken && URL_CONTINUATION_HINT_RE.test(leadingToken));
+}
+
+function hasWrappedUrlFinalSegment(upperText: string, lowerStripped: string): boolean {
+  const match = URL_FINAL_SEGMENT_WITH_CLOSER_RE.exec(lowerStripped);
+  const closer = match?.[1];
+  if (!closer) return false;
+
+  const opener = URL_WRAPPER_OPENERS[closer];
+  const urlStart = upperText.search(/(?:https?|ftp|file):\/\//i);
+  if (!opener || urlStart < 0) return false;
+
+  const prefix = upperText.slice(0, urlStart);
+  return prefix.lastIndexOf(opener) > prefix.lastIndexOf(closer);
 }
 
 /** True when the row's last column holds a character (hard-wrap break point). */

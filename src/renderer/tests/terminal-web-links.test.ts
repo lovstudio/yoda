@@ -84,6 +84,22 @@ describe('terminal web links', () => {
     ]);
   });
 
+  it.each([
+    ['full-width parentheses', '（', '）'],
+    ['ASCII parentheses', '(', ')'],
+  ])('joins a hard-wrapped final URL segment before its closing %s', (_label, opener, closer) => {
+    const terminal = makeTerminal([
+      `王树义${opener}https://blog.sciencenet.cn/u/`,
+      `wshuyi${closer}`,
+    ]);
+
+    for (const bufferLineNumber of [1, 2]) {
+      expect(
+        getTerminalWebLinkMatches(terminal, bufferLineNumber).map((match) => match.url)
+      ).toEqual(['https://blog.sciencenet.cn/u/wshuyi']);
+    }
+  });
+
   it('does not join a URL into the next Chinese row label', () => {
     const terminal = makeTerminal([
       '微信读书 (https://weread.qq.com/web/',
