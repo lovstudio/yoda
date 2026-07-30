@@ -275,6 +275,7 @@ describe('Settings integrations', () => {
   });
 
   it('makes managed credentials discoverable before opening the console', async () => {
+    host.style.width = '440px';
     mocks.liteLlmStatus = {
       ...mocks.liteLlmStatus!,
       state: 'running',
@@ -294,6 +295,11 @@ describe('Settings integrations', () => {
     expect(host.textContent).toContain('admin');
     expect(host.textContent).toContain('settings.integrationsTab.litellmAdminPasswordDescription');
 
+    const card = host.querySelector<HTMLElement>('[data-testid="litellm-integration-card"]');
+    expect(card).not.toBeNull();
+    expect(card!.scrollWidth).toBeLessThanOrEqual(card!.clientWidth);
+    expect(card!.classList.contains('h-full')).toBe(false);
+
     const copyPasswordButton = Array.from(host.querySelectorAll('button')).find((button) =>
       button.textContent?.includes('settings.integrationsTab.litellmCopyAdminPassword')
     );
@@ -301,7 +307,7 @@ describe('Settings integrations', () => {
     expect(mocks.copyLiteLlmAdminPassword).toHaveBeenCalledOnce();
 
     const openConsoleButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('settings.integrationsTab.litellmCopyPasswordAndOpenConsole')
+      button.textContent?.includes('settings.integrationsTab.litellmAddFirstModel')
     );
     await act(async () => openConsoleButton?.click());
     expect(mocks.openLiteLlmAdmin).toHaveBeenCalledOnce();
@@ -309,6 +315,7 @@ describe('Settings integrations', () => {
     const stopButton = host.querySelector<HTMLButtonElement>(
       'button[aria-label="settings.integrationsTab.litellmStop"]'
     );
+    expect(stopButton?.textContent).toContain('settings.integrationsTab.litellmStopService');
     await act(async () => stopButton?.click());
     expect(mocks.stopLiteLlm).toHaveBeenCalledOnce();
   });
