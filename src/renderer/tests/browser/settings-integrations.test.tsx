@@ -164,10 +164,10 @@ describe('Settings integrations', () => {
     expect(host.textContent).toContain('LiteLLM');
     expect(host.textContent).toContain('settings.integrationsTab.litellmManagedDescription');
 
-    const installButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('settings.integrationsTab.litellmOneClickInstall')
+    const installButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.litellmOneClickInstall"]'
     );
-    expect(installButton).toBeDefined();
+    expect(installButton).not.toBeNull();
     await act(async () => installButton?.click());
     expect(mocks.installLiteLlm).toHaveBeenCalledOnce();
     expect(mocks.openLiteLlm).not.toHaveBeenCalled();
@@ -198,10 +198,10 @@ describe('Settings integrations', () => {
     expect(host.textContent).toContain(
       'settings.integrationsTab.litellmRemoteConnectedDescription'
     );
-    const settingsButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('settings.integrationsTab.litellmManageConnection')
+    const settingsButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.litellmManageConnection"]'
     );
-    expect(settingsButton).toBeDefined();
+    expect(settingsButton).not.toBeNull();
     await act(async () => settingsButton?.click());
     expect(mocks.openLiteLlm).toHaveBeenCalledOnce();
   });
@@ -220,10 +220,10 @@ describe('Settings integrations', () => {
       root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
     );
 
-    const downloadButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('settings.integrationsTab.litellmDownloadDocker')
+    const downloadButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.litellmDownloadDocker"]'
     );
-    expect(downloadButton).toBeDefined();
+    expect(downloadButton).not.toBeNull();
     await act(async () => downloadButton?.click());
     expect(mocks.openExternal).toHaveBeenCalledWith(LITELLM_DOCKER_DESKTOP_URL);
   });
@@ -242,9 +242,8 @@ describe('Settings integrations', () => {
     );
 
     expect(host.textContent).toContain('settings.integrationsTab.litellmDockerStartingDescription');
-    expect(host.textContent).toContain('settings.integrationsTab.litellmStartingDocker');
-    const startingButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('settings.integrationsTab.litellmStartingDocker')
+    const startingButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.litellmStartingDocker"]'
     );
     expect(startingButton?.disabled).toBe(true);
   });
@@ -265,9 +264,8 @@ describe('Settings integrations', () => {
     );
 
     expect(host.textContent).toContain('settings.integrationsTab.litellmInstallingDescription');
-    expect(host.textContent).toContain('settings.integrationsTab.litellmStatusInstalling');
-    const progressButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('settings.integrationsTab.litellmInstalling')
+    const progressButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.litellmInstalling"]'
     );
     expect(progressButton?.disabled).toBe(true);
     expect(mocks.installLiteLlm).not.toHaveBeenCalled();
@@ -291,32 +289,42 @@ describe('Settings integrations', () => {
     );
 
     expect(host.textContent).toContain('settings.integrationsTab.litellmNeedsModelDescription');
-    expect(host.textContent).toContain('settings.integrationsTab.litellmAdminAccount');
-    expect(host.textContent).toContain('admin');
-    expect(host.textContent).toContain('settings.integrationsTab.litellmAdminPasswordDescription');
 
     const card = host.querySelector<HTMLElement>('[data-testid="litellm-integration-card"]');
+    const lovcodeCard = host.querySelector<HTMLElement>('[data-testid="integration-card-lovcode"]');
     expect(card).not.toBeNull();
+    expect(lovcodeCard).not.toBeNull();
     expect(card!.scrollWidth).toBeLessThanOrEqual(card!.clientWidth);
-    expect(card!.classList.contains('h-full')).toBe(false);
+    expect(card!.className).toBe(lovcodeCard!.className);
+    expect(card!.firstElementChild?.className).toBe(lovcodeCard!.firstElementChild?.className);
+    expect(card!.textContent).not.toContain('settings.integrationsTab.litellmAdminAccount');
 
-    const copyPasswordButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('settings.integrationsTab.litellmCopyAdminPassword')
+    const manageButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.litellmManageActions"]'
     );
-    await act(async () => copyPasswordButton?.click());
+    await act(async () => manageButton?.click());
+    expect(document.body.textContent).toContain('settings.integrationsTab.litellmAdminAccount');
+    expect(document.body.textContent).toContain('admin');
+
+    const copyPasswordItem = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) =>
+      item.textContent?.includes('settings.integrationsTab.litellmCopyAdminPassword')
+    );
+    await act(async () => copyPasswordItem?.click());
     expect(mocks.copyLiteLlmAdminPassword).toHaveBeenCalledOnce();
 
-    const openConsoleButton = Array.from(host.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('settings.integrationsTab.litellmAddFirstModel')
+    const openConsoleButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.litellmAddFirstModel"]'
     );
     await act(async () => openConsoleButton?.click());
     expect(mocks.openLiteLlmAdmin).toHaveBeenCalledOnce();
 
-    const stopButton = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="settings.integrationsTab.litellmStop"]'
-    );
-    expect(stopButton?.textContent).toContain('settings.integrationsTab.litellmStopService');
-    await act(async () => stopButton?.click());
+    await act(async () => manageButton?.click());
+    const stopItem = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) => item.textContent?.includes('settings.integrationsTab.litellmStopService'));
+    await act(async () => stopItem?.click());
     expect(mocks.stopLiteLlm).toHaveBeenCalledOnce();
   });
 

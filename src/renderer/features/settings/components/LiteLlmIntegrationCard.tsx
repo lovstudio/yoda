@@ -1,9 +1,11 @@
 import {
   Copy,
   Download,
+  Ellipsis,
   ExternalLink,
   Loader2,
   Play,
+  Plus,
   Power,
   RefreshCw,
   Settings2,
@@ -15,7 +17,6 @@ import {
   LITELLM_MANAGED_ADMIN_USERNAME,
   LITELLM_MANAGED_ENDPOINT,
   type LiteLlmManagedOperation,
-  type LiteLlmManagedState,
 } from '@shared/litellm-managed';
 import type { MaasConnection } from '@shared/maas';
 import {
@@ -28,9 +29,20 @@ import {
   useStartLiteLlm,
   useStopLiteLlm,
 } from '@renderer/features/maas/useMaas';
+import { HeaderActionButton, HeaderActionToolbar } from '@renderer/lib/components/header-actions';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@renderer/lib/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 
 type LiteLlmIntegrationCardProps = {
   onOpenManualSettings: () => void;
@@ -42,21 +54,6 @@ const operationActionKeys: Record<LiteLlmManagedOperation, string> = {
   stopping: 'settings.integrationsTab.litellmStopping',
   'starting-docker': 'settings.integrationsTab.litellmStartingDocker',
 };
-
-const operationStatusKeys: Record<LiteLlmManagedOperation, string> = {
-  installing: 'settings.integrationsTab.litellmStatusInstalling',
-  starting: 'settings.integrationsTab.litellmStatusStarting',
-  stopping: 'settings.integrationsTab.litellmStatusStopping',
-  'starting-docker': 'settings.integrationsTab.litellmStatusDockerStarting',
-};
-
-function stateTone(state: LiteLlmManagedState | undefined): string {
-  if (state === 'running' || state === 'external-running') return 'bg-emerald-500';
-  if (state === 'stopped' || state === 'docker-stopped' || state === 'docker-starting') {
-    return 'bg-amber-500';
-  }
-  return 'bg-muted-foreground/50';
-}
 
 function normalizeEndpoint(endpoint: string): string {
   return endpoint.trim().replace(/\/+$/, '');
@@ -135,24 +132,6 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     }
   })();
 
-  const statusLabel = remoteConnection
-    ? t('settings.integrationsTab.litellmStatusRemote')
-    : status?.operation
-      ? t(operationStatusKeys[status.operation])
-      : status?.state === 'running'
-        ? status.modelCount === 0
-          ? t('settings.integrationsTab.litellmStatusNeedsModel')
-          : t('settings.integrationsTab.litellmStatusReady')
-        : status?.state === 'external-running'
-          ? t('settings.integrationsTab.litellmStatusDetected')
-          : status?.state === 'stopped'
-            ? t('settings.integrationsTab.litellmStatusStopped')
-            : status?.state === 'docker-starting'
-              ? t('settings.integrationsTab.litellmStatusDockerStarting')
-              : status?.state === 'docker-stopped'
-                ? t('settings.integrationsTab.litellmStatusDockerStopped')
-                : t('settings.integrationsTab.litellmStatusNotInstalled');
-
   const runAction = async (
     action: () => Promise<unknown>,
     successTitle: string,
@@ -202,289 +181,301 @@ export function LiteLlmIntegrationCard({ onOpenManualSettings }: LiteLlmIntegrat
     }
   };
 
-  const renderActions = () => {
+  const renderPrimaryAction = () => {
     if (remoteConnection) {
       return (
-        <Button type="button" variant="outline" size="sm" onClick={onOpenManualSettings}>
-          <Settings2 className="mr-1.5 h-4 w-4" />
-          {t('settings.integrationsTab.litellmManageConnection')}
-        </Button>
+        <HeaderActionButton
+          label={t('settings.integrationsTab.litellmManageConnection')}
+          variant="outline"
+          onClick={onOpenManualSettings}
+        >
+          <Settings2 className="size-4" />
+        </HeaderActionButton>
       );
     }
 
     if (statusQuery.isLoading || !status) {
       return (
-        <Button
-          type="button"
+        <HeaderActionButton
+          label={t(
+            statusQuery.isLoading
+              ? 'settings.integrationsTab.litellmDetecting'
+              : 'settings.integrationsTab.litellmRecheck'
+          )}
           variant="outline"
-          size="sm"
           disabled={statusQuery.isLoading}
           onClick={() => void statusQuery.refetch()}
         >
           {statusQuery.isLoading ? (
-            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            <Loader2 className="size-4 animate-spin" />
           ) : (
-            <RefreshCw className="mr-1.5 h-4 w-4" />
+            <RefreshCw className="size-4" />
           )}
-          {t('settings.integrationsTab.litellmRecheck')}
-        </Button>
+        </HeaderActionButton>
       );
     }
 
     if (status.operation) {
       return (
-        <Button type="button" size="sm" disabled>
-          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-          {t(operationActionKeys[status.operation])}
-        </Button>
+        <HeaderActionButton
+          label={t(operationActionKeys[status.operation])}
+          variant="outline"
+          disabled
+        >
+          <Loader2 className="size-4 animate-spin" />
+        </HeaderActionButton>
       );
     }
 
     if (status.state === 'docker-missing') {
       return (
-        <>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void rpc.app.openExternal(LITELLM_DOCKER_DESKTOP_URL)}
-          >
-            <Download className="mr-1.5 h-4 w-4" />
-            {t('settings.integrationsTab.litellmDownloadDocker')}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void statusQuery.refetch()}
-          >
-            <RefreshCw className="mr-1.5 h-4 w-4" />
-            {t('settings.integrationsTab.litellmRecheck')}
-          </Button>
-        </>
+        <HeaderActionButton
+          label={t('settings.integrationsTab.litellmDownloadDocker')}
+          variant="outline"
+          onClick={() => void rpc.app.openExternal(LITELLM_DOCKER_DESKTOP_URL)}
+        >
+          <Download className="size-4" />
+        </HeaderActionButton>
       );
     }
 
     if (status.state === 'docker-stopped') {
-      return (
-        <>
-          {status.canStartDocker && (
-            <Button
-              type="button"
-              size="sm"
-              disabled={operationPending}
-              onClick={() =>
-                void runAction(
-                  () => startDocker.mutateAsync(),
-                  t('settings.integrationsTab.litellmDockerStartRequested'),
-                  t('settings.integrationsTab.litellmDockerStartFailed')
-                )
-              }
-            >
-              {startDocker.isPending ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="mr-1.5 h-4 w-4" />
-              )}
-              {t('settings.integrationsTab.litellmStartDocker')}
-            </Button>
-          )}
-          <Button
-            type="button"
+      if (!status.canStartDocker) {
+        return (
+          <HeaderActionButton
+            label={t('settings.integrationsTab.litellmRecheck')}
             variant="outline"
-            size="sm"
             onClick={() => void statusQuery.refetch()}
           >
-            <RefreshCw className="mr-1.5 h-4 w-4" />
-            {t('settings.integrationsTab.litellmRecheck')}
-          </Button>
-        </>
+            <RefreshCw className="size-4" />
+          </HeaderActionButton>
+        );
+      }
+      return (
+        <HeaderActionButton
+          label={t('settings.integrationsTab.litellmStartDocker')}
+          variant="outline"
+          disabled={operationPending}
+          onClick={() =>
+            void runAction(
+              () => startDocker.mutateAsync(),
+              t('settings.integrationsTab.litellmDockerStartRequested'),
+              t('settings.integrationsTab.litellmDockerStartFailed')
+            )
+          }
+        >
+          {startDocker.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Play className="size-4" />
+          )}
+        </HeaderActionButton>
       );
     }
 
     if (status.state === 'docker-starting') {
       return (
-        <>
-          <Button type="button" size="sm" disabled>
-            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-            {t('settings.integrationsTab.litellmStartingDocker')}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void statusQuery.refetch()}
-          >
-            <RefreshCw className="mr-1.5 h-4 w-4" />
-            {t('settings.integrationsTab.litellmRecheck')}
-          </Button>
-        </>
+        <HeaderActionButton
+          label={t('settings.integrationsTab.litellmStartingDocker')}
+          variant="outline"
+          disabled
+        >
+          <Loader2 className="size-4 animate-spin" />
+        </HeaderActionButton>
       );
     }
 
     if (status.state === 'not-installed') {
       return (
-        <>
-          <Button
-            type="button"
-            size="sm"
-            disabled={operationPending}
-            onClick={() =>
-              void runAction(
-                () => install.mutateAsync(),
-                t('settings.integrationsTab.litellmInstalled'),
-                t('settings.integrationsTab.litellmInstallFailed')
-              )
-            }
-          >
-            {install.isPending ? (
-              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="mr-1.5 h-4 w-4" />
-            )}
-            {install.isPending
-              ? t('settings.integrationsTab.litellmInstalling')
-              : t('settings.integrationsTab.litellmOneClickInstall')}
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={onOpenManualSettings}>
-            {t('settings.integrationsTab.litellmUseExisting')}
-          </Button>
-        </>
+        <HeaderActionButton
+          label={t(
+            install.isPending
+              ? 'settings.integrationsTab.litellmInstalling'
+              : 'settings.integrationsTab.litellmOneClickInstall'
+          )}
+          variant="outline"
+          disabled={operationPending}
+          onClick={() =>
+            void runAction(
+              () => install.mutateAsync(),
+              t('settings.integrationsTab.litellmInstalled'),
+              t('settings.integrationsTab.litellmInstallFailed')
+            )
+          }
+        >
+          {install.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Download className="size-4" />
+          )}
+        </HeaderActionButton>
       );
     }
 
     if (status.state === 'stopped') {
       return (
-        <>
-          <Button
-            type="button"
-            size="sm"
-            disabled={operationPending}
-            onClick={() =>
-              void runAction(
-                () => start.mutateAsync(),
-                t('settings.integrationsTab.litellmStarted'),
-                t('settings.integrationsTab.litellmStartFailed')
-              )
-            }
-          >
-            {start.isPending ? (
-              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="mr-1.5 h-4 w-4" />
-            )}
-            {t('settings.integrationsTab.litellmStart')}
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={onOpenManualSettings}>
-            {t('settings.integrationsTab.litellmConnectionSettings')}
-          </Button>
-        </>
+        <HeaderActionButton
+          label={t('settings.integrationsTab.litellmStart')}
+          variant="outline"
+          disabled={operationPending}
+          onClick={() =>
+            void runAction(
+              () => start.mutateAsync(),
+              t('settings.integrationsTab.litellmStarted'),
+              t('settings.integrationsTab.litellmStartFailed')
+            )
+          }
+        >
+          {start.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Play className="size-4" />
+          )}
+        </HeaderActionButton>
       );
     }
 
     if (status.state === 'external-running') {
       return (
-        <Button type="button" size="sm" onClick={onOpenManualSettings}>
-          <Settings2 className="mr-1.5 h-4 w-4" />
-          {t('settings.integrationsTab.litellmConnectExisting')}
-        </Button>
+        <HeaderActionButton
+          label={t('settings.integrationsTab.litellmConnectExisting')}
+          variant="outline"
+          onClick={onOpenManualSettings}
+        >
+          <Settings2 className="size-4" />
+        </HeaderActionButton>
       );
     }
 
     return (
-      <>
-        <Button type="button" size="sm" disabled={operationPending} onClick={handleOpenAdmin}>
-          {openAdmin.isPending ? (
-            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-          ) : (
-            <ExternalLink className="mr-1.5 h-4 w-4" />
-          )}
-          {status.modelCount === 0
-            ? t('settings.integrationsTab.litellmAddFirstModel')
-            : t('settings.integrationsTab.litellmOpenConsole')}
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={onOpenManualSettings}>
-          <Settings2 className="mr-1.5 h-4 w-4" />
-          {t('settings.integrationsTab.litellmConnectionSettings')}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={operationPending}
-          aria-label={t('settings.integrationsTab.litellmStop')}
-          onClick={() =>
-            void runAction(
-              () => stop.mutateAsync(),
-              t('settings.integrationsTab.litellmStopped'),
-              t('settings.integrationsTab.litellmStopFailed')
-            )
-          }
-        >
-          {stop.isPending ? (
-            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-          ) : (
-            <Power className="mr-1.5 h-4 w-4" />
-          )}
-          {t('settings.integrationsTab.litellmStopService')}
-        </Button>
-      </>
+      <HeaderActionButton
+        label={t(
+          status.modelCount === 0
+            ? 'settings.integrationsTab.litellmAddFirstModel'
+            : 'settings.integrationsTab.litellmOpenConsole'
+        )}
+        variant="outline"
+        disabled={operationPending}
+        onClick={handleOpenAdmin}
+      >
+        {openAdmin.isPending ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : status.modelCount === 0 ? (
+          <Plus className="size-4" />
+        ) : (
+          <ExternalLink className="size-4" />
+        )}
+      </HeaderActionButton>
+    );
+  };
+
+  const renderManagementMenu = () => {
+    if (remoteConnection || !status || status.operation || status.state === 'external-running') {
+      return null;
+    }
+
+    const running = status.state === 'running';
+    const showRecheck =
+      status.state === 'docker-missing' ||
+      status.state === 'docker-stopped' ||
+      status.state === 'docker-starting';
+    const menuLabel = t('settings.integrationsTab.litellmManageActions');
+
+    return (
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger render={<span className="inline-flex" />}>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label={menuLabel}
+                  disabled={operationPending}
+                />
+              }
+            >
+              <Ellipsis className="size-4" />
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={8}>
+            {menuLabel}
+          </TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>
+              <span className="block">{t('settings.integrationsTab.litellmManagement')}</span>
+              {running && (
+                <span className="mt-1 block font-normal text-muted-foreground">
+                  {t('settings.integrationsTab.litellmAdminAccount')}
+                  <code className="ml-1 font-mono text-foreground">
+                    {LITELLM_MANAGED_ADMIN_USERNAME}
+                  </code>
+                </span>
+              )}
+            </DropdownMenuLabel>
+            {running && (
+              <DropdownMenuItem onClick={() => void handleCopyAdminPassword()}>
+                <Copy className="size-4" />
+                {t('settings.integrationsTab.litellmCopyAdminPassword')}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={onOpenManualSettings}>
+              <Settings2 className="size-4" />
+              {t(
+                status.state === 'not-installed'
+                  ? 'settings.integrationsTab.litellmUseExisting'
+                  : 'settings.integrationsTab.litellmConnectionSettings'
+              )}
+            </DropdownMenuItem>
+            {showRecheck && (
+              <DropdownMenuItem onClick={() => void statusQuery.refetch()}>
+                <RefreshCw className="size-4" />
+                {t('settings.integrationsTab.litellmRecheck')}
+              </DropdownMenuItem>
+            )}
+            {running && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() =>
+                    void runAction(
+                      () => stop.mutateAsync(),
+                      t('settings.integrationsTab.litellmStopped'),
+                      t('settings.integrationsTab.litellmStopFailed')
+                    )
+                  }
+                >
+                  <Power className="size-4" />
+                  {t('settings.integrationsTab.litellmStopService')}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
     );
   };
 
   return (
-    <div className="@container self-start" data-testid="litellm-integration-card">
-      <div className="flex w-full items-start gap-3 rounded-lg border border-muted bg-muted/20 p-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/50">
-          <Waypoints className="h-6 w-6 text-primary" />
+    <div className="flex h-full min-h-0" data-testid="litellm-integration-card">
+      <div className="flex w-full items-center gap-4 rounded-lg border border-muted bg-muted/20 p-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted/50">
+          <Waypoints className="h-8 w-8 text-primary" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-medium text-foreground">LiteLLM</h3>
-            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${stateTone(
-                  remoteConnection
-                    ? 'external-running'
-                    : status?.operation
-                      ? 'docker-starting'
-                      : status?.state
-                )}`}
-              />
-              {statusLabel}
-            </span>
-          </div>
-          <p className="mt-0.5 text-sm leading-5 text-muted-foreground">{description}</p>
-          {!remoteConnection && status?.state === 'running' && (
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-l-2 border-primary/30 pl-3">
-              <div className="flex shrink-0 items-center gap-2 text-xs">
-                <span className="text-muted-foreground">
-                  {t('settings.integrationsTab.litellmAdminAccount')}
-                </span>
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono font-medium text-foreground">
-                  {LITELLM_MANAGED_ADMIN_USERNAME}
-                </code>
-              </div>
-              <p className="min-w-48 flex-1 text-xs leading-4 text-muted-foreground">
-                {t('settings.integrationsTab.litellmAdminPasswordDescription')}
-              </p>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                disabled={operationPending}
-                onClick={handleCopyAdminPassword}
-              >
-                {copyAdminPassword.isPending ? (
-                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Copy className="mr-1 h-3.5 w-3.5" />
-                )}
-                {t('settings.integrationsTab.litellmCopyAdminPassword')}
-              </Button>
-            </div>
-          )}
-          <div className="mt-3 flex flex-wrap items-center gap-2">{renderActions()}</div>
+          <h3 className="text-sm font-medium text-foreground">LiteLLM</h3>
+          <p className="mt-0.5 line-clamp-2 text-sm leading-5 text-muted-foreground">
+            {description}
+          </p>
         </div>
+        <HeaderActionToolbar label={t('settings.integrationsTab.litellmActions')}>
+          {renderPrimaryAction()}
+          {renderManagementMenu()}
+        </HeaderActionToolbar>
       </div>
     </div>
   );
