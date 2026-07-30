@@ -1050,11 +1050,12 @@ export const HomeComposer = observer(function HomeComposer({
         onSubmitted?.({ kind: 'task', projectId, taskId });
       };
       // Attachment transport: inline sentinel tokens are replaced in place —
-      // file tokens (and image tokens when the user prefers paths) become
-      // @path mentions; remaining image tokens become {{yoda-image:N}} markers
-      // the main process expands per runtime (native clipboard paste for TUIs
-      // that support it, @path substitution for the rest). Ordering always
-      // follows the text.
+      // File tokens become @path mentions. When the user prefers image paths,
+      // image tokens become backtick-wrapped @path text so Agent clients do not
+      // promote them back into image inputs. Remaining image tokens become
+      // {{yoda-image:N}} markers the main process expands per runtime (native
+      // clipboard paste for TUIs that support it, @path substitution for the
+      // rest). Ordering always follows the text.
       //
       // Serialize the RAW prompt, not `trimmed`: token sentinels are wrapped in
       // en-space (U+2002) delimiters, which `String.trim()` strips — so a
@@ -2145,6 +2146,7 @@ export const HomeComposer = observer(function HomeComposer({
           runtimeId={runtimeId}
           projectId={projectData?.id ?? null}
           projectPath={skillProjectPath}
+          imagesAsPaths={attachImagesAsPaths}
           skillSelection={composerSkillSelection}
           placeholder={runMode === 'build' ? t('home.buildPromptPlaceholder') : undefined}
           disabled={runMode === 'build' && submitting}
