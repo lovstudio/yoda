@@ -1,4 +1,3 @@
-import type { AgentReplyDisplayLevel } from './agent-reply-display';
 import type { MobileSessionDetail, MobileSessionTranscriptBlock } from './mobile-api';
 
 export const YODA_SESSION_SHARE_KIND = 'yoda-session-share' as const;
@@ -55,23 +54,20 @@ function normalizedTimestamp(value: string | null | undefined): string | null {
   return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
 }
 
-export function createYodaSessionShareUpload(
-  detail: MobileSessionDetail,
-  replyDisplayLevel: AgentReplyDisplayLevel
-): YodaSessionShareUpload {
+export function createYodaSessionShareUpload(detail: MobileSessionDetail): YodaSessionShareUpload {
   const blocks = detail.transcript
-    .filter((block) => isTranscriptBlockVisible(block, replyDisplayLevel))
     .filter((block) => block.content.trim().length > 0)
     .map((block, index) => ({
       id: `block-${index + 1}`,
       role: block.role,
+      ...(block.agentPhase ? { agentPhase: block.agentPhase } : {}),
       ...(block.title?.trim() ? { title: block.title.trim().slice(0, 160) } : {}),
       timestamp: normalizedTimestamp(block.timestamp),
       format: block.format,
       content: block.content,
     }));
 
-  if (replyDisplayLevel === 'verbose' && blocks.length === 0 && detail.content.trim()) {
+  if (blocks.length === 0 && detail.content.trim()) {
     blocks.push({
       id: 'block-1',
       role: 'status',
@@ -92,22 +88,4 @@ export function createYodaSessionShareUpload(
     assets: [],
     omittedAssetCount: 0,
   };
-}
-
-function isTranscriptBlockVisible(
-  block: MobileSessionTranscriptBlock,
-  replyDisplayLevel: AgentReplyDisplayLevel
-): boolean {
-  switch (replyDisplayLevel) {
-    case 'hidden':
-      return block.role === 'user';
-    case 'concise':
-      return (
-        block.role === 'user' || (block.role === 'assistant' && block.agentPhase !== 'commentary')
-      );
-    case 'detailed':
-      return block.role === 'user' || block.role === 'assistant';
-    case 'verbose':
-      return true;
-  }
 }

@@ -1,4 +1,4 @@
-import { Children, isValidElement, type ReactNode } from 'react';
+import { isValidElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { buildConversationSections } from '@renderer/app/app-tab-context-menu';
 import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
@@ -53,27 +53,7 @@ describe('conversation tab context menu', () => {
     );
 
     expect(management.some((item) => isValidElement(item) && item.key === 'move')).toBe(true);
-    const publicShare = copy.find((item) => isValidElement(item) && item.key === 'share-public');
-    expect(publicShare).toBeDefined();
-    expect(replyDisplayLevels(publicShare)).toEqual(['hidden', 'concise', 'detailed', 'verbose']);
+    expect(copy.some((item) => isValidElement(item) && item.key === 'share-public')).toBe(true);
     expect(copy.some((item) => isValidElement(item) && item.key === 'copy-link')).toBe(true);
   });
 });
-
-function replyDisplayLevels(node: ReactNode): string[] {
-  const levels: string[] = [];
-  Children.forEach(node, (child) => {
-    if (
-      !isValidElement<{
-        children?: ReactNode;
-        'data-reply-display-level'?: string;
-      }>(child)
-    ) {
-      return;
-    }
-    const level = child.props['data-reply-display-level'];
-    if (level) levels.push(level);
-    levels.push(...replyDisplayLevels(child.props.children));
-  });
-  return levels;
-}
