@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { app, clipboard, shell } from 'electron';
 import {
   LITELLM_MANAGED_ADMIN_URL,
@@ -15,9 +13,18 @@ import {
 } from '@shared/litellm-managed';
 import { log } from '@main/lib/logger';
 import { encryptedAppSecretsStore } from '../secrets/encrypted-app-secrets-store';
+import {
+  createDockerCommandRunner,
+  detectDocker,
+  launchDockerDesktop,
+  managedRuntimeDelay,
+  managedRuntimeErrorMessage,
+  type DockerAvailability,
+  type DockerCommandResult,
+  type DockerCommandRunner,
+} from './docker-managed-runtime';
 import { maasService } from './maas-service';
 
-const execFileAsync = promisify(execFile);
 const LITELLM_IMAGE_VERSION = 'v1.90.2';
 const LITELLM_IMAGE = `ghcr.io/berriai/litellm-database:${LITELLM_IMAGE_VERSION}`;
 const COMPOSE_PROJECT_NAME = 'yoda-litellm';
@@ -31,16 +38,6 @@ const MASTER_KEY_SECRET = 'yoda-litellm-master-key';
 const SALT_KEY_SECRET = 'yoda-litellm-salt-key';
 const POSTGRES_PASSWORD_SECRET = 'yoda-litellm-postgres-password';
 const VIRTUAL_KEY_SECRET = 'yoda-litellm-virtual-key';
-
-type DockerCommandResult = {
-  stdout: string;
-  stderr: string;
-};
-
-export type DockerCommandRunner = (
-  args: string[],
-  options: { timeout: number; env?: NodeJS.ProcessEnv }
-) => Promise<DockerCommandResult>;
 
 type SecretStore = Pick<
   typeof encryptedAppSecretsStore,
@@ -59,12 +56,6 @@ type LiteLlmManagedServiceOptions = {
   openExternal?: (url: string) => Promise<void>;
   launchDockerDesktop?: () => Promise<void>;
   platform?: NodeJS.Platform;
-};
-
-type DockerAvailability = {
-  installed: boolean;
-  running: boolean;
-  version: string | null;
 };
 
 type LiteLlmManagedOperationTarget = 'running' | 'stopped' | 'docker-running';
@@ -88,82 +79,6 @@ type VirtualKeyResponse = {
 type ModelsResponse = {
   data?: unknown[];
 };
-
-function dockerCommandCandidates(platform: NodeJS.Platform): string[] {
-  const candidates = new Set<string>();
-  if (process.env.DOCKER_BIN) candidates.add(process.env.DOCKER_BIN);
-  candidates.add('docker');
-
-  if (platform === 'darwin') {
-    candidates.add('/Applications/Docker.app/Contents/Resources/bin/docker');
-    candidates.add('/opt/homebrew/bin/docker');
-    candidates.add('/usr/local/bin/docker');
-  } else if (platform === 'win32') {
-    const programFiles = process.env.ProgramFiles;
-    if (programFiles) {
-      candidates.add(join(programFiles, 'Docker', 'Docker', 'resources', 'bin', 'docker.exe'));
-    }
-  } else {
-    candidates.add('/usr/bin/docker');
-    candidates.add('/usr/local/bin/docker');
-  }
-
-  return [...candidates];
-}
-
-function createDockerCommandRunner(platform: NodeJS.Platform): DockerCommandRunner {
-  let resolvedCommand: string | null = null;
-
-  return async (args, options) => {
-    const candidates = resolvedCommand ? [resolvedCommand] : dockerCommandCandidates(platform);
-    let lastError: unknown;
-
-    for (const command of candidates) {
-      try {
-        const result = await execFileAsync(command, args, {
-          encoding: 'utf8',
-          timeout: options.timeout,
-          maxBuffer: 16 * 1024 * 1024,
-          env: options.env ?? process.env,
-        });
-        resolvedCommand = command;
-        return {
-          stdout: String(result.stdout),
-          stderr: String(result.stderr),
-        };
-      } catch (error) {
-        lastError = error;
-        if (!isCommandMissing(error)) throw error;
-      }
-    }
-
-    throw lastError ?? Object.assign(new Error('Docker executable not found.'), { code: 'ENOENT' });
-  };
-}
-
-async function defaultLaunchDockerDesktop(
-  platform: NodeJS.Platform,
-  runDocker: DockerCommandRunner
-): Promise<void> {
-  if (platform === 'darwin') {
-    try {
-      await runDocker(['desktop', 'start', '--detach'], {
-        timeout: STATUS_TIMEOUT_MS,
-      });
-      return;
-    } catch (error) {
-      log.warn('Docker Desktop CLI start failed; falling back to Launch Services:', error);
-    }
-
-    await execFileAsync('/usr/bin/open', ['-a', 'Docker'], {
-      encoding: 'utf8',
-      timeout: STATUS_TIMEOUT_MS,
-    });
-    return;
-  }
-
-  throw new Error('Open Docker Desktop, then retry detection.');
-}
 
 function composeFileContents(): string {
   return `# Managed by Yoda. Credentials are supplied from encrypted storage at runtime.
@@ -204,19 +119,6 @@ volumes:
 `;
 }
 
-function isCommandMissing(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException)?.code === 'ENOENT';
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message.trim()) return error.message;
-  return fallback;
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
 export class LiteLlmManagedService {
   private readonly runDocker: DockerCommandRunner;
   private readonly getManagedDirectory: () => string;
@@ -241,8 +143,7 @@ export class LiteLlmManagedService {
     this.writeClipboard = options.writeClipboard ?? ((value) => clipboard.writeText(value));
     this.openExternal = options.openExternal ?? ((url) => shell.openExternal(url));
     this.launchDockerDesktop =
-      options.launchDockerDesktop ??
-      (() => defaultLaunchDockerDesktop(this.platform, this.runDocker));
+      options.launchDockerDesktop ?? (() => launchDockerDesktop(this.platform, this.runDocker));
   }
 
   async getStatus(): Promise<LiteLlmManagedStatus> {
@@ -326,7 +227,7 @@ export class LiteLlmManagedService {
         return {
           success: false,
           status: await this.getStatus(),
-          error: errorMessage(error, 'LiteLLM installation failed.'),
+          error: managedRuntimeErrorMessage(error, 'LiteLLM installation failed.'),
         };
       }
     });
@@ -362,7 +263,7 @@ export class LiteLlmManagedService {
         return {
           success: false,
           status: await this.getStatus(),
-          error: errorMessage(error, 'LiteLLM startup failed.'),
+          error: managedRuntimeErrorMessage(error, 'LiteLLM startup failed.'),
         };
       }
     });
@@ -391,7 +292,7 @@ export class LiteLlmManagedService {
         return {
           success: false,
           status: await this.getStatus(),
-          error: errorMessage(error, 'LiteLLM shutdown failed.'),
+          error: managedRuntimeErrorMessage(error, 'LiteLLM shutdown failed.'),
         };
       }
     });
@@ -409,7 +310,7 @@ export class LiteLlmManagedService {
         return {
           success: false,
           status: await this.getStatus(),
-          error: errorMessage(error, 'Docker Desktop startup failed.'),
+          error: managedRuntimeErrorMessage(error, 'Docker Desktop startup failed.'),
         };
       }
     });
@@ -430,7 +331,7 @@ export class LiteLlmManagedService {
       log.error('Failed to copy LiteLLM administrator password:', error);
       return {
         success: false,
-        error: errorMessage(error, 'Failed to copy LiteLLM administrator password.'),
+        error: managedRuntimeErrorMessage(error, 'Failed to copy LiteLLM administrator password.'),
       };
     }
   }
@@ -448,7 +349,7 @@ export class LiteLlmManagedService {
       log.error('Failed to open LiteLLM Admin UI:', error);
       return {
         success: false,
-        error: errorMessage(error, 'Failed to open LiteLLM Admin UI.'),
+        error: managedRuntimeErrorMessage(error, 'Failed to open LiteLLM Admin UI.'),
       };
     }
   }
@@ -519,25 +420,7 @@ export class LiteLlmManagedService {
   }
 
   private async detectDocker(): Promise<DockerAvailability> {
-    let version: string | null = null;
-    try {
-      const result = await this.runDocker(['--version'], { timeout: STATUS_TIMEOUT_MS });
-      version = result.stdout.trim() || null;
-    } catch (error) {
-      if (isCommandMissing(error)) {
-        return { installed: false, running: false, version: null };
-      }
-      return { installed: false, running: false, version: null };
-    }
-
-    try {
-      await this.runDocker(['info', '--format', '{{.ServerVersion}}'], {
-        timeout: STATUS_TIMEOUT_MS,
-      });
-      return { installed: true, running: true, version };
-    } catch {
-      return { installed: true, running: false, version };
-    }
+    return detectDocker(this.runDocker, STATUS_TIMEOUT_MS);
   }
 
   private async probeReadiness(): Promise<boolean> {
@@ -626,7 +509,7 @@ export class LiteLlmManagedService {
     const deadline = Date.now() + STARTUP_TIMEOUT_MS;
     while (Date.now() < deadline) {
       if (await this.probeReadiness()) return;
-      await delay(HEALTH_POLL_INTERVAL_MS);
+      await managedRuntimeDelay(HEALTH_POLL_INTERVAL_MS);
     }
     throw new Error('LiteLLM startup timed out.');
   }

@@ -6,6 +6,7 @@ export const MAAS_PLATFORM_IDS = [
   'openrouter',
   'siliconflow',
   'litellm',
+  'newapi',
   'custom',
 ] as const;
 
@@ -259,6 +260,16 @@ export const MAAS_PLATFORMS: Record<MaasPlatformTemplateId, MaasPlatformDefiniti
     defaultEndpoint: 'http://127.0.0.1:4000/v1',
     docsUrl: 'https://docs.litellm.ai/',
     officialDescriptionUrl: 'https://docs.litellm.ai/',
+    capabilities: ['text', 'image', 'embedding'],
+  },
+  newapi: {
+    id: 'newapi',
+    name: 'New API',
+    description:
+      'Manage OpenAI-compatible upstream channels through a lightweight local gateway with routing and failover.',
+    defaultEndpoint: 'http://127.0.0.1:4001/v1',
+    docsUrl: 'https://docs.newapi.pro/',
+    officialDescriptionUrl: 'https://docs.newapi.pro/',
     capabilities: ['text', 'image', 'embedding'],
   },
   custom: {

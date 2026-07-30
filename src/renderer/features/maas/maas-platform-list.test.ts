@@ -36,6 +36,7 @@ describe('MaaS platform list', () => {
       'openrouter',
       'siliconflow',
       'litellm',
+      'newapi',
       'custom',
     ]);
   });

@@ -5,11 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LITELLM_DOCKER_DESKTOP_URL, type LiteLlmManagedStatus } from '@shared/litellm-managed';
 import { LOVCODE_DOWNLOAD_URL, type LovcodeAvailability } from '@shared/lovcode';
 import type { MaasConnection } from '@shared/maas';
+import type { NewApiManagedStatus } from '@shared/new-api-managed';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
-  openLiteLlm: vi.fn(),
+  openMaasPlatform: vi.fn(),
   openExternal: vi.fn(async () => undefined),
   checkLovcodeAvailability: vi.fn<() => Promise<LovcodeAvailability>>(),
   checkGithubStatus: vi.fn(async () => ({})),
@@ -22,6 +23,15 @@ const mocks = vi.hoisted(() => ({
   startDockerForLiteLlm: vi.fn(async () => undefined),
   copyLiteLlmAdminPassword: vi.fn(async () => undefined),
   openLiteLlmAdmin: vi.fn(async () => undefined),
+  newApiStatus: null as NewApiManagedStatus | null,
+  refetchNewApiStatus: vi.fn(async () => undefined),
+  installNewApi: vi.fn(async () => undefined),
+  initializeNewApi: vi.fn(async () => undefined),
+  startNewApi: vi.fn(async () => undefined),
+  stopNewApi: vi.fn(async () => undefined),
+  startDockerForNewApi: vi.fn(async () => undefined),
+  copyNewApiAdminPassword: vi.fn(async () => undefined),
+  openNewApiAdmin: vi.fn(async () => undefined),
   toast: vi.fn(),
 }));
 
@@ -63,6 +73,25 @@ vi.mock('@renderer/features/maas/useMaas', () => ({
     isPending: false,
   }),
   useOpenLiteLlmAdmin: () => ({ mutateAsync: mocks.openLiteLlmAdmin, isPending: false }),
+  useNewApiManagedStatus: () => ({
+    data: mocks.newApiStatus,
+    isLoading: false,
+    isError: false,
+    refetch: mocks.refetchNewApiStatus,
+  }),
+  useInstallNewApi: () => ({ mutateAsync: mocks.installNewApi, isPending: false }),
+  useInitializeNewApi: () => ({ mutateAsync: mocks.initializeNewApi, isPending: false }),
+  useStartNewApi: () => ({ mutateAsync: mocks.startNewApi, isPending: false }),
+  useStopNewApi: () => ({ mutateAsync: mocks.stopNewApi, isPending: false }),
+  useStartDockerForNewApi: () => ({
+    mutateAsync: mocks.startDockerForNewApi,
+    isPending: false,
+  }),
+  useCopyNewApiAdminPassword: () => ({
+    mutateAsync: mocks.copyNewApiAdminPassword,
+    isPending: false,
+  }),
+  useOpenNewApiAdmin: () => ({ mutateAsync: mocks.openNewApiAdmin, isPending: false }),
 }));
 
 vi.mock('@renderer/lib/hooks/use-toast', () => ({
@@ -142,6 +171,22 @@ describe('Settings integrations', () => {
       imageVersion: 'v1.90.2',
       modelCount: null,
     };
+    mocks.newApiStatus = {
+      state: 'not-installed',
+      operation: null,
+      managed: false,
+      installed: false,
+      initialized: false,
+      credentialsAvailable: false,
+      dockerInstalled: true,
+      dockerRunning: true,
+      canStartDocker: true,
+      dockerVersion: 'Docker version 28.0.0',
+      endpoint: 'http://127.0.0.1:4001/v1',
+      adminUrl: 'http://127.0.0.1:4001',
+      imageVersion: 'v1.0.0-rc.22',
+      modelCount: null,
+    };
     mocks.checkLovcodeAvailability.mockResolvedValue({ status: 'not-installed' });
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -158,7 +203,7 @@ describe('Settings integrations', () => {
       '@renderer/features/settings/components/IntegrationsCard'
     );
     await act(async () =>
-      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
     );
 
     expect(host.textContent).toContain('LiteLLM');
@@ -170,7 +215,7 @@ describe('Settings integrations', () => {
     expect(installButton).not.toBeNull();
     await act(async () => installButton?.click());
     expect(mocks.installLiteLlm).toHaveBeenCalledOnce();
-    expect(mocks.openLiteLlm).not.toHaveBeenCalled();
+    expect(mocks.openMaasPlatform).not.toHaveBeenCalled();
   });
 
   it('keeps an existing remote LiteLLM connection manageable without replacing it', async () => {
@@ -192,7 +237,7 @@ describe('Settings integrations', () => {
       '@renderer/features/settings/components/IntegrationsCard'
     );
     await act(async () =>
-      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
     );
 
     expect(host.textContent).toContain(
@@ -203,7 +248,7 @@ describe('Settings integrations', () => {
     );
     expect(settingsButton).not.toBeNull();
     await act(async () => settingsButton?.click());
-    expect(mocks.openLiteLlm).toHaveBeenCalledOnce();
+    expect(mocks.openMaasPlatform).toHaveBeenCalledWith('litellm');
   });
 
   it('downloads Docker Desktop when the one-click runtime dependency is missing', async () => {
@@ -217,7 +262,7 @@ describe('Settings integrations', () => {
       '@renderer/features/settings/components/IntegrationsCard'
     );
     await act(async () =>
-      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
     );
 
     const downloadButton = host.querySelector<HTMLButtonElement>(
@@ -238,7 +283,7 @@ describe('Settings integrations', () => {
       '@renderer/features/settings/components/IntegrationsCard'
     );
     await act(async () =>
-      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
     );
 
     expect(host.textContent).toContain('settings.integrationsTab.litellmDockerStartingDescription');
@@ -260,7 +305,7 @@ describe('Settings integrations', () => {
       '@renderer/features/settings/components/IntegrationsCard'
     );
     await act(async () =>
-      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
     );
 
     expect(host.textContent).toContain('settings.integrationsTab.litellmInstallingDescription');
@@ -285,7 +330,7 @@ describe('Settings integrations', () => {
       '@renderer/features/settings/components/IntegrationsCard'
     );
     await act(async () =>
-      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
     );
 
     expect(host.textContent).toContain('settings.integrationsTab.litellmNeedsModelDescription');
@@ -328,12 +373,93 @@ describe('Settings integrations', () => {
     expect(mocks.stopLiteLlm).toHaveBeenCalledOnce();
   });
 
+  it('offers one-click New API installation and keeps the MaaS form for existing services', async () => {
+    const { default: IntegrationsCard } = await import(
+      '@renderer/features/settings/components/IntegrationsCard'
+    );
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
+    );
+
+    expect(host.textContent).toContain('New API');
+    expect(host.textContent).toContain('settings.integrationsTab.newApiManagedDescription');
+
+    const installButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.newApiOneClickInstall"]'
+    );
+    await act(async () => installButton?.click());
+    expect(mocks.installNewApi).toHaveBeenCalledOnce();
+    expect(mocks.openMaasPlatform).not.toHaveBeenCalled();
+
+    mocks.newApiStatus = {
+      ...mocks.newApiStatus!,
+      state: 'external-running',
+    };
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
+    );
+    const connectExistingButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.newApiConnectExisting"]'
+    );
+    await act(async () => connectExistingButton?.click());
+    expect(mocks.openMaasPlatform).toHaveBeenCalledWith('newapi');
+  });
+
+  it('keeps New API credentials and first-channel setup discoverable in the shared card grammar', async () => {
+    host.style.width = '440px';
+    mocks.newApiStatus = {
+      ...mocks.newApiStatus!,
+      state: 'running',
+      managed: true,
+      installed: true,
+      initialized: true,
+      credentialsAvailable: true,
+      modelCount: 0,
+    };
+    const { default: IntegrationsCard } = await import(
+      '@renderer/features/settings/components/IntegrationsCard'
+    );
+    await act(async () =>
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
+    );
+
+    const card = host.querySelector<HTMLElement>('[data-testid="new-api-integration-card"]');
+    const lovcodeCard = host.querySelector<HTMLElement>('[data-testid="integration-card-lovcode"]');
+    expect(card).not.toBeNull();
+    expect(lovcodeCard).not.toBeNull();
+    expect(card!.scrollWidth).toBeLessThanOrEqual(card!.clientWidth);
+    expect(card!.className).toBe(lovcodeCard!.className);
+    expect(card!.firstElementChild?.className).toBe(lovcodeCard!.firstElementChild?.className);
+    expect(host.textContent).toContain('settings.integrationsTab.newApiNeedsChannelDescription');
+
+    const manageButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.newApiManageActions"]'
+    );
+    await act(async () => manageButton?.click());
+    expect(document.body.textContent).toContain('settings.integrationsTab.newApiAdminAccount');
+    expect(document.body.textContent).toContain('admin');
+
+    const copyPasswordItem = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')
+    ).find((item) =>
+      item.textContent?.includes('settings.integrationsTab.newApiCopyAdminPassword')
+    );
+    await act(async () => copyPasswordItem?.click());
+    expect(mocks.copyNewApiAdminPassword).toHaveBeenCalledOnce();
+
+    const addChannelButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="settings.integrationsTab.newApiAddFirstChannel"]'
+    );
+    await act(async () => addChannelButton?.click());
+    expect(mocks.openNewApiAdmin).toHaveBeenCalledOnce();
+  });
+
   it('shows Lovcode and opens the download page when it is not installed', async () => {
     const { default: IntegrationsCard } = await import(
       '@renderer/features/settings/components/IntegrationsCard'
     );
     await act(async () =>
-      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
     );
 
     expect(host.textContent).toContain('Lovcode');
@@ -358,7 +484,7 @@ describe('Settings integrations', () => {
       '@renderer/features/settings/components/IntegrationsCard'
     );
     await act(async () =>
-      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
     );
 
     expect(host.textContent).toContain('settings.integrationsTab.lovcodeDescription');
@@ -381,7 +507,7 @@ describe('Settings integrations', () => {
       '@renderer/features/settings/components/IntegrationsCard'
     );
     await act(async () =>
-      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
     );
 
     expect(host.textContent).toContain(
@@ -405,7 +531,7 @@ describe('Settings integrations', () => {
       '@renderer/features/settings/components/IntegrationsCard'
     );
     await act(async () =>
-      root.render(createElement(IntegrationsCard, { onOpenLiteLlm: mocks.openLiteLlm }))
+      root.render(createElement(IntegrationsCard, { onOpenMaasPlatform: mocks.openMaasPlatform }))
     );
 
     expect(host.textContent).toContain('settings.integrationsTab.lovcodeUpgradeDescription:0.39.9');

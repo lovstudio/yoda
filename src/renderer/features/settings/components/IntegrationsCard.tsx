@@ -10,14 +10,18 @@ import linearSvg from '@/assets/images/Linear.svg?raw';
 import lovcodeSvg from '@/assets/images/Lovcode.svg?raw';
 import plainSvg from '@/assets/images/Plain.svg?raw';
 import { LOVCODE_DOWNLOAD_URL, type LovcodeAvailability } from '@shared/lovcode';
+import type { MaasPlatformTemplateId } from '@shared/maas';
 import { useIntegrationsContext } from '@renderer/features/integrations/integrations-provider';
+import { HeaderActionToolbar } from '@renderer/lib/components/header-actions';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { useGithubContext } from '@renderer/lib/providers/github-context-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
+import { IntegrationCardShell } from './IntegrationCardShell';
 import { LiteLlmIntegrationCard } from './LiteLlmIntegrationCard';
+import { NewApiIntegrationCard } from './NewApiIntegrationCard';
 
 /** Light mode: original SVG colors. Dark / dark-black: primary colour. */
 const SvgLogo = ({ raw }: { raw: string }) => {
@@ -56,7 +60,9 @@ type IntegrationItem = {
   connectIcon?: React.ReactNode;
 };
 
-const IntegrationsCard: React.FC<{ onOpenLiteLlm: () => void }> = ({ onOpenLiteLlm }) => {
+const IntegrationsCard: React.FC<{
+  onOpenMaasPlatform: (platformId: MaasPlatformTemplateId) => void;
+}> = ({ onOpenMaasPlatform }) => {
   const { t } = useTranslation();
   const [lovcodeAvailability, setLovcodeAvailability] = useState<LovcodeAvailability | null>(null);
   const [lovcodeLoading, setLovcodeLoading] = useState(true);
@@ -256,88 +262,87 @@ const IntegrationsCard: React.FC<{ onOpenLiteLlm: () => void }> = ({ onOpenLiteL
       className="grid gap-3"
       style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
     >
-      <LiteLlmIntegrationCard onOpenManualSettings={onOpenLiteLlm} />
+      <LiteLlmIntegrationCard onOpenManualSettings={() => onOpenMaasPlatform('litellm')} />
+      <NewApiIntegrationCard onOpenManualSettings={() => onOpenMaasPlatform('newapi')} />
       {integrations.map((integration) => (
-        <div
+        <IntegrationCardShell
           key={integration.id}
-          className="flex h-full min-h-0"
-          data-testid={`integration-card-${integration.id}`}
-        >
-          <div className="flex w-full items-center gap-4 rounded-lg border border-muted bg-muted/20 p-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted/50">
-              {integration.logoSvg ? <SvgLogo raw={integration.logoSvg} /> : integration.icon}
-            </div>
-            <div className="flex flex-1 flex-col gap-0.5">
-              <h3 className="text-sm font-medium text-foreground">{integration.name}</h3>
-              <p className="text-sm text-muted-foreground">{integration.description}</p>
-            </div>
-            {integration.connected ? (
-              integration.opensSettings ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={integration.onConnect}
-                  aria-label={t('settings.integrationsTab.openSettings', {
-                    name: integration.name,
-                  })}
-                >
-                  <Settings2 className="h-4 w-4" />
-                </Button>
-              ) : integration.disabledTooltip ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger
-                      className="inline-flex h-8 w-8 shrink-0 cursor-default items-center justify-center rounded-md border border-input bg-background opacity-70"
-                      aria-label={integration.disabledTooltip}
-                    >
-                      <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      <p className="text-xs">{integration.disabledTooltip}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+          testId={`integration-card-${integration.id}`}
+          icon={integration.logoSvg ? <SvgLogo raw={integration.logoSvg} /> : integration.icon}
+          name={integration.name}
+          description={integration.description}
+          actions={
+            <HeaderActionToolbar label={integration.name}>
+              {integration.connected ? (
+                integration.opensSettings ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={integration.onConnect}
+                    aria-label={t('settings.integrationsTab.openSettings', {
+                      name: integration.name,
+                    })}
+                  >
+                    <Settings2 className="h-4 w-4" />
+                  </Button>
+                ) : integration.disabledTooltip ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger
+                        className="inline-flex h-8 w-8 shrink-0 cursor-default items-center justify-center rounded-md border border-input bg-background opacity-70"
+                        aria-label={integration.disabledTooltip}
+                      >
+                        <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p className="text-xs">{integration.disabledTooltip}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => integration.onDisconnect?.()}
+                    aria-label={t('settings.integrationsTab.disconnect', {
+                      name: integration.name,
+                    })}
+                  >
+                    <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  </Button>
+                )
               ) : (
                 <Button
                   type="button"
                   variant="outline"
                   size="icon"
                   className="h-8 w-8 shrink-0"
-                  onClick={() => integration.onDisconnect?.()}
-                  aria-label={t('settings.integrationsTab.disconnect', { name: integration.name })}
+                  disabled={integration.loading && !integration.onCancel}
+                  onClick={integration.loading ? integration.onCancel : integration.onConnect}
+                  aria-label={
+                    integration.loading
+                      ? integration.onCancel
+                        ? t('settings.integrationsTab.cancelConnecting', { name: integration.name })
+                        : (integration.connectingLabel ??
+                          t('settings.integrationsTab.connecting', { name: integration.name }))
+                      : (integration.connectLabel ??
+                        t('settings.integrationsTab.connect', { name: integration.name }))
+                  }
                 >
-                  <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  {integration.loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    (integration.connectIcon ?? <Plus className="h-4 w-4" />)
+                  )}
                 </Button>
-              )
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                disabled={integration.loading && !integration.onCancel}
-                onClick={integration.loading ? integration.onCancel : integration.onConnect}
-                aria-label={
-                  integration.loading
-                    ? integration.onCancel
-                      ? t('settings.integrationsTab.cancelConnecting', { name: integration.name })
-                      : (integration.connectingLabel ??
-                        t('settings.integrationsTab.connecting', { name: integration.name }))
-                    : (integration.connectLabel ??
-                      t('settings.integrationsTab.connect', { name: integration.name }))
-                }
-              >
-                {integration.loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  (integration.connectIcon ?? <Plus className="h-4 w-4" />)
-                )}
-              </Button>
-            )}
-          </div>
-        </div>
+              )}
+            </HeaderActionToolbar>
+          }
+        />
       ))}
     </div>
   );
