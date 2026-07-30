@@ -35,6 +35,7 @@ import { normalizeSkillSelection } from '@shared/skills/selection';
 import type { CatalogIndex, SkillSelectionInput } from '@shared/skills/types';
 import { recordSkillInvocation } from '@renderer/features/skills/skill-usage-stats';
 import { toast } from '@renderer/lib/hooks/use-toast';
+import { isImagePath, pastedImagePathMention } from '@renderer/lib/image-path-mention';
 import { rpc } from '@renderer/lib/ipc';
 import {
   Combobox,
@@ -69,7 +70,6 @@ import {
   fileTokenLabel,
   findTokenRanges,
   measureTokenRects,
-  pastedImagePathMention,
   snapSelectionToTokens,
   tokenAtPoint,
   tokenText,
@@ -129,7 +129,6 @@ export interface ComposerPromptInputProps {
   onSubmit?: () => void;
 }
 
-const IMAGE_ATTACHMENT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 const MENU_VIEWPORT_GUTTER = 8;
 const MENU_ANCHOR_INSET = 12;
 const MENU_SIDE_OFFSET = 4;
@@ -802,7 +801,7 @@ export function ComposerPromptInput({
       for (const file of files) {
         const filePath = window.electronAPI.getPathForFile(file).trim();
         if (!filePath) continue;
-        if (file.type.startsWith('image/') || IMAGE_ATTACHMENT_RE.test(filePath)) {
+        if (file.type.startsWith('image/') || isImagePath(filePath)) {
           insertAttachmentToken('image', filePath, file.name, URL.createObjectURL(file));
         } else {
           insertAttachmentToken('file', filePath, file.name);

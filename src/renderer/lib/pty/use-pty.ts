@@ -4,6 +4,7 @@ import type { AppSettings } from '@shared/app-settings';
 import { appPasteChannel } from '@shared/events/appEvents';
 import { ptyDataChannel, ptyExitChannel, type PtyExitEvent } from '@shared/events/ptyEvents';
 import { DEFAULT_TERMINAL_SCROLLBACK_LINES } from '@shared/terminal-settings';
+import { imagePathMention, isImagePath } from '@renderer/lib/image-path-mention';
 import { events, rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
 import { usePaneSizingContext } from './pane-sizing-context';
@@ -32,6 +33,7 @@ import {
   registerTerminalFileLinkProvider,
   type TerminalFileLinkOptions,
 } from './terminal-file-links';
+import { transformTerminalPasteText } from './terminal-image-paste';
 import { registerTerminalImeDiagnostics } from './terminal-ime-diagnostics';
 import { registerTerminalImeNativePunctuation } from './terminal-ime-native-punctuation';
 import { isTerminalLinkActivation } from './terminal-link-activation';
@@ -123,6 +125,34 @@ function hasEnterSubmit(data: string): boolean {
   return data.includes('\r') || /\x1b\[13(?:;[0-9]+)?u/.test(data);
 }
 
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        reject(new Error('Clipboard image did not produce a data URL'));
+        return;
+      }
+      resolve(result.slice(result.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read clipboard image'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function resolveClipboardImagePath(file: File): Promise<string | null> {
+  try {
+    const existingPath = window.electronAPI.getPathForFile(file).trim();
+    if (existingPath) return existingPath;
+  } catch {}
+
+  if (!file.type.startsWith('image/')) return null;
+  const base64 = await readFileAsBase64(file);
+  const result = await rpc.fs.saveClipboardImage(base64, file.type);
+  return result.success ? (result.data?.absPath ?? null) : null;
+}
+
 export interface UsePtyOptions {
   /** Deterministic PTY session ID: makePtySessionId(projectId, scopeId, leafId). */
   sessionId: string;
@@ -136,6 +166,8 @@ export interface UsePtyOptions {
   onEnterPress?: (message: string) => void;
   onSubmittedInput?: (message: string, isTaskInput: boolean) => void;
   onInterruptPress?: () => void;
+  /** Turn pasted image files/paths into backtick-wrapped textual @mentions. */
+  pasteImagesAsPaths?: boolean;
   fileLinks?: TerminalFileLinkOptions | null;
   /** Overrides URL link activation (smart web links + OSC 8 hyperlinks); defaults to the system browser. */
   webLinks?: TerminalWebLinkOptions | null;
@@ -177,6 +209,7 @@ export function usePty(
     onEnterPress,
     onSubmittedInput,
     onInterruptPress,
+    pasteImagesAsPaths,
     fileLinks,
     webLinks,
   } = options;
@@ -194,6 +227,8 @@ export function usePty(
   onSubmittedInputRef.current = onSubmittedInput;
   const onInterruptPressRef = useRef(onInterruptPress);
   onInterruptPressRef.current = onInterruptPress;
+  const pasteImagesAsPathsRef = useRef(pasteImagesAsPaths ?? false);
+  pasteImagesAsPathsRef.current = pasteImagesAsPaths ?? false;
   const fileLinksRef = useRef(fileLinks ?? null);
   fileLinksRef.current = fileLinks ?? null;
   const webLinksRef = useRef(webLinks ?? null);
@@ -467,7 +502,9 @@ export function usePty(
     navigator.clipboard
       .readText()
       .then((text) => {
-        if (text && target && termRef.current === target) target.paste(text);
+        if (text && target && termRef.current === target) {
+          target.paste(transformTerminalPasteText(text, pasteImagesAsPathsRef.current));
+        }
       })
       .catch(() => {});
   }, []);
@@ -730,6 +767,43 @@ export function usePty(
       const terminalElement = (terminal as unknown as { element?: HTMLElement }).element;
       if (terminalElement) {
         const terminalDocument = terminalElement.ownerDocument;
+        const handleTerminalPaste = (event: ClipboardEvent) => {
+          if (!pasteImagesAsPathsRef.current || !event.clipboardData) return;
+
+          const clipboardFiles = Array.from(event.clipboardData.files);
+          const imageFiles = clipboardFiles.filter((file) => {
+            if (file.type.startsWith('image/')) return true;
+            try {
+              return isImagePath(window.electronAPI.getPathForFile(file).trim());
+            } catch {
+              return false;
+            }
+          });
+          const text = event.clipboardData.getData('text/plain');
+          const transformedText = transformTerminalPasteText(text, true);
+          if (imageFiles.length === 0 && transformedText === text) return;
+
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+
+          if (imageFiles.length === 0) {
+            terminal.paste(transformedText);
+            return;
+          }
+
+          void Promise.all(imageFiles.map((file) => resolveClipboardImagePath(file)))
+            .then((paths) => {
+              if (termRef.current !== terminal) return;
+              const mentions = paths
+                .filter((path): path is string => Boolean(path))
+                .map(imagePathMention);
+              if (mentions.length > 0) terminal.paste(mentions.join(' '));
+            })
+            .catch((error) => {
+              log.warn('Failed to paste terminal images as paths', { sessionId, error });
+            });
+        };
         let forcedSelection: {
           active: boolean;
           anchor: BufferCellPosition;
@@ -845,6 +919,7 @@ export function usePty(
           selectionGestureStart = null;
         };
 
+        terminalElement.addEventListener('paste', handleTerminalPaste, true);
         terminalElement.addEventListener('mousedown', handleSelectionGestureStart, true);
         // passive: the touch path never calls preventDefault, so don't block scrolling.
         terminalElement.addEventListener('touchstart', handleSelectionGestureStart, {
@@ -859,6 +934,7 @@ export function usePty(
         cleanups.push(() => {
           forcedSelection = null;
           if (viewportRestoreTimeout) clearTimeout(viewportRestoreTimeout);
+          terminalElement.removeEventListener('paste', handleTerminalPaste, true);
           terminalElement.removeEventListener('mousedown', handleSelectionGestureStart, true);
           terminalElement.removeEventListener('touchstart', handleSelectionGestureStart, true);
           terminalDocument.removeEventListener('mousemove', handleForcedSelectionMouseMove, true);

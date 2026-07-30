@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  pastedImagePathMention,
-  serializePromptWithTokens,
-  tokenText,
-  type PromptToken,
-} from './prompt-attachment-tokens';
+import { pastedImagePathMention } from '@renderer/lib/image-path-mention';
+import { serializePromptWithTokens, tokenText, type PromptToken } from './prompt-attachment-tokens';
 
 const imageToken: PromptToken = {
   id: 'image-1',
