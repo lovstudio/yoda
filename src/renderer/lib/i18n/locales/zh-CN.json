@@ -1548,7 +1548,14 @@
       "viewAllPrompts": "查看全部",
       "truncatedPrompts": "已截断 {{count}} 条 prompt",
       "truncatedPrompts_plural": "已截断 {{count}} 条 prompt",
+      "truncatedMessages": "中间还有 {{count}} 条对话",
+      "truncatedMessages_plural": "中间还有 {{count}} 条对话",
       "promptsModalTitle": "用户 prompts",
+      "conversationModalTitle": "对话",
+      "userMessage": "用户",
+      "userMessageIndex": "用户 #{{index}}",
+      "agent": "Agent",
+      "finalResult": "最终结果",
       "restoreContextAtPrompt": "恢复到第 {{index}} 条",
       "restoreContextTitle": "恢复到第 {{index}} 条？",
       "restoreContextDescription": "将创建一个新会话，并保留截至此条回复的上下文。当前会话和工作区文件不会改变。",
@@ -1970,6 +1977,26 @@
       "summarySkippedDescription": "当前语言设置为跳过，不会生成摘要。",
       "summaryFromCompaction": "来自 agent 的压缩摘要",
       "summaryGenerated": "根据对话生成",
+      "agentReplyDisplayControl": "Agent 回复显示级别：{{level}}",
+      "agentReplyDisplayShort": "Agent：{{level}}",
+      "agentReplyDisplay": {
+        "hidden": {
+          "label": "不显示",
+          "description": "只显示用户对话"
+        },
+        "concise": {
+          "label": "精简",
+          "description": "只显示 Agent 回复里的最终结果"
+        },
+        "detailed": {
+          "label": "详细",
+          "description": "显示除工具调用之外的 Agent 回复"
+        },
+        "verbose": {
+          "label": "verbose",
+          "description": "显示全部内容，几乎等同于实录"
+        }
+      },
       "transcript": "实录"
     },
     "browser": {

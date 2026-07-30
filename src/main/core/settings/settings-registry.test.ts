@@ -16,4 +16,8 @@ describe('settings defaults', () => {
   it('uses automatic terminal renderer selection by default', () => {
     expect(getDefaultForKey('terminal').renderer).toBe('auto');
   });
+
+  it('shows only final agent replies in the conversation panel by default', () => {
+    expect(getDefaultForKey('interface').agentReplyDisplayLevel).toBe('concise');
+  });
 });

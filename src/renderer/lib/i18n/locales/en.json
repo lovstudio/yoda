@@ -1548,7 +1548,14 @@
       "viewAllPrompts": "View all",
       "truncatedPrompts": "{{count}} truncated prompt",
       "truncatedPrompts_plural": "{{count}} truncated prompts",
+      "truncatedMessages": "{{count}} conversation item in the middle",
+      "truncatedMessages_plural": "{{count}} conversation items in the middle",
       "promptsModalTitle": "User prompts",
+      "conversationModalTitle": "Conversation",
+      "userMessage": "User",
+      "userMessageIndex": "User #{{index}}",
+      "agent": "Agent",
+      "finalResult": "Final result",
       "restoreContextAtPrompt": "Restore to prompt {{index}}",
       "restoreContextTitle": "Restore to prompt {{index}}?",
       "restoreContextDescription": "This creates a new session with the context through this reply. The current session and working tree files stay unchanged.",
@@ -1970,6 +1977,26 @@
       "summarySkippedDescription": "Summary generation is skipped by the current language setting.",
       "summaryFromCompaction": "From the agent's compaction summary",
       "summaryGenerated": "Generated from the conversation",
+      "agentReplyDisplayControl": "Agent reply display level: {{level}}",
+      "agentReplyDisplayShort": "Agent: {{level}}",
+      "agentReplyDisplay": {
+        "hidden": {
+          "label": "Hidden",
+          "description": "Show user messages only"
+        },
+        "concise": {
+          "label": "Concise",
+          "description": "Show only the final result from each agent reply"
+        },
+        "detailed": {
+          "label": "Detailed",
+          "description": "Show agent replies without tool calls"
+        },
+        "verbose": {
+          "label": "Verbose",
+          "description": "Show everything, nearly equivalent to the transcript"
+        }
+      },
       "transcript": "Transcript"
     },
     "browser": {

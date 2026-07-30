@@ -398,6 +398,8 @@ export const runtimeConfigDefaults = Object.fromEntries(
 export const interfaceSettingsSchema = z.object({
   taskHoverAction: z.enum(['delete', 'archive']),
   autoRightSidebarBehavior: z.boolean(),
+  /** How much of the agent's transcript appears in the Session → Conversation surface. */
+  agentReplyDisplayLevel: z.enum(['hidden', 'concise', 'detailed', 'verbose']),
   /** Dock the active session's prompt history at the bottom of the conversation pane. */
   dockSessionHistory: z.boolean(),
   /** Number of latest prompts shown after the first prompt in the docked history preview. */

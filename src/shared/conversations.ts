@@ -224,6 +224,11 @@ export type SessionTranscriptMessage = {
   role: 'user' | 'assistant';
   text: string;
   timestamp: string | null;
+  /**
+   * User-facing reply phase. Codex records this directly; Claude replies that
+   * end a turn are final while text emitted before a tool call is commentary.
+   */
+  phase?: 'commentary' | 'final';
 };
 
 /**

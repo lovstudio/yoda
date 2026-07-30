@@ -135,6 +135,37 @@ describe('getClaudeSessionContext restore checkpoints', () => {
       'Answer on the selected branch',
     ]);
   });
+
+  it('classifies Claude text before tools as commentary and end-turn text as final', async () => {
+    writeFileSync(
+      mocks.transcriptPath,
+      [
+        row('user', 'prompt-1', null, { role: 'user', content: 'Build it' }),
+        row('assistant', 'commentary', 'prompt-1', {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'I will inspect the code.' }],
+          stop_reason: 'tool_use',
+        }),
+        row('assistant', 'final', 'commentary', {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Implemented and tested.' }],
+          stop_reason: 'end_turn',
+        }),
+      ]
+        .map((value) => JSON.stringify(value))
+        .join('\n'),
+      'utf8'
+    );
+
+    const context = await getClaudeSessionContext('/repo', 'session-1', {
+      claudeConfigDir: directory,
+    });
+
+    expect(context?.messages.filter((message) => message.role === 'assistant')).toEqual([
+      expect.objectContaining({ text: 'I will inspect the code.', phase: 'commentary' }),
+      expect.objectContaining({ text: 'Implemented and tested.', phase: 'final' }),
+    ]);
+  });
 });
 
 function doneRow(uuid: string, parentUuid: string): Record<string, unknown> {

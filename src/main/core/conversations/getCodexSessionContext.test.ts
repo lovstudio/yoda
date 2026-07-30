@@ -99,6 +99,7 @@ describe('getCodexSessionContext', () => {
         role: 'assistant',
         text: 'Done',
         timestamp: '2026-06-02T11:00:04.000Z',
+        phase: 'final',
       },
     ]);
     expect(context?.developerMessages[0]?.text).toBe('Developer instructions');
@@ -537,6 +538,38 @@ describe('getCodexSessionContext', () => {
     expect(context?.completedTurnCount).toBe(2);
   });
 
+  it('keeps Codex commentary separate from the final user-facing result', async () => {
+    writeFileSync(
+      rolloutPath,
+      [
+        codexRow('session_meta', { id: 'conversation-1', cwd }),
+        codexEvent('task_started', { turn_id: 'turn-1' }),
+        codexEvent('user_message', { message: 'Build it' }),
+        codexResponse('assistant', 'I will inspect the code.', 'turn-1', 'commentary'),
+        codexResponse('assistant', 'Implemented and tested.', 'turn-1', 'final_answer'),
+        codexEvent('task_complete', {
+          turn_id: 'turn-1',
+          last_agent_message: 'Implemented and tested.',
+        }),
+      ]
+        .map((row) => JSON.stringify(row))
+        .join('\n')
+    );
+    insertThread(statePath, rolloutPath, {
+      id: 'conversation-1',
+      cwd,
+      title: 'Thread title',
+      firstUserMessage: 'Build it',
+    });
+
+    const context = await getConfiguredCodexSessionContext(cwd, 'conversation-1');
+
+    expect(context?.messages.filter((message) => message.role === 'assistant')).toEqual([
+      expect.objectContaining({ text: 'I will inspect the code.', phase: 'commentary' }),
+      expect.objectContaining({ text: 'Implemented and tested.', phase: 'final' }),
+    ]);
+  });
+
   it('does not resurrect firstUserMessage after rollback clears every Codex turn', async () => {
     writeFileSync(
       rolloutPath,
@@ -818,12 +851,14 @@ function codexEvent(type: string, payload: Record<string, unknown>): Record<stri
 function codexResponse(
   role: 'user' | 'assistant' | 'developer',
   text: string,
-  turnId?: string
+  turnId?: string,
+  phase?: 'commentary' | 'final_answer'
 ): Record<string, unknown> {
   return codexRow('response_item', {
     type: 'message',
     role,
     content: [{ type: role === 'assistant' ? 'output_text' : 'input_text', text }],
+    ...(phase ? { phase } : {}),
     ...(turnId ? { internal_chat_message_metadata_passthrough: { turn_id: turnId } } : {}),
   });
 }

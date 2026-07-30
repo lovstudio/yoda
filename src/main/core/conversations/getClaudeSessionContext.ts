@@ -225,7 +225,10 @@ function extractAssistantMessage(
   if (!text) return null;
   const timestamp = typeof row.timestamp === 'string' ? row.timestamp : null;
   const uuid = typeof row.uuid === 'string' ? row.uuid : `assistant-${index}`;
-  return { id: uuid, role: 'assistant', text, timestamp };
+  const stopReason = (message as Record<string, unknown>).stop_reason;
+  const phase =
+    typeof stopReason === 'string' && stopReason !== 'tool_use' ? 'final' : 'commentary';
+  return { id: uuid, role: 'assistant', text, timestamp, phase };
 }
 
 function extractUserText(content: unknown): string | null {

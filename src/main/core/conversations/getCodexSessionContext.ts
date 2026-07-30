@@ -737,6 +737,7 @@ function parseCodexRolloutLines(
               role: 'assistant',
               text: lastAgentMessage,
               timestamp,
+              phase: 'final',
             },
             completedTurnId
           );
@@ -799,6 +800,7 @@ function parseCodexRolloutLines(
         pendingResponseUser = responseTurnId ? { turnId: responseTurnId, text } : null;
         pushMessage(messages, { ...prompt, role: 'user' }, promptTurnId);
       } else if (payload.role === 'assistant') {
+        const phase = payload.phase === 'final_answer' ? 'final' : 'commentary';
         pushMessage(
           messages,
           {
@@ -806,6 +808,7 @@ function parseCodexRolloutLines(
             role: 'assistant',
             text,
             timestamp,
+            phase,
           },
           responseTurnId ?? currentTurnId
         );
@@ -860,7 +863,17 @@ function pushMessage(
   turnId: string | null
 ): void {
   const previous = messages[messages.length - 1]?.value;
-  if (previous?.role === message.role && previous.text === message.text) return;
+  if (previous?.role === message.role && previous.text === message.text) {
+    if (
+      previous.role === 'assistant' &&
+      message.role === 'assistant' &&
+      message.phase === 'final' &&
+      previous.phase !== 'final'
+    ) {
+      previous.phase = 'final';
+    }
+    return;
+  }
   messages.push({ value: message, turnId });
 }
 
