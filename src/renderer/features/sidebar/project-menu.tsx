@@ -76,6 +76,7 @@ interface ProjectMenuActions {
   launchCommands?: ProjectLaunchCommand[];
   launchCommandsLoading?: boolean;
   launchCommandsFailed?: boolean;
+  onRunLaunchCommand?: (command: ProjectLaunchCommand) => void;
   onRunQuickAction?: (action: QuickAction) => void;
   onMenuOpen?: () => void;
   onRename?: () => void;
@@ -100,7 +101,7 @@ interface MenuItemDescriptor {
   onSelect?: () => void;
   disabled?: boolean;
   variant?: 'default' | 'destructive';
-  kind?: 'action' | 'open-in' | 'quick-actions';
+  kind?: 'action' | 'open-in' | 'launch-commands';
 }
 
 function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
@@ -255,9 +256,9 @@ function useMenuItems(actions: ProjectMenuActions): MenuItemDescriptor[] {
   }
   if (actions.onCaptureAutomation) {
     items.push({
-      key: 'quick-actions',
+      key: 'launch-commands',
       group: 5,
-      kind: 'quick-actions',
+      kind: 'launch-commands',
       label: t('sidebar.captureAutomation.menuLabel'),
     });
   }
@@ -279,16 +280,7 @@ async function copyProjectPath(path: string, t: TFunction) {
   }
 }
 
-function quickActionFromLaunchCommand(command: ProjectLaunchCommand): QuickAction {
-  return {
-    id: command.id,
-    label: command.label,
-    command: command.command,
-    kind: 'shell',
-  };
-}
-
-function ProjectQuickActionsContextSubmenu({ actions }: { actions: ProjectMenuActions }) {
+function ProjectLaunchCommandsContextSubmenu({ actions }: { actions: ProjectMenuActions }) {
   const { t } = useTranslation();
   const quickActions = actions.quickActions ?? [];
   const launchCommands = (actions.launchCommands ?? []).filter(
@@ -314,10 +306,10 @@ function ProjectQuickActionsContextSubmenu({ actions }: { actions: ProjectMenuAc
             {launchCommands.map((command) => (
               <ContextMenuItem
                 key={command.id}
-                disabled={!actions.onRunQuickAction}
+                disabled={!actions.onRunLaunchCommand}
                 onClick={(event) => {
                   event.stopPropagation();
-                  actions.onRunQuickAction?.(quickActionFromLaunchCommand(command));
+                  actions.onRunLaunchCommand?.(command);
                 }}
               >
                 <Play className="size-4" />
@@ -380,7 +372,7 @@ function ProjectQuickActionsContextSubmenu({ actions }: { actions: ProjectMenuAc
   );
 }
 
-function ProjectQuickActionsDropdownSubmenu({ actions }: { actions: ProjectMenuActions }) {
+function ProjectLaunchCommandsDropdownSubmenu({ actions }: { actions: ProjectMenuActions }) {
   const { t } = useTranslation();
   const quickActions = actions.quickActions ?? [];
   const launchCommands = (actions.launchCommands ?? []).filter(
@@ -406,10 +398,10 @@ function ProjectQuickActionsDropdownSubmenu({ actions }: { actions: ProjectMenuA
             {launchCommands.map((command) => (
               <DropdownMenuItem
                 key={command.id}
-                disabled={!actions.onRunQuickAction}
+                disabled={!actions.onRunLaunchCommand}
                 onClick={(event) => {
                   event.stopPropagation();
-                  actions.onRunQuickAction?.(quickActionFromLaunchCommand(command));
+                  actions.onRunLaunchCommand?.(command);
                 }}
               >
                 <Play className="size-4" />
@@ -492,11 +484,11 @@ export function ProjectContextMenu({ children, ...actions }: ProjectContextMenuP
           const prev = items[index - 1];
           const showSeparator = prev && prev.group !== item.group;
           const workspaceAssign = item.key === 'remove-project' ? actions.onAssignWorkspace : null;
-          if (item.kind === 'quick-actions') {
+          if (item.kind === 'launch-commands') {
             return (
               <React.Fragment key={item.key}>
                 {showSeparator && <ContextMenuSeparator />}
-                <ProjectQuickActionsContextSubmenu actions={actions} />
+                <ProjectLaunchCommandsContextSubmenu actions={actions} />
               </React.Fragment>
             );
           }
@@ -571,11 +563,11 @@ export function ProjectActionsMenu({
           const prev = items[index - 1];
           const showSeparator = prev && prev.group !== item.group;
           const workspaceAssign = item.key === 'remove-project' ? actions.onAssignWorkspace : null;
-          if (item.kind === 'quick-actions') {
+          if (item.kind === 'launch-commands') {
             return (
               <React.Fragment key={item.key}>
                 {showSeparator && <DropdownMenuSeparator />}
-                <ProjectQuickActionsDropdownSubmenu actions={actions} />
+                <ProjectLaunchCommandsDropdownSubmenu actions={actions} />
               </React.Fragment>
             );
           }

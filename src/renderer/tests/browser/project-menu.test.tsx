@@ -144,7 +144,7 @@ function requiredActions() {
   };
 }
 
-describe('ProjectMenu quick actions submenu', () => {
+describe('ProjectMenu launch commands submenu', () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -168,12 +168,14 @@ describe('ProjectMenu quick actions submenu', () => {
       const { ProjectActionsMenu, ProjectContextMenu } = await import(
         '@renderer/features/sidebar/project-menu'
       );
+      const onRunLaunchCommand = vi.fn();
       const onRunQuickAction = vi.fn();
       const onCaptureAutomation = vi.fn();
       const actions = {
         ...requiredActions(),
         quickActions: [savedAction],
         launchCommands: [detectedCommand],
+        onRunLaunchCommand,
         onRunQuickAction,
         onCaptureAutomation,
       };
@@ -212,14 +214,10 @@ describe('ProjectMenu quick actions submenu', () => {
       );
 
       await act(async () => detectedCommandItem?.click());
-      expect(onRunQuickAction).toHaveBeenNthCalledWith(1, {
-        id: detectedCommand.id,
-        label: detectedCommand.label,
-        command: detectedCommand.command,
-        kind: 'shell',
-      });
+      expect(onRunLaunchCommand).toHaveBeenCalledWith(detectedCommand);
+      expect(onRunQuickAction).not.toHaveBeenCalled();
       await act(async () => savedActionItem?.click());
-      expect(onRunQuickAction).toHaveBeenNthCalledWith(2, savedAction);
+      expect(onRunQuickAction).toHaveBeenCalledWith(savedAction);
 
       await act(async () => createActionItem?.click());
       expect(onCaptureAutomation).toHaveBeenCalledTimes(1);

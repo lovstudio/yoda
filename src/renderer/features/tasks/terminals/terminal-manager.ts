@@ -5,6 +5,16 @@ import { rpc } from '@renderer/lib/ipc';
 import { PtySession } from '@renderer/lib/pty/pty-session';
 import { nextTerminalName } from './terminal-tabs';
 
+function nextCommandTerminalName(label: string, names: string[]): string {
+  const base = label.trim();
+  if (!base) return nextTerminalName(names);
+  const taken = new Set(names);
+  if (!taken.has(base)) return base;
+  let suffix = 2;
+  while (taken.has(`${base} ${suffix}`)) suffix += 1;
+  return `${base} ${suffix}`;
+}
+
 export class TerminalManagerStore {
   readonly projectId: string;
   readonly taskId: string;
@@ -71,6 +81,37 @@ export class TerminalManagerStore {
     const name = nextTerminalName(names);
     const id = crypto.randomUUID();
     return this.createTerminal({ id, projectId: this.projectId, taskId: this.taskId, name });
+  }
+
+  async createCommandTerminal({
+    command,
+    label,
+    initialSize,
+  }: {
+    command: string;
+    label: string;
+    initialSize?: { cols: number; rows: number };
+  }): Promise<Terminal> {
+    const normalizedCommand = command.trim();
+    if (!normalizedCommand) throw new Error('Terminal command is empty.');
+
+    const names = Array.from(this.terminals.values()).map((terminal) => terminal.data.name);
+    const id = crypto.randomUUID();
+    const terminal = await this.createTerminal({
+      id,
+      projectId: this.projectId,
+      taskId: this.taskId,
+      name: nextCommandTerminalName(label, names),
+      initialSize,
+    });
+    const inputResult = await rpc.pty.sendInput(
+      makePtySessionId(this.projectId, this.taskId, terminal.id),
+      `${normalizedCommand}\r`
+    );
+    if (!inputResult.success) {
+      throw new Error(`Terminal rejected the launch command: ${inputResult.error.type}`);
+    }
+    return terminal;
   }
 
   async deleteTerminal(terminalId: string): Promise<void> {

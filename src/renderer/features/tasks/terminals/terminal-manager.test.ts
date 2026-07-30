@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Terminal } from '@shared/terminals';
+import { makePtySessionId } from '@shared/ptySessionId';
+import type { CreateTerminalParams, Terminal } from '@shared/terminals';
 import { TerminalManagerStore } from './terminal-manager';
 
 const mocks = vi.hoisted(() => ({
   getTerminalsForTask: vi.fn<() => Promise<Terminal[]>>(),
-  createTerminal: vi.fn<(terminal: Terminal) => Promise<Terminal>>(),
+  createTerminal: vi.fn<(terminal: CreateTerminalParams) => Promise<Terminal>>(),
+  sendInput: vi.fn(),
   sessions: [] as Array<{
     sessionId: string;
     options?: { deferConnection?: boolean };
@@ -18,6 +20,9 @@ vi.mock('@renderer/lib/ipc', () => ({
     terminals: {
       getTerminalsForTask: mocks.getTerminalsForTask,
       createTerminal: mocks.createTerminal,
+    },
+    pty: {
+      sendInput: mocks.sendInput,
     },
   },
 }));
@@ -48,6 +53,7 @@ describe('TerminalManagerStore terminal lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.sessions.length = 0;
+    mocks.sendInput.mockResolvedValue({ success: true, data: { queued: false } });
   });
 
   it('loads inactive terminal tabs without eagerly constructing renderer connections', async () => {
@@ -79,5 +85,41 @@ describe('TerminalManagerStore terminal lifecycle', () => {
     await pending;
 
     expect(mocks.sessions[0].enableConnection).toHaveBeenCalledOnce();
+  });
+
+  it('runs a launch command in a standard persisted task terminal', async () => {
+    mocks.createTerminal.mockImplementation(async (params) => ({ ...params, ssh: false }));
+    const store = new TerminalManagerStore('project-1', 'task-1');
+
+    const created = await store.createCommandTerminal({
+      command: ' pnpm run dev ',
+      label: 'Start locally',
+      initialSize: { cols: 120, rows: 36 },
+    });
+
+    expect(mocks.createTerminal).toHaveBeenCalledWith({
+      id: created.id,
+      projectId: 'project-1',
+      taskId: 'task-1',
+      name: 'Start locally',
+      initialSize: { cols: 120, rows: 36 },
+    });
+    expect(mocks.sendInput).toHaveBeenCalledWith(
+      makePtySessionId('project-1', 'task-1', created.id),
+      'pnpm run dev\r'
+    );
+  });
+
+  it('gives repeated command terminals distinct labels', async () => {
+    mocks.createTerminal.mockImplementation(async (params) => ({ ...params, ssh: false }));
+    const store = new TerminalManagerStore('project-1', 'task-1');
+
+    await store.createCommandTerminal({ command: 'pnpm run dev', label: 'Start locally' });
+    await store.createCommandTerminal({ command: 'pnpm run dev', label: 'Start locally' });
+
+    expect(mocks.createTerminal.mock.calls.map(([params]) => params.name)).toEqual([
+      'Start locally',
+      'Start locally 2',
+    ]);
   });
 });

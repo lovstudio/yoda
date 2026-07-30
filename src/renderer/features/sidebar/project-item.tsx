@@ -14,6 +14,7 @@ import { buildProjectDeepLink } from '@shared/deep-links';
 import type { QuickAction } from '@shared/project-settings';
 import type { ProjectLaunchCommand } from '@shared/quick-actions';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
+import { runProjectLaunchCommand } from '@renderer/features/projects/run-project-launch-command';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   isUnregisteredProject,
@@ -228,6 +229,45 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     [expressProviderId, navigate, projectId, t]
   );
 
+  const handleRunLaunchCommand = useCallback(
+    async (launchCommand: ProjectLaunchCommand) => {
+      if (currentView !== 'task' || taskParams.projectId !== projectId || !taskParams.taskId) {
+        toast({
+          title: t('sidebar.captureAutomation.runFailed'),
+          description: t('sidebar.runScripts.noWorkspace'),
+          variant: 'destructive',
+        });
+        return;
+      }
+      try {
+        const didRun = await runProjectLaunchCommand({
+          projectId,
+          taskId: taskParams.taskId,
+          launchCommand,
+        });
+        if (!didRun) {
+          toast({
+            title: t('sidebar.captureAutomation.runFailed'),
+            description: t('sidebar.runScripts.noWorkspace'),
+            variant: 'destructive',
+          });
+        }
+      } catch (error) {
+        log.warn('sidebar launch command failed', {
+          projectId,
+          commandId: launchCommand.id,
+          error: String(error),
+        });
+        toast({
+          title: t('sidebar.captureAutomation.runFailed'),
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive',
+        });
+      }
+    },
+    [currentView, projectId, t, taskParams.projectId, taskParams.taskId]
+  );
+
   const handleAddTask = useCallback(async () => {
     const mounted = mountedProject;
     const repo = getRepositoryStore(projectId);
@@ -385,11 +425,15 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     launchCommands,
     launchCommandsLoading,
     launchCommandsFailed,
+    onRunLaunchCommand:
+      project.state === 'mounted' &&
+      mountedProject?.data.type === 'local' &&
+      launchCommands.length > 0
+        ? (command: ProjectLaunchCommand) => void handleRunLaunchCommand(command)
+        : undefined,
     onRunQuickAction:
       project.state === 'mounted' &&
-      (expressProviderId ||
-        (mountedProject?.data.type === 'local' &&
-          (quickActions.length > 0 || launchCommands.length > 0)))
+      (expressProviderId || (mountedProject?.data.type === 'local' && quickActions.length > 0))
         ? (action: QuickAction) => void handleRunQuickAction(action)
         : undefined,
     onMenuOpen: prefetchProjectMenuData,
