@@ -1455,6 +1455,7 @@
     "teamRoleUiux": "UIUX · Jony Ive",
     "teamRoleOperations": "User ops · Tim Cook",
     "selectProjectPlaceholder": "Select project",
+    "revealProjectInSidebar": "Show project in sidebar",
     "newConversationInTaskTitle": "Create a new conversation under \"{{name}}\"",
     "taskConversationScopeTooltip": "You are creating a child session for this task.",
     "newSubtaskInTaskTitle": "Create a subtask under \"{{name}}\"",

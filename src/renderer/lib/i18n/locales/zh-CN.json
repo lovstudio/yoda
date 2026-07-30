@@ -1455,6 +1455,7 @@
     "teamRoleUiux": "UIUX · 乔尼·艾夫",
     "teamRoleOperations": "用户运营 · 蒂姆库克",
     "selectProjectPlaceholder": "选择项目",
+    "revealProjectInSidebar": "在侧边栏中显示项目",
     "newConversationInTaskTitle": "在「{{name}}」下创建一个新对话",
     "taskConversationScopeTooltip": "你现在正在新建该任务的子会话",
     "newSubtaskInTaskTitle": "在「{{name}}」下新建子任务",
