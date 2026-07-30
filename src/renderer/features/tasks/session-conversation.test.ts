@@ -82,6 +82,70 @@ describe('buildSessionConversationItems', () => {
 
     expect(items[0]?.promptIndex).toBe(5);
   });
+
+  it('deduplicates consecutive final replies by their user-visible text', () => {
+    const duplicatedFinal = 'Implemented and tested.';
+    const items = buildSessionConversationItems(
+      prompts,
+      [
+        messages[0]!,
+        {
+          id: 'assistant-response-item',
+          role: 'assistant',
+          text: `${duplicatedFinal}
+
+<oai-mem-citation>
+internal metadata
+</oai-mem-citation>`,
+          timestamp: '2026-07-30T08:09:37.052Z',
+          phase: 'final',
+        },
+        {
+          id: 'assistant-task-complete',
+          role: 'assistant',
+          text: duplicatedFinal,
+          timestamp: '2026-07-30T08:09:37.053Z',
+          phase: 'final',
+        },
+        messages[3]!,
+      ],
+      'concise'
+    );
+
+    expect(items.map((item) => item.message.text)).toEqual([
+      'Build the feature',
+      duplicatedFinal,
+      'Polish it',
+    ]);
+  });
+
+  it('keeps identical final replies when a user turn separates them', () => {
+    const repeatedFinal = 'Done.';
+    const items = buildSessionConversationItems(
+      prompts,
+      [
+        messages[0]!,
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          text: repeatedFinal,
+          timestamp: null,
+          phase: 'final',
+        },
+        messages[3]!,
+        {
+          id: 'assistant-2',
+          role: 'assistant',
+          text: repeatedFinal,
+          timestamp: null,
+          phase: 'final',
+        },
+      ],
+      'concise'
+    );
+
+    expect(items.filter((item) => item.message.role === 'assistant')).toHaveLength(2);
+  });
 });
 
 describe('buildSessionConversationPreviewItems', () => {
