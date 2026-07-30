@@ -162,10 +162,13 @@ export type MobileSessionContentSource = 'live' | 'history' | 'empty';
 
 export type MobileSessionTranscriptRole = 'user' | 'assistant' | 'tool' | 'status';
 export type MobileSessionTranscriptFormat = 'markdown' | 'code' | 'plain';
+export type MobileSessionTranscriptAgentPhase = 'commentary' | 'final';
 
 export type MobileSessionTranscriptBlock = {
   id: string;
   role: MobileSessionTranscriptRole;
+  /** Present for Agent text when the runtime exposes reply-phase metadata. */
+  agentPhase?: MobileSessionTranscriptAgentPhase;
   title?: string;
   timestamp: string | null;
   format: MobileSessionTranscriptFormat;

@@ -18,6 +18,10 @@ import {
 import { observer } from 'mobx-react-lite';
 import { Fragment, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  AGENT_REPLY_DISPLAY_LEVELS,
+  type AgentReplyDisplayLevel,
+} from '@shared/agent-reply-display';
 import { buildTaskDeepLink } from '@shared/deep-links';
 import type { TaskWindowTabTarget } from '@shared/task-window';
 import {
@@ -447,14 +451,43 @@ export function buildConversationSections(
   const copy: ReactNode[] = [
     ...(provisioned
       ? [
-          <ContextMenuItem
-            key="share-public"
-            className="whitespace-nowrap"
-            onClick={() => void shareConversationPublicly(projectId, taskId, conversationId, t)}
-          >
-            <Share2 className="size-4" />
-            {t('tasks.tabs.sharePublicLink')}
-          </ContextMenuItem>,
+          <ContextMenuSub key="share-public">
+            <ContextMenuSubTrigger className="whitespace-nowrap">
+              <Share2 className="size-4" />
+              {t('tasks.tabs.sharePublicLink')}
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="w-72">
+              {AGENT_REPLY_DISPLAY_LEVELS.map((replyDisplayLevel) => (
+                <ContextMenuItem
+                  key={replyDisplayLevel}
+                  data-reply-display-level={replyDisplayLevel}
+                  className="items-start py-2"
+                  onClick={() =>
+                    void shareConversationPublicly(
+                      projectId,
+                      taskId,
+                      conversationId,
+                      replyDisplayLevel,
+                      t
+                    )
+                  }
+                >
+                  <span className="grid min-w-0 gap-0.5">
+                    <span>
+                      {t(
+                        `tasks.sessionPanel.agentReplyDisplay.${replyDisplayLevel}.label` as const
+                      )}
+                    </span>
+                    <span className="text-xs whitespace-normal text-foreground-passive">
+                      {t(
+                        `tasks.sessionPanel.agentReplyDisplay.${replyDisplayLevel}.description` as const
+                      )}
+                    </span>
+                  </span>
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>,
         ]
       : []),
     <ContextMenuItem
@@ -474,11 +507,17 @@ async function shareConversationPublicly(
   projectId: string,
   taskId: string,
   conversationId: string,
+  replyDisplayLevel: AgentReplyDisplayLevel,
   t: Translate
 ): Promise<void> {
   const toastId = toast.loading(t('tasks.tabs.creatingPublicShare'));
   try {
-    const share = await rpc.sessionShares.create(projectId, taskId, conversationId);
+    const share = await rpc.sessionShares.create(
+      projectId,
+      taskId,
+      conversationId,
+      replyDisplayLevel
+    );
     const copied = await rpc.app.clipboardWriteText(share.url);
     toast.success(
       t(copied.success ? 'tasks.tabs.publicShareCopied' : 'tasks.tabs.publicShareCreated'),
@@ -506,6 +545,7 @@ async function shareConversationPublicly(
       projectId,
       taskId,
       conversationId,
+      replyDisplayLevel,
       error,
     });
     toast.error(t('tasks.tabs.publicShareFailed'), {

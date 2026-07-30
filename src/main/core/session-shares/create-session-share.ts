@@ -1,3 +1,4 @@
+import type { AgentReplyDisplayLevel } from '@shared/agent-reply-display';
 import { createYodaSessionShareUpload, type YodaSessionShareResponse } from '@shared/session-share';
 import { lovStudioApiClient } from '@main/core/account/services/lovstudio-api-client';
 import { mobileGatewayService } from '@main/core/mobile-gateway/mobile-gateway-service';
@@ -6,7 +7,8 @@ import { attachLocalSessionAssets } from './session-share-assets';
 export async function createSessionShare(
   projectId: string,
   taskId: string,
-  conversationId: string
+  conversationId: string,
+  replyDisplayLevel: AgentReplyDisplayLevel
 ): Promise<YodaSessionShareResponse> {
   const { detail, cwd, embeddedImages } = await mobileGatewayService.getSessionShareSource(
     projectId,
@@ -14,7 +16,7 @@ export async function createSessionShare(
     conversationId
   );
   const upload = await attachLocalSessionAssets(
-    createYodaSessionShareUpload(detail),
+    createYodaSessionShareUpload(detail, replyDisplayLevel),
     cwd,
     embeddedImages
   );

@@ -24,6 +24,7 @@ describe('parseClaudeTranscript', () => {
         type: 'assistant',
         message: {
           role: 'assistant',
+          stop_reason: 'tool_use',
           content: [
             {
               type: 'text',
@@ -72,6 +73,7 @@ describe('parseClaudeTranscript', () => {
       {
         id: 'assistant-1-assistant-1',
         role: 'assistant',
+        agentPhase: 'commentary',
         title: 'Claude',
         timestamp: '2026-06-08T01:00:01.000Z',
         format: 'markdown',
@@ -154,6 +156,38 @@ describe('parseClaudeTranscript', () => {
       ['assistant-1-assistant-1', 'assistant', 'First paragraph.\n\nSecond paragraph.'],
       ['assistant-tool-tool-3', 'tool', '{\n  "file_path": "a.ts"\n}'],
       ['assistant-3-assistant-4', 'assistant', 'After tool.'],
+    ]);
+  });
+
+  it('keeps commentary and final Claude replies in separate phase-tagged blocks', () => {
+    const raw = [
+      {
+        uuid: 'assistant-commentary',
+        timestamp: '2026-06-08T01:00:01.000Z',
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          stop_reason: 'tool_use',
+          content: 'I will inspect the code.',
+        },
+      },
+      {
+        uuid: 'assistant-final',
+        timestamp: '2026-06-08T01:00:02.000Z',
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          stop_reason: 'end_turn',
+          content: 'Implemented and tested.',
+        },
+      },
+    ]
+      .map((row) => JSON.stringify(row))
+      .join('\n');
+
+    expect(parseClaudeTranscript(raw).map((block) => [block.agentPhase, block.content])).toEqual([
+      ['commentary', 'I will inspect the code.'],
+      ['final', 'Implemented and tested.'],
     ]);
   });
 });

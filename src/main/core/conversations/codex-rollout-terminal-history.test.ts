@@ -308,6 +308,40 @@ describe('parseCodexRolloutTranscript', () => {
     ]);
   });
 
+  it('keeps commentary and final Codex replies in separate phase-tagged blocks', () => {
+    const raw = [
+      {
+        timestamp: '2026-06-04T01:00:01.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          phase: 'commentary',
+          content: [{ type: 'output_text', text: 'I will inspect the code.' }],
+        },
+      },
+      {
+        timestamp: '2026-06-04T01:00:02.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          phase: 'final_answer',
+          content: [{ type: 'output_text', text: 'Implemented and tested.' }],
+        },
+      },
+    ]
+      .map((row) => JSON.stringify(row))
+      .join('\n');
+
+    expect(
+      parseCodexRolloutTranscript(raw).map((block) => [block.agentPhase, block.content])
+    ).toEqual([
+      ['commentary', 'I will inspect the code.'],
+      ['final', 'Implemented and tested.'],
+    ]);
+  });
+
   it('merges modern tool calls into the event transcript in stable source order', () => {
     const blocks = parseCodexRolloutTranscript(mixedModernRollout());
 

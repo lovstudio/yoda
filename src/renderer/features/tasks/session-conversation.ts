@@ -1,18 +1,5 @@
-import type { InterfaceSettings } from '@shared/app-settings';
+import type { AgentReplyDisplayLevel } from '@shared/agent-reply-display';
 import type { ClaudeSessionPrompt, SessionTranscriptMessage } from '@shared/conversations';
-
-export type AgentReplyDisplayLevel = InterfaceSettings['agentReplyDisplayLevel'];
-
-export const AGENT_REPLY_DISPLAY_LEVELS = [
-  'hidden',
-  'concise',
-  'detailed',
-  'verbose',
-] as const satisfies readonly AgentReplyDisplayLevel[];
-
-export function isAgentReplyDisplayLevel(value: unknown): value is AgentReplyDisplayLevel {
-  return AGENT_REPLY_DISPLAY_LEVELS.includes(value as AgentReplyDisplayLevel);
-}
 
 export type SessionConversationItem = {
   key: string;

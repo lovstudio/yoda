@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
+import type { AgentReplyDisplayLevel } from '@shared/agent-reply-display';
 import type { ClaudeSessionPrompt, SessionTranscriptMessage } from '@shared/conversations';
-import type { AgentReplyDisplayLevel } from '@renderer/features/tasks/session-conversation';
 import { SessionConversationList } from '@renderer/features/tasks/session-conversation-list';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
