@@ -13,3 +13,16 @@ export function findSidebarSelectionRow(
   }
   return null;
 }
+
+export function revealSidebarSelectionRow(
+  root: HTMLElement | null,
+  projectId: string,
+  taskId?: string,
+  focus = false
+): HTMLElement | null {
+  const row = findSidebarSelectionRow(root, projectId, taskId);
+  if (!row) return null;
+  row.scrollIntoView({ block: 'nearest' });
+  if (focus) row.focus({ preventScroll: true });
+  return row;
+}

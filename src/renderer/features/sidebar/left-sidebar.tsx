@@ -36,7 +36,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
 } from './sidebar-primitives';
-import { findSidebarSelectionRow } from './sidebar-selection-sync';
+import { findSidebarSelectionRow, revealSidebarSelectionRow } from './sidebar-selection-sync';
 import { SidebarSpace } from './sidebar-space';
 import { SidebarStatusBar } from './sidebar-status-bar';
 import { SidebarVirtualList } from './sidebar-virtual-list';
@@ -68,11 +68,16 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         ? projectParams.projectId
         : undefined;
   const currentTaskId = currentView === 'task' ? taskParams.taskId : undefined;
-  const currentProject = currentProjectId ? getProjectStore(currentProjectId) : undefined;
+  const selectionRevealRequest = sidebarStore.selectionRevealRequest;
+  const selectionProjectId = currentProjectId ?? selectionRevealRequest?.projectId;
+  const selectionTaskId = currentProjectId ? currentTaskId : selectionRevealRequest?.taskId;
+  const currentProject = selectionProjectId ? getProjectStore(selectionProjectId) : undefined;
   const currentTask =
-    currentProjectId && currentTaskId ? getTaskStore(currentProjectId, currentTaskId) : undefined;
-  const currentProjectPinned = currentProjectId
-    ? sidebarStore.isProjectPinned(currentProjectId)
+    selectionProjectId && selectionTaskId
+      ? getTaskStore(selectionProjectId, selectionTaskId)
+      : undefined;
+  const currentProjectPinned = selectionProjectId
+    ? sidebarStore.isProjectPinned(selectionProjectId)
     : false;
   const currentTaskPinned = currentTask?.data.isPinned ?? false;
   const currentWorkspaceId =
@@ -82,32 +87,35 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const selectionKey =
     currentProjectId && (currentView === 'project' || currentView === 'task')
       ? `${currentView}:${currentProjectId}:${currentTaskId ?? ''}`
-      : null;
+      : selectionRevealRequest
+        ? `reveal:${selectionRevealRequest.requestId}`
+        : null;
 
   React.useEffect(() => {
-    if (!currentProjectId || (currentView !== 'project' && currentView !== 'task')) return;
-    sidebarStore.revealSelection(currentProjectId, currentTaskId);
+    if (!selectionProjectId) return;
+    sidebarStore.revealSelection(selectionProjectId, selectionTaskId);
   }, [
     currentProject,
-    currentProjectId,
     currentProjectPinned,
     currentTask,
-    currentTaskId,
     currentTaskPinned,
     currentView,
     currentWorkspaceId,
+    selectionProjectId,
+    selectionTaskId,
   ]);
 
   React.useEffect(() => {
     const root = sidebarContentRef.current;
-    if (!selectionKey || !currentProjectId || !root) {
+    if (!selectionKey || !selectionProjectId || !root) {
       lastScrolledSelectionRef.current = null;
       lastScrolledRowRef.current = null;
       return;
     }
 
     const scrollSelectionIntoView = () => {
-      const row = findSidebarSelectionRow(root, currentProjectId, currentTaskId);
+      const shouldFocus = selectionRevealRequest !== null && !currentProjectId;
+      const row = findSidebarSelectionRow(root, selectionProjectId, selectionTaskId);
       if (!row) {
         lastScrolledRowRef.current = null;
         return;
@@ -116,9 +124,12 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         return;
       }
 
+      revealSidebarSelectionRow(root, selectionProjectId, selectionTaskId, shouldFocus);
       lastScrolledSelectionRef.current = selectionKey;
       lastScrolledRowRef.current = row;
-      row.scrollIntoView({ block: 'nearest' });
+      if (shouldFocus) {
+        sidebarStore.completeSelectionReveal(selectionRevealRequest.requestId);
+      }
     };
 
     scrollSelectionIntoView();
@@ -130,7 +141,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       subtree: true,
     });
     return () => observer.disconnect();
-  }, [currentProjectId, currentTaskId, selectionKey]);
+  }, [currentProjectId, selectionKey, selectionProjectId, selectionRevealRequest, selectionTaskId]);
   const skillIssueLabel =
     skillIssueCount > 0 ? t('sidebar.skillIssues', { count: skillIssueCount }) : null;
   const skillIssueTitle =

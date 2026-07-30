@@ -369,6 +369,27 @@ describe('SidebarStore subtask tree rows', () => {
     expect(store.collapsedTaskIds.has('parent')).toBe(false);
   });
 
+  it('issues a fresh one-shot reveal request for repeated project locator clicks', () => {
+    const store = makeSidebarStore([makeProject('project-1', [])]);
+    store.projectsCollapsed = true;
+
+    store.requestSelectionReveal('project-1');
+    const firstRequestId = store.selectionRevealRequest?.requestId;
+
+    expect(firstRequestId).toBe(1);
+    expect(store.projectsCollapsed).toBe(false);
+    expect(store.expandedProjectIds.has('project-1')).toBe(true);
+
+    store.requestSelectionReveal('project-1');
+    expect(store.selectionRevealRequest?.requestId).toBe(2);
+
+    store.completeSelectionReveal(1);
+    expect(store.selectionRevealRequest?.requestId).toBe(2);
+
+    store.completeSelectionReveal(2);
+    expect(store.selectionRevealRequest).toBeNull();
+  });
+
   it('opens the pinned section when the selected task is pinned', () => {
     const pinned = makeTask('pinned', {
       createdAt: '2026-06-02T10:00:00.000Z',

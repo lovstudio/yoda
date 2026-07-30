@@ -14,8 +14,8 @@ import {
 const DEFAULT_SIDEBAR_TAB: SidebarTab = 'conversations';
 const DEFAULT_SIDEBAR_COLLAPSED = true;
 
-/** The merged Session panel opens to its Basic blind by default. */
-const DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS = ['basic'];
+/** The merged Session panel starts with every blind collapsed. */
+const DEFAULT_SESSION_PANEL_OPEN_SECTION_IDS: string[] = [];
 
 const DEFAULT_BOTTOM_PANEL_OPEN = false;
 const DEFAULT_BOTTOM_PANEL_TAB: BottomPanelTab = 'terminals';
