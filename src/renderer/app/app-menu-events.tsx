@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import {
   deepLinkOpenChannel,
+  doctorNavigateMainChannel,
   menuExportSettingsChannel,
   menuImportSettingsChannel,
   menuOpenSettingsChannel,
@@ -19,6 +20,7 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { events, rpc } from '@renderer/lib/ipc';
 import { useWorkspaceLayoutContext } from '@renderer/lib/layout/layout-provider';
 import { useNavigate, useWorkspaceSlots } from '@renderer/lib/layout/navigation-provider';
+import { showModal } from '@renderer/lib/modal/modal-provider';
 import {
   exportSettingsFile,
   importSettingsFile,
@@ -161,6 +163,25 @@ export function AppMenuEvents({ onOpenSettings }: { onOpenSettings?: () => boole
       disposers.forEach((dispose) => dispose());
       disposers.clear();
     };
+  }, [navigate]);
+
+  useEffect(() => {
+    return events.on(doctorNavigateMainChannel, (destination) => {
+      if (destination.view === 'skills') {
+        navigate('skills');
+        return;
+      }
+      if (destination.view === 'mcp') {
+        navigate('settings', { tab: 'mcp' });
+        return;
+      }
+      if (destination.view === 'agents') {
+        navigate('settings', { tab: 'clis-models', runtimeId: destination.runtimeId });
+        return;
+      }
+      navigate('projectsOverview');
+      showModal('addProjectModal', { strategy: 'local', mode: 'pick' });
+    });
   }, [navigate]);
 
   return null;

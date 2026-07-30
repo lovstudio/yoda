@@ -94,6 +94,14 @@ export class SkillUsageStatsService {
     return this.refresh();
   }
 
+  async peek(): Promise<SkillUsageIndex | null> {
+    if (this.cache) return this.cache.data;
+    const persisted = await this.snapshotStore.get();
+    if (!isSkillUsageIndex(persisted)) return null;
+    this.cache = { fetchedAt: Date.now(), data: persisted };
+    return persisted;
+  }
+
   private refresh(): Promise<SkillUsageIndex> {
     if (this.refreshPromise) return this.refreshPromise;
 
@@ -139,4 +147,13 @@ const skillUsageStatsService = new SkillUsageStatsService(
  */
 export async function getSkillUsageStats(refresh = false): Promise<SkillUsageIndex> {
   return skillUsageStatsService.get(refresh);
+}
+
+/**
+ * Read the last successful incremental index without starting skillusage.
+ * Diagnostic and overview surfaces use this so opening them never triggers the
+ * potentially expensive first history scan.
+ */
+export async function getPersistedSkillUsageStats(): Promise<SkillUsageIndex | null> {
+  return skillUsageStatsService.peek();
 }
