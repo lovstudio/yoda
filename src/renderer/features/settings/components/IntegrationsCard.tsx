@@ -258,7 +258,11 @@ const IntegrationsCard: React.FC<{ onOpenLiteLlm: () => void }> = ({ onOpenLiteL
     >
       <LiteLlmIntegrationCard onOpenManualSettings={onOpenLiteLlm} />
       {integrations.map((integration) => (
-        <div key={integration.id} className="flex h-full min-h-0">
+        <div
+          key={integration.id}
+          className="flex h-full min-h-0"
+          data-testid={`integration-card-${integration.id}`}
+        >
           <div className="flex w-full items-center gap-4 rounded-lg border border-muted bg-muted/20 p-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted/50">
               {integration.logoSvg ? <SvgLogo raw={integration.logoSvg} /> : integration.icon}
