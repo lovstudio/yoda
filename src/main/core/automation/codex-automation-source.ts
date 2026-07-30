@@ -6,7 +6,6 @@ import { z } from 'zod';
 import type { AutomationStatus, AutomationTriggerKind } from '@shared/automation';
 
 export const CODEX_AUTOMATION_ID_PREFIX = 'codex:';
-export const CODEX_AUTOMATION_YODA_MIRROR_MARKER = '.yoda-mirror';
 
 const codexAutomationSchema = z
   .object({
@@ -251,18 +250,6 @@ export async function readCodexAutomationSnapshots(
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     if (!entry.isDirectory()) continue;
     const directory = join(root, entry.name);
-    const mirrorMarkerPath = join(directory, CODEX_AUTOMATION_YODA_MIRROR_MARKER);
-    try {
-      await stat(mirrorMarkerPath);
-    } catch (error) {
-      const code = error instanceof Error && 'code' in error ? String(error.code) : '';
-      if (code === 'ENOENT') continue;
-      errors.push({
-        path: mirrorMarkerPath,
-        message: error instanceof Error ? error.message : String(error),
-      });
-      continue;
-    }
     const filePath = join(directory, 'automation.toml');
     try {
       const [input, fileStat] = await Promise.all([readFile(filePath, 'utf8'), stat(filePath)]);

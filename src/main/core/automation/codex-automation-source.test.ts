@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  CODEX_AUTOMATION_YODA_MIRROR_MARKER,
   codexRruleToCron,
   parseCodexAutomationToml,
   readCodexAutomationSnapshots,
@@ -63,16 +62,18 @@ describe('Codex automation source', () => {
     );
   });
 
-  it('reads valid files while retaining malformed source IDs for reconciliation', async () => {
+  it('reads every native Codex task while retaining malformed source IDs for reconciliation', async () => {
     const root = await mkdtemp(join(tmpdir(), 'yoda-codex-automations-'));
     temporaryDirectories.push(root);
     const validDir = join(root, 'valid-task');
     const brokenDir = join(root, 'broken-task');
-    const ignoredDir = join(root, 'codex-only-task');
+    const nativeDir = join(root, 'codex-only-task');
+    const emptyDir = join(root, 'empty-task');
     await Promise.all([
       mkdir(validDir, { recursive: true }),
       mkdir(brokenDir, { recursive: true }),
-      mkdir(ignoredDir, { recursive: true }),
+      mkdir(nativeDir, { recursive: true }),
+      mkdir(emptyDir, { recursive: true }),
     ]);
     await Promise.all([
       writeFile(
@@ -88,7 +89,7 @@ describe('Codex automation source', () => {
       ),
       writeFile(join(brokenDir, 'automation.toml'), 'id = "broken-task"\nstatus = "ACTIVE"\n'),
       writeFile(
-        join(ignoredDir, 'automation.toml'),
+        join(nativeDir, 'automation.toml'),
         [
           'id = "codex-only-task"',
           'name = "Codex only"',
@@ -96,24 +97,32 @@ describe('Codex automation source', () => {
           'status = "ACTIVE"',
         ].join('\n')
       ),
-      writeFile(join(validDir, CODEX_AUTOMATION_YODA_MIRROR_MARKER), ''),
-      writeFile(join(brokenDir, CODEX_AUTOMATION_YODA_MIRROR_MARKER), ''),
     ]);
 
     const result = await readCodexAutomationSnapshots(root);
 
     expect(result.available).toBe(true);
-    expect(result.automations).toHaveLength(1);
-    expect(result.automations[0]).toMatchObject({
-      id: 'codex:valid-task',
-      workspaceName: 'web',
-      status: 'paused',
-      cronExpr: '0 * * * *',
-    });
-    expect(result.managedIds).toEqual(
-      expect.arrayContaining(['codex:valid-task', 'codex:broken-task'])
+    expect(result.automations).toHaveLength(2);
+    expect(result.automations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'codex:valid-task',
+          workspaceName: 'web',
+          status: 'paused',
+          cronExpr: '0 * * * *',
+        }),
+        expect.objectContaining({
+          id: 'codex:codex-only-task',
+          workspaceName: 'Codex',
+          status: 'active',
+          triggerKind: 'manual',
+          cronExpr: null,
+        }),
+      ])
     );
-    expect(result.managedIds).not.toContain('codex:codex-only-task');
+    expect(result.managedIds).toEqual(
+      expect.arrayContaining(['codex:valid-task', 'codex:broken-task', 'codex:codex-only-task'])
+    );
     expect(result.errors).toHaveLength(1);
   });
 });

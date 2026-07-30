@@ -145,8 +145,8 @@ export class AutomationService {
   }
 
   /**
-   * Reconciles Codex's file-backed automations into Yoda's runnable automation
-   * table. A deterministic ID makes the operation idempotent, while source
+   * Reconciles every Codex file-backed automation into Yoda's automation table.
+   * A deterministic ID makes the operation idempotent, while source
    * rows remain read-only in the renderer so the TOML file stays authoritative.
    */
   private async syncCodexAutomations(): Promise<boolean> {
