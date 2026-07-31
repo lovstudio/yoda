@@ -61,6 +61,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
       values?: { count?: number; enabled?: number; label?: string; name?: string }
     ) => {
       if (key === 'home.enabledPromptCount') return `${values?.count ?? 0} enabled`;
+      if (key === 'home.openPromptLibrary') return 'Manage prompts in Library';
       if (key === 'promptLibrary.injection.toggle') return `toggle ${values?.name ?? ''}`;
       return key;
     },
@@ -159,7 +160,7 @@ describe('ComposerSettingsContent', () => {
     );
     expect(promptHeader?.textContent).toContain('(2)');
     expect(promptHeader?.querySelector('[aria-label="2 enabled"]')).not.toBeNull();
-    expect(promptHeader?.querySelector('[aria-label="home.openPromptLibrary"]')).not.toBeNull();
+    expect(promptHeader?.querySelector('[aria-label="Manage prompts in Library"]')).not.toBeNull();
     expect(host.textContent).not.toContain('home.promptConfigurationDescription');
     expect(host.textContent).toContain('Detailed global prompt');
     expect(host.textContent).toContain('Detailed project prompt');
@@ -176,7 +177,7 @@ describe('ComposerSettingsContent', () => {
     expect(mocks.settingsStore.save).toHaveBeenCalled();
 
     const libraryButton = host.querySelector<HTMLButtonElement>(
-      'button[aria-label="home.openPromptLibrary"]'
+      'button[aria-label="Manage prompts in Library"]'
     );
     await act(async () => libraryButton?.click());
 

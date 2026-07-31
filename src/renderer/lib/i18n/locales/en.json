@@ -1388,7 +1388,7 @@
     "agentCliConfigHint": "Runtime permissions and instruction files read by the selected Agent CLI.",
     "promptConfigurationLabel": "Prompts & instructions",
     "enabledPromptCount": "{{count}} enabled",
-    "openPromptLibrary": "Open Library",
+    "openPromptLibrary": "Manage prompts in Library",
     "systemPromptLabel": "System Prompt",
     "systemPromptHint": "Dynamically injected prompts are appended to the selected Agent CLI's system/developer prompt; the CLI's built-in system prompt is not editable.",
     "systemPromptHintClaude": "Dynamically injected prompts are appended through --append-system-prompt; Claude's built-in system prompt is not editable.",

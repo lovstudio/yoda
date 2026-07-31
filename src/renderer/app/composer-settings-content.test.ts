@@ -23,6 +23,8 @@ describe('shared composer settings surfaces', () => {
     expect(content).toContain('<AutoTrustWorktreesControl compact');
     expect(content).toContain("t('home.enabledPromptCount'");
     expect(content).toContain("t('home.openPromptLibrary')");
+    expect(content).toContain('<ArrowUpRight');
+    expect(content).not.toContain('<ArrowRight');
     expect(content).toContain('size="icon-xs"');
     expect(content).toContain('({enabledPromptCount})');
     expect(content).toContain('data-slot="composer-settings-section-header"');

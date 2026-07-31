@@ -1388,7 +1388,7 @@
     "agentCliConfigHint": "当前所选 Agent CLI 的运行权限与启动前会读取的指令文件。",
     "promptConfigurationLabel": "提示词与指令",
     "enabledPromptCount": "已启用 {{count}} 条",
-    "openPromptLibrary": "前往资源库",
+    "openPromptLibrary": "在资源库中管理提示词",
     "systemPromptLabel": "System Prompt",
     "systemPromptHint": "启用动态注入的提示词会追加到所选 Agent CLI 的 system/developer prompt；CLI 内置 system prompt 不可编辑。",
     "systemPromptHintClaude": "启用动态注入的提示词会通过 --append-system-prompt 追加到 Claude Code 的 system prompt；Claude 内置 system prompt 不可编辑。",

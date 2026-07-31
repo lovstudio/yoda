@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, Folder, LibraryBig, SlidersHorizontal } from 'lucide-react';
+import { ArrowUpRight, Bot, Folder, LibraryBig, SlidersHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -195,7 +195,7 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
                       aria-label={t('home.openPromptLibrary')}
                       onClick={managePrompts}
                     >
-                      <ArrowRight className="size-3" />
+                      <ArrowUpRight className="size-3" />
                     </Button>
                   }
                 />
