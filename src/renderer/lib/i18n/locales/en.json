@@ -607,6 +607,7 @@
       "officialApiStale": "The latest check did not finish. Continuing with the vendor API result from {{date}}.",
       "officialSnapshotConfigured": "The built-in official snapshot was verified on {{date}}. Check for updates to verify this account.",
       "officialSnapshotNeedsKey": "The built-in official snapshot was verified on {{date}}. Configure this vendor's API key to verify online.",
+      "officialSnapshotStatic": "The built-in official snapshot was verified on {{date}}. Yoda releases update it from the vendor's published documentation.",
       "aggregateOnlyDescription": "This vendor is currently supplemented by the aggregate catalog. Custom models can also be added.",
       "aggregateStaleDescription": "The latest aggregate catalog check did not finish. Continuing with the cached catalog; custom models are unaffected.",
       "updateStatus": {

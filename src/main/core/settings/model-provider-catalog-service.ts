@@ -22,6 +22,7 @@ import {
   getOfficialModelProviderSource,
   hasOfficialModelProviderCredentials,
   OFFICIAL_MODEL_PROVIDER_SOURCES,
+  supportsOfficialModelProviderApi,
 } from './official-model-provider-catalog';
 import { appSettingsService } from './settings-service';
 
@@ -343,7 +344,7 @@ function toCatalogGroup(
     officialFetchedAt: cached?.fetchedAt ?? null,
     lastUpdateAttemptAt:
       cached?.lastAttemptAt ?? (source ? null : settings.catalogCache.aggregate.lastAttemptAt),
-    officialApiSupported: Boolean(source),
+    officialApiSupported: supportsOfficialModelProviderApi(group.id),
     officialApiConfigured,
     updateStatus,
     ...(cached?.error

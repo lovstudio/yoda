@@ -47,6 +47,8 @@ vi.mock('./official-model-provider-catalog', () => {
     getOfficialModelProviderSource: (providerId: string) =>
       sources.find((source) => source.providerId === providerId),
     hasOfficialModelProviderCredentials: mocks.hasCredentials,
+    supportsOfficialModelProviderApi: (providerId: string) =>
+      sources.some((source) => source.providerId === providerId),
   };
 });
 
