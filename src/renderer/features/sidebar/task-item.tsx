@@ -1,8 +1,8 @@
 import {
   Archive,
-  CalendarClock,
   ChevronRight,
   GitBranch,
+  Infinity as InfinityIcon,
   Loader2,
   MoreHorizontal,
   Users,
@@ -436,9 +436,9 @@ function LongTermTaskIcon({ label }: { label: string }) {
       role="img"
       aria-label={label}
       title={label}
-      className="inline-flex size-4 shrink-0 items-center justify-center text-sky-700 dark:text-sky-300"
+      className="inline-flex size-4 shrink-0 items-center justify-center text-foreground-tertiary-passive"
     >
-      <CalendarClock className="size-3.5" />
+      <InfinityIcon className="size-3.5 stroke-[1.75]" />
     </span>
   );
 }
