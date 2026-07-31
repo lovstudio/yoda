@@ -432,6 +432,7 @@
     },
     "needsReview": "Needs review",
     "multiAgentTask": "Multi-agent task",
+    "longTermTask": "Long-term task",
     "toggleSubtasks": "Toggle subtasks",
     "setParentFailed": "Failed to move task",
     "kanban": "Kanban"
@@ -2053,6 +2054,8 @@
       "tileCandidates": "Tile all candidates",
       "unpinTask": "Unpin",
       "pinTask": "Pin",
+      "markLongTerm": "Mark as long-term task",
+      "unmarkLongTerm": "Remove long-term task mark",
       "unmarkReview": "Mark as read",
       "markForReview": "Mark as unread",
       "archive": "Archive",

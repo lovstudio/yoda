@@ -445,6 +445,7 @@ function makeTask(
     parentTaskId: timestamps.parentTaskId,
     archivedAt: timestamps.archivedAt,
     isPinned: timestamps.isPinned ?? false,
+    isLongTerm: false,
     needsReview: false,
     isUserNamed: false,
     setupStatus: 'ready',

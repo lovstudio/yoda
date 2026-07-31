@@ -949,6 +949,7 @@ export class MobileGatewayService {
       lastInteractedAt: task.lastInteractedAt,
       needsReview: task.needsReview,
       isPinned: task.isPinned,
+      isLongTerm: task.isLongTerm,
       runtimeCounts: task.conversations,
       conversationCount: Object.values(task.conversations).reduce((sum, count) => sum + count, 0),
     };

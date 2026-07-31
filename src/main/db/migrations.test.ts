@@ -100,6 +100,8 @@ describe('runBundledMigrations', () => {
       db.exec(`
         CREATE TABLE conversations (id text PRIMARY KEY NOT NULL);
         INSERT INTO conversations (id) VALUES ('existing-conversation');
+        CREATE TABLE tasks (id text PRIMARY KEY NOT NULL);
+        INSERT INTO tasks (id) VALUES ('existing-task');
       `);
 
       runBundledMigrations(db);
@@ -118,6 +120,9 @@ describe('runBundledMigrations', () => {
       expect(
         db.prepare('SELECT group_name FROM prompts WHERE id = ?').get('existing-prompt')
       ).toEqual({ group_name: '' });
+      expect(
+        db.prepare('SELECT is_long_term FROM tasks WHERE id = ?').get('existing-task')
+      ).toEqual({ is_long_term: 0 });
     } finally {
       db.close();
     }

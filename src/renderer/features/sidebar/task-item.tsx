@@ -1,4 +1,12 @@
-import { Archive, ChevronRight, GitBranch, Loader2, MoreHorizontal, Users } from 'lucide-react';
+import {
+  Archive,
+  CalendarClock,
+  ChevronRight,
+  GitBranch,
+  Loader2,
+  MoreHorizontal,
+  Users,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -287,6 +295,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               >
                 {taskName}
               </span>
+              {task.data.isLongTerm && <LongTermTaskIcon label={t('sidebar.longTermTask')} />}
               {isCollapsed && (
                 <span className="shrink-0 rounded-sm bg-background-tertiary-2 px-1 text-[10px] tabular-nums text-foreground-tertiary">
                   {childCount}
@@ -417,6 +426,19 @@ function MultiAgentTaskIcon({ label, className }: { label: string; className?: s
       )}
     >
       <Users className="size-4" />
+    </span>
+  );
+}
+
+function LongTermTaskIcon({ label }: { label: string }) {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className="inline-flex size-4 shrink-0 items-center justify-center text-sky-700 dark:text-sky-300"
+    >
+      <CalendarClock className="size-3.5" />
     </span>
   );
 }

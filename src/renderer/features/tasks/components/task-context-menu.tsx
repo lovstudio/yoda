@@ -2,6 +2,7 @@ import type { TFunction } from 'i18next';
 import {
   Archive,
   ArchiveRestore,
+  CalendarClock,
   CircleDot,
   CircleSlash,
   ClipboardList,
@@ -70,6 +71,8 @@ interface TaskMenuInfoFields extends TaskBasicInfoFields, TaskSessionInfoFields 
 export interface TaskMenuActions extends TaskMenuInfoFields {
   isPinned: boolean;
   canPin: boolean;
+  isLongTerm: boolean;
+  canMarkLongTerm: boolean;
   isArchived: boolean;
   needsReview: boolean;
   canMarkReview: boolean;
@@ -81,6 +84,8 @@ export interface TaskMenuActions extends TaskMenuInfoFields {
   onOpenDetails?: () => void;
   onPin: () => void;
   onUnpin: () => void;
+  onMarkLongTerm: () => void;
+  onUnmarkLongTerm: () => void;
   onMarkNeedsReview: () => void;
   onUnmarkNeedsReview: () => void;
   onRename: () => void;
@@ -188,6 +193,15 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
             onSelect: actions.onPin,
           }
     );
+  }
+  if (actions.canMarkLongTerm) {
+    items.push({
+      key: actions.isLongTerm ? 'unmark-long-term' : 'mark-long-term',
+      group: 1,
+      icon: CalendarClock,
+      label: t(actions.isLongTerm ? 'tasks.context.unmarkLongTerm' : 'tasks.context.markLongTerm'),
+      onSelect: actions.isLongTerm ? actions.onUnmarkLongTerm : actions.onMarkLongTerm,
+    });
   }
   if (!actions.isArchived) {
     items.push({
