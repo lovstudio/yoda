@@ -17,7 +17,7 @@ import {
 import { formatDiffLineCount } from '@renderer/utils/format-diff-line-count';
 import { cn } from '@renderer/utils/utils';
 import { useUsageOverview } from '../useUsageOverview';
-import { TokenHeatmap } from './TokenHeatmap';
+import { DailyTokenChart } from './DailyTokenChart';
 
 const AUTH_PROVIDER_LABEL_KEYS: Record<AgentAccountProviderId, string> = {
   'official-subscription': 'tasks.overview.stats.authProvider.official-subscription',
@@ -26,7 +26,7 @@ const AUTH_PROVIDER_LABEL_KEYS: Record<AgentAccountProviderId, string> = {
 };
 
 /**
- * Lifetime usage dashboard: overview cards, a daily token-burn heatmap, and
+ * Lifetime usage dashboard: overview cards, a daily token-burn chart, and
  * runtime / auth-source / per-task breakdowns. All data comes from one
  * `stats.getUsageOverview` call.
  */
@@ -133,10 +133,10 @@ function UsageContent({ overview }: { overview: UsageOverview }) {
       {overview.daily.length > 0 && (
         <section className="flex flex-col gap-3 rounded-xl border border-border/70 p-5">
           <h2 className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-            {t('usage.heatmap.title')}
-            <CaliberHint text={t('usage.caliber.heatmap')} />
+            {t('usage.dailyChart.title')}
+            <CaliberHint text={t('usage.caliber.dailyChart')} />
           </h2>
-          <TokenHeatmap daily={overview.daily} />
+          <DailyTokenChart daily={overview.daily} />
         </section>
       )}
 

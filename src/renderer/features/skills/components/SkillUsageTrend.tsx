@@ -13,7 +13,7 @@ type TrendDay = {
 
 /**
  * Per-skill invocation trend — one bar per day over the last 30 days. Pure
- * CSS like the usage TokenHeatmap (no chart library); zero days render as a
+ * CSS like the daily token chart (no chart library); zero days render as a
  * baseline stub so the time axis stays readable.
  */
 export function SkillUsageTrend({ daily }: { daily: Record<string, number> }) {

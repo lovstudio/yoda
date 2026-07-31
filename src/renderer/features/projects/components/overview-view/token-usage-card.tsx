@@ -20,7 +20,7 @@ const DAILY_WINDOW_DAYS = 30;
 const TOP_TASKS_LIMIT = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Same green ramp as the usage heatmap — one hue, intensity = how "real" the
+// Same green ramp as the usage chart — one hue, intensity = how "real" the
 // cost is (output is the actual burn, cache reads are nearly free).
 const BUCKET_SEGMENTS = [
   { key: 'output', labelKey: 'projects.tokenUsage.output', className: 'bg-foreground-diff-added' },
@@ -259,11 +259,11 @@ function DailyBurnChart({ daily }: { daily: UsageOverview['daily'] }) {
           const real = day.tokens ? day.tokens.input + day.tokens.output : 0;
           const title =
             total > 0
-              ? t('usage.heatmap.dayTooltip', {
+              ? t('usage.dailyChart.dayTooltip', {
                   date: day.key,
                   tokens: formatCompactNumber(total),
                 })
-              : t('usage.heatmap.emptyDayTooltip', { date: day.key });
+              : t('usage.dailyChart.emptyDayTooltip', { date: day.key });
           return (
             <div
               key={day.key}
