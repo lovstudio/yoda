@@ -167,6 +167,20 @@ function handleCreateTaskWarning(warning: CreateTaskWarning): void {
   log.warn('Task setup completed with warning', warning);
 }
 
+type TaskViewPreload = {
+  savedSnapshot: TaskViewSnapshot | undefined;
+  preloadedConversations: Conversation[];
+  conversationsLoadFailed: boolean;
+};
+
+type TaskViewPreloadEntry = {
+  startedAt: number;
+  promise: Promise<TaskViewPreload>;
+};
+
+const TASK_VIEW_PRELOAD_MAX_AGE_MS = 10_000;
+const TASK_VIEW_PRELOAD_LIMIT = 4;
+
 export class TaskManagerStore {
   private readonly projectId: string;
   private readonly _repository: RepositoryStore;
@@ -175,6 +189,7 @@ export class TaskManagerStore {
   private _loadPromise: Promise<void> | null = null;
   private _teardownPromises = new Map<string, Promise<void>>();
   private _provisionPromises = new Map<string, Promise<void>>();
+  private _taskViewPreloads = new Map<string, TaskViewPreloadEntry>();
 
   private _unsubPrUpdated: (() => void) | null = null;
   private _unsubPrSyncProgress: (() => void) | null = null;
@@ -510,19 +525,12 @@ export class TaskManagerStore {
       task.phase = 'provision';
     });
 
-    const promise = Promise.all([
-      rpc.tasks.provisionTask(taskId),
-      viewStateCache.get(`task:${taskId}`),
-      rpc.conversations.getConversationsForTask(this.projectId, taskId).catch((err: unknown) => {
-        log.warn('TaskManagerStore: failed to pre-load conversations during provision', {
-          taskId,
-          error: err,
-        });
-        toast.error('Failed to load conversations');
-        return [] as Conversation[];
-      }),
-    ])
-      .then(([result, savedSnapshot, preloadedConversations]) => {
+    const taskViewPreload = this._getTaskViewPreload(taskId);
+    const promise = Promise.all([rpc.tasks.provisionTask(taskId), taskViewPreload])
+      .then(([result, preload]) => {
+        if (preload.conversationsLoadFailed) {
+          toast.error('Failed to load conversations');
+        }
         runInAction(() => {
           const current = this.tasks.get(taskId);
           if (current && isUnprovisioned(current)) {
@@ -532,9 +540,9 @@ export class TaskManagerStore {
               result.workspaceId,
               this._settingsStore,
               this._baseRef,
-              savedSnapshot as TaskViewSnapshot | undefined,
+              preload.savedSnapshot,
               result.sshConnectionId ?? undefined,
-              preloadedConversations
+              preload.preloadedConversations
             );
             current.activate();
           }
@@ -552,9 +560,72 @@ export class TaskManagerStore {
       })
       .finally(() => {
         this._provisionPromises.delete(taskId);
+        const cached = this._taskViewPreloads.get(taskId);
+        if (cached?.promise === taskViewPreload) {
+          this._taskViewPreloads.delete(taskId);
+        }
       });
 
     this._provisionPromises.set(taskId, promise);
+    return promise;
+  }
+
+  /**
+   * Preload the lightweight renderer data needed to materialize a task view.
+   * Sidebar hover can safely call this without provisioning a workspace or
+   * resuming agent/terminal processes; the next real open reuses the result.
+   */
+  async preloadTask(taskId: string): Promise<void> {
+    const task = this.tasks.get(taskId);
+    if (!task || !isUnprovisioned(task) || task.phase !== 'idle') return;
+
+    const preload = this._getTaskViewPreload(taskId);
+    try {
+      await preload;
+    } catch (error) {
+      const cached = this._taskViewPreloads.get(taskId);
+      if (cached?.promise === preload) {
+        this._taskViewPreloads.delete(taskId);
+      }
+      log.warn('TaskManagerStore: failed to preload task view', { taskId, error });
+    }
+  }
+
+  private _getTaskViewPreload(taskId: string): Promise<TaskViewPreload> {
+    const now = Date.now();
+    const cached = this._taskViewPreloads.get(taskId);
+    if (cached && now - cached.startedAt <= TASK_VIEW_PRELOAD_MAX_AGE_MS) {
+      // Refresh insertion order so the bounded cache behaves like an LRU.
+      this._taskViewPreloads.delete(taskId);
+      this._taskViewPreloads.set(taskId, cached);
+      return cached.promise;
+    }
+    if (cached) this._taskViewPreloads.delete(taskId);
+
+    const conversations = rpc.conversations
+      .getConversationsForTask(this.projectId, taskId)
+      .then((data) => ({ data, failed: false }))
+      .catch((error: unknown) => {
+        log.warn('TaskManagerStore: failed to pre-load conversations during provision', {
+          taskId,
+          error,
+        });
+        return { data: [] as Conversation[], failed: true };
+      });
+    const promise = Promise.all([viewStateCache.get(`task:${taskId}`), conversations]).then(
+      ([savedSnapshot, conversationResult]) => ({
+        savedSnapshot: savedSnapshot as TaskViewSnapshot | undefined,
+        preloadedConversations: conversationResult.data,
+        conversationsLoadFailed: conversationResult.failed,
+      })
+    );
+
+    this._taskViewPreloads.set(taskId, { startedAt: now, promise });
+    while (this._taskViewPreloads.size > TASK_VIEW_PRELOAD_LIMIT) {
+      const oldestTaskId = this._taskViewPreloads.keys().next().value;
+      if (oldestTaskId === undefined) break;
+      this._taskViewPreloads.delete(oldestTaskId);
+    }
     return promise;
   }
 
@@ -920,5 +991,6 @@ export class TaskManagerStore {
     this._unsubConversationMoved = null;
     this._disposeRepositoryReaction?.();
     this._disposeRepositoryReaction = null;
+    this._taskViewPreloads.clear();
   }
 }
