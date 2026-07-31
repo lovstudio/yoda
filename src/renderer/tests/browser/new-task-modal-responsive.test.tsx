@@ -1,4 +1,4 @@
-import { act, createElement, type ComponentProps, type ReactNode } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
@@ -9,6 +9,10 @@ import '../../index.css';
 type ChildrenProps = {
   children?: ReactNode;
   className?: string;
+};
+
+type MockHomeComposerProps = {
+  onProjectRevealed?: (projectId: string) => void;
 };
 
 function chip(
@@ -66,10 +70,20 @@ vi.mock('@renderer/lib/ui/dialog', () => ({
 }));
 
 vi.mock('@renderer/app/home-view', () => ({
-  HomeComposer: (_props: ComponentProps<'div'>) =>
+  HomeComposer: ({ onProjectRevealed }: MockHomeComposerProps) =>
     createElement(
       'div',
       { 'data-yoda-surface': 'home-composer' },
+      createElement(
+        'button',
+        {
+          'data-slot': 'mock-reveal-project',
+          onClick: () => onProjectRevealed?.('project-1'),
+          style: { position: 'absolute' },
+          type: 'button',
+        },
+        '定位项目'
+      ),
       createElement(
         'div',
         { 'data-yoda-surface': 'home-composer-input' },
@@ -141,15 +155,32 @@ describe('NewTaskModal responsive layout', () => {
     await page.viewport(1280, 720);
   });
 
-  async function renderAt(width: number, height: number): Promise<void> {
+  async function renderAt(
+    width: number,
+    height: number,
+    onClose: () => void = vi.fn()
+  ): Promise<void> {
     await page.viewport(width, height);
     host.style.width = `${width}px`;
     const { NewTaskModal } = await import('@renderer/app/new-task-modal');
     await act(async () => {
-      root.render(createElement(NewTaskModal, { onClose: vi.fn(), onSuccess: vi.fn() }));
+      root.render(createElement(NewTaskModal, { onClose, onSuccess: vi.fn() }));
     });
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   }
+
+  it('closes the floating modal after locating the selected project', async () => {
+    const onClose = vi.fn();
+    await renderAt(720, 600, onClose);
+
+    const revealProject = host.querySelector<HTMLButtonElement>(
+      'button[data-slot="mock-reveal-project"]'
+    );
+    if (!revealProject) throw new Error('Reveal-project action is missing');
+    await act(async () => revealProject.click());
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
 
   it('keeps session settings separate from the compare action when the toolbar wraps', async () => {
     await renderAt(480, 500);

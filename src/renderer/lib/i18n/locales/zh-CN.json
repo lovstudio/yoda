@@ -2562,7 +2562,6 @@
       "moveTo": "移动到分组",
       "reorderGroup": "拖动「{{name}}」调整分组顺序",
       "reorderPrompt": "拖动「{{name}}」调整它在分组内的顺序",
-      "toggleInjection": "切换「{{name}}」分组的动态注入",
       "ungrouped": "未分组",
       "count": "{{count}} 条"
     },

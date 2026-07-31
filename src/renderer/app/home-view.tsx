@@ -389,11 +389,14 @@ export const HomeMainPanel = observer(function HomeMainPanel() {
  */
 export const HomeComposer = observer(function HomeComposer({
   className,
+  onProjectRevealed,
   onSubmitted,
   submitTarget = { kind: 'new-task' },
   showDreamActions = false,
 }: {
   className?: string;
+  /** Called after the selected project has been requested in the app sidebar. */
+  onProjectRevealed?: (projectId: string) => void;
   /** Called after a successful submit. New-task mode navigates before firing it. */
   onSubmitted?: (result: HomeComposerSubmitResult) => void;
   submitTarget?: HomeComposerSubmitTarget;
@@ -447,7 +450,8 @@ export const HomeComposer = observer(function HomeComposer({
     if (!selectedProjectId) return;
     setCollapsed('left', false);
     appState.sidebar.requestSelectionReveal(selectedProjectId);
-  }, [selectedProjectId, setCollapsed]);
+    onProjectRevealed?.(selectedProjectId);
+  }, [onProjectRevealed, selectedProjectId, setCollapsed]);
 
   const draftProjectId = draft?.selectedProjectId ?? null;
   useEffect(() => {
