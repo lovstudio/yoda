@@ -44,11 +44,23 @@ type WorkspaceFactoryContext = {
   /** Inject an existing fetch service. When absent, the factory creates and manages one.
    *  Lifecycle (start/stop) is only managed by the factory when it creates the instance. */
   fetchService?: GitFetchService;
+  /**
+   * A newly-created task workspace already resolves these inputs. Hand them
+   * back to the provisioning caller so it does not immediately read the same
+   * settings and task config a second time.
+   */
+  onTaskRuntimeResolved?: (runtime: ResolvedTaskRuntime) => void;
   extraHooks?: {
     onCreate?: (ws: Workspace) => Promise<void>;
     onDestroy?: (ws: Workspace) => Promise<void>;
     onDetach?: (ws: Workspace) => Promise<void>;
   };
+};
+
+export type ResolvedTaskRuntime = {
+  taskEnvVars: Record<string, string>;
+  tmuxEnabled: boolean;
+  shellSetup?: string;
 };
 
 async function resolveGlobalTmuxEnabled(): Promise<boolean> {
@@ -77,8 +89,11 @@ export function createWorkspaceFactory(
       type.kind === 'ssh' ? new SshExecutionContext(type.proxy) : new LocalExecutionContext();
 
     // Settings (shared)
-    const projectSettings = await context.settings.get();
-    const defaultBranch = await context.settings.getDefaultBranch();
+    const [projectSettings, tmuxEnabled] = await Promise.all([
+      context.settings.get(),
+      resolveGlobalTmuxEnabled(),
+    ]);
+    const defaultBranch = await context.settings.getDefaultBranch(projectSettings);
     const bootstrapTaskEnvVars = getTaskEnvVars({
       taskId: context.task.id,
       taskName: context.task.name,
@@ -87,13 +102,18 @@ export function createWorkspaceFactory(
       defaultBranch,
       portSeed: workDir,
     });
-    const tmuxEnabled = await resolveGlobalTmuxEnabled();
     const taskLevelSettings = await getEffectiveTaskSettings({
       projectSettings: context.settings,
       taskFs: workspaceFs,
+      loadedProjectSettings: projectSettings,
     });
     const shellSetup = taskLevelSettings.shellSetup ?? projectSettings.shellSetup;
     const scripts = taskLevelSettings.scripts;
+    context.onTaskRuntimeResolved?.({
+      taskEnvVars: bootstrapTaskEnvVars,
+      tmuxEnabled,
+      shellSetup,
+    });
 
     // Transport-specific workspace terminal provider (used only by lifecycle scripts)
     const workspaceTerminals =
@@ -299,16 +319,16 @@ export async function resolveTaskEnv(
   workspace: Pick<Workspace, 'path' | 'fs'>,
   projectPath: string,
   settings: ProjectSettingsProvider
-): Promise<{
-  taskEnvVars: Record<string, string>;
-  tmuxEnabled: boolean;
-  shellSetup?: string;
-}> {
-  const projectSettings = await settings.get();
-  const defaultBranch = await settings.getDefaultBranch();
+): Promise<ResolvedTaskRuntime> {
+  const [projectSettings, tmuxEnabled] = await Promise.all([
+    settings.get(),
+    resolveGlobalTmuxEnabled(),
+  ]);
+  const defaultBranch = await settings.getDefaultBranch(projectSettings);
   const taskLevelSettings = await getEffectiveTaskSettings({
     projectSettings: settings,
     taskFs: workspace.fs,
+    loadedProjectSettings: projectSettings,
   });
   return {
     taskEnvVars: getTaskEnvVars({
@@ -319,7 +339,7 @@ export async function resolveTaskEnv(
       defaultBranch,
       portSeed: workspace.path,
     }),
-    tmuxEnabled: await resolveGlobalTmuxEnabled(),
+    tmuxEnabled,
     shellSetup: taskLevelSettings.shellSetup ?? projectSettings.shellSetup,
   };
 }

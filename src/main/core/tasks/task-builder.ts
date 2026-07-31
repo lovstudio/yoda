@@ -20,6 +20,7 @@ import {
   buildTaskProviders,
   createWorkspaceFactory,
   resolveTaskEnv,
+  type ResolvedTaskRuntime,
   type WorkspaceType,
 } from '../workspaces/workspace-factory';
 
@@ -91,6 +92,7 @@ export async function provisionLocalTask(
     step: 'initialising-workspace',
     message: 'Initialising workspace…',
   });
+  let resolvedTaskRuntime: ResolvedTaskRuntime | undefined;
   const workspace = await workspaceRegistry.acquire(
     workspaceId,
     projectId,
@@ -103,6 +105,9 @@ export async function provisionLocalTask(
       logPrefix,
       repository,
       fetchService,
+      onTaskRuntimeResolved: (runtime) => {
+        resolvedTaskRuntime = runtime;
+      },
     })
   );
 
@@ -122,7 +127,8 @@ export async function provisionLocalTask(
       projectPath,
       settings,
       { conversations, terminals },
-      logPrefix
+      logPrefix,
+      resolvedTaskRuntime
     );
     log.debug(`${logPrefix}: provisionLocalTask DONE`, { taskId: task.id });
     provisionSucceeded = true;
@@ -153,14 +159,11 @@ export async function buildTaskFromWorkspace(
   projectPath: string,
   settings: ProjectSettingsProvider,
   hydrate: { conversations: Conversation[]; terminals: Terminal[] },
-  logPrefix: string
+  logPrefix: string,
+  preResolvedTaskRuntime?: ResolvedTaskRuntime
 ): Promise<BuildTaskResult> {
-  const { taskEnvVars, tmuxEnabled, shellSetup } = await resolveTaskEnv(
-    task,
-    workspace,
-    projectPath,
-    settings
-  );
+  const { taskEnvVars, tmuxEnabled, shellSetup } =
+    preResolvedTaskRuntime ?? (await resolveTaskEnv(task, workspace, projectPath, settings));
 
   const { conversations: conversationProvider, terminals: terminalProvider } = buildTaskProviders(
     type,

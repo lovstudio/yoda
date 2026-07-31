@@ -38,6 +38,33 @@ describe('terminal file links', () => {
     ]);
   });
 
+  it.each([
+    'Agentic Engineering Patterns：公众号完整中文版.md',
+    'Agentic Engineering Patterns：公众号完整中文版.pdf',
+  ])('recognizes a labeled workspace-root filename containing spaces: %s', (text) => {
+    const line = `- 文件：${text}`;
+    const terminal = makeTerminal([line]);
+    const workspaceRoot = '/Users/mark/yoda/repositories/科技博主的自我修养';
+
+    expect(extractTerminalFileLinkCandidates(line)).toEqual([{ text, index: line.indexOf(text) }]);
+    expect(
+      getTerminalFileLinkMatches(terminal, 1, {
+        workspaceRoot,
+        onOpen: (): void => undefined,
+      }).map((match) => ({
+        text: match.text,
+        filePath: match.target.filePath,
+        absolutePath: match.target.absolutePath,
+      }))
+    ).toEqual([
+      {
+        text,
+        filePath: text,
+        absolutePath: `${workspaceRoot}/${text}`,
+      },
+    ]);
+  });
+
   it('recognizes common bare filenames without treating domains or versions as files', () => {
     const line = '检查 README.md、package.json:12；忽略 example.com 和 v1.2.3。';
 

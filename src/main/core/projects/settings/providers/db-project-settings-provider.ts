@@ -206,8 +206,8 @@ export abstract class DbProjectSettingsProvider implements ProjectSettingsProvid
     }
   }
 
-  async getDefaultBranch(): Promise<string> {
-    const settings = await this.get();
+  async getDefaultBranch(loadedSettings?: ProjectSettings): Promise<string> {
+    const settings = loadedSettings ?? (await this.get());
     const branch = settings.defaultBranch;
     if (!branch) return this.defaultBranchFallback;
     if (typeof branch === 'string') return branch;

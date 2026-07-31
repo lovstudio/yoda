@@ -9,7 +9,10 @@ import type { ProjectSettingsProvider } from '@main/core/projects/settings/provi
 import { sshConnectionManager } from '@main/core/ssh/ssh-connection-manager';
 import { buildTaskFromWorkspace } from '@main/core/tasks/task-builder';
 import { parseProvisionOutput } from '@main/core/workspaces/byoi/provision-output';
-import { createWorkspaceFactory } from '@main/core/workspaces/workspace-factory';
+import {
+  createWorkspaceFactory,
+  type ResolvedTaskRuntime,
+} from '@main/core/workspaces/workspace-factory';
 import { remoteTaskWorkspaceId } from '@main/core/workspaces/workspace-id';
 import { workspaceRegistry } from '@main/core/workspaces/workspace-registry';
 import { events } from '@main/lib/events';
@@ -89,6 +92,7 @@ export async function provisionBYOITask(params: ProvisionBYOITaskParams): Promis
   const workDir = output.worktreePath ?? projectPath;
   const workspaceId = remoteTaskWorkspaceId(output.id ?? task.id);
 
+  let resolvedTaskRuntime: ResolvedTaskRuntime | undefined;
   const workspace = await workspaceRegistry.acquire(
     workspaceId,
     projectId,
@@ -102,6 +106,9 @@ export async function provisionBYOITask(params: ProvisionBYOITaskParams): Promis
         projectPath,
         settings,
         logPrefix,
+        onTaskRuntimeResolved: (runtime) => {
+          resolvedTaskRuntime = runtime;
+        },
         extraHooks: {
           onDestroy: async () => {
             const cmd = output.id
@@ -136,7 +143,8 @@ export async function provisionBYOITask(params: ProvisionBYOITaskParams): Promis
       projectPath,
       settings,
       { conversations, terminals },
-      logPrefix
+      logPrefix,
+      resolvedTaskRuntime
     );
     log.debug(`${logPrefix}: provisionBYOITask DONE`, { taskId: task.id });
     provisionSucceeded = true;
