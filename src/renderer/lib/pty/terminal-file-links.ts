@@ -338,6 +338,7 @@ function canHardJoin(
   ) {
     return true;
   }
+  if (hasEarlyWrappedUrlFinalSegment(upperText, lowerStripped)) return true;
   if (!isRowFull(terminal, upperBottomRowIndex)) return false;
   if (hasHardWrappedLocationCandidate(upperText, lowerStripped)) return true;
   if (hasHardWrappedParenthesizedFilenameCandidate(upperText, lowerStripped)) return true;
@@ -489,6 +490,21 @@ function canHardJoinUrl(upperText: string, lowerStripped: string): boolean {
     lowerStripped
   )?.[0];
   return Boolean(leadingToken && URL_CONTINUATION_HINT_RE.test(leadingToken));
+}
+
+/**
+ * Ink cards wrap at their own content width, which can be much narrower than
+ * the xterm row. A URL enclosed in punctuation may therefore put only its
+ * final path segment and matching closer on the next real row. The paired
+ * wrapper and segment-only continuation make this safe to recognize before
+ * the general full-row guard.
+ */
+function hasEarlyWrappedUrlFinalSegment(upperText: string, lowerStripped: string): boolean {
+  return (
+    URL_IN_PROGRESS_RE.test(upperText) &&
+    upperText.endsWith('/') &&
+    hasWrappedUrlFinalSegment(upperText, lowerStripped)
+  );
 }
 
 function hasWrappedUrlFinalSegment(upperText: string, lowerStripped: string): boolean {
