@@ -82,13 +82,48 @@ export type MobileProjectSummary = {
   isInternal: boolean;
   isOpen: boolean;
   updatedAt: string;
+  /** Latest task interaction or project metadata update. Optional for older desktop gateways. */
+  lastActivityAt?: string;
 };
 
 export type MobileProjectSortMode = 'recent' | 'name' | 'open';
 
-function mobileProjectUpdatedAt(project: MobileProjectSummary): number {
-  const updatedAt = Date.parse(project.updatedAt);
-  return Number.isNaN(updatedAt) ? Number.NEGATIVE_INFINITY : updatedAt;
+const MOBILE_SQLITE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+
+export function parseMobileTimestamp(value: string | null | undefined): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const normalized = MOBILE_SQLITE_TIMESTAMP_RE.test(value) ? `${value.replace(' ', 'T')}Z` : value;
+  const timestamp = Date.parse(normalized);
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
+export function getMobileProjectActivityById(
+  projects: readonly Pick<MobileProjectSummary, 'id' | 'updatedAt' | 'lastActivityAt'>[],
+  tasks: readonly {
+    projectId: string;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    lastInteractedAt?: string | null;
+  }[]
+): Map<string, string> {
+  const activityByProjectId = new Map(
+    projects.map((project) => [project.id, project.lastActivityAt ?? project.updatedAt] as const)
+  );
+
+  for (const task of tasks) {
+    const activityAt = task.lastInteractedAt ?? task.createdAt ?? task.updatedAt;
+    if (!activityAt) continue;
+    const currentActivityAt = activityByProjectId.get(task.projectId);
+    if (parseMobileTimestamp(activityAt) > parseMobileTimestamp(currentActivityAt)) {
+      activityByProjectId.set(task.projectId, activityAt);
+    }
+  }
+
+  return activityByProjectId;
+}
+
+function mobileProjectActivityAt(project: MobileProjectSummary): number {
+  return parseMobileTimestamp(project.lastActivityAt ?? project.updatedAt);
 }
 
 export function sortMobileProjects(
@@ -97,7 +132,11 @@ export function sortMobileProjects(
 ): MobileProjectSummary[] {
   const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
   return projects
-    .map((project, index) => ({ project, index, updatedAt: mobileProjectUpdatedAt(project) }))
+    .map((project, index) => ({
+      project,
+      index,
+      activityAt: mobileProjectActivityAt(project),
+    }))
     .sort((a, b) => {
       if (mode === 'name') {
         return (
@@ -110,19 +149,13 @@ export function sortMobileProjects(
       if (mode === 'open') {
         return (
           Number(b.project.isOpen) - Number(a.project.isOpen) ||
-          b.updatedAt - a.updatedAt ||
+          b.activityAt - a.activityAt ||
           a.index - b.index
         );
       }
-      return b.updatedAt - a.updatedAt || a.index - b.index;
+      return b.activityAt - a.activityAt || a.index - b.index;
     })
     .map(({ project }) => project);
-}
-
-export function sortMobileProjectsByUpdatedAt(
-  projects: readonly MobileProjectSummary[]
-): MobileProjectSummary[] {
-  return sortMobileProjects(projects, 'recent');
 }
 
 export type MobileTaskSummary = {

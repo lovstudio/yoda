@@ -33,9 +33,11 @@ import {
   type TextStyle,
 } from 'react-native';
 import {
+  getMobileProjectActivityById,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_SESSION_INPUT_MAX_CHARS,
   parseMobilePairingUrl,
+  parseMobileTimestamp,
   sortMobileProjects,
   type MobileDashboardSnapshot,
   type MobileProjectSortMode,
@@ -485,7 +487,7 @@ function tokenizeInlineMarkdown(value: string): InlineMarkdownToken[] {
 
 function formatTimestamp(value?: string): string {
   if (!value) return 'No activity yet';
-  const date = new Date(value);
+  const date = new Date(parseMobileTimestamp(value));
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString([], {
     month: 'short',
@@ -749,10 +751,14 @@ export function App() {
     return () => clearInterval(timer);
   }, [connection, loadDashboard]);
 
-  const visibleProjects = useMemo(
-    () => snapshot?.projects.filter((project) => !project.isInternal) ?? [],
-    [snapshot]
-  );
+  const visibleProjects = useMemo(() => {
+    const projects = snapshot?.projects.filter((project) => !project.isInternal) ?? [];
+    const activityByProjectId = getMobileProjectActivityById(projects, snapshot?.tasks ?? []);
+    return projects.map((project) => ({
+      ...project,
+      lastActivityAt: activityByProjectId.get(project.id) ?? project.updatedAt,
+    }));
+  }, [snapshot]);
 
   const openProjectIds = useMemo(
     () =>
@@ -1682,7 +1688,7 @@ function DemandProjectAccordion({
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
   const selectedLabel = selectedProject?.displayName ?? 'Drafts';
   const selectedMeta = selectedProject
-    ? `Updated ${formatTimestamp(selectedProject.updatedAt)}`
+    ? `Active ${formatTimestamp(selectedProject.lastActivityAt ?? selectedProject.updatedAt)}`
     : 'Default workspace';
 
   return (
@@ -1754,7 +1760,7 @@ function DemandProjectAccordion({
               key={project.id}
               icon={project.isOpen ? 'desktop-outline' : 'folder-outline'}
               label={project.displayName}
-              meta={`Updated ${formatTimestamp(project.updatedAt)}`}
+              meta={`Active ${formatTimestamp(project.lastActivityAt ?? project.updatedAt)}`}
               selected={selectedProjectId === project.id}
               onPress={() => {
                 onProjectChange(project.id);
