@@ -220,7 +220,13 @@ describe('Models settings', () => {
     const automaticUpdate = host.querySelector<HTMLElement>(
       '[role="switch"][aria-label="settings.models.automaticUpdates"]'
     );
+    const automaticUpdateControl = host.querySelector<HTMLElement>(
+      '[data-testid="model-catalog-auto-update-control"]'
+    );
+    const catalogCard = host.querySelector<HTMLElement>('[data-testid="models-settings-card"]');
     expect(automaticUpdate).not.toBeNull();
+    expect(automaticUpdateControl?.textContent).toContain('settings.models.automaticUpdatesShort');
+    expect(catalogCard?.contains(automaticUpdateControl)).toBe(false);
     await act(async () => automaticUpdate?.click());
     await flush();
     expect(mocks.setAutomaticUpdates).toHaveBeenCalledWith(false);
@@ -279,12 +285,21 @@ describe('Models settings', () => {
 });
 
 async function renderModelsSettings(root: Root, queryClient: QueryClient) {
-  const { default: ModelsSettingsCard } = await import(
+  const { default: ModelsSettingsCard, ModelCatalogAutomaticUpdateControl } = await import(
     '@renderer/features/settings/components/ModelsSettingsCard'
   );
   await act(async () =>
     root.render(
-      createElement(QueryClientProvider, { client: queryClient }, createElement(ModelsSettingsCard))
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(
+          'div',
+          null,
+          createElement(ModelCatalogAutomaticUpdateControl),
+          createElement(ModelsSettingsCard)
+        )
+      )
     )
   );
   await flush();
