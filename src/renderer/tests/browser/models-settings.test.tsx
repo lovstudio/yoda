@@ -223,10 +223,15 @@ describe('Models settings', () => {
     const automaticUpdateControl = host.querySelector<HTMLElement>(
       '[data-testid="model-catalog-auto-update-control"]'
     );
+    const updateSection = host.querySelector<HTMLElement>(
+      '[data-testid="model-catalog-update-section"]'
+    );
     const catalogCard = host.querySelector<HTMLElement>('[data-testid="models-settings-card"]');
     expect(automaticUpdate).not.toBeNull();
     expect(automaticUpdateControl?.textContent).toContain('settings.models.automaticUpdatesShort');
-    expect(catalogCard?.contains(automaticUpdateControl)).toBe(false);
+    expect(updateSection?.textContent).toContain('settings.models.updatesTitle');
+    expect(updateSection?.contains(automaticUpdateControl)).toBe(true);
+    expect(updateSection?.parentElement).toBe(catalogCard);
     await act(async () => automaticUpdate?.click());
     await flush();
     expect(mocks.setAutomaticUpdates).toHaveBeenCalledWith(false);
@@ -285,21 +290,12 @@ describe('Models settings', () => {
 });
 
 async function renderModelsSettings(root: Root, queryClient: QueryClient) {
-  const { default: ModelsSettingsCard, ModelCatalogAutomaticUpdateControl } = await import(
+  const { default: ModelsSettingsCard } = await import(
     '@renderer/features/settings/components/ModelsSettingsCard'
   );
   await act(async () =>
     root.render(
-      createElement(
-        QueryClientProvider,
-        { client: queryClient },
-        createElement(
-          'div',
-          null,
-          createElement(ModelCatalogAutomaticUpdateControl),
-          createElement(ModelsSettingsCard)
-        )
-      )
+      createElement(QueryClientProvider, { client: queryClient }, createElement(ModelsSettingsCard))
     )
   );
   await flush();
