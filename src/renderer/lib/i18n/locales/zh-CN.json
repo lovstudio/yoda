@@ -455,7 +455,7 @@
       "agentManager": "Agent",
       "models": "模型",
       "llm": "LLM",
-      "maas": "MaaS",
+      "maas": "中转渠道",
       "usage": "用量",
       "aiLogs": "AI 日志",
       "automation": "自动化",
@@ -545,7 +545,7 @@
       "revokeDevice": "撤销",
       "settingsSync": {
         "title": "设置同步",
-        "description": "像 IDE 设置同步一样，在不同 Yoda 安装之间恢复界面、快捷键、Agent 与 MaaS 配置。",
+        "description": "像 IDE 设置同步一样，在不同 Yoda 安装之间恢复界面、快捷键、Agent 与中转渠道配置。",
         "autoSync": "自动同步到 LovStudio 账户",
         "lastSynced": "上次同步：{{date}}",
         "notSynced": "尚未同步",
@@ -586,7 +586,7 @@
       "providerDescription": "选择要查看和维护模型的厂商。",
       "providerUnknown": "未知厂商",
       "customProviderTitle": "自定义厂商",
-      "customProviderDescription": "新增目录尚未收录的模型厂商。这里管理厂商与模型归属；Agent 客户端或 MaaS 的接入方式仍在对应设置中配置。",
+      "customProviderDescription": "新增目录尚未收录的模型厂商。这里管理厂商与模型归属；Agent 客户端或中转渠道的接入方式仍在对应设置中配置。",
       "addProvider": "新增厂商",
       "providerName": "厂商名称",
       "providerNamePlaceholder": "例如 SiliconFlow",
@@ -657,14 +657,14 @@
       "agentClient": "Agent Client",
       "agentClientDescription": "这次 AI 调用实际依附的客户端，例如 Claude Code、Codex 或 Code Ace。",
       "accessMethod": "接入方式",
-      "accessMethodDescription": "在当前 Client 内选择官网订阅、官方 API Key 或 Yoda MaaS。",
+      "accessMethodDescription": "在当前 Client 内选择官网订阅、官方 API Key 或 Yoda 中转渠道。",
       "access": {
         "officialSubscription": "官网订阅",
         "officialApi": "API Key",
-        "maas": "第三方 MaaS"
+        "maas": "第三方中转渠道"
       },
-      "maasPlatform": "MaaS 平台",
-      "maasPlatformDescription": "仅在接入方式为 MaaS 时生效。当前已连接 {{count}} 个平台，所选平台{{status}}。",
+      "maasPlatform": "中转渠道",
+      "maasPlatformDescription": "仅在接入方式为中转渠道时生效。当前已连接 {{count}} 个渠道，所选渠道{{status}}。",
       "maasConnected": "已连接",
       "maasNotConnected": "未连接",
       "model": "模型",
@@ -1384,14 +1384,14 @@
     "signInDescription": "LovStudio 账户统一承载身份、积分、Relay 和 GitHub OAuth；不登录也可继续使用本地功能。",
     "connectedAs": "已登录为 {{name}}",
     "maasGateway": {
-      "stepTitle": "MaaS Gateway",
-      "title": "安装 Yoda MaaS Gateway？",
-      "description": "这是扩展市场中的可选后台服务。安装后，Codex 可通过本机代理使用和热切换第三方 MaaS，真实 API Key 不会写入 Codex 配置。",
+      "stepTitle": "中转渠道网关",
+      "title": "安装 Yoda 中转渠道网关？",
+      "description": "这是扩展市场中的可选后台服务。安装后，Codex 可通过本机代理使用和热切换第三方中转渠道，真实 API Key 不会写入 Codex 配置。",
       "security": "Gateway 只监听 127.0.0.1；Provider 密钥保存在 Yoda 加密密钥库，并仅通过进程 IPC 注入运行时内存。",
       "install": "安装 Gateway",
       "skip": "暂不需要",
-      "unavailable": "MaaS Gateway 当前不在扩展市场中。",
-      "installFailed": "MaaS Gateway 安装失败。"
+      "unavailable": "中转渠道网关当前不在扩展市场中。",
+      "installFailed": "中转渠道网关安装失败。"
     },
     "import": {
       "importing": "导入中…",
@@ -1689,7 +1689,7 @@
         "authProvider": {
           "official-subscription": "订阅",
           "official-api": "API Key",
-          "yoda-maas": "MaaS"
+          "yoda-maas": "中转渠道"
         }
       },
       "subtasks": "子任务（{{count}}）"
@@ -3327,7 +3327,7 @@
       "authProviders": {
         "official-subscription": "官方订阅",
         "official-api": "官方 API",
-        "yoda-maas": "Yoda MaaS"
+        "yoda-maas": "Yoda 中转渠道"
       },
       "configDetected": "已检测",
       "configMissing": "尚未创建",
@@ -3389,9 +3389,9 @@
       "officialSubscriptionDescription": "{{name}} 的官方登录与订阅凭据由它自己的 CLI 或本地配置管理。",
       "officialApi": "官方 API",
       "officialApiDescription": "Yoda 启动 {{name}} 会话时会转发这些 API Key 和 Base URL 环境变量。",
-      "maasSource": "Yoda MaaS",
+      "maasSource": "Yoda 中转渠道",
       "maasDescription": "如已配置模型平台，可作为共享路由、观测与计费来源。",
-      "manageMaas": "管理 MaaS",
+      "manageMaas": "管理中转渠道",
       "selectAria": "使用{{name}}作为认证来源",
       "expandAria": "展开{{name}}详情",
       "selectedUnavailable": "该来源尚未就绪，请先完成配置",
@@ -3442,10 +3442,10 @@
       "localUsageCacheWrite": "缓存写",
       "localUsageLoading": "正在统计本地用量…",
       "localUsageError": "统计本地用量失败",
-      "noMaasConnections": "尚未连接 MaaS 平台。",
+      "noMaasConnections": "尚未连接中转渠道。",
       "usageTitle": "用量",
       "usageRefresh": "刷新",
-      "usageNoMaas": "在 MaaS 视图连接 ZenMux 后即可打开官方账单与用量页面。",
+      "usageNoMaas": "在中转渠道页面连接 ZenMux 后即可打开官方账单与用量页面。",
       "usageLoading": "正在加载用量…",
       "usageError": "无法加载用量",
       "usageEmpty": "暂无匹配的用量统计。",
@@ -3453,7 +3453,7 @@
       "usageTokens": "Tokens",
       "usageCost": "费用",
       "usagePeriod": "周期",
-      "usageAllRoutes": "全部 MaaS 路由",
+      "usageAllRoutes": "全部渠道路由",
       "usageFilteredBy": "过滤",
       "usageExternalTitle": "以 ZenMux Console 为准",
       "usageExternalDescription": "Yoda 不展示 ZenMux 平台级统计，避免把公共趋势误认为当前账号或 Agent 的费用。",
@@ -4022,7 +4022,7 @@
       "commit-message": "提交信息",
       "logo-generation": "Logo 生成",
       "app-image-edit": "AI Lab 图片编辑",
-      "maas-chat": "MaaS 对话",
+      "maas-chat": "中转渠道对话",
       "llm-debug": "LLM 调试",
       "interactive-session": "交互式会话",
       "interactive-turn": "对话轮次",
@@ -4030,8 +4030,8 @@
     }
   },
   "maas": {
-    "title": "MaaS",
-    "subtitle": "连接模型平台并查看真实用量统计。",
+    "title": "中转渠道",
+    "subtitle": "连接模型中转渠道并查看真实用量统计。",
     "platformsTitle": "平台",
     "connected": "已连接",
     "notConnected": "未连接",
@@ -4046,30 +4046,30 @@
     "global": {
       "title": "当前生效平台",
       "description": "全局允许 0 或 1 个平台生效。启用后会备份所有兼容 Agent CLI 的当前接入配置；启用另一平台会自动切换，停用时自动复原。",
-      "loading": "正在读取 MaaS 状态…",
+      "loading": "正在读取中转渠道状态…",
       "effective": "已对 {{count}} 个 Agent CLI 生效",
       "needsAttention": "已启用，但凭据或配置异常",
       "enabled": "已启用",
       "disabled": "未启用",
       "notEnabled": "可启用",
       "needsConfiguration": "需要先配置 API Key",
-      "needsGateway": "需要先安装并启用 Yoda MaaS Gateway",
+      "needsGateway": "需要先安装并启用 Yoda 中转渠道网关",
       "toggleAria": "全局启用 {{platform}}",
       "enableAria": "启用 {{platform}}",
       "disableAria": "停用 {{platform}}",
       "manage": "配置 {{platform}}",
       "enabledToast": "{{platform}} 已对所有兼容 Agent CLI 生效",
-      "restoredToast": "已停用 MaaS，并复原 Agent CLI 配置",
-      "codexRestartNotice": "如 Codex App 已打开，请完全退出后重新打开，以重新加载本地 MaaS Gateway Provider；上游 API Key 不会进入 App 环境变量。",
-      "updateFailed": "无法更新全局 MaaS 配置"
+      "restoredToast": "已停用中转渠道，并复原 Agent CLI 配置",
+      "codexRestartNotice": "如 Codex App 已打开，请完全退出后重新打开，以重新加载本地中转渠道 Provider；上游 API Key 不会进入 App 环境变量。",
+      "updateFailed": "无法更新全局中转渠道配置"
     },
     "gatewayRequirement": {
-      "title": "需要 Yoda MaaS Gateway",
+      "title": "需要 Yoda 中转渠道网关",
       "states": {
         "loading": "正在检查扩展市场中的 Gateway 状态…",
         "unavailable": "当前未读取到 Gateway 扩展，请前往扩展市场查看。",
         "unsupported": "Gateway 暂不支持当前平台。",
-        "not-installed": "启用 MaaS 平台前，需要先从扩展市场安装 Gateway。",
+        "not-installed": "启用中转渠道前，需要先从扩展市场安装 Gateway。",
         "disabled": "Gateway 已安装但未启用，请先在扩展市场启用。",
         "unhealthy": "Gateway 当前未正常运行，请前往扩展市场检查状态。"
       },
@@ -4078,7 +4078,7 @@
     },
     "clients": {
       "title": "Agent Client",
-      "description": "勾选后会保存当前接入方式，并把该 Client 的 API Key 与端点切换到此 MaaS；复原会恢复切换前配置。新配置从下一次启动或恢复会话开始生效。",
+      "description": "勾选后会保存当前接入方式，并把该 Client 的 API Key 与端点切换到此中转渠道；复原会恢复切换前配置。新配置从下一次启动或恢复会话开始生效。",
       "loading": "正在读取 Client 配置…",
       "effective": "配置已生效",
       "needsAttention": "已关联，但凭据或配置异常",
@@ -4102,7 +4102,7 @@
         "description": "使用 SiliconFlow API 调用 GenAI 能力，支持 OpenAI 接口调用。"
       },
       "litellm": {
-        "description": "通过一个 OpenAI 兼容 Gateway 汇聚多个 MaaS，并由 LiteLLM 执行路由、负载均衡与故障切换。"
+        "description": "通过一个 OpenAI 兼容 Gateway 汇聚多个中转渠道，并由 LiteLLM 执行路由、负载均衡与故障切换。"
       },
       "newapi": {
         "description": "通过轻量网关管理 OpenAI 兼容上游渠道，并提供路由、重试与故障切换。"
@@ -4135,7 +4135,7 @@
       "managementApiKey": "Management API Key",
       "zenmuxManagementKeyPlaceholder": "粘贴 ZenMux Management API Key",
       "litellmKeyPlaceholder": "粘贴 LiteLLM Virtual Key 或 Master Key",
-      "litellmSetupHelper": "请先在 LiteLLM 中配置上游 MaaS、模型名称与路由规则；Yoda 只连接 Gateway，并通过 /v1/responses 转发 Codex 请求。",
+      "litellmSetupHelper": "请先在 LiteLLM 中配置上游中转渠道、模型名称与路由规则；Yoda 只连接 Gateway，并通过 /v1/responses 转发 Codex 请求。",
       "newApiKeyPlaceholder": "粘贴 New API 令牌",
       "newApiSetupHelper": "请先在 New API 中添加上游渠道；Yoda 连接其 OpenAI 兼容端点，并使用同一模型列表。",
       "inferenceApiKey": "Agent Client API Key",
@@ -4170,7 +4170,7 @@
       "subtitle": "账号级成本明细以 ZenMux 官方 Cost Analytics 为准。",
       "loading": "正在加载 ZenMux 统计数据…",
       "emptyNoConnectionTitle": "未连接平台",
-      "emptyNoConnection": "连接 MaaS 平台后即可加载 ZenMux Management API 聚合统计。",
+      "emptyNoConnection": "连接中转渠道后即可加载 ZenMux Management API 聚合统计。",
       "emptyNoRecords": "暂无用量统计。",
       "errorTitle": "无法加载用量统计",
       "reload": "刷新",
@@ -4362,7 +4362,7 @@
     },
     "gateway": {
       "title": "Gateway",
-      "description": "为每个 Agent Client 选择 MaaS、订阅账号或 API Key",
+      "description": "为每个 Agent Client 选择中转渠道、订阅账号或 API Key",
       "global": "全局",
       "globalHint": "这里的配置对所有本地新会话生效",
       "currentSource": "{{client}} 当前使用 {{source}}",
@@ -4375,21 +4375,21 @@
       "ready": "可用",
       "needsConfiguration": "需要配置",
       "directSources": "Agent CLI",
-      "maasSources": "MaaS 平台",
+      "maasSources": "中转渠道",
       "subscription": "订阅账号",
       "apiKey": "API Key",
-      "maas": "MaaS",
+      "maas": "中转渠道",
       "unconfigured": "未配置",
-      "noMaas": "尚未连接 MaaS 平台",
+      "noMaas": "尚未连接中转渠道",
       "updated": "已更新 {{client}} 的 Gateway",
       "updateFailed": "Gateway 更新失败",
       "manageClient": "管理 {{client}} 账号",
-      "manageMaas": "管理 MaaS 平台",
+      "manageMaas": "管理中转渠道",
       "openLogs": "查看 AI 日志"
     },
     "maas": {
-      "title": "MaaS",
-      "description": "选择一个 MaaS 平台，对所有兼容 Agent CLI 全局生效",
+      "title": "中转渠道",
+      "description": "选择一个中转渠道，对所有兼容 Agent CLI 全局生效",
       "effective": "已生效",
       "needsAttention": "需检查",
       "disabled": "未启用",
