@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { cn } from '@renderer/utils/utils';
 
 const TASK_OUTPUT_ENABLED_LANGUAGE_OPTIONS: TaskOutputLanguage[] = ['app', 'prompt', 'zh-CN', 'en'];
@@ -172,22 +173,35 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
         <ComposerSettingsSection
           icon={<LibraryBig className="size-3.5" />}
           label={t('home.promptConfigurationLabel')}
+          meta={
+            <span
+              role="status"
+              aria-label={t('home.enabledPromptCount', { count: enabledPromptCount })}
+              className="shrink-0 text-[10px] tabular-nums text-foreground-passive"
+            >
+              ({enabledPromptCount})
+            </span>
+          }
           action={
-            <div className="flex shrink-0 items-center gap-1.5">
-              <span className="text-[10px] tabular-nums text-foreground-passive">
-                {t('home.enabledPromptCount', { count: enabledPromptCount })}
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                className="-mr-1"
-                onClick={managePrompts}
-              >
-                {t('home.openPromptLibrary')}
-                <ArrowRight className="size-3" />
-              </Button>
-            </div>
+            <TooltipProvider delay={150}>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      className="-mr-1"
+                      aria-label={t('home.openPromptLibrary')}
+                      onClick={managePrompts}
+                    >
+                      <ArrowRight className="size-3" />
+                    </Button>
+                  }
+                />
+                <TooltipContent>{t('home.openPromptLibrary')}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           }
         >
           {promptPrinciples.length > 0 || (projectId && projectPrincipleItems.length > 0) ? (
@@ -260,11 +274,13 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
 function ComposerSettingsSection({
   icon,
   label,
+  meta,
   action,
   children,
 }: {
   icon: ReactNode;
   label: string;
+  meta?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
 }) {
@@ -278,7 +294,9 @@ function ComposerSettingsSection({
         className="flex min-h-9 items-center gap-2 border-b border-border/60 bg-background-1/50 px-3 py-1.5"
       >
         <span className="text-foreground-muted">{icon}</span>
-        <h3 className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">{label}</h3>
+        <h3 className="min-w-0 truncate text-[11px] font-medium text-foreground">{label}</h3>
+        {meta}
+        <span className="min-w-0 flex-1" />
         {action}
       </div>
       <div className="divide-y divide-border/50">{children}</div>

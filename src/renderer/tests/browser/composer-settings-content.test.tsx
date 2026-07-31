@@ -154,12 +154,12 @@ describe('ComposerSettingsContent', () => {
     expect(settingsSections).toHaveLength(3);
     expect(host.querySelector('[data-slot="permission-mode-select"]')).not.toBeNull();
     expect(host.querySelector('[data-slot="auto-trust-worktrees-control"]')).not.toBeNull();
-    expect(host.textContent).toContain('2 enabled');
     const promptHeader = settingsSections[2]?.querySelector(
       '[data-slot="composer-settings-section-header"]'
     );
-    expect(promptHeader?.textContent).toContain('2 enabled');
-    expect(promptHeader?.textContent).toContain('home.openPromptLibrary');
+    expect(promptHeader?.textContent).toContain('(2)');
+    expect(promptHeader?.querySelector('[aria-label="2 enabled"]')).not.toBeNull();
+    expect(promptHeader?.querySelector('[aria-label="home.openPromptLibrary"]')).not.toBeNull();
     expect(host.textContent).not.toContain('home.promptConfigurationDescription');
     expect(host.textContent).toContain('Detailed global prompt');
     expect(host.textContent).toContain('Detailed project prompt');
@@ -175,8 +175,8 @@ describe('ComposerSettingsContent', () => {
     await act(async () => projectPromptToggle?.click());
     expect(mocks.settingsStore.save).toHaveBeenCalled();
 
-    const libraryButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
-      (button) => button.textContent?.includes('home.openPromptLibrary')
+    const libraryButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="home.openPromptLibrary"]'
     );
     await act(async () => libraryButton?.click());
 
