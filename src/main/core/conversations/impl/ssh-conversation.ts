@@ -27,6 +27,7 @@ import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
+import { withExecutionModeInstructions } from '../execution-mode';
 import {
   recordConversationAuthProvider,
   snapshotTaskDiffOnSessionExit,
@@ -161,8 +162,9 @@ export class SshConversationProvider implements ConversationProvider {
           runtimeId: conversation.runtimeId,
         });
       }
-      const appendSystemPrompt = await getEnabledPromptPrinciplesText(
-        await this.resolveProjectPromptPrinciples?.()
+      const appendSystemPrompt = withExecutionModeInstructions(
+        await getEnabledPromptPrinciplesText(await this.resolveProjectPromptPrinciples?.()),
+        conversation.executionMode
       );
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const terminalThemeMode = await resolveTerminalThemeMode();
@@ -181,6 +183,7 @@ export class SshConversationProvider implements ConversationProvider {
         appendSystemPrompt,
         model,
         terminalThemeMode,
+        executionMode: conversation.executionMode,
       });
 
       const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);

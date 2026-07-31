@@ -54,6 +54,7 @@ import {
 import { getReservedCodexThreadIds } from '../codex-thread-reservations';
 import { ensureCodexThreadUnarchived } from '../codex-unarchive';
 import { getConversationRuntimeStateRoot } from '../conversation-session-source';
+import { withExecutionModeInstructions } from '../execution-mode';
 import { withRuntimeStateRoot } from '../session-state-roots';
 import {
   recordConversationAuthProvider,
@@ -349,8 +350,9 @@ export class LocalConversationProvider implements ConversationProvider {
         pendingImagePaths && !useClipboardImagePaste
           ? substituteImageMentions(initialPrompt, pendingImagePaths)
           : initialPrompt;
-      const appendSystemPrompt = await getEnabledPromptPrinciplesText(
-        await this.resolveProjectPromptPrinciples?.()
+      const appendSystemPrompt = withExecutionModeInstructions(
+        await getEnabledPromptPrinciplesText(await this.resolveProjectPromptPrinciples?.()),
+        conversation.executionMode
       );
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const terminalThemeMode = await resolveTerminalThemeMode();
@@ -368,6 +370,7 @@ export class LocalConversationProvider implements ConversationProvider {
         model,
         terminalThemeMode,
         skillPolicy: conversation.skillPolicy,
+        executionMode: conversation.executionMode,
       });
       const argsWithNotify = withCodexRuntimeNotifyArgs(conversation.runtimeId, baseArgs, port);
 

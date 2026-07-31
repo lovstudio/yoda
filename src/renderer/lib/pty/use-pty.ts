@@ -28,22 +28,18 @@ import {
   shouldPasteToTerminal,
 } from './pty-keybindings';
 import { writeTextToClipboard } from './terminal-clipboard';
-import {
-  getTerminalFileLinkAtCell,
-  registerTerminalFileLinkProvider,
-  type TerminalFileLinkOptions,
-} from './terminal-file-links';
+import type { TerminalFileLinkOptions } from './terminal-file-links';
 import { transformTerminalPasteText } from './terminal-image-paste';
 import { registerTerminalImeDiagnostics } from './terminal-ime-diagnostics';
 import { registerTerminalImeNativePunctuation } from './terminal-ime-native-punctuation';
 import { isTerminalLinkActivation } from './terminal-link-activation';
+import {
+  getTerminalLinkTargetAtCell,
+  registerTerminalLinkProviders,
+} from './terminal-link-resolver';
 import type { TerminalLinkTarget } from './terminal-link-target';
 import { TERMINAL_RELAYOUT_EVENT } from './terminal-relayout';
-import {
-  getTerminalWebLinkAtCell,
-  registerTerminalWebLinkProvider,
-  type TerminalWebLinkOptions,
-} from './terminal-web-links';
+import type { TerminalWebLinkOptions } from './terminal-web-links';
 
 const MIN_TERMINAL_COLS = 2;
 const MIN_TERMINAL_ROWS = 1;
@@ -485,16 +481,7 @@ export function usePty(
     if (!cell) return null;
 
     const position = { x: cell.col + 1, y: cell.row + 1 };
-    const fileOptions = fileLinksRef.current;
-    if (fileOptions) {
-      const fileMatch = getTerminalFileLinkAtCell(terminal, cell.row + 1, position, fileOptions);
-      if (fileMatch) return { kind: 'file', target: fileMatch.target };
-    }
-
-    const webMatch = getTerminalWebLinkAtCell(terminal, cell.row + 1, position);
-    if (webMatch) return { kind: 'url', url: webMatch.url };
-
-    return null;
+    return getTerminalLinkTargetAtCell(terminal, cell.row + 1, position, fileLinksRef.current);
   }, []);
 
   const pasteFromClipboard = useCallback(() => {
@@ -708,16 +695,12 @@ export function usePty(
       const imeDiagnosticsDisposable = registerTerminalImeDiagnostics(terminal);
       cleanups.push(() => imeDiagnosticsDisposable.dispose());
 
-      const fileLinkProviderDisposable = registerTerminalFileLinkProvider(
+      const terminalLinkProvidersDisposable = registerTerminalLinkProviders(
         terminal,
-        () => fileLinksRef.current
+        () => fileLinksRef.current,
+        () => ({ onOpen: openUrl })
       );
-      cleanups.push(() => fileLinkProviderDisposable.dispose());
-
-      const webLinkProviderDisposable = registerTerminalWebLinkProvider(terminal, () => ({
-        onOpen: openUrl,
-      }));
-      cleanups.push(() => webLinkProviderDisposable.dispose());
+      cleanups.push(() => terminalLinkProvidersDisposable.dispose());
 
       // OSC 8 hyperlinks go through the FrontendPty's link handler — route them
       // through the same funnel while this pane hosts the terminal.

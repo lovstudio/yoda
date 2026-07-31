@@ -41,6 +41,7 @@ import {
   findSidebarSelectionRow,
   resolveSidebarSelectionTarget,
   revealSidebarSelectionRow,
+  shouldSuppressSidebarRouteScroll,
 } from './sidebar-selection-sync';
 import { SidebarSpace } from './sidebar-space';
 import { SidebarStatusBar } from './sidebar-status-bar';
@@ -65,6 +66,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const sidebarContentRef = React.useRef<HTMLDivElement>(null);
   const lastScrolledSelectionRef = React.useRef<string | null>(null);
   const lastScrolledRowRef = React.useRef<HTMLElement | null>(null);
+  const suppressedRouteScrollKeyRef = React.useRef<string | null>(null);
   const pinnedApps = (aiLabApps.data ?? []).filter((app) => app.pinned);
   const currentProjectId =
     currentView === 'task'
@@ -82,6 +84,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       }
     : null;
   const selectionTarget = resolveSidebarSelectionTarget(routeSelection, selectionRevealRequest);
+  const routeSelectionKey = routeSelection?.key ?? null;
   const selectionProjectId = selectionTarget?.projectId;
   const selectionTaskId = selectionTarget?.taskId;
   const selectionKey = selectionTarget?.key ?? null;
@@ -117,9 +120,25 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   React.useEffect(() => {
     const root = sidebarContentRef.current;
     if (!selectionKey || !selectionProjectId || !root) {
+      suppressedRouteScrollKeyRef.current = null;
       lastScrolledSelectionRef.current = null;
       lastScrolledRowRef.current = null;
       return;
+    }
+    if (
+      shouldSuppressSidebarRouteScroll(
+        selectionKey,
+        selectionRequestId,
+        suppressedRouteScrollKeyRef.current
+      )
+    ) {
+      suppressedRouteScrollKeyRef.current = null;
+      lastScrolledSelectionRef.current = selectionKey;
+      lastScrolledRowRef.current = null;
+      return;
+    }
+    if (selectionRequestId === undefined) {
+      suppressedRouteScrollKeyRef.current = null;
     }
 
     const scrollSelectionIntoView = () => {
@@ -136,6 +155,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       lastScrolledSelectionRef.current = selectionKey;
       lastScrolledRowRef.current = row;
       if (selectionRequestId !== undefined) {
+        suppressedRouteScrollKeyRef.current = routeSelectionKey;
         sidebarStore.completeSelectionReveal(selectionRequestId);
       }
     };
@@ -149,7 +169,14 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       subtree: true,
     });
     return () => observer.disconnect();
-  }, [selectionKey, selectionProjectId, selectionRequestId, selectionTaskId, shouldFocusSelection]);
+  }, [
+    routeSelectionKey,
+    selectionKey,
+    selectionProjectId,
+    selectionRequestId,
+    selectionTaskId,
+    shouldFocusSelection,
+  ]);
   const skillIssueLabel =
     skillIssueCount > 0 ? t('sidebar.skillIssues', { count: skillIssueCount }) : null;
   const skillIssueTitle =

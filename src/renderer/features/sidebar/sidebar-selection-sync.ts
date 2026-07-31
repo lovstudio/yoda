@@ -30,6 +30,14 @@ export function resolveSidebarSelectionTarget(
   return routeSelection ? { ...routeSelection, shouldFocus: false } : null;
 }
 
+export function shouldSuppressSidebarRouteScroll(
+  selectionKey: string | null,
+  requestId: number | undefined,
+  suppressedRouteKey: string | null
+): boolean {
+  return requestId === undefined && selectionKey !== null && selectionKey === suppressedRouteKey;
+}
+
 export function findSidebarSelectionRow(
   root: HTMLElement | null,
   projectId: string,
@@ -52,14 +60,25 @@ export function revealSidebarSelectionRow(
   taskId?: string,
   focus = false
 ): HTMLElement | null {
+  if (!root) return null;
   const row = findSidebarSelectionRow(root, projectId, taskId);
   if (!row) return null;
-  row.scrollIntoView({ block: 'nearest' });
   if (focus) {
+    scrollSidebarSelectionRow(root, row);
     row.focus({ preventScroll: true });
     highlightSidebarSelectionRow(row);
+  } else {
+    row.scrollIntoView({ block: 'nearest' });
   }
   return row;
+}
+
+function scrollSidebarSelectionRow(root: HTMLElement, row: HTMLElement): void {
+  const rootRect = root.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  const centeredOffset = Math.max(0, (root.clientHeight - row.offsetHeight) / 2);
+  const top = Math.max(0, root.scrollTop + rowRect.top - rootRect.top - centeredOffset);
+  root.scrollTo({ top, behavior: 'smooth' });
 }
 
 function highlightSidebarSelectionRow(row: HTMLElement): void {
