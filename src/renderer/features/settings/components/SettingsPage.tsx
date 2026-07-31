@@ -132,9 +132,9 @@ function useSettingsTabGroups(): SettingsTabEntry[][] {
     // (prompts, skills, MCP, custom agents, automation) lives in the Library.
     [
       { id: 'models', label: t('settings.tabs.models') },
-      { id: 'llm', label: t('settings.tabs.llm') },
       { id: 'maas', label: t('settings.tabs.maas') },
       { id: 'clis-models', label: t('settings.tabs.agents') },
+      { id: 'llm', label: t('settings.tabs.llm') },
     ],
     // Product integrations and companion surfaces.
     [
