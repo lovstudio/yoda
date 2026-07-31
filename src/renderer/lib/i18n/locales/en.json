@@ -2564,7 +2564,6 @@
       "moveTo": "Move to group",
       "reorderGroup": "Drag {{name}} to reorder this group",
       "reorderPrompt": "Drag {{name}} to reorder it within this group",
-      "toggleInjection": "Toggle dynamic injection for the {{name}} group",
       "ungrouped": "Ungrouped",
       "count": "{{count}}"
     },
