@@ -229,7 +229,7 @@ describe('Models settings', () => {
   it('creates a custom provider with an initial model and deletes it after confirmation', async () => {
     await renderModelsSettings(root, queryClient);
 
-    await clickButtonContaining(host, 'settings.models.addProvider');
+    await selectProvider(host, 'settings.models.addProvider');
     const nameInput = host.querySelector<HTMLInputElement>(
       'input[aria-label="settings.models.providerName"]'
     );
