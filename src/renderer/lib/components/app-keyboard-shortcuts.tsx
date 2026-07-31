@@ -52,7 +52,7 @@ export function AppKeyboardShortcuts() {
       showCommandPalette({
         projectId: currentProjectId,
         taskId: currentTaskId,
-        initialQuery: 'in:tasks ',
+        queryMemory: 'task-search',
       }),
     { enabled: commandPaletteTasksHotkey !== null }
   );
