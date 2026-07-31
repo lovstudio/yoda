@@ -33,7 +33,25 @@ describe('shared composer settings surfaces', () => {
     expect(content).toContain('<PromptInjectionControls');
     expect(content).toContain('variant="compact"');
     expect(content).toContain('<CompactProjectPromptControls');
+    expect(content).toContain('data-slot="compact-prompt-list"');
+    expect(content).not.toContain('max-h-48 overflow-y-auto overscroll-contain');
     expect(content).not.toContain('<InstructionFilesSection');
+  });
+
+  it('guides new prompts toward one concise instruction', () => {
+    const zhCN = JSON.parse(
+      readFileSync(new URL('../lib/i18n/locales/zh-CN.json', import.meta.url), 'utf8')
+    ) as {
+      promptLibrary: {
+        form: { contentPlaceholder: string };
+        project: { contentPlaceholder: string };
+      };
+    };
+
+    expect(zhCN.promptLibrary.form.contentPlaceholder).toContain('尽量简短');
+    expect(zhCN.promptLibrary.form.contentPlaceholder).toContain('一条');
+    expect(zhCN.promptLibrary.project.contentPlaceholder).toContain('尽量简短');
+    expect(zhCN.promptLibrary.project.contentPlaceholder).toContain('一条');
   });
 
   it('places Config before the existing right-side workspace utilities', () => {

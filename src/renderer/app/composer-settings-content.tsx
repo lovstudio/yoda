@@ -205,7 +205,7 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
           }
         >
           {promptPrinciples.length > 0 || (projectId && projectPrincipleItems.length > 0) ? (
-            <div className="max-h-48 overflow-y-auto overscroll-contain">
+            <div data-slot="compact-prompt-list" className="min-w-0">
               {promptPrinciples.length > 0 ? (
                 <PromptInjectionControls
                   variant="compact"

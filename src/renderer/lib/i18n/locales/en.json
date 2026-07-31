@@ -2563,7 +2563,7 @@
       "groupPlaceholder": "e.g. Development & debugging",
       "groupHint": "Choose an existing group or enter a new one. Leave blank for Ungrouped.",
       "content": "Prompt",
-      "contentPlaceholder": "The prompt text to reuse…",
+      "contentPlaceholder": "Keep it brief and focused on one reusable instruction…",
       "extraInfo": "Extra information",
       "extraInfoPlaceholder": "Optional notes, reference URL, or extension entry point"
     },
@@ -2604,7 +2604,7 @@
       "empty": "This project has no project-only prompts yet.",
       "untitled": "Untitled project prompt",
       "namePlaceholder": "Prompt name",
-      "contentPlaceholder": "Project-level prompt content…",
+      "contentPlaceholder": "Keep it brief and focused on one project-specific instruction…",
       "toggle": "Toggle {{name}}",
       "remove": "Remove project prompt",
       "saveFailed": "Failed to save project prompts"

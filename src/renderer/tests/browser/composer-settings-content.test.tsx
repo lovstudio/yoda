@@ -169,6 +169,11 @@ describe('ComposerSettingsContent', () => {
     expect(
       host.querySelector('[data-slot="prompt-injection-controls"][data-variant="compact"]')
     ).not.toBeNull();
+    const promptList = host.querySelector<HTMLElement>('[data-slot="compact-prompt-list"]');
+    expect(promptList).not.toBeNull();
+    expect(promptList?.className).not.toContain('overflow-y-auto');
+    expect(host.querySelectorAll('[data-slot="prompt-injection-row"]')).toHaveLength(2);
+    expect(host.querySelectorAll('[data-slot="project-prompt-injection-row"]')).toHaveLength(1);
 
     const projectPromptToggle = host.querySelector<HTMLButtonElement>(
       '[aria-label="toggle Detailed project prompt"]'

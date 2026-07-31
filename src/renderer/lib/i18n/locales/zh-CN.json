@@ -2563,7 +2563,7 @@
       "groupPlaceholder": "例如：开发与调试",
       "groupHint": "可输入已有分组或新分组；留空则归入“未分组”。",
       "content": "提示词内容",
-      "contentPlaceholder": "要复用的提示词文本…",
+      "contentPlaceholder": "尽量简短，只写一条明确、可复用的指令…",
       "extraInfo": "额外信息",
       "extraInfoPlaceholder": "可选：补充说明、参考网址或扩展入口"
     },
@@ -2604,7 +2604,7 @@
       "empty": "当前项目还没有专属提示词。",
       "untitled": "未命名项目提示词",
       "namePlaceholder": "提示词名称",
-      "contentPlaceholder": "项目级提示词内容…",
+      "contentPlaceholder": "尽量简短，只写一条项目专属指令…",
       "toggle": "切换「{{name}}」",
       "remove": "移除项目提示词",
       "saveFailed": "保存项目提示词失败"
