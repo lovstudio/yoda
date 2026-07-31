@@ -487,6 +487,12 @@ function showCopyFailure(t: TFunction): void {
   });
 }
 
+function stopTaskDragGesture(event: React.SyntheticEvent): void {
+  // Menu popups are portaled into document.body, but React still bubbles their
+  // events through the owning task row where dnd-kit installs its drag sensor.
+  event.stopPropagation();
+}
+
 interface TaskContextMenuProps extends TaskMenuActions {
   children: React.ReactNode;
   onOpenChange?: (open: boolean) => void;
@@ -543,7 +549,11 @@ export function TaskContextMenu({ children, onOpenChange, ...actions }: TaskCont
   return (
     <ContextMenu onOpenChange={onOpenChange}>
       <ContextMenuTrigger>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="w-max overflow-x-visible">
+      <ContextMenuContent
+        className="w-max overflow-x-visible"
+        onPointerDown={stopTaskDragGesture}
+        onMouseDown={stopTaskDragGesture}
+      >
         <TaskContextMenuItems {...actions} />
       </ContextMenuContent>
     </ContextMenu>
@@ -568,7 +578,12 @@ export function TaskActionsMenu({
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger render={trigger} />
-      <DropdownMenuContent align={align} className="w-max min-w-44 overflow-x-visible">
+      <DropdownMenuContent
+        align={align}
+        className="w-max min-w-44 overflow-x-visible"
+        onPointerDown={stopTaskDragGesture}
+        onMouseDown={stopTaskDragGesture}
+      >
         {items.map((item, index) => {
           const prev = items[index - 1];
           const showSeparator = prev && prev.group !== item.group;
