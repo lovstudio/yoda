@@ -75,6 +75,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const showChangeConnectionModal = useShowModal('changeProjectConnectionModal');
   const showManageRunScripts = useShowModal('manageRunScriptsModal');
   const showCaptureAutomation = useShowModal('captureProjectAutomationModal');
+  const showManageQuickActions = useShowModal('manageQuickActionsModal');
   const showRenameProject = useShowModal('renameProjectModal');
   const showMoveProjectPath = useShowModal('moveProjectPathModal');
   const showConfirmRemoveProject = useShowModal('confirmActionModal');
@@ -199,16 +200,21 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     async (action: QuickAction) => {
       const mounted = asMounted(getProjectStore(projectId));
       const repository = getRepositoryStore(projectId);
-      if (!mounted || !repository) return;
+      if (!mounted) return;
       try {
-        await Promise.all([repository.localData.load(), repository.remoteData.load()]);
+        if (action.kind !== 'shell') {
+          if (!repository) return;
+          await Promise.all([repository.localData.load(), repository.remoteData.load()]);
+        }
         const result = await runProjectQuickAction({
           project: mounted,
           action,
           runtimeId: expressProviderId,
-          defaultBranch: repository.defaultBranch,
+          defaultBranch: repository?.defaultBranch,
         });
-        navigate('task', { projectId, taskId: result.taskId });
+        if (result.kind === 'agent') {
+          navigate('task', { projectId, taskId: result.taskId });
+        }
       } catch (error) {
         log.warn('sidebar quick action failed', {
           projectId,
@@ -228,16 +234,12 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
   const handleRunLaunchCommand = useCallback(
     async (launchCommand: ProjectLaunchCommand) => {
       const mounted = asMounted(getProjectStore(projectId));
-      const repository = getRepositoryStore(projectId);
-      if (!mounted || !repository) return;
+      if (!mounted) return;
       try {
-        await Promise.all([repository.localData.load(), repository.remoteData.load()]);
-        const taskId = await runProjectLaunchCommand({
+        await runProjectLaunchCommand({
           project: mounted,
           launchCommand,
-          defaultBranch: repository.defaultBranch,
         });
-        navigate('task', { projectId, taskId });
       } catch (error) {
         log.warn('sidebar launch command failed', {
           projectId,
@@ -251,7 +253,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         });
       }
     },
-    [navigate, projectId, t]
+    [projectId, t]
   );
 
   const handleAddTask = useCallback(async () => {
@@ -407,6 +409,8 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
       project.state === 'unregistered'
         ? undefined
         : () => showCaptureAutomation({ projectId, projectName: project.displayName }),
+    onManageQuickActions:
+      project.state === 'unregistered' ? undefined : () => showManageQuickActions({ projectId }),
     quickActions,
     launchCommands,
     launchCommandsLoading,

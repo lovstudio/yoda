@@ -9,12 +9,10 @@ import {
   asMounted,
   getProjectSettingsStore,
   getProjectStore,
-  getRepositoryStore,
 } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useEffectiveRuntime } from '@renderer/features/tasks/conversations/use-effective-runtime';
 import { rpc } from '@renderer/lib/ipc';
-import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
@@ -48,7 +46,6 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   onClose,
 }: Props) {
   const { t } = useTranslation();
-  const { navigate } = useNavigate();
   const [loading, setLoading] = useState(true);
   const [compiling, setCompiling] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -209,19 +206,12 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
       if (!action) return;
 
       try {
-        const repository = getRepositoryStore(projectId);
-        await Promise.all([repository?.localData.load(), repository?.remoteData.load()]);
-        const result = await runProjectQuickAction({
-          project,
-          action,
-          defaultBranch: repository?.defaultBranch,
-        });
+        const result = await runProjectQuickAction({ project, action });
         if (result.kind !== 'shell') {
           setError(t('sidebar.captureAutomation.savedButExecutionFailed'));
           return;
         }
         onSuccess();
-        navigate('task', { projectId, taskId: result.taskId });
       } catch (executionError) {
         setError(
           t('sidebar.captureAutomation.savedButExecutionFailedWithReason', {

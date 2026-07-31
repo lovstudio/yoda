@@ -25,19 +25,16 @@ const project = {
 describe('runProjectLaunchCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.runProjectQuickAction.mockResolvedValue({ kind: 'shell', taskId: 'task-1' });
+    mocks.runProjectQuickAction.mockResolvedValue({ kind: 'shell' });
   });
 
-  it('routes a detected launch command through the shared shell quick-action lifecycle', async () => {
-    const defaultBranch = { type: 'local', branch: 'main' } as const;
-
+  it('routes a detected launch command through the task-free project terminal lifecycle', async () => {
     await expect(
       runProjectLaunchCommand({
         project,
         launchCommand,
-        defaultBranch,
       })
-    ).resolves.toBe('task-1');
+    ).resolves.toBeUndefined();
 
     expect(mocks.runProjectQuickAction).toHaveBeenCalledWith({
       project,
@@ -47,7 +44,6 @@ describe('runProjectLaunchCommand', () => {
         command: 'pnpm run dev',
         kind: 'shell',
       },
-      defaultBranch,
     });
   });
 });

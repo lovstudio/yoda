@@ -252,7 +252,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     provisionedTask?.taskView.isTerminalDrawerOpen &&
       provisionedTask.taskView.activeBottomPanelTab === 'terminals'
   );
-  const terminalActive = provisionedTask ? taskTerminalActive : workspaceShellStore.isShellOpen;
+  const terminalActive = taskTerminalActive || workspaceShellStore.isOpen;
   const canCompactContext = Boolean(
     runtimeId === 'codex' && params?.projectId && params.taskId && activeConversationId
   );
@@ -402,8 +402,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   }, [activeConversation, provisionedTask]);
 
   const toggleTerminal = () => {
+    if (workspaceShellStore.isOpen) {
+      workspaceShellStore.close();
+      return;
+    }
     if (provisionedTask) {
-      if (workspaceShellStore.isOpen) workspaceShellStore.close();
       if (taskTerminalActive) {
         provisionedTask.taskView.setTerminalDrawerOpen(false);
         return;

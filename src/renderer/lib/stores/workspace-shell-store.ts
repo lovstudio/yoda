@@ -4,7 +4,7 @@ import type { WorkspaceShellAction } from '@shared/workspace-shell';
 import { rpc } from '@renderer/lib/ipc';
 import { PtySession } from '@renderer/lib/pty/pty-session';
 
-export type WorkspaceShellMode = 'shell' | 'runtime-action';
+export type WorkspaceShellMode = 'shell' | 'runtime-action' | 'command';
 
 type TerminalSize = { cols: number; rows: number };
 
@@ -16,6 +16,7 @@ export class WorkspaceShellStore {
   mode: WorkspaceShellMode = 'shell';
   runtimeId: RuntimeId | null = null;
   runtimeAction: WorkspaceShellAction | null = null;
+  commandLabel: string | null = null;
   cwd: string | undefined;
   private operationVersion = 0;
 
@@ -100,6 +101,28 @@ export class WorkspaceShellStore {
     }
   }
 
+  async runCommand(command: string, cwd: string, label: string): Promise<void> {
+    const normalizedCwd = cwd.trim();
+    const operation = this.beginOperation('command', normalizedCwd, null, null, label);
+    const previousSize = this.currentSize();
+    try {
+      const session = await this.replaceSession(operation);
+      if (!session) return;
+      await rpc.workspaceShell.runCommand(session.sessionId, {
+        command,
+        cwd: normalizedCwd,
+        initialSize: this.currentSize() ?? previousSize,
+      });
+      session.enableConnection();
+      await session.connect();
+    } catch (error) {
+      this.recordError(operation, error);
+      throw error;
+    } finally {
+      this.finishOperation(operation);
+    }
+  }
+
   close(): void {
     this.isOpen = false;
   }
@@ -114,6 +137,7 @@ export class WorkspaceShellStore {
     this.mode = 'shell';
     this.runtimeId = null;
     this.runtimeAction = null;
+    this.commandLabel = null;
     this.cwd = undefined;
     session?.dispose();
     if (session) await rpc.workspaceShell.stop(session.sessionId);
@@ -123,7 +147,8 @@ export class WorkspaceShellStore {
     mode: WorkspaceShellMode,
     cwd: string | undefined,
     runtimeId: RuntimeId | null = null,
-    runtimeAction: WorkspaceShellAction | null = null
+    runtimeAction: WorkspaceShellAction | null = null,
+    commandLabel: string | null = null
   ): number {
     this.operationVersion += 1;
     this.isOpen = true;
@@ -132,6 +157,7 @@ export class WorkspaceShellStore {
     this.mode = mode;
     this.runtimeId = runtimeId;
     this.runtimeAction = runtimeAction;
+    this.commandLabel = commandLabel;
     this.cwd = cwd;
     return this.operationVersion;
   }
