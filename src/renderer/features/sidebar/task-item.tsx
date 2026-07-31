@@ -1,9 +1,23 @@
-import { Archive, ChevronRight, GitBranch, Loader2, MoreHorizontal, Users } from 'lucide-react';
+import {
+  Archive,
+  Bookmark,
+  ChevronRight,
+  GitBranch,
+  Loader2,
+  MoreHorizontal,
+  Users,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { selectCurrentPr } from '@shared/pull-requests';
+import {
+  DEFAULT_TASK_APPEARANCE_SETTINGS,
+  resolveTaskAppearance,
+  type ResolvedTaskAppearance,
+} from '@shared/task-appearance';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { TaskSidebarAgentStatus } from '@renderer/features/sidebar/task-sidebar-agent-status';
 import {
   TaskActionsMenu,
@@ -17,6 +31,10 @@ import {
   getTaskStore,
   taskSessionStatusSummary,
 } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  taskIdleOpacityClassName,
+  taskTitleStyleClassName,
+} from '@renderer/features/tasks/task-appearance-classes';
 import { TreeGuideSlot } from '@renderer/lib/components/tree-guide-slot';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
@@ -25,7 +43,6 @@ import { branchColor } from '@renderer/utils/branch-color';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
 import { SidebarItemMiniButton, SidebarMenuRow } from './sidebar-primitives';
-import { shouldDeemphasizeLongTermTask } from './task-visual-state';
 
 interface SidebarTaskItemProps {
   taskId: string;
@@ -62,6 +79,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const { navigate } = useNavigate();
 
   const { params } = useParams('task');
+  const { value: interfaceSettings } = useAppSettingsKey('interface');
   // The selected task stays highlighted even after navigating to a non-task view
   // (settings, skills, etc.) — selection is only cancelled by switching to another
   // task, not by leaving the task view. `viewParamsStore['task']` persists the
@@ -93,7 +111,15 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // its hover-to-interrupt affordance.
   const hasAgentNotification = taskSessionStatusSummary(task).primaryStatus !== null;
   const isIdle = !isBootstrapping && !hasAgentNotification;
-  const isDeemphasized = shouldDeemphasizeLongTermTask(task.data, isIdle);
+  const appearance = resolveTaskAppearance(
+    interfaceSettings?.taskAppearance ?? DEFAULT_TASK_APPEARANCE_SETTINGS,
+    {
+      isLongTerm: task.data.isLongTerm,
+      needsReview: task.data.needsReview,
+      isIdle,
+      isMultiAgent,
+    }
+  );
 
   const taskName = task.data.name;
   const treeDepth = rowVariant === 'underProject' ? Math.min(depth, TASK_TREE_MAX_VISUAL_DEPTH) : 0;
@@ -112,10 +138,15 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const branchDisplay = sidebarStore.taskBranchDisplay;
   const taskIndentClass =
     rowVariant === 'underProject' ? (hasRootToggle ? undefined : 'pl-8') : 'pl-2';
-  const multiAgentLabel = t('sidebar.multiAgentTask');
-  const showMultiAgentIconInReservedSlot =
-    isMultiAgent && rowVariant === 'underProject' && treeDepth === 0 && !hasRootToggle;
-  const showMultiAgentIconInline = isMultiAgent && !showMultiAgentIconInReservedSlot;
+  const markerLabel = t(
+    isMultiAgent
+      ? 'settings.taskAppearance.multiAgent'
+      : task.data.isLongTerm
+        ? 'settings.taskAppearance.longTerm'
+        : 'settings.taskAppearance.standard'
+  );
+  const showMarkerInReservedSlot = appearance.marker !== 'none' && rowVariant === 'underProject';
+  const showMarkerInline = appearance.marker !== 'none' && !showMarkerInReservedSlot;
 
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
@@ -180,8 +211,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           // anchors the compact branch gutter inside the pl-8 icon column.
           'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1 transition-[color,background-color,opacity]',
           taskIndentClass,
-          isDeemphasized &&
-            'opacity-70 hover:opacity-100 focus-within:opacity-100 data-[active=true]:opacity-100'
+          taskIdleOpacityClassName(appearance.idleOpacity),
+          appearance.idleOpacity < 100 &&
+            'hover:opacity-100 focus-within:opacity-100 data-[active=true]:opacity-100'
         )}
         data-sidebar-entity="task"
         data-sidebar-project-id={projectId}
@@ -275,19 +307,25 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               )}
             />
           )}
-          {showMultiAgentIconInReservedSlot && (
-            <MultiAgentTaskIcon
-              label={multiAgentLabel}
-              className="absolute left-1 top-1/2 -translate-y-1/2"
+          {showMarkerInReservedSlot && (
+            <TaskAppearanceMarker
+              marker={appearance.marker}
+              label={markerLabel}
+              className={cn(
+                'absolute left-1 top-1/2 -translate-y-1/2',
+                hasRootToggle && 'transition-opacity group-hover/row:opacity-0'
+              )}
             />
           )}
-          {showMultiAgentIconInline && <MultiAgentTaskIcon label={multiAgentLabel} />}
+          {showMarkerInline && (
+            <TaskAppearanceMarker marker={appearance.marker} label={markerLabel} />
+          )}
           <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
             <div className="flex min-w-0 items-center gap-1">
               <span
                 className={cn(
                   'min-w-0 truncate text-left transition-colors',
-                  task.data.isLongTerm && 'italic',
+                  taskTitleStyleClassName(appearance.titleStyle),
                   (isBootstrapping || isArchiving) && 'text-foreground/40'
                 )}
               >
@@ -411,18 +449,31 @@ const RenderPrBadge = observer(function RenderPrBadge({ task }: { task: TaskStor
   return pr ? <PrBadge variant="compact" pr={pr} /> : null;
 });
 
-function MultiAgentTaskIcon({ label, className }: { label: string; className?: string }) {
+function TaskAppearanceMarker({
+  marker,
+  label,
+  className,
+}: {
+  marker: ResolvedTaskAppearance['marker'];
+  label: string;
+  className?: string;
+}) {
+  if (marker === 'none') return null;
+
   return (
     <span
       role="img"
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex size-6 shrink-0 items-center justify-center text-amber-700 dark:text-amber-300',
+        'inline-flex size-6 shrink-0 items-center justify-center',
+        marker === 'users' ? 'text-amber-700 dark:text-amber-300' : 'text-foreground-tertiary',
         className
       )}
     >
-      <Users className="size-4" />
+      {marker === 'users' && <Users className="size-4" />}
+      {marker === 'bookmark' && <Bookmark className="size-3.5 fill-current" />}
+      {marker === 'dot' && <span aria-hidden className="size-1.5 rounded-full bg-current" />}
     </span>
   );
 }

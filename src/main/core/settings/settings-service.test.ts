@@ -87,4 +87,39 @@ describe('SettingsStore', () => {
       idleSessionTimeoutMinutes: 5,
     });
   });
+
+  it('adds task appearance defaults to legacy interface settings', async () => {
+    mocks.selectExecute.mockResolvedValue([
+      {
+        key: 'interface',
+        value: JSON.stringify({
+          taskHoverAction: 'archive',
+          autoRightSidebarBehavior: true,
+          newTaskOpenMode: 'home',
+          agentReplyDisplayLevel: 'concise',
+          dockSessionHistory: true,
+          dockSessionHistoryRows: 5,
+        }),
+      },
+    ]);
+
+    const result = await new SettingsStore().get('interface');
+
+    expect(result.taskHoverAction).toBe('archive');
+    expect(result.taskAppearance).toEqual({
+      standard: {
+        titleStyle: 'regular',
+        idleOpacity: 100,
+        marker: 'none',
+      },
+      longTerm: {
+        titleStyle: 'italic',
+        idleOpacity: 70,
+        marker: 'none',
+      },
+      multiAgent: {
+        marker: 'users',
+      },
+    });
+  });
 });

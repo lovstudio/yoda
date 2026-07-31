@@ -12,6 +12,7 @@ import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
   DEFAULT_SUMMARY_CONTEXT_RECENT,
 } from '@shared/session-summary';
+import { DEFAULT_TASK_APPEARANCE_SETTINGS } from '@shared/task-appearance';
 import {
   DEFAULT_TASK_NAMING_CONTEXT,
   DEFAULT_TASK_NAMING_MODEL,
@@ -137,6 +138,7 @@ export const SETTINGS_DEFAULTS = {
     agentReplyDisplayLevel: 'concise' as const,
     dockSessionHistory: true,
     dockSessionHistoryRows: 3,
+    taskAppearance: DEFAULT_TASK_APPEARANCE_SETTINGS,
   },
   browserPreview: {
     enabled: true,
