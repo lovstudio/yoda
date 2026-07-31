@@ -213,7 +213,10 @@ describe('Models settings', () => {
     expect(host.textContent).toContain('settings.models.updateStatus.snapshot');
     expect(host.textContent).toContain('settings.models.officialBadge');
     const catalogActions = host.querySelector<HTMLElement>('[data-testid="model-catalog-actions"]');
+    const catalogStatus = host.querySelector<HTMLElement>('[data-testid="model-catalog-status"]');
     expect(catalogActions).not.toBeNull();
+    expect(catalogActions?.contains(catalogStatus)).toBe(true);
+    expect(catalogStatus?.title).toContain('settings.models.officialSnapshotNeedsKey');
     expect(catalogActions?.textContent).toContain('settings.models.customAdd');
     expect(catalogActions?.textContent).toContain('settings.models.refresh');
 
