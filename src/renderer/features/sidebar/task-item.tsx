@@ -33,6 +33,7 @@ import { branchColor } from '@renderer/utils/branch-color';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
 import { SidebarItemMiniButton, SidebarMenuRow } from './sidebar-primitives';
+import { shouldDeemphasizeLongTermTask } from './task-visual-state';
 
 interface SidebarTaskItemProps {
   taskId: string;
@@ -99,6 +100,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // click target (jump to the pending session) and the working spinner keeps
   // its hover-to-interrupt affordance.
   const hasAgentNotification = taskSessionStatusSummary(task).primaryStatus !== null;
+  const isDeemphasized = shouldDeemphasizeLongTermTask(task.data) && !hasAgentNotification;
 
   const taskName = task.data.name;
   const treeDepth = rowVariant === 'underProject' ? Math.min(depth, TASK_TREE_MAX_VISUAL_DEPTH) : 0;
@@ -189,8 +191,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           // Two-line row: task name on top, branch below. Height is intrinsic
           // (min-h-8 keeps branch-less rows at the original 32px). `relative`
           // anchors the compact branch gutter inside the pl-8 icon column.
-          'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1',
-          taskIndentClass
+          'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1 transition-[color,background-color,opacity]',
+          taskIndentClass,
+          isDeemphasized &&
+            'opacity-55 hover:opacity-100 focus-within:opacity-100 data-[active=true]:opacity-100'
         )}
         data-sidebar-entity="task"
         data-sidebar-project-id={projectId}
