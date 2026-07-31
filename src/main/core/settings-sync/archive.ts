@@ -28,6 +28,7 @@ export const PORTABLE_APP_SETTINGS_KEYS = [
   'kanban',
   'maas',
   'llm',
+  'modelProviders',
   'defaultRuntime',
   'keyboard',
   'notifications',

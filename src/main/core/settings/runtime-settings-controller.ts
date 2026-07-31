@@ -55,7 +55,6 @@ export const runtimeSettingsController = createRPCController({
     args: {
       hiddenModels?: string[];
       preferredNamingModel?: string | null;
-      customModels?: string[];
     }
   ) => runtimeModelCandidatesService.updateModelCandidatePreferences(id, args),
 
