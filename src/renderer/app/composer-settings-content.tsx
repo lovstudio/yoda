@@ -20,6 +20,7 @@ import {
   useSetPromptGroupInjectionEnabled,
   useUpdatePrompt,
 } from '@renderer/features/prompt-library/use-prompts';
+import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/auto-trust-worktrees-control';
 import { ContextItem, memoryFileLabel } from '@renderer/features/tasks/components/context-item';
 import { PermissionModeSelect } from '@renderer/features/tasks/components/permission-mode-select';
 import { rpc } from '@renderer/lib/ipc';
@@ -163,6 +164,9 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
               alignContentWithTrigger={false}
             />
           </div>
+          {runtimeId === 'codex' || runtimeId === 'claude' ? (
+            <AutoTrustWorktreesControl compact />
+          ) : null}
           <SystemPromptSection
             runtimeId={runtimeId}
             projectId={projectId}
