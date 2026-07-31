@@ -107,6 +107,7 @@ export async function createConversation(params: CreateConversationParams): Prom
       autoApprove === undefined &&
       permissionMode === undefined &&
       skillPolicy === undefined &&
+      params.executionMode === undefined &&
       sessionSource === undefined &&
       pendingInitialPrompt === undefined
         ? undefined
@@ -114,6 +115,7 @@ export async function createConversation(params: CreateConversationParams): Prom
             autoApprove,
             permissionMode,
             skillPolicy,
+            executionMode: params.executionMode,
             sessionSource,
             pendingInitialPrompt,
           });

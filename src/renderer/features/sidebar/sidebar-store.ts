@@ -831,6 +831,34 @@ export class SidebarStore implements Snapshottable<SidebarSnapshot> {
    * its current route, such as Home's selected-project locator.
    */
   requestSelectionReveal(projectId: string, taskId?: string): void {
+    const project = this.projectManager.projects.get(projectId);
+    if (project) {
+      const task = taskId ? project.mountedProject?.taskManager.tasks.get(taskId) : undefined;
+      const targetIsPinned = this.isProjectPinned(projectId) || task?.data.isPinned === true;
+
+      if (!targetIsPinned) {
+        // A locator is an explicit request to make the target row visible.
+        // Relax only the view options that currently exclude that project.
+        const targetProjectType = project.state === 'unregistered' ? 'local' : project.data?.type;
+        if (this.projectTypeFilter !== 'all' && targetProjectType !== this.projectTypeFilter) {
+          this.projectTypeFilter = 'all';
+        }
+
+        const hiddenByProjectPresence =
+          this.hideProjectsWithoutActiveTasks &&
+          (project.state === 'unregistered'
+            ? project.mode === 'pick'
+            : !this.shouldShowProjectByTaskPresence(project));
+        if (hiddenByProjectPresence) {
+          this.hideProjectsWithoutActiveTasks = false;
+        }
+
+        if (!taskId && (this.taskGroupBy === 'none' || this.taskGroupBy === 'activity')) {
+          this.applyGroupBy('project');
+        }
+      }
+    }
+
     this.revealSelection(projectId, taskId);
     this.selectionRevealRequest = {
       requestId: this.nextSelectionRevealRequestId,

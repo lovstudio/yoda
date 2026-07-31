@@ -2,6 +2,8 @@ import type { RuntimeId } from '@shared/runtime-registry';
 import type { SkillSelectionInput, SkillSessionPolicy } from '@shared/skills/types';
 import type { TaskNamingContextSnapshot, TaskNamingStatus } from '@shared/task-naming';
 
+export type ConversationExecutionMode = 'interactive' | 'automation';
+
 export type Conversation = {
   id: string;
   projectId: string;
@@ -18,6 +20,11 @@ export type Conversation = {
   permissionMode?: string;
   /** Immutable effective skill set captured when this session was created. */
   skillPolicy?: SkillSessionPolicy;
+  /**
+   * Product execution contract for this conversation. Automation sessions are
+   * unattended, single-run jobs rather than open-ended interactive chats.
+   */
+  executionMode?: ConversationExecutionMode;
   /**
    * Provider-native session backing this Yoda conversation. Yoda owns the
    * stable conversation id; the external id/root are provenance and resume
@@ -402,6 +409,8 @@ export type CreateConversationParams = {
   model?: string | null;
   /** Agent profile selection; resolved to concrete paths by the main process. */
   skillSelection?: SkillSelectionInput;
+  /** Defaults to interactive. Automation mode applies an unattended, single-run contract. */
+  executionMode?: ConversationExecutionMode;
   /**
    * Adopt an existing provider-native session without starting a fresh agent.
    * Opening the resulting Yoda conversation resumes this source on demand.

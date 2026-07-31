@@ -1,5 +1,5 @@
 import { Copy, ExternalLink, FileText } from 'lucide-react';
-import { useEffect, useRef, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useEffect, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { FilePathMenuItems } from '@renderer/lib/components/file-path-actions';
@@ -24,31 +24,18 @@ interface Props {
 
 export function TerminalLinkMenu({ state, fileLinks, onClose }: Props) {
   const { t } = useTranslation();
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!state) return;
 
-    const handlePointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
-      onClose();
-    };
-    const handleContextMenu = (event: MouseEvent) => {
-      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
-      onClose();
-    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
 
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    document.addEventListener('contextmenu', handleContextMenu, true);
     document.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('resize', onClose);
     window.addEventListener('blur', onClose);
     return () => {
-      document.removeEventListener('pointerdown', handlePointerDown, true);
-      document.removeEventListener('contextmenu', handleContextMenu, true);
       document.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('resize', onClose);
       window.removeEventListener('blur', onClose);
@@ -59,24 +46,40 @@ export function TerminalLinkMenu({ state, fileLinks, onClose }: Props) {
 
   return createPortal(
     <div
-      ref={menuRef}
-      role="menu"
-      className="fixed z-50 max-h-[min(24rem,calc(100vh-16px))] w-52 overflow-x-hidden overflow-y-auto rounded-md bg-background-quaternary p-1 text-foreground shadow-md ring-1 ring-foreground/10 outline-none"
-      style={{ left: state.x, top: state.y }}
+      data-terminal-link-menu-dismiss-layer
+      className="fixed inset-0 z-50"
       onPointerDown={(event) => event.stopPropagation()}
-      onContextMenu={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }}
     >
-      {state?.target.kind === 'file' ? (
-        <FileMenuItems
-          target={state.target.target}
-          fileLinks={fileLinks}
-          onAfterAction={onClose}
-          t={t}
-        />
-      ) : null}
-      {state?.target.kind === 'url' ? (
-        <UrlMenuItems url={state.target.url} onAfterAction={onClose} t={t} />
-      ) : null}
+      <div
+        role="menu"
+        className="absolute max-h-[min(24rem,calc(100vh-16px))] w-52 overflow-x-hidden overflow-y-auto rounded-md bg-background-quaternary p-1 text-foreground shadow-md ring-1 ring-foreground/10 outline-none"
+        style={{ left: state.x, top: state.y }}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        onContextMenu={(event) => event.stopPropagation()}
+      >
+        {state?.target.kind === 'file' ? (
+          <FileMenuItems
+            target={state.target.target}
+            fileLinks={fileLinks}
+            onAfterAction={onClose}
+            t={t}
+          />
+        ) : null}
+        {state?.target.kind === 'url' ? (
+          <UrlMenuItems url={state.target.url} onAfterAction={onClose} t={t} />
+        ) : null}
+      </div>
     </div>,
     document.body
   );

@@ -174,7 +174,7 @@ const ModelList: React.FC<{
               onCheckedChange={(checked) => onVisibleChange(model.id, checked === true)}
               aria-label={t('agents.models.toggleVisible', { model: model.id })}
             />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
                 <code className="truncate font-mono text-xs">{model.id}</code>
                 {!model.visible && <EyeOff className="h-3.5 w-3.5 shrink-0" />}

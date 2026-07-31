@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   setTaskGroupVisibleLimit: vi.fn(),
   updateHomeDraft: vi.fn(),
+  updateInterface: vi.fn(),
   sidebarStore: {
     projectTypeFilter: 'all',
     taskSortBy: 'updated-at',
@@ -44,10 +45,16 @@ vi.mock('react-i18next', async (importOriginal) => ({
 }));
 
 vi.mock('@renderer/features/settings/use-app-settings-key', () => ({
-  useAppSettingsKey: () => ({
-    value: { expressMode: false },
-    update: mocks.updateHomeDraft,
-  }),
+  useAppSettingsKey: (key: string) =>
+    key === 'interface'
+      ? {
+          value: { newTaskOpenMode: 'home' },
+          update: mocks.updateInterface,
+        }
+      : {
+          value: { expressMode: false },
+          update: mocks.updateHomeDraft,
+        },
 }));
 
 vi.mock('@renderer/lib/layout/navigation-provider', () => ({
@@ -119,5 +126,29 @@ describe('ProjectsSettingsMenu', () => {
     await settle();
 
     expect(mocks.setTaskGroupVisibleLimit).toHaveBeenCalledWith(10);
+  });
+
+  it('lets the user open new tasks in a floating window', async () => {
+    const { ProjectsSettingsMenu } = await import(
+      '@renderer/features/sidebar/projects-group-label'
+    );
+    await act(async () => root.render(createElement(ProjectsSettingsMenu)));
+
+    const viewOptions = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="workspaces.viewOptions"]'
+    );
+    if (!viewOptions) throw new Error('View options trigger is missing');
+    await userEvent.click(viewOptions);
+    await settle();
+
+    const floatingOption = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('button[data-slot="toggle-group-item"]')
+    ).find((button) => button.textContent === 'sidebar.newTaskOpenModal');
+    if (!floatingOption) throw new Error('Floating-window option is missing');
+
+    await userEvent.click(floatingOption);
+    await settle();
+
+    expect(mocks.updateInterface).toHaveBeenCalledWith({ newTaskOpenMode: 'modal' });
   });
 });

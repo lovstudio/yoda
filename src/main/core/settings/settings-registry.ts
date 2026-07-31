@@ -87,6 +87,19 @@ export const SETTINGS_DEFAULTS = {
     promptTranslationProfileId: DEFAULT_LLM_PROFILE_ID,
     promptTranslationShowOriginal: true,
   },
+  modelProviders: {
+    automaticUpdatesEnabled: true,
+    lastAutomaticRefreshAt: null,
+    providers: {},
+    catalogCache: {
+      official: {},
+      aggregate: {
+        models: [],
+        fetchedAt: null,
+        lastAttemptAt: null,
+      },
+    },
+  },
   runtimeModelCandidates: {
     runtimes: {},
   },
@@ -120,6 +133,7 @@ export const SETTINGS_DEFAULTS = {
   interface: {
     taskHoverAction: 'delete' as const,
     autoRightSidebarBehavior: false,
+    newTaskOpenMode: 'home' as const,
     agentReplyDisplayLevel: 'concise' as const,
     dockSessionHistory: true,
     dockSessionHistoryRows: 3,

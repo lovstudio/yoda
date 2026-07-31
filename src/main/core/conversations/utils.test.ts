@@ -71,6 +71,16 @@ describe('mapConversationRowToConversation', () => {
     });
   });
 
+  it('restores the persisted automation execution contract', () => {
+    const conversation = mapConversationRowToConversation(
+      conversationRow({
+        config: JSON.stringify({ executionMode: 'automation' }),
+      })
+    );
+
+    expect(conversation.executionMode).toBe('automation');
+  });
+
   it('exposes a pending initial prompt only to task provisioning', () => {
     const row = conversationRow({
       config: JSON.stringify({

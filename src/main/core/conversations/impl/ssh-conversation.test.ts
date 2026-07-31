@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   getProviderConfig: vi.fn(),
   getRemoteShellProfile: vi.fn(),
   maybeAutoTrustSsh: vi.fn(),
+  maybeAutoTrustCodexSsh: vi.fn(),
   noteOutput: vi.fn(),
   openSsh2Pty: vi.fn(),
   removeRuntimeStatus: vi.fn(),
@@ -37,6 +38,12 @@ vi.mock('@main/core/agent-hooks/classifier-wiring', () => ({
 vi.mock('@main/core/agent-hooks/claude-trust-service', () => ({
   claudeTrustService: {
     maybeAutoTrustSsh: mocks.maybeAutoTrustSsh,
+  },
+}));
+
+vi.mock('@main/core/agent-hooks/codex-trust-service', () => ({
+  codexTrustService: {
+    maybeAutoTrustSsh: mocks.maybeAutoTrustCodexSsh,
   },
 }));
 
@@ -222,6 +229,7 @@ describe('SshConversationProvider registration lifecycle', () => {
     mocks.getProviderConfig.mockResolvedValue(undefined);
     mocks.getRemoteShellProfile.mockResolvedValue({});
     mocks.maybeAutoTrustSsh.mockResolvedValue(undefined);
+    mocks.maybeAutoTrustCodexSsh.mockResolvedValue(undefined);
     mocks.resolveAvailableTmuxSessionName.mockResolvedValue(undefined);
     mocks.resolveRuntimeEnv.mockReturnValue(undefined);
     mocks.resolveRuntimeTmuxEnv.mockReturnValue(undefined);

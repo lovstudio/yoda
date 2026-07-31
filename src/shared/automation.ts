@@ -5,6 +5,9 @@ import { RUNTIME_IDS } from './runtime-registry';
 export const automationStatusSchema = z.enum(['active', 'paused']);
 export type AutomationStatus = z.infer<typeof automationStatusSchema>;
 
+export const automationSourceSchema = z.enum(['yoda', 'codex']);
+export type AutomationSource = z.infer<typeof automationSourceSchema>;
+
 /** P1 supports manual + cron triggers; event/webhook land in later phases. */
 export const automationTriggerKindSchema = z.enum(['manual', 'cron']);
 export type AutomationTriggerKind = z.infer<typeof automationTriggerKindSchema>;
@@ -12,6 +15,7 @@ export type AutomationTriggerKind = z.infer<typeof automationTriggerKindSchema>;
 /** A saved automation: a recurring prompt the user can run as an agent task. */
 export const automationSchema = z.object({
   id: z.string(),
+  source: automationSourceSchema.default('yoda'),
   title: z.string(),
   workspaceName: z.string(),
   prompt: z.string(),

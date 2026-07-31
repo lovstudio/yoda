@@ -134,9 +134,9 @@ const DOCK_PROMPT_HEAD_COUNT = 1;
 
 /**
  * The same prompt history docked at the bottom of the conversation pane, gated
- * behind the `interface.dockSessionHistory` setting (toggled from the task
- * menu). Shows the first prompt and N latest prompts — adjustable inline via
- * the header. The action menu opens the complete branch tree in a separate
+ * behind the `interface.dockSessionHistory` setting (toggled from the workspace
+ * runtime bar). Shows the first prompt and N latest prompts — adjustable inline
+ * via the header. The action menu opens the complete branch tree in a separate
  * floating panel, while collapsing stops the current-path background fetch.
  */
 export const DockedSessionHistory = observer(function DockedSessionHistory() {
