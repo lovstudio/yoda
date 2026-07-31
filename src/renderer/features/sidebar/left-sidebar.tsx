@@ -241,7 +241,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
                 showCommandPalette({
                   projectId: currentProjectId,
                   taskId: currentTaskId,
-                  initialQuery: 'in:tasks ',
+                  queryMemory: 'task-search',
                 })
               }
               aria-label={t('sidebar.searchTasks')}

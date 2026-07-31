@@ -9,7 +9,7 @@ import {
   Search,
   Zap,
 } from 'lucide-react';
-import React, { useDeferredValue, useState } from 'react';
+import React, { useDeferredValue, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SearchItem } from '@shared/search';
 import { ALL_WORKSPACES_ID } from '@shared/workspaces';
@@ -27,6 +27,11 @@ import { cn } from '@renderer/utils/utils';
 import { InfiniteGroup } from './infinite-group';
 import { LovcodeInstallBanner } from './lovcode-install-banner';
 import { parseQuery, setScope, type SearchScope } from './qualifiers';
+import {
+  rememberCommandPaletteQuery,
+  resolveInitialCommandPaletteQuery,
+  type CommandPaletteQueryMemory,
+} from './query-memory';
 import { applyContextAffinity, rrf } from './rrf';
 import { useLovcodeSearch } from './use-lovcode-search';
 import { useScopedSearch } from './use-scoped-search';
@@ -35,6 +40,7 @@ interface CommandPaletteProps {
   projectId?: string;
   taskId?: string;
   initialQuery?: string;
+  queryMemory?: CommandPaletteQueryMemory;
 }
 
 interface PaletteAction {
@@ -132,12 +138,19 @@ export function CommandPaletteModal({
   projectId,
   taskId,
   initialQuery,
+  queryMemory,
   onClose,
 }: CommandPaletteProps & BaseModalProps) {
   const { t } = useTranslation();
-  const [query, setQuery] = useState(initialQuery ?? '');
+  const [query, setQuery] = useState(() =>
+    resolveInitialCommandPaletteQuery(initialQuery, queryMemory)
+  );
   const deferred = useDeferredValue(query);
   const { navigate } = useNavigate();
+
+  useEffect(() => {
+    rememberCommandPaletteQuery(query, queryMemory);
+  }, [query, queryMemory]);
 
   const parsed = parseQuery(deferred);
   const scope = parsed.scope;
