@@ -7,16 +7,11 @@ import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import {
   effectiveGlobalEnabled,
   setGlobalOverride,
-  setGlobalOverrides,
   setProjectItems,
 } from '@renderer/features/projects/project-prompt-principles';
 import { getProjectSettingsStore } from '@renderer/features/projects/stores/project-selectors';
 import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
-import {
-  usePrompts,
-  useSetPromptGroupInjectionEnabled,
-  useUpdatePrompt,
-} from '@renderer/features/prompt-library/use-prompts';
+import { usePrompts, useUpdatePrompt } from '@renderer/features/prompt-library/use-prompts';
 import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/auto-trust-worktrees-control';
 import { PermissionModeSelect } from '@renderer/features/tasks/components/permission-mode-select';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -76,7 +71,6 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
   const { t } = useTranslation();
   const { data: promptLibraryItems } = usePrompts();
   const updateLibraryPrompt = useUpdatePrompt();
-  const setLibraryPromptGroup = useSetPromptGroupInjectionEnabled();
   const promptPrinciples = (promptLibraryItems ?? [])
     .slice()
     .sort((left, right) => left.injectionOrder - right.injectionOrder);
@@ -227,19 +221,7 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
                       patch: { injectionEnabled: checked },
                     });
                   }}
-                  onGroupEnabledChange={(groupName, prompts, enabled) => {
-                    if (projectId) {
-                      saveProjectPromptPrinciples(
-                        setGlobalOverrides(projectPromptPrinciples, prompts, enabled)
-                      );
-                      return;
-                    }
-                    setLibraryPromptGroup.mutate({
-                      groupName,
-                      enabled,
-                    });
-                  }}
-                  disabled={updateLibraryPrompt.isPending || setLibraryPromptGroup.isPending}
+                  disabled={updateLibraryPrompt.isPending}
                 />
               ) : null}
               {projectId && projectPrincipleItems.length > 0 ? (
