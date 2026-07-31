@@ -185,7 +185,14 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     });
   }
 
-  // group 1 — pin, long-term marker, rename, mark-read
+  // group 1 — rename, pin, long-term marker, mark-read
+  items.push({
+    key: 'rename',
+    group: 1,
+    icon: Pencil,
+    label: t('common.rename'),
+    onSelect: actions.onRename,
+  });
   if (actions.canPin) {
     items.push(
       actions.isPinned
@@ -214,13 +221,6 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       onSelect: actions.isLongTerm ? actions.onUnmarkLongTerm : actions.onMarkLongTerm,
     });
   }
-  items.push({
-    key: 'rename',
-    group: 1,
-    icon: Pencil,
-    label: t('common.rename'),
-    onSelect: actions.onRename,
-  });
   if (actions.canMarkReview) {
     items.push(
       actions.needsReview
