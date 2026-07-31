@@ -4,6 +4,7 @@ import type {
   AgentModelCandidateInferenceResult,
   AgentModelCandidateItem,
   AgentModelCandidateProviderSettings,
+  RuntimeModelCandidateCacheSource,
   RuntimeModelCandidateSource,
 } from '@shared/runtime-model-candidates';
 import {
@@ -26,13 +27,13 @@ import { appSettingsService } from './settings-service';
 const MODEL_CANDIDATE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 
 type SourceResult = {
-  source: RuntimeModelCandidateSource;
+  source: RuntimeModelCandidateCacheSource;
   models: string[];
   error?: string;
 };
 
-const CATALOG_SOURCE: RuntimeModelCandidateSource = 'catalog';
-const SOURCE_ORDER: RuntimeModelCandidateSource[] = [
+const CATALOG_SOURCE: RuntimeModelCandidateCacheSource = 'catalog';
+const SOURCE_ORDER: RuntimeModelCandidateCacheSource[] = [
   'catalog',
   'zenmux',
   'officialApi',
@@ -185,7 +186,7 @@ export class RuntimeModelCandidatesService {
 }
 
 async function inferSource(
-  source: RuntimeModelCandidateSource,
+  source: RuntimeModelCandidateCacheSource,
   load: () => Promise<string[]>
 ): Promise<SourceResult> {
   try {

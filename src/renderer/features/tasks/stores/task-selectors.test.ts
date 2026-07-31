@@ -110,6 +110,7 @@ function makeTask(): Task {
     statusChangedAt: '2026-06-09T10:00:00.000Z',
     lastInteractedAt: '2026-06-09T10:00:00.000Z',
     isPinned: false,
+    isLongTerm: false,
     needsReview: false,
     isUserNamed: false,
     setupStatus: 'ready',

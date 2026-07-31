@@ -1,5 +1,13 @@
 # Providers
 
+## Terminology
+
+- **Agent Client/runtime**: Claude Code, Codex, Gemini CLI, Kimi CLI, and other
+  executables Yoda launches. Their registry is `src/shared/agent-provider-registry.ts`.
+- **Model provider/vendor**: OpenAI, Anthropic, Kimi, Google, and other companies
+  that publish models. Their catalog is `src/shared/model-provider-catalog.ts`.
+- Do not use the Agent Client/runtime registry to build model-provider settings.
+
 ## Source Of Truth
 
 - `src/shared/agent-provider-registry.ts`
@@ -43,6 +51,11 @@ Each provider has a terminal output classifier in `src/main/core/conversations/i
   environment.
 - Never store a third-party MaaS key in Codex `auth.json`. That file belongs to
   the user's native OpenAI/ChatGPT login.
+- `tasks.autoTrustWorktrees` applies to both Claude Code and Codex. Before launch,
+  Yoda records the exact task directory in Claude's trust store or the active
+  `CODEX_HOME/config.toml`; Codex receives a
+  `[projects."<absolute path>"] trust_level = "trusted"` entry without replacing
+  unrelated config.
 - Agents with no CLI prompt flag (e.g., Amp, OpenCode) use keystroke injection — Yoda types the prompt into the TUI after startup.
 - `src/main/core/agent-hooks/service.ts` forwards hook events to renderer windows and can show OS notifications. Also writes hook config files (`.claude/settings.local.json`, `.codex/config.toml`) into worktrees.
 

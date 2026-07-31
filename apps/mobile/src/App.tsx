@@ -56,6 +56,10 @@ import {
   sendSessionInput,
   type MobileConnection,
 } from './api-client';
+import {
+  explicitMobilePairingUrl,
+  selectMobileConnectionBootstrapFallback,
+} from './connection-bootstrap';
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
 import { subscribeSessionEvents } from './session-event-stream';
 
@@ -557,9 +561,7 @@ async function getInitialPairing(): Promise<{
   }
 
   return {
-    pairingUrl:
-      candidates.find((url) => parseMobilePairingUrl(url) || parseMobileRelayPairingUrl(url)) ??
-      initialUrl,
+    pairingUrl: explicitMobilePairingUrl(initialUrl),
     devConnection: inferDevGatewayConnection(candidates),
   };
 }
@@ -669,6 +671,7 @@ export function App() {
     }
     if (!next) return false;
 
+    await saveConnection(next);
     setConnectDraft(next);
     setConnection(next);
     setSnapshot(null);
@@ -678,7 +681,6 @@ export function App() {
     setSelectedTaskId(null);
     setSelectedSessionId(null);
     setError(null);
-    await saveConnection(next);
     return true;
   }, []);
 
@@ -692,16 +694,12 @@ export function App() {
         } catch (e) {
           if (active) setError(errorMessage(e));
         }
-        if (initial.devConnection) {
-          setConnection(initial.devConnection);
-          setConnectDraft(initial.devConnection);
-          await saveConnection(initial.devConnection);
-          return;
-        }
-        if (saved) {
-          setConnection(saved);
-          setConnectDraft(saved);
-        }
+        const fallback = selectMobileConnectionBootstrapFallback(saved, initial.devConnection);
+        if (!fallback) return;
+        if (fallback.shouldPersist) await saveConnection(fallback.connection);
+        if (!active) return;
+        setConnection(fallback.connection);
+        setConnectDraft(fallback.connection);
       })
       .catch((e: unknown) => {
         if (active) setError(errorMessage(e));
@@ -1036,8 +1034,9 @@ function ConnectionScreen({
           </View>
           <Text style={styles.connectionTitle}>Connect to desktop</Text>
           <Text style={styles.connectionCopy}>
-            Scan the connection code from the desktop sidebar, or enter the gateway details
-            manually.
+            Scan once from the desktop sidebar. Yoda Mobile securely remembers this device and
+            reconnects automatically on future launches. Enter gateway details only for a local or
+            development connection.
           </Text>
 
           {error ? <Notice message={error} tone="error" /> : null}

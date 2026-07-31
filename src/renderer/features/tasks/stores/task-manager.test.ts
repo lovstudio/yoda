@@ -3,7 +3,7 @@ import { taskRenamedChannel } from '@shared/events/taskEvents';
 import type { CreateTaskParams, Task } from '@shared/tasks';
 import type { ProjectSettingsStore } from '@renderer/features/projects/stores/project-settings-store';
 import type { RepositoryStore } from '@renderer/features/projects/stores/repository-store';
-import { createUnregisteredTask } from './task';
+import { createUnprovisionedTask, createUnregisteredTask } from './task';
 import { TaskManagerStore } from './task-manager';
 
 const mocks = vi.hoisted(() => ({
@@ -106,6 +106,7 @@ describe('TaskManagerStore task rename events', () => {
         createdAt: '2026-06-05T10:00:00.000Z',
         statusChangedAt: '2026-06-05T10:00:00.000Z',
         isPinned: false,
+        isLongTerm: false,
         needsReview: false,
       })
     );
@@ -181,6 +182,29 @@ describe('TaskManagerStore external task reconciliation', () => {
   });
 });
 
+describe('TaskManagerStore task view preload', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    mocks.listeners.clear();
+  });
+
+  it('deduplicates lightweight task data without provisioning the workspace', async () => {
+    const manager = createManager();
+    manager.tasks.set('task-1', createUnprovisionedTask(makeTask('Task')));
+    mocks.viewStateGet.mockResolvedValue({ activeTabId: 'overview' });
+    mocks.getConversationsForTask.mockResolvedValue([]);
+
+    await Promise.all([manager.preloadTask('task-1'), manager.preloadTask('task-1')]);
+
+    expect(mocks.viewStateGet).toHaveBeenCalledTimes(1);
+    expect(mocks.viewStateGet).toHaveBeenCalledWith('task:task-1');
+    expect(mocks.getConversationsForTask).toHaveBeenCalledTimes(1);
+    expect(mocks.getConversationsForTask).toHaveBeenCalledWith('project-1', 'task-1');
+    expect(mocks.provisionTask).not.toHaveBeenCalled();
+    manager.dispose();
+  });
+});
+
 function createManager(): TaskManagerStore {
   const repository = { repositoryUrl: null } as unknown as RepositoryStore;
   const settings = {
@@ -224,6 +248,7 @@ function makeTask(name: string): Task {
     statusChangedAt: '2026-06-05T10:00:00.000Z',
     lastInteractedAt: '2026-06-05T10:00:00.000Z',
     isPinned: false,
+    isLongTerm: false,
     needsReview: false,
     isUserNamed: false,
     setupStatus: 'ready',

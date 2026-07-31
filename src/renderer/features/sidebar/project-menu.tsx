@@ -72,6 +72,7 @@ interface ProjectMenuActions {
   onChangeSshConnection?: () => void;
   onConfigureScripts?: () => void;
   onCaptureAutomation?: () => void;
+  onManageQuickActions?: () => void;
   quickActions?: QuickAction[];
   launchCommands?: ProjectLaunchCommand[];
   launchCommandsLoading?: boolean;
@@ -367,6 +368,15 @@ function ProjectLaunchCommandsContextSubmenu({ actions }: { actions: ProjectMenu
           <WandSparkles className="size-4" />
           {t('sidebar.captureAutomation.createLabel')}
         </ContextMenuItem>
+        <ContextMenuItem
+          onClick={(event) => {
+            event.stopPropagation();
+            actions.onManageQuickActions?.();
+          }}
+        >
+          <Settings2 className="size-4" />
+          {t('projects.quickActions.manage')}
+        </ContextMenuItem>
       </ContextMenuSubContent>
     </ContextMenuSub>
   );
@@ -458,6 +468,15 @@ function ProjectLaunchCommandsDropdownSubmenu({ actions }: { actions: ProjectMen
         >
           <WandSparkles className="size-4" />
           {t('sidebar.captureAutomation.createLabel')}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={(event) => {
+            event.stopPropagation();
+            actions.onManageQuickActions?.();
+          }}
+        >
+          <Settings2 className="size-4" />
+          {t('projects.quickActions.manage')}
         </DropdownMenuItem>
       </DropdownMenuSubContent>
     </DropdownMenuSub>

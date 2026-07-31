@@ -25,6 +25,7 @@ import {
 } from '@renderer/lib/ui/dropdown-menu';
 import { cn } from '@renderer/utils/utils';
 import { ScriptsPanel } from './terminals/scripts-panel';
+import { TerminalLogContextMenu } from './terminals/terminal-log-context-menu';
 import { TerminalsPanel } from './terminals/terminal-panel';
 
 const MODES: {
@@ -81,6 +82,7 @@ export const BottomPanel = observer(function BottomPanel({
   const { navigate } = useNavigate();
   const openTabs = taskView.openBottomPanelTabs;
   const tab = taskView.activeBottomPanelTab;
+  const activeTerminal = taskView.terminalTabs.activeTab;
   const openModes = openTabs.flatMap((id) => MODES.filter((m) => m.id === id));
   const availableModes = MODES.filter((m) => !openTabs.includes(m.id));
 
@@ -113,17 +115,18 @@ export const BottomPanel = observer(function BottomPanel({
           )}
         >
           {openModes.map(({ id, icon, labelKey }) => (
-            <ModeTab
-              key={id}
-              icon={icon}
-              label={t(labelKey)}
-              isActive={tab === id}
-              onSelect={() => taskView.setBottomPanelTab(id)}
-              onClose={() => taskView.closeBottomPanelTab(id)}
-              closeLabel={t('tasks.sidePane.removeCard')}
-              drag={tabDragSource(() => ({ kind: 'bottom-mode', mode: id }))}
-              dropMarker="bottom-mode"
-            />
+            <TerminalLogContextMenu key={id} terminal={id === 'terminals' ? activeTerminal : null}>
+              <ModeTab
+                icon={icon}
+                label={t(labelKey)}
+                isActive={tab === id}
+                onSelect={() => taskView.setBottomPanelTab(id)}
+                onClose={() => taskView.closeBottomPanelTab(id)}
+                closeLabel={t('tasks.sidePane.removeCard')}
+                drag={tabDragSource(() => ({ kind: 'bottom-mode', mode: id }))}
+                dropMarker="bottom-mode"
+              />
+            </TerminalLogContextMenu>
           ))}
           {availableModes.length > 0 ? (
             <DropdownMenu>

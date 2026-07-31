@@ -96,6 +96,7 @@ export type MobileTaskSummary = {
   lastInteractedAt?: string;
   needsReview: boolean;
   isPinned: boolean;
+  isLongTerm: boolean;
   conversationCount: number;
   runtimeCounts: Record<string, number>;
 };

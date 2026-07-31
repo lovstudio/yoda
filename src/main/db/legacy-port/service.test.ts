@@ -60,6 +60,7 @@ function createAppDb(): Database.Database {
       last_interacted_at TEXT,
       status_changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       is_pinned INTEGER NOT NULL DEFAULT 0,
+      is_long_term INTEGER NOT NULL DEFAULT 0,
       needs_review INTEGER NOT NULL DEFAULT 0,
       is_user_named INTEGER NOT NULL DEFAULT 0,
       setup_status TEXT NOT NULL DEFAULT 'ready',

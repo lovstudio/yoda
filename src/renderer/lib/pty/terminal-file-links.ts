@@ -54,6 +54,7 @@ const ABSOLUTE_PATH_SEGMENT = `${PATH_SEG_TOKEN}(?: +${PATH_SEG_TOKEN})?`;
 // extension, so trailing prose is not absorbed into the link.
 const SPACED_FILENAME_TOKEN = `[^\\s"'\`$<>|\\\\/:]+`;
 const SPACED_ABSOLUTE_FILENAME = `${SPACED_FILENAME_TOKEN}(?: +${SPACED_FILENAME_TOKEN})* +[^\\s"'\`$<>|\\\\/:]*\\.${PATH_EXT}`;
+const SPACED_BARE_FILENAME = `${SPACED_FILENAME_TOKEN}(?: +${SPACED_FILENAME_TOKEN})+\\.(?:${BARE_FILENAME_EXTENSIONS})`;
 // A path is either a file (one or more `dir/` segments + a `name.ext`, optional
 // `:line:col`) OR a directory (one or more `dir/` segments ending in a slash,
 // no filename). Making the filename tail optional lets a trailing-slash run
@@ -84,6 +85,13 @@ const BARE_FILE_CANDIDATE_REGEX = new RegExp(
   `(^|[${PATH_LEADING}])(@?[^${PATH_SEG_EXCLUDED}\\/]+\\.(?:${BARE_FILENAME_EXTENSIONS})(?::\\d+(?::\\d+)?)?)(?=$|[${PATH_TRAILING}])`,
   'giu'
 );
+// Without a slash, a multi-word filename is ambiguous with ordinary prose.
+// Accept the wider form after an explicit output label (`文件：final report.pdf`);
+// otherwise the regular bare-file matcher still recognizes the final token.
+const LABELED_SPACED_FILE_CANDIDATE_REGEX = new RegExp(
+  `([:：][ \\t]*)(@?${SPACED_BARE_FILENAME}(?::\\d+(?::\\d+)?)?)(?=$|[${PATH_TRAILING}])`,
+  'giu'
+);
 const FILE_PATH_CANDIDATE_REGEXES: readonly {
   regex: RegExp;
   requiresSpace: boolean;
@@ -93,6 +101,7 @@ const FILE_PATH_CANDIDATE_REGEXES: readonly {
   { regex: ROOTED_FILE_PATH_CANDIDATE_REGEX, requiresSpace: true },
   { regex: TILDE_DIRECTORY_CANDIDATE_REGEX, requiresSpace: false, isDirectory: true },
   { regex: FILE_PATH_CANDIDATE_REGEX, requiresSpace: false },
+  { regex: LABELED_SPACED_FILE_CANDIDATE_REGEX, requiresSpace: true },
   { regex: BARE_FILE_CANDIDATE_REGEX, requiresSpace: false },
 ];
 
@@ -228,6 +237,19 @@ const COMPLETE_EXT_RE = /\.[A-Za-z0-9]{1,8}$/;
 const URL_IN_PROGRESS_RE = /(?:https?|ftp|file):\/\/\S+$/i;
 const URL_CONTINUATION_START_RE = /[A-Za-z0-9._~:/?#@!$&'*+,;=%-]/;
 const URL_CONTINUATION_HINT_RE = /[/:?#&=%]/;
+const URL_FINAL_SEGMENT_WITH_CLOSER_RE = /^[A-Za-z0-9._~!$&'*+,;=:@%-]+([)\]}>）】〉》」』])$/u;
+const URL_WRAPPER_OPENERS: Readonly<Record<string, string>> = {
+  ')': '(',
+  ']': '[',
+  '}': '{',
+  '>': '<',
+  '）': '（',
+  '】': '【',
+  '〉': '〈',
+  '》': '《',
+  '」': '「',
+  '』': '『',
+};
 const HARD_WRAP_LOCATION_RE = new RegExp(`^:\\d+(?::\\d+)?(?=$|[${PATH_TRAILING}])`, 'u');
 
 export interface ScanChunk {
@@ -325,6 +347,7 @@ function canHardJoin(
   ) {
     return true;
   }
+  if (hasEarlyWrappedUrlFinalSegment(upperText, lowerStripped)) return true;
   if (!isRowFull(terminal, upperBottomRowIndex)) return false;
   if (hasHardWrappedLocationCandidate(upperText, lowerStripped)) return true;
   if (hasHardWrappedParenthesizedFilenameCandidate(upperText, lowerStripped)) return true;
@@ -470,11 +493,40 @@ function canHardJoinUrl(upperText: string, lowerStripped: string): boolean {
   if (!first || !URL_CONTINUATION_START_RE.test(first)) return false;
   if (/^[._~:/?#@!$&'*+,;=%-]$/.test(first)) return true;
   if (/[?&=#%]$/.test(upperText)) return true;
+  if (upperText.endsWith('/') && hasWrappedUrlFinalSegment(upperText, lowerStripped)) return true;
 
   const leadingToken = /^[^\s"'<>`、，。；：！？（）「」『』【】〈〉《》“”‘’.,;:!?)\]}]+/u.exec(
     lowerStripped
   )?.[0];
   return Boolean(leadingToken && URL_CONTINUATION_HINT_RE.test(leadingToken));
+}
+
+/**
+ * Ink cards wrap at their own content width, which can be much narrower than
+ * the xterm row. A URL enclosed in punctuation may therefore put only its
+ * final path segment and matching closer on the next real row. The paired
+ * wrapper and segment-only continuation make this safe to recognize before
+ * the general full-row guard.
+ */
+function hasEarlyWrappedUrlFinalSegment(upperText: string, lowerStripped: string): boolean {
+  return (
+    URL_IN_PROGRESS_RE.test(upperText) &&
+    upperText.endsWith('/') &&
+    hasWrappedUrlFinalSegment(upperText, lowerStripped)
+  );
+}
+
+function hasWrappedUrlFinalSegment(upperText: string, lowerStripped: string): boolean {
+  const match = URL_FINAL_SEGMENT_WITH_CLOSER_RE.exec(lowerStripped);
+  const closer = match?.[1];
+  if (!closer) return false;
+
+  const opener = URL_WRAPPER_OPENERS[closer];
+  const urlStart = upperText.search(/(?:https?|ftp|file):\/\//i);
+  if (!opener || urlStart < 0) return false;
+
+  const prefix = upperText.slice(0, urlStart);
+  return prefix.lastIndexOf(opener) > prefix.lastIndexOf(closer);
 }
 
 /** True when the row's last column holds a character (hard-wrap break point). */

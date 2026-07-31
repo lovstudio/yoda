@@ -1,4 +1,5 @@
 import type { RuntimeCustomConfig } from '@shared/app-settings';
+import type { ConversationExecutionMode } from '@shared/conversations';
 import { findRuntimePermissionMode, getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import type { SkillSessionPolicy } from '@shared/skills/types';
 import { buildClaudeSkillOverrides, buildCodexSkillConfig } from './skill-runtime-policy';
@@ -242,6 +243,7 @@ export function buildAgentCommand({
   model,
   terminalThemeMode,
   skillPolicy,
+  executionMode,
 }: {
   runtimeId: RuntimeId;
   providerConfig: RuntimeCustomConfig | undefined;
@@ -268,6 +270,8 @@ export function buildAgentCommand({
   terminalThemeMode?: 'light' | 'dark';
   /** Concrete skill paths captured with the conversation. */
   skillPolicy?: SkillSessionPolicy;
+  /** Product execution contract for this session. */
+  executionMode?: ConversationExecutionMode;
 }): AgentCommand {
   if (providerConfig?.disabled) {
     throw new Error(`${getRuntime(runtimeId)?.name ?? runtimeId} is disabled in Yoda.`);
@@ -276,6 +280,13 @@ export function buildAgentCommand({
   const [command, ...args] = parseCliPrefix(providerConfig?.cli, runtimeId);
 
   args.push(...(providerConfig?.defaultArgs ?? []));
+
+  // Goals intentionally continue across turns and surface a foreground
+  // resume/pause decision. An unattended automation is one bounded run, so
+  // disable that Codex feature before any subcommand (notably `resume`).
+  if (runtimeId === 'codex' && executionMode === 'automation') {
+    args.push('--disable', 'goals');
+  }
 
   const shouldPassSessionId =
     providerConfig?.sessionIdFlag && (!providerConfig.sessionIdOnResumeOnly || isResuming);

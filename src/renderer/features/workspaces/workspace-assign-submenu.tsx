@@ -31,6 +31,8 @@ interface WorkspaceAssignSubmenuProps {
   currentWorkspaceId: string | null;
   /** Assign to a workspace, or null to move to the default. */
   onAssign: (workspaceId: string | null) => void;
+  /** Whether to separate this move group from the preceding menu group. */
+  showSeparator?: boolean;
 }
 
 /**
@@ -63,11 +65,13 @@ function promptCreateWorkspaceAndAssign(onAssign: (workspaceId: string | null) =
 export const WorkspaceAssignContextSubmenu = observer(function WorkspaceAssignContextSubmenu({
   currentWorkspaceId,
   onAssign,
+  showSeparator = true,
 }: WorkspaceAssignSubmenuProps) {
   const { t } = useTranslation();
+  if (!workspaceStore.enabled) return null;
   return (
     <>
-      <ContextMenuSeparator />
+      {showSeparator && <ContextMenuSeparator />}
       <ContextMenuSub>
         <ContextMenuSubTrigger className="whitespace-nowrap">
           <FolderInput className="size-4" />
@@ -106,11 +110,13 @@ export const WorkspaceAssignContextSubmenu = observer(function WorkspaceAssignCo
 export const WorkspaceAssignDropdownSubmenu = observer(function WorkspaceAssignDropdownSubmenu({
   currentWorkspaceId,
   onAssign,
+  showSeparator = true,
 }: WorkspaceAssignSubmenuProps) {
   const { t } = useTranslation();
+  if (!workspaceStore.enabled) return null;
   return (
     <>
-      <DropdownMenuSeparator />
+      {showSeparator && <DropdownMenuSeparator />}
       <DropdownMenuSub>
         <DropdownMenuSubTrigger className="whitespace-nowrap">
           <FolderInput className="size-4" />

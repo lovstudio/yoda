@@ -3,7 +3,7 @@ import { AppSidePane } from '@renderer/app/app-side-pane';
 import { moveDraggedTabToStrip } from '@renderer/app/open-task-target';
 import { useTabDropZone } from '@renderer/app/tab-drag';
 import { WorkspaceRuntimeBar } from '@renderer/app/workspace-runtime-bar';
-import { WorkspaceShellPanel } from '@renderer/app/workspace-shell-panel';
+import { WorkspaceTerminalPanel } from '@renderer/app/workspace-terminal-panel';
 import { LeftSidebar } from '@renderer/features/sidebar/left-sidebar';
 import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
 import { TiledTaskGrid } from '@renderer/features/tasks/split-view/tiled-task-grid';
@@ -17,13 +17,13 @@ import { TmuxUnavailableNotifier } from '@renderer/lib/components/tmux-unavailab
 import { useTabShortcuts } from '@renderer/lib/hooks/useTabShortcuts';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import {
-  useWorkspaceSlots,
-  useWorkspaceWrapParams,
+  useWorkspaceRouteSnapshot,
+  type WorkspaceRouteSnapshot,
 } from '@renderer/lib/layout/navigation-provider';
 import { WorkspaceContentLayout, WorkspaceLayout } from '@renderer/lib/layout/workspace-layout';
 import { ModalRenderer } from '@renderer/lib/modal/modal-renderer';
 import { appState } from '@renderer/lib/stores/app-state';
-import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
+import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { Toaster } from '@renderer/lib/ui/toaster';
 import { cn } from '@renderer/utils/utils';
 
@@ -49,8 +49,8 @@ const GlobalTabShortcuts = observer(function GlobalTabShortcuts() {
 
 export const Workspace = observer(function Workspace() {
   useTheme();
-  const { WrapView } = useWorkspaceSlots();
-  const { wrapParams } = useWorkspaceWrapParams();
+  const { WrapView, TitlebarSlot, MainPanel, currentView, wrapParams } =
+    useWorkspaceRouteSnapshot();
 
   return (
     <>
@@ -72,7 +72,11 @@ export const Workspace = observer(function Workspace() {
               <ModalRenderer />
             </ErrorBoundary>
             <ErrorBoundary variant="inline" componentName="WorkspaceView">
-              <WorkspaceViewContent />
+              <WorkspaceViewContent
+                TitlebarSlot={TitlebarSlot}
+                MainPanel={MainPanel}
+                currentView={currentView}
+              />
             </ErrorBoundary>
           </WrapView>
         }
@@ -89,17 +93,15 @@ export const Workspace = observer(function Workspace() {
   );
 });
 
-const WorkspaceViewContent = observer(function WorkspaceViewContent() {
-  const { TitlebarSlot, MainPanel } = useWorkspaceSlots();
+const WorkspaceViewContent = observer(function WorkspaceViewContent({
+  TitlebarSlot,
+  MainPanel,
+  currentView,
+}: Pick<WorkspaceRouteSnapshot, 'TitlebarSlot' | 'MainPanel' | 'currentView'>) {
   // Tile extra tasks beside the routed one — only on the task view, and only
   // while extras exist. The primary keeps the outer route providers (it IS
   // <MainPanel/>); the grid hosts the self-contained extras.
-  const isTiled = appState.navigation.currentViewId === 'task' && splitViewStore.count > 0;
-  const taskParams = appState.navigation.viewParamsStore.task as { taskId?: string } | undefined;
-  const isQuickActionDocked =
-    appState.navigation.currentViewId === 'task' &&
-    workspaceShellStore.isCommandHostedInTask(taskParams?.taskId);
-  const isWorkspaceShellOpen = workspaceShellStore.isOpen && !isQuickActionDocked;
+  const isTiled = currentView === 'task' && splitViewStore.count > 0;
 
   // The whole central column — on every route — accepts a dragged pin (task
   // sidebar / shell pane): dropping "into the main window" means "show it
@@ -124,10 +126,10 @@ const WorkspaceViewContent = observer(function WorkspaceViewContent() {
         titlebarSlot={<TitlebarSlot />}
         mainPanel={isTiled ? <TiledTaskGrid primary={<MainPanel />} /> : <MainPanel />}
         bottomBar={<WorkspaceRuntimeBar />}
-        bottomPane={<WorkspaceShellPanel active={isWorkspaceShellOpen} />}
-        isBottomPaneOpen={isWorkspaceShellOpen}
+        bottomPane={<WorkspaceTerminalPanel />}
+        isBottomPaneOpen={workspaceTerminalStore.isOpen}
         onBottomPaneOpenChange={(open) => {
-          if (!open && !isQuickActionDocked) workspaceShellStore.close();
+          if (!open) workspaceTerminalStore.close();
         }}
       />
     </div>

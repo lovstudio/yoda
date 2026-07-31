@@ -8,8 +8,8 @@ import {
   TERMINAL_FIT_GUARD_COLUMNS,
 } from '@renderer/lib/pty/pty-dimensions';
 
-export function getTerminalsPaneSize() {
-  const container = getPaneContainer('terminal-drawer');
+export function getTerminalsPaneSize(paneId = 'terminal-drawer') {
+  const container = getPaneContainer(paneId);
   return container
     ? (measureDimensions(
         container,

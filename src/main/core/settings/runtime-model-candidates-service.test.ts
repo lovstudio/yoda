@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRuntime } from '@shared/runtime-registry';
 import { extractModelCandidatesFromText, hasExplicitModelList } from './model-candidate-parser';
 import {
@@ -6,6 +6,40 @@ import {
   sanitizeCachedModelIdsForRuntime,
   sanitizeCatalogEntriesForRuntime,
 } from './runtime-model-catalog';
+
+const serviceMocks = vi.hoisted(() => ({
+  getSettings: vi.fn(),
+  updateSettings: vi.fn(async () => undefined),
+  getRuntimeConfig: vi.fn(),
+  updateRuntimeConfig: vi.fn<(id: string, config: Record<string, unknown>) => Promise<void>>(
+    async () => undefined
+  ),
+  listCatalog: vi.fn(async () => [] as string[]),
+}));
+
+vi.mock('@main/core/maas/maas-service', () => ({
+  maasService: {
+    listZenmuxCatalogTextModelCandidates: serviceMocks.listCatalog,
+  },
+}));
+
+vi.mock('./settings-service', () => ({
+  appSettingsService: {
+    get: serviceMocks.getSettings,
+    update: serviceMocks.updateSettings,
+  },
+}));
+
+vi.mock('./runtime-settings-service', () => ({
+  runtimeOverrideSettings: {
+    getItem: serviceMocks.getRuntimeConfig,
+    updateItem: serviceMocks.updateRuntimeConfig,
+  },
+}));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe('extractModelCandidatesFromText', () => {
   it('extracts candidates from model lists', () => {

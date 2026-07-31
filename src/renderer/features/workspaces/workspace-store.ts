@@ -1,4 +1,5 @@
 import { makeAutoObservable, runInAction } from 'mobx';
+import type { AppSettings } from '@shared/app-settings';
 import { ALL_WORKSPACES_ID, DEFAULT_WORKSPACE_ID, type Workspace } from '@shared/workspaces';
 import { rpc } from '@renderer/lib/ipc';
 
@@ -7,11 +8,12 @@ export type ActiveWorkspaceId = string;
 
 /**
  * Holds the user-defined workspaces (sidebar tabs) and the active selection.
- * Workspace membership lives on each project (`project.data.workspaceId`); this
- * store only owns the list of workspaces and which tab is active.
+ * Workspace membership lives on each project/task; this store owns the feature
+ * state, workspace list, and active selection.
  */
 export class WorkspaceStore {
   workspaces: Workspace[] = [];
+  enabled = false;
   activeWorkspaceId: ActiveWorkspaceId = ALL_WORKSPACES_ID;
 
   constructor() {
@@ -19,9 +21,13 @@ export class WorkspaceStore {
   }
 
   async load(): Promise<void> {
-    const list = await rpc.workspaces.listWorkspaces();
+    const [list, taskSettings] = await Promise.all([
+      rpc.workspaces.listWorkspaces(),
+      rpc.appSettings.get('tasks') as Promise<AppSettings['tasks']>,
+    ]);
     runInAction(() => {
       this.workspaces = list;
+      this.setEnabled(taskSettings.workspacesEnabled);
       this.normalizeActive();
     });
   }
@@ -39,17 +45,28 @@ export class WorkspaceStore {
     }
   }
 
+  /**
+   * Disabling workspaces exposes every task as one flat collection without
+   * changing the user's active workspace selection. Re-enabling therefore
+   * returns to the same workspace instead of making existing organization look
+   * as though it moved into Default.
+   */
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+
   setActiveWorkspaceId(id: ActiveWorkspaceId): void {
     this.activeWorkspaceId = id;
   }
 
   get activeWorkspace(): Workspace | undefined {
+    if (!this.enabled) return undefined;
     return this.workspaces.find((w) => w.id === this.activeWorkspaceId);
   }
 
   /** True when items should be filtered (anything other than the "All" view). */
   get isFiltering(): boolean {
-    return this.activeWorkspaceId !== ALL_WORKSPACES_ID;
+    return this.enabled && this.activeWorkspaceId !== ALL_WORKSPACES_ID;
   }
 
   /** Whether an entity assigned to `assignedId` belongs in the active selection. */

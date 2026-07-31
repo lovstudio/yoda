@@ -2,27 +2,17 @@ import type { Branch } from '@shared/git';
 import type { QuickAction } from '@shared/project-settings';
 import type { RuntimeId } from '@shared/runtime-registry';
 import type { MountedProject } from '@renderer/features/projects/stores/project';
-import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
-import { appState } from '@renderer/lib/stores/app-state';
-import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
+import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { runProjectCommand } from './run-project-command';
 
 export type ProjectQuickActionRunResult = { kind: 'shell' } | { kind: 'agent'; taskId: string };
-
-function getActiveQuickActionHost(projectId: string) {
-  if (appState.navigation.currentViewId !== 'task') return undefined;
-  const params = appState.navigation.viewParamsStore.task as
-    | { projectId?: string; taskId?: string }
-    | undefined;
-  if (params?.projectId !== projectId || !params.taskId) return undefined;
-  return asProvisioned(getTaskStore(projectId, params.taskId));
-}
 
 /**
  * The single execution boundary for a project quick action.
  *
  * Agent actions open an inspectable task that can be continued when execution
- * needs repair. Explicit shell actions run directly in the project terminal.
+ * needs repair. Explicit shell actions create a standard project Terminal
+ * owned by WorkspaceRuntimeBar and do not create or depend on a task.
  */
 export async function runProjectQuickAction(args: {
   project: MountedProject;
@@ -32,21 +22,7 @@ export async function runProjectQuickAction(args: {
 }): Promise<ProjectQuickActionRunResult> {
   const { project, action, runtimeId = null, defaultBranch } = args;
   if (action.kind === 'shell') {
-    if (project.data.type !== 'local') {
-      throw new Error('Programmatic quick actions currently require a local project.');
-    }
-    const host = getActiveQuickActionHost(project.data.id);
-    if (host) {
-      host.taskView.setBottomPanelTab('terminals', { ensureTerminal: false });
-      host.taskView.setBottomPanelOpen(true);
-      host.taskView.setFocusedRegion('bottom');
-    }
-    await workspaceShellStore.runCommand(
-      action.command,
-      project.data.path,
-      action.label,
-      host?.taskId ?? null
-    );
+    await workspaceTerminalStore.runCommand(project.data, action.command, action.label);
     return { kind: 'shell' };
   }
 

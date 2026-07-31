@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => {
   const save = vi.fn();
   const compile = vi.fn();
   const runProjectQuickAction = vi.fn();
+  const navigate = vi.fn();
+  const loadLocalBranches = vi.fn();
+  const loadRemoteBranches = vi.fn();
   const translate = (key: string) => key;
   const mountedProject = {
     data: {
@@ -45,6 +48,12 @@ const mocks = vi.hoisted(() => {
     save,
     compile,
     runProjectQuickAction,
+    navigate,
+    repositoryStore: {
+      localData: { load: loadLocalBranches },
+      remoteData: { load: loadRemoteBranches },
+      defaultBranch: { type: 'local' as const, branch: 'main' },
+    },
     translate,
     mountedProject,
     projectStore: { mountedProject },
@@ -69,6 +78,7 @@ vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
   asMounted: () => mocks.mountedProject,
   getProjectSettingsStore: () => mocks.settingsStore,
   getProjectStore: () => mocks.projectStore,
+  getRepositoryStore: () => mocks.repositoryStore,
 }));
 
 vi.mock('@renderer/features/settings/use-app-settings-key', () => ({
@@ -85,6 +95,10 @@ vi.mock('@renderer/lib/ipc', () => ({
       compile: mocks.compile,
     },
   },
+}));
+
+vi.mock('@renderer/lib/layout/navigation-provider', () => ({
+  useNavigate: () => ({ navigate: mocks.navigate }),
 }));
 
 vi.mock('@renderer/lib/ui/confirm-button', async () => {
@@ -141,6 +155,9 @@ describe('CaptureProjectAutomationModal', () => {
       explanation: 'package.json defines the dev script',
     });
     mocks.runProjectQuickAction.mockReset().mockResolvedValue({ kind: 'shell' });
+    mocks.navigate.mockReset();
+    mocks.repositoryStore.localData.load.mockReset().mockResolvedValue(undefined);
+    mocks.repositoryStore.remoteData.load.mockReset().mockResolvedValue(undefined);
     mocks.runtime.runtimeId = 'codex';
     mocks.runtime.createDisabled = false;
     mocks.settingsStore.settings = {
@@ -271,6 +288,9 @@ describe('CaptureProjectAutomationModal', () => {
       action: savedAction,
     });
     expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(mocks.repositoryStore.localData.load).not.toHaveBeenCalled();
+    expect(mocks.repositoryStore.remoteData.load).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it('accepts a direct command without calling an Agent, even when no runtime is available', async () => {

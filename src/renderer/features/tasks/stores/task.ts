@@ -34,6 +34,7 @@ export type UnregisteredTaskData = {
   createdAt: string;
   statusChangedAt: string;
   isPinned: boolean;
+  isLongTerm: boolean;
   needsReview: boolean;
   isUserNamed?: boolean;
   setupStatus?: TaskSetupStatus;
@@ -320,6 +321,25 @@ export class TaskStore {
     } catch (e) {
       runInAction(() => {
         task.isPinned = previous;
+      });
+      log.error(e);
+      throw e;
+    }
+  }
+
+  async setLongTerm(isLongTerm: boolean): Promise<void> {
+    if (this.state === 'unregistered') return;
+    const task = registeredTaskData(this);
+    if (!task || task.isLongTerm === isLongTerm) return;
+    const previous = task.isLongTerm;
+    runInAction(() => {
+      task.isLongTerm = isLongTerm;
+    });
+    try {
+      await rpc.tasks.setTaskLongTerm(task.id, isLongTerm);
+    } catch (e) {
+      runInAction(() => {
+        task.isLongTerm = previous;
       });
       log.error(e);
       throw e;

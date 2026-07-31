@@ -6,6 +6,7 @@ import {
   conversationMovedChannel,
   conversationRenamedChannel,
 } from '@shared/events/conversationEvents';
+import type { FrontendPty } from '@renderer/lib/pty/pty';
 import { ConversationManagerStore } from './conversation-manager';
 
 const mocks = vi.hoisted(() => ({
@@ -233,6 +234,35 @@ describe('ConversationManagerStore', () => {
       { cols: 132, rows: 37 }
     );
     expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 132, 37);
+  });
+
+  it('reapplies the latest measured terminal size after a slow resume', async () => {
+    let resolveResume!: (running: boolean) => void;
+    mocks.resumeConversationMock.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveResume = resolve;
+        })
+    );
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+    const item = store.conversations.get('conversation-1');
+
+    const resume = store.resumeConversation('conversation-1', { cols: 80, rows: 24 });
+    if (item) {
+      item.session.pty = {
+        lastSentDims: { cols: 132, rows: 61 },
+      } as unknown as FrontendPty;
+    }
+    resolveResume(true);
+
+    await expect(resume).resolves.toBe(true);
+    expect(mocks.resumeConversationMock).toHaveBeenCalledWith(
+      'project-1',
+      'task-1',
+      'conversation-1',
+      { cols: 80, rows: 24 }
+    );
+    expect(mocks.ptyResizeMock).toHaveBeenCalledWith('project-1:task-1:conversation-1', 132, 61);
   });
 
   it('keeps a stopped session actionable when automatic resume does not start a process', async () => {
