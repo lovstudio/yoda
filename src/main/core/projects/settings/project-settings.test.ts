@@ -120,6 +120,22 @@ describe('ProjectSettingsProvider worktreeDirectory validation', () => {
     await expect(provider.getWorktreeDirectory()).resolves.toBe(expectedDefaultWorktreeDirectory);
   });
 
+  it('resolves the default branch from an already-loaded settings snapshot', async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
+    tempDirs.push(projectPath);
+    const settingsStorage = storage();
+    const readSettings = vi.spyOn(settingsStorage, 'get');
+    const provider = new LocalProjectSettingsProvider(
+      projectId(),
+      projectPath,
+      'main',
+      settingsStorage
+    );
+
+    await expect(provider.getDefaultBranch({ defaultBranch: 'develop' })).resolves.toBe('develop');
+    expect(readSettings).not.toHaveBeenCalled();
+  });
+
   it('ignores legacy tmux values stored in project settings', async () => {
     const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'yoda-settings-local-'));
     tempDirs.push(projectPath);

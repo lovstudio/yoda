@@ -71,4 +71,17 @@ describe('getEffectiveTaskSettings', () => {
 
     expect(settings.preservePatterns).toContain('.env');
   });
+
+  it('reuses an already-loaded project settings snapshot', async () => {
+    const projectSettings = makeProjectSettings({ shellSetup: 'should not be read' });
+
+    const settings = await getEffectiveTaskSettings({
+      projectSettings,
+      loadedProjectSettings: { shellSetup: 'source .envrc' },
+      taskFs: makeTaskFs(null),
+    });
+
+    expect(projectSettings.get).not.toHaveBeenCalled();
+    expect(settings.shellSetup).toBe('source .envrc');
+  });
 });

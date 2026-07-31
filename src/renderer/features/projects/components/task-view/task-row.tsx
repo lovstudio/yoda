@@ -50,6 +50,7 @@ export const TaskRow = observer(function TaskRow({
   const currentPr = task.data.prs ? selectCurrentPr(task.data.prs) : undefined;
   const provisionedTask = asProvisioned(task);
   const handleProvision = () => void taskManager?.provisionTask(task.data.id);
+  const preloadTaskView = () => void taskManager?.preloadTask(task.data.id);
 
   const openPreferredConversationIfEmpty = () => {
     if (!provisionedTask) return;
@@ -85,6 +86,8 @@ export const TaskRow = observer(function TaskRow({
         role="button"
         tabIndex={0}
         onClick={handleOpenDetails}
+        onPointerEnter={preloadTaskView}
+        onFocus={preloadTaskView}
         onKeyDown={handleRowKeyDown}
         className="group flex w-full cursor-pointer items-center gap-2 rounded-lg p-3 outline-none transition-colors hover:bg-background-1 focus-visible:ring-2 focus-visible:ring-ring/40"
       >

@@ -11,9 +11,17 @@ import type { ProjectSettingsProvider } from './provider';
 export async function getEffectiveTaskSettings(args: {
   projectSettings: ProjectSettingsProvider;
   taskFs: FileSystemProvider;
+  /**
+   * Reuse a settings snapshot when the caller already loaded one for the same
+   * provisioning pass. This avoids another database/SSH read on the task-open
+   * hot path while preserving the existing standalone behavior.
+   */
+  loadedProjectSettings?: ProjectSettings;
 }): Promise<ProjectSettings> {
-  const { projectSettings, taskFs } = args;
-  const parsedSettings = shareableProjectSettingsSchema.safeParse(await projectSettings.get());
+  const { projectSettings, taskFs, loadedProjectSettings } = args;
+  const parsedSettings = shareableProjectSettingsSchema.safeParse(
+    loadedProjectSettings ?? (await projectSettings.get())
+  );
   const localShareableSettings = parsedSettings.success ? parsedSettings.data : {};
   const defaults = defaultShareableProjectSettings();
   const exists = await taskFs.exists('.yoda.json');

@@ -153,6 +153,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
     void taskManager?.provisionTask(taskId);
   };
 
+  const preloadTaskView = () => {
+    void taskManager?.preloadTask(taskId);
+  };
+
   const needsReview = task.data.needsReview;
 
   const provisionedTask = asProvisioned(task);
@@ -219,7 +223,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         data-sidebar-project-id={projectId}
         data-sidebar-task-id={taskId}
         isActive={isActive}
-        onMouseDown={(e) => e.preventDefault()}
+        onPointerEnter={preloadTaskView}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          preloadTaskView();
+        }}
         onMouseLeave={() => setArchiveConfirming(false)}
         onClick={(e) => {
           setArchiveConfirming(false);
