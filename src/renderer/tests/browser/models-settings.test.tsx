@@ -12,9 +12,12 @@ import type {
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
+  createProvider: vi.fn(),
+  deleteProvider: vi.fn(),
   listProviders: vi.fn(),
   refreshProviders: vi.fn(),
   setAutomaticUpdates: vi.fn(),
+  showConfirm: vi.fn(),
   updateCustomModels: vi.fn(),
 }));
 
@@ -32,6 +35,8 @@ vi.mock('react-i18next', async (importOriginal) => ({
 vi.mock('@renderer/lib/ipc', () => ({
   rpc: {
     llm: {
+      createCustomModelProvider: mocks.createProvider,
+      deleteCustomModelProvider: mocks.deleteProvider,
       listModelProviders: mocks.listProviders,
       refreshModelProviders: mocks.refreshProviders,
       setModelProviderAutomaticUpdates: mocks.setAutomaticUpdates,
@@ -41,6 +46,10 @@ vi.mock('@renderer/lib/ipc', () => ({
       openExternal: vi.fn(),
     },
   },
+}));
+
+vi.mock('@renderer/lib/modal/modal-provider', () => ({
+  useShowModal: () => mocks.showConfirm,
 }));
 
 describe('Models settings', () => {
@@ -60,6 +69,39 @@ describe('Models settings', () => {
     mocks.refreshProviders.mockImplementation(async () => result);
     mocks.setAutomaticUpdates.mockImplementation(async (enabled: boolean) => {
       result = { ...result, automaticUpdatesEnabled: enabled };
+      return result;
+    });
+    mocks.createProvider.mockImplementation(
+      async (input: { id: string; name: string; initialModel?: string }) => {
+        const modelId = input.initialModel ? `${input.id}/${input.initialModel}` : null;
+        result = {
+          ...result,
+          providers: [
+            ...result.providers,
+            {
+              id: input.id,
+              name: input.name,
+              custom: true,
+              models: modelId ? [{ id: modelId, custom: true, sources: ['custom' as const] }] : [],
+              customModels: modelId ? [modelId] : [],
+              officialSourceUrl: null,
+              officialSnapshotAt: null,
+              officialFetchedAt: null,
+              lastUpdateAttemptAt: null,
+              officialApiSupported: false,
+              officialApiConfigured: false,
+              updateStatus: 'customOnly',
+            },
+          ],
+        };
+        return result;
+      }
+    );
+    mocks.deleteProvider.mockImplementation(async (providerId: string) => {
+      result = {
+        ...result,
+        providers: result.providers.filter((provider) => provider.id !== providerId),
+      };
       return result;
     });
     mocks.updateCustomModels.mockImplementation(
@@ -183,6 +225,57 @@ describe('Models settings', () => {
     await flush();
     expect(mocks.setAutomaticUpdates).toHaveBeenCalledWith(false);
   });
+
+  it('creates a custom provider with an initial model and deletes it after confirmation', async () => {
+    await renderModelsSettings(root, queryClient);
+
+    await clickButtonContaining(host, 'settings.models.addProvider');
+    const nameInput = host.querySelector<HTMLInputElement>(
+      'input[aria-label="settings.models.providerName"]'
+    );
+    const idInput = host.querySelector<HTMLInputElement>(
+      'input[aria-label="settings.models.providerId"]'
+    );
+    const modelInput = host.querySelector<HTMLInputElement>(
+      'input[aria-label="settings.models.providerInitialModel"]'
+    );
+    expect(nameInput).not.toBeNull();
+    expect(idInput).not.toBeNull();
+    expect(modelInput).not.toBeNull();
+
+    await act(async () => setInputValue(nameInput!, 'SiliconFlow'));
+    await act(async () => setInputValue(idInput!, 'siliconflow'));
+    await act(async () => setInputValue(modelInput!, 'deepseek-v3.2'));
+    await clickButtonContaining(host, 'settings.models.createProvider');
+    await flush();
+
+    expect(mocks.createProvider).toHaveBeenCalledWith({
+      id: 'siliconflow',
+      name: 'SiliconFlow',
+      initialModel: 'deepseek-v3.2',
+    });
+    expect(host.textContent).toContain('SiliconFlow');
+    expect(host.textContent).toContain('siliconflow/deepseek-v3.2');
+    expect(host.textContent).toContain('settings.models.updateStatus.customOnly');
+    expect(host.textContent).not.toContain('settings.models.refresh');
+
+    await clickButtonContaining(host, 'settings.models.deleteProvider');
+    expect(mocks.showConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'settings.models.deleteProviderTitle',
+        description: 'settings.models.deleteProviderDescription:SiliconFlow:',
+        confirmLabel: 'settings.models.deleteProviderConfirm',
+      })
+    );
+    const confirmArgs = mocks.showConfirm.mock.calls.at(-1)?.[0] as
+      | { onSuccess: () => void }
+      | undefined;
+    await act(async () => confirmArgs?.onSuccess());
+    await flush();
+
+    expect(mocks.deleteProvider).toHaveBeenCalledWith('siliconflow');
+    expect(host.textContent).not.toContain('siliconflow/deepseek-v3.2');
+  });
 });
 
 async function renderModelsSettings(root: Root, queryClient: QueryClient) {
@@ -228,6 +321,7 @@ function providerGroup(
   return {
     id,
     name,
+    custom: false,
     models: catalogModels.map((modelId) => ({
       id: modelId,
       custom: false,
