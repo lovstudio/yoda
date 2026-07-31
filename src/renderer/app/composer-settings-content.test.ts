@@ -24,7 +24,9 @@ describe('shared composer settings surfaces', () => {
     expect(content).toContain("t('home.enabledPromptCount'");
     expect(content).toContain("t('home.openPromptLibrary')");
     expect(content).toContain("appState.navigation.navigate('library', { section: 'prompts' })");
-    expect(content).not.toContain('<PromptInjectionControls');
+    expect(content).toContain('<PromptInjectionControls');
+    expect(content).toContain('variant="compact"');
+    expect(content).toContain('<CompactProjectPromptControls');
     expect(content).not.toContain('<InstructionFilesSection');
   });
 
