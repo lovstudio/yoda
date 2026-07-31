@@ -24,7 +24,7 @@ import {
 } from '@shared/view-state';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
-import { sidebarStore } from '@renderer/lib/stores/app-state';
+import { sidebarStore, workspaceStore } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
 import {
   ContextMenu,
@@ -59,6 +59,7 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
           label={t('sidebar.projects')}
           collapsed={sidebarStore.projectsCollapsed}
           onToggle={() => sidebarStore.toggleProjectsCollapsed()}
+          rightSlot={!workspaceStore.enabled ? <ProjectsSettingsMenu /> : undefined}
         />
       </ContextMenuTrigger>
       <ContextMenuContent>

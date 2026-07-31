@@ -56,6 +56,7 @@ vi.mock('@renderer/lib/layout/navigation-provider', () => ({
 
 vi.mock('@renderer/lib/stores/app-state', () => ({
   sidebarStore: mocks.sidebarStore,
+  workspaceStore: { enabled: false },
 }));
 
 async function settle(): Promise<void> {

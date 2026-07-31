@@ -45,6 +45,7 @@ export const SETTINGS_DEFAULTS = {
     writeAgentConfigToGitIgnore: true,
   }),
   tasks: {
+    workspacesEnabled: false,
     autoGenerateName: true,
     initTaskNameFromSession: true,
     branchNaming: 'hash' as const,

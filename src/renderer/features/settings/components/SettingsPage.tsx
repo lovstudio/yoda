@@ -53,6 +53,7 @@ import {
   InputPromptLanguageRow,
   PreArchiveCommandRow,
   TmuxSettingsChapter,
+  WorkspacesEnabledRow,
 } from './TaskSettingsRows';
 import TelemetryCard from './TelemetryCard';
 import TerminalSettingsCard from './TerminalSettingsCard';
@@ -248,6 +249,10 @@ export function SettingsPage({
       title: t('settings.tabs.tasks'),
       description: t('settings.tasksTab.description'),
       sections: [
+        {
+          id: 'workspaces-enabled',
+          component: <WorkspacesEnabledRow />,
+        },
         {
           id: 'init-task-name-from-session',
           component: <InitTaskNameFromSessionRow />,

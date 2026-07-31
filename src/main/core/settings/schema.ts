@@ -75,6 +75,8 @@ const summaryContextSchema = z.object(
 );
 
 export const taskSettingsSchema = z.object({
+  /** Whether workspace organization and filtering are exposed in the task UI. */
+  workspacesEnabled: z.boolean().catch(false),
   autoGenerateName: z.boolean(),
   /** Initialize the task name from the initial session's auto-generated title. */
   initTaskNameFromSession: z.boolean().catch(true),
