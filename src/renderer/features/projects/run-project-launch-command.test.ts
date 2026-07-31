@@ -1,20 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectLaunchCommand } from '@shared/quick-actions';
 import { runProjectLaunchCommand } from './run-project-launch-command';
+import type { MountedProject } from './stores/project';
 
 const mocks = vi.hoisted(() => ({
-  getTaskStore: vi.fn(),
-  asProvisioned: vi.fn(),
-  getTerminalsPaneSize: vi.fn(),
+  runProjectQuickAction: vi.fn(),
 }));
 
-vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
-  getTaskStore: mocks.getTaskStore,
-  asProvisioned: mocks.asProvisioned,
-}));
-
-vi.mock('@renderer/features/tasks/terminals/terminal-tabs', () => ({
-  getTerminalsPaneSize: mocks.getTerminalsPaneSize,
+vi.mock('./run-project-quick-action', () => ({
+  runProjectQuickAction: mocks.runProjectQuickAction,
 }));
 
 const launchCommand: ProjectLaunchCommand = {
@@ -24,62 +18,36 @@ const launchCommand: ProjectLaunchCommand = {
   source: 'package.json',
 };
 
+const project = {
+  data: { id: 'project-1', type: 'local', path: '/repo' },
+} as MountedProject;
+
 describe('runProjectLaunchCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getTerminalsPaneSize.mockReturnValue({ cols: 120, rows: 36 });
+    mocks.runProjectQuickAction.mockResolvedValue({ kind: 'shell', taskId: 'task-1' });
   });
 
-  it('returns false when there is no provisioned task terminal host', async () => {
-    mocks.getTaskStore.mockReturnValue({ state: 'unprovisioned' });
-    mocks.asProvisioned.mockReturnValue(undefined);
+  it('routes a detected launch command through the shared shell quick-action lifecycle', async () => {
+    const defaultBranch = { type: 'local', branch: 'main' } as const;
 
     await expect(
       runProjectLaunchCommand({
-        projectId: 'project-1',
-        taskId: 'task-1',
+        project,
         launchCommand,
+        defaultBranch,
       })
-    ).resolves.toBe(false);
-  });
+    ).resolves.toBe('task-1');
 
-  it('creates and selects a standard terminal before running the launch command', async () => {
-    const setBottomPanelTab = vi.fn();
-    const setBottomPanelOpen = vi.fn();
-    const setFocusedRegion = vi.fn();
-    const setActiveTab = vi.fn();
-    const createCommandTerminal = vi.fn().mockResolvedValue({ id: 'terminal-1' });
-    const taskStore = { state: 'provisioned' };
-    mocks.getTaskStore.mockReturnValue(taskStore);
-    mocks.asProvisioned.mockReturnValue({
-      taskView: {
-        setBottomPanelTab,
-        setBottomPanelOpen,
-        setFocusedRegion,
-        terminalTabs: { setActiveTab },
+    expect(mocks.runProjectQuickAction).toHaveBeenCalledWith({
+      project,
+      action: {
+        id: 'package-script:dev',
+        label: 'Start locally',
+        command: 'pnpm run dev',
+        kind: 'shell',
       },
-      terminals: { createCommandTerminal },
+      defaultBranch,
     });
-
-    await expect(
-      runProjectLaunchCommand({
-        projectId: 'project-1',
-        taskId: 'task-1',
-        launchCommand,
-      })
-    ).resolves.toBe(true);
-
-    expect(mocks.getTaskStore).toHaveBeenCalledWith('project-1', 'task-1');
-    expect(setBottomPanelTab).toHaveBeenCalledWith('terminals', {
-      ensureTerminal: false,
-    });
-    expect(setBottomPanelOpen).toHaveBeenCalledWith(true);
-    expect(setFocusedRegion).toHaveBeenCalledWith('bottom');
-    expect(createCommandTerminal).toHaveBeenCalledWith({
-      command: 'pnpm run dev',
-      label: 'Start locally',
-      initialSize: { cols: 120, rows: 36 },
-    });
-    expect(setActiveTab).toHaveBeenCalledWith('terminal-1');
   });
 });

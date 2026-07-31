@@ -1,30 +1,30 @@
+import type { Branch } from '@shared/git';
 import type { ProjectLaunchCommand } from '@shared/quick-actions';
-import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
-import { runCommandInTaskTerminal } from './run-command-in-task-terminal';
+import type { MountedProject } from '@renderer/features/projects/stores/project';
+import { runProjectQuickAction } from './run-project-quick-action';
 
 /**
- * Runs a discovered project launch command as a standard task terminal.
- *
- * Returning false means the requested task is not currently provisioned, so
- * the caller can explain that a task must be open without creating a parallel
- * project-shell execution path.
+ * Runs a discovered launch command through the same persisted task Terminal
+ * lifecycle as saved shell quick actions.
  */
 export async function runProjectLaunchCommand({
-  projectId,
-  taskId,
+  project,
   launchCommand,
+  defaultBranch,
 }: {
-  projectId: string;
-  taskId: string;
+  project: MountedProject;
   launchCommand: ProjectLaunchCommand;
-}): Promise<boolean> {
-  const provisioned = asProvisioned(getTaskStore(projectId, taskId));
-  if (!provisioned) return false;
-
-  await runCommandInTaskTerminal({
-    task: provisioned,
-    command: launchCommand.command,
-    label: launchCommand.label,
+  defaultBranch: Branch | undefined;
+}): Promise<string> {
+  const result = await runProjectQuickAction({
+    project,
+    action: {
+      id: launchCommand.id,
+      label: launchCommand.label,
+      command: launchCommand.command,
+      kind: 'shell',
+    },
+    defaultBranch,
   });
-  return true;
+  return result.taskId;
 }

@@ -227,27 +227,17 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
 
   const handleRunLaunchCommand = useCallback(
     async (launchCommand: ProjectLaunchCommand) => {
-      if (currentView !== 'task' || taskParams.projectId !== projectId || !taskParams.taskId) {
-        toast({
-          title: t('sidebar.captureAutomation.runFailed'),
-          description: t('sidebar.runScripts.noWorkspace'),
-          variant: 'destructive',
-        });
-        return;
-      }
+      const mounted = asMounted(getProjectStore(projectId));
+      const repository = getRepositoryStore(projectId);
+      if (!mounted || !repository) return;
       try {
-        const didRun = await runProjectLaunchCommand({
-          projectId,
-          taskId: taskParams.taskId,
+        await Promise.all([repository.localData.load(), repository.remoteData.load()]);
+        const taskId = await runProjectLaunchCommand({
+          project: mounted,
           launchCommand,
+          defaultBranch: repository.defaultBranch,
         });
-        if (!didRun) {
-          toast({
-            title: t('sidebar.captureAutomation.runFailed'),
-            description: t('sidebar.runScripts.noWorkspace'),
-            variant: 'destructive',
-          });
-        }
+        navigate('task', { projectId, taskId });
       } catch (error) {
         log.warn('sidebar launch command failed', {
           projectId,
@@ -261,7 +251,7 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
         });
       }
     },
-    [currentView, projectId, t, taskParams.projectId, taskParams.taskId]
+    [navigate, projectId, t]
   );
 
   const handleAddTask = useCallback(async () => {
