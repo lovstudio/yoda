@@ -12,6 +12,7 @@ import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
   DEFAULT_SUMMARY_CONTEXT_RECENT,
 } from '@shared/session-summary';
+import { DEFAULT_TASK_APPEARANCE_SETTINGS } from '@shared/task-appearance';
 import {
   DEFAULT_TASK_NAMING_CONTEXT,
   DEFAULT_TASK_NAMING_MODEL,
@@ -87,6 +88,19 @@ export const SETTINGS_DEFAULTS = {
     promptTranslationProfileId: DEFAULT_LLM_PROFILE_ID,
     promptTranslationShowOriginal: true,
   },
+  modelProviders: {
+    automaticUpdatesEnabled: true,
+    lastAutomaticRefreshAt: null,
+    providers: {},
+    catalogCache: {
+      official: {},
+      aggregate: {
+        models: [],
+        fetchedAt: null,
+        lastAttemptAt: null,
+      },
+    },
+  },
   runtimeModelCandidates: {
     runtimes: {},
   },
@@ -120,9 +134,11 @@ export const SETTINGS_DEFAULTS = {
   interface: {
     taskHoverAction: 'delete' as const,
     autoRightSidebarBehavior: false,
+    newTaskOpenMode: 'home' as const,
     agentReplyDisplayLevel: 'concise' as const,
     dockSessionHistory: true,
     dockSessionHistoryRows: 3,
+    taskAppearance: DEFAULT_TASK_APPEARANCE_SETTINGS,
   },
   browserPreview: {
     enabled: true,

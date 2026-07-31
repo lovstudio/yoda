@@ -11,6 +11,7 @@ import {
   type kanbanSettingsSchema,
   type localProjectSettingsSchema,
   type maasSettingsSchema,
+  type modelProviderSettingsSchema,
   type notificationSettingsSchema,
   type projectSettingsSchema,
   type promptPrinciplesSettingsSchema,
@@ -40,6 +41,7 @@ export type KanbanColumnHook = z.infer<typeof kanbanColumnHookSchema>;
 export type KanbanSettings = z.infer<typeof kanbanSettingsSchema>;
 export type MaasSettings = z.infer<typeof maasSettingsSchema>;
 export type GlobalLlmSettings = z.infer<typeof globalLlmSettingsSchema>;
+export type ModelProviderSettings = z.infer<typeof modelProviderSettingsSchema>;
 export type RuntimeModelCandidatesSettings = z.infer<typeof runtimeModelCandidatesSettingsSchema>;
 export type TerminalSettings = z.infer<typeof terminalSettingsSchema>;
 export type StatuslineTemplate = z.infer<typeof statuslineTemplateSchema>;

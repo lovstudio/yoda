@@ -5,6 +5,7 @@ import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { wireAgentClassifier } from '@main/core/agent-hooks/classifier-wiring';
 import { claudeTrustService } from '@main/core/agent-hooks/claude-trust-service';
+import { codexTrustService } from '@main/core/agent-hooks/codex-trust-service';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
 import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-interrupt-sniffer';
@@ -26,6 +27,7 @@ import type { SshClientProxy } from '@main/core/ssh/ssh-client-proxy';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
+import { withExecutionModeInstructions } from '../execution-mode';
 import {
   recordConversationAuthProvider,
   snapshotTaskDiffOnSessionExit,
@@ -141,6 +143,18 @@ export class SshConversationProvider implements ConversationProvider {
 
       const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
       if (!this.ownsPendingStart(sessionId, startToken)) return;
+      if (conversation.runtimeId === 'codex') {
+        await codexTrustService.maybeAutoTrustSsh({
+          runtimeId: conversation.runtimeId,
+          cwd: this.taskPath,
+          codexHome: resolveRuntimeEnv(providerConfig, {
+            runtimeId: conversation.runtimeId,
+          })?.CODEX_HOME,
+          ctx: this.ctx,
+          remoteFs: new SshFileSystem(this.proxy, '/'),
+        });
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
+      }
       recordConversationAuthProvider(conversation.id, providerConfig);
       if (conversation.skillPolicy) {
         log.warn('Skipping local Agent skill profile for SSH conversation', {
@@ -148,8 +162,9 @@ export class SshConversationProvider implements ConversationProvider {
           runtimeId: conversation.runtimeId,
         });
       }
-      const appendSystemPrompt = await getEnabledPromptPrinciplesText(
-        await this.resolveProjectPromptPrinciples?.()
+      const appendSystemPrompt = withExecutionModeInstructions(
+        await getEnabledPromptPrinciplesText(await this.resolveProjectPromptPrinciples?.()),
+        conversation.executionMode
       );
       if (!this.ownsPendingStart(sessionId, startToken)) return;
       const terminalThemeMode = await resolveTerminalThemeMode();
@@ -168,6 +183,7 @@ export class SshConversationProvider implements ConversationProvider {
         appendSystemPrompt,
         model,
         terminalThemeMode,
+        executionMode: conversation.executionMode,
       });
 
       const tmuxSessionName = await this.resolveTmuxSessionName(sessionId, tmuxOverride);

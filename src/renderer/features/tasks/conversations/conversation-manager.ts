@@ -510,9 +510,15 @@ export class ConversationManagerStore {
         return false;
       }
       store.setSessionExited(false);
-      if (initialSize) {
+      // Mount-time measurement can finish while the main process is still
+      // creating the backend PTY. That early resize sees no registered PTY,
+      // while initialSize may still be xterm's 80x24 fallback. Reapply the
+      // latest measured grid after spawn so the TUI paints the full pane on
+      // first launch instead of waiting for a reload.
+      const mountedSize = store.session.pty?.lastSentDims ?? initialSize;
+      if (mountedSize) {
         const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
-        void rpc.pty.resize(sessionId, initialSize.cols, initialSize.rows);
+        void rpc.pty.resize(sessionId, mountedSize.cols, mountedSize.rows);
       }
       return true;
     } catch (error) {

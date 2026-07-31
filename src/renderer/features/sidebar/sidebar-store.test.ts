@@ -390,6 +390,48 @@ describe('SidebarStore subtask tree rows', () => {
     expect(store.selectionRevealRequest).toBeNull();
   });
 
+  it('makes a filtered project visible before issuing its locator request', () => {
+    const store = makeSidebarStore([makeProject('project-1', [])]);
+    store.applyGroupBy('activity');
+    store.setProjectTypeFilter('ssh');
+    store.setHideProjectsWithoutActiveTasks(true);
+
+    expect(store.sidebarRows).not.toContainEqual({
+      kind: 'project',
+      projectId: 'project-1',
+    });
+
+    store.requestSelectionReveal('project-1');
+
+    expect(store.taskGroupBy).toBe('project');
+    expect(store.projectTypeFilter).toBe('all');
+    expect(store.hideProjectsWithoutActiveTasks).toBe(false);
+    expect(store.sidebarRows).toContainEqual({
+      kind: 'project',
+      projectId: 'project-1',
+    });
+  });
+
+  it('preserves filters that already list the located project', () => {
+    const task = makeTask('task-1', {
+      createdAt: '2026-06-02T10:00:00.000Z',
+    });
+    const store = makeSidebarStore([makeProject('project-1', [task])]);
+    store.applyGroupBy('type');
+    store.setProjectTypeFilter('local');
+    store.setHideProjectsWithoutActiveTasks(true);
+
+    store.requestSelectionReveal('project-1');
+
+    expect(store.taskGroupBy).toBe('type');
+    expect(store.projectTypeFilter).toBe('local');
+    expect(store.hideProjectsWithoutActiveTasks).toBe(true);
+    expect(store.sidebarRows).toContainEqual({
+      kind: 'project',
+      projectId: 'project-1',
+    });
+  });
+
   it('opens the pinned section when the selected task is pinned', () => {
     const pinned = makeTask('pinned', {
       createdAt: '2026-06-02T10:00:00.000Z',
@@ -445,6 +487,7 @@ function makeTask(
     parentTaskId: timestamps.parentTaskId,
     archivedAt: timestamps.archivedAt,
     isPinned: timestamps.isPinned ?? false,
+    isLongTerm: false,
     needsReview: false,
     isUserNamed: false,
     setupStatus: 'ready',

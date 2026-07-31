@@ -56,7 +56,11 @@ export type GlobalLlmDebugResult = {
   rawError?: string;
 };
 
-export const GLOBAL_LLM_MODEL_DISCOVERY_SOURCE_IDS = ['aiGateway', 'runtimeCatalog'] as const;
+export const GLOBAL_LLM_MODEL_DISCOVERY_SOURCE_IDS = [
+  'custom',
+  'aiGateway',
+  'runtimeCatalog',
+] as const;
 
 export type GlobalLlmModelDiscoverySource = (typeof GLOBAL_LLM_MODEL_DISCOVERY_SOURCE_IDS)[number];
 

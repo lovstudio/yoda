@@ -1,9 +1,23 @@
-import { Archive, ChevronRight, GitBranch, Loader2, MoreHorizontal, Users } from 'lucide-react';
+import {
+  Archive,
+  Bookmark,
+  ChevronRight,
+  GitBranch,
+  Loader2,
+  MoreHorizontal,
+  Users,
+} from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { selectCurrentPr } from '@shared/pull-requests';
+import {
+  DEFAULT_TASK_APPEARANCE_SETTINGS,
+  resolveTaskAppearance,
+  type ResolvedTaskAppearance,
+} from '@shared/task-appearance';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
+import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { TaskSidebarAgentStatus } from '@renderer/features/sidebar/task-sidebar-agent-status';
 import {
   TaskActionsMenu,
@@ -17,6 +31,10 @@ import {
   getTaskStore,
   taskSessionStatusSummary,
 } from '@renderer/features/tasks/stores/task-selectors';
+import {
+  taskIdleOpacityClassName,
+  taskTitleStyleClassName,
+} from '@renderer/features/tasks/task-appearance-classes';
 import { TreeGuideSlot } from '@renderer/lib/components/tree-guide-slot';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
@@ -61,6 +79,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const { navigate } = useNavigate();
 
   const { params } = useParams('task');
+  const { value: interfaceSettings } = useAppSettingsKey('interface');
   // The selected task stays highlighted even after navigating to a non-task view
   // (settings, skills, etc.) — selection is only cancelled by switching to another
   // task, not by leaving the task view. `viewParamsStore['task']` persists the
@@ -91,6 +110,16 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // click target (jump to the pending session) and the working spinner keeps
   // its hover-to-interrupt affordance.
   const hasAgentNotification = taskSessionStatusSummary(task).primaryStatus !== null;
+  const isIdle = !isBootstrapping && !hasAgentNotification;
+  const appearance = resolveTaskAppearance(
+    interfaceSettings?.taskAppearance ?? DEFAULT_TASK_APPEARANCE_SETTINGS,
+    {
+      isLongTerm: task.data.isLongTerm,
+      needsReview: task.data.needsReview,
+      isIdle,
+      isMultiAgent,
+    }
+  );
 
   const taskName = task.data.name;
   const treeDepth = rowVariant === 'underProject' ? Math.min(depth, TASK_TREE_MAX_VISUAL_DEPTH) : 0;
@@ -109,10 +138,15 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const branchDisplay = sidebarStore.taskBranchDisplay;
   const taskIndentClass =
     rowVariant === 'underProject' ? (hasRootToggle ? undefined : 'pl-8') : 'pl-2';
-  const multiAgentLabel = t('sidebar.multiAgentTask');
-  const showMultiAgentIconInReservedSlot =
-    isMultiAgent && rowVariant === 'underProject' && treeDepth === 0 && !hasRootToggle;
-  const showMultiAgentIconInline = isMultiAgent && !showMultiAgentIconInReservedSlot;
+  const markerLabel = t(
+    isMultiAgent
+      ? 'settings.taskAppearance.multiAgent'
+      : task.data.isLongTerm
+        ? 'settings.taskAppearance.longTerm'
+        : 'settings.taskAppearance.standard'
+  );
+  const showMarkerInReservedSlot = appearance.marker !== 'none' && rowVariant === 'underProject';
+  const showMarkerAtCompactEdge = appearance.marker !== 'none' && rowVariant !== 'underProject';
 
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
@@ -163,7 +197,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
       {...menuActions}
       // Hold the deferred reflow while the menu is open: the menu is a portal,
       // so the pointer leaving the list onto it would otherwise release the
-      // pointer-based hold and let "标记未读" reorder rows mid-interaction.
+      // pointer-based hold and let "标记为未读" reorder rows mid-interaction.
       onOpenChange={(open) =>
         open
           ? sidebarStore.holdTaskReflow('task-menu')
@@ -175,8 +209,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           // Two-line row: task name on top, branch below. Height is intrinsic
           // (min-h-8 keeps branch-less rows at the original 32px). `relative`
           // anchors the compact branch gutter inside the pl-8 icon column.
-          'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1',
-          taskIndentClass
+          'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1 transition-[color,background-color,opacity]',
+          taskIndentClass,
+          taskIdleOpacityClassName(appearance.idleOpacity),
+          appearance.idleOpacity < 100 &&
+            'hover:opacity-100 focus-within:opacity-100 data-[active=true]:opacity-100'
         )}
         data-sidebar-entity="task"
         data-sidebar-project-id={projectId}
@@ -270,18 +307,30 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               )}
             />
           )}
-          {showMultiAgentIconInReservedSlot && (
-            <MultiAgentTaskIcon
-              label={multiAgentLabel}
-              className="absolute left-1 top-1/2 -translate-y-1/2"
+          {showMarkerInReservedSlot && (
+            <TaskAppearanceMarker
+              marker={appearance.marker}
+              label={markerLabel}
+              className={cn(
+                'absolute left-1 top-1/2 -translate-y-1/2',
+                hasRootToggle && 'transition-opacity group-hover/row:opacity-0'
+              )}
             />
           )}
-          {showMultiAgentIconInline && <MultiAgentTaskIcon label={multiAgentLabel} />}
+          {showMarkerAtCompactEdge && (
+            <TaskAppearanceMarker
+              compact
+              marker={appearance.marker}
+              label={markerLabel}
+              className="absolute left-0 top-1/2 -translate-y-1/2"
+            />
+          )}
           <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
             <div className="flex min-w-0 items-center gap-1">
               <span
                 className={cn(
                   'min-w-0 truncate text-left transition-colors',
+                  taskTitleStyleClassName(appearance.titleStyle),
                   (isBootstrapping || isArchiving) && 'text-foreground/40'
                 )}
               >
@@ -405,18 +454,41 @@ const RenderPrBadge = observer(function RenderPrBadge({ task }: { task: TaskStor
   return pr ? <PrBadge variant="compact" pr={pr} /> : null;
 });
 
-function MultiAgentTaskIcon({ label, className }: { label: string; className?: string }) {
+function TaskAppearanceMarker({
+  marker,
+  label,
+  className,
+  compact = false,
+}: {
+  marker: ResolvedTaskAppearance['marker'];
+  label: string;
+  className?: string;
+  compact?: boolean;
+}) {
+  if (marker === 'none') return null;
+
   return (
     <span
       role="img"
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex size-6 shrink-0 items-center justify-center text-amber-700 dark:text-amber-300',
+        'inline-flex shrink-0 items-center justify-center',
+        compact ? 'size-2' : 'size-6',
+        marker === 'users' ? 'text-amber-700 dark:text-amber-300' : 'text-foreground-tertiary',
         className
       )}
     >
-      <Users className="size-4" />
+      {marker === 'users' && <Users className={compact ? 'size-2' : 'size-4'} />}
+      {marker === 'bookmark' && (
+        <Bookmark className={cn('fill-current', compact ? 'size-2' : 'size-3.5')} />
+      )}
+      {marker === 'dot' && (
+        <span
+          aria-hidden
+          className={cn('rounded-full bg-current', compact ? 'size-1' : 'size-1.5')}
+        />
+      )}
     </span>
   );
 }

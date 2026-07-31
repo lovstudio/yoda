@@ -30,8 +30,9 @@ class MockBufferLine {
     this.isWrapped = options.isWrapped ?? false;
   }
 
-  translateToString(trimRight?: boolean): string {
-    return trimRight ? this.text.trimEnd() : this.text.padEnd(this.length);
+  translateToString(trimRight?: boolean, startColumn = 0, endColumn = this.length): string {
+    const text = this.text.padEnd(this.length).slice(startColumn, endColumn);
+    return trimRight ? text.trimEnd() : text;
   }
 
   getCell(index: number, cell: MockCell): MockCell {

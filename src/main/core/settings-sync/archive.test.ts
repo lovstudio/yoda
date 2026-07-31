@@ -58,6 +58,31 @@ describe('settings archive', () => {
         runtimeBindings: [],
       },
       llm: {},
+      modelProviders: {
+        automaticUpdatesEnabled: true,
+        lastAutomaticRefreshAt: '2026-07-31T00:00:00.000Z',
+        providers: {
+          anthropic: { customModels: ['anthropic/claude-opus-4.7'] },
+          siliconflow: {
+            name: 'SiliconFlow',
+            customModels: ['siliconflow/deepseek-v3.2'],
+          },
+        },
+        catalogCache: {
+          official: {
+            anthropic: {
+              models: ['anthropic/claude-sonnet-5'],
+              fetchedAt: '2026-07-31T00:00:00.000Z',
+              lastAttemptAt: '2026-07-31T00:00:00.000Z',
+            },
+          },
+          aggregate: {
+            models: ['anthropic/claude-sonnet-5'],
+            fetchedAt: '2026-07-31T00:00:00.000Z',
+            lastAttemptAt: '2026-07-31T00:00:00.000Z',
+          },
+        },
+      },
       defaultRuntime: 'claude',
       keyboard: {},
       notifications: {},
@@ -107,6 +132,25 @@ describe('settings archive', () => {
     });
     expect(archive.data.runtimeConfigs.claude?.env).toEqual({
       HTTP_PROXY: 'http://127.0.0.1:7890',
+    });
+    expect(archive.data.appSettings.modelProviders).toEqual({
+      automaticUpdatesEnabled: true,
+      lastAutomaticRefreshAt: null,
+      providers: {
+        anthropic: { customModels: ['anthropic/claude-opus-4.7'] },
+        siliconflow: {
+          name: 'SiliconFlow',
+          customModels: ['siliconflow/deepseek-v3.2'],
+        },
+      },
+      catalogCache: {
+        official: {},
+        aggregate: {
+          models: [],
+          fetchedAt: null,
+          lastAttemptAt: null,
+        },
+      },
     });
     expect(archive.data.viewState.sidebar).toEqual({
       taskSortBy: 'updated-at',

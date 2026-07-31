@@ -56,6 +56,11 @@ EXPO_PUBLIC_YODA_RELAY_ORIGIN=https://relay-staging.example.com pnpm mobile
 Relay credentials are stored with Expo SecureStore on native iOS and Android builds. Web previews
 fall back to AsyncStorage and should not be used for production Relay access.
 
+Pairing is required once per phone. On later launches, the app restores the saved Relay credential
+before considering Expo or other development fallbacks. A new QR replaces the current connection
+only when the app is explicitly opened from that pairing link. Explicit disconnect, app-data
+removal, or desktop-device revocation requires pairing again.
+
 ## Local iOS Test First
 
 The fastest path is Expo Go on a physical iPhone. This does not install a Yoda-branded

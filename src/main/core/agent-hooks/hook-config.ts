@@ -10,7 +10,12 @@ import piYodaExtension from './pi-yoda-extension.ts?raw';
 // without clobbering user-defined hooks. Includes the legacy `YODA_HOOK_PORT`
 // (spawn-time env) so projects that still carry the old form get it rewritten
 // to the endpoint-file form on the next write.
-const YODA_MARKERS = ['hook-endpoint.json', 'YODA_HOOK_PORT', 'YODA_PTY_ID'];
+const YODA_MARKERS = [
+  'hook-endpoint.json',
+  'YODA_HOOK_PORT',
+  'YODA_PTY_ID',
+  'yoda-codex-notify.ps1',
+];
 
 function isYodaManagedHook(entry: unknown): boolean {
   const serialized = JSON.stringify(entry);
@@ -18,6 +23,7 @@ function isYodaManagedHook(entry: unknown): boolean {
 }
 
 const CLAUDE_SETTINGS_PATH = '.claude/settings.local.json';
+const CODEX_CONFIG_PATH = '.codex/config.toml';
 const PI_YODA_EXTENSION_PATH = '.pi/extensions/yoda-hook.ts';
 const OPENCODE_PLUGIN_PATH = '.opencode/plugins/yoda-notifications.js';
 const GITIGNORE_PATH = '.gitignore';
@@ -129,6 +135,25 @@ export class HookConfigWriter {
     return true;
   }
 
+  /**
+   * Codex notify is now injected as a per-process `-c` override. Older Yoda
+   * versions wrote it into the project config, which both duplicates the hook
+   * and is rejected by newer Codex project-config rules. Remove only the
+   * single-line Yoda-managed assignment and preserve every user-owned line.
+   */
+  async removeLegacyCodexNotify(): Promise<boolean> {
+    if (!(await this.fs.exists(CODEX_CONFIG_PATH))) return false;
+    const raw = await this.fs.read(CODEX_CONFIG_PATH).then((result) => result.content);
+    const lines = raw.split(/(?<=\n)/);
+    const nextLines = lines.filter((line) => {
+      if (!/^\s*notify\s*=/.test(line)) return true;
+      return !YODA_MARKERS.some((marker) => line.includes(marker));
+    });
+    if (nextLines.length === lines.length) return false;
+    await this.fs.write(CODEX_CONFIG_PATH, nextLines.join(''));
+    return true;
+  }
+
   async writeForProvider(
     runtimeId: RuntimeId,
     options: HookConfigWriteOptions = {}
@@ -144,6 +169,7 @@ export class HookConfigWriter {
     }
 
     if (runtimeId === 'codex') {
+      await this.removeLegacyCodexNotify();
       return;
     }
 
