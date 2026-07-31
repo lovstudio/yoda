@@ -4,7 +4,7 @@ import type { WorkspaceShellAction } from '@shared/workspace-shell';
 import { rpc } from '@renderer/lib/ipc';
 import { PtySession } from '@renderer/lib/pty/pty-session';
 
-export type WorkspaceShellMode = 'shell' | 'runtime-action' | 'command';
+export type WorkspaceShellMode = 'shell' | 'runtime-action';
 
 type TerminalSize = { cols: number; rows: number };
 
@@ -16,7 +16,6 @@ export class WorkspaceShellStore {
   mode: WorkspaceShellMode = 'shell';
   runtimeId: RuntimeId | null = null;
   runtimeAction: WorkspaceShellAction | null = null;
-  commandLabel: string | null = null;
   cwd: string | undefined;
   private operationVersion = 0;
 
@@ -39,7 +38,7 @@ export class WorkspaceShellStore {
     await this.openShell(cwd);
   }
 
-  async openShell(cwd?: string, forceRestart = false): Promise<void> {
+  async openShell(cwd?: string, forceRestart = false, requireCwd = false): Promise<void> {
     const normalizedCwd = cwd?.trim() || undefined;
     if (!forceRestart && this.session && this.mode === 'shell' && this.cwd === normalizedCwd) {
       this.isOpen = true;
@@ -56,6 +55,7 @@ export class WorkspaceShellStore {
         sessionId: session.sessionId,
         cwd: normalizedCwd,
         initialSize: this.currentSize() ?? previousSize,
+        requireCwd,
       });
       session.enableConnection();
       await session.connect();
@@ -101,25 +101,22 @@ export class WorkspaceShellStore {
     }
   }
 
-  async runCommand(command: string, cwd: string, label: string): Promise<void> {
+  /** Open the ordinary runtime-bar Terminal and type a command into its PTY. */
+  async runCommand(command: string, cwd: string): Promise<void> {
+    const normalizedCommand = command.trim();
+    if (!normalizedCommand) throw new Error('The quick action command is empty.');
+    if (normalizedCommand.length > 32_000) {
+      throw new Error('The quick action command is too long.');
+    }
     const normalizedCwd = cwd.trim();
-    const operation = this.beginOperation('command', normalizedCwd, null, null, label);
-    const previousSize = this.currentSize();
-    try {
-      const session = await this.replaceSession(operation);
-      if (!session) return;
-      await rpc.workspaceShell.runCommand(session.sessionId, {
-        command,
-        cwd: normalizedCwd,
-        initialSize: this.currentSize() ?? previousSize,
-      });
-      session.enableConnection();
-      await session.connect();
-    } catch (error) {
-      this.recordError(operation, error);
-      throw error;
-    } finally {
-      this.finishOperation(operation);
+    await this.openShell(normalizedCwd, false, true);
+    const session = this.session;
+    if (!session || !this.isShellOpen || this.cwd !== normalizedCwd) {
+      throw new Error('The project Terminal is unavailable.');
+    }
+    const inputResult = await rpc.pty.sendInput(session.sessionId, `${normalizedCommand}\r`);
+    if (!inputResult.success) {
+      throw new Error(`Terminal rejected the quick action: ${inputResult.error.type}`);
     }
   }
 
@@ -137,7 +134,6 @@ export class WorkspaceShellStore {
     this.mode = 'shell';
     this.runtimeId = null;
     this.runtimeAction = null;
-    this.commandLabel = null;
     this.cwd = undefined;
     session?.dispose();
     if (session) await rpc.workspaceShell.stop(session.sessionId);
@@ -147,8 +143,7 @@ export class WorkspaceShellStore {
     mode: WorkspaceShellMode,
     cwd: string | undefined,
     runtimeId: RuntimeId | null = null,
-    runtimeAction: WorkspaceShellAction | null = null,
-    commandLabel: string | null = null
+    runtimeAction: WorkspaceShellAction | null = null
   ): number {
     this.operationVersion += 1;
     this.isOpen = true;
@@ -157,7 +152,6 @@ export class WorkspaceShellStore {
     this.mode = mode;
     this.runtimeId = runtimeId;
     this.runtimeAction = runtimeAction;
-    this.commandLabel = commandLabel;
     this.cwd = cwd;
     return this.operationVersion;
   }
