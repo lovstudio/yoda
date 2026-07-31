@@ -23,6 +23,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@renderer/lib/ui/select';
@@ -32,6 +33,7 @@ import { cn } from '@renderer/utils/utils';
 import { SettingRow } from './SettingRow';
 
 const MODEL_PROVIDERS_QUERY_KEY = ['llm', 'modelProviders'] as const;
+const ADD_CUSTOM_PROVIDER_ACTION = '__add_custom_provider__';
 
 type UpdateCustomModelsInput = {
   providerId: string;
@@ -230,7 +232,12 @@ export default function ModelsSettingsCard() {
             value={selectedProviderId}
             onValueChange={(value) => {
               if (!value) return;
+              if (value === ADD_CUSTOM_PROVIDER_ACTION) {
+                setShowProviderCreator(true);
+                return;
+              }
               setProviderId(value);
+              resetProviderCreator();
               setCustomModelDraft('');
               setCustomModelError(null);
             }}
@@ -249,35 +256,27 @@ export default function ModelsSettingsCard() {
                   {provider.name}
                 </SelectItem>
               ))}
+              <SelectSeparator />
+              <SelectItem value={ADD_CUSTOM_PROVIDER_ACTION}>
+                <Plus className="h-3.5 w-3.5" />
+                {t('settings.models.addProvider')}
+              </SelectItem>
             </SelectContent>
           </Select>
         }
       />
 
-      <div className="rounded-md border border-border bg-background-secondary/40 p-3">
-        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">{t('settings.models.customProviderTitle')}</div>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              {t('settings.models.customProviderDescription')}
-            </p>
+      {showProviderCreator && (
+        <div className="rounded-md border border-border bg-background-secondary/40 p-3">
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">{t('settings.models.customProviderTitle')}</div>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {t('settings.models.customProviderDescription')}
+              </p>
+            </div>
           </div>
-          {!showProviderCreator && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowProviderCreator(true)}
-              disabled={disabled}
-              className="shrink-0 gap-1.5"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {t('settings.models.addProvider')}
-            </Button>
-          )}
-        </div>
 
-        {showProviderCreator && (
           <div className="mt-4 border-t border-border pt-4">
             <div className="grid gap-3 @2xl:grid-cols-2">
               <Label className="min-w-0 flex-col items-stretch gap-1.5 leading-normal">
@@ -373,8 +372,8 @@ export default function ModelsSettingsCard() {
               </Button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <SettingRow
         title={t('settings.models.automaticUpdates')}
