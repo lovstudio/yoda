@@ -640,7 +640,7 @@
       "loading": "正在加载模型…",
       "emptyTitle": "该厂商暂无模型",
       "emptyDescription": "刷新目录，或为 {{provider}} 添加一个自定义模型。",
-      "modelCount": "{{provider}} · {{count}} 个模型"
+      "modelCountCompact": "{{count}} 个模型"
     },
     "llm": {
       "title": "LLM 配置与调试",

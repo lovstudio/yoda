@@ -640,7 +640,7 @@
       "loading": "Loading models...",
       "emptyTitle": "No models for this provider",
       "emptyDescription": "Refresh the catalog or add a custom model for {{provider}}.",
-      "modelCount": "{{provider}} · {{count}} models"
+      "modelCountCompact": "{{count}} models"
     },
     "llm": {
       "title": "LLM config & debug",

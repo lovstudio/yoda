@@ -217,8 +217,15 @@ describe('Models settings', () => {
     expect(catalogActions).not.toBeNull();
     expect(catalogActions?.contains(catalogStatus)).toBe(true);
     expect(catalogStatus?.title).toContain('settings.models.officialSnapshotNeedsKey');
+    expect(catalogStatus?.textContent).toContain('settings.models.modelCountCompact');
+    expect(
+      catalogStatus?.querySelector('button[aria-label="settings.models.officialSource"]')
+    ).not.toBeNull();
     expect(catalogActions?.textContent).toContain('settings.models.customAdd');
-    expect(catalogActions?.textContent).toContain('settings.models.refresh');
+    expect(
+      catalogActions?.querySelector('button[aria-label="settings.models.refresh"]')
+    ).not.toBeNull();
+    expect(catalogActions?.textContent).not.toContain('settings.models.refresh');
 
     await clickButtonContaining(host, 'settings.models.refresh');
     await flush();
@@ -270,7 +277,10 @@ describe('Models settings', () => {
     expect(host.textContent).toContain('SiliconFlow');
     expect(host.textContent).toContain('siliconflow/deepseek-v3.2');
     expect(host.textContent).toContain('settings.models.updateStatus.customOnly');
-    expect(host.textContent).not.toContain('settings.models.refresh');
+    expect(host.querySelector('button[aria-label="settings.models.refresh"]')).toBeNull();
+    expect(
+      host.querySelector('button[aria-label="settings.models.deleteProvider"]')
+    ).not.toBeNull();
 
     await clickButtonContaining(host, 'settings.models.deleteProvider');
     expect(mocks.showConfirm).toHaveBeenCalledWith(
@@ -329,8 +339,8 @@ async function selectProvider(host: HTMLElement, name: string) {
 }
 
 async function clickButtonContaining(host: HTMLElement, text: string) {
-  const button = Array.from(host.querySelectorAll('button')).find((item) =>
-    item.textContent?.includes(text)
+  const button = Array.from(host.querySelectorAll('button')).find(
+    (item) => item.textContent?.includes(text) || item.getAttribute('aria-label')?.includes(text)
   );
   await act(async () => button?.click());
 }

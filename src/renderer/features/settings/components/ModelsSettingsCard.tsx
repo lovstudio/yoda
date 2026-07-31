@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '@renderer/lib/ui/select';
 import { Switch } from '@renderer/lib/ui/switch';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import { SettingRow } from './SettingRow';
@@ -434,33 +435,28 @@ export default function ModelsSettingsCard() {
             {t('settings.models.customAdd')}
           </Button>
           {selectedProvider?.custom ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
+            <CatalogIconAction
+              label={t('settings.models.deleteProvider')}
               onClick={() => requestDeleteCustomProvider(selectedProvider)}
               disabled={disabled}
-              className="shrink-0 gap-1.5 text-destructive hover:text-destructive"
+              destructive
             >
               <Trash2 className="h-3.5 w-3.5" />
-              {t('settings.models.deleteProvider')}
-            </Button>
+            </CatalogIconAction>
           ) : (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
+            <CatalogIconAction
+              label={
+                refreshCatalog.isPending
+                  ? t('settings.models.refreshing')
+                  : t('settings.models.refresh')
+              }
               onClick={() => refreshCatalog.mutate(selectedProviderId)}
               disabled={disabled}
-              className="shrink-0 gap-1.5"
             >
               <RefreshCw
                 className={cn('h-3.5 w-3.5', refreshCatalog.isPending && 'animate-spin')}
               />
-              {refreshCatalog.isPending
-                ? t('settings.models.refreshing')
-                : t('settings.models.refresh')}
-            </Button>
+            </CatalogIconAction>
           )}
         </div>
         {(customModelError || updateCustomModels.isError) && (
@@ -503,24 +499,55 @@ function ProviderCatalogStatus({ provider }: { provider: ModelProviderCatalogGro
         {t(statusKey)}
       </Badge>
       <div className="min-w-0 text-xs font-medium text-foreground-muted">
-        {t('settings.models.modelCount', {
-          provider: provider.name,
-          count: provider.models.length,
-        })}
+        {t('settings.models.modelCountCompact', { count: provider.models.length })}
       </div>
       {officialSourceUrl && (
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          className="h-auto shrink-0 gap-1 p-0 text-xs"
+        <CatalogIconAction
+          label={t('settings.models.officialSource')}
           onClick={() => void rpc.app.openExternal(officialSourceUrl)}
         >
-          {t('settings.models.officialSource')}
           <ExternalLink className="h-3 w-3" />
-        </Button>
+        </CatalogIconAction>
       )}
     </div>
+  );
+}
+
+function CatalogIconAction({
+  label,
+  onClick,
+  disabled = false,
+  destructive = false,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={label}
+            onClick={onClick}
+            disabled={disabled}
+            className={cn(
+              'shrink-0',
+              destructive && 'text-foreground-muted hover:text-foreground-destructive'
+            )}
+          >
+            {children}
+          </Button>
+        }
+      />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
