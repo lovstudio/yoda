@@ -207,7 +207,7 @@ describe('Models settings', () => {
     expect(host.textContent).not.toContain('anthropic/claude-opus-4.7');
   });
 
-  it('checks the selected vendor and exposes automatic update control', async () => {
+  it('checks the selected vendor and exposes automatic updates as a global setting', async () => {
     await renderModelsSettings(root, queryClient);
 
     expect(host.textContent).toContain('settings.models.updateStatus.snapshot');
@@ -220,18 +220,13 @@ describe('Models settings', () => {
     const automaticUpdate = host.querySelector<HTMLElement>(
       '[role="switch"][aria-label="settings.models.automaticUpdates"]'
     );
-    const automaticUpdateControl = host.querySelector<HTMLElement>(
-      '[data-testid="model-catalog-auto-update-control"]'
-    );
-    const updateSection = host.querySelector<HTMLElement>(
-      '[data-testid="model-catalog-update-section"]'
+    const automaticUpdateSetting = host.querySelector<HTMLElement>(
+      '[data-testid="model-catalog-auto-update-setting"]'
     );
     const catalogCard = host.querySelector<HTMLElement>('[data-testid="models-settings-card"]');
     expect(automaticUpdate).not.toBeNull();
-    expect(automaticUpdateControl?.textContent).toContain('settings.models.automaticUpdatesShort');
-    expect(updateSection?.textContent).toContain('settings.models.updatesTitle');
-    expect(updateSection?.contains(automaticUpdateControl)).toBe(true);
-    expect(updateSection?.parentElement).toBe(catalogCard);
+    expect(automaticUpdateSetting?.textContent).toContain('settings.models.automaticUpdates');
+    expect(catalogCard?.contains(automaticUpdateSetting)).toBe(false);
     await act(async () => automaticUpdate?.click());
     await flush();
     expect(mocks.setAutomaticUpdates).toHaveBeenCalledWith(false);
@@ -290,12 +285,21 @@ describe('Models settings', () => {
 });
 
 async function renderModelsSettings(root: Root, queryClient: QueryClient) {
-  const { default: ModelsSettingsCard } = await import(
+  const { default: ModelsSettingsCard, ModelCatalogAutomaticUpdateSetting } = await import(
     '@renderer/features/settings/components/ModelsSettingsCard'
   );
   await act(async () =>
     root.render(
-      createElement(QueryClientProvider, { client: queryClient }, createElement(ModelsSettingsCard))
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(
+          'div',
+          null,
+          createElement(ModelCatalogAutomaticUpdateSetting),
+          createElement(ModelsSettingsCard)
+        )
+      )
     )
   );
   await flush();
