@@ -3,6 +3,7 @@ import {
   findSidebarSelectionRow,
   resolveSidebarSelectionTarget,
   revealSidebarSelectionRow,
+  shouldSuppressSidebarRouteScroll,
 } from '@renderer/features/sidebar/sidebar-selection-sync';
 import '../../index.css';
 
@@ -44,6 +45,26 @@ describe('sidebar selection sync', () => {
     });
   });
 
+  it('suppresses the route scroll that immediately follows a completed locator request', () => {
+    expect(shouldSuppressSidebarRouteScroll('task:route-project:route-task', undefined, null)).toBe(
+      false
+    );
+    expect(
+      shouldSuppressSidebarRouteScroll(
+        'task:route-project:route-task',
+        undefined,
+        'task:route-project:route-task'
+      )
+    ).toBe(true);
+    expect(
+      shouldSuppressSidebarRouteScroll(
+        'task:other-project:other-task',
+        undefined,
+        'task:route-project:route-task'
+      )
+    ).toBe(false);
+  });
+
   it('finds the selected project row across the whole sidebar', () => {
     const root = document.createElement('div');
     const project = document.createElement('div');
@@ -69,13 +90,17 @@ describe('sidebar selection sync', () => {
     const project = document.createElement('button');
     project.dataset.sidebarEntity = 'project';
     project.dataset.sidebarProjectId = 'project-2';
-    project.scrollIntoView = vi.fn();
+    Object.defineProperty(root, 'clientHeight', { configurable: true, value: 100 });
+    Object.defineProperty(project, 'offsetHeight', { configurable: true, value: 32 });
+    root.getBoundingClientRect = () => ({ bottom: 100, top: 0 }) as DOMRect;
+    project.getBoundingClientRect = () => ({ bottom: 272, top: 240 }) as DOMRect;
+    root.scrollTo = vi.fn();
     const focus = vi.spyOn(project, 'focus');
     root.append(project);
     document.body.append(root);
 
     expect(revealSidebarSelectionRow(root, 'project-2', undefined, true)).toBe(project);
-    expect(project.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+    expect(root.scrollTo).toHaveBeenCalledWith({ top: 206, behavior: 'smooth' });
     expect(focus).toHaveBeenCalledWith({ preventScroll: true });
     expect(project.dataset.sidebarLocateHighlight).toBe('true');
     expect(getComputedStyle(project).animationName).toBe('sidebar-locate-highlight');
