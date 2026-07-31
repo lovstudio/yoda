@@ -148,10 +148,19 @@ describe('ComposerSettingsContent', () => {
       );
     });
 
-    expect(host.querySelectorAll('[data-slot="composer-settings-section"]')).toHaveLength(3);
+    const settingsSections = host.querySelectorAll<HTMLElement>(
+      '[data-slot="composer-settings-section"]'
+    );
+    expect(settingsSections).toHaveLength(3);
     expect(host.querySelector('[data-slot="permission-mode-select"]')).not.toBeNull();
     expect(host.querySelector('[data-slot="auto-trust-worktrees-control"]')).not.toBeNull();
     expect(host.textContent).toContain('2 enabled');
+    const promptHeader = settingsSections[2]?.querySelector(
+      '[data-slot="composer-settings-section-header"]'
+    );
+    expect(promptHeader?.textContent).toContain('2 enabled');
+    expect(promptHeader?.textContent).toContain('home.openPromptLibrary');
+    expect(host.textContent).not.toContain('home.promptConfigurationDescription');
     expect(host.textContent).toContain('Detailed global prompt');
     expect(host.textContent).toContain('Detailed project prompt');
     expect(host.textContent).not.toContain('Prompt content');

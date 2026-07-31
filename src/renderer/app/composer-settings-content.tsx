@@ -172,21 +172,24 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
         <ComposerSettingsSection
           icon={<LibraryBig className="size-3.5" />}
           label={t('home.promptConfigurationLabel')}
-        >
-          <div className="px-3 py-2.5">
-            <div className="flex items-center justify-between gap-3">
-              <span className="rounded-full bg-background-2 px-2 py-1 text-[11px] tabular-nums text-foreground-muted">
+          action={
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span className="text-[10px] tabular-nums text-foreground-passive">
                 {t('home.enabledPromptCount', { count: enabledPromptCount })}
               </span>
-              <Button type="button" variant="outline" size="sm" onClick={managePrompts}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="-mr-1"
+                onClick={managePrompts}
+              >
                 {t('home.openPromptLibrary')}
-                <ArrowRight className="size-3.5" />
+                <ArrowRight className="size-3" />
               </Button>
             </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-foreground-passive">
-              {t('home.promptConfigurationDescription')}
-            </p>
-          </div>
+          }
+        >
           {promptPrinciples.length > 0 || (projectId && projectPrincipleItems.length > 0) ? (
             <div className="max-h-48 overflow-y-auto overscroll-contain">
               {promptPrinciples.length > 0 ? (
@@ -257,10 +260,12 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
 function ComposerSettingsSection({
   icon,
   label,
+  action,
   children,
 }: {
   icon: ReactNode;
   label: string;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -268,9 +273,13 @@ function ComposerSettingsSection({
       data-slot="composer-settings-section"
       className="overflow-hidden rounded-lg border border-border/70 bg-background"
     >
-      <div className="flex items-center gap-2 border-b border-border/60 bg-background-1/50 px-3 py-2">
+      <div
+        data-slot="composer-settings-section-header"
+        className="flex min-h-9 items-center gap-2 border-b border-border/60 bg-background-1/50 px-3 py-1.5"
+      >
         <span className="text-foreground-muted">{icon}</span>
-        <h3 className="min-w-0 truncate text-[11px] font-medium text-foreground">{label}</h3>
+        <h3 className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">{label}</h3>
+        {action}
       </div>
       <div className="divide-y divide-border/50">{children}</div>
     </section>

@@ -1388,7 +1388,6 @@
     "agentCliConfigHint": "当前所选 Agent CLI 的运行权限与启动前会读取的指令文件。",
     "promptConfigurationLabel": "提示词与指令",
     "enabledPromptCount": "已启用 {{count}} 条",
-    "promptConfigurationDescription": "这里可快速查看和启停；内容、来源与分组编辑在资源库中完成。",
     "openPromptLibrary": "前往资源库",
     "systemPromptLabel": "System Prompt",
     "systemPromptHint": "启用动态注入的提示词会追加到所选 Agent CLI 的 system/developer prompt；CLI 内置 system prompt 不可编辑。",
