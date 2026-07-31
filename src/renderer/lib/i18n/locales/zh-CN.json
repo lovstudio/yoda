@@ -608,6 +608,8 @@
       "deleteProviderTitle": "删除自定义厂商？",
       "deleteProviderDescription": "将删除 {{provider}} 及其全部自定义模型。其他厂商不受影响。",
       "deleteProviderConfirm": "删除厂商",
+      "updatesTitle": "目录更新",
+      "updatesDescription": "管理目录更新方式，并检查当前厂商的最新模型。",
       "automaticUpdates": "自动更新模型目录",
       "automaticUpdatesShort": "自动更新",
       "automaticUpdatesDescription": "Yoda 启动后每 24 小时检查一次；仅在本机已有对应厂商 API Key 时访问其官方接口。",

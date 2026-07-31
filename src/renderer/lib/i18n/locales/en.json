@@ -608,6 +608,8 @@
       "deleteProviderTitle": "Delete custom provider?",
       "deleteProviderDescription": "This removes {{provider}} and all of its custom models. Other providers are unchanged.",
       "deleteProviderConfirm": "Delete provider",
+      "updatesTitle": "Catalog updates",
+      "updatesDescription": "Manage catalog updates and check the selected provider for its latest models.",
       "automaticUpdates": "Automatically update model catalog",
       "automaticUpdatesShort": "Auto-update",
       "automaticUpdatesDescription": "Yoda checks once every 24 hours after launch and only calls a vendor API when its API key is already configured locally.",
