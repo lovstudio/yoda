@@ -11,6 +11,7 @@ import { appSettingsService } from '@main/core/settings/settings-service';
 import { requestUtilityAgentText } from '@main/core/tasks/name-generation/task-naming-service';
 import { summarizeLlmDebugError } from './debug-error';
 import { discoverGlobalLlmModels } from './model-discovery-service';
+import { listModelProviders, updateModelProviderCustomModels } from './model-provider-operations';
 
 const MAX_DEBUG_PROMPT_CHARS = 8_000;
 
@@ -91,4 +92,6 @@ async function discoverModels(
 export const llmController = createRPCController({
   debug,
   discoverModels,
+  listModelProviders,
+  updateModelProviderCustomModels,
 });

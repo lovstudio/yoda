@@ -374,10 +374,12 @@ describe('PromptLibraryPanel groups', () => {
 
     const groupToggles = Array.from(
       host.querySelectorAll<HTMLElement>(
-        '[data-slot="checkbox"][aria-label="promptLibrary.groups.toggleInjection"]'
+        '[data-slot="prompt-group-injection-toggle"][aria-label="promptLibrary.groups.toggleInjection"]'
       )
     );
     expect(groupToggles).toHaveLength(3);
+    expect(groupToggles.every((toggle) => toggle.dataset.size === 'sm')).toBe(true);
+    expect(host.querySelector('[data-slot="checkbox"]')).toBeNull();
     await act(async () => groupToggles[0]?.click());
 
     expect(mocks.setGroupInjection).toHaveBeenCalledWith({

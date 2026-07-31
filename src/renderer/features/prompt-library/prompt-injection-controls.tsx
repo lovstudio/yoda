@@ -2,7 +2,6 @@ import { Folder } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Prompt } from '@shared/prompt-library';
-import { Checkbox } from '@renderer/lib/ui/checkbox';
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import { Switch } from '@renderer/lib/ui/switch';
 import { cn } from '@renderer/utils/utils';
@@ -33,22 +32,16 @@ export function PromptGroupInjectionToggle({
     groupName === UNGROUPED_PROMPT_GROUP ? t('promptLibrary.groups.ungrouped') : groupName;
 
   return (
-    <div className={cn('flex shrink-0 items-center gap-2', className)}>
-      <span className="text-[11px] tabular-nums text-foreground-passive">
-        {t('promptLibrary.groups.enabledCount', {
-          enabled: selection.enabledCount,
-          count: selection.totalCount,
-        })}
-      </span>
-      <Checkbox
-        checked={selection.state === 'all'}
-        indeterminate={selection.state === 'partial'}
-        disabled={disabled || prompts.length === 0}
-        onCheckedChange={() => onEnabledChange(selection.state !== 'all')}
-        aria-label={t('promptLibrary.groups.toggleInjection', { name: groupLabel })}
-        title={t('promptLibrary.groups.toggleInjection', { name: groupLabel })}
-      />
-    </div>
+    <Switch
+      data-slot="prompt-group-injection-toggle"
+      size="sm"
+      checked={selection.state === 'all'}
+      disabled={disabled || prompts.length === 0}
+      onCheckedChange={onEnabledChange}
+      aria-label={t('promptLibrary.groups.toggleInjection', { name: groupLabel })}
+      title={t('promptLibrary.groups.toggleInjection', { name: groupLabel })}
+      className={className}
+    />
   );
 }
 
@@ -118,7 +111,6 @@ export function PromptInjectionControls({
                 prompts={group.prompts}
                 isPromptEnabled={isPromptEnabled}
                 disabled={disabled}
-                className={compact ? 'gap-1.5' : undefined}
                 onEnabledChange={(enabled) =>
                   onGroupEnabledChange(group.name, group.prompts, enabled)
                 }

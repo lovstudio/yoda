@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getAvailableModels: vi.fn(),
   getRuntime: vi.fn(),
   inferNamingModelCandidates: vi.fn(),
+  listCustomModelsForRuntime: vi.fn(),
 }));
 
 vi.mock('ai', () => ({
@@ -21,6 +22,12 @@ vi.mock('@shared/runtime-registry', () => ({
 vi.mock('@main/core/settings/runtime-model-candidates-service', () => ({
   runtimeModelCandidatesService: {
     inferNamingModelCandidates: mocks.inferNamingModelCandidates,
+  },
+}));
+
+vi.mock('@main/core/settings/model-provider-catalog-service', () => ({
+  modelProviderCatalogService: {
+    listCustomModelsForRuntime: mocks.listCustomModelsForRuntime,
   },
 }));
 
@@ -55,6 +62,7 @@ describe('sortModelCandidatesForDisplay', () => {
 describe('discoverGlobalLlmModels', () => {
   it('keeps custom models visible and identifies their source when catalogs are full', async () => {
     mocks.getRuntime.mockReturnValue(undefined);
+    mocks.listCustomModelsForRuntime.mockResolvedValue(['special-model']);
     mocks.getAvailableModels.mockResolvedValue({
       models: Array.from({ length: 45 }, (_, index) => ({
         id: `gateway/model-${index + 1}`,
@@ -66,20 +74,14 @@ describe('discoverGlobalLlmModels', () => {
       runtimeId: 'codex',
       models: [
         {
-          id: 'acme/special-model',
-          visible: true,
-          sources: ['custom'],
-        },
-        {
           id: 'gpt-5.5',
           visible: true,
           sources: ['catalog'],
         },
       ],
-      candidates: ['acme/special-model', 'gpt-5.5'],
+      candidates: ['gpt-5.5'],
       sources: [],
       hiddenModels: [],
-      customModels: ['acme/special-model'],
       cached: true,
     });
 
@@ -90,7 +92,7 @@ describe('discoverGlobalLlmModels', () => {
 
     expect(result.models).toHaveLength(40);
     expect(result.models[0]).toMatchObject({
-      id: 'acme/special-model',
+      id: 'special-model',
       sources: ['custom'],
     });
     expect(result.sources.find((source) => source.source === 'custom')).toMatchObject({

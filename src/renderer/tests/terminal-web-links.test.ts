@@ -113,6 +113,29 @@ describe('terminal web links', () => {
     expect(getTerminalWebLinkAtCell(terminal, 2, { x: 1, y: 2 })?.url).toBe(url);
   });
 
+  it('recognizes a URL wrapped inside a table cell without linking the next column', () => {
+    const firstLine =
+      '王树义 (https://blog.sciencenet.cn/u/          AI 工具、研究工作流、知识管理';
+    const secondLine = 'wshuyi)                                    对普通读者友好';
+    const url = 'https://blog.sciencenet.cn/u/wshuyi';
+    const terminal = makeTerminal([firstLine, secondLine], { cols: 100 });
+
+    expect(getTerminalWebLinkMatches(terminal, 1).map((match) => match.url)).toEqual([url]);
+    expect(getTerminalWebLinkMatches(terminal, 2).map((match) => match.url)).toEqual([url]);
+    expect(
+      getTerminalWebLinkAtCell(terminal, 1, { x: firstLine.indexOf('https') + 1, y: 1 })?.url
+    ).toBe(url);
+    expect(
+      getTerminalWebLinkAtCell(terminal, 2, { x: secondLine.indexOf('wshuyi') + 1, y: 2 })?.url
+    ).toBe(url);
+    expect(
+      getTerminalWebLinkAtCell(terminal, 2, { x: secondLine.indexOf(')') + 1, y: 2 })
+    ).toBeNull();
+    expect(
+      getTerminalWebLinkAtCell(terminal, 1, { x: firstLine.indexOf('AI 工具') + 1, y: 1 })
+    ).toBeNull();
+  });
+
   it('does not join a URL into the next Chinese row label', () => {
     const terminal = makeTerminal(
       ['微信读书 (https://weread.qq.com/web/', '得到 (https://www.dedao.cn/ebook/detail)'],

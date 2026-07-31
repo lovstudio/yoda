@@ -12,6 +12,7 @@ import {
 } from '@shared/global-llm';
 import { KANBAN_STATUSES } from '@shared/kanban';
 import { isMaasPlatformId, type MaasPlatformId } from '@shared/maas';
+import { MAX_CUSTOM_MODELS_PER_PROVIDER } from '@shared/model-provider-catalog';
 import { openInAppIdSchema } from '@shared/openInApps';
 import {
   promptPrincipleSchema,
@@ -19,10 +20,7 @@ import {
   taskOutputLanguageValues,
 } from '@shared/project-settings';
 import { runtimeIdSchema } from '@shared/runtime-id-schema';
-import {
-  MAX_CUSTOM_RUNTIME_MODELS,
-  RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES,
-} from '@shared/runtime-model-candidates';
+import { RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES } from '@shared/runtime-model-candidates';
 import { AGENT_ACCOUNT_PROVIDER_IDS, RUNTIMES } from '@shared/runtime-registry';
 import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
@@ -199,11 +197,6 @@ export const runtimeCustomConfigEntrySchema = z.object({
   env: z.record(z.string(), z.string()).optional(),
   /** Default model for new sessions when an Agent/slot does not override it. */
   defaultModel: z.string().optional(),
-  /** User-managed model IDs offered for this runtime across model selectors. */
-  customModels: z
-    .array(z.string().trim().min(1).max(100))
-    .max(MAX_CUSTOM_RUNTIME_MODELS)
-    .optional(),
   namingModel: z.string().optional(),
   namingCommand: z.string().optional(),
 });
@@ -257,6 +250,20 @@ export const globalLlmSettingsSchema = z
     })
   )
   .transform((value) => normalizeLlmSettings(value));
+
+export const modelProviderSettingsSchema = z.object({
+  providers: z
+    .record(
+      z.string().trim().min(1).max(60),
+      z.object({
+        customModels: z
+          .array(z.string().trim().min(2).max(100))
+          .max(MAX_CUSTOM_MODELS_PER_PROVIDER)
+          .default([]),
+      })
+    )
+    .default({}),
+});
 
 export const runtimeModelCandidateCacheEntrySchema = z.object({
   source: z.enum(RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES),
@@ -569,6 +576,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   kanban: kanbanSettingsSchema,
   maas: maasSettingsSchema,
   llm: globalLlmSettingsSchema,
+  modelProviders: modelProviderSettingsSchema,
   runtimeModelCandidates: runtimeModelCandidatesSettingsSchema,
   defaultRuntime: defaultRuntimeSchema,
   keyboard: keyboardSettingsSchema,
@@ -596,6 +604,7 @@ export const appSettingsSchema = z.object({
   kanban: kanbanSettingsSchema,
   maas: maasSettingsSchema,
   llm: globalLlmSettingsSchema,
+  modelProviders: modelProviderSettingsSchema,
   runtimeModelCandidates: runtimeModelCandidatesSettingsSchema,
   defaultRuntime: defaultRuntimeSchema,
   keyboard: keyboardSettingsSchema,

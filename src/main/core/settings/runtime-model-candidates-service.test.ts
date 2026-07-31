@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRuntime } from '@shared/runtime-registry';
 import { extractModelCandidatesFromText, hasExplicitModelList } from './model-candidate-parser';
-import { RuntimeModelCandidatesService } from './runtime-model-candidates-service';
 import {
   filterModelsForRuntime,
   sanitizeCachedModelIdsForRuntime,
@@ -174,74 +173,3 @@ describe('provider model catalog mapping', () => {
     ]);
   });
 });
-
-describe('RuntimeModelCandidatesService custom models', () => {
-  it('merges provider-specific custom models ahead of the synced catalog', async () => {
-    serviceMocks.getSettings.mockResolvedValue({
-      runtimes: {
-        codex: {
-          sources: [freshCatalogEntry(['gpt-5.5'])],
-          hiddenModels: [],
-        },
-      },
-    });
-    serviceMocks.getRuntimeConfig.mockResolvedValue({
-      cli: 'codex',
-      customModels: ['acme/gpt-5.6-codex'],
-    });
-
-    const result = await new RuntimeModelCandidatesService().inferNamingModelCandidates('codex');
-
-    expect(result.customModels).toEqual(['acme/gpt-5.6-codex']);
-    expect(result.candidates).toEqual(['acme/gpt-5.6-codex', 'gpt-5.5']);
-    expect(result.models[0]).toEqual({
-      id: 'acme/gpt-5.6-codex',
-      visible: true,
-      sources: ['custom'],
-    });
-  });
-
-  it('persists new custom models with the runtime config and makes them visible', async () => {
-    let runtimeConfig = { cli: 'codex', customModels: [] as string[] };
-    serviceMocks.getSettings.mockResolvedValue({
-      runtimes: {
-        codex: {
-          sources: [freshCatalogEntry(['gpt-5.5'])],
-          hiddenModels: ['acme/gpt-5.6-codex'],
-        },
-      },
-    });
-    serviceMocks.getRuntimeConfig.mockImplementation(async () => runtimeConfig);
-    serviceMocks.updateRuntimeConfig.mockImplementation(async (_id, config) => {
-      runtimeConfig = config as typeof runtimeConfig;
-    });
-
-    const result = await new RuntimeModelCandidatesService().updateModelCandidatePreferences(
-      'codex',
-      { customModels: ['acme/gpt-5.6-codex'] }
-    );
-
-    expect(serviceMocks.updateRuntimeConfig).toHaveBeenCalledWith(
-      'codex',
-      expect.objectContaining({ customModels: ['acme/gpt-5.6-codex'] })
-    );
-    expect(serviceMocks.updateSettings).toHaveBeenCalledWith('runtimeModelCandidates', {
-      runtimes: {
-        codex: {
-          sources: [freshCatalogEntry(['gpt-5.5'])],
-          hiddenModels: [],
-        },
-      },
-    });
-    expect(result.candidates).toContain('acme/gpt-5.6-codex');
-  });
-});
-
-function freshCatalogEntry(models: string[]) {
-  return {
-    source: 'catalog' as const,
-    models,
-    fetchedAt: '2026-07-31T00:00:00.000Z',
-    expiresAt: '2099-07-31T00:00:00.000Z',
-  };
-}

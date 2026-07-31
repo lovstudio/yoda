@@ -87,6 +87,9 @@ export const SETTINGS_DEFAULTS = {
     promptTranslationProfileId: DEFAULT_LLM_PROFILE_ID,
     promptTranslationShowOriginal: true,
   },
+  modelProviders: {
+    providers: {},
+  },
   runtimeModelCandidates: {
     runtimes: {},
   },
