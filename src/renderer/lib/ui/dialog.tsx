@@ -144,7 +144,10 @@ export function DialogContentArea({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn('flex flex-col gap-2 w-full min-h-0 overflow-y-auto p-6 pt-0', className)}>
+    <div
+      data-slot="dialog-content-area"
+      className={cn('flex flex-col gap-2 w-full min-h-0 overflow-y-auto p-6 pt-0', className)}
+    >
       {children}
     </div>
   );

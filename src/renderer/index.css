@@ -1316,6 +1316,108 @@
   }
 }
 
+/* New-task modal: the Home composer becomes a compact capture tray. Keep this
+   scoped to the modal so the full Home canvas retains its spacious layout. */
+[data-yoda-surface='new-task-modal'] {
+  container: new-task-modal / inline-size;
+}
+
+[data-yoda-surface='new-task-modal'] > [data-slot='dialog-header'] {
+  flex: 0 0 auto;
+  padding: 1.125rem 1.25rem 1rem;
+}
+
+[data-yoda-surface='new-task-modal'] > [data-slot='dialog-content-area'] {
+  padding: 0 1.25rem 1.25rem;
+}
+
+[data-yoda-surface='new-task-modal'] [data-yoda-surface='home-composer'],
+[data-yoda-surface='new-task-modal'] [data-yoda-surface='home-composer-input'],
+[data-yoda-surface='new-task-modal'] [data-yoda-surface='home-composer-toolbar'] {
+  width: 100%;
+  max-width: none;
+  margin-right: 0;
+  margin-left: 0;
+}
+
+[data-yoda-surface='new-task-modal'] [data-yoda-surface='home-composer'] {
+  z-index: auto;
+  margin-top: 0;
+}
+
+[data-yoda-surface='new-task-modal'] [data-yoda-surface='home-composer-input'] {
+  margin-top: 0;
+}
+
+[data-yoda-surface='new-task-modal']
+  [data-yoda-surface='home-composer-input']
+  [data-yoda-surface='composer'] {
+  min-height: 0;
+  border-radius: 0.75rem;
+}
+
+[data-yoda-surface='new-task-modal']
+  [data-yoda-surface='home-composer-input']
+  [data-slot='textarea'] {
+  min-height: clamp(5rem, 16dvh, 7rem);
+  max-height: min(32dvh, 15rem);
+  overflow-y: auto;
+}
+
+[data-yoda-surface='new-task-modal'] [data-yoda-surface='home-composer-actions'] {
+  flex: 0 0 auto;
+}
+
+@container new-task-modal (max-width: 34rem) {
+  [data-yoda-surface='new-task-modal'] > [data-slot='dialog-header'] {
+    padding: 1rem;
+  }
+
+  [data-yoda-surface='new-task-modal'] > [data-slot='dialog-content-area'] {
+    padding: 0 1rem 1rem;
+  }
+
+  [data-yoda-surface='new-task-modal'] [data-yoda-surface='home-composer-actions'] {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@container new-task-modal (max-width: 24rem) {
+  [data-yoda-surface='new-task-modal']
+    [data-yoda-surface='home-composer-input']
+    [data-slot='textarea'] {
+    padding: 0.875rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  [data-yoda-surface='new-task-modal'] [data-yoda-surface='home-composer-toolbar'] > div {
+    gap: 0.375rem;
+  }
+}
+
+@media (max-height: 32rem) {
+  [data-yoda-surface='new-task-modal'] > [data-slot='dialog-header'] {
+    padding-top: 0.875rem;
+    padding-bottom: 0.75rem;
+  }
+
+  [data-yoda-surface='new-task-modal'] > [data-slot='dialog-content-area'] {
+    padding-bottom: 0.875rem;
+  }
+
+  [data-yoda-surface='new-task-modal']
+    [data-yoda-surface='home-composer-input']
+    [data-slot='textarea'] {
+    min-height: 4.5rem;
+    max-height: 22dvh;
+  }
+
+  [data-yoda-surface='new-task-modal'] [data-yoda-surface='home-composer-toolbar'] {
+    margin-top: 0.5rem;
+  }
+}
+
 @layer components {
   .logo-shimmer-container {
     position: relative;
