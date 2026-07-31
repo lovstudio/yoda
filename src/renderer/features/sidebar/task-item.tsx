@@ -287,6 +287,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           {showMultiAgentIconInline && <MultiAgentTaskIcon label={multiAgentLabel} />}
           <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
             <div className="flex min-w-0 items-center gap-1">
+              {task.data.isLongTerm && <LongTermTaskIcon label={t('sidebar.longTermTask')} />}
               <span
                 className={cn(
                   'min-w-0 truncate text-left transition-colors',
@@ -295,7 +296,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               >
                 {taskName}
               </span>
-              {task.data.isLongTerm && <LongTermTaskIcon label={t('sidebar.longTermTask')} />}
               {isCollapsed && (
                 <span className="shrink-0 rounded-sm bg-background-tertiary-2 px-1 text-[10px] tabular-nums text-foreground-tertiary">
                   {childCount}
