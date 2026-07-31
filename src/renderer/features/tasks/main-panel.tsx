@@ -116,7 +116,10 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
     );
   }
 
-  if (kind === 'missing') {
+  // Keep every present and future non-ready state outside consumers that
+  // require ProvisionedTaskProvider. The owner snapshot may intentionally
+  // advance one render after the mutable task store during provisioning.
+  if (kind !== 'ready') {
     return null;
   }
 

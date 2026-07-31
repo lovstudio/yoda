@@ -41,6 +41,7 @@ describe('task view state snapshot', () => {
     const taskWindowSource = readFileSync(new URL('./task-window.tsx', import.meta.url), 'utf8');
 
     expect(mainPanelSource).toContain('const kind = useTaskViewKind();');
+    expect(mainPanelSource).toContain("if (kind !== 'ready') {");
     expect(titlebarSource).toContain('const kind = useTaskViewKind();');
     expect(taskWindowSource).toContain('const kind = useTaskViewKind();');
     expect(mainPanelSource).not.toContain('const kind = taskViewKind(');
