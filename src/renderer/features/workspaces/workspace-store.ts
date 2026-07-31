@@ -34,10 +34,6 @@ export class WorkspaceStore {
 
   /** Keep the active selection valid if its workspace was removed elsewhere. */
   private normalizeActive(): void {
-    if (!this.enabled) {
-      this.activeWorkspaceId = ALL_WORKSPACES_ID;
-      return;
-    }
     if (
       this.activeWorkspaceId === ALL_WORKSPACES_ID ||
       this.activeWorkspaceId === DEFAULT_WORKSPACE_ID
@@ -50,18 +46,17 @@ export class WorkspaceStore {
   }
 
   /**
-   * Disabling workspaces exposes every task as one flat collection. Enabling
-   * starts in the virtual Default workspace, whose members are the tasks and
-   * projects without an explicit workspace id.
+   * Disabling workspaces exposes every task as one flat collection without
+   * changing the user's active workspace selection. Re-enabling therefore
+   * returns to the same workspace instead of making existing organization look
+   * as though it moved into Default.
    */
   setEnabled(enabled: boolean): void {
-    if (this.enabled === enabled) return;
     this.enabled = enabled;
-    this.activeWorkspaceId = enabled ? DEFAULT_WORKSPACE_ID : ALL_WORKSPACES_ID;
   }
 
   setActiveWorkspaceId(id: ActiveWorkspaceId): void {
-    this.activeWorkspaceId = this.enabled ? id : ALL_WORKSPACES_ID;
+    this.activeWorkspaceId = id;
   }
 
   get activeWorkspace(): Workspace | undefined {
@@ -128,7 +123,7 @@ export class WorkspaceStore {
   }
 
   restoreActiveWorkspaceId(id: string | undefined): void {
-    if (id === undefined || !this.enabled) return;
+    if (id === undefined) return;
     this.activeWorkspaceId = id;
     this.normalizeActive();
   }
