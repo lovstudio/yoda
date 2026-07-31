@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QuickAction } from '@shared/project-settings';
+import type { ProvisionedTask } from '@renderer/features/tasks/stores/task';
 import { runProjectQuickAction } from './run-project-quick-action';
 import type { MountedProject } from './stores/project';
 
 const mocks = vi.hoisted(() => ({
-  runCommand: vi.fn(),
   runProjectCommand: vi.fn(),
   getTaskStore: vi.fn(),
   asProvisioned: vi.fn(),
+  getTerminalsPaneSize: vi.fn(),
+  createTask: vi.fn(),
+  provisionTask: vi.fn(),
   navigation: {
     currentViewId: 'home',
     viewParamsStore: {} as Record<string, unknown>,
@@ -19,12 +22,12 @@ vi.mock('@renderer/features/tasks/stores/task-selectors', () => ({
   asProvisioned: mocks.asProvisioned,
 }));
 
-vi.mock('@renderer/lib/stores/app-state', () => ({
-  appState: { navigation: mocks.navigation },
+vi.mock('@renderer/features/tasks/terminals/terminal-tabs', () => ({
+  getTerminalsPaneSize: mocks.getTerminalsPaneSize,
 }));
 
-vi.mock('@renderer/lib/stores/workspace-shell-store', () => ({
-  workspaceShellStore: { runCommand: mocks.runCommand },
+vi.mock('@renderer/lib/stores/app-state', () => ({
+  appState: { navigation: mocks.navigation },
 }));
 
 vi.mock('./run-project-command', () => ({
@@ -33,7 +36,35 @@ vi.mock('./run-project-command', () => ({
 
 const localProject = {
   data: { id: 'project-1', type: 'local', path: '/repo' },
-} as MountedProject;
+  taskManager: {
+    tasks: new Map(),
+    createTask: mocks.createTask,
+    provisionTask: mocks.provisionTask,
+  },
+} as unknown as MountedProject;
+
+const shellAction: QuickAction = {
+  id: 'start',
+  label: 'Start locally',
+  command: 'pnpm run dev',
+  kind: 'shell',
+  sourceIntent: 'Start this project.',
+};
+
+function createProvisionedTask(taskId: string): ProvisionedTask {
+  return {
+    taskId,
+    taskView: {
+      setBottomPanelTab: vi.fn(),
+      setBottomPanelOpen: vi.fn(),
+      setFocusedRegion: vi.fn(),
+      terminalTabs: { setActiveTab: vi.fn() },
+    },
+    terminals: {
+      createCommandTerminal: vi.fn().mockResolvedValue({ id: 'terminal-1' }),
+    },
+  } as unknown as ProvisionedTask;
+}
 
 describe('runProjectQuickAction', () => {
   beforeEach(() => {
@@ -41,77 +72,93 @@ describe('runProjectQuickAction', () => {
     mocks.navigation.currentViewId = 'home';
     mocks.navigation.viewParamsStore = {};
     mocks.asProvisioned.mockReturnValue(undefined);
-    mocks.runCommand.mockResolvedValue(undefined);
+    mocks.getTerminalsPaneSize.mockReturnValue({ cols: 120, rows: 36 });
   });
 
-  it('executes compiled shell actions directly in the project terminal', async () => {
-    const action: QuickAction = {
-      id: 'start',
-      label: 'Start locally',
-      command: 'pnpm run dev',
-      kind: 'shell',
-      sourceIntent: 'Start this project.',
-    };
-
-    await expect(runProjectQuickAction({ project: localProject, action })).resolves.toEqual({
-      kind: 'shell',
-    });
-    expect(mocks.runCommand).toHaveBeenCalledWith('pnpm run dev', '/repo', 'Start locally', null);
-    expect(mocks.runProjectCommand).not.toHaveBeenCalled();
-  });
-
-  it('hosts a shell action in the active task bottom panel for the same project', async () => {
-    const setBottomPanelTab = vi.fn();
-    const setBottomPanelOpen = vi.fn();
-    const setFocusedRegion = vi.fn();
+  it('runs a shell action as a standard persisted terminal in the active task', async () => {
+    const task = createProvisionedTask('task-1');
     mocks.navigation.currentViewId = 'task';
     mocks.navigation.viewParamsStore = {
       task: { projectId: 'project-1', taskId: 'task-1' },
     };
     mocks.getTaskStore.mockReturnValue({ state: 'provisioned' });
-    mocks.asProvisioned.mockReturnValue({
-      taskId: 'task-1',
-      taskView: { setBottomPanelTab, setBottomPanelOpen, setFocusedRegion },
-    });
-    const action: QuickAction = {
-      id: 'start',
-      label: 'Start locally',
-      command: 'pnpm run dev',
+    mocks.asProvisioned.mockReturnValue(task);
+
+    await expect(
+      runProjectQuickAction({ project: localProject, action: shellAction })
+    ).resolves.toEqual({
       kind: 'shell',
-    };
+      taskId: 'task-1',
+    });
 
-    await runProjectQuickAction({ project: localProject, action });
-
-    expect(mocks.getTaskStore).toHaveBeenCalledWith('project-1', 'task-1');
-    expect(setBottomPanelTab).toHaveBeenCalledWith('terminals', {
+    expect(mocks.createTask).not.toHaveBeenCalled();
+    expect(task.taskView.setBottomPanelTab).toHaveBeenCalledWith('terminals', {
       ensureTerminal: false,
     });
-    expect(setBottomPanelOpen).toHaveBeenCalledWith(true);
-    expect(setFocusedRegion).toHaveBeenCalledWith('bottom');
-    expect(mocks.runCommand).toHaveBeenCalledWith(
-      'pnpm run dev',
-      '/repo',
-      'Start locally',
-      'task-1'
-    );
+    expect(task.taskView.setBottomPanelOpen).toHaveBeenCalledWith(true);
+    expect(task.taskView.setFocusedRegion).toHaveBeenCalledWith('bottom');
+    expect(task.terminals.createCommandTerminal).toHaveBeenCalledWith({
+      command: 'pnpm run dev',
+      label: 'Start locally',
+      initialSize: { cols: 120, rows: 36 },
+    });
+    expect(task.taskView.terminalTabs.setActiveTab).toHaveBeenCalledWith('terminal-1');
   });
 
-  it('keeps a different project task out of the quick action host', async () => {
+  it('finishes provisioning the active task before creating its terminal', async () => {
+    const task = createProvisionedTask('task-1');
     mocks.navigation.currentViewId = 'task';
     mocks.navigation.viewParamsStore = {
-      task: { projectId: 'project-2', taskId: 'task-2' },
+      task: { projectId: 'project-1', taskId: 'task-1' },
     };
-    const action: QuickAction = {
-      id: 'start',
-      label: 'Start locally',
-      command: 'pnpm run dev',
+    mocks.getTaskStore.mockReturnValue({ state: 'unprovisioned' });
+    mocks.asProvisioned.mockReturnValueOnce(undefined).mockReturnValue(task);
+
+    await expect(
+      runProjectQuickAction({ project: localProject, action: shellAction })
+    ).resolves.toEqual({
       kind: 'shell',
-    };
+      taskId: 'task-1',
+    });
 
-    await runProjectQuickAction({ project: localProject, action });
+    expect(mocks.provisionTask).toHaveBeenCalledWith('task-1');
+    expect(task.terminals.createCommandTerminal).toHaveBeenCalledOnce();
+  });
 
-    expect(mocks.getTaskStore).not.toHaveBeenCalled();
-    expect(mocks.runCommand).toHaveBeenCalledWith('pnpm run dev', '/repo', 'Start locally', null);
+  it('creates a no-worktree operation task when no task terminal is active', async () => {
+    let createdTaskId = '';
+    const task = createProvisionedTask('');
+    mocks.createTask.mockImplementation(async (params: { id: string }) => {
+      createdTaskId = params.id;
+      Object.assign(task, { taskId: params.id });
+    });
+    mocks.getTaskStore.mockReturnValue({ state: 'provisioned' });
+    mocks.asProvisioned.mockImplementation(() => task);
+    const defaultBranch = { type: 'local', branch: 'main' } as const;
+
+    const result = await runProjectQuickAction({
+      project: localProject,
+      action: shellAction,
+      defaultBranch,
+    });
+
+    expect(result).toEqual({ kind: 'shell', taskId: createdTaskId });
+    expect(mocks.createTask).toHaveBeenCalledWith({
+      id: createdTaskId,
+      projectId: 'project-1',
+      name: expect.stringMatching(/^ops-start-locally-\d{8}-\d{4}$/),
+      sourceBranch: defaultBranch,
+      strategy: { kind: 'no-worktree' },
+    });
+    expect(task.terminals.createCommandTerminal).toHaveBeenCalledOnce();
+  });
+
+  it('does not fall back to the independent workspace shell without a terminal task', async () => {
+    await expect(
+      runProjectQuickAction({ project: localProject, action: shellAction })
+    ).rejects.toThrow('default branch is required');
+
+    expect(mocks.createTask).not.toHaveBeenCalled();
   });
 
   it('routes Agent actions through the inspectable task execution path', async () => {
@@ -138,6 +185,6 @@ describe('runProjectQuickAction', () => {
       runtimeId: 'codex',
       defaultBranch,
     });
-    expect(mocks.runCommand).not.toHaveBeenCalled();
+    expect(mocks.createTask).not.toHaveBeenCalled();
   });
 });

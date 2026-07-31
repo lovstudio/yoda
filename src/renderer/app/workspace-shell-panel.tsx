@@ -6,23 +6,17 @@ import { WorkspaceShellTerminal } from '@renderer/features/tasks/terminals/works
 import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
 import { Button } from '@renderer/lib/ui/button';
 
-export const WorkspaceShellPanel = observer(function WorkspaceShellPanel({
-  active,
-}: {
-  active: boolean;
-}) {
+export const WorkspaceShellPanel = observer(function WorkspaceShellPanel() {
   const { t } = useTranslation();
   const runtimeName = workspaceShellStore.runtimeId
     ? (getRuntime(workspaceShellStore.runtimeId)?.name ?? workspaceShellStore.runtimeId)
     : null;
   const title =
-    workspaceShellStore.mode === 'command' && workspaceShellStore.commandLabel
-      ? t('workspaceRuntime.quickAction', { label: workspaceShellStore.commandLabel })
-      : workspaceShellStore.mode === 'runtime-action' &&
-          workspaceShellStore.runtimeAction &&
-          runtimeName
-        ? t(`workspaceRuntime.actions.${workspaceShellStore.runtimeAction}`, { name: runtimeName })
-        : t('workspaceRuntime.terminal');
+    workspaceShellStore.mode === 'runtime-action' &&
+    workspaceShellStore.runtimeAction &&
+    runtimeName
+      ? t(`workspaceRuntime.actions.${workspaceShellStore.runtimeAction}`, { name: runtimeName })
+      : t('workspaceRuntime.terminal');
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border bg-background-secondary px-2">
@@ -37,7 +31,7 @@ export const WorkspaceShellPanel = observer(function WorkspaceShellPanel({
           <X className="size-3.5" />
         </Button>
       </div>
-      <WorkspaceShellTerminal active={active} paneId="workspace-shell" />
+      <WorkspaceShellTerminal active={workspaceShellStore.isOpen} paneId="workspace-shell" />
     </div>
   );
 });
