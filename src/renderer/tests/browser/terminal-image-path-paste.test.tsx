@@ -59,7 +59,11 @@ async function waitForTerminalInput(): Promise<string> {
   throw new Error('Terminal did not forward pasted input');
 }
 
-describe('active TUI image path paste', () => {
+function writeTerminal(pty: FrontendPty, data: string): Promise<void> {
+  return new Promise((resolve) => pty.terminal.write(data, resolve));
+}
+
+describe('active TUI interactions', () => {
   let host: HTMLDivElement;
   let root: Root;
   let pty: FrontendPty;
@@ -117,5 +121,47 @@ describe('active TUI image path paste', () => {
       })
     );
     expect(await waitForTerminalInput()).toContain('`@/tmp/clipboard.png`');
+  });
+
+  it('does not forward a secondary-button press to TUI mouse tracking', async () => {
+    await writeTerminal(pty, '\x1b[?1002h\x1b[?1006h');
+    mocks.sendInput.mockClear();
+
+    const screen = host.querySelector<HTMLElement>('.xterm-screen');
+    if (!screen) throw new Error('xterm screen was not mounted');
+    const rect = screen.getBoundingClientRect();
+    const mouseDown = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+      buttons: 2,
+      clientX: rect.left + 10,
+      clientY: rect.top + 10,
+    });
+    const mouseUp = new MouseEvent('mouseup', {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+      buttons: 0,
+      clientX: rect.left + 10,
+      clientY: rect.top + 10,
+    });
+    const contextMenu = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+      clientX: rect.left + 10,
+      clientY: rect.top + 10,
+    });
+
+    screen.dispatchEvent(mouseDown);
+    screen.dispatchEvent(mouseUp);
+    screen.dispatchEvent(contextMenu);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    expect(mouseDown.defaultPrevented).toBe(true);
+    expect(mouseUp.defaultPrevented).toBe(true);
+    expect(contextMenu.defaultPrevented).toBe(true);
+    expect(mocks.sendInput).not.toHaveBeenCalled();
   });
 });
