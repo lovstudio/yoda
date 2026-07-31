@@ -167,9 +167,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     });
   }
 
-  // group 1 — pin, archive / restore, mark-review. Archive is a flat pair:
-  // direct archive (note dialog, no skill) and, when configured, run the
-  // pre-archive skill then archive.
+  // group 1 — pin, mark-review
   if (actions.canPin) {
     items.push(
       actions.isPinned
@@ -188,35 +186,6 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
             onSelect: actions.onPin,
           }
     );
-  }
-  if (!actions.isArchived) {
-    items.push({
-      key: 'archive',
-      group: 1,
-      icon: Archive,
-      label: t('tasks.context.archiveDirect'),
-      onSelect: actions.onArchive,
-    });
-    if (actions.onArchiveWithSkill) {
-      // The skill dialog prefills/edits the command and links to settings, so
-      // it stays enabled even when no preset is configured yet.
-      items.push({
-        key: 'archive-with-skill',
-        group: 1,
-        icon: Sparkles,
-        label: t('tasks.context.archiveWithSkill'),
-        onSelect: actions.onArchiveWithSkill,
-      });
-    }
-  }
-  if (actions.isArchived && actions.onRestore) {
-    items.push({
-      key: 'restore',
-      group: 1,
-      icon: ArchiveRestore,
-      label: t('projects.tasks.restore'),
-      onSelect: actions.onRestore,
-    });
   }
   if (actions.canMarkReview) {
     items.push(
@@ -337,11 +306,44 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     });
   }
 
-  // group 5 — reopen / reload (standalone, last)
+  // group 5 — archive / restore (penultimate). Archive is a flat pair:
+  // direct archive (note dialog, no skill) and, when configured, run the
+  // pre-archive skill then archive.
+  if (!actions.isArchived) {
+    items.push({
+      key: 'archive',
+      group: 5,
+      icon: Archive,
+      label: t('tasks.context.archiveDirect'),
+      onSelect: actions.onArchive,
+    });
+    if (actions.onArchiveWithSkill) {
+      // The skill dialog prefills/edits the command and links to settings, so
+      // it stays enabled even when no preset is configured yet.
+      items.push({
+        key: 'archive-with-skill',
+        group: 5,
+        icon: Sparkles,
+        label: t('tasks.context.archiveWithSkill'),
+        onSelect: actions.onArchiveWithSkill,
+      });
+    }
+  }
+  if (actions.isArchived && actions.onRestore) {
+    items.push({
+      key: 'restore',
+      group: 5,
+      icon: ArchiveRestore,
+      label: t('projects.tasks.restore'),
+      onSelect: actions.onRestore,
+    });
+  }
+
+  // group 6 — reopen / reload (standalone, last)
   if (actions.onRestartSession) {
     items.push({
       key: 'reopen',
-      group: 5,
+      group: 6,
       icon: RefreshCw,
       label: t('tasks.context.reopenTask'),
       onSelect: () => actions.onRestartSession?.(),
