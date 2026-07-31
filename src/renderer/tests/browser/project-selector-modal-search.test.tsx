@@ -26,8 +26,23 @@ const mocks = vi.hoisted(() => {
   return {
     manager: {
       projects: new Map([
-        ['alpha', { data: project('alpha', 'Alpha', '/workspace/alpha') }],
-        ['beta', { data: project('beta', 'Beta', '/workspace/beta') }],
+        [
+          'visualizer',
+          {
+            data: project('visualizer', '算法可视化', '/Users/mark/yoda/repositories/算法可视化'),
+          },
+        ],
+        [
+          'blog',
+          {
+            data: project(
+              'blog',
+              '科技博主的自我修养',
+              '/Users/mark/yoda/repositories/科技博主的自我修养'
+            ),
+          },
+        ],
+        ['yoda', { data: project('yoda', 'Yoda', '/Users/mark/lovstudio/coding/yoda') }],
       ]),
       mountProject: vi.fn().mockResolvedValue(undefined),
       createProject: vi.fn(),
@@ -73,7 +88,7 @@ vi.mock('@renderer/utils/logger', () => ({
 function ProjectSelectorDialog() {
   const [draftProjectId, setDraftProjectId] = useState<string | null | undefined>(undefined);
   const projectId = resolveHomeProjectId({
-    navigationProjectId: 'alpha',
+    navigationProjectId: 'visualizer',
     draftProjectId,
   });
   return (
@@ -93,6 +108,24 @@ function setInputValue(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(
     new InputEvent('input', { bubbles: true, data: value, inputType: 'insertText' })
   );
+}
+
+async function openProjectSearch(query: string): Promise<HTMLElement[]> {
+  const trigger = document.querySelector<HTMLButtonElement>('[data-slot="combobox-trigger"]');
+  if (!trigger) throw new Error('Project selector trigger is missing');
+  await act(async () => trigger.click());
+
+  const input = document.querySelector<HTMLInputElement>(
+    'input[placeholder="projects.searchProjects"]'
+  );
+  if (!input) throw new Error('Project search input is missing');
+  await act(async () => {
+    input.focus();
+    setInputValue(input, query);
+  });
+  expect(document.activeElement).toBe(input);
+
+  return Array.from(document.querySelectorAll<HTMLElement>('[data-slot="combobox-item"]'));
 }
 
 describe('ProjectSelector in a modal', () => {
@@ -115,31 +148,30 @@ describe('ProjectSelector in a modal', () => {
     vi.clearAllMocks();
   });
 
-  it('filters projects and selects the match while the new-task dialog traps focus', async () => {
-    const trigger = document.querySelector<HTMLButtonElement>('[data-slot="combobox-trigger"]');
-    if (!trigger) throw new Error('Project selector trigger is missing');
-    await act(async () => trigger.click());
+  it('ignores a shared parent path when filtering by a project keyword', async () => {
+    const items = await openProjectSearch('yoda');
+    const visualizer = items.find((item) => item.textContent?.includes('算法可视化'));
+    const blog = items.find((item) => item.textContent?.includes('科技博主的自我修养'));
+    const yoda = items.find((item) => item.textContent?.includes('Yoda'));
 
-    const input = document.querySelector<HTMLInputElement>(
-      'input[placeholder="projects.searchProjects"]'
-    );
-    if (!input) throw new Error('Project search input is missing');
-    await act(async () => {
-      input.focus();
-      setInputValue(input, 'beta');
-    });
+    expect(visualizer).toBeUndefined();
+    expect(blog).toBeUndefined();
+    expect(yoda).toBeDefined();
 
-    const items = Array.from(document.querySelectorAll<HTMLElement>('[data-slot="combobox-item"]'));
-    const alpha = items.find((item) => item.textContent?.includes('Alpha'));
-    const beta = items.find((item) => item.textContent?.includes('Beta'));
-
-    expect(document.activeElement).toBe(input);
-    expect(alpha).toBeUndefined();
-    expect(beta).toBeDefined();
-
-    await act(async () => beta?.click());
+    await act(async () => yoda?.click());
     expect(document.querySelector<HTMLOutputElement>('[data-slot="selected-project"]')?.value).toBe(
-      'beta'
+      'yoda'
     );
+  });
+
+  it('keeps full-path search when the query is explicitly path-like', async () => {
+    const items = await openProjectSearch('/Users/mark/yoda/repositories/算法');
+    const visualizer = items.find((item) => item.textContent?.includes('算法可视化'));
+    const blog = items.find((item) => item.textContent?.includes('科技博主的自我修养'));
+    const yoda = items.find((item) => item.textContent?.includes('Yoda'));
+
+    expect(visualizer).toBeDefined();
+    expect(blog).toBeUndefined();
+    expect(yoda).toBeUndefined();
   });
 });
