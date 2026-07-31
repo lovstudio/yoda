@@ -3,6 +3,7 @@ import type {
   AppSettings,
   AppSettingsKey,
   MaasSettings,
+  ModelProviderSettings,
   RuntimeCustomConfig,
 } from '@shared/app-settings';
 import { isValidRuntimeId } from '@shared/runtime-registry';
@@ -75,6 +76,22 @@ function sanitizeMaasSettings(settings: MaasSettings): MaasSettings {
   };
 }
 
+function sanitizeModelProviderSettings(settings: ModelProviderSettings): ModelProviderSettings {
+  return {
+    automaticUpdatesEnabled: settings.automaticUpdatesEnabled,
+    lastAutomaticRefreshAt: null,
+    providers: settings.providers,
+    catalogCache: {
+      official: {},
+      aggregate: {
+        models: [],
+        fetchedAt: null,
+        lastAttemptAt: null,
+      },
+    },
+  };
+}
+
 export function sanitizeRuntimeConfig(config: RuntimeCustomConfig): RuntimeCustomConfig {
   if (!config.env) return config;
   const env = Object.fromEntries(
@@ -130,7 +147,12 @@ export async function createSettingsArchive(
   for (const key of PORTABLE_APP_SETTINGS_KEYS) {
     const value = allSettings[key];
     Object.assign(appSettings, {
-      [key]: key === 'maas' ? sanitizeMaasSettings(value as MaasSettings) : value,
+      [key]:
+        key === 'maas'
+          ? sanitizeMaasSettings(value as MaasSettings)
+          : key === 'modelProviders'
+            ? sanitizeModelProviderSettings(value as ModelProviderSettings)
+            : value,
     });
   }
 
