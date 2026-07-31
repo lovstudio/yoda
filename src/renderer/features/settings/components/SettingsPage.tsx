@@ -42,7 +42,7 @@ import {
   LlmProfileDebugCard,
   LlmProfilesCard,
 } from './LlmConfigDebugCard';
-import ModelsSettingsCard from './ModelsSettingsCard';
+import ModelsSettingsCard, { ModelCatalogAutomaticUpdateControl } from './ModelsSettingsCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import OpenInAppsSettingsCard from './OpenInAppsSettingsCard';
 import {
@@ -338,6 +338,7 @@ export function SettingsPage({
           id: 'models-catalog',
           title: t('settings.models.catalogTitle'),
           description: t('settings.models.catalogDescription'),
+          action: <ModelCatalogAutomaticUpdateControl />,
           surface: 'panel',
           component: <ModelsSettingsCard />,
         },
