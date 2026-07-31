@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => {
   const save = vi.fn();
   const compile = vi.fn();
   const runProjectQuickAction = vi.fn();
+  const navigate = vi.fn();
+  const loadLocalBranches = vi.fn();
+  const loadRemoteBranches = vi.fn();
   const translate = (key: string) => key;
   const mountedProject = {
     data: {
@@ -45,6 +48,12 @@ const mocks = vi.hoisted(() => {
     save,
     compile,
     runProjectQuickAction,
+    navigate,
+    repositoryStore: {
+      localData: { load: loadLocalBranches },
+      remoteData: { load: loadRemoteBranches },
+      defaultBranch: { type: 'local' as const, branch: 'main' },
+    },
     translate,
     mountedProject,
     projectStore: { mountedProject },
@@ -69,6 +78,7 @@ vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
   asMounted: () => mocks.mountedProject,
   getProjectSettingsStore: () => mocks.settingsStore,
   getProjectStore: () => mocks.projectStore,
+  getRepositoryStore: () => mocks.repositoryStore,
 }));
 
 vi.mock('@renderer/features/settings/use-app-settings-key', () => ({
@@ -85,6 +95,10 @@ vi.mock('@renderer/lib/ipc', () => ({
       compile: mocks.compile,
     },
   },
+}));
+
+vi.mock('@renderer/lib/layout/navigation-provider', () => ({
+  useNavigate: () => ({ navigate: mocks.navigate }),
 }));
 
 vi.mock('@renderer/lib/ui/confirm-button', async () => {
@@ -140,7 +154,12 @@ describe('CaptureProjectAutomationModal', () => {
       command: 'pnpm run dev',
       explanation: 'package.json defines the dev script',
     });
-    mocks.runProjectQuickAction.mockReset().mockResolvedValue({ kind: 'shell' });
+    mocks.runProjectQuickAction
+      .mockReset()
+      .mockResolvedValue({ kind: 'shell', taskId: 'task-terminal' });
+    mocks.navigate.mockReset();
+    mocks.repositoryStore.localData.load.mockReset().mockResolvedValue(undefined);
+    mocks.repositoryStore.remoteData.load.mockReset().mockResolvedValue(undefined);
     mocks.runtime.runtimeId = 'codex';
     mocks.runtime.createDisabled = false;
     mocks.settingsStore.settings = {
@@ -269,8 +288,13 @@ describe('CaptureProjectAutomationModal', () => {
     expect(mocks.runProjectQuickAction).toHaveBeenCalledWith({
       project: mocks.mountedProject,
       action: savedAction,
+      defaultBranch: mocks.repositoryStore.defaultBranch,
     });
     expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).toHaveBeenCalledWith('task', {
+      projectId: 'project-1',
+      taskId: 'task-terminal',
+    });
   });
 
   it('accepts a direct command without calling an Agent, even when no runtime is available', async () => {
@@ -304,6 +328,7 @@ describe('CaptureProjectAutomationModal', () => {
     expect(mocks.runProjectQuickAction).toHaveBeenCalledWith({
       project: mocks.mountedProject,
       action: savedAction,
+      defaultBranch: mocks.repositoryStore.defaultBranch,
     });
   });
 

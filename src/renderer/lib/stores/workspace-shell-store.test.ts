@@ -4,7 +4,6 @@ import { WorkspaceShellStore } from './workspace-shell-store';
 const mocks = vi.hoisted(() => ({
   start: vi.fn(async () => ({ sessionId: 'started' })),
   execute: vi.fn(async () => ({ sessionId: 'executed' })),
-  runCommand: vi.fn(async () => ({ sessionId: 'command' })),
   stop: vi.fn(async () => {}),
   sessions: [] as Array<{
     sessionId: string;
@@ -20,7 +19,6 @@ vi.mock('@renderer/lib/ipc', () => ({
     workspaceShell: {
       start: mocks.start,
       execute: mocks.execute,
-      runCommand: mocks.runCommand,
       stop: mocks.stop,
     },
   },
@@ -113,28 +111,5 @@ describe('WorkspaceShellStore', () => {
     expect(store.runtimeId).toBeNull();
     expect(store.runtimeAction).toBeNull();
     expect(mocks.start).toHaveBeenCalledTimes(1);
-  });
-
-  it('opens a fresh command terminal for a programmatic quick action', async () => {
-    const store = new WorkspaceShellStore();
-
-    await store.runCommand('pnpm run dev', '/repo', 'Start locally', 'task-1');
-
-    expect(store.mode).toBe('command');
-    expect(store.commandLabel).toBe('Start locally');
-    expect(store.commandHostTaskId).toBe('task-1');
-    expect(store.isCommandHostedInTask('task-1')).toBe(true);
-    expect(store.isCommandSelectedInTask('task-1')).toBe(true);
-    expect(store.isCommandHostedInTask('task-2')).toBe(false);
-    store.selectTaskTerminal('task-1');
-    expect(store.isCommandSelectedInTask('task-1')).toBe(false);
-    store.selectHostedCommand('task-1');
-    expect(store.isCommandSelectedInTask('task-1')).toBe(true);
-    expect(store.isOpen).toBe(true);
-    expect(mocks.runCommand).toHaveBeenCalledWith(store.session?.sessionId, {
-      command: 'pnpm run dev',
-      cwd: '/repo',
-      initialSize: undefined,
-    });
   });
 });

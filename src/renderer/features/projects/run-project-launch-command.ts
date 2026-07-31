@@ -1,6 +1,6 @@
 import type { ProjectLaunchCommand } from '@shared/quick-actions';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
-import { getTerminalsPaneSize } from '@renderer/features/tasks/terminals/terminal-tabs';
+import { runCommandInTaskTerminal } from './run-command-in-task-terminal';
 
 /**
  * Runs a discovered project launch command as a standard task terminal.
@@ -21,15 +21,10 @@ export async function runProjectLaunchCommand({
   const provisioned = asProvisioned(getTaskStore(projectId, taskId));
   if (!provisioned) return false;
 
-  provisioned.taskView.setBottomPanelTab('terminals', { ensureTerminal: false });
-  provisioned.taskView.setBottomPanelOpen(true);
-  provisioned.taskView.setFocusedRegion('bottom');
-
-  const terminal = await provisioned.terminals.createCommandTerminal({
+  await runCommandInTaskTerminal({
+    task: provisioned,
     command: launchCommand.command,
     label: launchCommand.label,
-    initialSize: getTerminalsPaneSize(),
   });
-  provisioned.taskView.terminalTabs.setActiveTab(terminal.id);
   return true;
 }

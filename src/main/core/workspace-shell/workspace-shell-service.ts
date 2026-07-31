@@ -9,7 +9,6 @@ import {
 } from '@shared/runtime-registry';
 import type {
   StartWorkspaceShellParams,
-  WorkspaceShellCommand,
   WorkspaceShellRuntimeAction,
 } from '@shared/workspace-shell';
 import {
@@ -32,7 +31,6 @@ import { ensureUserBinDirsInPath } from '@main/utils/userEnv';
 
 const SESSION_PREFIX = 'workspace-shell:';
 const DEFAULT_SIZE = { cols: 100, rows: 24 };
-const MAX_COMMAND_CHARS = 32_000;
 
 type SessionRecord = {
   pty: Pty;
@@ -54,27 +52,6 @@ async function resolveCwd(candidate?: string): Promise<string> {
   } catch {
     return os.homedir();
   }
-}
-
-async function requireCommandCwd(candidate: string): Promise<string> {
-  const cwd = candidate.trim();
-  if (!cwd) throw new Error('A project directory is required.');
-  try {
-    const info = await stat(cwd);
-    if (!info.isDirectory()) throw new Error('not a directory');
-    return cwd;
-  } catch {
-    throw new Error('The project directory is unavailable.');
-  }
-}
-
-function requireCommandLine(candidate: string): string {
-  const command = candidate.trim();
-  if (!command) throw new Error('The quick action command is empty.');
-  if (command.length > MAX_COMMAND_CHARS) {
-    throw new Error('The quick action command is too long.');
-  }
-  return command;
 }
 
 function parseTrustedCommand(command: string): { command: string; args: string[] } {
@@ -211,28 +188,6 @@ export class WorkspaceShellService {
         runtimeAction: request,
         preserveBufferOnExit: true,
       }
-    );
-    return { sessionId };
-  }
-
-  async runCommand(
-    sessionId: string,
-    request: WorkspaceShellCommand
-  ): Promise<{ sessionId: string }> {
-    assertSessionId(sessionId);
-    const commandLine = requireCommandLine(request.command);
-    const operationToken = this.beginOperation(sessionId);
-    const existing = this.sessions.get(sessionId);
-    const cwd = await requireCommandCwd(request.cwd);
-    const size = request.initialSize ?? existing?.size ?? DEFAULT_SIZE;
-    if (!this.isCurrentOperation(sessionId, operationToken)) return { sessionId };
-    this.replace(
-      sessionId,
-      cwd,
-      size,
-      operationToken,
-      { kind: 'shell-line', commandLine },
-      { preserveBufferOnExit: true }
     );
     return { sessionId };
   }

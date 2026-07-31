@@ -4,10 +4,7 @@ import { TerminalPtyContent } from '@renderer/features/tasks/terminals/terminal-
 import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
 
 /**
- * Shared chrome-free workspace-shell terminal body.
- *
- * Quick Actions keep their project-root execution contract while the same PTY
- * moves between the workspace drawer and a task's terminal panel.
+ * Chrome-free terminal body for the global workspace shell and runtime actions.
  */
 export const WorkspaceShellTerminal = observer(function WorkspaceShellTerminal({
   active,

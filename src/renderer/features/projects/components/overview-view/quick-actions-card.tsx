@@ -52,18 +52,14 @@ export const QuickActionsCard = observer(function QuickActionsCard({
     if (!project) return;
     setRunningId(action.id);
     try {
-      if (action.kind !== 'shell') {
-        await Promise.all([repo?.localData.load(), repo?.remoteData.load()]);
-      }
+      await Promise.all([repo?.localData.load(), repo?.remoteData.load()]);
       const result = await runProjectQuickAction({
         project,
         action,
         runtimeId,
         defaultBranch: repo?.defaultBranch,
       });
-      if (result.kind === 'agent') {
-        navigate('task', { projectId, taskId: result.taskId });
-      }
+      navigate('task', { projectId, taskId: result.taskId });
     } catch (err) {
       log.warn('runProjectQuickAction failed', { projectId, action, error: String(err) });
     } finally {

@@ -201,18 +201,14 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
       const repository = getRepositoryStore(projectId);
       if (!mounted || !repository) return;
       try {
-        if (action.kind !== 'shell') {
-          await Promise.all([repository.localData.load(), repository.remoteData.load()]);
-        }
+        await Promise.all([repository.localData.load(), repository.remoteData.load()]);
         const result = await runProjectQuickAction({
           project: mounted,
           action,
           runtimeId: expressProviderId,
           defaultBranch: repository.defaultBranch,
         });
-        if (result.kind === 'agent') {
-          navigate('task', { projectId, taskId: result.taskId });
-        }
+        navigate('task', { projectId, taskId: result.taskId });
       } catch (error) {
         log.warn('sidebar quick action failed', {
           projectId,
