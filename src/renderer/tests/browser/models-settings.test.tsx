@@ -210,12 +210,13 @@ describe('Models settings', () => {
   it('checks the selected vendor and exposes automatic updates as a global setting', async () => {
     await renderModelsSettings(root, queryClient);
 
-    expect(host.textContent).toContain('settings.models.updateStatus.snapshot');
     expect(host.textContent).toContain('settings.models.officialBadge');
     const catalogActions = host.querySelector<HTMLElement>('[data-testid="model-catalog-actions"]');
     const catalogStatus = host.querySelector<HTMLElement>('[data-testid="model-catalog-status"]');
     expect(catalogActions).not.toBeNull();
     expect(catalogActions?.contains(catalogStatus)).toBe(true);
+    expect(catalogActions?.lastElementChild).toBe(catalogStatus);
+    expect(catalogActions?.textContent).not.toContain('settings.models.updateStatus.snapshot');
     expect(catalogStatus?.title).toContain('settings.models.officialSnapshotNeedsKey');
     expect(catalogStatus?.textContent).toContain('settings.models.modelCountCompact');
     expect(
@@ -276,7 +277,9 @@ describe('Models settings', () => {
     });
     expect(host.textContent).toContain('SiliconFlow');
     expect(host.textContent).toContain('siliconflow/deepseek-v3.2');
-    expect(host.textContent).toContain('settings.models.updateStatus.customOnly');
+    expect(
+      host.querySelector<HTMLElement>('[data-testid="model-catalog-status"]')?.title
+    ).toContain('settings.models.customProviderStatusDescription');
     expect(host.querySelector('button[aria-label="settings.models.refresh"]')).toBeNull();
     expect(
       host.querySelector('button[aria-label="settings.models.deleteProvider"]')

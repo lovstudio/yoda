@@ -406,7 +406,6 @@ export default function ModelsSettingsCard() {
           className="flex min-w-0 flex-wrap items-center gap-2"
           data-testid="model-catalog-actions"
         >
-          <ProviderCatalogStatus provider={selectedProvider} />
           <Input
             value={customModelDraft}
             onChange={(event) => {
@@ -458,6 +457,7 @@ export default function ModelsSettingsCard() {
               />
             </CatalogIconAction>
           )}
+          <ProviderCatalogStatus provider={selectedProvider} />
         </div>
         {(customModelError || updateCustomModels.isError) && (
           <p className="mt-2 text-xs text-destructive" role="alert">
@@ -480,7 +480,6 @@ function ProviderCatalogStatus({ provider }: { provider: ModelProviderCatalogGro
   const { t } = useTranslation();
   if (!provider) return null;
 
-  const statusKey = `settings.models.updateStatus.${provider.updateStatus}`;
   const officialSourceUrl = provider.officialSourceUrl;
   const date =
     provider.officialFetchedAt ?? provider.officialSnapshotAt ?? provider.lastUpdateAttemptAt;
@@ -488,17 +487,11 @@ function ProviderCatalogStatus({ provider }: { provider: ModelProviderCatalogGro
 
   return (
     <div
-      className="flex min-w-0 shrink-0 flex-wrap items-center gap-2"
+      className="flex min-w-0 shrink-0 items-center gap-1"
       data-testid="model-catalog-status"
       title={description}
     >
-      <Badge
-        variant={provider.updateStatus === 'stale' ? 'destructive' : 'secondary'}
-        className="h-auto max-w-full whitespace-normal"
-      >
-        {t(statusKey)}
-      </Badge>
-      <div className="min-w-0 text-xs font-medium text-foreground-muted">
+      <div className="min-w-0 whitespace-nowrap text-xs tabular-nums text-foreground-muted">
         {t('settings.models.modelCountCompact', { count: provider.models.length })}
       </div>
       {officialSourceUrl && (
