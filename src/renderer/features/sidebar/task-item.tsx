@@ -146,7 +146,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         : 'settings.taskAppearance.standard'
   );
   const showMarkerInReservedSlot = appearance.marker !== 'none' && rowVariant === 'underProject';
-  const showMarkerInline = appearance.marker !== 'none' && !showMarkerInReservedSlot;
+  const showMarkerAtCompactEdge = appearance.marker !== 'none' && rowVariant !== 'underProject';
 
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
@@ -317,8 +317,13 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               )}
             />
           )}
-          {showMarkerInline && (
-            <TaskAppearanceMarker marker={appearance.marker} label={markerLabel} />
+          {showMarkerAtCompactEdge && (
+            <TaskAppearanceMarker
+              compact
+              marker={appearance.marker}
+              label={markerLabel}
+              className="absolute left-0 top-1/2 -translate-y-1/2"
+            />
           )}
           <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
             <div className="flex min-w-0 items-center gap-1">
@@ -453,10 +458,12 @@ function TaskAppearanceMarker({
   marker,
   label,
   className,
+  compact = false,
 }: {
   marker: ResolvedTaskAppearance['marker'];
   label: string;
   className?: string;
+  compact?: boolean;
 }) {
   if (marker === 'none') return null;
 
@@ -466,14 +473,22 @@ function TaskAppearanceMarker({
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex size-6 shrink-0 items-center justify-center',
+        'inline-flex shrink-0 items-center justify-center',
+        compact ? 'size-2' : 'size-6',
         marker === 'users' ? 'text-amber-700 dark:text-amber-300' : 'text-foreground-tertiary',
         className
       )}
     >
-      {marker === 'users' && <Users className="size-4" />}
-      {marker === 'bookmark' && <Bookmark className="size-3.5 fill-current" />}
-      {marker === 'dot' && <span aria-hidden className="size-1.5 rounded-full bg-current" />}
+      {marker === 'users' && <Users className={compact ? 'size-2' : 'size-4'} />}
+      {marker === 'bookmark' && (
+        <Bookmark className={cn('fill-current', compact ? 'size-2' : 'size-3.5')} />
+      )}
+      {marker === 'dot' && (
+        <span
+          aria-hidden
+          className={cn('rounded-full bg-current', compact ? 'size-1' : 'size-1.5')}
+        />
+      )}
     </span>
   );
 }
