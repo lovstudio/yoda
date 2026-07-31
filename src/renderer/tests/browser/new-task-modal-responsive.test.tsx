@@ -169,7 +169,7 @@ describe('NewTaskModal responsive layout', () => {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   }
 
-  it('closes the floating modal after locating the selected project', async () => {
+  it('keeps the floating modal open after locating the selected project', async () => {
     const onClose = vi.fn();
     await renderAt(720, 600, onClose);
 
@@ -179,7 +179,7 @@ describe('NewTaskModal responsive layout', () => {
     if (!revealProject) throw new Error('Reveal-project action is missing');
     await act(async () => revealProject.click());
 
-    expect(onClose).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('keeps session settings separate from the compare action when the toolbar wraps', async () => {
