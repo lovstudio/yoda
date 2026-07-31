@@ -1,11 +1,49 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   findSidebarSelectionRow,
+  resolveSidebarSelectionTarget,
   revealSidebarSelectionRow,
 } from '@renderer/features/sidebar/sidebar-selection-sync';
 import '../../index.css';
 
 describe('sidebar selection sync', () => {
+  it('prioritizes an explicit locator request over the project from the current route', () => {
+    expect(
+      resolveSidebarSelectionTarget(
+        {
+          key: 'task:route-project:route-task',
+          projectId: 'route-project',
+          taskId: 'route-task',
+        },
+        {
+          requestId: 7,
+          projectId: 'selected-project',
+        }
+      )
+    ).toEqual({
+      key: 'reveal:7',
+      projectId: 'selected-project',
+      requestId: 7,
+      shouldFocus: true,
+    });
+  });
+
+  it('falls back to the current route when no locator request is pending', () => {
+    expect(
+      resolveSidebarSelectionTarget(
+        {
+          key: 'project:route-project:',
+          projectId: 'route-project',
+        },
+        null
+      )
+    ).toEqual({
+      key: 'project:route-project:',
+      projectId: 'route-project',
+      shouldFocus: false,
+    });
+  });
+
   it('finds the selected project row across the whole sidebar', () => {
     const root = document.createElement('div');
     const project = document.createElement('div');

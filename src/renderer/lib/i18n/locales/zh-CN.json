@@ -121,6 +121,9 @@
   },
   "sidebar": {
     "newTask": "新建任务",
+    "newTaskOpenMode": "新建任务打开方式",
+    "newTaskOpenHome": "主页",
+    "newTaskOpenModal": "悬浮窗",
     "searchTasks": "搜索任务",
     "library": "资源库",
     "marketplace": "扩展市场",
@@ -450,6 +453,7 @@
       "prompts": "Prompts",
       "skills": "技能",
       "agentManager": "Agent",
+      "models": "模型",
       "llm": "LLM",
       "maas": "MaaS",
       "usage": "用量",
@@ -573,6 +577,49 @@
       "executionSettings": "执行设置",
       "rescan": "重新探测"
     },
+    "models": {
+      "title": "模型",
+      "description": "按厂商管理 Yoda 可用的模型，并添加目录尚未收录的模型 ID。",
+      "catalogTitle": "模型目录",
+      "catalogDescription": "模型按 OpenAI、Anthropic、Kimi 等厂商归类；Claude Code、Codex 等客户端只负责使用模型。",
+      "provider": "厂商",
+      "providerDescription": "选择要查看和维护模型的厂商。",
+      "providerUnknown": "未知厂商",
+      "automaticUpdates": "自动更新模型目录",
+      "automaticUpdatesDescription": "Yoda 启动后每 24 小时检查一次；仅在本机已有对应厂商 API Key 时访问其官方接口。",
+      "customTitle": "自定义模型",
+      "customDescription": "添加 {{provider}} 已支持但目录尚未收录的模型 ID，最多 {{count}} 个。",
+      "customInput": "自定义模型 ID",
+      "customPlaceholder": "例如 gpt-5.6-codex",
+      "customAdd": "添加模型",
+      "customBadge": "自定义",
+      "customInvalid": "请输入当前厂商下 2–100 个字符的有效模型 ID。",
+      "customDuplicate": "这个模型已经在当前厂商的自定义列表中。",
+      "customLimit": "每个厂商最多可添加 {{count}} 个自定义模型。",
+      "removeCustom": "移除自定义模型 {{model}}",
+      "saveFailed": "模型设置保存失败，请重试。",
+      "refresh": "检查更新",
+      "refreshing": "检查中",
+      "officialSource": "查看厂商官方来源",
+      "officialBadge": "官方",
+      "aggregateBadge": "聚合目录",
+      "officialApiUpdated": "已于 {{date}} 通过厂商官方 API 校验当前账号可用模型。",
+      "officialApiStale": "最近一次检查未完成，继续使用 {{date}} 的官方 API 结果。",
+      "officialSnapshotConfigured": "内置官方快照核验于 {{date}}；点击“检查更新”可按当前账号重新校验。",
+      "officialSnapshotNeedsKey": "内置官方快照核验于 {{date}}；配置该厂商 API Key 后可在线校验。",
+      "aggregateOnlyDescription": "该厂商目前由聚合目录补充，也可继续添加自定义模型。",
+      "aggregateStaleDescription": "最近一次聚合目录检查未完成，继续使用已缓存目录；自定义模型不受影响。",
+      "updateStatus": {
+        "current": "官方 API 已更新",
+        "snapshot": "官方快照",
+        "stale": "沿用上次结果",
+        "aggregateOnly": "聚合目录"
+      },
+      "loading": "正在加载模型…",
+      "emptyTitle": "该厂商暂无模型",
+      "emptyDescription": "刷新目录，或为 {{provider}} 添加一个自定义模型。",
+      "modelCount": "{{provider}} · {{count}} 个模型"
+    },
     "llm": {
       "title": "LLM 配置与调试",
       "description": "管理 Yoda 内部 AI 调用使用的 LLM Profile。",
@@ -608,6 +655,7 @@
       "modelDiscoveryMore": "另有 {{count}} 个",
       "modelDiscoveryPartial": "部分来源失败：{{error}}",
       "modelDiscoverySources": {
+        "custom": "自定义",
         "aiGateway": "AI Gateway",
         "runtimeCatalog": "Runtime catalog"
       },
@@ -1134,10 +1182,10 @@
       "namingContextProject": "项目路径",
       "namingContextReadme": "README",
       "namingContextRecentTasks": "最近任务",
-      "autoTrustWorktrees": "自动信任 worktree 目录",
-      "autoTrustWorktreesDescription": "新任务时跳过 Claude Code 的目录信任弹窗。",
-      "autoTrustWorktreesInfo": "仅对 Claude Code 生效。会在启动前向 ~/.claude.json 写入信任记录。",
-      "autoTrustWorktreesInfoLabel": "关于自动信任 worktree 的更多信息",
+      "autoTrustWorktrees": "自动信任新项目目录",
+      "autoTrustWorktreesDescription": "Claude Code 或 Codex 在新项目中启动时，跳过目录信任确认。",
+      "autoTrustWorktreesInfo": "对 Claude Code 和 Codex 生效。Yoda 会在启动前将当前项目目录写入所用 CLI 的信任配置。",
+      "autoTrustWorktreesInfoLabel": "关于自动信任项目目录的更多信息",
       "enableTmux": "启用 tmux",
       "enableTmuxDescription": "在 tmux session 中运行代理与终端，使它们在重启 Yoda 后仍可继续连接。",
       "tmuxUnavailableTitle": "尚未安装 tmux",
@@ -1361,6 +1409,7 @@
     "promptSendFailed": "无法把 Prompt 发送给 agent。",
     "composerSettingsAria": "输入设置",
     "composerSettingsLabel": "配置",
+    "composerEssentialsSectionLabel": "输入与输出",
     "attachImagesAsPathsLabel": "图片以文件路径发送",
     "attachImagesAsPathsDesc": "以反引号包裹的 `@路径` 文本引用图片，避免 Agent 将路径直接转换成图片输入。",
     "permissionModeLabel": "权限模式",
@@ -1382,6 +1431,9 @@
     "composerDefaultReviewerLabel": "默认评审 agent",
     "agentCliConfigLabel": "Agent CLI",
     "agentCliConfigHint": "当前所选 Agent CLI 的运行权限与启动前会读取的指令文件。",
+    "promptConfigurationLabel": "提示词与指令",
+    "enabledPromptCount": "已启用 {{count}} 条",
+    "openPromptLibrary": "在资源库中管理提示词",
     "systemPromptLabel": "System Prompt",
     "systemPromptHint": "启用动态注入的提示词会追加到所选 Agent CLI 的 system/developer prompt；CLI 内置 system prompt 不可编辑。",
     "systemPromptHintClaude": "启用动态注入的提示词会通过 --append-system-prompt 追加到 Claude Code 的 system prompt；Claude 内置 system prompt 不可编辑。",
@@ -2086,9 +2138,7 @@
       "createParent": "增设父任务（分组）",
       "moveToProject": "移动到项目",
       "moveToProjectEmpty": "没有其他项目",
-      "moveToProjectSearch": "搜索项目…",
-      "showSessionHistoryDock": "显示底部会话记录",
-      "hideSessionHistoryDock": "隐藏底部会话记录"
+      "moveToProjectSearch": "搜索项目…"
     },
     "moveToProject": {
       "confirmTitle": "移动任务到其他项目？",
@@ -2527,7 +2577,6 @@
       "moveTo": "移动到分组",
       "reorderGroup": "拖动「{{name}}」调整分组顺序",
       "reorderPrompt": "拖动「{{name}}」调整它在分组内的顺序",
-      "toggleInjection": "切换「{{name}}」分组的动态注入",
       "ungrouped": "未分组",
       "count": "{{count}} 条"
     },
@@ -2545,7 +2594,7 @@
       "groupPlaceholder": "例如：开发与调试",
       "groupHint": "可输入已有分组或新分组；留空则归入“未分组”。",
       "content": "提示词内容",
-      "contentPlaceholder": "要复用的提示词文本…",
+      "contentPlaceholder": "尽量简短，只写一条明确、可复用的指令…",
       "extraInfo": "额外信息",
       "extraInfoPlaceholder": "可选：补充说明、参考网址或扩展入口"
     },
@@ -2586,7 +2635,7 @@
       "empty": "当前项目还没有专属提示词。",
       "untitled": "未命名项目提示词",
       "namePlaceholder": "提示词名称",
-      "contentPlaceholder": "项目级提示词内容…",
+      "contentPlaceholder": "尽量简短，只写一条项目专属指令…",
       "toggle": "切换「{{name}}」",
       "remove": "移除项目提示词",
       "saveFailed": "保存项目提示词失败"
@@ -2686,6 +2735,11 @@
       "activeDescription": "你可以从“已暂停”中恢复已有自动化。",
       "pausedTitle": "没有已暂停的自动化",
       "pausedDescription": "暂停的自动化会集中显示在这里。"
+    },
+    "source": {
+      "codex": "Codex 同步",
+      "codexHint": "配置、调度和通知由 Codex 管理，Yoda 只读同步展示",
+      "codexManaged": "由 Codex 管理"
     },
     "status": {
       "active": "启用",
@@ -3246,7 +3300,7 @@
     "tabs": {
       "account": "Auth",
       "maas": "客户端",
-      "models": "Models",
+      "models": "模型",
       "memory": "记忆",
       "hooks": "Hooks",
       "skills": "技能",
@@ -3364,7 +3418,7 @@
       "noPath": "{{name}} 暂未配置技能目录。"
     },
     "models": {
-      "title": "Models",
+      "title": "模型",
       "description": "同步该 Agent 可用的模型，并选择哪些模型显示。模型列表来自统一的公开模型目录，并会缓存在本地。",
       "refresh": "同步",
       "refreshing": "同步中",
@@ -4245,7 +4299,7 @@
     "quickAction": "快速操作：{{label}}",
     "config": {
       "title": "配置",
-      "description": "设置输入处理与 Agent CLI 默认行为。更改用于后续输入；CLI 启动配置在新建或恢复会话后生效。"
+      "description": "调整常用输入与 Agent 选项。Prompt、指令文件等详细内容在资源库统一管理。"
     },
     "gateway": {
       "title": "Gateway",

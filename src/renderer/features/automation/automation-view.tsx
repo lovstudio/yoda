@@ -14,6 +14,7 @@ import {
   Pencil,
   Play,
   Plus,
+  RefreshCw,
   Save,
   Settings2,
   Trash2,
@@ -220,6 +221,7 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
   };
 
   const openEdit = (entry: Automation) => {
+    if (entry.source === 'codex') return;
     setEditingId(entry.id);
     setDraft(draftFromEntry(entry));
     revealEditor();
@@ -657,6 +659,7 @@ const AutomationCard = observer(function AutomationCard({
   const { t } = useTranslation();
   const runtime = RUNTIMES.find((item) => item.id === entry.runtime);
   const detected = appState.dependencies.agentStatuses[entry.runtime]?.status === 'available';
+  const syncedFromCodex = entry.source === 'codex';
   const scheduleLabel =
     entry.triggerKind === 'cron'
       ? entry.nextRunAt
@@ -712,41 +715,53 @@ const AutomationCard = observer(function AutomationCard({
                   {t(`automation.runStatus.${lastRun.status}`)}
                 </Badge>
               )}
+              {syncedFromCodex && (
+                <Badge
+                  variant="outline"
+                  className="text-foreground-muted"
+                  title={t('automation.source.codexHint')}
+                >
+                  <RefreshCw className="size-3" />
+                  {t('automation.source.codex')}
+                </Badge>
+              )}
             </div>
             <p className="mt-1 line-clamp-2 text-xs leading-5 text-foreground-muted">
               {entry.prompt}
             </p>
           </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label={t('automation.actions.more', { name: entry.title })}
-              className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted outline-none transition-colors hover:bg-background-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              <MoreHorizontal className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={() => onEdit(entry)}>
-                <Pencil className="size-4" />
-                {t('automation.actions.edit')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onToggle(entry)}>
-                {entry.status === 'active' ? (
-                  <Pause className="size-4" />
-                ) : (
-                  <Play className="size-4" />
-                )}
-                {entry.status === 'active'
-                  ? t('automation.actions.pause')
-                  : t('automation.actions.resume')}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={() => onDelete(entry)}>
-                <Trash2 className="size-4" />
-                {t('automation.actions.delete')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {!syncedFromCodex && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label={t('automation.actions.more', { name: entry.title })}
+                className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-muted outline-none transition-colors hover:bg-background-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <MoreHorizontal className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={() => onEdit(entry)}>
+                  <Pencil className="size-4" />
+                  {t('automation.actions.edit')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onToggle(entry)}>
+                  {entry.status === 'active' ? (
+                    <Pause className="size-4" />
+                  ) : (
+                    <Play className="size-4" />
+                  )}
+                  {entry.status === 'active'
+                    ? t('automation.actions.pause')
+                    : t('automation.actions.resume')}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={() => onDelete(entry)}>
+                  <Trash2 className="size-4" />
+                  {t('automation.actions.delete')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         <div className="mt-4 grid gap-2 @2xl:grid-cols-2">
@@ -785,38 +800,48 @@ const AutomationCard = observer(function AutomationCard({
             <span>{t('automation.card.neverRun')}</span>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-2 text-xs text-foreground-muted">
-            {entry.status === 'active'
-              ? t('automation.actions.enabled')
-              : t('automation.actions.disabled')}
-            <Switch
-              size="sm"
-              checked={entry.status === 'active'}
-              disabled={isUpdating}
-              onCheckedChange={() => onToggle(entry)}
-              aria-label={
-                entry.status === 'active'
-                  ? t('automation.actions.pause')
-                  : t('automation.actions.resume')
-              }
-            />
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onRun(entry)}
-            disabled={isRunning}
+        {syncedFromCodex ? (
+          <span
+            className="inline-flex items-center gap-1.5 text-xs text-foreground-muted"
+            title={t('automation.source.codexHint')}
           >
-            {isRunning ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Play className="size-3.5" />
-            )}
-            {isRunning ? t('automation.actions.running') : t('automation.actions.runNow')}
-          </Button>
-        </div>
+            <RefreshCw className="size-3" />
+            {t('automation.source.codexManaged')}
+          </span>
+        ) : (
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-2 text-xs text-foreground-muted">
+              {entry.status === 'active'
+                ? t('automation.actions.enabled')
+                : t('automation.actions.disabled')}
+              <Switch
+                size="sm"
+                checked={entry.status === 'active'}
+                disabled={isUpdating}
+                onCheckedChange={() => onToggle(entry)}
+                aria-label={
+                  entry.status === 'active'
+                    ? t('automation.actions.pause')
+                    : t('automation.actions.resume')
+                }
+              />
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onRun(entry)}
+              disabled={isRunning}
+            >
+              {isRunning ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Play className="size-3.5" />
+              )}
+              {isRunning ? t('automation.actions.running') : t('automation.actions.runNow')}
+            </Button>
+          </div>
+        )}
       </footer>
     </article>
   );

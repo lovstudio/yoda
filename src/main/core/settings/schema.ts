@@ -12,6 +12,7 @@ import {
 } from '@shared/global-llm';
 import { KANBAN_STATUSES } from '@shared/kanban';
 import { isMaasPlatformId, type MaasPlatformId } from '@shared/maas';
+import { MAX_CUSTOM_MODELS_PER_PROVIDER } from '@shared/model-provider-catalog';
 import { openInAppIdSchema } from '@shared/openInApps';
 import {
   promptPrincipleSchema,
@@ -19,7 +20,7 @@ import {
   taskOutputLanguageValues,
 } from '@shared/project-settings';
 import { runtimeIdSchema } from '@shared/runtime-id-schema';
-import { RUNTIME_MODEL_CANDIDATE_SOURCES } from '@shared/runtime-model-candidates';
+import { RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES } from '@shared/runtime-model-candidates';
 import { AGENT_ACCOUNT_PROVIDER_IDS, RUNTIMES } from '@shared/runtime-registry';
 import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
@@ -250,8 +251,58 @@ export const globalLlmSettingsSchema = z
   )
   .transform((value) => normalizeLlmSettings(value));
 
+export const modelProviderSettingsSchema = z.object({
+  automaticUpdatesEnabled: z.boolean().default(true),
+  lastAutomaticRefreshAt: z.string().nullable().default(null),
+  providers: z
+    .record(
+      z.string().trim().min(1).max(60),
+      z.object({
+        customModels: z
+          .array(z.string().trim().min(2).max(100))
+          .max(MAX_CUSTOM_MODELS_PER_PROVIDER)
+          .default([]),
+      })
+    )
+    .default({}),
+  catalogCache: z
+    .object({
+      official: z
+        .record(
+          z.string().trim().min(1).max(60),
+          z.object({
+            models: z.array(z.string().trim().min(2).max(100)).max(1_000).default([]),
+            fetchedAt: z.string().nullable().default(null),
+            lastAttemptAt: z.string().nullable().default(null),
+            error: z.string().optional(),
+          })
+        )
+        .default({}),
+      aggregate: z
+        .object({
+          models: z.array(z.string().trim().min(2).max(100)).max(5_000).default([]),
+          fetchedAt: z.string().nullable().default(null),
+          lastAttemptAt: z.string().nullable().default(null),
+          error: z.string().optional(),
+        })
+        .default({
+          models: [],
+          fetchedAt: null,
+          lastAttemptAt: null,
+        }),
+    })
+    .default({
+      official: {},
+      aggregate: {
+        models: [],
+        fetchedAt: null,
+        lastAttemptAt: null,
+      },
+    }),
+});
+
 export const runtimeModelCandidateCacheEntrySchema = z.object({
-  source: z.enum(RUNTIME_MODEL_CANDIDATE_SOURCES),
+  source: z.enum(RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES),
   models: z.array(z.string()),
   fetchedAt: z.string(),
   expiresAt: z.string(),
@@ -414,6 +465,8 @@ export const runtimeConfigDefaults = Object.fromEntries(
 export const interfaceSettingsSchema = z.object({
   taskHoverAction: z.enum(['delete', 'archive']),
   autoRightSidebarBehavior: z.boolean(),
+  /** Where the global new-task action opens its composer. */
+  newTaskOpenMode: z.enum(['home', 'modal']).catch('home'),
   /** How much of the agent's transcript appears in the Session → Conversation surface. */
   agentReplyDisplayLevel: z.enum(AGENT_REPLY_DISPLAY_LEVELS),
   /** Dock the active session's prompt history at the bottom of the conversation pane. */
@@ -559,6 +612,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   kanban: kanbanSettingsSchema,
   maas: maasSettingsSchema,
   llm: globalLlmSettingsSchema,
+  modelProviders: modelProviderSettingsSchema,
   runtimeModelCandidates: runtimeModelCandidatesSettingsSchema,
   defaultRuntime: defaultRuntimeSchema,
   keyboard: keyboardSettingsSchema,
@@ -586,6 +640,7 @@ export const appSettingsSchema = z.object({
   kanban: kanbanSettingsSchema,
   maas: maasSettingsSchema,
   llm: globalLlmSettingsSchema,
+  modelProviders: modelProviderSettingsSchema,
   runtimeModelCandidates: runtimeModelCandidatesSettingsSchema,
   defaultRuntime: defaultRuntimeSchema,
   keyboard: keyboardSettingsSchema,

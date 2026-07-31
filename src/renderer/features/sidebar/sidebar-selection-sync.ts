@@ -1,5 +1,34 @@
+import type { SidebarSelectionRevealRequest } from './sidebar-store';
+
 const SIDEBAR_LOCATE_HIGHLIGHT_MS = 1600;
 const locateHighlightTimers = new WeakMap<HTMLElement, number>();
+
+interface SidebarRouteSelection {
+  key: string;
+  projectId: string;
+  taskId?: string;
+}
+
+export interface SidebarSelectionTarget extends SidebarRouteSelection {
+  requestId?: number;
+  shouldFocus: boolean;
+}
+
+export function resolveSidebarSelectionTarget(
+  routeSelection: SidebarRouteSelection | null,
+  revealRequest: SidebarSelectionRevealRequest | null
+): SidebarSelectionTarget | null {
+  if (revealRequest) {
+    return {
+      key: `reveal:${revealRequest.requestId}`,
+      projectId: revealRequest.projectId,
+      requestId: revealRequest.requestId,
+      shouldFocus: true,
+      ...(revealRequest.taskId ? { taskId: revealRequest.taskId } : {}),
+    };
+  }
+  return routeSelection ? { ...routeSelection, shouldFocus: false } : null;
+}
 
 export function findSidebarSelectionRow(
   root: HTMLElement | null,

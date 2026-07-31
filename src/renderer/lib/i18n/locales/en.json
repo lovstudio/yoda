@@ -121,6 +121,9 @@
   },
   "sidebar": {
     "newTask": "New task",
+    "newTaskOpenMode": "New task opens in",
+    "newTaskOpenHome": "Home",
+    "newTaskOpenModal": "Floating window",
     "searchTasks": "Search tasks",
     "library": "Library",
     "marketplace": "Marketplace",
@@ -450,6 +453,7 @@
       "prompts": "Prompts",
       "skills": "Skills",
       "agentManager": "Agents",
+      "models": "Models",
       "llm": "LLM",
       "maas": "MaaS",
       "usage": "Usage",
@@ -573,6 +577,49 @@
       "executionSettings": "Execution settings",
       "rescan": "Rescan"
     },
+    "models": {
+      "title": "Models",
+      "description": "Manage Yoda's available models by model provider and add models missing from the catalog.",
+      "catalogTitle": "Model catalog",
+      "catalogDescription": "Models are grouped by providers such as OpenAI, Anthropic, and Kimi. Clients such as Claude Code and Codex only consume them.",
+      "provider": "Provider",
+      "providerDescription": "Choose the model provider whose catalog you want to manage.",
+      "providerUnknown": "Unknown provider",
+      "automaticUpdates": "Automatically update model catalog",
+      "automaticUpdatesDescription": "Yoda checks once every 24 hours after launch and only calls a vendor API when its API key is already configured locally.",
+      "customTitle": "Custom models",
+      "customDescription": "Add model IDs supported by {{provider}} but missing from the catalog, up to {{count}}.",
+      "customInput": "Custom model ID",
+      "customPlaceholder": "e.g. gpt-5.6-codex",
+      "customAdd": "Add model",
+      "customBadge": "Custom",
+      "customInvalid": "Enter a valid 2–100 character model ID for the selected provider.",
+      "customDuplicate": "This model is already in the selected provider's custom list.",
+      "customLimit": "Each provider can have up to {{count}} custom models.",
+      "removeCustom": "Remove custom model {{model}}",
+      "saveFailed": "Could not save model settings. Try again.",
+      "refresh": "Check for updates",
+      "refreshing": "Checking",
+      "officialSource": "View official vendor source",
+      "officialBadge": "Official",
+      "aggregateBadge": "Aggregate catalog",
+      "officialApiUpdated": "Verified models available to this account through the vendor API on {{date}}.",
+      "officialApiStale": "The latest check did not finish. Continuing with the vendor API result from {{date}}.",
+      "officialSnapshotConfigured": "The built-in official snapshot was verified on {{date}}. Check for updates to verify this account.",
+      "officialSnapshotNeedsKey": "The built-in official snapshot was verified on {{date}}. Configure this vendor's API key to verify online.",
+      "aggregateOnlyDescription": "This vendor is currently supplemented by the aggregate catalog. Custom models can also be added.",
+      "aggregateStaleDescription": "The latest aggregate catalog check did not finish. Continuing with the cached catalog; custom models are unaffected.",
+      "updateStatus": {
+        "current": "Official API updated",
+        "snapshot": "Official snapshot",
+        "stale": "Using last result",
+        "aggregateOnly": "Aggregate catalog"
+      },
+      "loading": "Loading models...",
+      "emptyTitle": "No models for this provider",
+      "emptyDescription": "Refresh the catalog or add a custom model for {{provider}}.",
+      "modelCount": "{{provider}} · {{count}} models"
+    },
     "llm": {
       "title": "LLM config & debug",
       "description": "Manage the LLM Profiles Yoda uses for internal AI calls.",
@@ -608,6 +655,7 @@
       "modelDiscoveryMore": "+{{count}} more",
       "modelDiscoveryPartial": "Some sources failed: {{error}}",
       "modelDiscoverySources": {
+        "custom": "Custom",
         "aiGateway": "AI Gateway",
         "runtimeCatalog": "Runtime catalog"
       },
@@ -1134,10 +1182,10 @@
       "namingContextProject": "Project path",
       "namingContextReadme": "README",
       "namingContextRecentTasks": "Recent tasks",
-      "autoTrustWorktrees": "Auto-trust worktree directories",
-      "autoTrustWorktreesDescription": "Skip the folder trust prompt in Claude Code for new tasks.",
-      "autoTrustWorktreesInfo": "Only applies to Claude Code. Writes trust entries to ~/.claude.json before launching.",
-      "autoTrustWorktreesInfoLabel": "More info about auto-trust worktrees",
+      "autoTrustWorktrees": "Auto-trust new project directories",
+      "autoTrustWorktreesDescription": "Skip the directory trust prompt when Claude Code or Codex starts in a new project.",
+      "autoTrustWorktreesInfo": "Applies to Claude Code and Codex. Before launch, Yoda records the exact project directory as trusted in the active CLI configuration.",
+      "autoTrustWorktreesInfoLabel": "More info about auto-trusting project directories",
       "enableTmux": "Enable tmux",
       "enableTmuxDescription": "Run agent sessions and terminals in tmux sessions so they survive Yoda restarts.",
       "tmuxUnavailableTitle": "tmux is not installed",
@@ -1361,6 +1409,7 @@
     "promptSendFailed": "Could not send the prompt to the agent.",
     "composerSettingsAria": "Input settings",
     "composerSettingsLabel": "Config",
+    "composerEssentialsSectionLabel": "Input & output",
     "attachImagesAsPathsLabel": "Send images as file paths",
     "attachImagesAsPathsDesc": "Reference images as backtick-wrapped `@path` text so the Agent keeps the path instead of converting it into image input.",
     "permissionModeLabel": "Permission mode",
@@ -1382,6 +1431,9 @@
     "composerDefaultReviewerLabel": "Default reviewer",
     "agentCliConfigLabel": "Agent CLI",
     "agentCliConfigHint": "Runtime permissions and instruction files read by the selected Agent CLI.",
+    "promptConfigurationLabel": "Prompts & instructions",
+    "enabledPromptCount": "{{count}} enabled",
+    "openPromptLibrary": "Manage prompts in Library",
     "systemPromptLabel": "System Prompt",
     "systemPromptHint": "Dynamically injected prompts are appended to the selected Agent CLI's system/developer prompt; the CLI's built-in system prompt is not editable.",
     "systemPromptHintClaude": "Dynamically injected prompts are appended through --append-system-prompt; Claude's built-in system prompt is not editable.",
@@ -2086,9 +2138,7 @@
       "createParent": "Add parent task (group)",
       "moveToProject": "Move to project",
       "moveToProjectEmpty": "No other projects",
-      "moveToProjectSearch": "Search projects...",
-      "showSessionHistoryDock": "Show session history dock",
-      "hideSessionHistoryDock": "Hide session history dock"
+      "moveToProjectSearch": "Search projects..."
     },
     "moveToProject": {
       "confirmTitle": "Move task to another project?",
@@ -2527,7 +2577,6 @@
       "moveTo": "Move to group",
       "reorderGroup": "Drag {{name}} to reorder this group",
       "reorderPrompt": "Drag {{name}} to reorder it within this group",
-      "toggleInjection": "Toggle dynamic injection for the {{name}} group",
       "ungrouped": "Ungrouped",
       "count": "{{count}}"
     },
@@ -2545,7 +2594,7 @@
       "groupPlaceholder": "e.g. Development & debugging",
       "groupHint": "Choose an existing group or enter a new one. Leave blank for Ungrouped.",
       "content": "Prompt",
-      "contentPlaceholder": "The prompt text to reuse…",
+      "contentPlaceholder": "Keep it brief and focused on one reusable instruction…",
       "extraInfo": "Extra information",
       "extraInfoPlaceholder": "Optional notes, reference URL, or extension entry point"
     },
@@ -2586,7 +2635,7 @@
       "empty": "This project has no project-only prompts yet.",
       "untitled": "Untitled project prompt",
       "namePlaceholder": "Prompt name",
-      "contentPlaceholder": "Project-level prompt content…",
+      "contentPlaceholder": "Keep it brief and focused on one project-specific instruction…",
       "toggle": "Toggle {{name}}",
       "remove": "Remove project prompt",
       "saveFailed": "Failed to save project prompts"
@@ -2686,6 +2735,11 @@
       "activeDescription": "Resume an existing automation from the Paused filter.",
       "pausedTitle": "No paused automations",
       "pausedDescription": "Automations you pause will be collected here."
+    },
+    "source": {
+      "codex": "Synced from Codex",
+      "codexHint": "Configuration, scheduling, and notifications stay in Codex; Yoda mirrors it read-only",
+      "codexManaged": "Managed by Codex"
     },
     "status": {
       "active": "Active",
@@ -4245,7 +4299,7 @@
     "quickAction": "Quick action: {{label}}",
     "config": {
       "title": "Config",
-      "description": "Set input handling and Agent CLI defaults. Changes apply to later input; CLI startup settings take effect after starting or resuming a session."
+      "description": "Adjust common input and Agent options. Manage detailed prompts and instruction files in Library."
     },
     "gateway": {
       "title": "Gateway",

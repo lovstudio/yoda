@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 const fixtures = vi.hoisted(() => {
   const activeAutomation = {
     id: 'active-automation',
+    source: 'yoda' as const,
     title: 'Daily product feedback',
     workspaceName: 'Product operations',
     prompt: 'Collect feedback from the inbox and summarize the three most important themes.',
@@ -45,6 +46,13 @@ const fixtures = vi.hoisted(() => {
     cronExpr: null,
     nextRunAt: null,
   };
+  const codexAutomation = {
+    ...activeAutomation,
+    id: 'codex-automation',
+    source: 'codex' as const,
+    title: 'Codex scheduled review',
+    prompt: 'Review the project status from Codex.',
+  };
   const recentRun = {
     id: 'run-1',
     automationId: activeAutomation.id,
@@ -55,7 +63,7 @@ const fixtures = vi.hoisted(() => {
     finishedAt: '2026-07-31T01:04:00.000Z',
     error: null,
   };
-  return { activeAutomation, pausedAutomation, recentRun };
+  return { activeAutomation, pausedAutomation, codexAutomation, recentRun };
 });
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -72,7 +80,7 @@ vi.mock('@renderer/features/settings/use-app-settings-key', () => ({
 
 vi.mock('@renderer/features/automation/use-automations', () => ({
   useAutomations: () => ({
-    data: [fixtures.activeAutomation, fixtures.pausedAutomation],
+    data: [fixtures.activeAutomation, fixtures.pausedAutomation, fixtures.codexAutomation],
     isLoading: false,
   }),
   useAutomationHistory: () => ({ data: [fixtures.recentRun] }),
@@ -229,5 +237,18 @@ describe('AutomationMainPanel', () => {
     expect(host.textContent).toContain('automation.editor.executionTitle');
     expect(host.textContent).toContain('automation.form.promptHint');
     expect(host.textContent).toContain('automation.form.manualHint');
+  });
+
+  it('keeps Codex-synced automations visibly read-only', async () => {
+    const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
+    await act(async () => root.render(createElement(AutomationMainPanel)));
+
+    const codexCard = Array.from(host.querySelectorAll('article')).find((card) =>
+      card.textContent?.includes(fixtures.codexAutomation.title)
+    );
+    expect(codexCard?.textContent).toContain('automation.source.codex');
+    expect(codexCard?.textContent).toContain('automation.source.codexManaged');
+    expect(findButton(codexCard as HTMLElement, 'automation.actions.runNow')).toBeUndefined();
+    expect(codexCard?.querySelector('button[aria-label^="automation.actions.more"]')).toBeNull();
   });
 });

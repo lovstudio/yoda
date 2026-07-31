@@ -72,7 +72,6 @@ import {
   reorderPromptIds,
   UNGROUPED_PROMPT_GROUP,
 } from './prompt-groups';
-import { PromptGroupInjectionToggle } from './prompt-injection-controls';
 import { PromptLibraryChapter } from './prompt-library-chapter';
 import { PromptRuntimeSelector, UserInstructionSection } from './prompt-system-section';
 import {
@@ -85,7 +84,6 @@ import {
   useRenamePromptGroup,
   useReorderPromptGroups,
   useReorderPrompts,
-  useSetPromptGroupInjectionEnabled,
   useUpdatePrompt,
 } from './use-prompts';
 
@@ -298,7 +296,6 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
   const deletePrompt = useDeletePrompt();
   const reorderGroups = useReorderPromptGroups();
   const reorderPrompts = useReorderPrompts();
-  const setGroupInjection = useSetPromptGroupInjectionEnabled();
   const refreshSource = useRefreshPromptSource();
   const sortingSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -1124,16 +1121,6 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                     <Pencil className="size-4" />
                                   </Button>
                                 )}
-                                <PromptGroupInjectionToggle
-                                  groupName={group.name}
-                                  prompts={group.prompts}
-                                  isPromptEnabled={(prompt) => prompt.injectionEnabled}
-                                  disabled={setGroupInjection.isPending}
-                                  className="pr-3"
-                                  onEnabledChange={(enabled) =>
-                                    setGroupInjection.mutate({ groupName: group.name, enabled })
-                                  }
-                                />
                               </div>
 
                               {renamingGroupName === group.name && (
@@ -1244,7 +1231,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                                     <Switch
                                                       size="sm"
                                                       checked={entry.injectionEnabled}
-                                                      disabled={setGroupInjection.isPending}
+                                                      disabled={updatePrompt.isPending}
                                                       aria-label={t(
                                                         'promptLibrary.injection.toggle',
                                                         {

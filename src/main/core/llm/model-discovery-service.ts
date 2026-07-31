@@ -8,6 +8,7 @@ import type {
 } from '@shared/global-llm';
 import { getRuntime } from '@shared/runtime-registry';
 import { normalizeModelCandidates } from '@main/core/settings/model-candidate-parser';
+import { modelProviderCatalogService } from '@main/core/settings/model-provider-catalog-service';
 import { runtimeModelCandidatesService } from '@main/core/settings/runtime-model-candidates-service';
 import { filterModelsForRuntime } from '@main/core/settings/runtime-model-catalog';
 
@@ -24,11 +25,12 @@ type SourceLoadResult = {
 export async function discoverGlobalLlmModels(
   input: GlobalLlmModelDiscoveryInput
 ): Promise<GlobalLlmModelDiscoveryResult> {
-  const [gatewayResult, runtimeCatalogResult] = await Promise.all([
+  const [gatewayResult, customResult, runtimeCatalogResult] = await Promise.all([
     loadGatewayModels(input),
+    loadCustomModels(input),
     loadRuntimeCatalogModels(input),
   ]);
-  const results = [gatewayResult, runtimeCatalogResult];
+  const results = [customResult, gatewayResult, runtimeCatalogResult];
   const models = mergeModelCandidates(results);
 
   return {
@@ -39,6 +41,21 @@ export async function discoverGlobalLlmModels(
     sources: results.map(toSourceStatus),
     fetchedAt: new Date().toISOString(),
   };
+}
+
+async function loadCustomModels(input: GlobalLlmModelDiscoveryInput): Promise<SourceLoadResult> {
+  try {
+    return {
+      source: 'custom',
+      models: await modelProviderCatalogService.listCustomModelsForRuntime(input.runtimeId),
+    };
+  } catch (error) {
+    return {
+      source: 'custom',
+      models: [],
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function loadGatewayModels(input: GlobalLlmModelDiscoveryInput): Promise<SourceLoadResult> {
@@ -141,6 +158,7 @@ function compareModelCandidates(
   const rightKey = modelSortKey(right);
 
   const version = compareVersionsDesc(leftKey.version, rightKey.version);
+  if (leftKey.customRank !== rightKey.customRank) return rightKey.customRank - leftKey.customRank;
   if (version !== 0) return version;
 
   if (leftKey.aliasRank !== rightKey.aliasRank) return leftKey.aliasRank - rightKey.aliasRank;
@@ -152,6 +170,7 @@ function compareModelCandidates(
 
 function modelSortKey(candidate: GlobalLlmModelCandidate): {
   aliasRank: number;
+  customRank: number;
   sourceRank: number;
   tierRank: number;
   version: number[];
@@ -159,6 +178,7 @@ function modelSortKey(candidate: GlobalLlmModelCandidate): {
   const text = `${candidate.id} ${candidate.name ?? ''}`.toLowerCase();
   return {
     aliasRank: /\b(latest|default|current|chat-latest)\b/.test(text) ? 1 : 0,
+    customRank: candidate.sources.includes('custom') ? 1 : 0,
     sourceRank: candidate.sources.length,
     tierRank: modelTierRank(text),
     version: extractModelVersion(text),

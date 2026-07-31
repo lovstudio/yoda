@@ -1,11 +1,11 @@
 import type {
   AgentModelCandidateCacheEntry,
-  RuntimeModelCandidateSource,
+  RuntimeModelCandidateCacheSource,
 } from '@shared/runtime-model-candidates';
 import type { RuntimeDefinition } from '@shared/runtime-registry';
 import { normalizeModelCandidates } from './model-candidate-parser';
 
-const CATALOG_SOURCE: RuntimeModelCandidateSource = 'catalog';
+const CATALOG_SOURCE: RuntimeModelCandidateCacheSource = 'catalog';
 
 type CatalogModelCandidate = {
   model: string;

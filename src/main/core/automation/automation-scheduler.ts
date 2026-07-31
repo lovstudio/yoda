@@ -3,6 +3,7 @@ import { automationsUpdatedChannel } from '@shared/events/appEvents';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { automationRunner } from './automation-runner';
+import { shouldScheduleInYoda } from './automation-schedule-policy';
 import { automationService } from './automation-service';
 
 /**
@@ -20,6 +21,7 @@ export class AutomationScheduler {
     if (this.initialized) return;
     this.initialized = true;
     automationRunner.initialize();
+    await automationService.initialize();
     await automationService.sweepInterruptedRuns();
     await this.reload();
     // Rebuild whenever automations change (CRUD). Run-state events use a
@@ -34,6 +36,12 @@ export class AutomationScheduler {
     this.jobs.clear();
   }
 
+  dispose(): void {
+    this.clear();
+    automationService.dispose();
+    this.initialized = false;
+  }
+
   async reload(): Promise<void> {
     if (this.reloading) return;
     this.reloading = true;
@@ -41,7 +49,9 @@ export class AutomationScheduler {
       this.clear();
       const list = await automationService.list();
       for (const auto of list) {
-        if (auto.status !== 'active' || auto.triggerKind !== 'cron' || !auto.cronExpr) continue;
+        // Codex-backed rows are library mirrors. Codex remains the sole scheduler
+        // so its target thread, notification policy, and run memory stay intact.
+        if (!shouldScheduleInYoda(auto) || !auto.cronExpr) continue;
         try {
           const job = new Cron(
             auto.cronExpr,
