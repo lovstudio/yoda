@@ -22,7 +22,7 @@ import {
   useWorkspaceSlots,
 } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
+import { appState, sidebarStore, workspaceStore } from '@renderer/lib/stores/app-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { cn } from '@renderer/utils/utils';
 import { GlobalSidePaneTarget } from './global-side-pane-target';
@@ -214,12 +214,16 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       <SidebarContainer className="w-full border-r-0 flex-1 min-h-0">
         <div className="px-2">
           <SidebarMenu>
-            <div className="group/ws flex h-8 items-center gap-1 rounded-lg pr-1 text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary has-data-popup-open:bg-background-tertiary-1 has-data-popup-open:text-foreground-tertiary">
-              <WorkspaceSwitcher />
-              <WorkspaceReviewBadge className="shrink-0" />
-              <ProjectsSettingsMenu />
-            </div>
-            <div className="my-1 border-t border-border" />
+            {workspaceStore.enabled && (
+              <>
+                <div className="group/ws flex h-8 items-center gap-1 rounded-lg pr-1 text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary has-data-popup-open:bg-background-tertiary-1 has-data-popup-open:text-foreground-tertiary">
+                  <WorkspaceSwitcher />
+                  <WorkspaceReviewBadge className="shrink-0" />
+                  <ProjectsSettingsMenu />
+                </div>
+                <div className="my-1 border-t border-border" />
+              </>
+            )}
             <SidebarMenuButton
               isActive={isCurrentView(currentView, 'home')}
               onClick={handleNewTask}

@@ -50,6 +50,42 @@ export const AutoGenerateTaskNamesRow: React.FC = () => {
   );
 };
 
+export const WorkspacesEnabledRow: React.FC = () => {
+  const { t } = useTranslation();
+  const {
+    value: tasks,
+    update,
+    isLoading: loading,
+    isSaving: saving,
+    isFieldOverridden,
+    resetField,
+  } = useAppSettingsKey('tasks');
+
+  const workspacesEnabled = tasks?.workspacesEnabled ?? false;
+
+  return (
+    <SettingRow
+      title={t('settings.tasks.workspacesEnabled')}
+      description={t('settings.tasks.workspacesEnabledDescription')}
+      control={
+        <>
+          <ResetToDefaultButton
+            visible={isFieldOverridden('workspacesEnabled')}
+            defaultLabel={t('common.no')}
+            onReset={() => resetField('workspacesEnabled')}
+            disabled={loading || saving}
+          />
+          <Switch
+            checked={workspacesEnabled}
+            disabled={loading || saving}
+            onCheckedChange={(checked) => update({ workspacesEnabled: checked })}
+          />
+        </>
+      }
+    />
+  );
+};
+
 export const InitTaskNameFromSessionRow: React.FC = () => {
   const { t } = useTranslation();
   const taskSettings = useTaskSettings();

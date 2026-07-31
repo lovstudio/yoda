@@ -1190,6 +1190,8 @@
       "osNotificationsDescription": "Show system banners when agents need attention or finish (while Yoda is unfocused)."
     },
     "tasks": {
+      "workspacesEnabled": "Enable workspaces",
+      "workspacesEnabledDescription": "Organize and filter tasks by workspace. Unassigned tasks appear in the Default workspace.",
       "autoGenerateName": "Auto-generate session titles",
       "autoGenerateNameDescription": "Generate a readable session title from a session's first prompt.",
       "initTaskNameFromSession": "Initialize task names from session titles",

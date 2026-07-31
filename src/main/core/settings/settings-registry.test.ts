@@ -8,6 +8,7 @@ describe('settings defaults', () => {
 
   it('enables delivery summaries while leaving other language calls disabled', () => {
     const tasks = getDefaultForKey('tasks');
+    expect(tasks.workspacesEnabled).toBe(false);
     expect(tasks.inputPromptLanguage).toBe('skip');
     expect(tasks.namingLanguage).toBe('skip');
     expect(tasks.summaryLanguage).toBe('app');

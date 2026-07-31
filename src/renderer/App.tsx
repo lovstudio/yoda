@@ -20,6 +20,7 @@ import { Onboarding } from './features/onboarding/onboarding';
 import { getOnboardingSteps, type OnboardingStep } from './features/onboarding/onboarding-steps';
 import { ComparisonWindow } from './features/tasks/comparison-window';
 import { TaskTabWindow } from './features/tasks/task-window';
+import { WorkspaceSettingsAgent } from './features/workspaces/workspace-settings-agent';
 import { getAiLabWindowLaunchTarget, isAiLabWindowLaunch } from './lib/ai-lab-window-launch-target';
 import {
   getComparisonWindowLaunchTarget,
@@ -158,6 +159,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <AccountSessionEvents />
       <SettingsSyncAgent />
+      <WorkspaceSettingsAgent />
       <FeatureFlagProvider>
         <AppContent />
       </FeatureFlagProvider>

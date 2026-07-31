@@ -1190,6 +1190,8 @@
       "osNotificationsDescription": "当代理需要处理或完成任务时（且 Yoda 未聚焦）显示系统横幅。"
     },
     "tasks": {
+      "workspacesEnabled": "是否启用工作区",
+      "workspacesEnabledDescription": "启用后可按工作区整理和筛选任务；未归类的任务会显示在「默认」工作区。",
       "autoGenerateName": "自动生成会话名",
       "autoGenerateNameDescription": "会话收到首条 Prompt 后，自动生成可读的会话名。",
       "initTaskNameFromSession": "基于会话名初始化任务名",

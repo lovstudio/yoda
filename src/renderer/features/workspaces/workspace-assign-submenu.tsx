@@ -68,6 +68,7 @@ export const WorkspaceAssignContextSubmenu = observer(function WorkspaceAssignCo
   showSeparator = true,
 }: WorkspaceAssignSubmenuProps) {
   const { t } = useTranslation();
+  if (!workspaceStore.enabled) return null;
   return (
     <>
       {showSeparator && <ContextMenuSeparator />}
@@ -112,6 +113,7 @@ export const WorkspaceAssignDropdownSubmenu = observer(function WorkspaceAssignD
   showSeparator = true,
 }: WorkspaceAssignSubmenuProps) {
   const { t } = useTranslation();
+  if (!workspaceStore.enabled) return null;
   return (
     <>
       {showSeparator && <DropdownMenuSeparator />}

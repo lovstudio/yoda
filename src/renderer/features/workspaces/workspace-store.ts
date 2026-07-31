@@ -1,4 +1,5 @@
 import { makeAutoObservable, runInAction } from 'mobx';
+import type { AppSettings } from '@shared/app-settings';
 import { ALL_WORKSPACES_ID, DEFAULT_WORKSPACE_ID, type Workspace } from '@shared/workspaces';
 import { rpc } from '@renderer/lib/ipc';
 
@@ -7,11 +8,12 @@ export type ActiveWorkspaceId = string;
 
 /**
  * Holds the user-defined workspaces (sidebar tabs) and the active selection.
- * Workspace membership lives on each project (`project.data.workspaceId`); this
- * store only owns the list of workspaces and which tab is active.
+ * Workspace membership lives on each project/task; this store owns the feature
+ * state, workspace list, and active selection.
  */
 export class WorkspaceStore {
   workspaces: Workspace[] = [];
+  enabled = false;
   activeWorkspaceId: ActiveWorkspaceId = ALL_WORKSPACES_ID;
 
   constructor() {
@@ -19,15 +21,23 @@ export class WorkspaceStore {
   }
 
   async load(): Promise<void> {
-    const list = await rpc.workspaces.listWorkspaces();
+    const [list, taskSettings] = await Promise.all([
+      rpc.workspaces.listWorkspaces(),
+      rpc.appSettings.get('tasks') as Promise<AppSettings['tasks']>,
+    ]);
     runInAction(() => {
       this.workspaces = list;
+      this.setEnabled(taskSettings.workspacesEnabled);
       this.normalizeActive();
     });
   }
 
   /** Keep the active selection valid if its workspace was removed elsewhere. */
   private normalizeActive(): void {
+    if (!this.enabled) {
+      this.activeWorkspaceId = ALL_WORKSPACES_ID;
+      return;
+    }
     if (
       this.activeWorkspaceId === ALL_WORKSPACES_ID ||
       this.activeWorkspaceId === DEFAULT_WORKSPACE_ID
@@ -39,17 +49,29 @@ export class WorkspaceStore {
     }
   }
 
+  /**
+   * Disabling workspaces exposes every task as one flat collection. Enabling
+   * starts in the virtual Default workspace, whose members are the tasks and
+   * projects without an explicit workspace id.
+   */
+  setEnabled(enabled: boolean): void {
+    if (this.enabled === enabled) return;
+    this.enabled = enabled;
+    this.activeWorkspaceId = enabled ? DEFAULT_WORKSPACE_ID : ALL_WORKSPACES_ID;
+  }
+
   setActiveWorkspaceId(id: ActiveWorkspaceId): void {
-    this.activeWorkspaceId = id;
+    this.activeWorkspaceId = this.enabled ? id : ALL_WORKSPACES_ID;
   }
 
   get activeWorkspace(): Workspace | undefined {
+    if (!this.enabled) return undefined;
     return this.workspaces.find((w) => w.id === this.activeWorkspaceId);
   }
 
   /** True when items should be filtered (anything other than the "All" view). */
   get isFiltering(): boolean {
-    return this.activeWorkspaceId !== ALL_WORKSPACES_ID;
+    return this.enabled && this.activeWorkspaceId !== ALL_WORKSPACES_ID;
   }
 
   /** Whether an entity assigned to `assignedId` belongs in the active selection. */
@@ -106,7 +128,7 @@ export class WorkspaceStore {
   }
 
   restoreActiveWorkspaceId(id: string | undefined): void {
-    if (id === undefined) return;
+    if (id === undefined || !this.enabled) return;
     this.activeWorkspaceId = id;
     this.normalizeActive();
   }
