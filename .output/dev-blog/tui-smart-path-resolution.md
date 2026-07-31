@@ -2,10 +2,20 @@
 
 这次修复从一张很普通的终端截图开始：AI 输出了一张三列表格，作者主页和推荐文章都是 URL。表格一窄，链接就被拆成两行甚至三行。
 
+第一张图很有欺骗性。鼠标落在 `https://` 开头时，终端确实显示 “Hold Cmd and click to open”，所以功能看起来已经正常；真正的问题藏在每条链接的后半段。
+
+![Yoda 终端表格中，多条 URL 因列宽被拆成两行或三行；鼠标悬停在 Simon Willison 链接的开头部分](https://nouchjcfeoobplxkwasg.supabase.co/storage/v1/object/public/app-assets/blog-images/tui-smart-path-resolution/01-partial-match-overview.webp)
+
+_图 1：表面上所有 URL 都有下划线，开头部分也能触发打开提示，但这还不是完整链接识别。_
+
 ```text
 Hamel Husain (https://hamel.dev/blog/
 secret.html)
 ```
+
+![Hamel Husain 的完整 URL 在终端单元格内换行，第一行是 https://hamel.dev/blog/，第二行是 secret.html](https://nouchjcfeoobplxkwasg.supabase.co/storage/v1/object/public/app-assets/blog-images/tui-smart-path-resolution/02-hamel-wrapped-url.webp)
+
+_图 2：视觉上是一条 URL；从终端单元格看，它却是两个物理片段。右键第二行的 `secret.html` 时，旧逻辑会把它当成文件。_
 
 肉眼看，这当然是一个完整地址。但在终端里，第一行的 `https://hamel.dev/blog/`、第二行的 `secret.html`，以及鼠标最终落下的字符坐标，可能分别落入三套判断逻辑。
 
@@ -80,6 +90,10 @@ Yoda 在 `terminal-web-links.ts` 中寻找当前行上下最近的横向分隔�
 因此，无论鼠标落在 `https://`、域名、中间路径还是末尾路径，得到的目标都应该相同。
 
 这一轮解决了截图中不同列、不同换行方式和任意段数的 URL 重组。悬停 URL 开头时，识别结果终于正确了。
+
+![修复后的 Yoda 终端回归场景，表格同时包含作者主页、长文章地址、两行链接、三行链接和不同列中的 URL](https://nouchjcfeoobplxkwasg.supabase.co/storage/v1/object/public/app-assets/blog-images/tui-smart-path-resolution/03-final-regression-scene.webp)
+
+_图 3：最终回归场景不再只测一个精心构造的短地址，而是保留真实表格中的两行、三行、不同列与不同结尾形态。_
 
 但它还没有真正结束。
 
@@ -175,4 +189,3 @@ https://hamel.dev/blog/secret.html
 这次最值得记录的，并不是终于写出了一个更复杂的链接识别器，而是把判断顺序重新对齐到了用户心智：
 
 **屏幕上被折成多少段并不重要。只要它原本是一个链接，点击任何一段，都应该到达同一个地方。**
-
