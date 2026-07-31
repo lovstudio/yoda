@@ -1,8 +1,8 @@
 import {
   Archive,
+  Bookmark,
   ChevronRight,
   GitBranch,
-  Infinity as InfinityIcon,
   Loader2,
   MoreHorizontal,
   Users,
@@ -476,7 +476,7 @@ function LongTermTaskIcon({
         className
       )}
     >
-      <InfinityIcon className={cn('stroke-[1.75]', compact ? 'size-2.5' : 'size-3.5')} />
+      <Bookmark className={cn('fill-current stroke-[1.75]', compact ? 'size-2.5' : 'size-3.5')} />
     </span>
   );
 }

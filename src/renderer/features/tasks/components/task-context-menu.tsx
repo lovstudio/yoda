@@ -2,13 +2,13 @@ import type { TFunction } from 'i18next';
 import {
   Archive,
   ArchiveRestore,
+  Bookmark,
   CircleDot,
   CircleSlash,
   ClipboardList,
   Columns2,
   Copy,
   FolderTree,
-  Infinity as InfinityIcon,
   Info,
   LayoutGrid,
   Link2,
@@ -216,7 +216,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     items.push({
       key: actions.isLongTerm ? 'unmark-long-term' : 'mark-long-term',
       group: 1,
-      icon: InfinityIcon,
+      icon: Bookmark,
       label: t(actions.isLongTerm ? 'tasks.context.unmarkLongTerm' : 'tasks.context.markLongTerm'),
       onSelect: actions.isLongTerm ? actions.onUnmarkLongTerm : actions.onMarkLongTerm,
     });
