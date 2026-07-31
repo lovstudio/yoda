@@ -41,6 +41,8 @@ export type Task = {
   /** @deprecated Use linkedIssues. Preserved as the primary linked issue for compatibility. */
   linkedIssue?: Issue;
   isPinned: boolean;
+  /** User-marked task expected to stay active over an extended period. */
+  isLongTerm: boolean;
   needsReview: boolean;
   isUserNamed: boolean;
   setupStatus: TaskSetupStatus;

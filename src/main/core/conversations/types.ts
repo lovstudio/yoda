@@ -1,6 +1,7 @@
 import {
   type AgentSessionSource,
   type Conversation,
+  type ConversationExecutionMode,
   type PendingInitialPrompt,
 } from '@shared/conversations';
 import type { SkillSessionPolicy } from '@shared/skills/types';
@@ -43,6 +44,7 @@ export type ConversationConfig = {
   autoApprove?: boolean;
   permissionMode?: string;
   skillPolicy?: SkillSessionPolicy;
+  executionMode?: ConversationExecutionMode;
   sessionSource?: AgentSessionSource;
   /** Cleared only after the Agent session is spawned with its first prompt. */
   pendingInitialPrompt?: PendingInitialPrompt;

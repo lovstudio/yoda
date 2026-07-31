@@ -121,6 +121,9 @@
   },
   "sidebar": {
     "newTask": "新建任务",
+    "newTaskOpenMode": "新建任务打开方式",
+    "newTaskOpenHome": "主页",
+    "newTaskOpenModal": "悬浮窗",
     "searchTasks": "搜索任务",
     "library": "资源库",
     "marketplace": "扩展市场",
@@ -353,7 +356,7 @@
       "tailscaleSetupGuide": "查看配置指引",
       "relayTitle": "Yoda Relay",
       "relayHeroTitle": "从任何网络连接这台电脑",
-      "relayHeroDescription": "手机无需与电脑连接同一 Wi-Fi，也无需安装 VPN。启用后，直接用 Yoda Mobile 扫码配对。",
+      "relayHeroDescription": "手机无需与电脑连接同一 Wi-Fi，也无需安装 VPN。首次用 Yoda Mobile 扫码配对一次，之后打开手机即可自动连接。",
       "recommended": "推荐",
       "relayDescription": "手机无需安装 VPN；桌面主动连接 LovStudio Relay，通过普通 HTTPS 安全访问。首次启用赠送 7 天试用；同一桌面当前仅保留最近配对的一台手机。",
       "relayChecking": "正在检查 Relay…",
@@ -380,7 +383,7 @@
       "relayPairingPlaceholder": "生成配对码后，二维码会显示在这里",
       "relayPairingExpiredQr": "配对码已过期，请重新生成",
       "relayPairingExpiredHint": "为保护连接安全，过期二维码不会切换成本地连接。请重新生成一次性配对码。",
-      "scanRelayPairing": "用 Yoda Mobile 扫码，配对码 10 分钟内有效",
+      "scanRelayPairing": "首次用 Yoda Mobile 扫一次即可；配对码 10 分钟内有效",
       "copyRelayPairing": "复制配对链接",
       "copyRelayError": "复制 Relay 错误",
       "relayCredentialRejected": "Relay 凭据已失效，请重新启用。",
@@ -389,7 +392,7 @@
       "relayDeviceUnavailable": "Relay 设备暂不可用，请重新启用。",
       "relayPairingQrLabel": "Yoda Relay 一次性配对二维码",
       "relayTrialNote": "首次启用赠送 7 天试用；每台电脑当前仅保留最近配对的一台手机。",
-      "relayConnectDescription": "这是 10 分钟内有效的一次性 Relay 配对码。扫码兑换后，手机凭据会保存到系统安全存储。",
+      "relayConnectDescription": "这是 10 分钟内有效的一次性 Relay 配对码。首次扫码后，手机会安全保存配对凭据；后续启动自动恢复，无需再次扫码。",
       "installDisclosureTitle": "还没安装 Yoda Mobile？",
       "installDisclosureDescription": "展开获取 App，已安装可直接忽略",
       "copyInstallUrl": "复制安装链接",
@@ -450,8 +453,9 @@
       "prompts": "Prompts",
       "skills": "技能",
       "agentManager": "Agent",
+      "models": "模型",
       "llm": "LLM",
-      "maas": "MaaS",
+      "maas": "中转渠道",
       "usage": "用量",
       "aiLogs": "AI 日志",
       "automation": "自动化",
@@ -541,7 +545,7 @@
       "revokeDevice": "撤销",
       "settingsSync": {
         "title": "设置同步",
-        "description": "像 IDE 设置同步一样，在不同 Yoda 安装之间恢复界面、快捷键、Agent 与 MaaS 配置。",
+        "description": "像 IDE 设置同步一样，在不同 Yoda 安装之间恢复界面、快捷键、Agent 与中转渠道配置。",
         "autoSync": "自动同步到 LovStudio 账户",
         "lastSynced": "上次同步：{{date}}",
         "notSynced": "尚未同步",
@@ -573,6 +577,70 @@
       "executionSettings": "执行设置",
       "rescan": "重新探测"
     },
+    "models": {
+      "title": "模型",
+      "description": "按厂商管理 Yoda 可用的模型，并添加目录尚未收录的模型 ID。",
+      "catalogTitle": "模型目录",
+      "catalogDescription": "模型按 OpenAI、Anthropic、Kimi 等厂商归类；Claude Code、Codex 等客户端只负责使用模型。",
+      "provider": "厂商",
+      "providerDescription": "选择要查看和维护模型的厂商。",
+      "providerUnknown": "未知厂商",
+      "customProviderTitle": "自定义厂商",
+      "customProviderDescription": "新增目录尚未收录的模型厂商。这里管理厂商与模型归属；Agent 客户端或中转渠道的接入方式仍在对应设置中配置。",
+      "addProvider": "新增厂商",
+      "providerName": "厂商名称",
+      "providerNamePlaceholder": "例如 SiliconFlow",
+      "providerId": "厂商标识",
+      "providerIdPlaceholder": "例如 siliconflow",
+      "providerIdDescription": "厂商标识用于生成模型前缀，支持小写字母、数字、点、下划线和连字符；创建后保持稳定。",
+      "providerInitialModel": "首个模型 ID（可选）",
+      "providerInitialModelPlaceholder": "例如 deepseek-v3.2",
+      "createProvider": "创建厂商",
+      "providerNameInvalid": "请输入 1–60 个字符的厂商名称。",
+      "providerIdInvalid": "请输入有效且未被预置厂商占用的厂商标识。",
+      "providerDuplicate": "这个厂商标识已经存在。",
+      "providerLimit": "最多可添加 {{count}} 个自定义厂商。",
+      "providerInitialModelInvalid": "请输入当前厂商下 2–100 个字符的有效模型 ID。",
+      "providerSaveFailed": "厂商保存失败，请重试。",
+      "customProviderStatusDescription": "这是你创建的厂商，模型由本地设置维护，不参与官方目录自动更新。",
+      "deleteProvider": "删除厂商",
+      "deleteProviderTitle": "删除自定义厂商？",
+      "deleteProviderDescription": "将删除 {{provider}} 及其全部自定义模型。其他厂商不受影响。",
+      "deleteProviderConfirm": "删除厂商",
+      "automaticUpdates": "自动更新模型目录",
+      "automaticUpdatesDescription": "Yoda 启动后每 24 小时检查一次；仅在本机已有对应厂商 API Key 时访问其官方接口。",
+      "customInput": "自定义模型 ID",
+      "customPlaceholder": "例如 gpt-5.6-codex",
+      "customAdd": "添加模型",
+      "customBadge": "自定义",
+      "customInvalid": "请输入当前厂商下 2–100 个字符的有效模型 ID。",
+      "customDuplicate": "这个模型已经在当前厂商的自定义列表中。",
+      "customLimit": "每个厂商最多可添加 {{count}} 个自定义模型。",
+      "removeCustom": "移除自定义模型 {{model}}",
+      "saveFailed": "模型设置保存失败，请重试。",
+      "refresh": "检查更新",
+      "refreshing": "检查中",
+      "officialSource": "查看厂商官方来源",
+      "officialBadge": "官方",
+      "aggregateBadge": "聚合目录",
+      "officialApiUpdated": "已于 {{date}} 通过厂商官方 API 校验当前账号可用模型。",
+      "officialApiStale": "最近一次检查未完成，继续使用 {{date}} 的官方 API 结果。",
+      "officialSnapshotConfigured": "内置官方快照核验于 {{date}}；点击“检查更新”可按当前账号重新校验。",
+      "officialSnapshotNeedsKey": "内置官方快照核验于 {{date}}；配置该厂商 API Key 后可在线校验。",
+      "officialSnapshotStatic": "内置官方快照核验于 {{date}}；Yoda 版本会按厂商发布资料更新这份快照。",
+      "aggregateOnlyDescription": "该厂商目前由聚合目录补充，也可继续添加自定义模型。",
+      "aggregateStaleDescription": "最近一次聚合目录检查未完成，继续使用已缓存目录；自定义模型不受影响。",
+      "updateStatus": {
+        "current": "官方 API 已更新",
+        "snapshot": "官方快照",
+        "stale": "沿用上次结果",
+        "aggregateOnly": "聚合目录",
+        "customOnly": "自定义厂商"
+      },
+      "loading": "正在加载模型…",
+      "emptyTitle": "该厂商暂无模型",
+      "emptyDescription": "刷新目录，或为 {{provider}} 添加一个自定义模型。"
+    },
     "llm": {
       "title": "LLM 配置与调试",
       "description": "管理 Yoda 内部 AI 调用使用的 LLM Profile。",
@@ -589,14 +657,14 @@
       "agentClient": "Agent Client",
       "agentClientDescription": "这次 AI 调用实际依附的客户端，例如 Claude Code、Codex 或 Code Ace。",
       "accessMethod": "接入方式",
-      "accessMethodDescription": "在当前 Client 内选择官网订阅、官方 API Key 或 Yoda MaaS。",
+      "accessMethodDescription": "在当前 Client 内选择官网订阅、官方 API Key 或 Yoda 中转渠道。",
       "access": {
         "officialSubscription": "官网订阅",
         "officialApi": "API Key",
-        "maas": "第三方 MaaS"
+        "maas": "第三方中转渠道"
       },
-      "maasPlatform": "MaaS 平台",
-      "maasPlatformDescription": "仅在接入方式为 MaaS 时生效。当前已连接 {{count}} 个平台，所选平台{{status}}。",
+      "maasPlatform": "中转渠道",
+      "maasPlatformDescription": "仅在接入方式为中转渠道时生效。当前已连接 {{count}} 个渠道，所选渠道{{status}}。",
       "maasConnected": "已连接",
       "maasNotConnected": "未连接",
       "model": "模型",
@@ -608,6 +676,7 @@
       "modelDiscoveryMore": "另有 {{count}} 个",
       "modelDiscoveryPartial": "部分来源失败：{{error}}",
       "modelDiscoverySources": {
+        "custom": "自定义",
         "aiGateway": "AI Gateway",
         "runtimeCatalog": "Runtime catalog"
       },
@@ -892,6 +961,35 @@
       "description": "自定义应用的外观与行为。",
       "keyboardShortcuts": "键盘快捷键"
     },
+    "taskAppearance": {
+      "title": "任务外观",
+      "description": "分别定义侧边栏中不同任务类型的视觉层级；多智能体任务继承任务类型，只覆盖标记。",
+      "previewHint": "预览按“已结束工作且已读”的空闲状态展示；工作中、未读或选中时会恢复完整强度。",
+      "defaultPreset": "默认任务外观",
+      "standard": "标准任务",
+      "standardDescription": "所有普通任务使用的基础样式。",
+      "standardSample": "整理产品发布说明",
+      "longTerm": "长期任务",
+      "longTermDescription": "覆盖基础样式，适合持续推进的工作。",
+      "longTermSample": "持续优化用户体验",
+      "multiAgent": "多智能体任务",
+      "multiAgentDescription": "文字与空闲强度继承任务类型，仅覆盖标记。",
+      "multiAgentSample": "协作完成版本发布",
+      "titleStyle": "文字",
+      "titleStyleRegular": "常规",
+      "titleStyleMedium": "中等",
+      "titleStyleItalic": "斜体",
+      "idleStrength": "空闲强度",
+      "opacity100": "清晰 · 100%",
+      "opacity85": "轻柔 · 85%",
+      "opacity70": "低调 · 70%",
+      "opacity55": "淡化 · 55%",
+      "marker": "左侧标记",
+      "markerNone": "无",
+      "markerDot": "圆点",
+      "markerBookmark": "书签",
+      "markerUsers": "协作"
+    },
     "terminalTab": {
       "description": "配置终端字体、历史行数与剪贴板行为。"
     },
@@ -941,7 +1039,7 @@
       "ariaDreamVirtual": "设置主题为未来音律皮肤",
       "ariaDreamGold": "设置主题为舞台黑金皮肤",
       "dreamSkinGallery": "梦境皮肤库",
-      "dreamSkinGalleryDescription": "对应上游图库风格的原生可交互 Yoda 皮肤。",
+      "dreamSkinGalleryDescription": "精选风格各异的原生可交互 Yoda 皮肤。",
       "activeSkin": "使用中",
       "systemLight": "浅色模式使用",
       "systemDark": "深色模式使用",
@@ -1092,6 +1190,8 @@
       "osNotificationsDescription": "当代理需要处理或完成任务时（且 Yoda 未聚焦）显示系统横幅。"
     },
     "tasks": {
+      "workspacesEnabled": "是否启用工作区",
+      "workspacesEnabledDescription": "启用后可按工作区整理和筛选任务；未归类的任务会显示在「默认」工作区。",
       "autoGenerateName": "自动生成会话名",
       "autoGenerateNameDescription": "会话收到首条 Prompt 后，自动生成可读的会话名。",
       "initTaskNameFromSession": "基于会话名初始化任务名",
@@ -1134,10 +1234,10 @@
       "namingContextProject": "项目路径",
       "namingContextReadme": "README",
       "namingContextRecentTasks": "最近任务",
-      "autoTrustWorktrees": "自动信任 worktree 目录",
-      "autoTrustWorktreesDescription": "新任务时跳过 Claude Code 的目录信任弹窗。",
-      "autoTrustWorktreesInfo": "仅对 Claude Code 生效。会在启动前向 ~/.claude.json 写入信任记录。",
-      "autoTrustWorktreesInfoLabel": "关于自动信任 worktree 的更多信息",
+      "autoTrustWorktrees": "自动信任新项目目录",
+      "autoTrustWorktreesDescription": "Claude Code 或 Codex 在新项目中启动时，跳过目录信任确认。",
+      "autoTrustWorktreesInfo": "对 Claude Code 和 Codex 生效。Yoda 会在启动前将当前项目目录写入所用 CLI 的信任配置。",
+      "autoTrustWorktreesInfoLabel": "关于自动信任项目目录的更多信息",
       "enableTmux": "启用 tmux",
       "enableTmuxDescription": "在 tmux session 中运行代理与终端，使它们在重启 Yoda 后仍可继续连接。",
       "tmuxUnavailableTitle": "尚未安装 tmux",
@@ -1286,14 +1386,14 @@
     "signInDescription": "LovStudio 账户统一承载身份、积分、Relay 和 GitHub OAuth；不登录也可继续使用本地功能。",
     "connectedAs": "已登录为 {{name}}",
     "maasGateway": {
-      "stepTitle": "MaaS Gateway",
-      "title": "安装 Yoda MaaS Gateway？",
-      "description": "这是扩展市场中的可选后台服务。安装后，Codex 可通过本机代理使用和热切换第三方 MaaS，真实 API Key 不会写入 Codex 配置。",
+      "stepTitle": "中转渠道网关",
+      "title": "安装 Yoda 中转渠道网关？",
+      "description": "这是扩展市场中的可选后台服务。安装后，Codex 可通过本机代理使用和热切换第三方中转渠道，真实 API Key 不会写入 Codex 配置。",
       "security": "Gateway 只监听 127.0.0.1；Provider 密钥保存在 Yoda 加密密钥库，并仅通过进程 IPC 注入运行时内存。",
       "install": "安装 Gateway",
       "skip": "暂不需要",
-      "unavailable": "MaaS Gateway 当前不在扩展市场中。",
-      "installFailed": "MaaS Gateway 安装失败。"
+      "unavailable": "中转渠道网关当前不在扩展市场中。",
+      "installFailed": "中转渠道网关安装失败。"
     },
     "import": {
       "importing": "导入中…",
@@ -1361,6 +1461,7 @@
     "promptSendFailed": "无法把 Prompt 发送给 agent。",
     "composerSettingsAria": "输入设置",
     "composerSettingsLabel": "配置",
+    "composerEssentialsSectionLabel": "输入与输出",
     "attachImagesAsPathsLabel": "图片以文件路径发送",
     "attachImagesAsPathsDesc": "以反引号包裹的 `@路径` 文本引用图片，避免 Agent 将路径直接转换成图片输入。",
     "permissionModeLabel": "权限模式",
@@ -1382,6 +1483,9 @@
     "composerDefaultReviewerLabel": "默认评审 agent",
     "agentCliConfigLabel": "Agent CLI",
     "agentCliConfigHint": "当前所选 Agent CLI 的运行权限与启动前会读取的指令文件。",
+    "promptConfigurationLabel": "提示词与指令",
+    "enabledPromptCount": "已启用 {{count}} 条",
+    "openPromptLibrary": "在资源库中管理提示词",
     "systemPromptLabel": "System Prompt",
     "systemPromptHint": "启用动态注入的提示词会追加到所选 Agent CLI 的 system/developer prompt；CLI 内置 system prompt 不可编辑。",
     "systemPromptHintClaude": "启用动态注入的提示词会通过 --append-system-prompt 追加到 Claude Code 的 system prompt；Claude 内置 system prompt 不可编辑。",
@@ -1587,7 +1691,7 @@
         "authProvider": {
           "official-subscription": "订阅",
           "official-api": "API Key",
-          "yoda-maas": "MaaS"
+          "yoda-maas": "中转渠道"
         }
       },
       "subtasks": "子任务（{{count}}）"
@@ -2053,8 +2157,10 @@
       "tileCandidates": "并排所有候选",
       "unpinTask": "取消置顶",
       "pinTask": "置顶",
-      "unmarkReview": "标记已读",
-      "markForReview": "标记未读",
+      "markLongTerm": "标记为长期任务",
+      "unmarkLongTerm": "取消长期任务标记",
+      "unmarkReview": "标记为已读",
+      "markForReview": "标记为未读",
       "archive": "归档",
       "archiveDirect": "直接归档…",
       "archiveWithSkill": "先执行预设 skill 再归档",
@@ -2086,9 +2192,7 @@
       "createParent": "增设父任务（分组）",
       "moveToProject": "移动到项目",
       "moveToProjectEmpty": "没有其他项目",
-      "moveToProjectSearch": "搜索项目…",
-      "showSessionHistoryDock": "显示底部会话记录",
-      "hideSessionHistoryDock": "隐藏底部会话记录"
+      "moveToProjectSearch": "搜索项目…"
     },
     "moveToProject": {
       "confirmTitle": "移动任务到其他项目？",
@@ -2527,7 +2631,6 @@
       "moveTo": "移动到分组",
       "reorderGroup": "拖动「{{name}}」调整分组顺序",
       "reorderPrompt": "拖动「{{name}}」调整它在分组内的顺序",
-      "toggleInjection": "切换「{{name}}」分组的动态注入",
       "ungrouped": "未分组",
       "count": "{{count}} 条"
     },
@@ -2545,7 +2648,7 @@
       "groupPlaceholder": "例如：开发与调试",
       "groupHint": "可输入已有分组或新分组；留空则归入“未分组”。",
       "content": "提示词内容",
-      "contentPlaceholder": "要复用的提示词文本…",
+      "contentPlaceholder": "尽量简短，只写一条明确、可复用的指令…",
       "extraInfo": "额外信息",
       "extraInfoPlaceholder": "可选：补充说明、参考网址或扩展入口"
     },
@@ -2586,7 +2689,7 @@
       "empty": "当前项目还没有专属提示词。",
       "untitled": "未命名项目提示词",
       "namePlaceholder": "提示词名称",
-      "contentPlaceholder": "项目级提示词内容…",
+      "contentPlaceholder": "尽量简短，只写一条项目专属指令…",
       "toggle": "切换「{{name}}」",
       "remove": "移除项目提示词",
       "saveFailed": "保存项目提示词失败"
@@ -2644,7 +2747,8 @@
   },
   "automation": {
     "title": "自动化",
-    "subtitle": "把常用 prompt 保存为自动化任务，一键在内部工作区运行。",
+    "eyebrow": "自动化工作台",
+    "subtitle": "让 AI 按计划处理重复工作，并在一个地方掌握运行状态与结果。",
     "new": "新建自动化",
     "current": "当前",
     "paused": "已暂停",
@@ -2655,6 +2759,48 @@
     "nextRunLabel": "下次 {{time}}",
     "runFailed": "自动化运行失败",
     "saveFailed": "自动化保存失败",
+    "updateFailed": "自动化状态更新失败",
+    "listCount": "{{count}} 个自动化",
+    "yourAutomations": "你的自动化",
+    "yourAutomationsDescription": "查看计划、最近结果，并随时手动运行。",
+    "summary": {
+      "status": "{{active}} 个启用 · {{paused}} 个暂停",
+      "next": "下一次：{{name}} · {{time}}",
+      "noSchedule": "暂无定时运行"
+    },
+    "overview": {
+      "label": "自动化运行概览",
+      "active": "正在启用",
+      "scheduledCount": "其中 {{count}} 个按计划运行",
+      "nextRun": "下一次运行",
+      "noScheduledRun": "暂无定时计划",
+      "createScheduleHint": "创建定时自动化后会显示在这里",
+      "recentHealth": "最近运行",
+      "successRatio": "{{success}} / {{total}} 成功",
+      "noRuns": "尚无记录",
+      "latestRuns": "最近 {{count}} 次已完成运行",
+      "runHint": "运行一次后会显示结果"
+    },
+    "filters": {
+      "label": "筛选自动化",
+      "active": "启用中",
+      "paused": "已暂停",
+      "all": "全部"
+    },
+    "empty": {
+      "title": "创建第一个自动化",
+      "description": "把重复出现的工作交给 AI，设定一次，之后按计划执行。",
+      "action": "开始创建",
+      "activeTitle": "没有启用中的自动化",
+      "activeDescription": "你可以从“已暂停”中恢复已有自动化。",
+      "pausedTitle": "没有已暂停的自动化",
+      "pausedDescription": "暂停的自动化会集中显示在这里。"
+    },
+    "source": {
+      "codex": "Codex 同步",
+      "codexHint": "配置、调度和通知由 Codex 管理，Yoda 只读同步展示",
+      "codexManaged": "由 Codex 管理"
+    },
     "status": {
       "active": "启用",
       "paused": "暂停"
@@ -2662,6 +2808,10 @@
     "trigger": {
       "manual": "手动",
       "cron": "定时"
+    },
+    "schedule": {
+      "manual": "需要时手动运行",
+      "pending": "等待生成下一次计划"
     },
     "runStatus": {
       "running": "运行中",
@@ -2674,14 +2824,42 @@
       "edit": "编辑",
       "pause": "暂停",
       "resume": "恢复",
-      "delete": "删除"
+      "delete": "删除",
+      "more": "管理“{{name}}”",
+      "enabled": "已启用",
+      "disabled": "已暂停",
+      "runNow": "立即运行",
+      "running": "正在运行"
+    },
+    "card": {
+      "schedule": "运行计划",
+      "workspace": "工作区",
+      "lastRun": "上次运行",
+      "openLastRun": "查看“{{name}}”的上次运行",
+      "neverRun": "尚未运行"
+    },
+    "recentRuns": {
+      "title": "最近运行",
+      "description": "自动记录每次执行结果",
+      "empty": "还没有运行记录",
+      "emptyDescription": "手动运行或等待计划触发后，结果会显示在这里。",
+      "deletedAutomation": "已删除的自动化"
+    },
+    "editor": {
+      "createTitle": "创建自动化",
+      "editTitle": "编辑自动化",
+      "description": "先说明要完成的工作，再设置何时、由谁执行。",
+      "executionTitle": "执行设置",
+      "executionDescription": "这些设置决定自动化的归属、执行 Agent 和运行节奏。",
+      "ready": "设置完整，可以保存。",
+      "requiredHint": "填写名称、任务说明和必要的计划设置后即可保存。"
     },
     "form": {
       "title": "名称",
-      "titlePlaceholder": "Daily maker trend research",
+      "titlePlaceholder": "例如：每天整理产品反馈",
       "workspace": "工作区",
-      "workspacePlaceholder": "Lovstudio Web",
-      "agent": "代理",
+      "workspacePlaceholder": "例如：产品运营",
+      "agent": "执行 Agent",
       "schedule": "计划",
       "schedulePlaceholder": "每天 10:00",
       "trigger": "触发方式",
@@ -2689,8 +2867,31 @@
       "cronPlaceholder": "0 9 * * *",
       "cronHint": "标准 cron（分 时 日 月 周）。例：0 9 * * * 表示每天 09:00 运行。",
       "status": "状态",
-      "prompt": "Prompt",
-      "promptPlaceholder": "描述这个自动化运行时要让 agent 做什么。"
+      "prompt": "任务说明",
+      "promptPlaceholder": "清楚描述输入、要执行的步骤，以及完成后应交付什么结果。",
+      "promptHint": "这段说明会直接交给 Agent，请只写执行任务真正需要的信息。",
+      "scheduleFrequency": "运行频率",
+      "scheduleKinds": {
+        "daily": "每天",
+        "weekdays": "每个工作日",
+        "weekly": "每周",
+        "custom": "自定义 Cron"
+      },
+      "weekday": "星期",
+      "weekdays": {
+        "0": "星期日",
+        "1": "星期一",
+        "2": "星期二",
+        "3": "星期三",
+        "4": "星期四",
+        "5": "星期五",
+        "6": "星期六"
+      },
+      "runTime": "运行时间",
+      "localTimezone": "按本机时区运行",
+      "manualHint": "保存后不会自动触发，你可以随时从自动化卡片手动运行。",
+      "enabled": "保存后启用",
+      "enabledHint": "关闭后会以暂停状态保存"
     },
     "delete": {
       "title": "删除自动化？",
@@ -3128,7 +3329,7 @@
       "authProviders": {
         "official-subscription": "官方订阅",
         "official-api": "官方 API",
-        "yoda-maas": "Yoda MaaS"
+        "yoda-maas": "Yoda 中转渠道"
       },
       "configDetected": "已检测",
       "configMissing": "尚未创建",
@@ -3160,7 +3361,7 @@
     "tabs": {
       "account": "Auth",
       "maas": "客户端",
-      "models": "Models",
+      "models": "模型",
       "memory": "记忆",
       "hooks": "Hooks",
       "skills": "技能",
@@ -3190,9 +3391,9 @@
       "officialSubscriptionDescription": "{{name}} 的官方登录与订阅凭据由它自己的 CLI 或本地配置管理。",
       "officialApi": "官方 API",
       "officialApiDescription": "Yoda 启动 {{name}} 会话时会转发这些 API Key 和 Base URL 环境变量。",
-      "maasSource": "Yoda MaaS",
+      "maasSource": "Yoda 中转渠道",
       "maasDescription": "如已配置模型平台，可作为共享路由、观测与计费来源。",
-      "manageMaas": "管理 MaaS",
+      "manageMaas": "管理中转渠道",
       "selectAria": "使用{{name}}作为认证来源",
       "expandAria": "展开{{name}}详情",
       "selectedUnavailable": "该来源尚未就绪，请先完成配置",
@@ -3243,10 +3444,10 @@
       "localUsageCacheWrite": "缓存写",
       "localUsageLoading": "正在统计本地用量…",
       "localUsageError": "统计本地用量失败",
-      "noMaasConnections": "尚未连接 MaaS 平台。",
+      "noMaasConnections": "尚未连接中转渠道。",
       "usageTitle": "用量",
       "usageRefresh": "刷新",
-      "usageNoMaas": "在 MaaS 视图连接 ZenMux 后即可打开官方账单与用量页面。",
+      "usageNoMaas": "在中转渠道页面连接 ZenMux 后即可打开官方账单与用量页面。",
       "usageLoading": "正在加载用量…",
       "usageError": "无法加载用量",
       "usageEmpty": "暂无匹配的用量统计。",
@@ -3254,7 +3455,7 @@
       "usageTokens": "Tokens",
       "usageCost": "费用",
       "usagePeriod": "周期",
-      "usageAllRoutes": "全部 MaaS 路由",
+      "usageAllRoutes": "全部渠道路由",
       "usageFilteredBy": "过滤",
       "usageExternalTitle": "以 ZenMux Console 为准",
       "usageExternalDescription": "Yoda 不展示 ZenMux 平台级统计，避免把公共趋势误认为当前账号或 Agent 的费用。",
@@ -3278,7 +3479,7 @@
       "noPath": "{{name}} 暂未配置技能目录。"
     },
     "models": {
-      "title": "Models",
+      "title": "模型",
       "description": "同步该 Agent 可用的模型，并选择哪些模型显示。模型列表来自统一的公开模型目录，并会缓存在本地。",
       "refresh": "同步",
       "refreshing": "同步中",
@@ -3823,7 +4024,7 @@
       "commit-message": "提交信息",
       "logo-generation": "Logo 生成",
       "app-image-edit": "AI Lab 图片编辑",
-      "maas-chat": "MaaS 对话",
+      "maas-chat": "中转渠道对话",
       "llm-debug": "LLM 调试",
       "interactive-session": "交互式会话",
       "interactive-turn": "对话轮次",
@@ -3831,8 +4032,8 @@
     }
   },
   "maas": {
-    "title": "MaaS",
-    "subtitle": "连接模型平台并查看真实用量统计。",
+    "title": "中转渠道",
+    "subtitle": "连接模型中转渠道并查看真实用量统计。",
     "platformsTitle": "平台",
     "connected": "已连接",
     "notConnected": "未连接",
@@ -3847,30 +4048,30 @@
     "global": {
       "title": "当前生效平台",
       "description": "全局允许 0 或 1 个平台生效。启用后会备份所有兼容 Agent CLI 的当前接入配置；启用另一平台会自动切换，停用时自动复原。",
-      "loading": "正在读取 MaaS 状态…",
+      "loading": "正在读取中转渠道状态…",
       "effective": "已对 {{count}} 个 Agent CLI 生效",
       "needsAttention": "已启用，但凭据或配置异常",
       "enabled": "已启用",
       "disabled": "未启用",
       "notEnabled": "可启用",
       "needsConfiguration": "需要先配置 API Key",
-      "needsGateway": "需要先安装并启用 Yoda MaaS Gateway",
+      "needsGateway": "需要先安装并启用 Yoda 中转渠道网关",
       "toggleAria": "全局启用 {{platform}}",
       "enableAria": "启用 {{platform}}",
       "disableAria": "停用 {{platform}}",
       "manage": "配置 {{platform}}",
       "enabledToast": "{{platform}} 已对所有兼容 Agent CLI 生效",
-      "restoredToast": "已停用 MaaS，并复原 Agent CLI 配置",
-      "codexRestartNotice": "如 Codex App 已打开，请完全退出后重新打开，以重新加载本地 MaaS Gateway Provider；上游 API Key 不会进入 App 环境变量。",
-      "updateFailed": "无法更新全局 MaaS 配置"
+      "restoredToast": "已停用中转渠道，并复原 Agent CLI 配置",
+      "codexRestartNotice": "如 Codex App 已打开，请完全退出后重新打开，以重新加载本地中转渠道 Provider；上游 API Key 不会进入 App 环境变量。",
+      "updateFailed": "无法更新全局中转渠道配置"
     },
     "gatewayRequirement": {
-      "title": "需要 Yoda MaaS Gateway",
+      "title": "需要 Yoda 中转渠道网关",
       "states": {
         "loading": "正在检查扩展市场中的 Gateway 状态…",
         "unavailable": "当前未读取到 Gateway 扩展，请前往扩展市场查看。",
         "unsupported": "Gateway 暂不支持当前平台。",
-        "not-installed": "启用 MaaS 平台前，需要先从扩展市场安装 Gateway。",
+        "not-installed": "启用中转渠道前，需要先从扩展市场安装 Gateway。",
         "disabled": "Gateway 已安装但未启用，请先在扩展市场启用。",
         "unhealthy": "Gateway 当前未正常运行，请前往扩展市场检查状态。"
       },
@@ -3879,7 +4080,7 @@
     },
     "clients": {
       "title": "Agent Client",
-      "description": "勾选后会保存当前接入方式，并把该 Client 的 API Key 与端点切换到此 MaaS；复原会恢复切换前配置。新配置从下一次启动或恢复会话开始生效。",
+      "description": "勾选后会保存当前接入方式，并把该 Client 的 API Key 与端点切换到此中转渠道；复原会恢复切换前配置。新配置从下一次启动或恢复会话开始生效。",
       "loading": "正在读取 Client 配置…",
       "effective": "配置已生效",
       "needsAttention": "已关联，但凭据或配置异常",
@@ -3903,7 +4104,7 @@
         "description": "使用 SiliconFlow API 调用 GenAI 能力，支持 OpenAI 接口调用。"
       },
       "litellm": {
-        "description": "通过一个 OpenAI 兼容 Gateway 汇聚多个 MaaS，并由 LiteLLM 执行路由、负载均衡与故障切换。"
+        "description": "通过一个 OpenAI 兼容 Gateway 汇聚多个中转渠道，并由 LiteLLM 执行路由、负载均衡与故障切换。"
       },
       "newapi": {
         "description": "通过轻量网关管理 OpenAI 兼容上游渠道，并提供路由、重试与故障切换。"
@@ -3936,7 +4137,7 @@
       "managementApiKey": "Management API Key",
       "zenmuxManagementKeyPlaceholder": "粘贴 ZenMux Management API Key",
       "litellmKeyPlaceholder": "粘贴 LiteLLM Virtual Key 或 Master Key",
-      "litellmSetupHelper": "请先在 LiteLLM 中配置上游 MaaS、模型名称与路由规则；Yoda 只连接 Gateway，并通过 /v1/responses 转发 Codex 请求。",
+      "litellmSetupHelper": "请先在 LiteLLM 中配置上游中转渠道、模型名称与路由规则；Yoda 只连接 Gateway，并通过 /v1/responses 转发 Codex 请求。",
       "newApiKeyPlaceholder": "粘贴 New API 令牌",
       "newApiSetupHelper": "请先在 New API 中添加上游渠道；Yoda 连接其 OpenAI 兼容端点，并使用同一模型列表。",
       "inferenceApiKey": "Agent Client API Key",
@@ -3971,7 +4172,7 @@
       "subtitle": "账号级成本明细以 ZenMux 官方 Cost Analytics 为准。",
       "loading": "正在加载 ZenMux 统计数据…",
       "emptyNoConnectionTitle": "未连接平台",
-      "emptyNoConnection": "连接 MaaS 平台后即可加载 ZenMux Management API 聚合统计。",
+      "emptyNoConnection": "连接中转渠道后即可加载 ZenMux Management API 聚合统计。",
       "emptyNoRecords": "暂无用量统计。",
       "errorTitle": "无法加载用量统计",
       "reload": "刷新",
@@ -4159,11 +4360,11 @@
     "quickAction": "快速操作：{{label}}",
     "config": {
       "title": "配置",
-      "description": "设置输入处理与 Agent CLI 默认行为。更改用于后续输入；CLI 启动配置在新建或恢复会话后生效。"
+      "description": "调整常用输入与 Agent 选项。Prompt、指令文件等详细内容在资源库统一管理。"
     },
     "gateway": {
       "title": "Gateway",
-      "description": "为每个 Agent Client 选择 MaaS、订阅账号或 API Key",
+      "description": "为每个 Agent Client 选择中转渠道、订阅账号或 API Key",
       "global": "全局",
       "globalHint": "这里的配置对所有本地新会话生效",
       "currentSource": "{{client}} 当前使用 {{source}}",
@@ -4176,21 +4377,21 @@
       "ready": "可用",
       "needsConfiguration": "需要配置",
       "directSources": "Agent CLI",
-      "maasSources": "MaaS 平台",
+      "maasSources": "中转渠道",
       "subscription": "订阅账号",
       "apiKey": "API Key",
-      "maas": "MaaS",
+      "maas": "中转渠道",
       "unconfigured": "未配置",
-      "noMaas": "尚未连接 MaaS 平台",
+      "noMaas": "尚未连接中转渠道",
       "updated": "已更新 {{client}} 的 Gateway",
       "updateFailed": "Gateway 更新失败",
       "manageClient": "管理 {{client}} 账号",
-      "manageMaas": "管理 MaaS 平台",
+      "manageMaas": "管理中转渠道",
       "openLogs": "查看 AI 日志"
     },
     "maas": {
-      "title": "MaaS",
-      "description": "选择一个 MaaS 平台，对所有兼容 Agent CLI 全局生效",
+      "title": "中转渠道",
+      "description": "选择一个中转渠道，对所有兼容 Agent CLI 全局生效",
       "effective": "已生效",
       "needsAttention": "需检查",
       "disabled": "未启用",

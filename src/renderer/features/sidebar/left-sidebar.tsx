@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { skillIssueAgentLabel } from '@shared/skills/validation';
+import { openNewTaskFromPreference } from '@renderer/app/open-new-task';
 import { useAiLabApps, useUpdateAiLabApp } from '@renderer/features/ai-lab/use-ai-lab';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import {
@@ -21,7 +22,7 @@ import {
   useWorkspaceSlots,
 } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { appState, sidebarStore } from '@renderer/lib/stores/app-state';
+import { appState, sidebarStore, workspaceStore } from '@renderer/lib/stores/app-state';
 import { ShortcutHint } from '@renderer/lib/ui/shortcut-hint';
 import { cn } from '@renderer/utils/utils';
 import { GlobalSidePaneTarget } from './global-side-pane-target';
@@ -36,7 +37,12 @@ import {
   SidebarMenu,
   SidebarMenuButton,
 } from './sidebar-primitives';
-import { findSidebarSelectionRow, revealSidebarSelectionRow } from './sidebar-selection-sync';
+import {
+  findSidebarSelectionRow,
+  resolveSidebarSelectionTarget,
+  revealSidebarSelectionRow,
+  shouldSuppressSidebarRouteScroll,
+} from './sidebar-selection-sync';
 import { SidebarSpace } from './sidebar-space';
 import { SidebarStatusBar } from './sidebar-status-bar';
 import { SidebarVirtualList } from './sidebar-virtual-list';
@@ -60,6 +66,7 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   const sidebarContentRef = React.useRef<HTMLDivElement>(null);
   const lastScrolledSelectionRef = React.useRef<string | null>(null);
   const lastScrolledRowRef = React.useRef<HTMLElement | null>(null);
+  const suppressedRouteScrollKeyRef = React.useRef<string | null>(null);
   const pinnedApps = (aiLabApps.data ?? []).filter((app) => app.pinned);
   const currentProjectId =
     currentView === 'task'
@@ -69,8 +76,20 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         : undefined;
   const currentTaskId = currentView === 'task' ? taskParams.taskId : undefined;
   const selectionRevealRequest = sidebarStore.selectionRevealRequest;
-  const selectionProjectId = currentProjectId ?? selectionRevealRequest?.projectId;
-  const selectionTaskId = currentProjectId ? currentTaskId : selectionRevealRequest?.taskId;
+  const routeSelection = currentProjectId
+    ? {
+        key: `${currentView}:${currentProjectId}:${currentTaskId ?? ''}`,
+        projectId: currentProjectId,
+        ...(currentTaskId ? { taskId: currentTaskId } : {}),
+      }
+    : null;
+  const selectionTarget = resolveSidebarSelectionTarget(routeSelection, selectionRevealRequest);
+  const routeSelectionKey = routeSelection?.key ?? null;
+  const selectionProjectId = selectionTarget?.projectId;
+  const selectionTaskId = selectionTarget?.taskId;
+  const selectionKey = selectionTarget?.key ?? null;
+  const selectionRequestId = selectionTarget?.requestId;
+  const shouldFocusSelection = selectionTarget?.shouldFocus ?? false;
   const currentProject = selectionProjectId ? getProjectStore(selectionProjectId) : undefined;
   const currentTask =
     selectionProjectId && selectionTaskId
@@ -84,13 +103,6 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
     currentProject?.state === 'unregistered'
       ? currentProject.pendingWorkspaceId
       : currentProject?.data?.workspaceId;
-  const selectionKey =
-    currentProjectId && (currentView === 'project' || currentView === 'task')
-      ? `${currentView}:${currentProjectId}:${currentTaskId ?? ''}`
-      : selectionRevealRequest
-        ? `reveal:${selectionRevealRequest.requestId}`
-        : null;
-
   React.useEffect(() => {
     if (!selectionProjectId) return;
     sidebarStore.revealSelection(selectionProjectId, selectionTaskId);
@@ -108,13 +120,28 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
   React.useEffect(() => {
     const root = sidebarContentRef.current;
     if (!selectionKey || !selectionProjectId || !root) {
+      suppressedRouteScrollKeyRef.current = null;
       lastScrolledSelectionRef.current = null;
       lastScrolledRowRef.current = null;
       return;
     }
+    if (
+      shouldSuppressSidebarRouteScroll(
+        selectionKey,
+        selectionRequestId,
+        suppressedRouteScrollKeyRef.current
+      )
+    ) {
+      suppressedRouteScrollKeyRef.current = null;
+      lastScrolledSelectionRef.current = selectionKey;
+      lastScrolledRowRef.current = null;
+      return;
+    }
+    if (selectionRequestId === undefined) {
+      suppressedRouteScrollKeyRef.current = null;
+    }
 
     const scrollSelectionIntoView = () => {
-      const shouldFocus = selectionRevealRequest !== null && !currentProjectId;
       const row = findSidebarSelectionRow(root, selectionProjectId, selectionTaskId);
       if (!row) {
         lastScrolledRowRef.current = null;
@@ -124,11 +151,12 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
         return;
       }
 
-      revealSidebarSelectionRow(root, selectionProjectId, selectionTaskId, shouldFocus);
+      revealSidebarSelectionRow(root, selectionProjectId, selectionTaskId, shouldFocusSelection);
       lastScrolledSelectionRef.current = selectionKey;
       lastScrolledRowRef.current = row;
-      if (shouldFocus) {
-        sidebarStore.completeSelectionReveal(selectionRevealRequest.requestId);
+      if (selectionRequestId !== undefined) {
+        suppressedRouteScrollKeyRef.current = routeSelectionKey;
+        sidebarStore.completeSelectionReveal(selectionRequestId);
       }
     };
 
@@ -141,7 +169,14 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       subtree: true,
     });
     return () => observer.disconnect();
-  }, [currentProjectId, selectionKey, selectionProjectId, selectionRevealRequest, selectionTaskId]);
+  }, [
+    routeSelectionKey,
+    selectionKey,
+    selectionProjectId,
+    selectionRequestId,
+    selectionTaskId,
+    shouldFocusSelection,
+  ]);
   const skillIssueLabel =
     skillIssueCount > 0 ? t('sidebar.skillIssues', { count: skillIssueCount }) : null;
   const skillIssueTitle =
@@ -149,12 +184,8 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       ? `${skillIssueLabel}\n${formatSkillIssueTitle(firstSkillIssue)}`
       : (skillIssueLabel ?? undefined);
   const handleNewTask = React.useCallback(() => {
-    if (currentProjectId) {
-      navigate('home', { projectId: currentProjectId });
-      return;
-    }
-    navigate('home');
-  }, [currentProjectId, navigate]);
+    void openNewTaskFromPreference(currentProjectId);
+  }, [currentProjectId]);
 
   return (
     <div
@@ -183,12 +214,16 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       <SidebarContainer className="w-full border-r-0 flex-1 min-h-0">
         <div className="px-2">
           <SidebarMenu>
-            <div className="group/ws flex h-8 items-center gap-1 rounded-lg pr-1 text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary has-data-popup-open:bg-background-tertiary-1 has-data-popup-open:text-foreground-tertiary">
-              <WorkspaceSwitcher />
-              <WorkspaceReviewBadge className="shrink-0" />
-              <ProjectsSettingsMenu />
-            </div>
-            <div className="my-1 border-t border-border" />
+            {workspaceStore.enabled && (
+              <>
+                <div className="group/ws flex h-8 items-center gap-1 rounded-lg pr-1 text-foreground-tertiary-muted transition-colors hover:bg-background-tertiary-1 hover:text-foreground-tertiary has-data-popup-open:bg-background-tertiary-1 has-data-popup-open:text-foreground-tertiary">
+                  <WorkspaceSwitcher />
+                  <WorkspaceReviewBadge className="shrink-0" />
+                  <ProjectsSettingsMenu />
+                </div>
+                <div className="my-1 border-t border-border" />
+              </>
+            )}
             <SidebarMenuButton
               isActive={isCurrentView(currentView, 'home')}
               onClick={handleNewTask}

@@ -14,6 +14,9 @@
 - When Tailscale is active, connection info prefers its `100.64.0.0/10` address so a paired phone
   on the same tailnet can connect outside the physical LAN. LAN addresses remain fallbacks.
 - The gateway starts by default and must require a token for non-health endpoints.
+- Pairing is an onboarding action, not a launch action. After the first successful exchange, native
+  clients must restore the saved SecureStore credential before considering inferred Expo/development
+  connections. Only an explicit new pairing deep link may replace the saved connection.
 - Allow explicit disablement through `YODA_MOBILE_GATEWAY_DISABLED=1`, `YODA_MOBILE_GATEWAY_ENABLED=0`, or `YODA_MOBILE_GATEWAY=0`.
 - The desktop sidebar mobile modal must support QR-based install and connection. `YODA_MOBILE_INSTALL_URL` can override the install QR target.
 - Prefer polling snapshots for first-pass mobile workflows. Add server-sent events or WebSocket only when realtime behavior is required.
@@ -59,4 +62,6 @@ pnpm mobile:ios:device
 ```
 
 For product-style pairing, open the desktop sidebar mobile modal, scan the install QR, then scan
-the connection QR after installing the native app.
+the connection QR after installing the native app. The connection QR is needed once per device;
+later launches restore the saved credential automatically unless the user explicitly disconnects or
+the desktop device is revoked.

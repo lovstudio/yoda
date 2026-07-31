@@ -52,6 +52,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { captureTelemetry } from '@renderer/utils/telemetryClient';
 import { cn } from '@renderer/utils/utils';
+import { DREAM_SKIN_GALLERY } from './dream-skin-gallery';
 
 // Two pairs and a standalone: neutral 白/黑, brand 浅绿/暗绿, fixed 暖.
 const COLOR_THEME_BUTTONS = [
@@ -62,70 +63,7 @@ const COLOR_THEME_BUTTONS = [
   { value: 'ywarm', Icon: Sunset, label: 'yodaWarm', aria: 'ariaWarm' },
 ] as const;
 
-const DREAM_SKIN_BUTTONS = [
-  {
-    value: 'ydream',
-    label: 'yodaDream',
-    aria: 'ariaDream',
-    image: 'builtin:dream-bloom',
-  },
-  {
-    value: 'ydream-arina',
-    label: 'yodaDreamArina',
-    aria: 'ariaDreamArina',
-    image: 'builtin:dream-bloom',
-  },
-  {
-    value: 'ydream-night',
-    label: 'yodaDreamNight',
-    aria: 'ariaDreamNight',
-    image: 'builtin:dream-portal',
-  },
-  {
-    value: 'ydream-fortune',
-    label: 'yodaDreamFortune',
-    aria: 'ariaDreamFortune',
-    image: 'builtin:dream-fortune',
-  },
-  {
-    value: 'ydream-scifi',
-    label: 'yodaDreamScifi',
-    aria: 'ariaDreamScifi',
-    image: 'builtin:dream-scifi',
-  },
-  {
-    value: 'ydream-clear',
-    label: 'yodaDreamClear',
-    aria: 'ariaDreamClear',
-    image: 'builtin:dream-clear',
-  },
-  {
-    value: 'ydream-cosmos',
-    label: 'yodaDreamCosmos',
-    aria: 'ariaDreamCosmos',
-    image: 'builtin:dream-cosmos',
-  },
-  {
-    value: 'ydream-purple',
-    label: 'yodaDreamPurple',
-    aria: 'ariaDreamPurple',
-    image: 'builtin:dream-purple',
-  },
-  {
-    value: 'ydream-virtual',
-    label: 'yodaDreamVirtual',
-    aria: 'ariaDreamVirtual',
-    image: 'builtin:dream-virtual',
-  },
-  {
-    value: 'ydream-gold',
-    label: 'yodaDreamGold',
-    aria: 'ariaDreamGold',
-    image: 'builtin:dream-gold',
-  },
-] as const;
-
-const ALL_BUILT_IN_THEMES = [...COLOR_THEME_BUTTONS, ...DREAM_SKIN_BUTTONS] as const;
+const ALL_BUILT_IN_THEMES = [...COLOR_THEME_BUTTONS, ...DREAM_SKIN_GALLERY] as const;
 
 const ThemeCard: React.FC = () => {
   const { t } = useTranslation();
@@ -575,8 +513,8 @@ const ThemeCard: React.FC = () => {
             {t('settings.theme.dreamSkinGalleryDescription')}
           </div>
         </div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-2">
-          {DREAM_SKIN_BUTTONS.map(({ value, label, aria, image }) => {
+        <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-3">
+          {DREAM_SKIN_GALLERY.map(({ value, label, aria, image }) => {
             const isActive = theme === value;
             return (
               <button

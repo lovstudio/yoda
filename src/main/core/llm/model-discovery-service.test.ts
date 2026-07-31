@@ -1,20 +1,33 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GlobalLlmModelCandidate } from '@shared/global-llm';
-import { sortModelCandidatesForDisplay } from './model-discovery-service';
+import { discoverGlobalLlmModels, sortModelCandidatesForDisplay } from './model-discovery-service';
+
+const mocks = vi.hoisted(() => ({
+  getAvailableModels: vi.fn(),
+  getRuntime: vi.fn(),
+  inferNamingModelCandidates: vi.fn(),
+  listCustomModelsForRuntime: vi.fn(),
+}));
 
 vi.mock('ai', () => ({
   gateway: {
-    getAvailableModels: vi.fn(),
+    getAvailableModels: mocks.getAvailableModels,
   },
 }));
 
 vi.mock('@shared/runtime-registry', () => ({
-  getRuntime: vi.fn(),
+  getRuntime: mocks.getRuntime,
 }));
 
 vi.mock('@main/core/settings/runtime-model-candidates-service', () => ({
   runtimeModelCandidatesService: {
-    inferNamingModelCandidates: vi.fn(),
+    inferNamingModelCandidates: mocks.inferNamingModelCandidates,
+  },
+}));
+
+vi.mock('@main/core/settings/model-provider-catalog-service', () => ({
+  modelProviderCatalogService: {
+    listCustomModelsForRuntime: mocks.listCustomModelsForRuntime,
   },
 }));
 
@@ -43,6 +56,49 @@ describe('sortModelCandidatesForDisplay', () => {
       'gpt-5.4',
       'chat-latest',
     ]);
+  });
+});
+
+describe('discoverGlobalLlmModels', () => {
+  it('keeps custom models visible and identifies their source when catalogs are full', async () => {
+    mocks.getRuntime.mockReturnValue(undefined);
+    mocks.listCustomModelsForRuntime.mockResolvedValue(['special-model']);
+    mocks.getAvailableModels.mockResolvedValue({
+      models: Array.from({ length: 45 }, (_, index) => ({
+        id: `gateway/model-${index + 1}`,
+        name: null,
+        description: null,
+      })),
+    });
+    mocks.inferNamingModelCandidates.mockResolvedValue({
+      runtimeId: 'codex',
+      models: [
+        {
+          id: 'gpt-5.5',
+          visible: true,
+          sources: ['catalog'],
+        },
+      ],
+      candidates: ['gpt-5.5'],
+      sources: [],
+      hiddenModels: [],
+      cached: true,
+    });
+
+    const result = await discoverGlobalLlmModels({
+      runtimeId: 'codex',
+      authProvider: 'official-subscription',
+    });
+
+    expect(result.models).toHaveLength(40);
+    expect(result.models[0]).toMatchObject({
+      id: 'special-model',
+      sources: ['custom'],
+    });
+    expect(result.sources.find((source) => source.source === 'custom')).toMatchObject({
+      ok: true,
+      modelCount: 1,
+    });
   });
 });
 

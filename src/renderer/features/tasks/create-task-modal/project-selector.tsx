@@ -248,9 +248,19 @@ export const ProjectSelector = observer(function ProjectSelector({
       }
       filter={(item: ProjectSelectorOption, q) => {
         if (item.kind === 'browse' || item.kind === 'express') return true;
-        const needle = q.toLowerCase();
+        const needle = q.trim().toLowerCase();
         if (item.label.toLowerCase().includes(needle)) return true;
-        return item.kind === 'project' && item.path.toLowerCase().includes(needle);
+        if (item.kind !== 'project') return false;
+
+        // Plain keywords describe the project the user wants, not an arbitrary
+        // ancestor directory. Matching the whole path made a query such as
+        // "yoda" return every project stored under /Users/mark/yoda/repositories.
+        // Keep full-path lookup available when the query is explicitly path-like.
+        const pathCandidate =
+          needle.includes('/') || needle.includes('\\')
+            ? item.path
+            : basenameFromAnyPath(item.path);
+        return pathCandidate.toLowerCase().includes(needle);
       }}
       autoHighlight
     >

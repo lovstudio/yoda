@@ -7,12 +7,6 @@ export type PromptGroup = {
   prompts: Prompt[];
 };
 
-export type PromptGroupInjectionState = {
-  state: 'all' | 'none' | 'partial';
-  enabledCount: number;
-  totalCount: number;
-};
-
 export function groupPrompts(prompts: Prompt[], persistedGroups: string[] = []): PromptGroup[] {
   const persistedGroupOrder = new Map(
     persistedGroups
@@ -62,18 +56,6 @@ export function getInjectionOrderedPromptGroups(prompts: Prompt[]): PromptGroup[
     new Set(orderedPrompts.map((prompt) => prompt.groupName.trim()).filter(Boolean))
   );
   return groupPrompts(orderedPrompts, orderedGroupNames);
-}
-
-export function getPromptGroupInjectionState(
-  prompts: Prompt[],
-  isEnabled: (prompt: Prompt) => boolean
-): PromptGroupInjectionState {
-  const enabledCount = prompts.filter(isEnabled).length;
-  return {
-    enabledCount,
-    totalCount: prompts.length,
-    state: enabledCount === 0 ? 'none' : enabledCount === prompts.length ? 'all' : 'partial',
-  };
 }
 
 export function reorderPromptIds(ids: string[], activeId: string, overId: string): string[] {

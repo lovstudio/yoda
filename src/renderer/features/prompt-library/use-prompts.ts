@@ -142,32 +142,6 @@ export function useReorderPrompts() {
   });
 }
 
-export function useSetPromptGroupInjectionEnabled() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ groupName, enabled }: { groupName: string; enabled: boolean }) =>
-      rpc.promptLibrary.setGroupInjectionEnabled(groupName, enabled),
-    onMutate: async ({ groupName, enabled }) => {
-      await queryClient.cancelQueries({ queryKey: promptsQueryKey });
-      const previous = queryClient.getQueryData<Prompt[]>(promptsQueryKey);
-      queryClient.setQueryData<Prompt[]>(promptsQueryKey, (current) =>
-        current?.map((prompt) =>
-          prompt.groupName.trim() === groupName.trim()
-            ? { ...prompt, injectionEnabled: enabled }
-            : prompt
-        )
-      );
-      return { previous };
-    },
-    onError: (_error, _input, context) => {
-      if (context?.previous) queryClient.setQueryData(promptsQueryKey, context.previous);
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: promptsQueryKey });
-    },
-  });
-}
-
 export function useRefreshPromptSource() {
   const queryClient = useQueryClient();
   return useMutation({

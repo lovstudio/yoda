@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   logInfo: vi.fn(),
   logWarn: vi.fn(),
   maybeAutoTrustLocal: vi.fn(),
+  maybeAutoTrustCodexLocal: vi.fn(),
   prepareHookConfig: vi.fn(),
   prepareWindowsClaudeSettings: vi.fn(),
   promptLibraryList: vi.fn(),
@@ -76,6 +77,12 @@ vi.mock('@main/core/ai-logs/interactive-turn-logger', () => ({
 vi.mock('@main/core/agent-hooks/claude-trust-service', () => ({
   claudeTrustService: {
     maybeAutoTrustLocal: mocks.maybeAutoTrustLocal,
+  },
+}));
+
+vi.mock('@main/core/agent-hooks/codex-trust-service', () => ({
+  codexTrustService: {
+    maybeAutoTrustLocal: mocks.maybeAutoTrustCodexLocal,
   },
 }));
 
@@ -310,6 +317,7 @@ describe('LocalConversationProvider', () => {
       return { writeAgentConfigToGitIgnore: false };
     });
     mocks.maybeAutoTrustLocal.mockResolvedValue(undefined);
+    mocks.maybeAutoTrustCodexLocal.mockResolvedValue(undefined);
     mocks.prepareHookConfig.mockResolvedValue(undefined);
     mocks.promptLibraryList.mockResolvedValue([]);
     mocks.prepareWindowsClaudeSettings.mockImplementation((_runtimeId: string, args: string[]) => ({
@@ -635,6 +643,11 @@ describe('LocalConversationProvider', () => {
     await provider.startSession(importedConversation, { cols: 80, rows: 24 }, true);
 
     expect(mocks.reconcileCodexStateRoot).toHaveBeenCalledWith('/state/codex-account-a');
+    expect(mocks.maybeAutoTrustCodexLocal).toHaveBeenCalledWith({
+      runtimeId: 'codex',
+      cwd: '/workspace',
+      codexHome: '/state/codex-account-a',
+    });
     expect(mocks.ensureCodexThreadUnarchived).toHaveBeenCalledWith({
       runtimeId: 'codex',
       providerConfig: {

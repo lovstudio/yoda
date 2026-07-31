@@ -42,20 +42,6 @@ export function setGlobalOverride(
   return normalize({ globalOverrides: overrides, items: project?.items });
 }
 
-/** Toggle a group of library prompts for this project in one normalized update. */
-export function setGlobalOverrides(
-  project: ProjectPromptPrinciples | undefined,
-  prompts: Array<Pick<Prompt, 'id' | 'injectionEnabled'>>,
-  enabled: boolean
-): ProjectPromptPrinciples | undefined {
-  const overrides = { ...(project?.globalOverrides ?? {}) };
-  for (const prompt of prompts) {
-    if (enabled === prompt.injectionEnabled) delete overrides[prompt.id];
-    else overrides[prompt.id] = enabled;
-  }
-  return normalize({ globalOverrides: overrides, items: project?.items });
-}
-
 /** Replace the legacy project-local prompt list. */
 export function setProjectItems(
   project: ProjectPromptPrinciples | undefined,

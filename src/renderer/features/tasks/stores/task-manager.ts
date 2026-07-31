@@ -423,6 +423,7 @@ export class TaskManagerStore {
           status: params.initialStatus ?? 'in_progress',
           statusChangedAt: new Date().toISOString(),
           isPinned: false,
+          isLongTerm: false,
           needsReview: false,
           setupStatus: 'pending',
           setupRequiresBranchName,

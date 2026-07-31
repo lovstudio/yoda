@@ -4,6 +4,9 @@
 
 - Provider registry:
   - `src/shared/agent-provider-registry.ts`
+- Model provider catalog:
+  - `src/shared/model-provider-catalog.ts` — OpenAI, Anthropic, Kimi and other model
+    vendors; this is separate from the Agent Client/runtime registry
 - IPC primitives:
   - `src/shared/ipc/rpc.ts` — typed RPC router, controller, and client
   - `src/shared/ipc/events.ts` — typed event emitter

@@ -12,6 +12,10 @@ import {
 } from '@shared/global-llm';
 import { KANBAN_STATUSES } from '@shared/kanban';
 import { isMaasPlatformId, type MaasPlatformId } from '@shared/maas';
+import {
+  MAX_CUSTOM_MODEL_PROVIDERS,
+  MAX_CUSTOM_MODELS_PER_PROVIDER,
+} from '@shared/model-provider-catalog';
 import { openInAppIdSchema } from '@shared/openInApps';
 import {
   promptPrincipleSchema,
@@ -19,13 +23,19 @@ import {
   taskOutputLanguageValues,
 } from '@shared/project-settings';
 import { runtimeIdSchema } from '@shared/runtime-id-schema';
-import { RUNTIME_MODEL_CANDIDATE_SOURCES } from '@shared/runtime-model-candidates';
+import { RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES } from '@shared/runtime-model-candidates';
 import { AGENT_ACCOUNT_PROVIDER_IDS, RUNTIMES } from '@shared/runtime-registry';
 import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
   DEFAULT_SUMMARY_CONTEXT_RECENT,
   SUMMARY_CONTEXT_SOURCE_IDS,
 } from '@shared/session-summary';
+import {
+  DEFAULT_TASK_APPEARANCE_SETTINGS,
+  MULTI_AGENT_TASK_MARKERS,
+  TASK_MARKERS,
+  TASK_TITLE_STYLES,
+} from '@shared/task-appearance';
 import {
   DEFAULT_TASK_NAMING_RECENT_TASK_LIMIT,
   DEFAULT_TASK_NAMING_TIMEOUT_MS,
@@ -75,6 +85,8 @@ const summaryContextSchema = z.object(
 );
 
 export const taskSettingsSchema = z.object({
+  /** Whether workspace organization and filtering are exposed in the task UI. */
+  workspacesEnabled: z.boolean().catch(false),
   autoGenerateName: z.boolean(),
   /** Initialize the task name from the initial session's auto-generated title. */
   initTaskNameFromSession: z.boolean().catch(true),
@@ -250,8 +262,65 @@ export const globalLlmSettingsSchema = z
   )
   .transform((value) => normalizeLlmSettings(value));
 
+export const modelProviderSettingsSchema = z.object({
+  automaticUpdatesEnabled: z.boolean().default(true),
+  lastAutomaticRefreshAt: z.string().nullable().default(null),
+  providers: z
+    .record(
+      z.string().trim().min(1).max(60),
+      z.object({
+        name: z.string().trim().min(1).max(60).optional(),
+        customModels: z
+          .array(z.string().trim().min(2).max(100))
+          .max(MAX_CUSTOM_MODELS_PER_PROVIDER)
+          .default([]),
+      })
+    )
+    .refine(
+      (providers) =>
+        Object.values(providers).filter((provider) => provider.name !== undefined).length <=
+        MAX_CUSTOM_MODEL_PROVIDERS,
+      `A maximum of ${MAX_CUSTOM_MODEL_PROVIDERS} custom model providers is allowed.`
+    )
+    .default({}),
+  catalogCache: z
+    .object({
+      official: z
+        .record(
+          z.string().trim().min(1).max(60),
+          z.object({
+            models: z.array(z.string().trim().min(2).max(100)).max(1_000).default([]),
+            fetchedAt: z.string().nullable().default(null),
+            lastAttemptAt: z.string().nullable().default(null),
+            error: z.string().optional(),
+          })
+        )
+        .default({}),
+      aggregate: z
+        .object({
+          models: z.array(z.string().trim().min(2).max(100)).max(5_000).default([]),
+          fetchedAt: z.string().nullable().default(null),
+          lastAttemptAt: z.string().nullable().default(null),
+          error: z.string().optional(),
+        })
+        .default({
+          models: [],
+          fetchedAt: null,
+          lastAttemptAt: null,
+        }),
+    })
+    .default({
+      official: {},
+      aggregate: {
+        models: [],
+        fetchedAt: null,
+        lastAttemptAt: null,
+      },
+    }),
+});
+
 export const runtimeModelCandidateCacheEntrySchema = z.object({
-  source: z.enum(RUNTIME_MODEL_CANDIDATE_SOURCES),
+  source: z.enum(RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES),
   models: z.array(z.string()),
   fetchedAt: z.string(),
   expiresAt: z.string(),
@@ -411,15 +480,40 @@ export const runtimeConfigDefaults = Object.fromEntries(
   ])
 );
 
+const taskIdleOpacitySchema = z.union([
+  z.literal(100),
+  z.literal(85),
+  z.literal(70),
+  z.literal(55),
+]);
+
+const taskAppearancePresetSchema = z.object({
+  titleStyle: z.enum(TASK_TITLE_STYLES),
+  idleOpacity: taskIdleOpacitySchema,
+  marker: z.enum(TASK_MARKERS),
+});
+
+export const taskAppearanceSettingsSchema = z.object({
+  standard: taskAppearancePresetSchema,
+  longTerm: taskAppearancePresetSchema,
+  multiAgent: z.object({
+    marker: z.enum(MULTI_AGENT_TASK_MARKERS),
+  }),
+});
+
 export const interfaceSettingsSchema = z.object({
   taskHoverAction: z.enum(['delete', 'archive']),
   autoRightSidebarBehavior: z.boolean(),
+  /** Where the global new-task action opens its composer. */
+  newTaskOpenMode: z.enum(['home', 'modal']).catch('home'),
   /** How much of the agent's transcript appears in the Session → Conversation surface. */
   agentReplyDisplayLevel: z.enum(AGENT_REPLY_DISPLAY_LEVELS),
   /** Dock the active session's prompt history at the bottom of the conversation pane. */
   dockSessionHistory: z.boolean(),
   /** Number of latest prompts shown after the first prompt in the docked history preview. */
   dockSessionHistoryRows: z.number().int().min(1).max(20),
+  /** Composable visual rules for task rows across the sidebar's task-list variants. */
+  taskAppearance: taskAppearanceSettingsSchema.default(DEFAULT_TASK_APPEARANCE_SETTINGS),
 });
 
 export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });
@@ -559,6 +653,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   kanban: kanbanSettingsSchema,
   maas: maasSettingsSchema,
   llm: globalLlmSettingsSchema,
+  modelProviders: modelProviderSettingsSchema,
   runtimeModelCandidates: runtimeModelCandidatesSettingsSchema,
   defaultRuntime: defaultRuntimeSchema,
   keyboard: keyboardSettingsSchema,
@@ -586,6 +681,7 @@ export const appSettingsSchema = z.object({
   kanban: kanbanSettingsSchema,
   maas: maasSettingsSchema,
   llm: globalLlmSettingsSchema,
+  modelProviders: modelProviderSettingsSchema,
   runtimeModelCandidates: runtimeModelCandidatesSettingsSchema,
   defaultRuntime: defaultRuntimeSchema,
   keyboard: keyboardSettingsSchema,

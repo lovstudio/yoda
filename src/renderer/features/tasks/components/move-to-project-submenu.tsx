@@ -27,6 +27,8 @@ interface MoveToProjectSubmenuProps {
   currentProjectId: string;
   /** Re-home the task under the chosen project. */
   onMove: (targetProjectId: string) => void;
+  /** Whether to separate this move group from the preceding menu group. */
+  showSeparator?: boolean;
 }
 
 interface MoveTarget {
@@ -100,12 +102,13 @@ function ProjectSearchField({
 export const MoveToProjectContextSubmenu = observer(function MoveToProjectContextSubmenu({
   currentProjectId,
   onMove,
+  showSeparator = true,
 }: MoveToProjectSubmenuProps) {
   const { t } = useTranslation();
   const { showSearch, filtered, query, setQuery } = useFilteredTargets(currentProjectId);
   return (
     <>
-      <ContextMenuSeparator />
+      {showSeparator && <ContextMenuSeparator />}
       <ContextMenuSub>
         <ContextMenuSubTrigger className="whitespace-nowrap">
           <FolderGit2 className="size-4" />
@@ -138,12 +141,13 @@ export const MoveToProjectContextSubmenu = observer(function MoveToProjectContex
 export const MoveToProjectDropdownSubmenu = observer(function MoveToProjectDropdownSubmenu({
   currentProjectId,
   onMove,
+  showSeparator = true,
 }: MoveToProjectSubmenuProps) {
   const { t } = useTranslation();
   const { showSearch, filtered, query, setQuery } = useFilteredTargets(currentProjectId);
   return (
     <>
-      <DropdownMenuSeparator />
+      {showSeparator && <DropdownMenuSeparator />}
       <DropdownMenuSub>
         <DropdownMenuSubTrigger className="whitespace-nowrap">
           <FolderGit2 className="size-4" />

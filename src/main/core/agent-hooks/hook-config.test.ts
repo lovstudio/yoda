@@ -99,6 +99,40 @@ describe('HookConfigWriter', () => {
     expect(fs.files.has('.gitignore')).toBe(false);
   });
 
+  it('removes only the legacy Yoda Codex notify assignment', async () => {
+    const fs = new MemoryFs();
+    fs.files.set(
+      '.codex/config.toml',
+      [
+        'model = "gpt-5.6-codex"',
+        'notify = ["bash", "-c", "curl http://127.0.0.1:$YODA_HOOK_PORT/hook"]',
+        '[projects."/workspace"]',
+        'trust_level = "trusted"',
+        '',
+      ].join('\n')
+    );
+    const writer = makeWriter(fs);
+
+    await writer.writeForProvider('codex');
+
+    expect(fs.files.get('.codex/config.toml')).toBe(
+      ['model = "gpt-5.6-codex"', '[projects."/workspace"]', 'trust_level = "trusted"', ''].join(
+        '\n'
+      )
+    );
+  });
+
+  it('preserves a user-owned Codex notify assignment', async () => {
+    const fs = new MemoryFs();
+    const config = 'notify = ["my-notifier", "--quiet"]\n';
+    fs.files.set('.codex/config.toml', config);
+    const writer = makeWriter(fs);
+
+    await writer.writeForProvider('codex');
+
+    expect(fs.files.get('.codex/config.toml')).toBe(config);
+  });
+
   it('registers Notification, Stop, UserPromptSubmit and interactive-tool PreToolUse/PostToolUse hooks', async () => {
     mockResolveCommandPath.mockResolvedValue('/usr/local/bin/claude');
     const fs = new MemoryFs();

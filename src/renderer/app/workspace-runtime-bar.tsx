@@ -881,7 +881,6 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
             <ComposerSettingsContent
               runtimeId={configRuntimeId}
               projectId={activeProjectId}
-              projectPath={connectionId ? undefined : provisionedTask?.path}
               attachImagesAsPaths={attachImagesField.value}
               inputPromptLanguage={inputPromptLanguageField.value}
               namingLanguage={namingLanguageField.value}

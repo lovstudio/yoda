@@ -2,6 +2,7 @@ import type { TFunction } from 'i18next';
 import {
   Archive,
   ArchiveRestore,
+  Bookmark,
   CircleDot,
   CircleSlash,
   ClipboardList,
@@ -13,8 +14,6 @@ import {
   Link2,
   ListPlus,
   ListTree,
-  PanelBottomClose,
-  PanelBottomOpen,
   Pencil,
   Pin,
   PinOff,
@@ -25,7 +24,6 @@ import {
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuntimeId } from '@shared/runtime-registry';
-import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import {
   WorkspaceAssignContextSubmenu,
   WorkspaceAssignDropdownSubmenu,
@@ -70,6 +68,8 @@ interface TaskMenuInfoFields extends TaskBasicInfoFields, TaskSessionInfoFields 
 export interface TaskMenuActions extends TaskMenuInfoFields {
   isPinned: boolean;
   canPin: boolean;
+  isLongTerm: boolean;
+  canMarkLongTerm: boolean;
   isArchived: boolean;
   needsReview: boolean;
   canMarkReview: boolean;
@@ -81,6 +81,8 @@ export interface TaskMenuActions extends TaskMenuInfoFields {
   onOpenDetails?: () => void;
   onPin: () => void;
   onUnpin: () => void;
+  onMarkLongTerm: () => void;
+  onUnmarkLongTerm: () => void;
   onMarkNeedsReview: () => void;
   onUnmarkNeedsReview: () => void;
   onRename: () => void;
@@ -134,11 +136,9 @@ interface MenuItemDescriptor {
 
 function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
   const { t } = useTranslation();
-  const { value: ui, update: updateInterface } = useAppSettingsKey('interface');
-  const dockSessionHistory = ui?.dockSessionHistory ?? true;
   const items: MenuItemDescriptor[] = [];
 
-  // group 0 — open details (standalone)
+  // group 0 — open / reload
   if (actions.onOpenDetails) {
     items.push({
       key: 'open-details',
@@ -157,6 +157,15 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       onSelect: actions.onOpenBeside,
     });
   }
+  if (actions.onRestartSession) {
+    items.push({
+      key: 'reopen',
+      group: 0,
+      icon: RefreshCw,
+      label: t('tasks.context.reopenTask'),
+      onSelect: () => actions.onRestartSession?.(),
+    });
+  }
   if (actions.onTileCandidates) {
     items.push({
       key: 'tile-candidates',
@@ -166,10 +175,24 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
       onSelect: actions.onTileCandidates,
     });
   }
+  if (actions.onReconnect) {
+    items.push({
+      key: 'reconnect',
+      group: 0,
+      icon: RotateCcw,
+      label: t('sidebar.reconnect'),
+      onSelect: actions.onReconnect,
+    });
+  }
 
-  // group 1 — pin, archive / restore, mark-review. Archive is a flat pair:
-  // direct archive (note dialog, no skill) and, when configured, run the
-  // pre-archive skill then archive.
+  // group 1 — rename, pin, long-term marker, mark-read
+  items.push({
+    key: 'rename',
+    group: 1,
+    icon: Pencil,
+    label: t('common.rename'),
+    onSelect: actions.onRename,
+  });
   if (actions.canPin) {
     items.push(
       actions.isPinned
@@ -189,33 +212,13 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
           }
     );
   }
-  if (!actions.isArchived) {
+  if (actions.canMarkLongTerm) {
     items.push({
-      key: 'archive',
+      key: actions.isLongTerm ? 'unmark-long-term' : 'mark-long-term',
       group: 1,
-      icon: Archive,
-      label: t('tasks.context.archiveDirect'),
-      onSelect: actions.onArchive,
-    });
-    if (actions.onArchiveWithSkill) {
-      // The skill dialog prefills/edits the command and links to settings, so
-      // it stays enabled even when no preset is configured yet.
-      items.push({
-        key: 'archive-with-skill',
-        group: 1,
-        icon: Sparkles,
-        label: t('tasks.context.archiveWithSkill'),
-        onSelect: actions.onArchiveWithSkill,
-      });
-    }
-  }
-  if (actions.isArchived && actions.onRestore) {
-    items.push({
-      key: 'restore',
-      group: 1,
-      icon: ArchiveRestore,
-      label: t('projects.tasks.restore'),
-      onSelect: actions.onRestore,
+      icon: Bookmark,
+      label: t(actions.isLongTerm ? 'tasks.context.unmarkLongTerm' : 'tasks.context.markLongTerm'),
+      onSelect: actions.isLongTerm ? actions.onUnmarkLongTerm : actions.onMarkLongTerm,
     });
   }
   if (actions.canMarkReview) {
@@ -238,14 +241,7 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     );
   }
 
-  // group 2 — rename, subtask tree
-  items.push({
-    key: 'rename',
-    group: 2,
-    icon: Pencil,
-    label: t('common.rename'),
-    onSelect: actions.onRename,
-  });
+  // group 2 — task hierarchy
   if (!actions.isArchived && actions.onCreateSubtask) {
     items.push({
       key: 'create-subtask',
@@ -307,44 +303,36 @@ function useMenuItems(actions: TaskMenuActions): MenuItemDescriptor[] {
     });
   }
 
-  // group 4 — session: docked prompt-history toggle, reconnect
+  // group 4 — archive / restore. Archive is a flat pair:
+  // direct archive (note dialog, no skill) and, when configured, run the
+  // pre-archive skill then archive.
   if (!actions.isArchived) {
-    items.push(
-      dockSessionHistory
-        ? {
-            key: 'hide-session-history-dock',
-            group: 4,
-            icon: PanelBottomClose,
-            label: t('tasks.context.hideSessionHistoryDock'),
-            onSelect: () => updateInterface({ dockSessionHistory: false }),
-          }
-        : {
-            key: 'show-session-history-dock',
-            group: 4,
-            icon: PanelBottomOpen,
-            label: t('tasks.context.showSessionHistoryDock'),
-            onSelect: () => updateInterface({ dockSessionHistory: true }),
-          }
-    );
-  }
-  if (actions.onReconnect) {
     items.push({
-      key: 'reconnect',
+      key: 'archive',
       group: 4,
-      icon: RotateCcw,
-      label: t('sidebar.reconnect'),
-      onSelect: actions.onReconnect,
+      icon: Archive,
+      label: t('tasks.context.archiveDirect'),
+      onSelect: actions.onArchive,
     });
+    if (actions.onArchiveWithSkill) {
+      // The skill dialog prefills/edits the command and links to settings, so
+      // it stays enabled even when no preset is configured yet.
+      items.push({
+        key: 'archive-with-skill',
+        group: 4,
+        icon: Sparkles,
+        label: t('tasks.context.archiveWithSkill'),
+        onSelect: actions.onArchiveWithSkill,
+      });
+    }
   }
-
-  // group 5 — reopen / reload (standalone, last)
-  if (actions.onRestartSession) {
+  if (actions.isArchived && actions.onRestore) {
     items.push({
-      key: 'reopen',
-      group: 5,
-      icon: RefreshCw,
-      label: t('tasks.context.reopenTask'),
-      onSelect: () => actions.onRestartSession?.(),
+      key: 'restore',
+      group: 4,
+      icon: ArchiveRestore,
+      label: t('projects.tasks.restore'),
+      onSelect: actions.onRestore,
     });
   }
 
@@ -533,6 +521,7 @@ export function TaskContextMenuItems(actions: TaskMenuActions) {
         <WorkspaceAssignContextSubmenu
           currentWorkspaceId={actions.currentWorkspaceId ?? null}
           onAssign={actions.onAssignWorkspace}
+          showSeparator={!actions.onMoveToProject || !actions.projectId}
         />
       )}
     </>
@@ -601,6 +590,7 @@ export function TaskActionsMenu({
           <WorkspaceAssignDropdownSubmenu
             currentWorkspaceId={actions.currentWorkspaceId ?? null}
             onAssign={actions.onAssignWorkspace}
+            showSeparator={!actions.onMoveToProject || !actions.projectId}
           />
         )}
       </DropdownMenuContent>
