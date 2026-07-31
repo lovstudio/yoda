@@ -1,12 +1,22 @@
-import { ArrowRight, Bot, LibraryBig, SlidersHorizontal } from 'lucide-react';
+import { ArrowRight, Bot, Folder, LibraryBig, SlidersHorizontal } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TaskOutputLanguage } from '@shared/project-settings';
+import type { ProjectPromptPrinciples, TaskOutputLanguage } from '@shared/project-settings';
 import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
-import { effectiveGlobalEnabled } from '@renderer/features/projects/project-prompt-principles';
+import {
+  effectiveGlobalEnabled,
+  setGlobalOverride,
+  setGlobalOverrides,
+  setProjectItems,
+} from '@renderer/features/projects/project-prompt-principles';
 import { getProjectSettingsStore } from '@renderer/features/projects/stores/project-selectors';
-import { usePrompts } from '@renderer/features/prompt-library/use-prompts';
+import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
+import {
+  usePrompts,
+  useSetPromptGroupInjectionEnabled,
+  useUpdatePrompt,
+} from '@renderer/features/prompt-library/use-prompts';
 import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/auto-trust-worktrees-control';
 import { PermissionModeSelect } from '@renderer/features/tasks/components/permission-mode-select';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -64,7 +74,11 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
 }: ComposerSettingsContentProps) {
   const { t } = useTranslation();
   const { data: promptLibraryItems } = usePrompts();
-  const promptPrinciples = promptLibraryItems ?? [];
+  const updateLibraryPrompt = useUpdatePrompt();
+  const setLibraryPromptGroup = useSetPromptGroupInjectionEnabled();
+  const promptPrinciples = (promptLibraryItems ?? [])
+    .slice()
+    .sort((left, right) => left.injectionOrder - right.injectionOrder);
   const projectSettingsStore = projectId ? getProjectSettingsStore(projectId) : undefined;
   const projectSettings = projectSettingsStore?.settings ?? null;
   const projectPromptPrinciples = projectSettings?.promptPrinciples;
@@ -80,6 +94,10 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
     promptPrinciples.filter((prompt) =>
       projectId ? effectiveGlobalEnabled(projectPromptPrinciples, prompt) : prompt.injectionEnabled
     ).length + projectPrincipleItems.filter((principle) => principle.enabled).length;
+  const saveProjectPromptPrinciples = (next: ProjectPromptPrinciples | undefined) => {
+    if (!projectSettingsStore || !projectSettings) return;
+    void projectSettingsStore.save({ ...projectSettings, promptPrinciples: next });
+  };
   const managePrompts = () => {
     if (onManagePrompts) {
       onManagePrompts();
@@ -155,7 +173,7 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
           icon={<LibraryBig className="size-3.5" />}
           label={t('home.promptConfigurationLabel')}
         >
-          <div className="px-3 py-3">
+          <div className="px-3 py-2.5">
             <div className="flex items-center justify-between gap-3">
               <span className="rounded-full bg-background-2 px-2 py-1 text-[11px] tabular-nums text-foreground-muted">
                 {t('home.enabledPromptCount', { count: enabledPromptCount })}
@@ -169,6 +187,66 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
               {t('home.promptConfigurationDescription')}
             </p>
           </div>
+          {promptPrinciples.length > 0 || (projectId && projectPrincipleItems.length > 0) ? (
+            <div className="max-h-48 overflow-y-auto overscroll-contain">
+              {promptPrinciples.length > 0 ? (
+                <PromptInjectionControls
+                  variant="compact"
+                  prompts={promptPrinciples}
+                  isPromptEnabled={(prompt) =>
+                    projectId
+                      ? effectiveGlobalEnabled(projectPromptPrinciples, prompt)
+                      : prompt.injectionEnabled
+                  }
+                  onPromptEnabledChange={(prompt, checked) => {
+                    if (projectId) {
+                      saveProjectPromptPrinciples(
+                        setGlobalOverride(projectPromptPrinciples, prompt, checked)
+                      );
+                      return;
+                    }
+                    updateLibraryPrompt.mutate({
+                      id: prompt.id,
+                      patch: { injectionEnabled: checked },
+                    });
+                  }}
+                  onGroupEnabledChange={(groupName, prompts, enabled) => {
+                    if (projectId) {
+                      saveProjectPromptPrinciples(
+                        setGlobalOverrides(projectPromptPrinciples, prompts, enabled)
+                      );
+                      return;
+                    }
+                    setLibraryPromptGroup.mutate({
+                      groupName,
+                      enabled,
+                    });
+                  }}
+                  disabled={updateLibraryPrompt.isPending || setLibraryPromptGroup.isPending}
+                />
+              ) : null}
+              {projectId && projectPrincipleItems.length > 0 ? (
+                <CompactProjectPromptControls
+                  items={projectPrincipleItems}
+                  separated={promptPrinciples.length > 0}
+                  onEnabledChange={(id, enabled) =>
+                    saveProjectPromptPrinciples(
+                      setProjectItems(
+                        projectPromptPrinciples,
+                        projectPrincipleItems.map((item) =>
+                          item.id === id ? { ...item, enabled } : item
+                        )
+                      )
+                    )
+                  }
+                />
+              ) : null}
+            </div>
+          ) : (
+            <p className="px-3 py-2.5 text-[11px] text-foreground-passive">
+              {t('settings.prompts.empty')}
+            </p>
+          )}
         </ComposerSettingsSection>
       ) : null}
       {footer}
@@ -186,7 +264,10 @@ function ComposerSettingsSection({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-border/70 bg-background">
+    <section
+      data-slot="composer-settings-section"
+      className="overflow-hidden rounded-lg border border-border/70 bg-background"
+    >
       <div className="flex items-center gap-2 border-b border-border/60 bg-background-1/50 px-3 py-2">
         <span className="text-foreground-muted">{icon}</span>
         <h3 className="min-w-0 truncate text-[11px] font-medium text-foreground">{label}</h3>
@@ -213,6 +294,59 @@ function ComposerSettingRow({
       </div>
       <div className="flex shrink-0 items-center">{control}</div>
     </div>
+  );
+}
+
+function CompactProjectPromptControls({
+  items,
+  separated,
+  onEnabledChange,
+}: {
+  items: NonNullable<ProjectPromptPrinciples['items']>;
+  separated: boolean;
+  onEnabledChange: (id: string, enabled: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const enabledCount = items.filter((item) => item.enabled).length;
+
+  return (
+    <section
+      data-slot="project-prompt-injection-group"
+      className={cn(separated && 'border-t border-border/50')}
+    >
+      <div className="flex min-w-0 items-center gap-2 border-b border-border/60 bg-background-1 px-3 py-1.5">
+        <Folder className="size-3 shrink-0 text-foreground-muted" />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
+          {t('home.promptPrinciplesProjectHeading')}
+        </span>
+        <span className="text-[11px] tabular-nums text-foreground-passive">
+          {t('promptLibrary.groups.enabledCount', {
+            enabled: enabledCount,
+            count: items.length,
+          })}
+        </span>
+      </div>
+      <div className="divide-y divide-border/50">
+        {items.map((item) => {
+          const name = item.name || t('home.promptPrincipleUnnamed');
+          return (
+            <div
+              key={item.id}
+              data-slot="project-prompt-injection-row"
+              className="flex min-h-8 items-center justify-between gap-3 px-3 py-1.5"
+            >
+              <span className="min-w-0 truncate text-[11px] text-foreground">{name}</span>
+              <Switch
+                size="sm"
+                checked={item.enabled}
+                onCheckedChange={(enabled) => onEnabledChange(item.id, enabled)}
+                aria-label={t('promptLibrary.injection.toggle', { name })}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

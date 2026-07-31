@@ -8,6 +8,8 @@ import type { Prompt } from '@shared/prompt-library';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
+  setGroupInjection: vi.fn(),
+  updatePrompt: vi.fn(),
   prompts: [
     {
       id: 'global-enabled',
@@ -47,14 +49,19 @@ const mocks = vi.hoisted(() => ({
         ],
       },
     },
+    save: vi.fn(async () => ({ success: true })),
   },
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof ReactI18nextModule>()),
   useTranslation: () => ({
-    t: (key: string, values?: { count?: number; label?: string }) => {
+    t: (
+      key: string,
+      values?: { count?: number; enabled?: number; label?: string; name?: string }
+    ) => {
       if (key === 'home.enabledPromptCount') return `${values?.count ?? 0} enabled`;
+      if (key === 'promptLibrary.injection.toggle') return `toggle ${values?.name ?? ''}`;
       return key;
     },
   }),
@@ -62,6 +69,11 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
 vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   usePrompts: () => ({ data: mocks.prompts }),
+  useSetPromptGroupInjectionEnabled: () => ({
+    mutate: mocks.setGroupInjection,
+    isPending: false,
+  }),
+  useUpdatePrompt: () => ({ mutate: mocks.updatePrompt, isPending: false }),
 }));
 
 vi.mock('@renderer/features/projects/stores/project-selectors', () => ({
@@ -136,13 +148,23 @@ describe('ComposerSettingsContent', () => {
       );
     });
 
-    expect(host.querySelectorAll('section')).toHaveLength(3);
+    expect(host.querySelectorAll('[data-slot="composer-settings-section"]')).toHaveLength(3);
     expect(host.querySelector('[data-slot="permission-mode-select"]')).not.toBeNull();
     expect(host.querySelector('[data-slot="auto-trust-worktrees-control"]')).not.toBeNull();
     expect(host.textContent).toContain('2 enabled');
-    expect(host.textContent).not.toContain('Detailed global prompt');
-    expect(host.textContent).not.toContain('Detailed project prompt');
-    expect(host.querySelector('[data-slot="prompt-injection-controls"]')).toBeNull();
+    expect(host.textContent).toContain('Detailed global prompt');
+    expect(host.textContent).toContain('Detailed project prompt');
+    expect(host.textContent).not.toContain('Prompt content');
+    expect(host.textContent).not.toContain('Project prompt content');
+    expect(
+      host.querySelector('[data-slot="prompt-injection-controls"][data-variant="compact"]')
+    ).not.toBeNull();
+
+    const projectPromptToggle = host.querySelector<HTMLButtonElement>(
+      '[aria-label="toggle Detailed project prompt"]'
+    );
+    await act(async () => projectPromptToggle?.click());
+    expect(mocks.settingsStore.save).toHaveBeenCalled();
 
     const libraryButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
       (button) => button.textContent?.includes('home.openPromptLibrary')
