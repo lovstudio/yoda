@@ -8,12 +8,7 @@ export const RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES = [
   'cli',
 ] as const;
 
-export const RUNTIME_MODEL_CANDIDATE_SOURCES = [
-  ...RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES,
-  'custom',
-] as const;
-
-export const MAX_CUSTOM_RUNTIME_MODELS = 40;
+export const RUNTIME_MODEL_CANDIDATE_SOURCES = [...RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES] as const;
 
 export type RuntimeModelCandidateCacheSource =
   (typeof RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES)[number];
@@ -48,6 +43,5 @@ export type AgentModelCandidateInferenceResult = {
   candidates: string[];
   sources: AgentModelCandidateCacheEntry[];
   hiddenModels: string[];
-  customModels: string[];
   cached: boolean;
 };

@@ -8,6 +8,7 @@ import type {
 } from '@shared/global-llm';
 import { getRuntime } from '@shared/runtime-registry';
 import { normalizeModelCandidates } from '@main/core/settings/model-candidate-parser';
+import { modelProviderCatalogService } from '@main/core/settings/model-provider-catalog-service';
 import { runtimeModelCandidatesService } from '@main/core/settings/runtime-model-candidates-service';
 import { filterModelsForRuntime } from '@main/core/settings/runtime-model-catalog';
 
@@ -24,11 +25,12 @@ type SourceLoadResult = {
 export async function discoverGlobalLlmModels(
   input: GlobalLlmModelDiscoveryInput
 ): Promise<GlobalLlmModelDiscoveryResult> {
-  const [gatewayResult, runtimeCatalogResults] = await Promise.all([
+  const [gatewayResult, customResult, runtimeCatalogResult] = await Promise.all([
     loadGatewayModels(input),
+    loadCustomModels(input),
     loadRuntimeCatalogModels(input),
   ]);
-  const results = [gatewayResult, ...runtimeCatalogResults];
+  const results = [customResult, gatewayResult, runtimeCatalogResult];
   const models = mergeModelCandidates(results);
 
   return {
@@ -39,6 +41,21 @@ export async function discoverGlobalLlmModels(
     sources: results.map(toSourceStatus),
     fetchedAt: new Date().toISOString(),
   };
+}
+
+async function loadCustomModels(input: GlobalLlmModelDiscoveryInput): Promise<SourceLoadResult> {
+  try {
+    return {
+      source: 'custom',
+      models: await modelProviderCatalogService.listCustomModelsForRuntime(input.runtimeId),
+    };
+  } catch (error) {
+    return {
+      source: 'custom',
+      models: [],
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function loadGatewayModels(input: GlobalLlmModelDiscoveryInput): Promise<SourceLoadResult> {
@@ -78,34 +95,18 @@ async function loadGatewayModels(input: GlobalLlmModelDiscoveryInput): Promise<S
 
 async function loadRuntimeCatalogModels(
   input: GlobalLlmModelDiscoveryInput
-): Promise<SourceLoadResult[]> {
+): Promise<SourceLoadResult> {
   try {
     const result = await runtimeModelCandidatesService.inferNamingModelCandidates(input.runtimeId, {
       forceRefresh: input.forceRefresh,
     });
-    const visibleModels = result.models.filter((model) => model.visible);
-    return [
-      {
-        source: 'custom',
-        models: visibleModels
-          .filter((model) => model.sources.includes('custom'))
-          .map((model) => model.id),
-      },
-      {
-        source: 'runtimeCatalog',
-        models: visibleModels
-          .filter((model) => model.sources.some((source) => source !== 'custom'))
-          .map((model) => model.id),
-      },
-    ];
+    return { source: 'runtimeCatalog', models: result.candidates };
   } catch (error) {
-    return [
-      {
-        source: 'runtimeCatalog',
-        models: [],
-        error: error instanceof Error ? error.message : String(error),
-      },
-    ];
+    return {
+      source: 'runtimeCatalog',
+      models: [],
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 

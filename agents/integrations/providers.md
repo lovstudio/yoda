@@ -1,5 +1,13 @@
 # Providers
 
+## Terminology
+
+- **Agent Client/runtime**: Claude Code, Codex, Gemini CLI, Kimi CLI, and other
+  executables Yoda launches. Their registry is `src/shared/agent-provider-registry.ts`.
+- **Model provider/vendor**: OpenAI, Anthropic, Kimi, Google, and other companies
+  that publish models. Their catalog is `src/shared/model-provider-catalog.ts`.
+- Do not use the Agent Client/runtime registry to build model-provider settings.
+
 ## Source Of Truth
 
 - `src/shared/agent-provider-registry.ts`
