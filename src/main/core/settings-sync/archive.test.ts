@@ -63,6 +63,10 @@ describe('settings archive', () => {
         lastAutomaticRefreshAt: '2026-07-31T00:00:00.000Z',
         providers: {
           anthropic: { customModels: ['anthropic/claude-opus-4.7'] },
+          siliconflow: {
+            name: 'SiliconFlow',
+            customModels: ['siliconflow/deepseek-v3.2'],
+          },
         },
         catalogCache: {
           official: {
@@ -134,6 +138,10 @@ describe('settings archive', () => {
       lastAutomaticRefreshAt: null,
       providers: {
         anthropic: { customModels: ['anthropic/claude-opus-4.7'] },
+        siliconflow: {
+          name: 'SiliconFlow',
+          customModels: ['siliconflow/deepseek-v3.2'],
+        },
       },
       catalogCache: {
         official: {},

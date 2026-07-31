@@ -1,6 +1,7 @@
 import type { RuntimeId } from './runtime-registry';
 
 export const MAX_CUSTOM_MODELS_PER_PROVIDER = 40;
+export const MAX_CUSTOM_MODEL_PROVIDERS = 50;
 export const MODEL_PROVIDER_AUTO_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 
 export const MODEL_PROVIDER_CATALOG_SOURCES = ['official', 'aggregate', 'custom'] as const;
@@ -11,6 +12,7 @@ export const MODEL_PROVIDER_UPDATE_STATUSES = [
   'snapshot',
   'stale',
   'aggregateOnly',
+  'customOnly',
 ] as const;
 export type ModelProviderUpdateStatus = (typeof MODEL_PROVIDER_UPDATE_STATUSES)[number];
 
@@ -118,6 +120,7 @@ export type ModelProviderCatalogItem = {
 export type ModelProviderCatalogGroup = {
   id: string;
   name: string;
+  custom: boolean;
   models: ModelProviderCatalogItem[];
   customModels: string[];
   officialSourceUrl: string | null;
@@ -137,6 +140,12 @@ export type ModelProviderCatalogResult = {
   lastAutomaticRefreshAt: string | null;
   nextAutomaticRefreshAt: string | null;
   error?: string;
+};
+
+export type CreateCustomModelProviderInput = {
+  id: string;
+  name: string;
+  initialModel?: string;
 };
 
 export function getModelProviderDefinition(
@@ -181,6 +190,18 @@ export function normalizeModelIdForProvider(providerId: string, modelId: string)
 
   const prefix = provider?.catalogPrefixes[0] ?? providerId;
   return `${prefix}/${normalized}`;
+}
+
+export function normalizeCustomModelProviderId(providerId: string): string | null {
+  const normalized = providerId.trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9._-]{0,59}$/.test(normalized) ? normalized : null;
+}
+
+export function isReservedModelProviderId(providerId: string): boolean {
+  const normalized = providerId.trim().toLowerCase();
+  return MODEL_PROVIDER_DEFINITIONS.some((provider) =>
+    provider.catalogPrefixes.some((prefix) => prefix === normalized)
+  );
 }
 
 export function modelProviderIdsForRuntime(runtimeId: RuntimeId): string[] {

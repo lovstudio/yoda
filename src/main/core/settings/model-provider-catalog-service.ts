@@ -1,13 +1,17 @@
 import type { ModelProviderSettings } from '@shared/app-settings';
 import {
   getModelProviderDefinition,
+  isReservedModelProviderId,
+  MAX_CUSTOM_MODEL_PROVIDERS,
   MAX_CUSTOM_MODELS_PER_PROVIDER,
   MODEL_PROVIDER_AUTO_REFRESH_INTERVAL_MS,
   MODEL_PROVIDER_DEFINITIONS,
   modelProviderIdsForRuntime,
+  normalizeCustomModelProviderId,
   normalizeModelIdForProvider,
   resolveModelProvider,
   toRuntimeModelId,
+  type CreateCustomModelProviderInput,
   type ModelProviderCatalogGroup,
   type ModelProviderCatalogItem,
   type ModelProviderCatalogResult,
@@ -29,6 +33,7 @@ import { appSettingsService } from './settings-service';
 type MutableProviderGroup = {
   id: string;
   name: string;
+  custom: boolean;
   models: Map<string, Set<ModelProviderCatalogSource>>;
   customModels: string[];
 };
@@ -141,14 +146,70 @@ export class ModelProviderCatalogService {
     if (!normalizedProviderId) throw new Error('Model provider is required.');
 
     const normalized = normalizeCustomModels(normalizedProviderId, customModels, true);
-    await appSettingsService.update('modelProviders', {
+    await appSettingsService.updateComputed('modelProviders', (latest) => ({
+      ...latest,
       providers: {
+        ...latest.providers,
         [normalizedProviderId]: {
+          ...latest.providers[normalizedProviderId],
           customModels: normalized,
         },
       },
-    });
+    }));
 
+    return this.list();
+  }
+
+  async createCustomProvider(
+    input: CreateCustomModelProviderInput
+  ): Promise<ModelProviderCatalogResult> {
+    const providerId = normalizeCustomModelProviderId(input.id);
+    const name = input.name.trim();
+    if (!providerId) throw new Error('Custom model provider ID is invalid.');
+    if (!name || name.length > 60) throw new Error('Custom model provider name is invalid.');
+    if (isReservedModelProviderId(providerId)) {
+      throw new Error('This model provider ID is reserved.');
+    }
+
+    const customModels = input.initialModel?.trim()
+      ? normalizeCustomModels(providerId, [input.initialModel], true)
+      : [];
+    await appSettingsService.updateComputed('modelProviders', (latest) => {
+      if (latest.providers[providerId]) {
+        throw new Error('A model provider with this ID already exists.');
+      }
+      const customProviderCount = Object.values(latest.providers).filter(
+        (provider) => provider.name !== undefined
+      ).length;
+      if (customProviderCount >= MAX_CUSTOM_MODEL_PROVIDERS) {
+        throw new Error('The custom model provider limit has been reached.');
+      }
+      return {
+        ...latest,
+        providers: {
+          ...latest.providers,
+          [providerId]: {
+            name,
+            customModels,
+          },
+        },
+      };
+    });
+    return this.list();
+  }
+
+  async deleteCustomProvider(providerId: string): Promise<ModelProviderCatalogResult> {
+    const normalizedProviderId = normalizeCustomModelProviderId(providerId);
+    if (!normalizedProviderId) throw new Error('Custom model provider ID is invalid.');
+
+    await appSettingsService.updateComputed('modelProviders', (latest) => {
+      if (!latest.providers[normalizedProviderId]?.name) {
+        throw new Error('Custom model provider was not found.');
+      }
+      const providers = { ...latest.providers };
+      delete providers[normalizedProviderId];
+      return { ...latest, providers };
+    });
     return this.list();
   }
 
@@ -190,6 +251,7 @@ export function buildModelProviderCatalog(
     groups.set(provider.id, {
       id: provider.id,
       name: provider.name,
+      custom: false,
       models: new Map(),
       customModels: normalizeCustomModels(
         provider.id,
@@ -202,7 +264,11 @@ export function buildModelProviderCatalog(
     if (groups.has(providerId)) continue;
     groups.set(providerId, {
       id: providerId,
-      name: getModelProviderDefinition(providerId)?.name ?? formatProviderName(providerId),
+      name:
+        providerSettings.name ??
+        getModelProviderDefinition(providerId)?.name ??
+        formatProviderName(providerId),
+      custom: providerSettings.name !== undefined,
       models: new Map(),
       customModels: normalizeCustomModels(providerId, providerSettings.customModels),
     });
@@ -256,6 +322,7 @@ function addModels(
     const group = groups.get(provider.id) ?? {
       id: provider.id,
       name: provider.name,
+      custom: false,
       models: new Map<string, Set<ModelProviderCatalogSource>>(),
       customModels: [],
     };
@@ -279,10 +346,13 @@ function normalizeCustomModels(
   models: readonly string[],
   strict = false
 ): string[] {
+  if (strict && models.length > MAX_CUSTOM_MODELS_PER_PROVIDER) {
+    throw new Error(`A model provider can have up to ${MAX_CUSTOM_MODELS_PER_PROVIDER} models.`);
+  }
   const normalized: string[] = [];
   for (const model of models) {
     const modelId = normalizeModelIdForProvider(providerId, model);
-    if (!modelId) {
+    if (!modelId || !isValidCatalogModelId(modelId)) {
       if (strict) throw new Error(`Model ID does not belong to provider "${providerId}".`);
       continue;
     }
@@ -295,17 +365,16 @@ function normalizeCatalogModelIds(models: readonly string[]): string[] {
   const normalized: string[] = [];
   for (const model of models) {
     const modelId = model.trim();
-    if (
-      modelId.length < 2 ||
-      modelId.length > 100 ||
-      !/^[a-z0-9][a-z0-9._:/+-]*$/i.test(modelId) ||
-      normalized.includes(modelId)
-    ) {
+    if (!isValidCatalogModelId(modelId) || normalized.includes(modelId)) {
       continue;
     }
     normalized.push(modelId);
   }
   return normalized;
+}
+
+function isValidCatalogModelId(modelId: string): boolean {
+  return modelId.length >= 2 && modelId.length <= 100 && /^[a-z0-9][a-z0-9._:/+-]*$/i.test(modelId);
 }
 
 function toCatalogGroup(
@@ -324,19 +393,22 @@ function toCatalogGroup(
     (left, right) => Number(right.custom) - Number(left.custom) || left.id.localeCompare(right.id)
   );
 
-  const updateStatus = source
-    ? cached?.fetchedAt
-      ? cached.error
+  const updateStatus = group.custom
+    ? 'customOnly'
+    : source
+      ? cached?.fetchedAt
+        ? cached.error
+          ? 'stale'
+          : 'current'
+        : 'snapshot'
+      : settings.catalogCache.aggregate.error
         ? 'stale'
-        : 'current'
-      : 'snapshot'
-    : settings.catalogCache.aggregate.error
-      ? 'stale'
-      : 'aggregateOnly';
+        : 'aggregateOnly';
 
   return {
     id: group.id,
     name: group.name,
+    custom: group.custom,
     models,
     customModels: group.customModels,
     officialSourceUrl: source?.sourceUrl ?? null,

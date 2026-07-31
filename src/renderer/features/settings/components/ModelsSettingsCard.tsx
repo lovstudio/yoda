@@ -3,16 +3,22 @@ import { ExternalLink, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  isReservedModelProviderId,
+  MAX_CUSTOM_MODEL_PROVIDERS,
   MAX_CUSTOM_MODELS_PER_PROVIDER,
   MODEL_PROVIDER_DEFINITIONS,
+  normalizeCustomModelProviderId,
   normalizeModelIdForProvider,
+  type CreateCustomModelProviderInput,
   type ModelProviderCatalogGroup,
   type ModelProviderCatalogResult,
 } from '@shared/model-provider-catalog';
 import { rpc } from '@renderer/lib/ipc';
+import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
+import { Label } from '@renderer/lib/ui/label';
 import {
   Select,
   SelectContent,
@@ -35,9 +41,16 @@ type UpdateCustomModelsInput = {
 export default function ModelsSettingsCard() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const showConfirm = useShowModal('confirmActionModal');
   const [providerId, setProviderId] = useState('openai');
   const [customModelDraft, setCustomModelDraft] = useState('');
   const [customModelError, setCustomModelError] = useState<string | null>(null);
+  const [showProviderCreator, setShowProviderCreator] = useState(false);
+  const [providerNameDraft, setProviderNameDraft] = useState('');
+  const [providerIdDraft, setProviderIdDraft] = useState('');
+  const [providerIdEdited, setProviderIdEdited] = useState(false);
+  const [initialModelDraft, setInitialModelDraft] = useState('');
+  const [providerFormError, setProviderFormError] = useState<string | null>(null);
 
   const catalogQuery = useQuery<ModelProviderCatalogResult>({
     queryKey: MODEL_PROVIDERS_QUERY_KEY,
@@ -81,11 +94,94 @@ export default function ModelsSettingsCard() {
     },
   });
 
+  const createCustomProvider = useMutation<
+    ModelProviderCatalogResult,
+    Error,
+    CreateCustomModelProviderInput
+  >({
+    mutationFn: (input) => rpc.llm.createCustomModelProvider(input),
+    onSuccess: (result, input) => {
+      queryClient.setQueryData(MODEL_PROVIDERS_QUERY_KEY, result);
+      void queryClient.invalidateQueries({ queryKey: ['llm', 'modelDiscovery'] });
+      setProviderId(input.id);
+      resetProviderCreator();
+    },
+  });
+
+  const deleteCustomProvider = useMutation<ModelProviderCatalogResult, Error, string>({
+    mutationFn: (id) => rpc.llm.deleteCustomModelProvider(id),
+    onSuccess: (result) => {
+      queryClient.setQueryData(MODEL_PROVIDERS_QUERY_KEY, result);
+      void queryClient.invalidateQueries({ queryKey: ['llm', 'modelDiscovery'] });
+      setProviderId(result.providers[0]?.id ?? 'openai');
+      setCustomModelDraft('');
+      setCustomModelError(null);
+    },
+  });
+
   const disabled =
     catalogQuery.isLoading ||
     updateCustomModels.isPending ||
     refreshCatalog.isPending ||
-    updateAutomaticUpdates.isPending;
+    updateAutomaticUpdates.isPending ||
+    createCustomProvider.isPending ||
+    deleteCustomProvider.isPending;
+
+  function resetProviderCreator() {
+    setShowProviderCreator(false);
+    setProviderNameDraft('');
+    setProviderIdDraft('');
+    setProviderIdEdited(false);
+    setInitialModelDraft('');
+    setProviderFormError(null);
+  }
+
+  const submitCustomProvider = () => {
+    const name = providerNameDraft.trim();
+    const id = normalizeCustomModelProviderId(providerIdDraft);
+    if (!name || name.length > 60) {
+      setProviderFormError(t('settings.models.providerNameInvalid'));
+      return;
+    }
+    if (!id || isReservedModelProviderId(id)) {
+      setProviderFormError(t('settings.models.providerIdInvalid'));
+      return;
+    }
+    if (providers.some((provider) => provider.id === id)) {
+      setProviderFormError(t('settings.models.providerDuplicate'));
+      return;
+    }
+    if (providers.filter((provider) => provider.custom).length >= MAX_CUSTOM_MODEL_PROVIDERS) {
+      setProviderFormError(
+        t('settings.models.providerLimit', { count: MAX_CUSTOM_MODEL_PROVIDERS })
+      );
+      return;
+    }
+    const initialModel = initialModelDraft.trim();
+    if (initialModel) {
+      const normalizedModel = normalizeModelIdForProvider(id, initialModel);
+      if (!normalizedModel || !isValidModelId(normalizedModel)) {
+        setProviderFormError(t('settings.models.providerInitialModelInvalid'));
+        return;
+      }
+    }
+
+    setProviderFormError(null);
+    createCustomProvider.mutate({
+      id,
+      name,
+      ...(initialModel ? { initialModel } : {}),
+    });
+  };
+
+  const requestDeleteCustomProvider = (provider: ModelProviderCatalogGroup) => {
+    showConfirm({
+      title: t('settings.models.deleteProviderTitle'),
+      description: t('settings.models.deleteProviderDescription', { provider: provider.name }),
+      confirmLabel: t('settings.models.deleteProviderConfirm'),
+      onSuccess: () => deleteCustomProvider.mutate(provider.id),
+    });
+  };
 
   const addCustomModel = () => {
     const modelId = normalizeModelIdForProvider(selectedProviderId, customModelDraft);
@@ -158,6 +254,128 @@ export default function ModelsSettingsCard() {
         }
       />
 
+      <div className="rounded-md border border-border bg-background-secondary/40 p-3">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">{t('settings.models.customProviderTitle')}</div>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {t('settings.models.customProviderDescription')}
+            </p>
+          </div>
+          {!showProviderCreator && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowProviderCreator(true)}
+              disabled={disabled}
+              className="shrink-0 gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t('settings.models.addProvider')}
+            </Button>
+          )}
+        </div>
+
+        {showProviderCreator && (
+          <div className="mt-4 border-t border-border pt-4">
+            <div className="grid gap-3 @2xl:grid-cols-2">
+              <Label className="min-w-0 flex-col items-stretch gap-1.5 leading-normal">
+                <span>{t('settings.models.providerName')}</span>
+                <Input
+                  value={providerNameDraft}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setProviderNameDraft(value);
+                    if (!providerIdEdited) setProviderIdDraft(suggestProviderId(value));
+                    setProviderFormError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !isImeComposing(event)) {
+                      event.preventDefault();
+                      submitCustomProvider();
+                    }
+                  }}
+                  aria-label={t('settings.models.providerName')}
+                  placeholder={t('settings.models.providerNamePlaceholder')}
+                  disabled={disabled}
+                />
+              </Label>
+              <Label className="min-w-0 flex-col items-stretch gap-1.5 leading-normal">
+                <span>{t('settings.models.providerId')}</span>
+                <Input
+                  value={providerIdDraft}
+                  onChange={(event) => {
+                    setProviderIdDraft(event.target.value.toLowerCase());
+                    setProviderIdEdited(true);
+                    setProviderFormError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !isImeComposing(event)) {
+                      event.preventDefault();
+                      submitCustomProvider();
+                    }
+                  }}
+                  aria-label={t('settings.models.providerId')}
+                  placeholder={t('settings.models.providerIdPlaceholder')}
+                  disabled={disabled}
+                  className="font-mono text-xs"
+                />
+              </Label>
+              <Label className="min-w-0 flex-col items-stretch gap-1.5 leading-normal @2xl:col-span-2">
+                <span>{t('settings.models.providerInitialModel')}</span>
+                <Input
+                  value={initialModelDraft}
+                  onChange={(event) => {
+                    setInitialModelDraft(event.target.value);
+                    setProviderFormError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !isImeComposing(event)) {
+                      event.preventDefault();
+                      submitCustomProvider();
+                    }
+                  }}
+                  aria-label={t('settings.models.providerInitialModel')}
+                  placeholder={t('settings.models.providerInitialModelPlaceholder')}
+                  disabled={disabled}
+                  className="font-mono text-xs"
+                />
+              </Label>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              {t('settings.models.providerIdDescription')}
+            </p>
+            {(providerFormError || createCustomProvider.isError) && (
+              <p className="mt-2 text-xs text-destructive" role="alert">
+                {providerFormError ?? t('settings.models.providerSaveFailed')}
+              </p>
+            )}
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={resetProviderCreator}
+                disabled={disabled}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={submitCustomProvider}
+                disabled={disabled || !providerNameDraft.trim() || !providerIdDraft.trim()}
+                className="gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {t('settings.models.createProvider')}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <SettingRow
         title={t('settings.models.automaticUpdates')}
         description={t('settings.models.automaticUpdatesDescription')}
@@ -176,6 +394,9 @@ export default function ModelsSettingsCard() {
         isRefreshing={refreshCatalog.isPending}
         disabled={disabled}
         onRefresh={() => refreshCatalog.mutate(selectedProviderId)}
+        onDelete={() => {
+          if (selectedProvider) requestDeleteCustomProvider(selectedProvider);
+        }}
       />
 
       <div className="border-t border-border pt-5">
@@ -239,11 +460,13 @@ function ProviderCatalogStatus({
   isRefreshing,
   disabled,
   onRefresh,
+  onDelete,
 }: {
   provider: ModelProviderCatalogGroup | undefined;
   isRefreshing: boolean;
   disabled: boolean;
   onRefresh: () => void;
+  onDelete: () => void;
 }) {
   const { t } = useTranslation();
   if (!provider) return null;
@@ -252,25 +475,7 @@ function ProviderCatalogStatus({
   const officialSourceUrl = provider.officialSourceUrl;
   const date =
     provider.officialFetchedAt ?? provider.officialSnapshotAt ?? provider.lastUpdateAttemptAt;
-  const description = provider.officialApiSupported
-    ? provider.updateStatus === 'current'
-      ? t('settings.models.officialApiUpdated', { date: formatCatalogDate(date) })
-      : provider.updateStatus === 'stale'
-        ? t('settings.models.officialApiStale', { date: formatCatalogDate(date) })
-        : provider.officialApiConfigured
-          ? t('settings.models.officialSnapshotConfigured', {
-              date: formatCatalogDate(date),
-            })
-          : t('settings.models.officialSnapshotNeedsKey', {
-              date: formatCatalogDate(date),
-            })
-    : officialSourceUrl
-      ? t('settings.models.officialSnapshotStatic', {
-          date: formatCatalogDate(date),
-        })
-      : provider.updateStatus === 'stale'
-        ? t('settings.models.aggregateStaleDescription')
-        : t('settings.models.aggregateOnlyDescription');
+  const description = getProviderStatusDescription(provider, date, t);
 
   return (
     <div className="min-w-0 overflow-hidden rounded-md border border-border bg-background-secondary/40 p-3">
@@ -306,20 +511,65 @@ function ProviderCatalogStatus({
             </Button>
           )}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onRefresh}
-          disabled={disabled}
-          className="shrink-0 gap-1.5"
-        >
-          <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
-          {isRefreshing ? t('settings.models.refreshing') : t('settings.models.refresh')}
-        </Button>
+        {provider.custom ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onDelete}
+            disabled={disabled}
+            className="shrink-0 gap-1.5 text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {t('settings.models.deleteProvider')}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onRefresh}
+            disabled={disabled}
+            className="shrink-0 gap-1.5"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
+            {isRefreshing ? t('settings.models.refreshing') : t('settings.models.refresh')}
+          </Button>
+        )}
       </div>
     </div>
   );
+}
+
+function getProviderStatusDescription(
+  provider: ModelProviderCatalogGroup,
+  date: string | null,
+  t: ReturnType<typeof useTranslation>['t']
+): string {
+  if (provider.custom) return t('settings.models.customProviderStatusDescription');
+  if (provider.officialApiSupported) {
+    if (provider.updateStatus === 'current') {
+      return t('settings.models.officialApiUpdated', { date: formatCatalogDate(date) });
+    }
+    if (provider.updateStatus === 'stale') {
+      return t('settings.models.officialApiStale', { date: formatCatalogDate(date) });
+    }
+    return provider.officialApiConfigured
+      ? t('settings.models.officialSnapshotConfigured', {
+          date: formatCatalogDate(date),
+        })
+      : t('settings.models.officialSnapshotNeedsKey', {
+          date: formatCatalogDate(date),
+        });
+  }
+  if (provider.officialSourceUrl) {
+    return t('settings.models.officialSnapshotStatic', {
+      date: formatCatalogDate(date),
+    });
+  }
+  return provider.updateStatus === 'stale'
+    ? t('settings.models.aggregateStaleDescription')
+    : t('settings.models.aggregateOnlyDescription');
 }
 
 function ProviderModelList({
@@ -395,6 +645,7 @@ function fallbackProviderGroups(): ModelProviderCatalogGroup[] {
   return MODEL_PROVIDER_DEFINITIONS.map((provider) => ({
     id: provider.id,
     name: provider.name,
+    custom: false,
     models: [],
     customModels: [],
     officialSourceUrl: null,
@@ -419,4 +670,13 @@ function formatCatalogDate(value: string | null): string {
 
 function isValidModelId(value: string): boolean {
   return value.length >= 2 && value.length <= 100 && /^[a-z0-9][a-z0-9._:/+-]*$/i.test(value);
+}
+
+function suggestProviderId(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9._-]/g, '')
+    .slice(0, 60);
 }

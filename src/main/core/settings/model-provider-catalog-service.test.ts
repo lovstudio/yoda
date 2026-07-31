@@ -129,16 +129,64 @@ describe('model provider catalog', () => {
 
     const result = await service.updateCustomModels('openai', ['gpt-5.6-codex']);
 
-    expect(mocks.updateSettings).toHaveBeenCalledWith('modelProviders', {
-      providers: {
-        openai: {
-          customModels: ['openai/gpt-5.6-codex'],
-        },
-      },
+    expect(storedSettings.providers.openai).toEqual({
+      customModels: ['openai/gpt-5.6-codex'],
     });
     expect(result.providers.find((provider) => provider.id === 'openai')?.customModels).toEqual([
       'openai/gpt-5.6-codex',
     ]);
+  });
+
+  it('creates and deletes a custom provider with its first model', async () => {
+    const service = new ModelProviderCatalogService();
+
+    const created = await service.createCustomProvider({
+      id: 'siliconflow',
+      name: 'SiliconFlow',
+      initialModel: 'deepseek-v3.2',
+    });
+
+    expect(storedSettings.providers.siliconflow).toEqual({
+      name: 'SiliconFlow',
+      customModels: ['siliconflow/deepseek-v3.2'],
+    });
+    expect(created.providers.find((provider) => provider.id === 'siliconflow')).toMatchObject({
+      id: 'siliconflow',
+      name: 'SiliconFlow',
+      custom: true,
+      customModels: ['siliconflow/deepseek-v3.2'],
+      updateStatus: 'customOnly',
+    });
+
+    const deleted = await service.deleteCustomProvider('siliconflow');
+
+    expect(storedSettings.providers).not.toHaveProperty('siliconflow');
+    expect(deleted.providers.some((provider) => provider.id === 'siliconflow')).toBe(false);
+  });
+
+  it('reserves built-in provider IDs for the official vendor groups', async () => {
+    const service = new ModelProviderCatalogService();
+
+    await expect(
+      service.createCustomProvider({
+        id: 'openai',
+        name: 'Another OpenAI',
+      })
+    ).rejects.toThrow('reserved');
+    expect(storedSettings.providers).not.toHaveProperty('openai');
+  });
+
+  it('validates a custom provider initial model before persisting it', async () => {
+    const service = new ModelProviderCatalogService();
+
+    await expect(
+      service.createCustomProvider({
+        id: 'siliconflow',
+        name: 'SiliconFlow',
+        initialModel: 'invalid model',
+      })
+    ).rejects.toThrow('does not belong');
+    expect(storedSettings.providers).not.toHaveProperty('siliconflow');
   });
 
   it('replaces a snapshot with a successful official API refresh', async () => {

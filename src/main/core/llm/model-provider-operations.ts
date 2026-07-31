@@ -1,4 +1,7 @@
-import type { ModelProviderCatalogResult } from '@shared/model-provider-catalog';
+import type {
+  CreateCustomModelProviderInput,
+  ModelProviderCatalogResult,
+} from '@shared/model-provider-catalog';
 import { modelProviderCatalogService } from '@main/core/settings/model-provider-catalog-service';
 
 export function listModelProviders(): Promise<ModelProviderCatalogResult> {
@@ -20,4 +23,14 @@ export function updateModelProviderCustomModels(
   customModels: string[]
 ): Promise<ModelProviderCatalogResult> {
   return modelProviderCatalogService.updateCustomModels(providerId, customModels);
+}
+
+export function createCustomModelProvider(
+  input: CreateCustomModelProviderInput
+): Promise<ModelProviderCatalogResult> {
+  return modelProviderCatalogService.createCustomProvider(input);
+}
+
+export function deleteCustomModelProvider(providerId: string): Promise<ModelProviderCatalogResult> {
+  return modelProviderCatalogService.deleteCustomProvider(providerId);
 }
