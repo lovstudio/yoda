@@ -212,6 +212,10 @@ describe('Models settings', () => {
 
     expect(host.textContent).toContain('settings.models.updateStatus.snapshot');
     expect(host.textContent).toContain('settings.models.officialBadge');
+    const catalogActions = host.querySelector<HTMLElement>('[data-testid="model-catalog-actions"]');
+    expect(catalogActions).not.toBeNull();
+    expect(catalogActions?.textContent).toContain('settings.models.customAdd');
+    expect(catalogActions?.textContent).toContain('settings.models.refresh');
 
     await clickButtonContaining(host, 'settings.models.refresh');
     await flush();
