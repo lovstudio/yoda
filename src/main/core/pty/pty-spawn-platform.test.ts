@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveLocalPtySpawn } from './pty-spawn-platform';
+import { argvToInteractiveShellLine, resolveLocalPtySpawn } from './pty-spawn-platform';
 
 const winEnv = {
   ComSpec: 'C:\\Windows\\System32\\cmd.exe',
@@ -9,6 +9,17 @@ const winEnv = {
 const posixEnv = {
   SHELL: '/bin/bash',
 } satisfies NodeJS.ProcessEnv;
+
+describe('argvToInteractiveShellLine', () => {
+  it('quotes argv for the active interactive shell platform', () => {
+    expect(argvToInteractiveShellLine('codex', ['hello world'], 'darwin')).toBe(
+      "codex 'hello world'"
+    );
+    expect(argvToInteractiveShellLine('codex', ['hello world'], 'win32')).toBe(
+      'codex "hello world"'
+    );
+  });
+});
 
 describe('resolveLocalPtySpawn - Windows', () => {
   const windowsPathEnv = {

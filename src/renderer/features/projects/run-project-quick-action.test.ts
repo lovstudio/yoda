@@ -9,8 +9,8 @@ const mocks = vi.hoisted(() => ({
   createTask: vi.fn(),
 }));
 
-vi.mock('@renderer/lib/stores/workspace-shell-store', () => ({
-  workspaceShellStore: { runCommand: mocks.runCommand },
+vi.mock('@renderer/lib/stores/workspace-terminal-store', () => ({
+  workspaceTerminalStore: { runCommand: mocks.runCommand },
 }));
 
 vi.mock('./run-project-command', () => ({
@@ -47,20 +47,28 @@ describe('runProjectQuickAction', () => {
       })
     ).resolves.toEqual({ kind: 'shell' });
 
-    expect(mocks.runCommand).toHaveBeenCalledWith('pnpm run dev', '/repo');
+    expect(mocks.runCommand).toHaveBeenCalledWith(
+      localProject.data,
+      'pnpm run dev',
+      'Start locally'
+    );
     expect(mocks.createTask).not.toHaveBeenCalled();
     expect(mocks.runProjectCommand).not.toHaveBeenCalled();
   });
 
-  it('rejects shell actions for remote projects before opening a local terminal', async () => {
+  it('runs remote shell actions through the project Terminal provider', async () => {
     const remoteProject = {
       data: { id: 'project-2', type: 'ssh', connectionId: 'ssh-1', path: '/repo' },
     } as unknown as MountedProject;
 
     await expect(
       runProjectQuickAction({ project: remoteProject, action: shellAction })
-    ).rejects.toThrow('require a local project');
-    expect(mocks.runCommand).not.toHaveBeenCalled();
+    ).resolves.toEqual({ kind: 'shell' });
+    expect(mocks.runCommand).toHaveBeenCalledWith(
+      remoteProject.data,
+      'pnpm run dev',
+      'Start locally'
+    );
   });
 
   it('keeps Agent actions on the inspectable task execution path', async () => {

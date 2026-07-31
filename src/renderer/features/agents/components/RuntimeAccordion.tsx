@@ -16,7 +16,7 @@ import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
-import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
+import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -114,7 +114,7 @@ export const RuntimeAccordion: React.FC<{ focusRuntimeId?: RuntimeId }> = observ
     );
 
     const handleUpdate = useCallback(async (row: RuntimeRow) => {
-      await workspaceShellStore.runRuntimeAction(row.id, 'update').catch(() => {});
+      await workspaceTerminalStore.runRuntimeAction(row.id, 'update').catch(() => {});
     }, []);
 
     const setCachedDisabled = useCallback(

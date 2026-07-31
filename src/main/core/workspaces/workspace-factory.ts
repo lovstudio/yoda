@@ -171,6 +171,7 @@ export function createWorkspaceFactory(
       git: gitService,
       settings: context.settings,
       lifecycleService,
+      terminals: workspaceTerminals,
       repository,
       fetchService,
     };

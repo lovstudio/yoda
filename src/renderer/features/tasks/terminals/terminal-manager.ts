@@ -5,6 +5,29 @@ import { rpc } from '@renderer/lib/ipc';
 import { PtySession } from '@renderer/lib/pty/pty-session';
 import { nextTerminalName } from './terminal-tabs';
 
+export type TerminalManagerGateway = {
+  getTerminals(projectId: string, taskId: string): Promise<Terminal[]>;
+  createTerminal(params: CreateTerminalParams): Promise<Terminal>;
+  deleteTerminal(params: { projectId: string; taskId: string; terminalId: string }): Promise<void>;
+  renameTerminal(terminalId: string, name: string): Promise<void>;
+};
+
+const taskTerminalGateway: TerminalManagerGateway = {
+  getTerminals: (projectId, taskId) => rpc.terminals.getTerminalsForTask(projectId, taskId),
+  createTerminal: (params) => rpc.terminals.createTerminal(params),
+  deleteTerminal: (params) => rpc.terminals.deleteTerminal(params),
+  renameTerminal: (terminalId, name) => rpc.terminals.renameTerminal(terminalId, name),
+};
+
+export const workspaceTerminalGateway: TerminalManagerGateway = {
+  getTerminals: (projectId, taskId) => rpc.terminals.getWorkspaceTerminals(projectId, taskId),
+  createTerminal: (params) => rpc.terminals.createWorkspaceTerminal(params),
+  deleteTerminal: (params) => rpc.terminals.deleteWorkspaceTerminal(params),
+  renameTerminal: async (terminalId, name) => {
+    await rpc.terminals.renameWorkspaceTerminal(terminalId, name);
+  },
+};
+
 function nextCommandTerminalName(label: string, names: string[]): string {
   const base = label.trim();
   if (!base) return nextTerminalName(names);
@@ -19,9 +42,14 @@ export class TerminalManagerStore {
   readonly projectId: string;
   readonly taskId: string;
   private _loaded = false;
+  private _loadPromise: Promise<void> | null = null;
   terminals = observable.map<string, TerminalStore>();
 
-  constructor(projectId: string, taskId: string) {
+  constructor(
+    projectId: string,
+    taskId: string,
+    private readonly gateway: TerminalManagerGateway = taskTerminalGateway
+  ) {
     this.projectId = projectId;
     this.taskId = taskId;
     makeObservable(this, {
@@ -34,14 +62,28 @@ export class TerminalManagerStore {
   }
 
   async load() {
+    if (this._loadPromise) return this._loadPromise;
+    if (this._loaded) return;
     this._loaded = true;
-    const terminals = await rpc.terminals.getTerminalsForTask(this.projectId, this.taskId);
-    runInAction(() => {
-      for (const terminal of terminals) {
-        const store = new TerminalStore(terminal);
-        this.terminals.set(terminal.id, store);
-      }
-    });
+    const loadPromise = this.gateway
+      .getTerminals(this.projectId, this.taskId)
+      .then((terminals) => {
+        runInAction(() => {
+          for (const terminal of terminals) {
+            const store = new TerminalStore(terminal);
+            this.terminals.set(terminal.id, store);
+          }
+        });
+      })
+      .catch((error) => {
+        this._loaded = false;
+        throw error;
+      })
+      .finally(() => {
+        if (this._loadPromise === loadPromise) this._loadPromise = null;
+      });
+    this._loadPromise = loadPromise;
+    return loadPromise;
   }
 
   async createTerminal(params: CreateTerminalParams): Promise<Terminal> {
@@ -58,7 +100,7 @@ export class TerminalManagerStore {
     });
 
     try {
-      const terminal = await rpc.terminals.createTerminal(params);
+      const terminal = await this.gateway.createTerminal(params);
       runInAction(() => {
         const store = this.terminals.get(params.id);
         if (store) {
@@ -83,6 +125,23 @@ export class TerminalManagerStore {
     return this.createTerminal({ id, projectId: this.projectId, taskId: this.taskId, name });
   }
 
+  async createNamedTerminal({
+    label,
+    initialSize,
+  }: {
+    label: string;
+    initialSize?: { cols: number; rows: number };
+  }): Promise<Terminal> {
+    const names = Array.from(this.terminals.values()).map((terminal) => terminal.data.name);
+    return this.createTerminal({
+      id: crypto.randomUUID(),
+      projectId: this.projectId,
+      taskId: this.taskId,
+      name: nextCommandTerminalName(label, names),
+      initialSize,
+    });
+  }
+
   async createCommandTerminal({
     command,
     label,
@@ -95,13 +154,8 @@ export class TerminalManagerStore {
     const normalizedCommand = command.trim();
     if (!normalizedCommand) throw new Error('Terminal command is empty.');
 
-    const names = Array.from(this.terminals.values()).map((terminal) => terminal.data.name);
-    const id = crypto.randomUUID();
-    const terminal = await this.createTerminal({
-      id,
-      projectId: this.projectId,
-      taskId: this.taskId,
-      name: nextCommandTerminalName(label, names),
+    const terminal = await this.createNamedTerminal({
+      label,
       initialSize,
     });
     const inputResult = await rpc.pty.sendInput(
@@ -123,7 +177,7 @@ export class TerminalManagerStore {
     });
 
     try {
-      await rpc.terminals.deleteTerminal({
+      await this.gateway.deleteTerminal({
         projectId: this.projectId,
         taskId: this.taskId,
         terminalId,
@@ -148,7 +202,7 @@ export class TerminalManagerStore {
     });
 
     try {
-      await rpc.terminals.renameTerminal(terminalId, name);
+      await this.gateway.renameTerminal(terminalId, name);
     } catch (err) {
       runInAction(() => {
         store.data.name = previousName;
