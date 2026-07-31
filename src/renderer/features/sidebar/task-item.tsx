@@ -475,12 +475,12 @@ function LongTermTaskIcon({
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center text-foreground-tertiary-passive',
+        'inline-flex shrink-0 items-center justify-center text-foreground-tertiary-muted',
         compact ? 'size-2.5' : 'size-6',
         className
       )}
     >
-      <Bookmark className={cn('fill-current stroke-[1.75]', compact ? 'size-2.5' : 'size-3.5')} />
+      <Bookmark className={compact ? 'size-2.5 fill-current stroke-[1.75]' : 'size-4'} />
     </span>
   );
 }
