@@ -17,8 +17,8 @@ import { TmuxUnavailableNotifier } from '@renderer/lib/components/tmux-unavailab
 import { useTabShortcuts } from '@renderer/lib/hooks/useTabShortcuts';
 import { useTheme } from '@renderer/lib/hooks/useTheme';
 import {
-  useWorkspaceSlots,
-  useWorkspaceWrapParams,
+  useWorkspaceRouteSnapshot,
+  type WorkspaceRouteSnapshot,
 } from '@renderer/lib/layout/navigation-provider';
 import { WorkspaceContentLayout, WorkspaceLayout } from '@renderer/lib/layout/workspace-layout';
 import { ModalRenderer } from '@renderer/lib/modal/modal-renderer';
@@ -49,8 +49,8 @@ const GlobalTabShortcuts = observer(function GlobalTabShortcuts() {
 
 export const Workspace = observer(function Workspace() {
   useTheme();
-  const { WrapView } = useWorkspaceSlots();
-  const { wrapParams } = useWorkspaceWrapParams();
+  const { WrapView, TitlebarSlot, MainPanel, currentView, wrapParams } =
+    useWorkspaceRouteSnapshot();
 
   return (
     <>
@@ -72,7 +72,11 @@ export const Workspace = observer(function Workspace() {
               <ModalRenderer />
             </ErrorBoundary>
             <ErrorBoundary variant="inline" componentName="WorkspaceView">
-              <WorkspaceViewContent />
+              <WorkspaceViewContent
+                TitlebarSlot={TitlebarSlot}
+                MainPanel={MainPanel}
+                currentView={currentView}
+              />
             </ErrorBoundary>
           </WrapView>
         }
@@ -89,12 +93,15 @@ export const Workspace = observer(function Workspace() {
   );
 });
 
-const WorkspaceViewContent = observer(function WorkspaceViewContent() {
-  const { TitlebarSlot, MainPanel } = useWorkspaceSlots();
+const WorkspaceViewContent = observer(function WorkspaceViewContent({
+  TitlebarSlot,
+  MainPanel,
+  currentView,
+}: Pick<WorkspaceRouteSnapshot, 'TitlebarSlot' | 'MainPanel' | 'currentView'>) {
   // Tile extra tasks beside the routed one — only on the task view, and only
   // while extras exist. The primary keeps the outer route providers (it IS
   // <MainPanel/>); the grid hosts the self-contained extras.
-  const isTiled = appState.navigation.currentViewId === 'task' && splitViewStore.count > 0;
+  const isTiled = currentView === 'task' && splitViewStore.count > 0;
 
   // The whole central column — on every route — accepts a dragged pin (task
   // sidebar / shell pane): dropping "into the main window" means "show it

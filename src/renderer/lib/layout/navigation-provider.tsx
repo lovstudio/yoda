@@ -40,7 +40,7 @@ export type SlotsContextValue = {
   currentView: string;
 };
 
-export type WrapParamsContextValue = {
+export type WorkspaceRouteSnapshot = SlotsContextValue & {
   wrapParams: Record<string, unknown>;
 };
 
@@ -73,11 +73,27 @@ export function useWorkspaceSlots(): SlotsContextValue {
   });
 }
 
-export function useWorkspaceWrapParams(): WrapParamsContextValue {
-  return useMobxValue(() => ({
-    wrapParams: (appState.navigation.viewParamsStore[appState.navigation.currentViewId] ??
-      {}) as Record<string, unknown>,
-  }));
+/** Route components and params must commit together so provider boundaries stay aligned. */
+export function useWorkspaceRouteSnapshot(): WorkspaceRouteSnapshot {
+  return useMobxValue(() => {
+    const viewId = appState.navigation.currentViewId;
+    const def = (views as unknown as Record<string, ViewDefinition<Record<string, unknown>>>)[
+      viewId
+    ];
+    return {
+      WrapView: (def.WrapView ?? Fragment) as ComponentType<
+        { children: ReactNode } & Record<string, unknown>
+      >,
+      TitlebarSlot: def.TitlebarSlot ?? (() => null),
+      MainPanel: def.MainPanel,
+      currentView: viewId,
+      // Keep the wrapper params in the same MobX snapshot as the view
+      // components. Separate subscriptions can commit in different React
+      // renders, briefly pairing a task MainPanel with a non-task WrapView
+      // (and therefore no ProvisionedTaskProvider).
+      wrapParams: (appState.navigation.viewParamsStore[viewId] ?? {}) as Record<string, unknown>,
+    };
+  });
 }
 
 /**
