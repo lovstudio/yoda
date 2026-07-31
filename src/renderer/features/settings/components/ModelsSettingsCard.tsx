@@ -17,7 +17,6 @@ import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
-import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import { Input } from '@renderer/lib/ui/input';
 import { Label } from '@renderer/lib/ui/label';
 import {
@@ -40,6 +39,39 @@ type UpdateCustomModelsInput = {
   providerId: string;
   customModels: string[];
 };
+
+export function ModelCatalogAutomaticUpdateSetting() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const catalogQuery = useQuery<ModelProviderCatalogResult>({
+    queryKey: MODEL_PROVIDERS_QUERY_KEY,
+    queryFn: () => rpc.llm.listModelProviders(),
+    staleTime: 60_000,
+  });
+  const updateAutomaticUpdates = useMutation<ModelProviderCatalogResult, Error, boolean>({
+    mutationFn: (enabled) => rpc.llm.setModelProviderAutomaticUpdates(enabled),
+    onSuccess: (result) => {
+      queryClient.setQueryData(MODEL_PROVIDERS_QUERY_KEY, result);
+    },
+  });
+
+  return (
+    <div data-testid="model-catalog-auto-update-setting">
+      <SettingRow
+        title={t('settings.models.automaticUpdates')}
+        description={t('settings.models.automaticUpdatesDescription')}
+        control={
+          <Switch
+            checked={catalogQuery.data?.automaticUpdatesEnabled ?? true}
+            onCheckedChange={(checked) => updateAutomaticUpdates.mutate(checked)}
+            disabled={catalogQuery.isLoading || updateAutomaticUpdates.isPending}
+            aria-label={t('settings.models.automaticUpdates')}
+          />
+        }
+      />
+    </div>
+  );
+}
 
 export default function ModelsSettingsCard() {
   const { t } = useTranslation();
@@ -90,13 +122,6 @@ export default function ModelsSettingsCard() {
     },
   });
 
-  const updateAutomaticUpdates = useMutation<ModelProviderCatalogResult, Error, boolean>({
-    mutationFn: (enabled) => rpc.llm.setModelProviderAutomaticUpdates(enabled),
-    onSuccess: (result) => {
-      queryClient.setQueryData(MODEL_PROVIDERS_QUERY_KEY, result);
-    },
-  });
-
   const createCustomProvider = useMutation<
     ModelProviderCatalogResult,
     Error,
@@ -126,7 +151,6 @@ export default function ModelsSettingsCard() {
     catalogQuery.isLoading ||
     updateCustomModels.isPending ||
     refreshCatalog.isPending ||
-    updateAutomaticUpdates.isPending ||
     createCustomProvider.isPending ||
     deleteCustomProvider.isPending;
 
@@ -376,45 +400,15 @@ export default function ModelsSettingsCard() {
         </div>
       )}
 
-      <section className="border-t border-border pt-4" data-testid="model-catalog-update-section">
-        <SettingRow
-          title={t('settings.models.updatesTitle')}
-          description={t('settings.models.updatesDescription')}
-          control={
-            <div
-              className="flex shrink-0 items-center gap-2"
-              data-testid="model-catalog-auto-update-control"
-            >
-              <div className="flex items-center gap-1">
-                <span className="text-xs font-medium text-foreground-muted">
-                  {t('settings.models.automaticUpdatesShort')}
-                </span>
-                <InfoTooltip
-                  label={t('settings.models.automaticUpdates')}
-                  content={t('settings.models.automaticUpdatesDescription')}
-                />
-              </div>
-              <Switch
-                checked={catalogQuery.data?.automaticUpdatesEnabled ?? true}
-                onCheckedChange={(checked) => updateAutomaticUpdates.mutate(checked)}
-                disabled={disabled}
-                aria-label={t('settings.models.automaticUpdates')}
-              />
-            </div>
-          }
-        />
-        <div className="mt-3">
-          <ProviderCatalogStatus
-            provider={selectedProvider}
-            isRefreshing={refreshCatalog.isPending}
-            disabled={disabled}
-            onRefresh={() => refreshCatalog.mutate(selectedProviderId)}
-            onDelete={() => {
-              if (selectedProvider) requestDeleteCustomProvider(selectedProvider);
-            }}
-          />
-        </div>
-      </section>
+      <ProviderCatalogStatus
+        provider={selectedProvider}
+        isRefreshing={refreshCatalog.isPending}
+        disabled={disabled}
+        onRefresh={() => refreshCatalog.mutate(selectedProviderId)}
+        onDelete={() => {
+          if (selectedProvider) requestDeleteCustomProvider(selectedProvider);
+        }}
+      />
       <div className="border-t border-border pt-4">
         <div className="rounded-md border border-border bg-background-secondary/40 p-3">
           <div className="text-sm font-medium">{t('settings.models.customTitle')}</div>
