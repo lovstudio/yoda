@@ -350,6 +350,35 @@ export class WorktreeService {
     return undefined;
   }
 
+  /**
+   * Adds a branch worktree, treating a concurrent checkout of the same branch
+   * as success. Multiple Yoda instances can pass the initial worktree lookup
+   * before either one reaches `git worktree add`; the loser should reuse the
+   * winner's worktree instead of surfacing Git's "already used" error.
+   */
+  private async addWorktree(
+    targetPath: string,
+    branchName: string
+  ): Promise<Result<string, ServeWorktreeError>> {
+    const existingPath = await this.findCheckedOutPathForBranch(branchName);
+    if (existingPath) return ok(existingPath);
+
+    try {
+      await this.ctx.exec('git', ['worktree', 'add', targetPath, branchName]);
+      return ok(targetPath);
+    } catch (cause) {
+      const checkedOutPath = await this.findCheckedOutPathForBranch(branchName);
+      if (checkedOutPath) {
+        log.info('WorktreeService: branch was checked out concurrently; reusing worktree', {
+          branchName,
+          targetPath: checkedOutPath,
+        });
+        return ok(checkedOutPath);
+      }
+      return err({ type: 'worktree-setup-failed', cause });
+    }
+  }
+
   private async resolveSourceBaseRef(
     sourceBranch: Branch | undefined
   ): Promise<string | undefined> {
@@ -429,19 +458,22 @@ export class WorktreeService {
 
       await this.host.mkdirAbsolute(this.pathApi.dirname(targetPath), { recursive: true });
       await this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
-      await this.ctx.exec('git', ['worktree', 'add', targetPath, branchName]);
     } catch (cause) {
       return err({ type: 'worktree-setup-failed', cause });
     }
 
-    await this.copyPreservedFiles(targetPath).catch((e) => {
+    const worktree = await this.addWorktree(targetPath, branchName);
+    if (!worktree.success) return worktree;
+    const worktreePath = worktree.data;
+
+    await this.copyPreservedFiles(worktreePath).catch((e) => {
       log.warn('WorktreeService: failed to copy preserved files', {
-        targetPath,
+        targetPath: worktreePath,
         error: String(e),
       });
     });
 
-    return ok(targetPath);
+    return ok(worktreePath);
   }
 
   async checkoutExistingBranch(
@@ -512,19 +544,22 @@ export class WorktreeService {
       }
 
       await this.ctx.exec('git', ['worktree', 'prune']).catch(() => {});
-      await this.ctx.exec('git', ['worktree', 'add', targetPath, branchName]);
     } catch (cause) {
       return err({ type: 'worktree-setup-failed', cause });
     }
 
-    await this.copyPreservedFiles(targetPath).catch((e) => {
+    const worktree = await this.addWorktree(targetPath, branchName);
+    if (!worktree.success) return worktree;
+    const worktreePath = worktree.data;
+
+    await this.copyPreservedFiles(worktreePath).catch((e) => {
       log.warn('WorktreeService: failed to copy preserved files', {
-        targetPath,
+        targetPath: worktreePath,
         error: String(e),
       });
     });
 
-    return ok(targetPath);
+    return ok(worktreePath);
   }
 
   async moveWorktree(oldPath: string, newPath: string): Promise<void> {

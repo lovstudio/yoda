@@ -57,6 +57,22 @@ function overrideRemoveAbsolute(
   };
 }
 
+function overrideExistsAbsolute(
+  base: WorktreeHost,
+  existsAbsolute: WorktreeHost['existsAbsolute']
+): WorktreeHost {
+  return {
+    existsAbsolute,
+    mkdirAbsolute: base.mkdirAbsolute.bind(base),
+    removeAbsolute: base.removeAbsolute.bind(base),
+    realPathAbsolute: base.realPathAbsolute.bind(base),
+    globAbsolute: base.globAbsolute.bind(base),
+    readFileAbsolute: base.readFileAbsolute.bind(base),
+    copyFileAbsolute: base.copyFileAbsolute.bind(base),
+    statAbsolute: base.statAbsolute.bind(base),
+  };
+}
+
 describe('WorktreeService', () => {
   let repoDir: string;
   let poolDir: string;
@@ -209,6 +225,35 @@ describe('WorktreeService', () => {
       expect(path.normalize(result.data)).toBe(path.normalize(fs.realpathSync(externalPath)));
 
       fs.rmSync(externalDir, { recursive: true, force: true });
+    });
+
+    it('reuses a worktree created concurrently while choosing the target path', async () => {
+      const branchName = 'yoda/e1yf1';
+      const existingPath = path.join(poolDir, 'e1yf1');
+      const losingTargetPath = path.join(poolDir, 'yoda-e1yf1');
+      await git(['branch', branchName], { cwd: repoDir });
+
+      const realHost = host;
+      let concurrentCheckoutCreated = false;
+      host = overrideExistsAbsolute(realHost, async (targetPath) => {
+        if (!concurrentCheckoutCreated && targetPath === existingPath) {
+          concurrentCheckoutCreated = true;
+          await git(['worktree', 'add', existingPath, branchName], { cwd: repoDir });
+        }
+        return realHost.existsAbsolute(targetPath);
+      });
+
+      const svc = makeService();
+      const result = await svc.checkoutBranchWorktree(
+        { type: 'local', branch: 'main' },
+        branchName
+      );
+
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error('expected success');
+      expect(result.data).toBe(fs.realpathSync(existingPath));
+      expect(concurrentCheckoutCreated).toBe(true);
+      expect(fs.existsSync(losingTargetPath)).toBe(false);
     });
 
     it('returns branch-not-found when source branch does not exist', async () => {
