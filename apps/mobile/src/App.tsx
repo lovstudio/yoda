@@ -36,6 +36,7 @@ import {
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_SESSION_INPUT_MAX_CHARS,
   parseMobilePairingUrl,
+  sortMobileProjectsByUpdatedAt,
   type MobileDashboardSnapshot,
   type MobileProjectSummary,
   type MobileSessionDetail,
@@ -1620,6 +1621,7 @@ function DemandComposer({
   onSubmit: () => void;
 }) {
   const canSubmit = prompt.trim().length > 0 && !submitting;
+  const sortedProjects = useMemo(() => sortMobileProjectsByUpdatedAt(projects), [projects]);
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
@@ -1634,27 +1636,11 @@ function DemandComposer({
         value={prompt}
         onChangeText={onPromptChange}
       />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rail}
-      >
-        <ProjectChip
-          active={selectedProjectId === null}
-          label="Drafts"
-          meta="Default"
-          onPress={() => onProjectChange(null)}
-        />
-        {projects.map((project) => (
-          <ProjectChip
-            key={project.id}
-            active={selectedProjectId === project.id}
-            label={project.displayName}
-            meta={project.isOpen ? 'Open' : 'Will open'}
-            onPress={() => onProjectChange(project.id)}
-          />
-        ))}
-      </ScrollView>
+      <DemandProjectAccordion
+        projects={sortedProjects}
+        selectedProjectId={selectedProjectId}
+        onProjectChange={onProjectChange}
+      />
       <Pressable
         accessibilityLabel="Submit new mobile request"
         disabled={!canSubmit}
@@ -1675,6 +1661,131 @@ function DemandComposer({
         )}
       </Pressable>
     </View>
+  );
+}
+
+function DemandProjectAccordion({
+  projects,
+  selectedProjectId,
+  onProjectChange,
+}: {
+  projects: MobileProjectSummary[];
+  selectedProjectId: string | null;
+  onProjectChange: (projectId: string | null) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const selectedLabel = selectedProject?.displayName ?? 'Drafts';
+  const selectedMeta = selectedProject
+    ? `Updated ${formatTimestamp(selectedProject.updatedAt)}`
+    : 'Default workspace';
+
+  return (
+    <View style={styles.projectAccordion}>
+      <Pressable
+        accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} project selection`}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        style={({ pressed }) => [
+          styles.projectAccordionTrigger,
+          expanded ? styles.projectAccordionTriggerExpanded : null,
+          pressed ? styles.buttonPressed : null,
+        ]}
+        onPress={() => setExpanded((current) => !current)}
+      >
+        <View style={styles.projectAccordionTriggerIcon}>
+          <Ionicons color={COLORS.charcoal} name="folder-open-outline" size={18} />
+        </View>
+        <View style={styles.projectAccordionTriggerBody}>
+          <Text style={styles.projectAccordionEyebrow}>Project</Text>
+          <Text style={styles.projectAccordionTitle} numberOfLines={1}>
+            {selectedLabel}
+          </Text>
+          <Text style={styles.projectAccordionMeta} numberOfLines={1}>
+            {selectedMeta}
+          </Text>
+        </View>
+        <Ionicons
+          color={COLORS.muted}
+          name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+          size={18}
+        />
+      </Pressable>
+
+      {expanded ? (
+        <View style={styles.projectAccordionList}>
+          <DemandProjectOption
+            icon="documents-outline"
+            label="Drafts"
+            meta="Default workspace"
+            selected={selectedProjectId === null}
+            onPress={() => {
+              onProjectChange(null);
+              setExpanded(false);
+            }}
+          />
+          {projects.map((project) => (
+            <DemandProjectOption
+              key={project.id}
+              icon={project.isOpen ? 'desktop-outline' : 'folder-outline'}
+              label={project.displayName}
+              meta={`Updated ${formatTimestamp(project.updatedAt)}`}
+              selected={selectedProjectId === project.id}
+              onPress={() => {
+                onProjectChange(project.id);
+                setExpanded(false);
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function DemandProjectOption({
+  icon,
+  label,
+  meta,
+  selected,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  meta: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`${label}, ${meta}`}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      style={({ pressed }) => [
+        styles.projectAccordionOption,
+        selected ? styles.projectAccordionOptionSelected : null,
+        pressed ? styles.buttonPressed : null,
+      ]}
+      onPress={onPress}
+    >
+      <View
+        style={[
+          styles.projectAccordionOptionIcon,
+          selected ? styles.projectAccordionOptionIconSelected : null,
+        ]}
+      >
+        <Ionicons color={selected ? COLORS.surface : COLORS.muted} name={icon} size={17} />
+      </View>
+      <View style={styles.projectAccordionOptionBody}>
+        <Text style={styles.projectAccordionOptionLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={styles.projectAccordionOptionMeta} numberOfLines={1}>
+          {meta}
+        </Text>
+      </View>
+      {selected ? <Ionicons color={COLORS.charcoal} name="checkmark-circle" size={20} /> : null}
+    </Pressable>
   );
 }
 
@@ -3451,6 +3562,103 @@ const styles = StyleSheet.create({
   },
   projectChipMetaActive: {
     color: '#D8D4CB',
+  },
+  projectAccordion: {
+    width: '100%',
+  },
+  projectAccordionTrigger: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+  },
+  projectAccordionTriggerExpanded: {
+    borderBottomWidth: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  projectAccordionTriggerIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#EFEEE7',
+  },
+  projectAccordionTriggerBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  projectAccordionEyebrow: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  projectAccordionTitle: {
+    color: COLORS.ink,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  projectAccordionMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  projectAccordionList: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: COLORS.line,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    backgroundColor: COLORS.surface,
+  },
+  projectAccordionOption: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  projectAccordionOptionSelected: {
+    backgroundColor: '#EFEEE7',
+  },
+  projectAccordionOptionIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: COLORS.page,
+  },
+  projectAccordionOptionIconSelected: {
+    backgroundColor: COLORS.charcoal,
+  },
+  projectAccordionOptionBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+  },
+  projectAccordionOptionLabel: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  projectAccordionOptionMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
   },
   taskRow: {
     borderWidth: 1,
