@@ -154,9 +154,7 @@ describe('CaptureProjectAutomationModal', () => {
       command: 'pnpm run dev',
       explanation: 'package.json defines the dev script',
     });
-    mocks.runProjectQuickAction
-      .mockReset()
-      .mockResolvedValue({ kind: 'shell', taskId: 'task-terminal' });
+    mocks.runProjectQuickAction.mockReset().mockResolvedValue({ kind: 'shell' });
     mocks.navigate.mockReset();
     mocks.repositoryStore.localData.load.mockReset().mockResolvedValue(undefined);
     mocks.repositoryStore.remoteData.load.mockReset().mockResolvedValue(undefined);
@@ -288,13 +286,11 @@ describe('CaptureProjectAutomationModal', () => {
     expect(mocks.runProjectQuickAction).toHaveBeenCalledWith({
       project: mocks.mountedProject,
       action: savedAction,
-      defaultBranch: mocks.repositoryStore.defaultBranch,
     });
     expect(onSuccess).toHaveBeenCalledTimes(1);
-    expect(mocks.navigate).toHaveBeenCalledWith('task', {
-      projectId: 'project-1',
-      taskId: 'task-terminal',
-    });
+    expect(mocks.repositoryStore.localData.load).not.toHaveBeenCalled();
+    expect(mocks.repositoryStore.remoteData.load).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it('accepts a direct command without calling an Agent, even when no runtime is available', async () => {
@@ -328,7 +324,6 @@ describe('CaptureProjectAutomationModal', () => {
     expect(mocks.runProjectQuickAction).toHaveBeenCalledWith({
       project: mocks.mountedProject,
       action: savedAction,
-      defaultBranch: mocks.repositoryStore.defaultBranch,
     });
   });
 

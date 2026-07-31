@@ -1,22 +1,19 @@
-import type { Branch } from '@shared/git';
 import type { ProjectLaunchCommand } from '@shared/quick-actions';
 import type { MountedProject } from '@renderer/features/projects/stores/project';
 import { runProjectQuickAction } from './run-project-quick-action';
 
 /**
- * Runs a discovered launch command through the same persisted task Terminal
- * lifecycle as saved shell quick actions.
+ * Runs a discovered launch command through the same project-level Terminal
+ * lifecycle as saved shell quick actions, without creating a task.
  */
 export async function runProjectLaunchCommand({
   project,
   launchCommand,
-  defaultBranch,
 }: {
   project: MountedProject;
   launchCommand: ProjectLaunchCommand;
-  defaultBranch: Branch | undefined;
-}): Promise<string> {
-  const result = await runProjectQuickAction({
+}): Promise<void> {
+  await runProjectQuickAction({
     project,
     action: {
       id: launchCommand.id,
@@ -24,7 +21,5 @@ export async function runProjectLaunchCommand({
       command: launchCommand.command,
       kind: 'shell',
     },
-    defaultBranch,
   });
-  return result.taskId;
 }

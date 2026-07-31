@@ -20,6 +20,7 @@ const translations: Record<string, string> = {
   'sidebar.captureAutomation.loadingCommands': 'Reading project commands…',
   'sidebar.captureAutomation.loadCommandsFailed': 'Project commands could not be read.',
   'sidebar.captureAutomation.noCommands': 'No launch commands detected.',
+  'projects.quickActions.manage': 'Manage quick actions',
 };
 
 vi.mock('react-i18next', () => ({
@@ -171,6 +172,7 @@ describe('ProjectMenu launch commands submenu', () => {
       const onRunLaunchCommand = vi.fn();
       const onRunQuickAction = vi.fn();
       const onCaptureAutomation = vi.fn();
+      const onManageQuickActions = vi.fn();
       const actions = {
         ...requiredActions(),
         quickActions: [savedAction],
@@ -178,6 +180,7 @@ describe('ProjectMenu launch commands submenu', () => {
         onRunLaunchCommand,
         onRunQuickAction,
         onCaptureAutomation,
+        onManageQuickActions,
       };
 
       await act(async () => {
@@ -212,6 +215,9 @@ describe('ProjectMenu launch commands submenu', () => {
       const createActionItem = items.find((item) =>
         item.textContent?.includes('Generate command from a requirement')
       );
+      const manageActionsItem = items.find((item) =>
+        item.textContent?.includes('Manage quick actions')
+      );
 
       await act(async () => detectedCommandItem?.click());
       expect(onRunLaunchCommand).toHaveBeenCalledWith(detectedCommand);
@@ -221,6 +227,8 @@ describe('ProjectMenu launch commands submenu', () => {
 
       await act(async () => createActionItem?.click());
       expect(onCaptureAutomation).toHaveBeenCalledTimes(1);
+      await act(async () => manageActionsItem?.click());
+      expect(onManageQuickActions).toHaveBeenCalledTimes(1);
     }
   );
 });

@@ -175,4 +175,39 @@ describe('workspace shell runtime actions', () => {
 
     expect(mocks.spawnLocalPty).toHaveBeenCalledTimes(1);
   });
+
+  it('runs a quick action in its project directory and preserves completed output', async () => {
+    const service = new WorkspaceShellService();
+    const sessionId = 'workspace-shell:quick-action';
+
+    await service.runCommand(sessionId, {
+      command: 'pnpm run dev',
+      cwd: process.cwd(),
+      initialSize: { cols: 120, rows: 30 },
+    });
+
+    expect(mocks.spawnLocalPty).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: sessionId,
+        cwd: process.cwd(),
+        cols: 120,
+        rows: 30,
+      })
+    );
+    expect(mocks.registerSession).toHaveBeenCalledWith(sessionId, expect.anything(), {
+      preserveBufferOnExit: true,
+    });
+  });
+
+  it('does not fall back to the home directory when the project directory is missing', async () => {
+    const service = new WorkspaceShellService();
+
+    await expect(
+      service.runCommand('workspace-shell:missing-project', {
+        command: 'pnpm run dev',
+        cwd: '/definitely/missing/yoda-project',
+      })
+    ).rejects.toThrow('project directory is unavailable');
+    expect(mocks.spawnLocalPty).not.toHaveBeenCalled();
+  });
 });

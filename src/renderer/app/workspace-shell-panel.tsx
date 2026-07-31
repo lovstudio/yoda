@@ -12,11 +12,13 @@ export const WorkspaceShellPanel = observer(function WorkspaceShellPanel() {
     ? (getRuntime(workspaceShellStore.runtimeId)?.name ?? workspaceShellStore.runtimeId)
     : null;
   const title =
-    workspaceShellStore.mode === 'runtime-action' &&
-    workspaceShellStore.runtimeAction &&
-    runtimeName
-      ? t(`workspaceRuntime.actions.${workspaceShellStore.runtimeAction}`, { name: runtimeName })
-      : t('workspaceRuntime.terminal');
+    workspaceShellStore.mode === 'command' && workspaceShellStore.commandLabel
+      ? t('workspaceRuntime.quickAction', { label: workspaceShellStore.commandLabel })
+      : workspaceShellStore.mode === 'runtime-action' &&
+          workspaceShellStore.runtimeAction &&
+          runtimeName
+        ? t(`workspaceRuntime.actions.${workspaceShellStore.runtimeAction}`, { name: runtimeName })
+        : t('workspaceRuntime.terminal');
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border bg-background-secondary px-2">
