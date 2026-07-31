@@ -11,10 +11,11 @@ type ChildrenProps = {
   className?: string;
 };
 
-function chip(label: string, width: number): ReactNode {
+function chip(label: string, width: number, surface?: string): ReactNode {
   return createElement(
     'button',
     {
+      'data-yoda-surface': surface,
       type: 'button',
       style: {
         alignItems: 'center',
@@ -84,20 +85,26 @@ vi.mock('@renderer/app/home-view', () => ({
           chip('环境', 88),
           chip('分支', 128),
           chip('代理', 132),
+          chip('配置', 72, 'home-composer-session-settings'),
           createElement(
-            'div',
+            'button',
             {
-              'data-yoda-surface': 'home-composer-actions',
-              className: 'ml-auto flex items-center gap-2',
+              'data-yoda-surface': 'home-composer-compare-action',
+              type: 'button',
               style: {
                 alignItems: 'center',
+                border: '1px solid currentColor',
+                borderRadius: 7,
                 display: 'flex',
-                gap: 8,
+                flex: '0 0 auto',
+                height: 28,
+                justifyContent: 'center',
                 marginLeft: 'auto',
+                padding: '0 10px',
+                width: 72,
               },
             },
-            chip('配置', 72),
-            chip('对比', 72)
+            '对比'
           )
         )
       )
@@ -140,22 +147,20 @@ describe('NewTaskModal responsive layout', () => {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   }
 
-  it('keeps settings and compare together when the toolbar wraps', async () => {
+  it('keeps session settings separate from the compare action when the toolbar wraps', async () => {
     await renderAt(480, 500);
 
     const modal = host.querySelector('[data-yoda-surface="new-task-modal"]');
     const content = host.querySelector('[data-slot="dialog-content-area"]');
     const toolbar = host.querySelector('[data-yoda-surface="home-composer-toolbar"]');
-    const actionGroup = host.querySelector('[data-yoda-surface="home-composer-actions"]');
-    const buttons = actionGroup?.querySelectorAll('button');
+    const settings = host.querySelector('[data-yoda-surface="home-composer-session-settings"]');
+    const compare = host.querySelector('[data-yoda-surface="home-composer-compare-action"]');
 
     expect(getComputedStyle(modal as Element).containerType).toBe('inline-size');
     expect(getComputedStyle(content as Element).paddingLeft).toBe('16px');
-    expect(rect(actionGroup).width).toBeCloseTo(rect(toolbar).width, 0);
-    expect(rect(buttons?.item(1) ?? null).left - rect(buttons?.item(0) ?? null).right).toBeCloseTo(
-      8,
-      0
-    );
+    expect(settings?.parentElement).toBe(compare?.parentElement);
+    expect(rect(compare).left - rect(settings).right).toBeGreaterThan(32);
+    expect(rect(toolbar).right - rect(compare).right).toBeCloseTo(0, 0);
     expect((content as HTMLElement).scrollWidth).toBeLessThanOrEqual(
       (content as HTMLElement).clientWidth
     );
@@ -166,11 +171,11 @@ describe('NewTaskModal responsive layout', () => {
 
     const content = host.querySelector('[data-slot="dialog-content-area"]');
     const toolbar = host.querySelector('[data-yoda-surface="home-composer-toolbar"]');
-    const actionGroup = host.querySelector('[data-yoda-surface="home-composer-actions"]');
+    const compare = host.querySelector('[data-yoda-surface="home-composer-compare-action"]');
     const textarea = host.querySelector('[data-slot="textarea"]');
 
     expect(getComputedStyle(content as Element).paddingLeft).toBe('20px');
-    expect(rect(actionGroup).width).toBeLessThan(rect(toolbar).width);
+    expect(rect(compare).width).toBeLessThan(rect(toolbar).width);
     expect(Number.parseFloat(getComputedStyle(textarea as Element).minHeight)).toBeCloseTo(112, 0);
   });
 

@@ -1961,6 +1961,7 @@ export const HomeComposer = observer(function HomeComposer({
   const renderComposerSettingsButton = (): ReactNode => (
     <Popover>
       <PopoverTrigger
+        data-yoda-surface="home-composer-session-settings"
         aria-label={t('home.composerSettingsAria')}
         title={t('home.composerSettingsAria')}
         className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 hover:text-foreground"
@@ -2091,17 +2092,15 @@ export const HomeComposer = observer(function HomeComposer({
 
   // "+ 对比" sits at the end of the first config row (the base row in normal
   // mode, the first config row in compare mode), never on its own line.
-  const renderAddCompareButton = (className?: string): ReactNode => (
+  const renderAddCompareButton = (): ReactNode => (
     <button
+      data-yoda-surface="home-composer-compare-action"
       type="button"
       aria-label={t('home.addCompareVariant')}
       title={t('home.addCompareVariantTooltip')}
       onClick={addVariant}
       disabled={compareVariants.length >= MAX_COMPARE_VARIANTS}
-      className={cn(
-        'flex h-7 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:cursor-not-allowed disabled:opacity-50',
-        className
-      )}
+      className="ml-auto flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background-1 px-2.5 text-xs text-foreground transition-colors hover:bg-background-2 disabled:cursor-not-allowed disabled:opacity-50"
     >
       <GitCompare className="size-3.5 text-foreground-muted" />
       <span className="hidden @lg/composer:inline">{t('home.addCompareVariant')}</span>
@@ -2195,7 +2194,7 @@ export const HomeComposer = observer(function HomeComposer({
                   runHostKind={variantRunHostKind}
                   modelLabel={compareModelLabel}
                   renderSettings={renderComposerSettingsButton}
-                  trailing={index === 0 ? renderAddCompareButton('ml-auto') : undefined}
+                  trailing={index === 0 ? renderAddCompareButton() : undefined}
                   onChange={(patch) => {
                     updateVariant(variant.id, patch);
                     // The first compare row is the migrated base configuration.
@@ -2345,13 +2344,8 @@ export const HomeComposer = observer(function HomeComposer({
                 />
               )}
             />
-            <div
-              data-yoda-surface="home-composer-actions"
-              className="ml-auto flex items-center gap-2"
-            >
-              {renderComposerSettingsButton()}
-              {runMode === 'normal' && renderAddCompareButton()}
-            </div>
+            {renderComposerSettingsButton()}
+            {runMode === 'normal' && renderAddCompareButton()}
           </div>
         )}
       </div>
