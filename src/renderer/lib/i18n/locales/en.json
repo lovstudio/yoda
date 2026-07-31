@@ -435,7 +435,6 @@
     },
     "needsReview": "Needs review",
     "multiAgentTask": "Multi-agent task",
-    "longTermTask": "Long-term task",
     "toggleSubtasks": "Toggle subtasks",
     "setParentFailed": "Failed to move task",
     "kanban": "Kanban"

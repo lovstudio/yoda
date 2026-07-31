@@ -1,12 +1,4 @@
-import {
-  Archive,
-  Bookmark,
-  ChevronRight,
-  GitBranch,
-  Loader2,
-  MoreHorizontal,
-  Users,
-} from 'lucide-react';
+import { Archive, ChevronRight, GitBranch, Loader2, MoreHorizontal, Users } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -121,15 +113,9 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const taskIndentClass =
     rowVariant === 'underProject' ? (hasRootToggle ? undefined : 'pl-8') : 'pl-2';
   const multiAgentLabel = t('sidebar.multiAgentTask');
-  const longTermLabel = t('sidebar.longTermTask');
   const showMultiAgentIconInReservedSlot =
     isMultiAgent && rowVariant === 'underProject' && treeDepth === 0 && !hasRootToggle;
   const showMultiAgentIconInline = isMultiAgent && !showMultiAgentIconInReservedSlot;
-  // Project-nested rows already own a 24px leading status slot, so the marker
-  // can sit there without reducing the task-name width. Compact flat/pinned
-  // rows keep their full title width and use a tiny edge marker instead.
-  const showLongTermIconInReservedSlot = task.data.isLongTerm && rowVariant === 'underProject';
-  const showLongTermEdgeMarker = task.data.isLongTerm && rowVariant !== 'underProject';
 
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
@@ -289,31 +275,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               )}
             />
           )}
-          {showLongTermEdgeMarker && (
-            <span
-              role="img"
-              aria-label={longTermLabel}
-              title={longTermLabel}
-              className="absolute left-0.5 top-1/2 size-1 -translate-y-1/2 rounded-full bg-foreground-tertiary-passive"
-            />
-          )}
           {showMultiAgentIconInReservedSlot && (
             <MultiAgentTaskIcon
               label={multiAgentLabel}
               className="absolute left-1 top-1/2 -translate-y-1/2"
-            />
-          )}
-          {showLongTermIconInReservedSlot && (
-            <LongTermTaskIcon
-              label={longTermLabel}
-              compact={showMultiAgentIconInReservedSlot}
-              className={cn(
-                'absolute transition-opacity',
-                showMultiAgentIconInReservedSlot
-                  ? 'left-[17px] top-[17px] z-[1]'
-                  : 'left-1 top-1/2 -translate-y-1/2',
-                hasRootToggle && 'group-hover/row:opacity-0'
-              )}
             />
           )}
           {showMultiAgentIconInline && <MultiAgentTaskIcon label={multiAgentLabel} />}
@@ -322,6 +287,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               <span
                 className={cn(
                   'min-w-0 truncate text-left transition-colors',
+                  task.data.isLongTerm && 'italic',
                   (isBootstrapping || isArchiving) && 'text-foreground/40'
                 )}
               >
@@ -457,31 +423,6 @@ function MultiAgentTaskIcon({ label, className }: { label: string; className?: s
       )}
     >
       <Users className="size-4" />
-    </span>
-  );
-}
-
-function LongTermTaskIcon({
-  label,
-  compact = false,
-  className,
-}: {
-  label: string;
-  compact?: boolean;
-  className?: string;
-}) {
-  return (
-    <span
-      role="img"
-      aria-label={label}
-      title={label}
-      className={cn(
-        'inline-flex shrink-0 items-center justify-center text-foreground-tertiary-muted',
-        compact ? 'size-2.5' : 'size-6',
-        className
-      )}
-    >
-      <Bookmark className={compact ? 'size-2.5 fill-current stroke-[1.75]' : 'size-4'} />
     </span>
   );
 }
