@@ -84,6 +84,23 @@ export type MobileProjectSummary = {
   updatedAt: string;
 };
 
+export function sortMobileProjectsByUpdatedAt(
+  projects: readonly MobileProjectSummary[]
+): MobileProjectSummary[] {
+  return projects
+    .map((project, index) => ({
+      project,
+      index,
+      updatedAt: Date.parse(project.updatedAt),
+    }))
+    .sort((a, b) => {
+      const aUpdatedAt = Number.isNaN(a.updatedAt) ? Number.NEGATIVE_INFINITY : a.updatedAt;
+      const bUpdatedAt = Number.isNaN(b.updatedAt) ? Number.NEGATIVE_INFINITY : b.updatedAt;
+      return bUpdatedAt - aUpdatedAt || a.index - b.index;
+    })
+    .map(({ project }) => project);
+}
+
 export type MobileTaskSummary = {
   id: string;
   projectId: string;
