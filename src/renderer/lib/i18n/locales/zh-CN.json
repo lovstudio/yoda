@@ -450,6 +450,7 @@
       "prompts": "Prompts",
       "skills": "技能",
       "agentManager": "Agent",
+      "models": "Models",
       "llm": "LLM",
       "maas": "MaaS",
       "usage": "用量",
@@ -573,6 +574,15 @@
       "executionSettings": "执行设置",
       "rescan": "重新探测"
     },
+    "models": {
+      "title": "Models",
+      "description": "按 Provider 管理可用模型与自定义模型。",
+      "catalogTitle": "模型目录",
+      "catalogDescription": "这里维护的可见模型会出现在 LLM Profile 与对应 Client 的模型候选中。",
+      "provider": "Provider",
+      "providerDescription": "选择接收这些模型 ID 的 Agent Client。",
+      "providerUnknown": "未知 Provider"
+    },
     "llm": {
       "title": "LLM 配置与调试",
       "description": "管理 Yoda 内部 AI 调用使用的 LLM Profile。",
@@ -608,6 +618,7 @@
       "modelDiscoveryMore": "另有 {{count}} 个",
       "modelDiscoveryPartial": "部分来源失败：{{error}}",
       "modelDiscoverySources": {
+        "custom": "自定义",
         "aiGateway": "AI Gateway",
         "runtimeCatalog": "Runtime catalog"
       },
@@ -3280,6 +3291,17 @@
     "models": {
       "title": "Models",
       "description": "同步该 Agent 可用的模型，并选择哪些模型显示。模型列表来自统一的公开模型目录，并会缓存在本地。",
+      "customTitle": "自定义模型",
+      "customDescription": "添加 Provider 支持但目录尚未收录的模型 ID，最多 {{count}} 个。移除候选不会改写已保存的 LLM Profile。",
+      "customInput": "自定义模型 ID",
+      "customPlaceholder": "例如 gpt-5.6-codex",
+      "customAdd": "添加模型",
+      "customBadge": "自定义",
+      "customInvalid": "请输入 2–100 个字符的有效模型 ID。",
+      "customDuplicate": "这个模型已经在自定义列表中。",
+      "customLimit": "每个 Provider 最多可添加 {{count}} 个自定义模型。",
+      "removeCustom": "移除自定义模型 {{model}}",
+      "saveFailed": "模型设置保存失败，请重试。",
       "refresh": "同步",
       "refreshing": "同步中",
       "loading": "正在加载模型…",
@@ -3296,6 +3318,7 @@
       "sourceFetchedAt": "{{time}}",
       "sourcesById": {
         "catalog": "模型目录",
+        "custom": "自定义",
         "officialApi": "官方 API",
         "cli": "CLI",
         "docs": "文档",

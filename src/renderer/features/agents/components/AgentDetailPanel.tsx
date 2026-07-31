@@ -94,7 +94,7 @@ export const AgentDetailPanel: React.FC<{ agentId: RuntimeId; hideHeader?: boole
         <div className={hideHeader ? '' : 'flex-1 overflow-y-auto'}>
           {activeTab === 'account' && <AgentTabAccount agentId={agentId} />}
           {activeTab === 'maas' && <AgentTabRuntime agentId={agentId} />}
-          {activeTab === 'models' && <AgentTabModels agentId={agentId} />}
+          {activeTab === 'models' && <AgentTabModels key={agentId} agentId={agentId} />}
           {activeTab === 'memory' && <AgentTabMemory agentId={agentId} />}
           {activeTab === 'hooks' && <AgentTabHooks agentId={agentId} />}
           {activeTab === 'skills' && <AgentTabSkills agentId={agentId} />}

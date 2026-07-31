@@ -450,6 +450,7 @@
       "prompts": "Prompts",
       "skills": "Skills",
       "agentManager": "Agents",
+      "models": "Models",
       "llm": "LLM",
       "maas": "MaaS",
       "usage": "Usage",
@@ -573,6 +574,15 @@
       "executionSettings": "Execution settings",
       "rescan": "Rescan"
     },
+    "models": {
+      "title": "Models",
+      "description": "Manage available and custom models by provider.",
+      "catalogTitle": "Model catalog",
+      "catalogDescription": "Visible models maintained here appear in LLM Profiles and the matching Client's model choices.",
+      "provider": "Provider",
+      "providerDescription": "Choose the Agent Client that receives these model IDs.",
+      "providerUnknown": "Unknown provider"
+    },
     "llm": {
       "title": "LLM config & debug",
       "description": "Manage the LLM Profiles Yoda uses for internal AI calls.",
@@ -608,6 +618,7 @@
       "modelDiscoveryMore": "+{{count}} more",
       "modelDiscoveryPartial": "Some sources failed: {{error}}",
       "modelDiscoverySources": {
+        "custom": "Custom",
         "aiGateway": "AI Gateway",
         "runtimeCatalog": "Runtime catalog"
       },
@@ -3280,6 +3291,17 @@
     "models": {
       "title": "Models",
       "description": "Sync available models for this agent and choose which ones to show. The list is refreshed from a shared public model directory and cached locally.",
+      "customTitle": "Custom models",
+      "customDescription": "Add model IDs supported by the provider but not yet listed in the catalog, up to {{count}}. Removing a candidate does not rewrite saved LLM Profiles.",
+      "customInput": "Custom model ID",
+      "customPlaceholder": "e.g. gpt-5.6-codex",
+      "customAdd": "Add model",
+      "customBadge": "Custom",
+      "customInvalid": "Enter a valid model ID between 2 and 100 characters.",
+      "customDuplicate": "This model is already in the custom list.",
+      "customLimit": "Each provider can have up to {{count}} custom models.",
+      "removeCustom": "Remove custom model {{model}}",
+      "saveFailed": "Could not save model settings. Try again.",
       "refresh": "Sync",
       "refreshing": "Syncing",
       "loading": "Loading models...",
@@ -3296,6 +3318,7 @@
       "sourceFetchedAt": "{{time}}",
       "sourcesById": {
         "catalog": "Model catalog",
+        "custom": "Custom",
         "officialApi": "Official API",
         "cli": "CLI",
         "docs": "Docs",
