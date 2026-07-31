@@ -44,7 +44,7 @@ export const APP_SHORTCUTS = defineShortcuts({
     category: 'Navigation',
   },
   commandPaletteTasks: {
-    defaultHotkey: 'Mod+Shift+K',
+    defaultHotkey: 'Mod+K',
     label: 'Search Tasks',
     description: 'Open the command palette scoped to tasks (in:tasks)',
     category: 'Navigation',

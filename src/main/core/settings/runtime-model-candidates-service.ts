@@ -4,6 +4,7 @@ import type {
   AgentModelCandidateInferenceResult,
   AgentModelCandidateItem,
   AgentModelCandidateProviderSettings,
+  RuntimeModelCandidateCacheSource,
   RuntimeModelCandidateSource,
 } from '@shared/runtime-model-candidates';
 import {
@@ -26,13 +27,13 @@ import { appSettingsService } from './settings-service';
 const MODEL_CANDIDATE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 
 type SourceResult = {
-  source: RuntimeModelCandidateSource;
+  source: RuntimeModelCandidateCacheSource;
   models: string[];
   error?: string;
 };
 
-const CATALOG_SOURCE: RuntimeModelCandidateSource = 'catalog';
-const SOURCE_ORDER: RuntimeModelCandidateSource[] = [
+const CATALOG_SOURCE: RuntimeModelCandidateCacheSource = 'catalog';
+const SOURCE_ORDER: RuntimeModelCandidateCacheSource[] = [
   'catalog',
   'zenmux',
   'officialApi',
@@ -46,8 +47,12 @@ export class RuntimeModelCandidatesService {
     args: { forceRefresh?: boolean } = {}
   ): Promise<AgentModelCandidateInferenceResult> {
     const provider = getRuntime(runtimeId);
-    const settings = await appSettingsService.get('runtimeModelCandidates');
+    const [settings, providerConfig] = await Promise.all([
+      appSettingsService.get('runtimeModelCandidates'),
+      runtimeOverrideSettings.getItem(runtimeId),
+    ]);
     const existingSettings = normalizeProviderModelSettings(settings.runtimes[runtimeId]);
+    const customModels = normalizeModelCandidates(providerConfig?.customModels ?? []);
     const existingEntries = provider
       ? sanitizeCatalogEntriesForRuntime(provider, existingSettings.sources)
       : existingSettings.sources;
@@ -57,11 +62,23 @@ export class RuntimeModelCandidatesService {
     const freshEntries = existingEntries.filter(isFreshEntry);
 
     if (!args.forceRefresh && freshEntries.length > 0) {
-      return buildInferenceResult(runtimeId, freshEntries, existingHiddenModels, true);
+      return buildInferenceResult(
+        runtimeId,
+        freshEntries,
+        existingHiddenModels,
+        customModels,
+        true
+      );
     }
 
     if (!provider) {
-      return buildInferenceResult(runtimeId, existingEntries, existingHiddenModels, true);
+      return buildInferenceResult(
+        runtimeId,
+        existingEntries,
+        existingHiddenModels,
+        customModels,
+        true
+      );
     }
 
     const refreshedSettings = await this.refreshCandidates(
@@ -75,14 +92,32 @@ export class RuntimeModelCandidatesService {
       refreshedSettings.hiddenModels
     );
     if (refreshedEntries.length > 0) {
-      return buildInferenceResult(runtimeId, refreshedEntries, refreshedHiddenModels, false);
+      return buildInferenceResult(
+        runtimeId,
+        refreshedEntries,
+        refreshedHiddenModels,
+        customModels,
+        false
+      );
     }
 
     if (existingEntries.length > 0) {
-      return buildInferenceResult(runtimeId, existingEntries, existingHiddenModels, true);
+      return buildInferenceResult(
+        runtimeId,
+        existingEntries,
+        existingHiddenModels,
+        customModels,
+        true
+      );
     }
 
-    return buildInferenceResult(runtimeId, refreshedEntries, refreshedHiddenModels, false);
+    return buildInferenceResult(
+      runtimeId,
+      refreshedEntries,
+      refreshedHiddenModels,
+      customModels,
+      false
+    );
   }
 
   async updateModelCandidatePreferences(
@@ -90,38 +125,59 @@ export class RuntimeModelCandidatesService {
     args: {
       hiddenModels?: string[];
       preferredNamingModel?: string | null;
+      customModels?: string[];
     }
   ): Promise<AgentModelCandidateInferenceResult> {
-    const settings = await appSettingsService.get('runtimeModelCandidates');
+    const [settings, providerConfig] = await Promise.all([
+      appSettingsService.get('runtimeModelCandidates'),
+      runtimeOverrideSettings.getItem(runtimeId),
+    ]);
     const current = normalizeProviderModelSettings(settings.runtimes[runtimeId]);
+    const currentCustomModels = normalizeModelCandidates(providerConfig?.customModels ?? []);
+    const customModels =
+      args.customModels === undefined
+        ? currentCustomModels
+        : normalizeModelCandidates(args.customModels);
     const preferredNamingModel = args.preferredNamingModel?.trim() ?? '';
     const hiddenModels =
       args.hiddenModels === undefined
         ? current.hiddenModels
         : normalizeModelCandidates(args.hiddenModels);
-    const nextHiddenModels = preferredNamingModel
-      ? hiddenModels.filter((model) => model !== preferredNamingModel)
-      : hiddenModels;
+    const newlyAddedCustomModels = customModels.filter(
+      (model) => !currentCustomModels.includes(model)
+    );
+    const modelsToShow = new Set([
+      ...newlyAddedCustomModels,
+      ...(preferredNamingModel ? [preferredNamingModel] : []),
+    ]);
+    const nextHiddenModels = hiddenModels.filter((model) => !modelsToShow.has(model));
 
-    await appSettingsService.update('runtimeModelCandidates', {
-      runtimes: {
-        [runtimeId]: {
-          sources: current.sources,
-          hiddenModels: nextHiddenModels,
+    const writes: Promise<void>[] = [
+      appSettingsService.update('runtimeModelCandidates', {
+        runtimes: {
+          [runtimeId]: {
+            sources: current.sources,
+            hiddenModels: nextHiddenModels,
+          },
         },
-      },
-    });
+      }),
+    ];
 
-    if (args.preferredNamingModel !== undefined) {
-      const providerConfig = await runtimeOverrideSettings.getItem(runtimeId);
+    if (args.preferredNamingModel !== undefined || args.customModels !== undefined) {
       const nextConfig: RuntimeCustomConfig = { ...(providerConfig ?? {}) };
       if (preferredNamingModel) {
         nextConfig.namingModel = preferredNamingModel;
-      } else {
+      } else if (args.preferredNamingModel !== undefined) {
         delete nextConfig.namingModel;
       }
-      await runtimeOverrideSettings.updateItem(runtimeId, nextConfig);
+      if (customModels.length > 0) {
+        nextConfig.customModels = customModels;
+      } else {
+        delete nextConfig.customModels;
+      }
+      writes.push(runtimeOverrideSettings.updateItem(runtimeId, nextConfig));
     }
+    await Promise.all(writes);
 
     return this.inferNamingModelCandidates(runtimeId);
   }
@@ -185,7 +241,7 @@ export class RuntimeModelCandidatesService {
 }
 
 async function inferSource(
-  source: RuntimeModelCandidateSource,
+  source: RuntimeModelCandidateCacheSource,
   load: () => Promise<string[]>
 ): Promise<SourceResult> {
   try {
@@ -255,26 +311,34 @@ function buildInferenceResult(
   runtimeId: RuntimeId,
   sources: readonly AgentModelCandidateCacheEntry[],
   hiddenModels: readonly string[],
+  customModels: readonly string[],
   cached: boolean
 ): AgentModelCandidateInferenceResult {
   const sortedSources = sortSourceEntries(sources);
-  const models = buildModelItems(sortedSources, hiddenModels);
+  const normalizedCustomModels = normalizeModelCandidates(customModels);
+  const models = buildModelItems(sortedSources, hiddenModels, normalizedCustomModels);
   return {
     runtimeId,
     models,
     candidates: models.filter((model) => model.visible).map((model) => model.id),
     sources: sortedSources,
     hiddenModels: normalizeModelCandidates(hiddenModels),
+    customModels: normalizedCustomModels,
     cached,
   };
 }
 
 function buildModelItems(
   entries: readonly AgentModelCandidateCacheEntry[],
-  hiddenModels: readonly string[]
+  hiddenModels: readonly string[],
+  customModels: readonly string[]
 ): AgentModelCandidateItem[] {
   const hidden = new Set(normalizeModelCandidates(hiddenModels));
   const sourceByModel = new Map<string, RuntimeModelCandidateSource[]>();
+
+  for (const model of normalizeModelCandidates(customModels)) {
+    sourceByModel.set(model, ['custom']);
+  }
 
   for (const entry of entries) {
     for (const model of normalizeModelCandidates(entry.models)) {

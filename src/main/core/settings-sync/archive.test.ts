@@ -78,6 +78,7 @@ describe('settings archive', () => {
     mocks.getOverrides.mockResolvedValue({
       claude: {
         cli: 'claude',
+        customModels: ['anthropic/claude-opus-4-7'],
         env: {
           ANTHROPIC_API_KEY: 'secret',
           HTTP_PROXY: 'http://127.0.0.1:7890',
@@ -108,6 +109,7 @@ describe('settings archive', () => {
     expect(archive.data.runtimeConfigs.claude?.env).toEqual({
       HTTP_PROXY: 'http://127.0.0.1:7890',
     });
+    expect(archive.data.runtimeConfigs.claude?.customModels).toEqual(['anthropic/claude-opus-4-7']);
     expect(archive.data.viewState.sidebar).toEqual({
       taskSortBy: 'updated-at',
       hideProjectsWithoutActiveTasks: true,

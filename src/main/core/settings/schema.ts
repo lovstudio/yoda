@@ -19,7 +19,10 @@ import {
   taskOutputLanguageValues,
 } from '@shared/project-settings';
 import { runtimeIdSchema } from '@shared/runtime-id-schema';
-import { RUNTIME_MODEL_CANDIDATE_SOURCES } from '@shared/runtime-model-candidates';
+import {
+  MAX_CUSTOM_RUNTIME_MODELS,
+  RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES,
+} from '@shared/runtime-model-candidates';
 import { AGENT_ACCOUNT_PROVIDER_IDS, RUNTIMES } from '@shared/runtime-registry';
 import {
   DEFAULT_SUMMARY_CONTEXT_GLOBAL,
@@ -196,6 +199,11 @@ export const runtimeCustomConfigEntrySchema = z.object({
   env: z.record(z.string(), z.string()).optional(),
   /** Default model for new sessions when an Agent/slot does not override it. */
   defaultModel: z.string().optional(),
+  /** User-managed model IDs offered for this runtime across model selectors. */
+  customModels: z
+    .array(z.string().trim().min(1).max(100))
+    .max(MAX_CUSTOM_RUNTIME_MODELS)
+    .optional(),
   namingModel: z.string().optional(),
   namingCommand: z.string().optional(),
 });
@@ -251,7 +259,7 @@ export const globalLlmSettingsSchema = z
   .transform((value) => normalizeLlmSettings(value));
 
 export const runtimeModelCandidateCacheEntrySchema = z.object({
-  source: z.enum(RUNTIME_MODEL_CANDIDATE_SOURCES),
+  source: z.enum(RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES),
   models: z.array(z.string()),
   fetchedAt: z.string(),
   expiresAt: z.string(),
