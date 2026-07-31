@@ -1361,6 +1361,7 @@
     "promptSendFailed": "无法把 Prompt 发送给 agent。",
     "composerSettingsAria": "输入设置",
     "composerSettingsLabel": "配置",
+    "composerEssentialsSectionLabel": "输入与输出",
     "attachImagesAsPathsLabel": "图片以文件路径发送",
     "attachImagesAsPathsDesc": "以反引号包裹的 `@路径` 文本引用图片，避免 Agent 将路径直接转换成图片输入。",
     "permissionModeLabel": "权限模式",
@@ -1382,6 +1383,10 @@
     "composerDefaultReviewerLabel": "默认评审 agent",
     "agentCliConfigLabel": "Agent CLI",
     "agentCliConfigHint": "当前所选 Agent CLI 的运行权限与启动前会读取的指令文件。",
+    "promptConfigurationLabel": "提示词与指令",
+    "enabledPromptCount": "已启用 {{count}} 条",
+    "promptConfigurationDescription": "详细内容、分组和项目级 Prompt 在资源库中统一管理。",
+    "openPromptLibrary": "前往资源库",
     "systemPromptLabel": "System Prompt",
     "systemPromptHint": "启用动态注入的提示词会追加到所选 Agent CLI 的 system/developer prompt；CLI 内置 system prompt 不可编辑。",
     "systemPromptHintClaude": "启用动态注入的提示词会通过 --append-system-prompt 追加到 Claude Code 的 system prompt；Claude 内置 system prompt 不可编辑。",
@@ -4159,7 +4164,7 @@
     "quickAction": "快速操作：{{label}}",
     "config": {
       "title": "配置",
-      "description": "设置输入处理与 Agent CLI 默认行为。更改用于后续输入；CLI 启动配置在新建或恢复会话后生效。"
+      "description": "调整常用输入与 Agent 选项。Prompt、指令文件等详细内容在资源库统一管理。"
     },
     "gateway": {
       "title": "Gateway",

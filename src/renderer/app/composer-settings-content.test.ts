@@ -20,8 +20,11 @@ describe('shared composer settings surfaces', () => {
     expect(content).toContain("t('settings.tasks.sessionTitleLanguageLabel')");
     expect(content).toContain("t('settings.tasks.summaryLanguageLabel')");
     expect(content).toContain('<PermissionModeSelect');
-    expect(content).toContain('<PromptInjectionControls');
-    expect(content).toContain('<InstructionFilesSection');
+    expect(content).toContain("t('home.enabledPromptCount'");
+    expect(content).toContain("t('home.openPromptLibrary')");
+    expect(content).toContain("appState.navigation.navigate('library', { section: 'prompts' })");
+    expect(content).not.toContain('<PromptInjectionControls');
+    expect(content).not.toContain('<InstructionFilesSection');
   });
 
   it('places Config before the existing right-side workspace utilities', () => {

@@ -1361,6 +1361,7 @@
     "promptSendFailed": "Could not send the prompt to the agent.",
     "composerSettingsAria": "Input settings",
     "composerSettingsLabel": "Config",
+    "composerEssentialsSectionLabel": "Input & output",
     "attachImagesAsPathsLabel": "Send images as file paths",
     "attachImagesAsPathsDesc": "Reference images as backtick-wrapped `@path` text so the Agent keeps the path instead of converting it into image input.",
     "permissionModeLabel": "Permission mode",
@@ -1382,6 +1383,10 @@
     "composerDefaultReviewerLabel": "Default reviewer",
     "agentCliConfigLabel": "Agent CLI",
     "agentCliConfigHint": "Runtime permissions and instruction files read by the selected Agent CLI.",
+    "promptConfigurationLabel": "Prompts & instructions",
+    "enabledPromptCount": "{{count}} enabled",
+    "promptConfigurationDescription": "Manage detailed content, groups, and project prompts in Library.",
+    "openPromptLibrary": "Open Library",
     "systemPromptLabel": "System Prompt",
     "systemPromptHint": "Dynamically injected prompts are appended to the selected Agent CLI's system/developer prompt; the CLI's built-in system prompt is not editable.",
     "systemPromptHintClaude": "Dynamically injected prompts are appended through --append-system-prompt; Claude's built-in system prompt is not editable.",
@@ -4159,7 +4164,7 @@
     "quickAction": "Quick action: {{label}}",
     "config": {
       "title": "Config",
-      "description": "Set input handling and Agent CLI defaults. Changes apply to later input; CLI startup settings take effect after starting or resuming a session."
+      "description": "Adjust common input and Agent options. Manage detailed prompts and instruction files in Library."
     },
     "gateway": {
       "title": "Gateway",
