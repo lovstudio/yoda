@@ -50,7 +50,7 @@ export const quickActionSchema = z.object({
   command: z.string(),
   /**
    * Agent actions open an inspectable Yoda task so failures can be fixed in
-   * context. Shell actions run as standard persisted task terminals.
+   * context. Shell actions run as standard persisted project terminals.
    */
   kind: z.enum(['agent', 'shell']).default('agent'),
   sourceIntent: z.string().optional(),

@@ -1,14 +1,28 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ActiveAgentSessionSummary } from '@main/core/tasks/task-manager';
-import { resolveQuitAgentSessionsDecision } from './quit-agent-sessions';
+import {
+  resolveQuitAgentSessionsDecision,
+  type ActiveQuitSessionSummary,
+} from './quit-agent-sessions';
 
 function summary(
-  values: Partial<ActiveAgentSessionSummary> &
-    Pick<ActiveAgentSessionSummary, 'running' | 'keepable'>
-): ActiveAgentSessionSummary {
+  values: Partial<ActiveQuitSessionSummary> & Pick<ActiveQuitSessionSummary, 'running' | 'keepable'>
+): ActiveQuitSessionSummary {
   return {
+    agentSessions: values.running,
+    terminalSessions: 0,
     nonKeepableSessions: [],
     ...values,
+  };
+}
+
+function nonKeepableTerminal(name: string) {
+  return {
+    sessionId: 'project-1:local:project-1:project-view:terminal-1',
+    terminalId: 'terminal-1',
+    projectId: 'project-1',
+    scopeId: 'local:project-1:project-view',
+    name,
+    detachable: false,
   };
 }
 
@@ -127,6 +141,32 @@ describe('resolveQuitAgentSessionsDecision', () => {
 
     expect(detail).toBe(
       '2 sessions can be kept in tmux. 1 direct session will stop if Yoda quits.\n\n- Exit prompt task - Direct session (Codex)'
+    );
+  });
+
+  it('includes project terminals in the unified quit prompt', () => {
+    let message = '';
+    let detail = '';
+    const showDialog = vi.fn((options: { message: string; detail: string }) => {
+      message = options.message;
+      detail = options.detail;
+      return 2;
+    });
+
+    resolveQuitAgentSessionsDecision(
+      summary({
+        running: 3,
+        keepable: 2,
+        agentSessions: 2,
+        terminalSessions: 1,
+        nonKeepableSessions: [nonKeepableTerminal('Start locally')],
+      }),
+      showDialog
+    );
+
+    expect(message).toBe('2 agent sessions and 1 terminal session are still running.');
+    expect(detail).toBe(
+      '2 sessions can be kept in tmux. 1 direct session will stop if Yoda quits.\n\n- Start locally (Terminal)'
     );
   });
 });

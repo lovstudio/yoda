@@ -331,6 +331,11 @@ export class LocalTerminalProvider implements TerminalProvider {
     });
   }
 
+  isTerminalDetachable(terminalId: string): boolean {
+    const sessionId = makePtySessionId(this.projectId, this.scopeId, terminalId);
+    return this.tmuxSessionNames.has(sessionId);
+  }
+
   async killTerminal(terminalId: string): Promise<void> {
     const sessionId = makePtySessionId(this.projectId, this.scopeId, terminalId);
     this.knownSessionIds.delete(sessionId);

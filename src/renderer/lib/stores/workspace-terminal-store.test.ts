@@ -86,4 +86,28 @@ describe('WorkspaceTerminalStore', () => {
       action: 'doctor',
     });
   });
+
+  it('switches an open project Terminal to the active project without creating a shell', async () => {
+    const store = new WorkspaceTerminalStore();
+    const first = { id: 'project-1', type: 'local', path: '/repo-1' } as const;
+    const second = { id: 'project-2', type: 'local', path: '/repo-2' } as const;
+
+    await store.openProject(first as never, { ensureTerminal: false });
+    await store.syncActiveProject(second as never);
+
+    expect(store.isOpen).toBe(true);
+    expect(store.activeProjectId).toBe('project-2');
+    expect(store.manager?.taskId).toBe('local:project-2:project-view');
+    expect(mocks.createWorkspaceTerminal).not.toHaveBeenCalled();
+  });
+
+  it('closes a project Terminal when navigation leaves project context', async () => {
+    const store = new WorkspaceTerminalStore();
+    const project = { id: 'project-1', type: 'local', path: '/repo' } as const;
+
+    await store.openProject(project as never, { ensureTerminal: false });
+    await store.syncActiveProject(null);
+
+    expect(store.isOpen).toBe(false);
+  });
 });
