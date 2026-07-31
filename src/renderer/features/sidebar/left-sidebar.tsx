@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { skillIssueAgentLabel } from '@shared/skills/validation';
+import { openNewTaskFromPreference } from '@renderer/app/open-new-task';
 import { useAiLabApps, useUpdateAiLabApp } from '@renderer/features/ai-lab/use-ai-lab';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import {
@@ -149,12 +150,8 @@ export const LeftSidebar: React.FC = observer(function LeftSidebar() {
       ? `${skillIssueLabel}\n${formatSkillIssueTitle(firstSkillIssue)}`
       : (skillIssueLabel ?? undefined);
   const handleNewTask = React.useCallback(() => {
-    if (currentProjectId) {
-      navigate('home', { projectId: currentProjectId });
-      return;
-    }
-    navigate('home');
-  }, [currentProjectId, navigate]);
+    void openNewTaskFromPreference(currentProjectId);
+  }, [currentProjectId]);
 
   return (
     <div
