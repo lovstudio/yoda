@@ -195,7 +195,7 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
           'group/row relative flex items-center justify-between px-1 h-auto min-h-8 py-1 gap-1 transition-[color,background-color,opacity]',
           taskIndentClass,
           isDeemphasized &&
-            'opacity-55 hover:opacity-100 focus-within:opacity-100 data-[active=true]:opacity-100'
+            'opacity-70 hover:opacity-100 focus-within:opacity-100 data-[active=true]:opacity-100'
         )}
         data-sidebar-entity="task"
         data-sidebar-project-id={projectId}
