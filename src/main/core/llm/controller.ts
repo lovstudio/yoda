@@ -12,6 +12,8 @@ import { requestUtilityAgentText } from '@main/core/tasks/name-generation/task-n
 import { summarizeLlmDebugError } from './debug-error';
 import { discoverGlobalLlmModels } from './model-discovery-service';
 import {
+  createCustomModelProvider,
+  deleteCustomModelProvider,
   listModelProviders,
   refreshModelProviders,
   setModelProviderAutomaticUpdates,
@@ -95,7 +97,9 @@ async function discoverModels(
 }
 
 export const llmController = createRPCController({
+  createCustomModelProvider,
   debug,
+  deleteCustomModelProvider,
   discoverModels,
   listModelProviders,
   refreshModelProviders,

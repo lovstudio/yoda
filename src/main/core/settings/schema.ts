@@ -12,7 +12,10 @@ import {
 } from '@shared/global-llm';
 import { KANBAN_STATUSES } from '@shared/kanban';
 import { isMaasPlatformId, type MaasPlatformId } from '@shared/maas';
-import { MAX_CUSTOM_MODELS_PER_PROVIDER } from '@shared/model-provider-catalog';
+import {
+  MAX_CUSTOM_MODEL_PROVIDERS,
+  MAX_CUSTOM_MODELS_PER_PROVIDER,
+} from '@shared/model-provider-catalog';
 import { openInAppIdSchema } from '@shared/openInApps';
 import {
   promptPrincipleSchema,
@@ -258,11 +261,18 @@ export const modelProviderSettingsSchema = z.object({
     .record(
       z.string().trim().min(1).max(60),
       z.object({
+        name: z.string().trim().min(1).max(60).optional(),
         customModels: z
           .array(z.string().trim().min(2).max(100))
           .max(MAX_CUSTOM_MODELS_PER_PROVIDER)
           .default([]),
       })
+    )
+    .refine(
+      (providers) =>
+        Object.values(providers).filter((provider) => provider.name !== undefined).length <=
+        MAX_CUSTOM_MODEL_PROVIDERS,
+      `A maximum of ${MAX_CUSTOM_MODEL_PROVIDERS} custom model providers is allowed.`
     )
     .default({}),
   catalogCache: z
