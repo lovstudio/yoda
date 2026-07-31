@@ -88,7 +88,9 @@ export const ProjectsGroupLabel = observer(function ProjectsGroupLabel() {
 export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
   const { t } = useTranslation();
   const { value: homeDraft } = useAppSettingsKey('homeDraft');
+  const { value: interfaceSettings } = useAppSettingsKey('interface');
   const expressMode = homeDraft?.expressMode ?? false;
+  const newTaskOpenMode = interfaceSettings?.newTaskOpenMode ?? 'home';
   const customized =
     sidebarStore.projectTypeFilter !== 'all' ||
     sidebarStore.taskSortBy !== 'updated-at' ||
@@ -99,6 +101,7 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
     sidebarStore.hideTasksWithoutActiveConversations ||
     sidebarStore.sortNeedsReviewLast ||
     sidebarStore.sortArchivingLast ||
+    newTaskOpenMode !== 'home' ||
     expressMode;
 
   return (
@@ -139,7 +142,9 @@ export const ProjectsSettingsMenu = observer(function ProjectsSettingsMenu() {
 const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
   const { t } = useTranslation();
   const { value: homeDraft, update: updateHomeDraft } = useAppSettingsKey('homeDraft');
+  const { value: interfaceSettings, update: updateInterface } = useAppSettingsKey('interface');
   const expressMode = homeDraft?.expressMode ?? false;
+  const newTaskOpenMode = interfaceSettings?.newTaskOpenMode ?? 'home';
 
   const groupByLabels: Record<SidebarTaskGroupBy, string> = {
     project: t('sidebar.groupByProject'),
@@ -150,6 +155,22 @@ const ProjectsSettingsPanel = observer(function ProjectsSettingsPanel() {
 
   return (
     <div className="flex flex-col">
+      <PanelRow label={t('sidebar.newTaskOpenMode')}>
+        <ToggleGroup
+          size="xs"
+          multiple={false}
+          value={[newTaskOpenMode]}
+          onValueChange={([value]) => {
+            if (value === 'home' || value === 'modal') {
+              updateInterface({ newTaskOpenMode: value });
+            }
+          }}
+        >
+          <ToggleGroupItem value="home">{t('sidebar.newTaskOpenHome')}</ToggleGroupItem>
+          <ToggleGroupItem value="modal">{t('sidebar.newTaskOpenModal')}</ToggleGroupItem>
+        </ToggleGroup>
+      </PanelRow>
+      <PanelSeparator />
       <PanelRow label={t('sidebar.groupBy')}>
         <Select
           value={sidebarStore.taskGroupBy}
