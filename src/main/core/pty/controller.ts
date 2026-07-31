@@ -12,10 +12,13 @@ import { conversations, projects } from '@main/db/schema';
 import { log } from '@main/lib/logger';
 import { taskManager } from '../tasks/task-manager';
 import { workspaceRegistry } from '../workspaces/workspace-registry';
+import { exportTerminalLog } from './export-terminal-log';
 import { ptySessionRegistry } from './pty-session-registry';
 import { normalizePlainTextTerminalEol } from './terminal-history-eol';
 
 export const ptyController = createRPCController({
+  exportTerminalLog,
+
   /** Send raw input data to a PTY session. */
   sendInput: (sessionId: string, data: string) => {
     let status = ptySessionRegistry.writeOrQueue(sessionId, data);
