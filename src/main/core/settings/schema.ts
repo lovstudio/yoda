@@ -252,6 +252,8 @@ export const globalLlmSettingsSchema = z
   .transform((value) => normalizeLlmSettings(value));
 
 export const modelProviderSettingsSchema = z.object({
+  automaticUpdatesEnabled: z.boolean().default(true),
+  lastAutomaticRefreshAt: z.string().nullable().default(null),
   providers: z
     .record(
       z.string().trim().min(1).max(60),
@@ -263,6 +265,40 @@ export const modelProviderSettingsSchema = z.object({
       })
     )
     .default({}),
+  catalogCache: z
+    .object({
+      official: z
+        .record(
+          z.string().trim().min(1).max(60),
+          z.object({
+            models: z.array(z.string().trim().min(2).max(100)).max(1_000).default([]),
+            fetchedAt: z.string().nullable().default(null),
+            lastAttemptAt: z.string().nullable().default(null),
+            error: z.string().optional(),
+          })
+        )
+        .default({}),
+      aggregate: z
+        .object({
+          models: z.array(z.string().trim().min(2).max(100)).max(5_000).default([]),
+          fetchedAt: z.string().nullable().default(null),
+          lastAttemptAt: z.string().nullable().default(null),
+          error: z.string().optional(),
+        })
+        .default({
+          models: [],
+          fetchedAt: null,
+          lastAttemptAt: null,
+        }),
+    })
+    .default({
+      official: {},
+      aggregate: {
+        models: [],
+        fetchedAt: null,
+        lastAttemptAt: null,
+      },
+    }),
 });
 
 export const runtimeModelCandidateCacheEntrySchema = z.object({

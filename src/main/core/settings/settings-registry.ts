@@ -88,7 +88,17 @@ export const SETTINGS_DEFAULTS = {
     promptTranslationShowOriginal: true,
   },
   modelProviders: {
+    automaticUpdatesEnabled: true,
+    lastAutomaticRefreshAt: null,
     providers: {},
+    catalogCache: {
+      official: {},
+      aggregate: {
+        models: [],
+        fetchedAt: null,
+        lastAttemptAt: null,
+      },
+    },
   },
   runtimeModelCandidates: {
     runtimes: {},

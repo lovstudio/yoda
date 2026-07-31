@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { ExternalLink, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@renderer/lib/ui/select';
+import { Switch } from '@renderer/lib/ui/switch';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
 import { SettingRow } from './SettingRow';
@@ -40,7 +41,7 @@ export default function ModelsSettingsCard() {
 
   const catalogQuery = useQuery<ModelProviderCatalogResult>({
     queryKey: MODEL_PROVIDERS_QUERY_KEY,
-    queryFn: () => rpc.llm.listModelProviders({ forceRefresh: false }),
+    queryFn: () => rpc.llm.listModelProviders(),
     staleTime: 60_000,
   });
 
@@ -65,16 +66,26 @@ export default function ModelsSettingsCard() {
     },
   });
 
-  const refreshCatalog = useMutation<ModelProviderCatalogResult, Error, void>({
-    mutationFn: () => rpc.llm.listModelProviders({ forceRefresh: true }),
+  const refreshCatalog = useMutation<ModelProviderCatalogResult, Error, string>({
+    mutationFn: (id) => rpc.llm.refreshModelProviders(id),
     onSuccess: (result) => {
       queryClient.setQueryData(MODEL_PROVIDERS_QUERY_KEY, result);
       void queryClient.invalidateQueries({ queryKey: ['llm', 'modelDiscovery'] });
     },
   });
 
+  const updateAutomaticUpdates = useMutation<ModelProviderCatalogResult, Error, boolean>({
+    mutationFn: (enabled) => rpc.llm.setModelProviderAutomaticUpdates(enabled),
+    onSuccess: (result) => {
+      queryClient.setQueryData(MODEL_PROVIDERS_QUERY_KEY, result);
+    },
+  });
+
   const disabled =
-    catalogQuery.isLoading || updateCustomModels.isPending || refreshCatalog.isPending;
+    catalogQuery.isLoading ||
+    updateCustomModels.isPending ||
+    refreshCatalog.isPending ||
+    updateAutomaticUpdates.isPending;
 
   const addCustomModel = () => {
     const modelId = normalizeModelIdForProvider(selectedProviderId, customModelDraft);
@@ -147,6 +158,26 @@ export default function ModelsSettingsCard() {
         }
       />
 
+      <SettingRow
+        title={t('settings.models.automaticUpdates')}
+        description={t('settings.models.automaticUpdatesDescription')}
+        control={
+          <Switch
+            checked={catalogQuery.data?.automaticUpdatesEnabled ?? true}
+            onCheckedChange={(checked) => updateAutomaticUpdates.mutate(checked)}
+            disabled={disabled}
+            aria-label={t('settings.models.automaticUpdates')}
+          />
+        }
+      />
+
+      <ProviderCatalogStatus
+        provider={selectedProvider}
+        isRefreshing={refreshCatalog.isPending}
+        disabled={disabled}
+        onRefresh={() => refreshCatalog.mutate(selectedProviderId)}
+      />
+
       <div className="border-t border-border pt-5">
         <div className="rounded-md border border-border bg-background-secondary/40 p-3">
           <div className="text-sm font-medium">{t('settings.models.customTitle')}</div>
@@ -193,41 +224,96 @@ export default function ModelsSettingsCard() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Badge variant={catalogQuery.data?.error ? 'destructive' : 'secondary'}>
-            {catalogQuery.data?.error
-              ? t('settings.models.statusFailed')
-              : t('settings.models.statusReady')}
-          </Badge>
-          <span>
-            {t('settings.models.modelCount', {
-              provider: selectedProvider?.name ?? selectedProviderId,
-              count: selectedProvider?.models.length ?? 0,
-            })}
-          </span>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => refreshCatalog.mutate()}
-          disabled={disabled}
-          className="gap-1.5"
-        >
-          <RefreshCw className={cn('h-3.5 w-3.5', refreshCatalog.isPending && 'animate-spin')} />
-          {refreshCatalog.isPending
-            ? t('settings.models.refreshing')
-            : t('settings.models.refresh')}
-        </Button>
-      </div>
-
       <ProviderModelList
         provider={selectedProvider}
         isLoading={catalogQuery.isLoading}
         disabled={disabled}
         onRemoveCustom={removeCustomModel}
       />
+    </div>
+  );
+}
+
+function ProviderCatalogStatus({
+  provider,
+  isRefreshing,
+  disabled,
+  onRefresh,
+}: {
+  provider: ModelProviderCatalogGroup | undefined;
+  isRefreshing: boolean;
+  disabled: boolean;
+  onRefresh: () => void;
+}) {
+  const { t } = useTranslation();
+  if (!provider) return null;
+
+  const statusKey = `settings.models.updateStatus.${provider.updateStatus}`;
+  const officialSourceUrl = provider.officialSourceUrl;
+  const date =
+    provider.officialFetchedAt ?? provider.officialSnapshotAt ?? provider.lastUpdateAttemptAt;
+  const description = provider.officialApiSupported
+    ? provider.updateStatus === 'current'
+      ? t('settings.models.officialApiUpdated', { date: formatCatalogDate(date) })
+      : provider.updateStatus === 'stale'
+        ? t('settings.models.officialApiStale', { date: formatCatalogDate(date) })
+        : provider.officialApiConfigured
+          ? t('settings.models.officialSnapshotConfigured', {
+              date: formatCatalogDate(date),
+            })
+          : t('settings.models.officialSnapshotNeedsKey', {
+              date: formatCatalogDate(date),
+            })
+    : provider.updateStatus === 'stale'
+      ? t('settings.models.aggregateStaleDescription')
+      : t('settings.models.aggregateOnlyDescription');
+
+  return (
+    <div className="min-w-0 overflow-hidden rounded-md border border-border bg-background-secondary/40 p-3">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant={provider.updateStatus === 'stale' ? 'destructive' : 'secondary'}
+              className="h-auto max-w-full break-all whitespace-normal"
+            >
+              {t(statusKey)}
+            </Badge>
+            <div className="min-w-0 w-full basis-full break-all text-xs text-muted-foreground">
+              {t('settings.models.modelCount', {
+                provider: provider.name,
+                count: provider.models.length,
+              })}
+            </div>
+          </div>
+          <p className="mt-2 min-w-0 break-all text-xs leading-relaxed text-muted-foreground">
+            {description}
+          </p>
+          {officialSourceUrl && (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="mt-1 h-auto gap-1 p-0 text-xs"
+              onClick={() => void rpc.app.openExternal(officialSourceUrl)}
+            >
+              {t('settings.models.officialSource')}
+              <ExternalLink className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onRefresh}
+          disabled={disabled}
+          className="shrink-0 gap-1.5"
+        >
+          <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
+          {isRefreshing ? t('settings.models.refreshing') : t('settings.models.refresh')}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -272,6 +358,12 @@ function ProviderModelList({
           className="flex min-w-0 items-center gap-3 border-b border-border px-3 py-2.5 last:border-b-0"
         >
           <code className="min-w-0 flex-1 truncate font-mono text-xs">{model.id}</code>
+          {model.sources.includes('official') && (
+            <Badge variant="secondary">{t('settings.models.officialBadge')}</Badge>
+          )}
+          {model.sources.includes('aggregate') && !model.sources.includes('official') && (
+            <Badge variant="outline">{t('settings.models.aggregateBadge')}</Badge>
+          )}
           {model.custom && (
             <>
               <Badge variant="secondary">{t('settings.models.customBadge')}</Badge>
@@ -301,7 +393,24 @@ function fallbackProviderGroups(): ModelProviderCatalogGroup[] {
     name: provider.name,
     models: [],
     customModels: [],
+    officialSourceUrl: null,
+    officialSnapshotAt: null,
+    officialFetchedAt: null,
+    lastUpdateAttemptAt: null,
+    officialApiSupported: false,
+    officialApiConfigured: false,
+    updateStatus: 'aggregateOnly',
   }));
+}
+
+function formatCatalogDate(value: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: value.includes('T00:00:00.000Z') ? undefined : 'short',
+  }).format(date);
 }
 
 function isValidModelId(value: string): boolean {

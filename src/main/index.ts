@@ -34,6 +34,7 @@ import { ptySessionRegistry } from './core/pty/pty-session-registry';
 import { prSyncScheduler } from './core/pull-requests/pr-sync-scheduler';
 import { reviewOrchestrator } from './core/review-orchestration/orchestrator';
 import { searchService } from './core/search/search-service';
+import { modelProviderCatalogService } from './core/settings/model-provider-catalog-service';
 import { runtimeModelCandidatesService } from './core/settings/runtime-model-candidates-service';
 import { appSettingsService } from './core/settings/settings-service';
 import { resumePendingTaskArchives } from './core/tasks/operations/archiveTask';
@@ -281,6 +282,10 @@ void app.whenReady().then(async () => {
   // Dependency probe shells out to user tools, so wait for the login-shell
   // PATH to land before probing — otherwise nvm/mise-managed binaries miss.
   void userEnvReady.then(() => {
+    modelProviderCatalogService.refreshAutomatically().catch((e) => {
+      log.warn('Failed to refresh the model provider catalog:', e);
+    });
+
     runtimeModelCandidatesService.refreshStartupModelCatalog().catch((e) => {
       log.warn('Failed to refresh provider model catalog:', e);
     });

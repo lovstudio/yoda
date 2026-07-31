@@ -1,6 +1,18 @@
 import type { RuntimeId } from './runtime-registry';
 
 export const MAX_CUSTOM_MODELS_PER_PROVIDER = 40;
+export const MODEL_PROVIDER_AUTO_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1_000;
+
+export const MODEL_PROVIDER_CATALOG_SOURCES = ['official', 'aggregate', 'custom'] as const;
+export type ModelProviderCatalogSource = (typeof MODEL_PROVIDER_CATALOG_SOURCES)[number];
+
+export const MODEL_PROVIDER_UPDATE_STATUSES = [
+  'current',
+  'snapshot',
+  'stale',
+  'aggregateOnly',
+] as const;
+export type ModelProviderUpdateStatus = (typeof MODEL_PROVIDER_UPDATE_STATUSES)[number];
 
 export type ModelProviderDefinition = {
   id: string;
@@ -97,17 +109,10 @@ export const MODEL_PROVIDER_DEFINITIONS = [
   },
 ] as const satisfies readonly ModelProviderDefinition[];
 
-export type ModelProviderCustomSettings = {
-  customModels: string[];
-};
-
-export type ModelProviderSettings = {
-  providers: Record<string, ModelProviderCustomSettings>;
-};
-
 export type ModelProviderCatalogItem = {
   id: string;
   custom: boolean;
+  sources: ModelProviderCatalogSource[];
 };
 
 export type ModelProviderCatalogGroup = {
@@ -115,11 +120,22 @@ export type ModelProviderCatalogGroup = {
   name: string;
   models: ModelProviderCatalogItem[];
   customModels: string[];
+  officialSourceUrl: string | null;
+  officialSnapshotAt: string | null;
+  officialFetchedAt: string | null;
+  lastUpdateAttemptAt: string | null;
+  officialApiSupported: boolean;
+  officialApiConfigured: boolean;
+  updateStatus: ModelProviderUpdateStatus;
+  updateError?: string;
 };
 
 export type ModelProviderCatalogResult = {
   providers: ModelProviderCatalogGroup[];
   fetchedAt: string;
+  automaticUpdatesEnabled: boolean;
+  lastAutomaticRefreshAt: string | null;
+  nextAutomaticRefreshAt: string | null;
   error?: string;
 };
 
