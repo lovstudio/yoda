@@ -20,6 +20,22 @@ const ASCII_CLOSING_DELIMITERS: Readonly<Record<string, AsciiOpeningDelimiter>> 
   ']': '[',
   '}': '{',
 };
+const CELL_WRAPPER_OPENERS: Readonly<Record<string, string>> = {
+  ')': '(',
+  ']': '[',
+  '}': '{',
+  '>': '<',
+  '）': '（',
+  '】': '【',
+  '〉': '〈',
+  '》': '《',
+  '」': '「',
+  '』': '『',
+};
+const CELL_URL_CONTINUATION_RE =
+  /(^\s*|\s{2,})([A-Za-z0-9._~!$&'*+,;=:@%-]+)([)\]}>）】〉》」』])(?=\s{2,}\S|\s*$)/gu;
+const CELL_GAP_RE = /\s{2,}/g;
+const NEXT_CELL_AFTER_URL_RE = /^\s{2,}\S/u;
 
 // Markdown inline links `[label](url)` — the agent's ink renderer often prints
 // these literally, where only the bare URL inside the parens was clickable.
@@ -33,6 +49,12 @@ interface TerminalWebLinkCandidate {
   index: number;
   /** Length of the clickable span (the full `[label](url)` for markdown links). */
   length: number;
+}
+
+interface CellWrappedWebLinkCandidate {
+  url: string;
+  upper: { index: number; length: number };
+  lower: { index: number; length: number };
 }
 
 export interface TerminalWebLinkOptions {
@@ -102,22 +124,180 @@ export function getTerminalWebLinkMatches(
   terminal: Terminal,
   bufferLineNumber: number
 ): TerminalWebLinkMatch[] {
+  const cellWrappedMatches = getCellWrappedWebLinkMatches(terminal, bufferLineNumber);
+
   // Shares the file-link scan window: soft-wrapped rows joined, plus
   // conservative hard-wrap continuation joining (Claude Code's ink renderer
   // breaks long URLs with real newlines).
   const chunks = buildScanChunks(bufferLineNumber - 1, terminal);
-  if (chunks.length === 0) return [];
+  if (chunks.length === 0) return cellWrappedMatches;
   const line = chunks.map((chunk) => chunk.text).join('');
 
-  const matches: TerminalWebLinkMatch[] = [];
+  const matches: TerminalWebLinkMatch[] = [...cellWrappedMatches];
   for (const candidate of extractTerminalWebLinkCandidates(line)) {
     const range = mapScanRangeToBufferRange(terminal, chunks, candidate.index, candidate.length);
     if (!range) continue;
+    if (cellWrappedMatches.some((match) => terminalLinkRangesOverlap(match.range, range))) continue;
 
     matches.push({ range, url: candidate.url });
   }
 
   return matches;
+}
+
+function getCellWrappedWebLinkMatches(
+  terminal: Terminal,
+  bufferLineNumber: number
+): TerminalWebLinkMatch[] {
+  const lineIndex = bufferLineNumber - 1;
+  const pairs = [
+    { upperLineIndex: lineIndex, lowerLineIndex: lineIndex + 1, fragment: 'upper' as const },
+    { upperLineIndex: lineIndex - 1, lowerLineIndex: lineIndex, fragment: 'lower' as const },
+  ];
+  const matches: TerminalWebLinkMatch[] = [];
+
+  for (const { upperLineIndex, lowerLineIndex, fragment } of pairs) {
+    if (upperLineIndex < 0) continue;
+    const upperLine = terminal.buffer.active.getLine(upperLineIndex);
+    const lowerLine = terminal.buffer.active.getLine(lowerLineIndex);
+    if (!upperLine || !lowerLine || upperLine.isWrapped || lowerLine.isWrapped) continue;
+
+    const upperText = upperLine.translateToString(true);
+    const lowerText = lowerLine.translateToString(true);
+    for (const candidate of findCellWrappedWebLinkCandidates(
+      terminal,
+      upperLineIndex,
+      upperText,
+      lowerLineIndex,
+      lowerText
+    )) {
+      const part = candidate[fragment];
+      const partLineIndex = fragment === 'upper' ? upperLineIndex : lowerLineIndex;
+      const partText = fragment === 'upper' ? upperText : lowerText;
+      const range = mapPhysicalLineRange(
+        terminal,
+        partLineIndex,
+        partText,
+        part.index,
+        part.length
+      );
+      if (!range) continue;
+      matches.push({ range, url: candidate.url });
+    }
+  }
+
+  return matches;
+}
+
+function findCellWrappedWebLinkCandidates(
+  terminal: Terminal,
+  upperLineIndex: number,
+  upperText: string,
+  lowerLineIndex: number,
+  lowerText: string
+): CellWrappedWebLinkCandidate[] {
+  const lowerContinuations = [...lowerText.matchAll(CELL_URL_CONTINUATION_RE)].flatMap((match) => {
+    const boundary = match[1] ?? '';
+    const segment = match[2];
+    const closer = match[3];
+    if (!segment || !closer) return [];
+    return [
+      {
+        segment,
+        closer,
+        index: (match.index ?? 0) + boundary.length,
+      },
+    ];
+  });
+  if (lowerContinuations.length === 0) return [];
+
+  const matches: CellWrappedWebLinkCandidate[] = [];
+  for (const upperCandidate of extractTerminalWebLinkCandidates(upperText)) {
+    if (upperCandidate.length !== upperCandidate.url.length || !upperCandidate.url.endsWith('/')) {
+      continue;
+    }
+    const upperEnd = upperCandidate.index + upperCandidate.length;
+    if (!NEXT_CELL_AFTER_URL_RE.test(upperText.slice(upperEnd))) continue;
+
+    const upperCellStart = findCellStartIndex(upperText, upperCandidate.index);
+    const upperCellStartX = mapPhysicalLineRange(
+      terminal,
+      upperLineIndex,
+      upperText,
+      upperCellStart,
+      1
+    )?.start.x;
+    if (upperCellStartX === undefined) continue;
+
+    for (const lowerContinuation of lowerContinuations) {
+      const opener = CELL_WRAPPER_OPENERS[lowerContinuation.closer];
+      const cellPrefix = upperText.slice(upperCellStart, upperCandidate.index);
+      if (
+        !opener ||
+        cellPrefix.lastIndexOf(opener) <= cellPrefix.lastIndexOf(lowerContinuation.closer)
+      ) {
+        continue;
+      }
+
+      const lowerStartX = mapPhysicalLineRange(
+        terminal,
+        lowerLineIndex,
+        lowerText,
+        lowerContinuation.index,
+        1
+      )?.start.x;
+      if (lowerStartX !== upperCellStartX) continue;
+
+      matches.push({
+        url: `${upperCandidate.url}${lowerContinuation.segment}`,
+        upper: { index: upperCandidate.index, length: upperCandidate.length },
+        lower: { index: lowerContinuation.index, length: lowerContinuation.segment.length },
+      });
+    }
+  }
+
+  return matches;
+}
+
+function findCellStartIndex(line: string, beforeIndex: number): number {
+  let cellStart = 0;
+  CELL_GAP_RE.lastIndex = 0;
+  for (const match of line.slice(0, beforeIndex).matchAll(CELL_GAP_RE)) {
+    cellStart = (match.index ?? 0) + match[0].length;
+  }
+  return cellStart;
+}
+
+function mapPhysicalLineRange(
+  terminal: Terminal,
+  lineIndex: number,
+  text: string,
+  index: number,
+  length: number
+): ILink['range'] | null {
+  return mapScanRangeToBufferRange(
+    terminal,
+    [
+      {
+        startLineIndex: lineIndex,
+        startCellOffset: 0,
+        rowCount: 1,
+        text,
+        charOffset: 0,
+      },
+    ],
+    index,
+    length
+  );
+}
+
+function terminalLinkRangesOverlap(left: ILink['range'], right: ILink['range']): boolean {
+  return (
+    isTerminalLinkCellInRange(left, right.start) ||
+    isTerminalLinkCellInRange(left, right.end) ||
+    isTerminalLinkCellInRange(right, left.start) ||
+    isTerminalLinkCellInRange(right, left.end)
+  );
 }
 
 export function getTerminalWebLinkAtCell(
