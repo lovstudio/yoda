@@ -17,6 +17,7 @@ import { rpc } from '@renderer/lib/ipc';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
+import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import { Input } from '@renderer/lib/ui/input';
 import { Label } from '@renderer/lib/ui/label';
 import {
@@ -39,6 +40,45 @@ type UpdateCustomModelsInput = {
   providerId: string;
   customModels: string[];
 };
+
+export function ModelCatalogAutomaticUpdateControl() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const catalogQuery = useQuery<ModelProviderCatalogResult>({
+    queryKey: MODEL_PROVIDERS_QUERY_KEY,
+    queryFn: () => rpc.llm.listModelProviders(),
+    staleTime: 60_000,
+  });
+  const updateAutomaticUpdates = useMutation<ModelProviderCatalogResult, Error, boolean>({
+    mutationFn: (enabled) => rpc.llm.setModelProviderAutomaticUpdates(enabled),
+    onSuccess: (result) => {
+      queryClient.setQueryData(MODEL_PROVIDERS_QUERY_KEY, result);
+    },
+  });
+
+  return (
+    <div
+      className="flex shrink-0 items-center gap-2"
+      data-testid="model-catalog-auto-update-control"
+    >
+      <div className="flex items-center gap-1">
+        <span className="text-xs font-medium text-foreground-muted">
+          {t('settings.models.automaticUpdatesShort')}
+        </span>
+        <InfoTooltip
+          label={t('settings.models.automaticUpdates')}
+          content={t('settings.models.automaticUpdatesDescription')}
+        />
+      </div>
+      <Switch
+        checked={catalogQuery.data?.automaticUpdatesEnabled ?? true}
+        onCheckedChange={(checked) => updateAutomaticUpdates.mutate(checked)}
+        disabled={catalogQuery.isLoading || updateAutomaticUpdates.isPending}
+        aria-label={t('settings.models.automaticUpdates')}
+      />
+    </div>
+  );
+}
 
 export default function ModelsSettingsCard() {
   const { t } = useTranslation();
@@ -89,13 +129,6 @@ export default function ModelsSettingsCard() {
     },
   });
 
-  const updateAutomaticUpdates = useMutation<ModelProviderCatalogResult, Error, boolean>({
-    mutationFn: (enabled) => rpc.llm.setModelProviderAutomaticUpdates(enabled),
-    onSuccess: (result) => {
-      queryClient.setQueryData(MODEL_PROVIDERS_QUERY_KEY, result);
-    },
-  });
-
   const createCustomProvider = useMutation<
     ModelProviderCatalogResult,
     Error,
@@ -125,7 +158,6 @@ export default function ModelsSettingsCard() {
     catalogQuery.isLoading ||
     updateCustomModels.isPending ||
     refreshCatalog.isPending ||
-    updateAutomaticUpdates.isPending ||
     createCustomProvider.isPending ||
     deleteCustomProvider.isPending;
 
@@ -223,7 +255,7 @@ export default function ModelsSettingsCard() {
   };
 
   return (
-    <div className="@container flex min-w-0 flex-col gap-5" data-testid="models-settings-card">
+    <div className="@container flex min-w-0 flex-col gap-4" data-testid="models-settings-card">
       <SettingRow
         title={t('settings.models.provider')}
         description={t('settings.models.providerDescription')}
@@ -375,19 +407,6 @@ export default function ModelsSettingsCard() {
         </div>
       )}
 
-      <SettingRow
-        title={t('settings.models.automaticUpdates')}
-        description={t('settings.models.automaticUpdatesDescription')}
-        control={
-          <Switch
-            checked={catalogQuery.data?.automaticUpdatesEnabled ?? true}
-            onCheckedChange={(checked) => updateAutomaticUpdates.mutate(checked)}
-            disabled={disabled}
-            aria-label={t('settings.models.automaticUpdates')}
-          />
-        }
-      />
-
       <ProviderCatalogStatus
         provider={selectedProvider}
         isRefreshing={refreshCatalog.isPending}
@@ -397,8 +416,7 @@ export default function ModelsSettingsCard() {
           if (selectedProvider) requestDeleteCustomProvider(selectedProvider);
         }}
       />
-
-      <div className="border-t border-border pt-5">
+      <div className="border-t border-border pt-4">
         <div className="rounded-md border border-border bg-background-secondary/40 p-3">
           <div className="text-sm font-medium">{t('settings.models.customTitle')}</div>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -477,38 +495,23 @@ function ProviderCatalogStatus({
   const description = getProviderStatusDescription(provider, date, t);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-md border border-border bg-background-secondary/40 p-3">
-      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+    <div className="min-w-0 rounded-md border border-border/70 bg-background-secondary/30 px-3 py-2.5">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <Badge
               variant={provider.updateStatus === 'stale' ? 'destructive' : 'secondary'}
-              className="h-auto max-w-full break-all whitespace-normal"
+              className="h-auto max-w-full whitespace-normal"
             >
               {t(statusKey)}
             </Badge>
-            <div className="min-w-0 w-full basis-full break-all text-xs text-muted-foreground">
+            <div className="min-w-0 text-xs font-medium text-foreground-muted">
               {t('settings.models.modelCount', {
                 provider: provider.name,
                 count: provider.models.length,
               })}
             </div>
           </div>
-          <p className="mt-2 min-w-0 break-all text-xs leading-relaxed text-muted-foreground">
-            {description}
-          </p>
-          {officialSourceUrl && (
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              className="mt-1 h-auto gap-1 p-0 text-xs"
-              onClick={() => void rpc.app.openExternal(officialSourceUrl)}
-            >
-              {t('settings.models.officialSource')}
-              <ExternalLink className="h-3 w-3" />
-            </Button>
-          )}
         </div>
         {provider.custom ? (
           <Button
@@ -533,6 +536,23 @@ function ProviderCatalogStatus({
           >
             <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
             {isRefreshing ? t('settings.models.refreshing') : t('settings.models.refresh')}
+          </Button>
+        )}
+      </div>
+      <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="min-w-48 flex-1 break-words text-xs leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+        {officialSourceUrl && (
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto shrink-0 gap-1 p-0 text-xs"
+            onClick={() => void rpc.app.openExternal(officialSourceUrl)}
+          >
+            {t('settings.models.officialSource')}
+            <ExternalLink className="h-3 w-3" />
           </Button>
         )}
       </div>
