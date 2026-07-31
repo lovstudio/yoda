@@ -54,6 +54,7 @@ const ABSOLUTE_PATH_SEGMENT = `${PATH_SEG_TOKEN}(?: +${PATH_SEG_TOKEN})?`;
 // extension, so trailing prose is not absorbed into the link.
 const SPACED_FILENAME_TOKEN = `[^\\s"'\`$<>|\\\\/:]+`;
 const SPACED_ABSOLUTE_FILENAME = `${SPACED_FILENAME_TOKEN}(?: +${SPACED_FILENAME_TOKEN})* +[^\\s"'\`$<>|\\\\/:]*\\.${PATH_EXT}`;
+const SPACED_BARE_FILENAME = `${SPACED_FILENAME_TOKEN}(?: +${SPACED_FILENAME_TOKEN})+\\.(?:${BARE_FILENAME_EXTENSIONS})`;
 // A path is either a file (one or more `dir/` segments + a `name.ext`, optional
 // `:line:col`) OR a directory (one or more `dir/` segments ending in a slash,
 // no filename). Making the filename tail optional lets a trailing-slash run
@@ -84,6 +85,13 @@ const BARE_FILE_CANDIDATE_REGEX = new RegExp(
   `(^|[${PATH_LEADING}])(@?[^${PATH_SEG_EXCLUDED}\\/]+\\.(?:${BARE_FILENAME_EXTENSIONS})(?::\\d+(?::\\d+)?)?)(?=$|[${PATH_TRAILING}])`,
   'giu'
 );
+// Without a slash, a multi-word filename is ambiguous with ordinary prose.
+// Accept the wider form after an explicit output label (`文件：final report.pdf`);
+// otherwise the regular bare-file matcher still recognizes the final token.
+const LABELED_SPACED_FILE_CANDIDATE_REGEX = new RegExp(
+  `([:：][ \\t]*)(@?${SPACED_BARE_FILENAME}(?::\\d+(?::\\d+)?)?)(?=$|[${PATH_TRAILING}])`,
+  'giu'
+);
 const FILE_PATH_CANDIDATE_REGEXES: readonly {
   regex: RegExp;
   requiresSpace: boolean;
@@ -93,6 +101,7 @@ const FILE_PATH_CANDIDATE_REGEXES: readonly {
   { regex: ROOTED_FILE_PATH_CANDIDATE_REGEX, requiresSpace: true },
   { regex: TILDE_DIRECTORY_CANDIDATE_REGEX, requiresSpace: false, isDirectory: true },
   { regex: FILE_PATH_CANDIDATE_REGEX, requiresSpace: false },
+  { regex: LABELED_SPACED_FILE_CANDIDATE_REGEX, requiresSpace: true },
   { regex: BARE_FILE_CANDIDATE_REGEX, requiresSpace: false },
 ];
 
