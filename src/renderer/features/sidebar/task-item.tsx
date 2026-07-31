@@ -118,9 +118,15 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const taskIndentClass =
     rowVariant === 'underProject' ? (hasRootToggle ? undefined : 'pl-8') : 'pl-2';
   const multiAgentLabel = t('sidebar.multiAgentTask');
+  const longTermLabel = t('sidebar.longTermTask');
   const showMultiAgentIconInReservedSlot =
     isMultiAgent && rowVariant === 'underProject' && treeDepth === 0 && !hasRootToggle;
   const showMultiAgentIconInline = isMultiAgent && !showMultiAgentIconInReservedSlot;
+  // Project-nested rows already own a 24px leading status slot, so the marker
+  // can sit there without reducing the task-name width. Compact flat/pinned
+  // rows keep their full title width and use a tiny edge marker instead.
+  const showLongTermIconInReservedSlot = task.data.isLongTerm && rowVariant === 'underProject';
+  const showLongTermEdgeMarker = task.data.isLongTerm && rowVariant !== 'underProject';
 
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
@@ -278,16 +284,36 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
               )}
             />
           )}
+          {showLongTermEdgeMarker && (
+            <span
+              role="img"
+              aria-label={longTermLabel}
+              title={longTermLabel}
+              className="absolute left-0.5 top-1/2 size-1 -translate-y-1/2 rounded-full bg-foreground-tertiary-passive"
+            />
+          )}
           {showMultiAgentIconInReservedSlot && (
             <MultiAgentTaskIcon
               label={multiAgentLabel}
               className="absolute left-1 top-1/2 -translate-y-1/2"
             />
           )}
+          {showLongTermIconInReservedSlot && (
+            <LongTermTaskIcon
+              label={longTermLabel}
+              compact={showMultiAgentIconInReservedSlot}
+              className={cn(
+                'absolute transition-opacity',
+                showMultiAgentIconInReservedSlot
+                  ? 'left-[17px] top-[17px] z-[1]'
+                  : 'left-1 top-1/2 -translate-y-1/2',
+                hasRootToggle && 'group-hover/row:opacity-0'
+              )}
+            />
+          )}
           {showMultiAgentIconInline && <MultiAgentTaskIcon label={multiAgentLabel} />}
           <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
             <div className="flex min-w-0 items-center gap-1">
-              {task.data.isLongTerm && <LongTermTaskIcon label={t('sidebar.longTermTask')} />}
               <span
                 className={cn(
                   'min-w-0 truncate text-left transition-colors',
@@ -430,15 +456,27 @@ function MultiAgentTaskIcon({ label, className }: { label: string; className?: s
   );
 }
 
-function LongTermTaskIcon({ label }: { label: string }) {
+function LongTermTaskIcon({
+  label,
+  compact = false,
+  className,
+}: {
+  label: string;
+  compact?: boolean;
+  className?: string;
+}) {
   return (
     <span
       role="img"
       aria-label={label}
       title={label}
-      className="inline-flex size-4 shrink-0 items-center justify-center text-foreground-tertiary-passive"
+      className={cn(
+        'inline-flex shrink-0 items-center justify-center text-foreground-tertiary-passive',
+        compact ? 'size-2.5' : 'size-6',
+        className
+      )}
     >
-      <InfinityIcon className="size-3.5 stroke-[1.75]" />
+      <InfinityIcon className={cn('stroke-[1.75]', compact ? 'size-2.5' : 'size-3.5')} />
     </span>
   );
 }
