@@ -106,6 +106,36 @@ describe('buildAgentCommand', () => {
     });
   });
 
+  it('disables Codex goals for a fresh automation session', () => {
+    const command = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: runtimeConfigDefaults.codex,
+      executionMode: 'automation',
+      initialPrompt: 'Run the scheduled check',
+      sessionId: 'session-1',
+    });
+
+    expect(command).toEqual({
+      command: 'codex',
+      args: ['--disable', 'goals', 'Run the scheduled check'],
+    });
+  });
+
+  it('places the Codex goals override before the resume subcommand', () => {
+    const command = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: runtimeConfigDefaults.codex,
+      executionMode: 'automation',
+      sessionId: '019e00e5-0aba-7f30-a13e-ddf5df6cd705',
+      isResuming: true,
+    });
+
+    expect(command).toEqual({
+      command: 'codex',
+      args: ['--disable', 'goals', 'resume', '019e00e5-0aba-7f30-a13e-ddf5df6cd705'],
+    });
+  });
+
   it('resumes the requested Codex session by id', () => {
     const command = buildAgentCommand({
       runtimeId: 'codex',

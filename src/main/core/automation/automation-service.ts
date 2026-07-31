@@ -354,12 +354,12 @@ export class AutomationService {
     return rows.length > 0;
   }
 
-  async startRun(automationId: string, trigger: string): Promise<string> {
+  async startRun(automationId: string, trigger: string, taskId?: string): Promise<string> {
     const id = randomUUID();
     await db.insert(automationRuns).values({
       id,
       automationId,
-      taskId: null,
+      taskId: taskId ?? null,
       trigger,
       status: 'running',
       startedAt: new Date().toISOString(),
@@ -368,21 +368,35 @@ export class AutomationService {
     return id;
   }
 
-  async setRunTask(runId: string, taskId: string): Promise<void> {
-    await db.update(automationRuns).set({ taskId }).where(eq(automationRuns.id, runId));
-    events.emit(automationRunsUpdatedChannel, undefined);
-  }
-
   async finishRun(
     runId: string,
     status: Exclude<AutomationRunStatus, 'running'>,
     error?: string | null
   ): Promise<void> {
-    await db
+    const finished = await db
       .update(automationRuns)
       .set({ status, error: error ?? null, finishedAt: new Date().toISOString() })
-      .where(eq(automationRuns.id, runId));
-    events.emit(automationRunsUpdatedChannel, undefined);
+      .where(and(eq(automationRuns.id, runId), eq(automationRuns.status, 'running')))
+      .returning({ id: automationRuns.id });
+    if (finished.length > 0) events.emit(automationRunsUpdatedChannel, undefined);
+  }
+
+  /**
+   * Completes whichever persisted automation run owns this task. Event
+   * correlation must not depend on an in-memory map: main-process HMR and fast
+   * task completion can otherwise leave the database row permanently running.
+   */
+  async finishRunningRunForTask(
+    taskId: string,
+    status: Exclude<AutomationRunStatus, 'running'>,
+    error?: string | null
+  ): Promise<void> {
+    const finished = await db
+      .update(automationRuns)
+      .set({ status, error: error ?? null, finishedAt: new Date().toISOString() })
+      .where(and(eq(automationRuns.taskId, taskId), eq(automationRuns.status, 'running')))
+      .returning({ id: automationRuns.id });
+    if (finished.length > 0) events.emit(automationRunsUpdatedChannel, undefined);
   }
 
   async listRuns(automationId?: string, limit = 50): Promise<AutomationRun[]> {
@@ -399,14 +413,18 @@ export class AutomationService {
   /** Marks runs left `running` by a previous process as interrupted. Runs once. */
   async sweepInterruptedRuns(): Promise<void> {
     this.runSweep ??= (async () => {
-      await db
+      const interrupted = await db
         .update(automationRuns)
         .set({
           status: 'failed',
           error: 'Interrupted: the app quit before this run finished.',
           finishedAt: new Date().toISOString(),
         })
-        .where(eq(automationRuns.status, 'running'));
+        .where(eq(automationRuns.status, 'running'))
+        .returning({ id: automationRuns.id });
+      if (interrupted.length > 0) {
+        events.emit(automationRunsUpdatedChannel, undefined);
+      }
     })().catch((error) => {
       log.warn('[automation] run sweep failed', { error: String(error) });
     });

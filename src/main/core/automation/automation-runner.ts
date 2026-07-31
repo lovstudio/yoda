@@ -23,32 +23,27 @@ import { automationService } from './automation-service';
  */
 export class AutomationRunner {
   private initialized = false;
-  /** taskId → runId for in-flight runs. */
-  private active = new Map<string, string>();
 
   initialize(): void {
     if (this.initialized) return;
     this.initialized = true;
 
     events.on(agentSessionStatusChangedChannel, (e) => {
-      const runId = this.active.get(e.taskId);
-      if (!runId) return;
       if (e.status === 'completed') {
-        this.active.delete(e.taskId);
-        void automationService.finishRun(runId, 'success');
+        void automationService.finishRunningRunForTask(e.taskId, 'success');
       } else if (e.status === 'error') {
-        this.active.delete(e.taskId);
-        void automationService.finishRun(runId, 'failed', 'Agent reported an error.');
+        void automationService.finishRunningRunForTask(
+          e.taskId,
+          'failed',
+          'Agent reported an error.'
+        );
       }
     });
 
     events.on(agentSessionExitedChannel, (e) => {
-      const runId = this.active.get(e.taskId);
-      if (!runId) return;
-      this.active.delete(e.taskId);
       const ok = e.exitCode === 0 || e.exitCode === undefined;
-      void automationService.finishRun(
-        runId,
+      void automationService.finishRunningRunForTask(
+        e.taskId,
         ok ? 'success' : 'failed',
         ok ? null : `Agent exited with code ${e.exitCode}`
       );
@@ -71,7 +66,11 @@ export class AutomationRunner {
       return;
     }
 
-    const runId = await automationService.startRun(automationId, trigger);
+    // Persist the task correlation before starting the Agent. A fast completion
+    // event can then close the run even before createTask() returns.
+    const taskId = randomUUID();
+    const conversationId = randomUUID();
+    const runId = await automationService.startRun(automationId, trigger, taskId);
     try {
       const existing = await db
         .select({ name: tasks.name })
@@ -81,8 +80,6 @@ export class AutomationRunner {
         auto.title,
         existing.map((r) => r.name)
       );
-      const taskId = randomUUID();
-      const conversationId = randomUUID();
       const title = taskNameFromPrompt(auto.prompt) || auto.title;
 
       const result = await createTask({
@@ -99,6 +96,7 @@ export class AutomationRunner {
           title,
           initialPrompt: auto.prompt,
           autoApprove: true, // unattended
+          executionMode: 'automation',
         },
       });
 
@@ -107,8 +105,6 @@ export class AutomationRunner {
         return;
       }
 
-      this.active.set(taskId, runId);
-      await automationService.setRunTask(runId, taskId);
       await automationService.setLastRunAt(automationId, new Date().toISOString());
     } catch (error) {
       await automationService.finishRun(
