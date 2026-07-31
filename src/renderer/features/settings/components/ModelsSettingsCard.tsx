@@ -402,57 +402,66 @@ export default function ModelsSettingsCard() {
 
       <ProviderCatalogStatus
         provider={selectedProvider}
-        isRefreshing={refreshCatalog.isPending}
         disabled={disabled}
-        onRefresh={() => refreshCatalog.mutate(selectedProviderId)}
         onDelete={() => {
           if (selectedProvider) requestDeleteCustomProvider(selectedProvider);
         }}
       />
       <div className="border-t border-border pt-4">
-        <div className="rounded-md border border-border bg-background-secondary/40 p-3">
-          <div className="text-sm font-medium">{t('settings.models.customTitle')}</div>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {t('settings.models.customDescription', {
-              provider: selectedProvider?.name ?? selectedProviderId,
-              count: MAX_CUSTOM_MODELS_PER_PROVIDER,
-            })}
-          </p>
-          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
-            <Input
-              value={customModelDraft}
-              onChange={(event) => {
-                setCustomModelDraft(event.target.value);
-                setCustomModelError(null);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !isImeComposing(event)) {
-                  event.preventDefault();
-                  addCustomModel();
-                }
-              }}
-              aria-label={t('settings.models.customInput')}
-              placeholder={t('settings.models.customPlaceholder')}
-              disabled={disabled}
-              className="min-w-48 flex-1 font-mono text-xs"
-            />
+        <div
+          className="flex min-w-0 flex-wrap items-center gap-2"
+          data-testid="model-catalog-actions"
+        >
+          <Input
+            value={customModelDraft}
+            onChange={(event) => {
+              setCustomModelDraft(event.target.value);
+              setCustomModelError(null);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !isImeComposing(event)) {
+                event.preventDefault();
+                addCustomModel();
+              }
+            }}
+            aria-label={t('settings.models.customInput')}
+            placeholder={t('settings.models.customPlaceholder')}
+            disabled={disabled}
+            className="min-w-48 flex-1 font-mono text-xs"
+          />
+          <Button
+            type="button"
+            size="sm"
+            onClick={addCustomModel}
+            disabled={disabled || !customModelDraft.trim()}
+            className="shrink-0 gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t('settings.models.customAdd')}
+          </Button>
+          {!selectedProvider?.custom && (
             <Button
               type="button"
+              variant="outline"
               size="sm"
-              onClick={addCustomModel}
-              disabled={disabled || !customModelDraft.trim()}
-              className="gap-1.5"
+              onClick={() => refreshCatalog.mutate(selectedProviderId)}
+              disabled={disabled}
+              className="shrink-0 gap-1.5"
             >
-              <Plus className="h-3.5 w-3.5" />
-              {t('settings.models.customAdd')}
+              <RefreshCw
+                className={cn('h-3.5 w-3.5', refreshCatalog.isPending && 'animate-spin')}
+              />
+              {refreshCatalog.isPending
+                ? t('settings.models.refreshing')
+                : t('settings.models.refresh')}
             </Button>
-          </div>
-          {(customModelError || updateCustomModels.isError) && (
-            <p className="mt-2 text-xs text-destructive" role="alert">
-              {customModelError ?? t('settings.models.saveFailed')}
-            </p>
           )}
         </div>
+        {(customModelError || updateCustomModels.isError) && (
+          <p className="mt-2 text-xs text-destructive" role="alert">
+            {customModelError ?? t('settings.models.saveFailed')}
+          </p>
+        )}
       </div>
 
       <ProviderModelList
@@ -467,15 +476,11 @@ export default function ModelsSettingsCard() {
 
 function ProviderCatalogStatus({
   provider,
-  isRefreshing,
   disabled,
-  onRefresh,
   onDelete,
 }: {
   provider: ModelProviderCatalogGroup | undefined;
-  isRefreshing: boolean;
   disabled: boolean;
-  onRefresh: () => void;
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
@@ -506,7 +511,7 @@ function ProviderCatalogStatus({
             </div>
           </div>
         </div>
-        {provider.custom ? (
+        {provider.custom && (
           <Button
             type="button"
             variant="outline"
@@ -517,18 +522,6 @@ function ProviderCatalogStatus({
           >
             <Trash2 className="h-3.5 w-3.5" />
             {t('settings.models.deleteProvider')}
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onRefresh}
-            disabled={disabled}
-            className="shrink-0 gap-1.5"
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
-            {isRefreshing ? t('settings.models.refreshing') : t('settings.models.refresh')}
           </Button>
         )}
       </div>
