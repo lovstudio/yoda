@@ -113,27 +113,51 @@ describe('terminal web links', () => {
     expect(getTerminalWebLinkAtCell(terminal, 2, { x: 1, y: 2 })?.url).toBe(url);
   });
 
-  it('recognizes a URL wrapped inside a table cell without linking the next column', () => {
-    const firstLine =
-      '王树义 (https://blog.sciencenet.cn/u/          AI 工具、研究工作流、知识管理';
-    const secondLine = 'wshuyi)                                    对普通读者友好';
-    const url = 'https://blog.sciencenet.cn/u/wshuyi';
-    const terminal = makeTerminal([firstLine, secondLine], { cols: 100 });
+  it('recognizes every fragment of URLs wrapped across terminal table cells', () => {
+    const columnWidths = [60, 54, 68] as const;
+    const tableRow = (author: string, subject: string, detail: string) =>
+      `${author.padEnd(columnWidths[0])}   ${subject.padEnd(columnWidths[1])}   ${detail}`;
+    const separator = columnWidths.map((width) => '─'.repeat(width)).join('   ');
+    const lines = [
+      separator,
+      tableRow(
+        'Simon Willison (https://',
+        'Agent 工程、模型实验、工具调用',
+        '更新快，亲自验证；他的'
+      ),
+      tableRow('simonwillison.net/)', '', 'Agentic Engineering Patterns'),
+      tableRow('', '', '(https://simonwillison.net/guides/'),
+      tableRow('', '', 'agentic-engineering-patterns/what-is-'),
+      tableRow('', '', 'agentic-engineering/) 很适合系统阅读'),
+      separator,
+      tableRow(
+        'Hamel Husain (https://hamel.dev/blog/',
+        'AI 产品评测、生产落地',
+        '非常务实，强调真实数据'
+      ),
+      tableRow('secret.html)', '', '《Your AI Product Needs Evals》'),
+      separator,
+    ];
+    const terminal = makeTerminal(lines, { cols: lines[0].length });
+    const simonUrl = 'https://simonwillison.net/';
+    const guideUrl =
+      'https://simonwillison.net/guides/agentic-engineering-patterns/what-is-agentic-engineering/';
+    const hamelUrl = 'https://hamel.dev/blog/secret.html';
+    const linkAt = (lineNumber: number, token: string) =>
+      getTerminalWebLinkAtCell(terminal, lineNumber, {
+        x: lines[lineNumber - 1].indexOf(token) + 1,
+        y: lineNumber,
+      });
 
-    expect(getTerminalWebLinkMatches(terminal, 1).map((match) => match.url)).toEqual([url]);
-    expect(getTerminalWebLinkMatches(terminal, 2).map((match) => match.url)).toEqual([url]);
-    expect(
-      getTerminalWebLinkAtCell(terminal, 1, { x: firstLine.indexOf('https') + 1, y: 1 })?.url
-    ).toBe(url);
-    expect(
-      getTerminalWebLinkAtCell(terminal, 2, { x: secondLine.indexOf('wshuyi') + 1, y: 2 })?.url
-    ).toBe(url);
-    expect(
-      getTerminalWebLinkAtCell(terminal, 2, { x: secondLine.indexOf(')') + 1, y: 2 })
-    ).toBeNull();
-    expect(
-      getTerminalWebLinkAtCell(terminal, 1, { x: firstLine.indexOf('AI 工具') + 1, y: 1 })
-    ).toBeNull();
+    expect(linkAt(2, 'https://')?.url).toBe(simonUrl);
+    expect(linkAt(3, 'simonwillison.net')?.url).toBe(simonUrl);
+    expect(linkAt(4, 'https://')?.url).toBe(guideUrl);
+    expect(linkAt(5, 'agentic-engineering-patterns')?.url).toBe(guideUrl);
+    expect(linkAt(6, 'agentic-engineering/')?.url).toBe(guideUrl);
+    expect(linkAt(8, 'https://hamel.dev')?.url).toBe(hamelUrl);
+    expect(linkAt(9, 'secret.html')?.url).toBe(hamelUrl);
+    expect(linkAt(2, 'Agent 工程')).toBeNull();
+    expect(linkAt(6, '很适合系统阅读')).toBeNull();
   });
 
   it('does not join a URL into the next Chinese row label', () => {
