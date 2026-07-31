@@ -1,18 +1,24 @@
 import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
-import { TaskViewWrapper, useTaskViewContext, useTaskViewKind } from './task-view-context';
-
-vi.mock('./stores/task-selectors', () => ({
-  asProvisioned: vi.fn(),
-  getTaskStore: vi.fn(),
-}));
+import { describe, expect, it } from 'vitest';
+import type { ProvisionedTask } from './stores/task';
+import {
+  ProvisionedTaskProvider,
+  TaskViewWrapper,
+  useProvisionedTask,
+  useTaskViewContext,
+  useTaskViewKind,
+} from './task-view-context';
 
 function TaskKindProbe() {
   const { projectId, taskId } = useTaskViewContext();
   const kind = useTaskViewKind();
   return createElement('span', null, `${projectId}:${taskId}:${kind}`);
+}
+
+function ProvisionedTaskProbe() {
+  return createElement('span', null, useProvisionedTask().taskId);
 }
 
 describe('task view state snapshot', () => {
@@ -40,5 +46,17 @@ describe('task view state snapshot', () => {
     expect(mainPanelSource).not.toContain('const kind = taskViewKind(');
     expect(titlebarSource).not.toContain('const kind = taskViewKind(');
     expect(taskWindowSource).not.toContain('const kind = taskViewKind(');
+  });
+
+  it('provides the task instance captured by the ready-state owner', () => {
+    const task = { taskId: 'task-1' } as ProvisionedTask;
+    const markup = renderToStaticMarkup(
+      createElement(ProvisionedTaskProvider, {
+        task,
+        children: createElement(ProvisionedTaskProbe),
+      })
+    );
+
+    expect(markup).toContain('task-1');
   });
 });

@@ -413,12 +413,16 @@ const ShellPinnedTaskHost = observer(function ShellPinnedTaskHost({
   taskId: string;
   tabId: string;
 }) {
-  const kind = taskViewKind(getTaskStore(projectId, taskId), projectId);
+  const taskStore = getTaskStore(projectId, taskId);
+  const kind = taskViewKind(taskStore, projectId);
+  const provisioned = asProvisioned(taskStore);
+
+  if (kind === 'ready' && !provisioned) return null;
 
   return (
     <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind}>
-      {kind === 'ready' ? (
-        <ProvisionedTaskProvider projectId={projectId} taskId={taskId}>
+      {kind === 'ready' && provisioned ? (
+        <ProvisionedTaskProvider task={provisioned}>
           <ShellPinnedTaskBody tabId={tabId} />
         </ProvisionedTaskProvider>
       ) : null}
