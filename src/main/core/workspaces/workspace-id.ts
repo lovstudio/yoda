@@ -1,3 +1,5 @@
+import { projectTerminalScopeId } from '@shared/terminals';
+
 /**
  * Typed workspace ID utilities.
  *
@@ -35,5 +37,5 @@ export function remoteTaskWorkspaceId(remoteId: string): string {
  * with tasks provisioned on the project root.
  */
 export function projectViewWorkspaceId(kind: 'local' | 'ssh', projectId: string): string {
-  return `${kind}:${projectId}:project-view`;
+  return projectTerminalScopeId(kind, projectId);
 }

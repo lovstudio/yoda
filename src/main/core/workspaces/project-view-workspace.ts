@@ -34,6 +34,10 @@ export async function acquireProjectViewWorkspace(provider: ProjectProvider): Pr
   );
 }
 
+export function projectViewWorkspaceIdForProvider(provider: ProjectProvider): string {
+  return projectViewWorkspaceId(provider.defaultWorkspaceType.kind, provider.projectId);
+}
+
 export async function releaseProjectViewWorkspace(provider: ProjectProvider): Promise<void> {
   const workspaceId = projectViewWorkspaceId(
     provider.defaultWorkspaceType.kind,
@@ -66,7 +70,7 @@ function createProjectViewWorkspaceFactory(
     // the project-view workspace never runs lifecycle scripts.
     const { terminals } = buildTaskProviders(type, {
       projectId: provider.projectId,
-      taskId: 'project-view',
+      taskId: workspaceId,
       taskPath: workDir,
       tmuxEnabled: false,
       taskEnvVars: {},
@@ -83,6 +87,7 @@ function createProjectViewWorkspaceFactory(
         workspaceId,
         terminals,
       }),
+      terminals,
       repository: provider.repository,
       fetchService: provider.gitFetchService,
     };

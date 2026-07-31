@@ -30,7 +30,11 @@ import { YODA_ACCOUNT_USAGE_DOC_URL } from '@shared/urls';
 import { openTaskTarget } from '@renderer/app/open-task-target';
 import { MaasGlobalSelector } from '@renderer/features/maas/components/MaasGlobalSelector';
 import { useMaasConnections, useMaasGlobalBinding } from '@renderer/features/maas/useMaas';
-import { getProjectSettingsStore } from '@renderer/features/projects/stores/project-selectors';
+import {
+  asMounted,
+  getProjectSettingsStore,
+  getProjectStore,
+} from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { SkillQuickSearchPopover } from '@renderer/features/skills/components/SkillQuickSearchPopover';
 import { AgentStatusIndicator } from '@renderer/features/tasks/components/agent-status-indicator';
@@ -48,7 +52,7 @@ import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
-import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
+import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { Button } from '@renderer/lib/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/lib/ui/popover';
 import { agentConfig } from '@renderer/utils/agentConfig';
@@ -131,6 +135,9 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       ? asProvisioned(getTaskStore(params.projectId, params.taskId))
       : undefined;
   const activeProjectId = params?.projectId;
+  const activeMountedProject = activeProjectId
+    ? asMounted(getProjectStore(activeProjectId))
+    : undefined;
   const projectSettingsStore = activeProjectId
     ? getProjectSettingsStore(activeProjectId)
     : undefined;
@@ -252,7 +259,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     provisionedTask?.taskView.isTerminalDrawerOpen &&
       provisionedTask.taskView.activeBottomPanelTab === 'terminals'
   );
-  const terminalActive = taskTerminalActive || workspaceShellStore.isOpen;
+  const terminalActive = taskTerminalActive || workspaceTerminalStore.isOpen;
   const canCompactContext = Boolean(
     runtimeId === 'codex' && params?.projectId && params.taskId && activeConversationId
   );
@@ -402,8 +409,8 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   }, [activeConversation, provisionedTask]);
 
   const toggleTerminal = () => {
-    if (workspaceShellStore.isOpen) {
-      workspaceShellStore.close();
+    if (workspaceTerminalStore.isOpen) {
+      workspaceTerminalStore.close();
       return;
     }
     if (provisionedTask) {
@@ -416,7 +423,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       provisionedTask.taskView.setFocusedRegion('bottom');
       return;
     }
-    void workspaceShellStore.toggleShell().catch(() => {});
+    if (activeMountedProject) {
+      void workspaceTerminalStore.toggleProject(activeMountedProject.data).catch(() => {});
+      return;
+    }
+    void workspaceTerminalStore.toggleGlobal().catch(() => {});
   };
 
   const compactContext = async () => {

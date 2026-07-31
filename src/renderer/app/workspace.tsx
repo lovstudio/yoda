@@ -3,7 +3,7 @@ import { AppSidePane } from '@renderer/app/app-side-pane';
 import { moveDraggedTabToStrip } from '@renderer/app/open-task-target';
 import { useTabDropZone } from '@renderer/app/tab-drag';
 import { WorkspaceRuntimeBar } from '@renderer/app/workspace-runtime-bar';
-import { WorkspaceShellPanel } from '@renderer/app/workspace-shell-panel';
+import { WorkspaceTerminalPanel } from '@renderer/app/workspace-terminal-panel';
 import { LeftSidebar } from '@renderer/features/sidebar/left-sidebar';
 import { splitViewStore } from '@renderer/features/tasks/split-view/split-view-store';
 import { TiledTaskGrid } from '@renderer/features/tasks/split-view/tiled-task-grid';
@@ -23,7 +23,7 @@ import {
 import { WorkspaceContentLayout, WorkspaceLayout } from '@renderer/lib/layout/workspace-layout';
 import { ModalRenderer } from '@renderer/lib/modal/modal-renderer';
 import { appState } from '@renderer/lib/stores/app-state';
-import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
+import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { Toaster } from '@renderer/lib/ui/toaster';
 import { cn } from '@renderer/utils/utils';
 
@@ -119,10 +119,10 @@ const WorkspaceViewContent = observer(function WorkspaceViewContent() {
         titlebarSlot={<TitlebarSlot />}
         mainPanel={isTiled ? <TiledTaskGrid primary={<MainPanel />} /> : <MainPanel />}
         bottomBar={<WorkspaceRuntimeBar />}
-        bottomPane={<WorkspaceShellPanel />}
-        isBottomPaneOpen={workspaceShellStore.isOpen}
+        bottomPane={<WorkspaceTerminalPanel />}
+        isBottomPaneOpen={workspaceTerminalStore.isOpen}
         onBottomPaneOpenChange={(open) => {
-          if (!open) workspaceShellStore.close();
+          if (!open) workspaceTerminalStore.close();
         }}
       />
     </div>

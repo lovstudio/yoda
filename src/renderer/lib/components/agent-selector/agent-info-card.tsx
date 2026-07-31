@@ -26,7 +26,7 @@ import {
 } from '@renderer/lib/components/file-path-actions';
 import { rpc } from '@renderer/lib/ipc';
 import { appState } from '@renderer/lib/stores/app-state';
-import { workspaceShellStore } from '@renderer/lib/stores/workspace-shell-store';
+import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { Button } from '@renderer/lib/ui/button';
 import {
   DropdownMenu,
@@ -188,7 +188,7 @@ export const AgentInfoCard: React.FC<Props> = ({ id, dependency, selectedModel, 
             <Button
               size="xs"
               onClick={() => {
-                void workspaceShellStore.runRuntimeAction(id, 'open').catch(() => {});
+                void workspaceTerminalStore.runRuntimeAction(id, 'open').catch(() => {});
               }}
             >
               <Terminal className="size-3.5" />
@@ -200,7 +200,7 @@ export const AgentInfoCard: React.FC<Props> = ({ id, dependency, selectedModel, 
               variant="outline"
               size="xs"
               onClick={() => {
-                void workspaceShellStore.runRuntimeAction(id, 'update').catch(() => {});
+                void workspaceTerminalStore.runRuntimeAction(id, 'update').catch(() => {});
               }}
             >
               <RefreshCw className="size-3.5" />
@@ -227,7 +227,7 @@ export const AgentInfoCard: React.FC<Props> = ({ id, dependency, selectedModel, 
               !snapshot.update.available ? (
                 <DropdownMenuItem
                   onClick={() => {
-                    void workspaceShellStore.runRuntimeAction(id, 'update').catch(() => {});
+                    void workspaceTerminalStore.runRuntimeAction(id, 'update').catch(() => {});
                   }}
                 >
                   <RefreshCw />
@@ -237,7 +237,7 @@ export const AgentInfoCard: React.FC<Props> = ({ id, dependency, selectedModel, 
               {id === 'codex' && installed && !connectionId ? (
                 <DropdownMenuItem
                   onClick={() => {
-                    void workspaceShellStore.runRuntimeAction(id, 'doctor').catch(() => {});
+                    void workspaceTerminalStore.runRuntimeAction(id, 'doctor').catch(() => {});
                   }}
                 >
                   <Stethoscope />

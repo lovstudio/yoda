@@ -20,6 +20,7 @@ function makeWorkspace(id: string): {
       lifecycleService: {
         dispose,
       } as unknown as Workspace['lifecycleService'],
+      terminals: {} as Workspace['terminals'],
       repository: {} as Workspace['repository'],
       fetchService: {} as Workspace['fetchService'],
     },

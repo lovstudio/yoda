@@ -67,6 +67,24 @@ describe('TerminalManagerStore terminal lifecycle', () => {
     expect(mocks.sessions[0].connect).not.toHaveBeenCalled();
   });
 
+  it('coalesces concurrent loads from observation and explicit opening', async () => {
+    let resolveLoad!: (terminals: Terminal[]) => void;
+    mocks.getTerminalsForTask.mockReturnValue(
+      new Promise<Terminal[]>((resolve) => {
+        resolveLoad = resolve;
+      })
+    );
+    const store = new TerminalManagerStore('project-1', 'task-1');
+
+    const first = store.load();
+    const second = store.load();
+    expect(mocks.getTerminalsForTask).toHaveBeenCalledTimes(1);
+    resolveLoad([terminal]);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
+    expect(store.terminals.has(terminal.id)).toBe(true);
+  });
+
   it('keeps an optimistic renderer deferred until the backend terminal exists', async () => {
     let resolveBackend!: (value: Terminal) => void;
     mocks.createTerminal.mockImplementation(

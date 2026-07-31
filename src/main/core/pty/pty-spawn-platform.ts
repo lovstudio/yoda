@@ -90,6 +90,16 @@ function quoteForCmdExe(input: string): string {
     .replace(/(["^&|<>()])/g, '^$1')}"`;
 }
 
+/** Formats argv for input into the platform's interactive terminal shell. */
+export function argvToInteractiveShellLine(
+  command: string,
+  args: string[],
+  platform: NodeJS.Platform = process.platform
+): string {
+  const quote = isWindows(platform) ? quoteForCmdExe : quotePosixArg;
+  return [command, ...args].map(quote).join(' ');
+}
+
 function getWindowsPathDirs(env: NodeJS.ProcessEnv): string[] {
   const rawPath = getWindowsEnvValue(env, 'PATH') ?? '';
   return rawPath.split(path.win32.delimiter).filter(Boolean);
