@@ -3,6 +3,7 @@ import {
   createExpoGoPairingUrl,
   createMobilePairingUrl,
   parseMobilePairingUrl,
+  sortMobileProjects,
   sortMobileProjectsByUpdatedAt,
   type MobileProjectSummary,
 } from './mobile-api';
@@ -59,15 +60,19 @@ describe('mobile pairing links', () => {
 });
 
 describe('mobile project ordering', () => {
-  function project(id: string, updatedAt: string): MobileProjectSummary {
+  function project(
+    id: string,
+    updatedAt: string,
+    options: { displayName?: string; isOpen?: boolean } = {}
+  ): MobileProjectSummary {
     return {
       id,
       name: id,
-      displayName: id,
+      displayName: options.displayName ?? id,
       type: 'local',
       path: `/projects/${id}`,
       isInternal: false,
-      isOpen: false,
+      isOpen: options.isOpen ?? false,
       updatedAt,
     };
   }
@@ -100,6 +105,36 @@ describe('mobile project ordering', () => {
       'valid-b',
       'invalid-a',
       'invalid-b',
+    ]);
+  });
+
+  it('sorts projects by display name using natural ordering', () => {
+    const projects = [
+      project('ten', '2026-07-31T08:00:00.000Z', { displayName: 'Project 10' }),
+      project('alpha', '2026-07-29T08:00:00.000Z', { displayName: 'alpha' }),
+      project('two', '2026-07-30T08:00:00.000Z', { displayName: 'Project 2' }),
+    ];
+
+    expect(sortMobileProjects(projects, 'name').map(({ id }) => id)).toEqual([
+      'alpha',
+      'two',
+      'ten',
+    ]);
+  });
+
+  it('sorts open projects first and keeps each group in recent order', () => {
+    const projects = [
+      project('closed-newest', '2026-07-31T08:00:00.000Z'),
+      project('open-older', '2026-07-28T08:00:00.000Z', { isOpen: true }),
+      project('closed-older', '2026-07-27T08:00:00.000Z'),
+      project('open-newest', '2026-07-30T08:00:00.000Z', { isOpen: true }),
+    ];
+
+    expect(sortMobileProjects(projects, 'open').map(({ id }) => id)).toEqual([
+      'open-newest',
+      'open-older',
+      'closed-newest',
+      'closed-older',
     ]);
   });
 });

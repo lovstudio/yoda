@@ -36,8 +36,9 @@ import {
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_SESSION_INPUT_MAX_CHARS,
   parseMobilePairingUrl,
-  sortMobileProjectsByUpdatedAt,
+  sortMobileProjects,
   type MobileDashboardSnapshot,
+  type MobileProjectSortMode,
   type MobileProjectSummary,
   type MobileSessionDetail,
   type MobileSessionSummary,
@@ -1621,7 +1622,6 @@ function DemandComposer({
   onSubmit: () => void;
 }) {
   const canSubmit = prompt.trim().length > 0 && !submitting;
-  const sortedProjects = useMemo(() => sortMobileProjectsByUpdatedAt(projects), [projects]);
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
@@ -1637,7 +1637,7 @@ function DemandComposer({
         onChangeText={onPromptChange}
       />
       <DemandProjectAccordion
-        projects={sortedProjects}
+        projects={projects}
         selectedProjectId={selectedProjectId}
         onProjectChange={onProjectChange}
       />
@@ -1674,6 +1674,11 @@ function DemandProjectAccordion({
   onProjectChange: (projectId: string | null) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [sortMode, setSortMode] = useState<MobileProjectSortMode>('recent');
+  const sortedProjects = useMemo(
+    () => sortMobileProjects(projects, sortMode),
+    [projects, sortMode]
+  );
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
   const selectedLabel = selectedProject?.displayName ?? 'Drafts';
   const selectedMeta = selectedProject
@@ -1714,6 +1719,26 @@ function DemandProjectAccordion({
 
       {expanded ? (
         <View style={styles.projectAccordionList}>
+          <View style={styles.projectAccordionSort}>
+            <Text style={styles.projectAccordionSortLabel}>Sort projects</Text>
+            <View accessibilityRole="radiogroup" style={styles.projectAccordionSortOptions}>
+              <DemandProjectSortOption
+                active={sortMode === 'recent'}
+                label="Recent"
+                onPress={() => setSortMode('recent')}
+              />
+              <DemandProjectSortOption
+                active={sortMode === 'name'}
+                label="Name"
+                onPress={() => setSortMode('name')}
+              />
+              <DemandProjectSortOption
+                active={sortMode === 'open'}
+                label="Open"
+                onPress={() => setSortMode('open')}
+              />
+            </View>
+          </View>
           <DemandProjectOption
             icon="documents-outline"
             label="Drafts"
@@ -1724,7 +1749,7 @@ function DemandProjectAccordion({
               setExpanded(false);
             }}
           />
-          {projects.map((project) => (
+          {sortedProjects.map((project) => (
             <DemandProjectOption
               key={project.id}
               icon={project.isOpen ? 'desktop-outline' : 'folder-outline'}
@@ -1740,6 +1765,39 @@ function DemandProjectAccordion({
         </View>
       ) : null}
     </View>
+  );
+}
+
+function DemandProjectSortOption({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`Sort projects by ${label.toLowerCase()}`}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: active }}
+      style={({ pressed }) => [
+        styles.projectAccordionSortOption,
+        active ? styles.projectAccordionSortOptionActive : null,
+        pressed ? styles.buttonPressed : null,
+      ]}
+      onPress={onPress}
+    >
+      <Text
+        style={[
+          styles.projectAccordionSortOptionText,
+          active ? styles.projectAccordionSortOptionTextActive : null,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -3620,6 +3678,45 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
     backgroundColor: COLORS.surface,
+  },
+  projectAccordionSort: {
+    gap: 7,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  projectAccordionSortLabel: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  projectAccordionSortOptions: {
+    flexDirection: 'row',
+    gap: 3,
+    borderRadius: 8,
+    backgroundColor: COLORS.page,
+    padding: 3,
+  },
+  projectAccordionSortOption: {
+    minHeight: 32,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+  },
+  projectAccordionSortOptionActive: {
+    backgroundColor: COLORS.charcoal,
+  },
+  projectAccordionSortOptionText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  projectAccordionSortOptionTextActive: {
+    color: COLORS.surface,
   },
   projectAccordionOption: {
     minHeight: 64,

@@ -84,21 +84,45 @@ export type MobileProjectSummary = {
   updatedAt: string;
 };
 
+export type MobileProjectSortMode = 'recent' | 'name' | 'open';
+
+function mobileProjectUpdatedAt(project: MobileProjectSummary): number {
+  const updatedAt = Date.parse(project.updatedAt);
+  return Number.isNaN(updatedAt) ? Number.NEGATIVE_INFINITY : updatedAt;
+}
+
+export function sortMobileProjects(
+  projects: readonly MobileProjectSummary[],
+  mode: MobileProjectSortMode
+): MobileProjectSummary[] {
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+  return projects
+    .map((project, index) => ({ project, index, updatedAt: mobileProjectUpdatedAt(project) }))
+    .sort((a, b) => {
+      if (mode === 'name') {
+        return (
+          collator.compare(
+            a.project.displayName || a.project.name,
+            b.project.displayName || b.project.name
+          ) || a.index - b.index
+        );
+      }
+      if (mode === 'open') {
+        return (
+          Number(b.project.isOpen) - Number(a.project.isOpen) ||
+          b.updatedAt - a.updatedAt ||
+          a.index - b.index
+        );
+      }
+      return b.updatedAt - a.updatedAt || a.index - b.index;
+    })
+    .map(({ project }) => project);
+}
+
 export function sortMobileProjectsByUpdatedAt(
   projects: readonly MobileProjectSummary[]
 ): MobileProjectSummary[] {
-  return projects
-    .map((project, index) => ({
-      project,
-      index,
-      updatedAt: Date.parse(project.updatedAt),
-    }))
-    .sort((a, b) => {
-      const aUpdatedAt = Number.isNaN(a.updatedAt) ? Number.NEGATIVE_INFINITY : a.updatedAt;
-      const bUpdatedAt = Number.isNaN(b.updatedAt) ? Number.NEGATIVE_INFINITY : b.updatedAt;
-      return bUpdatedAt - aUpdatedAt || a.index - b.index;
-    })
-    .map(({ project }) => project);
+  return sortMobileProjects(projects, 'recent');
 }
 
 export type MobileTaskSummary = {
