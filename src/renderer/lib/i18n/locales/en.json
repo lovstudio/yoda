@@ -610,8 +610,6 @@
       "deleteProviderConfirm": "Delete provider",
       "automaticUpdates": "Automatically update model catalog",
       "automaticUpdatesDescription": "Yoda checks once every 24 hours after launch and only calls a vendor API when its API key is already configured locally.",
-      "customTitle": "Custom models",
-      "customDescription": "Add model IDs supported by {{provider}} but missing from the catalog, up to {{count}}.",
       "customInput": "Custom model ID",
       "customPlaceholder": "e.g. gpt-5.6-codex",
       "customAdd": "Add model",
