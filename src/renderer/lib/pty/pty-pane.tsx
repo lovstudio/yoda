@@ -86,11 +86,20 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
       focus();
     };
 
-    // Right-click should open the link menu without also focusing/clicking
-    // through to xterm.
-    const handlePointerDown: React.MouseEventHandler<HTMLDivElement> = (event) => {
+    const handleMouseDown: React.MouseEventHandler<HTMLDivElement> = (event) => {
       if (event.button !== 0) return;
       focus();
+    };
+
+    // tmux binds secondary-button presses to its internal pane menu. That menu
+    // is rendered into the terminal character grid, bypasses Yoda's UI, and can
+    // snap a scrolled-back transcript to the tail when it closes. Consume both
+    // halves of the secondary click before xterm's mouse protocol sees them;
+    // handleContextMenu still opens Yoda's menu for recognized links.
+    const handleSecondaryMouseEvent: React.MouseEventHandler<HTMLDivElement> = (event) => {
+      if (event.button !== 2) return;
+      event.preventDefault();
+      event.stopPropagation();
     };
 
     const handleDrop: React.DragEventHandler<HTMLDivElement> = (event) => {
@@ -135,10 +144,10 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
     };
 
     const handleContextMenu: React.MouseEventHandler<HTMLDivElement> = (event) => {
-      const target = getLinkTargetAtEvent(event.nativeEvent);
-      if (!target) return;
       event.preventDefault();
       event.stopPropagation();
+      const target = getLinkTargetAtEvent(event.nativeEvent);
+      if (!target) return;
       const { clientX: x, clientY: y } = event;
       // Defer the open until after the right-click mouseup so the release
       // cannot be treated as an outside interaction by the menu.
@@ -182,8 +191,10 @@ const PtyPaneComponent = forwardRef<{ focus: () => void }, Props>(
             filter: contentFilter || undefined,
           }}
           onClick={handleFocus}
-          onMouseDown={handlePointerDown}
-          onContextMenu={handleContextMenu}
+          onMouseDownCapture={handleSecondaryMouseEvent}
+          onMouseDown={handleMouseDown}
+          onMouseUpCapture={handleSecondaryMouseEvent}
+          onContextMenuCapture={handleContextMenu}
           onDragOver={(event) => event.preventDefault()}
           onDrop={handleDrop}
         />
