@@ -20,11 +20,15 @@ export function NewConversationModal({
   const { t } = useTranslation();
   const taskName = taskDisplayName(getTaskStore(projectId, taskId)) ?? taskId;
   return (
-    <>
+    <div
+      data-yoda-surface="new-conversation-modal"
+      data-yoda-composer-modal
+      className="flex min-h-0 flex-1 flex-col"
+    >
       <DialogHeader>
         <DialogTitle>{t('home.newConversationInTaskTitle', { name: taskName })}</DialogTitle>
       </DialogHeader>
-      <DialogContentArea>
+      <DialogContentArea className="gap-0">
         <HomeComposer
           submitTarget={{ kind: 'existing-task', projectId, taskId }}
           onSubmitted={(result) => {
@@ -32,6 +36,6 @@ export function NewConversationModal({
           }}
         />
       </DialogContentArea>
-    </>
+    </div>
   );
 }
