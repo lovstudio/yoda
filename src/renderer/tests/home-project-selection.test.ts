@@ -22,6 +22,24 @@ describe('resolveHomeProjectId', () => {
     ).toBe('route-project');
   });
 
+  it('keeps a modal project selection ahead of the surrounding page project', () => {
+    expect(
+      resolveHomeProjectId({
+        navigationProjectId: 'project-behind-modal',
+        draftProjectId: 'newly-selected-project',
+      })
+    ).toBe('newly-selected-project');
+  });
+
+  it('keeps an explicit projectless modal selection ahead of the surrounding page project', () => {
+    expect(
+      resolveHomeProjectId({
+        navigationProjectId: 'project-behind-modal',
+        draftProjectId: null,
+      })
+    ).toBeUndefined();
+  });
+
   it('keeps task-scoped internal projects locked for existing-task flows', () => {
     expect(
       resolveHomeProjectId({
