@@ -15,22 +15,37 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('@renderer/features/settings/use-app-settings-key', () => ({
-  useAppSettingsKey: () => ({
-    value: { dockSessionHistory: true },
-    update: vi.fn(),
-  }),
-}));
+vi.mock('@renderer/features/workspaces/workspace-assign-submenu', async () => {
+  const { createElement: create, Fragment } = await import('react');
+  const submenu = ({ showSeparator = true }: { showSeparator?: boolean }) =>
+    create(
+      Fragment,
+      null,
+      showSeparator ? create('hr') : null,
+      create('button', null, 'workspaces.moveToWorkspace')
+    );
 
-vi.mock('@renderer/features/workspaces/workspace-assign-submenu', () => ({
-  WorkspaceAssignContextSubmenu: () => null,
-  WorkspaceAssignDropdownSubmenu: () => null,
-}));
+  return {
+    WorkspaceAssignContextSubmenu: submenu,
+    WorkspaceAssignDropdownSubmenu: submenu,
+  };
+});
 
-vi.mock('@renderer/features/tasks/components/move-to-project-submenu', () => ({
-  MoveToProjectContextSubmenu: () => null,
-  MoveToProjectDropdownSubmenu: () => null,
-}));
+vi.mock('@renderer/features/tasks/components/move-to-project-submenu', async () => {
+  const { createElement: create, Fragment } = await import('react');
+  const submenu = ({ showSeparator = true }: { showSeparator?: boolean }) =>
+    create(
+      Fragment,
+      null,
+      showSeparator ? create('hr') : null,
+      create('button', null, 'tasks.context.moveToProject')
+    );
+
+  return {
+    MoveToProjectContextSubmenu: submenu,
+    MoveToProjectDropdownSubmenu: submenu,
+  };
+});
 
 vi.mock('@renderer/lib/hooks/use-toast', () => ({ toast: vi.fn() }));
 vi.mock('@renderer/lib/ipc', () => ({ rpc: {} }));
@@ -122,22 +137,53 @@ describe('TaskContextMenuItems grouping', () => {
     host.remove();
   });
 
-  it('keeps archive actions in the penultimate group', async () => {
+  it('uses the six requested groups and keeps both move actions together', async () => {
     const { TaskContextMenuItems } = await import(
       '@renderer/features/tasks/components/task-context-menu'
     );
 
     await act(async () => {
-      root.render(createElement(TaskContextMenuItems, taskMenuActions()));
+      root.render(
+        createElement(
+          TaskContextMenuItems,
+          taskMenuActions({
+            projectId: 'project-1',
+            taskId: 'task-1',
+            taskName: 'Task 1',
+            canPin: true,
+            canMarkReview: true,
+            onOpenDetails: vi.fn(),
+            onOpenBeside: vi.fn(),
+            onTileCandidates: vi.fn(),
+            onReconnect: vi.fn(),
+            onCreateSubtask: vi.fn(),
+            onSetParent: vi.fn(),
+            onCreateParent: vi.fn(),
+            onCopyYodaLink: vi.fn(),
+            onMoveToProject: vi.fn(),
+            onAssignWorkspace: vi.fn(),
+          })
+        )
+      );
     });
 
-    expect(menuGroups(host).slice(-2)).toEqual([
+    expect(menuGroups(host)).toEqual([
+      [
+        'tasks.context.openDetails',
+        'tasks.context.openBeside',
+        'tasks.context.reopenTask',
+        'tasks.context.tileCandidates',
+        'sidebar.reconnect',
+      ],
+      ['tasks.context.pinTask', 'common.rename', 'tasks.context.markForReview'],
+      ['tasks.context.addSubtask', 'tasks.context.setParent', 'tasks.context.createParent'],
+      ['tasks.context.copyTaskId', 'tasks.context.copyTaskBasicInfo', 'tasks.context.copyYodaLink'],
       ['tasks.context.archiveDirect', 'tasks.context.archiveWithSkill'],
-      ['tasks.context.reopenTask'],
+      ['tasks.context.moveToProject', 'workspaces.moveToWorkspace'],
     ]);
   });
 
-  it('keeps restore in the penultimate group for archived tasks', async () => {
+  it('keeps restore in the archive group before movement', async () => {
     const { TaskContextMenuItems } = await import(
       '@renderer/features/tasks/components/task-context-menu'
     );
@@ -150,6 +196,8 @@ describe('TaskContextMenuItems grouping', () => {
             isArchived: true,
             onArchiveWithSkill: undefined,
             onRestore: vi.fn(),
+            projectId: 'project-1',
+            onMoveToProject: vi.fn(),
           })
         )
       );
@@ -157,7 +205,7 @@ describe('TaskContextMenuItems grouping', () => {
 
     expect(menuGroups(host).slice(-2)).toEqual([
       ['projects.tasks.restore'],
-      ['tasks.context.reopenTask'],
+      ['tasks.context.moveToProject'],
     ]);
   });
 });

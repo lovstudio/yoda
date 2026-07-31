@@ -2123,9 +2123,7 @@
       "createParent": "Add parent task (group)",
       "moveToProject": "Move to project",
       "moveToProjectEmpty": "No other projects",
-      "moveToProjectSearch": "Search projects...",
-      "showSessionHistoryDock": "Show session history dock",
-      "hideSessionHistoryDock": "Hide session history dock"
+      "moveToProjectSearch": "Search projects..."
     },
     "moveToProject": {
       "confirmTitle": "Move task to another project?",
