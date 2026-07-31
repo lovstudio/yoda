@@ -2693,7 +2693,8 @@
   },
   "automation": {
     "title": "自动化",
-    "subtitle": "把常用 prompt 保存为自动化任务，一键在内部工作区运行。",
+    "eyebrow": "自动化工作台",
+    "subtitle": "让 AI 按计划处理重复工作，并在一个地方掌握运行状态与结果。",
     "new": "新建自动化",
     "current": "当前",
     "paused": "已暂停",
@@ -2704,9 +2705,47 @@
     "nextRunLabel": "下次 {{time}}",
     "runFailed": "自动化运行失败",
     "saveFailed": "自动化保存失败",
+    "updateFailed": "自动化状态更新失败",
+    "listCount": "{{count}} 个自动化",
+    "yourAutomations": "你的自动化",
+    "yourAutomationsDescription": "查看计划、最近结果，并随时手动运行。",
+    "summary": {
+      "status": "{{active}} 个启用 · {{paused}} 个暂停",
+      "next": "下一次：{{name}} · {{time}}",
+      "noSchedule": "暂无定时运行"
+    },
+    "overview": {
+      "label": "自动化运行概览",
+      "active": "正在启用",
+      "scheduledCount": "其中 {{count}} 个按计划运行",
+      "nextRun": "下一次运行",
+      "noScheduledRun": "暂无定时计划",
+      "createScheduleHint": "创建定时自动化后会显示在这里",
+      "recentHealth": "最近运行",
+      "successRatio": "{{success}} / {{total}} 成功",
+      "noRuns": "尚无记录",
+      "latestRuns": "最近 {{count}} 次已完成运行",
+      "runHint": "运行一次后会显示结果"
+    },
+    "filters": {
+      "label": "筛选自动化",
+      "active": "启用中",
+      "paused": "已暂停",
+      "all": "全部"
+    },
+    "empty": {
+      "title": "创建第一个自动化",
+      "description": "把重复出现的工作交给 AI，设定一次，之后按计划执行。",
+      "action": "开始创建",
+      "activeTitle": "没有启用中的自动化",
+      "activeDescription": "你可以从“已暂停”中恢复已有自动化。",
+      "pausedTitle": "没有已暂停的自动化",
+      "pausedDescription": "暂停的自动化会集中显示在这里。"
+    },
     "source": {
       "codex": "Codex 同步",
-      "codexHint": "配置、调度和通知由 Codex 管理，Yoda 只读同步展示"
+      "codexHint": "配置、调度和通知由 Codex 管理，Yoda 只读同步展示",
+      "codexManaged": "由 Codex 管理"
     },
     "status": {
       "active": "启用",
@@ -2715,6 +2754,10 @@
     "trigger": {
       "manual": "手动",
       "cron": "定时"
+    },
+    "schedule": {
+      "manual": "需要时手动运行",
+      "pending": "等待生成下一次计划"
     },
     "runStatus": {
       "running": "运行中",
@@ -2727,14 +2770,42 @@
       "edit": "编辑",
       "pause": "暂停",
       "resume": "恢复",
-      "delete": "删除"
+      "delete": "删除",
+      "more": "管理“{{name}}”",
+      "enabled": "已启用",
+      "disabled": "已暂停",
+      "runNow": "立即运行",
+      "running": "正在运行"
+    },
+    "card": {
+      "schedule": "运行计划",
+      "workspace": "工作区",
+      "lastRun": "上次运行",
+      "openLastRun": "查看“{{name}}”的上次运行",
+      "neverRun": "尚未运行"
+    },
+    "recentRuns": {
+      "title": "最近运行",
+      "description": "自动记录每次执行结果",
+      "empty": "还没有运行记录",
+      "emptyDescription": "手动运行或等待计划触发后，结果会显示在这里。",
+      "deletedAutomation": "已删除的自动化"
+    },
+    "editor": {
+      "createTitle": "创建自动化",
+      "editTitle": "编辑自动化",
+      "description": "先说明要完成的工作，再设置何时、由谁执行。",
+      "executionTitle": "执行设置",
+      "executionDescription": "这些设置决定自动化的归属、执行 Agent 和运行节奏。",
+      "ready": "设置完整，可以保存。",
+      "requiredHint": "填写名称、任务说明和必要的计划设置后即可保存。"
     },
     "form": {
       "title": "名称",
-      "titlePlaceholder": "Daily maker trend research",
+      "titlePlaceholder": "例如：每天整理产品反馈",
       "workspace": "工作区",
-      "workspacePlaceholder": "Lovstudio Web",
-      "agent": "代理",
+      "workspacePlaceholder": "例如：产品运营",
+      "agent": "执行 Agent",
       "schedule": "计划",
       "schedulePlaceholder": "每天 10:00",
       "trigger": "触发方式",
@@ -2742,8 +2813,31 @@
       "cronPlaceholder": "0 9 * * *",
       "cronHint": "标准 cron（分 时 日 月 周）。例：0 9 * * * 表示每天 09:00 运行。",
       "status": "状态",
-      "prompt": "Prompt",
-      "promptPlaceholder": "描述这个自动化运行时要让 agent 做什么。"
+      "prompt": "任务说明",
+      "promptPlaceholder": "清楚描述输入、要执行的步骤，以及完成后应交付什么结果。",
+      "promptHint": "这段说明会直接交给 Agent，请只写执行任务真正需要的信息。",
+      "scheduleFrequency": "运行频率",
+      "scheduleKinds": {
+        "daily": "每天",
+        "weekdays": "每个工作日",
+        "weekly": "每周",
+        "custom": "自定义 Cron"
+      },
+      "weekday": "星期",
+      "weekdays": {
+        "0": "星期日",
+        "1": "星期一",
+        "2": "星期二",
+        "3": "星期三",
+        "4": "星期四",
+        "5": "星期五",
+        "6": "星期六"
+      },
+      "runTime": "运行时间",
+      "localTimezone": "按本机时区运行",
+      "manualHint": "保存后不会自动触发，你可以随时从自动化卡片手动运行。",
+      "enabled": "保存后启用",
+      "enabledHint": "关闭后会以暂停状态保存"
     },
     "delete": {
       "title": "删除自动化？",

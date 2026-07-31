@@ -2693,7 +2693,8 @@
   },
   "automation": {
     "title": "Automation",
-    "subtitle": "Save recurring prompts as automations and run them in the internal workspace with one click.",
+    "eyebrow": "Automation workspace",
+    "subtitle": "Let AI handle recurring work on schedule, with every run and result visible in one place.",
     "new": "New automation",
     "current": "Current",
     "paused": "Paused",
@@ -2704,9 +2705,47 @@
     "nextRunLabel": "Next {{time}}",
     "runFailed": "Automation failed",
     "saveFailed": "Failed to save automation",
+    "updateFailed": "Failed to update automation",
+    "listCount": "{{count}} automations",
+    "yourAutomations": "Your automations",
+    "yourAutomationsDescription": "Review schedules and recent results, or run one on demand.",
+    "summary": {
+      "status": "{{active}} active · {{paused}} paused",
+      "next": "Next: {{name}} · {{time}}",
+      "noSchedule": "No scheduled runs"
+    },
+    "overview": {
+      "label": "Automation run overview",
+      "active": "Active",
+      "scheduledCount": "{{count}} run on a schedule",
+      "nextRun": "Next run",
+      "noScheduledRun": "No scheduled run",
+      "createScheduleHint": "Scheduled automations will appear here",
+      "recentHealth": "Recent runs",
+      "successRatio": "{{success}} / {{total}} succeeded",
+      "noRuns": "No runs yet",
+      "latestRuns": "Last {{count}} completed runs",
+      "runHint": "Results appear after the first run"
+    },
+    "filters": {
+      "label": "Filter automations",
+      "active": "Active",
+      "paused": "Paused",
+      "all": "All"
+    },
+    "empty": {
+      "title": "Create your first automation",
+      "description": "Hand recurring work to AI once, then let it run on your schedule.",
+      "action": "Create automation",
+      "activeTitle": "No active automations",
+      "activeDescription": "Resume an existing automation from the Paused filter.",
+      "pausedTitle": "No paused automations",
+      "pausedDescription": "Automations you pause will be collected here."
+    },
     "source": {
       "codex": "Synced from Codex",
-      "codexHint": "Configuration, scheduling, and notifications stay in Codex; Yoda mirrors it read-only"
+      "codexHint": "Configuration, scheduling, and notifications stay in Codex; Yoda mirrors it read-only",
+      "codexManaged": "Managed by Codex"
     },
     "status": {
       "active": "Active",
@@ -2715,6 +2754,10 @@
     "trigger": {
       "manual": "Manual",
       "cron": "Schedule"
+    },
+    "schedule": {
+      "manual": "Run manually when needed",
+      "pending": "Waiting for the next run time"
     },
     "runStatus": {
       "running": "Running",
@@ -2727,14 +2770,42 @@
       "edit": "Edit",
       "pause": "Pause",
       "resume": "Resume",
-      "delete": "Delete"
+      "delete": "Delete",
+      "more": "Manage \"{{name}}\"",
+      "enabled": "Enabled",
+      "disabled": "Paused",
+      "runNow": "Run now",
+      "running": "Running"
+    },
+    "card": {
+      "schedule": "Schedule",
+      "workspace": "Workspace",
+      "lastRun": "Last run",
+      "openLastRun": "Open the last run for \"{{name}}\"",
+      "neverRun": "Never run"
+    },
+    "recentRuns": {
+      "title": "Recent runs",
+      "description": "Every result is recorded automatically",
+      "empty": "No run history yet",
+      "emptyDescription": "Run an automation manually or wait for its schedule to trigger.",
+      "deletedAutomation": "Deleted automation"
+    },
+    "editor": {
+      "createTitle": "Create automation",
+      "editTitle": "Edit automation",
+      "description": "Describe the outcome first, then choose when and how it should run.",
+      "executionTitle": "Execution settings",
+      "executionDescription": "Choose where this belongs, which agent runs it, and when it starts.",
+      "ready": "Everything is ready to save.",
+      "requiredHint": "Add a name, task instructions, and any required schedule settings."
     },
     "form": {
       "title": "Name",
-      "titlePlaceholder": "Daily maker trend research",
+      "titlePlaceholder": "For example: Summarize product feedback",
       "workspace": "Workspace",
-      "workspacePlaceholder": "Lovstudio Web",
-      "agent": "Agent",
+      "workspacePlaceholder": "For example: Product operations",
+      "agent": "Execution agent",
       "schedule": "Schedule",
       "schedulePlaceholder": "Every day 10:00",
       "trigger": "Trigger",
@@ -2742,8 +2813,31 @@
       "cronPlaceholder": "0 9 * * *",
       "cronHint": "Standard cron (min hour day month weekday). Example: 0 9 * * * runs every day at 09:00.",
       "status": "Status",
-      "prompt": "Prompt",
-      "promptPlaceholder": "Describe what the agent should do when this automation runs."
+      "prompt": "Task instructions",
+      "promptPlaceholder": "Describe the input, the steps to perform, and the result that should be delivered.",
+      "promptHint": "These instructions are sent directly to the agent. Include only information needed to complete the task.",
+      "scheduleFrequency": "Frequency",
+      "scheduleKinds": {
+        "daily": "Every day",
+        "weekdays": "Every weekday",
+        "weekly": "Every week",
+        "custom": "Custom cron"
+      },
+      "weekday": "Day",
+      "weekdays": {
+        "0": "Sunday",
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday"
+      },
+      "runTime": "Run time",
+      "localTimezone": "Runs in your computer's timezone",
+      "manualHint": "This automation will not start on its own. Run it anytime from its automation card.",
+      "enabled": "Enable after saving",
+      "enabledHint": "Turn off to save it as paused"
     },
     "delete": {
       "title": "Delete automation?",
