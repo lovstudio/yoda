@@ -607,6 +607,7 @@
       "officialApiStale": "最近一次检查未完成，继续使用 {{date}} 的官方 API 结果。",
       "officialSnapshotConfigured": "内置官方快照核验于 {{date}}；点击“检查更新”可按当前账号重新校验。",
       "officialSnapshotNeedsKey": "内置官方快照核验于 {{date}}；配置该厂商 API Key 后可在线校验。",
+      "officialSnapshotStatic": "内置官方快照核验于 {{date}}；Yoda 版本会按厂商发布资料更新这份快照。",
       "aggregateOnlyDescription": "该厂商目前由聚合目录补充，也可继续添加自定义模型。",
       "aggregateStaleDescription": "最近一次聚合目录检查未完成，继续使用已缓存目录；自定义模型不受影响。",
       "updateStatus": {

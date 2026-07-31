@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchOfficialModelProviderModels,
   OFFICIAL_MODEL_PROVIDER_SOURCES,
@@ -26,14 +26,29 @@ beforeEach(() => {
   mocks.getRuntimeConfig.mockResolvedValue(undefined);
 });
 
+afterEach(() => {
+  delete process.env.COHERE_API_KEY;
+  delete process.env.DASHSCOPE_API_KEY;
+  delete process.env.MINIMAX_API_KEY;
+});
+
 describe('official model provider catalog', () => {
   it('ships dated snapshots with vendor documentation for the initial catalog', () => {
-    expect(OFFICIAL_MODEL_PROVIDER_SOURCES.map((source) => source.providerId)).toEqual([
-      'openai',
-      'anthropic',
-      'kimi',
-      'google',
-    ]);
+    expect(OFFICIAL_MODEL_PROVIDER_SOURCES.map((source) => source.providerId)).toEqual(
+      expect.arrayContaining([
+        'openai',
+        'anthropic',
+        'kimi',
+        'google',
+        'deepseek',
+        'qwen',
+        'xai',
+        'mistral',
+        'minimax',
+        'zhipu',
+        'cohere',
+      ])
+    );
     for (const source of OFFICIAL_MODEL_PROVIDER_SOURCES) {
       expect(source.sourceUrl).toMatch(/^https:\/\//);
       expect(source.snapshotAt).toBe('2026-07-31T00:00:00.000Z');
@@ -69,5 +84,54 @@ describe('official model provider catalog', () => {
       kind: 'credentialsMissing',
     });
     expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('parses Cohere model names and removes deprecated entries', async () => {
+    process.env.COHERE_API_KEY = 'test-key';
+    mocks.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        models: [
+          { name: 'command-a-plus-05-2026', is_deprecated: false },
+          { name: 'command-r-old', is_deprecated: true },
+          { name: 'embed-v4.0', is_deprecated: false },
+        ],
+      }),
+    });
+
+    await expect(fetchOfficialModelProviderModels('cohere')).resolves.toEqual({
+      kind: 'success',
+      models: ['cohere/command-a-plus-05-2026'],
+    });
+  });
+
+  it('keeps only Qwen text generation models from the account catalog', async () => {
+    process.env.DASHSCOPE_API_KEY = 'test-key';
+    mocks.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ id: 'qwen3.7-plus' }, { id: 'qwen-image-2.0' }, { id: 'qwen3-embedding-8b' }],
+      }),
+    });
+
+    await expect(fetchOfficialModelProviderModels('qwen')).resolves.toEqual({
+      kind: 'success',
+      models: ['qwen/qwen3.7-plus'],
+    });
+  });
+
+  it('keeps only MiniMax text models from the account catalog', async () => {
+    process.env.MINIMAX_API_KEY = 'test-key';
+    mocks.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ id: 'MiniMax-M2.7' }, { id: 'MiniMax-Hailuo-2.3' }, { id: 'speech-2.8' }],
+      }),
+    });
+
+    await expect(fetchOfficialModelProviderModels('minimax')).resolves.toEqual({
+      kind: 'success',
+      models: ['minimax/MiniMax-M2.7'],
+    });
   });
 });

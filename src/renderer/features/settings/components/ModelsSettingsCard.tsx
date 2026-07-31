@@ -264,9 +264,13 @@ function ProviderCatalogStatus({
           : t('settings.models.officialSnapshotNeedsKey', {
               date: formatCatalogDate(date),
             })
-    : provider.updateStatus === 'stale'
-      ? t('settings.models.aggregateStaleDescription')
-      : t('settings.models.aggregateOnlyDescription');
+    : officialSourceUrl
+      ? t('settings.models.officialSnapshotStatic', {
+          date: formatCatalogDate(date),
+        })
+      : provider.updateStatus === 'stale'
+        ? t('settings.models.aggregateStaleDescription')
+        : t('settings.models.aggregateOnlyDescription');
 
   return (
     <div className="min-w-0 overflow-hidden rounded-md border border-border bg-background-secondary/40 p-3">
