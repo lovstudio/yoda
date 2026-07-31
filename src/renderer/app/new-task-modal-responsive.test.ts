@@ -16,7 +16,7 @@ describe('new task modal responsive contract', () => {
     );
     expect(renderer).toContain('displayEntry?.className');
     expect(modal).toContain('data-yoda-surface="new-task-modal"');
-    expect(modal).toContain('<HomeComposer onSubmitted={onClose} />');
+    expect(modal).toContain('<HomeComposer onProjectRevealed={onClose} onSubmitted={onClose} />');
     expect(home).toContain('data-yoda-surface="home-composer-session-settings"');
     expect(home).toContain('data-yoda-surface="home-composer-compare-action"');
     expect(home).not.toContain('data-yoda-surface="home-composer-actions"');
