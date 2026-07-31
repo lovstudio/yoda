@@ -121,6 +121,9 @@
   },
   "sidebar": {
     "newTask": "新建任务",
+    "newTaskOpenMode": "新建任务打开方式",
+    "newTaskOpenHome": "主页",
+    "newTaskOpenModal": "悬浮窗",
     "searchTasks": "搜索任务",
     "library": "资源库",
     "marketplace": "扩展市场",

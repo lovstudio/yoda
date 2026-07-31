@@ -414,6 +414,8 @@ export const runtimeConfigDefaults = Object.fromEntries(
 export const interfaceSettingsSchema = z.object({
   taskHoverAction: z.enum(['delete', 'archive']),
   autoRightSidebarBehavior: z.boolean(),
+  /** Where the global new-task action opens its composer. */
+  newTaskOpenMode: z.enum(['home', 'modal']).catch('home'),
   /** How much of the agent's transcript appears in the Session → Conversation surface. */
   agentReplyDisplayLevel: z.enum(AGENT_REPLY_DISPLAY_LEVELS),
   /** Dock the active session's prompt history at the bottom of the conversation pane. */

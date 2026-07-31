@@ -1,3 +1,4 @@
+import { openNewTaskFromPreference } from '@renderer/app/open-new-task';
 import { applyHistoryEntry } from '@renderer/lib/components/nav-buttons';
 import { showModal } from '@renderer/lib/modal/modal-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -40,18 +41,16 @@ function createAppCommandProvider(): CommandProvider {
         },
       ];
 
-      if (projectId) {
-        commands.push({
-          id: 'app.newTask',
-          label: 'New Task',
-          description: 'Create a new task in this project',
-          shortcutKey: 'newTask',
-          group: 'App',
-          execute() {
-            showModal('taskModal', { projectId });
-          },
-        });
-      }
+      commands.push({
+        id: 'app.newTask',
+        label: 'New Task',
+        description: projectId ? 'Create a new task in this project' : 'Create a new task',
+        shortcutKey: 'newTask',
+        group: 'App',
+        execute() {
+          void openNewTaskFromPreference(projectId);
+        },
+      });
 
       commands.push(
         {

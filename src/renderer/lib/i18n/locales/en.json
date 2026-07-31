@@ -121,6 +121,9 @@
   },
   "sidebar": {
     "newTask": "New task",
+    "newTaskOpenMode": "New task opens in",
+    "newTaskOpenHome": "Home",
+    "newTaskOpenModal": "Floating window",
     "searchTasks": "Search tasks",
     "library": "Library",
     "marketplace": "Marketplace",
