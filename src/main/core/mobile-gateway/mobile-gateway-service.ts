@@ -16,6 +16,7 @@ import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import {
   createExpoGoPairingUrl,
   createMobilePairingUrl,
+  getMobileProjectActivityById,
   MOBILE_APP_DEFAULT_INSTALL_URL,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_GATEWAY_DEFAULT_PORT,
@@ -899,7 +900,10 @@ export class MobileGatewayService {
 
   private async getSnapshot(): Promise<MobileDashboardSnapshot> {
     const [projects, tasks] = await Promise.all([getProjects(), getTasks()]);
-    const mappedProjects = projects.map((project) => this.mapProject(project));
+    const projectActivityById = getMobileProjectActivityById(projects, tasks);
+    const mappedProjects = projects.map((project) =>
+      this.mapProject(project, projectActivityById.get(project.id) ?? project.updatedAt)
+    );
     const activeTasks = tasks.filter((task) => !task.archivedAt);
     const activityStatuses = await this.getTaskActivityStatuses(activeTasks);
     const mappedTasks = activeTasks.map((task) =>
@@ -923,7 +927,7 @@ export class MobileGatewayService {
     };
   }
 
-  private mapProject(project: Project): MobileProjectSummary {
+  private mapProject(project: Project, lastActivityAt: string): MobileProjectSummary {
     return {
       id: project.id,
       name: project.name,
@@ -933,6 +937,7 @@ export class MobileGatewayService {
       isInternal: project.isInternal,
       isOpen: Boolean(projectManager.getProject(project.id)),
       updatedAt: project.updatedAt,
+      lastActivityAt,
     };
   }
 

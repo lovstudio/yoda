@@ -3,12 +3,11 @@ import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { TaskFinishControl } from '@renderer/features/tasks/finish-flow/finish-control';
-import { getTaskStore, taskViewKind } from '@renderer/features/tasks/stores/task-selectors';
 import { getTabMeta } from '@renderer/features/tasks/tabs/tab-meta';
 import {
   useIsHostedTaskView,
   useProvisionedTask,
-  useTaskViewContext,
+  useTaskViewKind,
 } from '@renderer/features/tasks/task-view-context';
 import { SidebarChip } from '@renderer/lib/components/sidebar-chip';
 import { OpenInMenu } from '@renderer/lib/components/titlebar/open-in-menu';
@@ -25,10 +24,8 @@ import { DevServerPills } from './components/dev-server-pills';
  * hosts its own header row at the same height.
  */
 export const TaskTitlebar = observer(function TaskTitlebar() {
-  const { projectId, taskId } = useTaskViewContext();
   const hosted = useIsHostedTaskView();
-  const taskStore = getTaskStore(projectId, taskId);
-  const kind = taskViewKind(taskStore, projectId);
+  const kind = useTaskViewKind();
 
   if (kind !== 'ready') {
     return <Titlebar hosted={hosted} />;
