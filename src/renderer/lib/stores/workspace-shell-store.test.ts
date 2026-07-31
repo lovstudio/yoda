@@ -4,7 +4,7 @@ import { WorkspaceShellStore } from './workspace-shell-store';
 const mocks = vi.hoisted(() => ({
   start: vi.fn(async () => ({ sessionId: 'started' })),
   execute: vi.fn(async () => ({ sessionId: 'executed' })),
-  runCommand: vi.fn(async () => ({ sessionId: 'command' })),
+  sendInput: vi.fn(async () => ({ success: true, data: { queued: false } })),
   stop: vi.fn(async () => {}),
   sessions: [] as Array<{
     sessionId: string;
@@ -20,9 +20,9 @@ vi.mock('@renderer/lib/ipc', () => ({
     workspaceShell: {
       start: mocks.start,
       execute: mocks.execute,
-      runCommand: mocks.runCommand,
       stop: mocks.stop,
     },
+    pty: { sendInput: mocks.sendInput },
   },
 }));
 
@@ -58,6 +58,7 @@ describe('WorkspaceShellStore', () => {
       sessionId: session?.sessionId,
       cwd: '/repo',
       initialSize: undefined,
+      requireCwd: false,
     });
     const mockSession = mocks.sessions[0];
     expect(mockSession.enableConnection).toHaveBeenCalledOnce();
@@ -115,19 +116,27 @@ describe('WorkspaceShellStore', () => {
     expect(mocks.start).toHaveBeenCalledTimes(1);
   });
 
-  it('opens a project command terminal without task metadata', async () => {
+  it('types a quick action into the ordinary project Terminal and keeps it reusable', async () => {
     const store = new WorkspaceShellStore();
 
-    await store.runCommand('pnpm run dev', '/repo', 'Start locally');
+    await store.runCommand('pnpm run dev', '/repo');
+    const terminalSession = store.session;
 
-    expect(store.mode).toBe('command');
-    expect(store.commandLabel).toBe('Start locally');
+    expect(store.mode).toBe('shell');
+    expect(store.isShellOpen).toBe(true);
     expect(store.cwd).toBe('/repo');
-    expect(store.isOpen).toBe(true);
-    expect(mocks.runCommand).toHaveBeenCalledWith(store.session?.sessionId, {
-      command: 'pnpm run dev',
+    expect(mocks.start).toHaveBeenCalledWith({
+      sessionId: terminalSession?.sessionId,
       cwd: '/repo',
       initialSize: undefined,
+      requireCwd: true,
     });
+    expect(mocks.sendInput).toHaveBeenCalledWith(terminalSession?.sessionId, 'pnpm run dev\r');
+
+    await store.runCommand('pnpm test', '/repo');
+
+    expect(store.session).toBe(terminalSession);
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+    expect(mocks.sendInput).toHaveBeenLastCalledWith(terminalSession?.sessionId, 'pnpm test\r');
   });
 });

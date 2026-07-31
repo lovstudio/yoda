@@ -47,7 +47,7 @@ describe('runProjectQuickAction', () => {
       })
     ).resolves.toEqual({ kind: 'shell' });
 
-    expect(mocks.runCommand).toHaveBeenCalledWith('pnpm run dev', '/repo', 'Start locally');
+    expect(mocks.runCommand).toHaveBeenCalledWith('pnpm run dev', '/repo');
     expect(mocks.createTask).not.toHaveBeenCalled();
     expect(mocks.runProjectCommand).not.toHaveBeenCalled();
   });

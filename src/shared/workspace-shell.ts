@@ -10,14 +10,9 @@ export type WorkspaceShellRuntimeAction = {
   initialSize?: { cols: number; rows: number };
 };
 
-export type WorkspaceShellCommand = {
-  command: string;
-  cwd: string;
-  initialSize?: { cols: number; rows: number };
-};
-
 export type StartWorkspaceShellParams = {
   sessionId: string;
   cwd?: string;
   initialSize?: { cols: number; rows: number };
+  requireCwd?: boolean;
 };

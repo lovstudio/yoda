@@ -4374,7 +4374,6 @@
     "skill": "Skill",
     "doctor": "Doctor",
     "terminal": "Terminal",
-    "quickAction": "Quick action: {{label}}",
     "config": {
       "title": "Config",
       "description": "Adjust common input and Agent options. Manage detailed prompts and instruction files in Library."

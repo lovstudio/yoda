@@ -4374,7 +4374,6 @@
     "skill": "Skill",
     "doctor": "Doctor",
     "terminal": "终端",
-    "quickAction": "快速操作：{{label}}",
     "config": {
       "title": "配置",
       "description": "调整常用输入与 Agent 选项。Prompt、指令文件等详细内容在资源库统一管理。"

@@ -11,8 +11,8 @@ export type ProjectQuickActionRunResult = { kind: 'shell' } | { kind: 'agent'; t
  * The single execution boundary for a project quick action.
  *
  * Agent actions open an inspectable task that can be continued when execution
- * needs repair. Explicit shell actions run in the project-level Terminal and
- * do not create or depend on a task.
+ * needs repair. Explicit shell actions type into the ordinary Terminal owned
+ * by WorkspaceRuntimeBar and do not create or depend on a task.
  */
 export async function runProjectQuickAction(args: {
   project: MountedProject;
@@ -25,7 +25,7 @@ export async function runProjectQuickAction(args: {
     if (project.data.type !== 'local') {
       throw new Error('Programmatic quick actions currently require a local project.');
     }
-    await workspaceShellStore.runCommand(action.command, project.data.path, action.label);
+    await workspaceShellStore.runCommand(action.command, project.data.path);
     return { kind: 'shell' };
   }
 
