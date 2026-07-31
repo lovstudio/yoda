@@ -2706,8 +2706,14 @@
     "runFailed": "Automation failed",
     "saveFailed": "Failed to save automation",
     "updateFailed": "Failed to update automation",
+    "listCount": "{{count}} automations",
     "yourAutomations": "Your automations",
     "yourAutomationsDescription": "Review schedules and recent results, or run one on demand.",
+    "summary": {
+      "status": "{{active}} active · {{paused}} paused",
+      "next": "Next: {{name}} · {{time}}",
+      "noSchedule": "No scheduled runs"
+    },
     "overview": {
       "label": "Automation run overview",
       "active": "Active",
@@ -2775,6 +2781,7 @@
       "schedule": "Schedule",
       "workspace": "Workspace",
       "lastRun": "Last run",
+      "openLastRun": "Open the last run for \"{{name}}\"",
       "neverRun": "Never run"
     },
     "recentRuns": {

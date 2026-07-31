@@ -2706,8 +2706,14 @@
     "runFailed": "自动化运行失败",
     "saveFailed": "自动化保存失败",
     "updateFailed": "自动化状态更新失败",
+    "listCount": "{{count}} 个自动化",
     "yourAutomations": "你的自动化",
     "yourAutomationsDescription": "查看计划、最近结果，并随时手动运行。",
+    "summary": {
+      "status": "{{active}} 个启用 · {{paused}} 个暂停",
+      "next": "下一次：{{name}} · {{time}}",
+      "noSchedule": "暂无定时运行"
+    },
     "overview": {
       "label": "自动化运行概览",
       "active": "正在启用",
@@ -2775,6 +2781,7 @@
       "schedule": "运行计划",
       "workspace": "工作区",
       "lastRun": "上次运行",
+      "openLastRun": "查看“{{name}}”的上次运行",
       "neverRun": "尚未运行"
     },
     "recentRuns": {

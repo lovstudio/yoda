@@ -52,6 +52,7 @@ const fixtures = vi.hoisted(() => {
     source: 'codex' as const,
     title: 'Codex scheduled review',
     prompt: 'Review the project status from Codex.',
+    status: 'paused' as const,
   };
   const recentRun = {
     id: 'run-1',
@@ -192,17 +193,21 @@ describe('AutomationMainPanel', () => {
     host.remove();
   });
 
-  it('shows an operational overview, active cards, and recent run navigation', async () => {
+  it('defaults to all automations so paused Codex tasks stay visible', async () => {
     const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
     await act(async () => root.render(createElement(AutomationMainPanel)));
 
-    expect(host.textContent).toContain('automation.overview.active');
+    expect(host.textContent).toContain('automation.summary.status');
     expect(host.textContent).toContain(fixtures.activeAutomation.title);
     expect(host.textContent).toContain(fixtures.activeAutomation.prompt);
-    expect(host.textContent).not.toContain(fixtures.pausedAutomation.title);
-    expect(host.textContent).toContain('automation.recentRuns.title');
+    expect(host.textContent).toContain(fixtures.pausedAutomation.title);
+    expect(host.textContent).toContain(fixtures.codexAutomation.title);
+    expect(findButton(host, 'automation.filters.all')?.getAttribute('aria-pressed')).toBe('true');
+    expect(host.textContent).not.toContain('automation.recentRuns.title');
 
-    const recentRunButton = findButton(host, fixtures.activeAutomation.title);
+    const recentRunButton = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="automation.card.openLastRun"]'
+    );
     await act(async () => recentRunButton?.click());
     expect(mocks.navigate).toHaveBeenCalledWith('task', {
       projectId: INTERNAL_PROJECT_ID,
@@ -221,9 +226,11 @@ describe('AutomationMainPanel', () => {
 
     const pausedFilter = findButton(host, 'automation.filters.paused');
     await act(async () => pausedFilter?.click());
-    const visibleCard = host.querySelector('article');
-    expect(visibleCard?.textContent).toContain(fixtures.pausedAutomation.title);
-    expect(visibleCard?.textContent).not.toContain(fixtures.activeAutomation.title);
+    const visibleCards = Array.from(host.querySelectorAll('article'));
+    expect(visibleCards).toHaveLength(2);
+    expect(host.textContent).toContain(fixtures.pausedAutomation.title);
+    expect(host.textContent).toContain(fixtures.codexAutomation.title);
+    expect(host.textContent).not.toContain(fixtures.activeAutomation.title);
   });
 
   it('opens the product-oriented creation editor from the page action', async () => {
@@ -246,7 +253,6 @@ describe('AutomationMainPanel', () => {
     const codexCard = Array.from(host.querySelectorAll('article')).find((card) =>
       card.textContent?.includes(fixtures.codexAutomation.title)
     );
-    expect(codexCard?.textContent).toContain('automation.source.codex');
     expect(codexCard?.textContent).toContain('automation.source.codexManaged');
     expect(findButton(codexCard as HTMLElement, 'automation.actions.runNow')).toBeUndefined();
     expect(codexCard?.querySelector('button[aria-label^="automation.actions.more"]')).toBeNull();

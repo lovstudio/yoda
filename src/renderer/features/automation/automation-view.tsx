@@ -1,9 +1,7 @@
 import {
-  Activity,
   Bot,
   CalendarClock,
   CheckCircle2,
-  ChevronRight,
   CircleDashed,
   Clock3,
   Folder,
@@ -159,7 +157,7 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
   const runAutomation = useRunAutomation();
   const editorRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<AutomationFilter>('active');
+  const [filter, setFilter] = useState<AutomationFilter>('all');
   const [draft, setDraft] = useState<AutomationDraft>(() => makeDraft(DEFAULT_PROVIDER));
 
   const defaultProvider = isValidRuntimeId(defaultRuntime) ? defaultRuntime : DEFAULT_PROVIDER;
@@ -172,10 +170,6 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
     if (filter === 'paused') return pausedItems;
     return items;
   }, [activeItems, filter, items, pausedItems]);
-  const automationById = useMemo(
-    () => new Map(items.map((item) => [item.id, item] as const)),
-    [items]
-  );
   const latestRuns = useMemo(() => {
     const map = new Map<string, AutomationRun>();
     for (const run of history) {
@@ -193,11 +187,6 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
         )[0],
     [activeItems]
   );
-  const settledRuns = useMemo(
-    () => history.filter((run) => run.status === 'success' || run.status === 'failed').slice(0, 10),
-    [history]
-  );
-  const successfulRuns = settledRuns.filter((run) => run.status === 'success').length;
   const runningId = runAutomation.isPending ? (runAutomation.variables ?? null) : null;
   const updatingId = updateAutomation.isPending ? (updateAutomation.variables?.id ?? null) : null;
   const editorOpen = editingId !== null;
@@ -328,12 +317,8 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
         >
           {!embedded && (
             <div className="max-w-2xl">
-              <div className="mb-2 flex items-center gap-2 text-xs font-medium tracking-wide text-foreground-muted">
-                <Workflow className="size-3.5" />
-                {t('automation.eyebrow')}
-              </div>
-              <h1 className="text-3xl font-semibold tracking-tight">{t('automation.title')}</h1>
-              <p className="mt-2 text-sm leading-6 text-foreground-muted">
+              <h1 className="text-2xl font-semibold tracking-tight">{t('automation.title')}</h1>
+              <p className="mt-1.5 text-sm leading-6 text-foreground-muted">
                 {t('automation.subtitle')}
               </p>
             </div>
@@ -344,13 +329,11 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
           </Button>
         </header>
 
-        <AutomationOverview
-          className={cn(embedded ? 'mt-5' : 'mt-8')}
+        <AutomationSummary
+          className={cn(embedded ? 'mt-5' : 'mt-6')}
           activeCount={activeItems.length}
-          scheduledCount={activeItems.filter((entry) => entry.triggerKind === 'cron').length}
+          pausedCount={pausedItems.length}
           nextAutomation={nextAutomation}
-          successfulRuns={successfulRuns}
-          settledRunCount={settledRuns.length}
         />
 
         {editorOpen && (
@@ -367,74 +350,62 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
           </div>
         )}
 
-        <div className="mt-8 grid items-start gap-6 @5xl:grid-cols-[minmax(0,1fr)_20rem]">
-          <section className="min-w-0">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold">{t('automation.yourAutomations')}</h2>
-                <p className="mt-0.5 text-xs text-foreground-muted">
-                  {t('automation.yourAutomationsDescription')}
-                </p>
-              </div>
-              <AutomationFilterControl
-                value={filter}
-                activeCount={activeItems.length}
-                pausedCount={pausedItems.length}
-                totalCount={items.length}
-                onChange={setFilter}
+        <section className="mt-6 min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-medium text-foreground-muted">
+              {t('automation.listCount', { count: items.length })}
+            </h2>
+            <AutomationFilterControl
+              value={filter}
+              activeCount={activeItems.length}
+              pausedCount={pausedItems.length}
+              totalCount={items.length}
+              onChange={setFilter}
+            />
+          </div>
+
+          <div className="mt-3 space-y-2.5">
+            {visibleItems.length === 0 ? (
+              <AutomationEmptyState
+                filter={filter}
+                hasAutomations={items.length > 0}
+                onCreate={openCreate}
               />
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {visibleItems.length === 0 ? (
-                <AutomationEmptyState
-                  filter={filter}
-                  hasAutomations={items.length > 0}
-                  onCreate={openCreate}
+            ) : (
+              visibleItems.map((entry) => (
+                <AutomationCard
+                  key={entry.id}
+                  entry={entry}
+                  isRunning={runningId === entry.id}
+                  isUpdating={updatingId === entry.id}
+                  lastRun={latestRuns.get(entry.id)}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                  onRun={handleRun}
+                  onToggle={handleToggle}
+                  onOpenTask={(taskId) =>
+                    navigate('task', { projectId: INTERNAL_PROJECT_ID, taskId })
+                  }
                 />
-              ) : (
-                visibleItems.map((entry) => (
-                  <AutomationCard
-                    key={entry.id}
-                    entry={entry}
-                    isRunning={runningId === entry.id}
-                    isUpdating={updatingId === entry.id}
-                    lastRun={latestRuns.get(entry.id)}
-                    onEdit={openEdit}
-                    onDelete={handleDelete}
-                    onRun={handleRun}
-                    onToggle={handleToggle}
-                  />
-                ))
-              )}
-            </div>
-          </section>
-
-          <RecentRuns
-            runs={history.slice(0, 6)}
-            automationById={automationById}
-            onOpenTask={(taskId) => navigate('task', { projectId: INTERNAL_PROJECT_ID, taskId })}
-          />
-        </div>
+              ))
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
 });
 
-function AutomationOverview({
+function AutomationSummary({
   className,
   activeCount,
-  scheduledCount,
+  pausedCount,
   nextAutomation,
-  successfulRuns,
-  settledRunCount,
 }: {
   className?: string;
   activeCount: number;
-  scheduledCount: number;
+  pausedCount: number;
   nextAutomation: Automation | undefined;
-  successfulRuns: number;
-  settledRunCount: number;
 }) {
   const { t } = useTranslation();
 
@@ -442,83 +413,26 @@ function AutomationOverview({
     <section
       aria-label={t('automation.overview.label')}
       className={cn(
-        'grid overflow-hidden rounded-xl border border-border/80 bg-background-secondary divide-y divide-border/70 @3xl:grid-cols-3 @3xl:divide-x @3xl:divide-y-0',
+        'flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-border/70 py-3 text-xs text-foreground-muted',
         className
       )}
     >
-      <OverviewMetric
-        icon={Activity}
-        label={t('automation.overview.active')}
-        value={String(activeCount)}
-        detail={t('automation.overview.scheduledCount', { count: scheduledCount })}
-        tone="active"
-      />
-      <OverviewMetric
-        icon={CalendarClock}
-        label={t('automation.overview.nextRun')}
-        value={nextAutomation?.title ?? t('automation.overview.noScheduledRun')}
-        detail={
-          nextAutomation?.nextRunAt
-            ? formatTime(nextAutomation.nextRunAt)
-            : t('automation.overview.createScheduleHint')
-        }
-      />
-      <OverviewMetric
-        icon={CheckCircle2}
-        label={t('automation.overview.recentHealth')}
-        value={
-          settledRunCount > 0
-            ? t('automation.overview.successRatio', {
-                success: successfulRuns,
-                total: settledRunCount,
+      <span className="inline-flex items-center gap-2 font-medium text-foreground">
+        <span className="size-1.5 rounded-full bg-emerald-500" />
+        {t('automation.summary.status', { active: activeCount, paused: pausedCount })}
+      </span>
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        <CalendarClock className="size-3.5 shrink-0" />
+        <span className="truncate">
+          {nextAutomation?.nextRunAt
+            ? t('automation.summary.next', {
+                name: nextAutomation.title,
+                time: formatTime(nextAutomation.nextRunAt),
               })
-            : t('automation.overview.noRuns')
-        }
-        detail={
-          settledRunCount > 0
-            ? t('automation.overview.latestRuns', { count: settledRunCount })
-            : t('automation.overview.runHint')
-        }
-        tone={settledRunCount > 0 && successfulRuns === settledRunCount ? 'success' : 'neutral'}
-      />
+            : t('automation.summary.noSchedule')}
+        </span>
+      </span>
     </section>
-  );
-}
-
-function OverviewMetric({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone = 'neutral',
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  detail: string;
-  tone?: 'active' | 'success' | 'neutral';
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-3.5 px-4 py-4">
-      <span
-        className={cn(
-          'flex size-9 shrink-0 items-center justify-center rounded-lg border',
-          tone === 'active' && 'border-blue-500/15 bg-blue-500/10 text-blue-600 dark:text-blue-400',
-          tone === 'success' &&
-            'border-emerald-500/15 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-          tone === 'neutral' && 'border-border bg-background text-foreground-muted'
-        )}
-      >
-        <Icon className="size-4" />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[11px] font-medium text-foreground-muted">{label}</span>
-        <strong className="mt-0.5 block truncate text-sm font-semibold text-foreground">
-          {value}
-        </strong>
-        <span className="mt-0.5 block truncate text-[11px] text-foreground-passive">{detail}</span>
-      </span>
-    </div>
   );
 }
 
@@ -537,9 +451,9 @@ function AutomationFilterControl({
 }) {
   const { t } = useTranslation();
   const filters: Array<{ id: AutomationFilter; label: string; count: number }> = [
+    { id: 'all', label: t('automation.filters.all'), count: totalCount },
     { id: 'active', label: t('automation.filters.active'), count: activeCount },
     { id: 'paused', label: t('automation.filters.paused'), count: pausedCount },
-    { id: 'all', label: t('automation.filters.all'), count: totalCount },
   ];
 
   return (
@@ -646,6 +560,7 @@ const AutomationCard = observer(function AutomationCard({
   onDelete,
   onRun,
   onToggle,
+  onOpenTask,
 }: {
   entry: Automation;
   isRunning: boolean;
@@ -655,6 +570,7 @@ const AutomationCard = observer(function AutomationCard({
   onDelete: (entry: Automation) => void;
   onRun: (entry: Automation) => void;
   onToggle: (entry: Automation) => void;
+  onOpenTask: (taskId: string) => void;
 }) {
   const { t } = useTranslation();
   const runtime = RUNTIMES.find((item) => item.id === entry.runtime);
@@ -672,7 +588,7 @@ const AutomationCard = observer(function AutomationCard({
   return (
     <article
       className={cn(
-        'group overflow-hidden rounded-xl border border-border/80 bg-background-secondary transition-[border-color,box-shadow,opacity] hover:border-border-strong hover:shadow-sm',
+        'group overflow-hidden rounded-xl border border-border/80 bg-background-secondary transition-[border-color,box-shadow,opacity] hover:border-border-strong',
         entry.status === 'paused' && 'opacity-80'
       )}
     >
@@ -715,18 +631,8 @@ const AutomationCard = observer(function AutomationCard({
                   {t(`automation.runStatus.${lastRun.status}`)}
                 </Badge>
               )}
-              {syncedFromCodex && (
-                <Badge
-                  variant="outline"
-                  className="text-foreground-muted"
-                  title={t('automation.source.codexHint')}
-                >
-                  <RefreshCw className="size-3" />
-                  {t('automation.source.codex')}
-                </Badge>
-              )}
             </div>
-            <p className="mt-1 line-clamp-2 text-xs leading-5 text-foreground-muted">
+            <p className="mt-1 line-clamp-1 text-xs leading-5 text-foreground-muted">
               {entry.prompt}
             </p>
           </div>
@@ -764,51 +670,55 @@ const AutomationCard = observer(function AutomationCard({
           )}
         </div>
 
-        <div className="mt-4 grid gap-2 @2xl:grid-cols-2">
-          <AutomationMeta
-            icon={CalendarClock}
-            label={t('automation.card.schedule')}
-            value={scheduleLabel}
-            detail={entry.triggerKind === 'cron' ? (entry.cronExpr ?? undefined) : undefined}
-          />
-          <AutomationMeta
-            icon={Folder}
-            label={t('automation.card.workspace')}
-            value={entry.workspaceName}
-          />
-        </div>
-      </div>
-
-      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 bg-background/55 px-4 py-2.5">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-foreground-muted">
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-foreground-muted">
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            <CalendarClock className="size-3.5 shrink-0" />
+            <span className="truncate">{scheduleLabel}</span>
+          </span>
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            <Folder className="size-3.5 shrink-0" />
+            <span className="truncate">{entry.workspaceName}</span>
+          </span>
           <span
             className={cn(
-              'inline-flex items-center gap-1',
+              'inline-flex items-center gap-1.5',
               detected ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground-muted'
             )}
           >
-            <Bot className="size-3" />
+            <Bot className="size-3.5" />
             {runtime?.name ?? entry.runtime}
           </span>
-          {lastRun ? (
-            <span className="inline-flex items-center gap-1">
-              <History className="size-3" />
-              {t('automation.card.lastRun')}{' '}
-              <RelativeTime value={lastRun.startedAt} className="text-foreground-muted" />
+          {lastRun &&
+            (lastRun.taskId ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                aria-label={t('automation.card.openLastRun', { name: entry.title })}
+                onClick={() => onOpenTask(lastRun.taskId as string)}
+              >
+                <History className="size-3.5" />
+                {t('automation.card.lastRun')} <RelativeTime value={lastRun.startedAt} />
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <History className="size-3.5" />
+                {t('automation.card.lastRun')} <RelativeTime value={lastRun.startedAt} />
+              </span>
+            ))}
+          {syncedFromCodex && (
+            <span
+              className="inline-flex items-center gap-1.5"
+              title={t('automation.source.codexHint')}
+            >
+              <RefreshCw className="size-3.5" />
+              {t('automation.source.codexManaged')}
             </span>
-          ) : (
-            <span>{t('automation.card.neverRun')}</span>
           )}
         </div>
-        {syncedFromCodex ? (
-          <span
-            className="inline-flex items-center gap-1.5 text-xs text-foreground-muted"
-            title={t('automation.source.codexHint')}
-          >
-            <RefreshCw className="size-3" />
-            {t('automation.source.codexManaged')}
-          </span>
-        ) : (
+      </div>
+
+      {!syncedFromCodex && (
+        <footer className="flex flex-wrap items-center justify-end gap-3 border-t border-border/70 bg-background/40 px-4 py-2">
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-2 text-xs text-foreground-muted">
               {entry.status === 'active'
@@ -841,133 +751,11 @@ const AutomationCard = observer(function AutomationCard({
               {isRunning ? t('automation.actions.running') : t('automation.actions.runNow')}
             </Button>
           </div>
-        )}
-      </footer>
+        </footer>
+      )}
     </article>
   );
 });
-
-function AutomationMeta({
-  icon: Icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  detail?: string;
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-border/60 bg-background px-3 py-2">
-      <Icon className="size-3.5 shrink-0 text-foreground-muted" />
-      <span className="min-w-0">
-        <span className="block text-[10px] font-medium text-foreground-passive">{label}</span>
-        <span className="flex min-w-0 items-baseline gap-1.5">
-          <strong className="truncate text-xs font-medium text-foreground">{value}</strong>
-          {detail && <code className="shrink-0 text-[9px] text-foreground-passive">{detail}</code>}
-        </span>
-      </span>
-    </div>
-  );
-}
-
-function RecentRuns({
-  runs,
-  automationById,
-  onOpenTask,
-}: {
-  runs: AutomationRun[];
-  automationById: Map<string, Automation>;
-  onOpenTask: (taskId: string) => void;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <aside className="overflow-hidden rounded-xl border border-border/80 bg-background-secondary">
-      <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
-        <div>
-          <h2 className="text-sm font-semibold">{t('automation.recentRuns.title')}</h2>
-          <p className="mt-0.5 text-[11px] text-foreground-muted">
-            {t('automation.recentRuns.description')}
-          </p>
-        </div>
-        <History className="size-4 text-foreground-muted" />
-      </div>
-      {runs.length === 0 ? (
-        <div className="flex min-h-40 flex-col items-center justify-center px-5 text-center">
-          <Clock3 className="size-5 text-foreground-passive" />
-          <p className="mt-2 text-xs font-medium">{t('automation.recentRuns.empty')}</p>
-          <p className="mt-1 text-[11px] leading-4 text-foreground-muted">
-            {t('automation.recentRuns.emptyDescription')}
-          </p>
-        </div>
-      ) : (
-        <div className="divide-y divide-border/60">
-          {runs.map((run) => (
-            <RecentRunRow
-              key={run.id}
-              run={run}
-              automation={automationById.get(run.automationId)}
-              onOpenTask={onOpenTask}
-            />
-          ))}
-        </div>
-      )}
-    </aside>
-  );
-}
-
-function RecentRunRow({
-  run,
-  automation,
-  onOpenTask,
-}: {
-  run: AutomationRun;
-  automation: Automation | undefined;
-  onOpenTask: (taskId: string) => void;
-}) {
-  const { t } = useTranslation();
-  const style = RUN_STATUS_STYLES[run.status];
-  const StatusIcon = style.icon;
-  const content = (
-    <>
-      <span
-        className={cn(
-          'flex size-7 shrink-0 items-center justify-center rounded-full',
-          style.className
-        )}
-      >
-        <StatusIcon className={cn('size-3.5', run.status === 'running' && 'animate-spin')} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-medium">
-          {automation?.title ?? t('automation.recentRuns.deletedAutomation')}
-        </span>
-        <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-foreground-muted">
-          {t(`automation.runStatus.${run.status}`)}
-          <span aria-hidden="true">·</span>
-          <RelativeTime value={run.startedAt} />
-        </span>
-      </span>
-      {run.taskId && <ChevronRight className="size-3.5 shrink-0 text-foreground-passive" />}
-    </>
-  );
-
-  if (!run.taskId) {
-    return <div className="flex items-center gap-2.5 px-4 py-3">{content}</div>;
-  }
-
-  return (
-    <button
-      type="button"
-      className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-background-1 focus-visible:bg-background-1 focus-visible:outline-none"
-      onClick={() => onOpenTask(run.taskId as string)}
-    >
-      {content}
-    </button>
-  );
-}
 
 function AutomationEditor({
   draft,
