@@ -14,9 +14,12 @@ import {
   getTaskManagerStore,
   getTaskStore,
   taskErrorMessage,
-  taskViewKind,
 } from '@renderer/features/tasks/stores/task-selectors';
-import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
+import {
+  useProvisionedTask,
+  useTaskViewContext,
+  useTaskViewKind,
+} from '@renderer/features/tasks/task-view-context';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
@@ -38,7 +41,7 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
   const { t } = useTranslation();
   const { projectId, taskId } = useTaskViewContext();
   const taskStore = getTaskStore(projectId, taskId);
-  const kind = taskViewKind(taskStore, projectId);
+  const kind = useTaskViewKind();
 
   if (kind === 'creating' || kind === 'naming') {
     const setupRequiresBranchName = taskStore?.data.setupRequiresBranchName === true;

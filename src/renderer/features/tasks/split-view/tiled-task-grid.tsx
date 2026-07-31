@@ -45,14 +45,14 @@ export const SelfContainedTaskPane = observer(function SelfContainedTaskPane({
 
   if (kind !== 'ready') {
     return (
-      <TaskViewWrapper projectId={projectId} taskId={taskId} hosted>
+      <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind} hosted>
         <TaskMainPanel />
       </TaskViewWrapper>
     );
   }
 
   return (
-    <TaskViewWrapper projectId={projectId} taskId={taskId} hosted>
+    <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind} hosted>
       <ProvisionedTaskProvider projectId={projectId} taskId={taskId}>
         <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
           <TaskMainPanel />

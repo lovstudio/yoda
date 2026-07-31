@@ -235,14 +235,14 @@ export const TaskViewWrapperWithProviders = observer(function TaskViewWrapperWit
 
   if (kind !== 'ready') {
     return (
-      <TaskViewWrapper projectId={projectId} taskId={taskId}>
+      <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind}>
         {children}
       </TaskViewWrapper>
     );
   }
 
   return (
-    <TaskViewWrapper projectId={projectId} taskId={taskId}>
+    <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind}>
       <ProvisionedTaskProvider projectId={projectId} taskId={taskId}>
         <TabManagerVisibilitySync projectId={projectId} taskId={taskId} />
         <TopLevelTabSync projectId={projectId} taskId={taskId} />
