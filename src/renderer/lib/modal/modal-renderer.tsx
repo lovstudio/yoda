@@ -104,7 +104,8 @@ export const ModalRenderer = observer(function ModalRenderer() {
           'fixed left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 flex-col overflow-hidden rounded-xl bg-background-quaternary text-sm ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
           isContainerScoped && 'absolute max-h-[calc(100%-2rem)]',
           POSITION_CLASSES[displayEntry?.position ?? 'center'],
-          SIZE_CLASSES[displayEntry?.size ?? 'md']
+          SIZE_CLASSES[displayEntry?.size ?? 'md'],
+          displayEntry?.className
         )}
       >
         {DisplayComponent && displayArgs ? <DisplayComponent {...displayArgs} /> : null}
