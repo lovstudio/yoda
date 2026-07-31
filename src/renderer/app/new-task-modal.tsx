@@ -16,7 +16,7 @@ export function NewTaskModal({ onClose }: BaseModalProps) {
         <DialogTitle>{t('sidebar.newTask')}</DialogTitle>
       </DialogHeader>
       <DialogContentArea className="gap-0">
-        <HomeComposer onProjectRevealed={onClose} onSubmitted={onClose} />
+        <HomeComposer onSubmitted={onClose} />
       </DialogContentArea>
     </div>
   );

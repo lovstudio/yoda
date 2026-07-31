@@ -13,6 +13,8 @@ import type {
 
 const mocks = vi.hoisted(() => ({
   listProviders: vi.fn(),
+  refreshProviders: vi.fn(),
+  setAutomaticUpdates: vi.fn(),
   updateCustomModels: vi.fn(),
 }));
 
@@ -31,7 +33,12 @@ vi.mock('@renderer/lib/ipc', () => ({
   rpc: {
     llm: {
       listModelProviders: mocks.listProviders,
+      refreshModelProviders: mocks.refreshProviders,
+      setModelProviderAutomaticUpdates: mocks.setAutomaticUpdates,
       updateModelProviderCustomModels: mocks.updateCustomModels,
+    },
+    app: {
+      openExternal: vi.fn(),
     },
   },
 }));
@@ -50,6 +57,11 @@ describe('Models settings', () => {
       providerGroup('kimi', 'Kimi', ['moonshotai/kimi-k2.5']),
     ]);
     mocks.listProviders.mockImplementation(async () => result);
+    mocks.refreshProviders.mockImplementation(async () => result);
+    mocks.setAutomaticUpdates.mockImplementation(async (enabled: boolean) => {
+      result = { ...result, automaticUpdatesEnabled: enabled };
+      return result;
+    });
     mocks.updateCustomModels.mockImplementation(
       async (providerId: string, customModels: string[]) => {
         result = {
@@ -60,7 +72,14 @@ describe('Models settings', () => {
             return {
               ...provider,
               customModels,
-              models: [...customModels.map((id) => ({ id, custom: true })), ...catalogModels],
+              models: [
+                ...customModels.map((id) => ({
+                  id,
+                  custom: true,
+                  sources: ['custom' as const],
+                })),
+                ...catalogModels,
+              ],
             };
           }),
         };
@@ -111,7 +130,16 @@ describe('Models settings', () => {
     expect(mocks.updateCustomModels).toHaveBeenLastCalledWith('openai', []);
     const card = host.querySelector<HTMLElement>('[data-testid="models-settings-card"]');
     expect(card).not.toBeNull();
-    expect(card!.scrollWidth).toBeLessThanOrEqual(card!.clientWidth);
+    const cardRight = card!.getBoundingClientRect().right;
+    const overflowingElements = Array.from(card!.querySelectorAll<HTMLElement>('*'))
+      .filter((element) => element.getBoundingClientRect().right > cardRight + 1)
+      .map((element) => ({
+        slot: element.dataset.slot,
+        tag: element.tagName,
+        text: element.textContent?.slice(0, 80),
+        width: element.getBoundingClientRect().width,
+      }));
+    expect(overflowingElements).toEqual([]);
   });
 
   it('switches between Anthropic and Kimi vendor catalogs independently', async () => {
@@ -135,6 +163,25 @@ describe('Models settings', () => {
     await selectProvider(host, 'Kimi');
     expect(host.textContent).toContain('moonshotai/kimi-k2.5');
     expect(host.textContent).not.toContain('anthropic/claude-opus-4.7');
+  });
+
+  it('checks the selected vendor and exposes automatic update control', async () => {
+    await renderModelsSettings(root, queryClient);
+
+    expect(host.textContent).toContain('settings.models.updateStatus.snapshot');
+    expect(host.textContent).toContain('settings.models.officialBadge');
+
+    await clickButtonContaining(host, 'settings.models.refresh');
+    await flush();
+    expect(mocks.refreshProviders).toHaveBeenCalledWith('openai');
+
+    const automaticUpdate = host.querySelector<HTMLElement>(
+      '[role="switch"][aria-label="settings.models.automaticUpdates"]'
+    );
+    expect(automaticUpdate).not.toBeNull();
+    await act(async () => automaticUpdate?.click());
+    await flush();
+    expect(mocks.setAutomaticUpdates).toHaveBeenCalledWith(false);
   });
 });
 
@@ -181,8 +228,19 @@ function providerGroup(
   return {
     id,
     name,
-    models: catalogModels.map((modelId) => ({ id: modelId, custom: false })),
+    models: catalogModels.map((modelId) => ({
+      id: modelId,
+      custom: false,
+      sources: ['official'],
+    })),
     customModels: [],
+    officialSourceUrl: `https://example.com/${id}`,
+    officialSnapshotAt: '2026-07-31T00:00:00.000Z',
+    officialFetchedAt: null,
+    lastUpdateAttemptAt: null,
+    officialApiSupported: true,
+    officialApiConfigured: false,
+    updateStatus: 'snapshot',
   };
 }
 
@@ -190,6 +248,9 @@ function catalogResult(providers: ModelProviderCatalogGroup[]): ModelProviderCat
   return {
     providers,
     fetchedAt: '2026-07-31T00:00:00.000Z',
+    automaticUpdatesEnabled: true,
+    lastAutomaticRefreshAt: null,
+    nextAutomaticRefreshAt: null,
   };
 }
 
