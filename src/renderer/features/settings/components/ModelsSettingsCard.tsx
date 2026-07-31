@@ -478,7 +478,7 @@ export default function ModelsSettingsCard() {
 
 function ProviderCatalogStatus({ provider }: { provider: ModelProviderCatalogGroup | undefined }) {
   const { t } = useTranslation();
-  if (!provider) return null;
+  if (!provider?.officialSourceUrl) return null;
 
   const officialSourceUrl = provider.officialSourceUrl;
   const date =
@@ -491,17 +491,12 @@ function ProviderCatalogStatus({ provider }: { provider: ModelProviderCatalogGro
       data-testid="model-catalog-status"
       title={description}
     >
-      <div className="min-w-0 whitespace-nowrap text-xs tabular-nums text-foreground-muted">
-        {t('settings.models.modelCountCompact', { count: provider.models.length })}
-      </div>
-      {officialSourceUrl && (
-        <CatalogIconAction
-          label={t('settings.models.officialSource')}
-          onClick={() => void rpc.app.openExternal(officialSourceUrl)}
-        >
-          <ExternalLink className="h-3 w-3" />
-        </CatalogIconAction>
-      )}
+      <CatalogIconAction
+        label={t('settings.models.officialSource')}
+        onClick={() => void rpc.app.openExternal(officialSourceUrl)}
+      >
+        <ExternalLink className="h-3 w-3" />
+      </CatalogIconAction>
     </div>
   );
 }

@@ -218,7 +218,6 @@ describe('Models settings', () => {
     expect(catalogActions?.lastElementChild).toBe(catalogStatus);
     expect(catalogActions?.textContent).not.toContain('settings.models.updateStatus.snapshot');
     expect(catalogStatus?.title).toContain('settings.models.officialSnapshotNeedsKey');
-    expect(catalogStatus?.textContent).toContain('settings.models.modelCountCompact');
     expect(
       catalogStatus?.querySelector('button[aria-label="settings.models.officialSource"]')
     ).not.toBeNull();
@@ -277,9 +276,7 @@ describe('Models settings', () => {
     });
     expect(host.textContent).toContain('SiliconFlow');
     expect(host.textContent).toContain('siliconflow/deepseek-v3.2');
-    expect(
-      host.querySelector<HTMLElement>('[data-testid="model-catalog-status"]')?.title
-    ).toContain('settings.models.customProviderStatusDescription');
+    expect(host.querySelector('[data-testid="model-catalog-status"]')).toBeNull();
     expect(host.querySelector('button[aria-label="settings.models.refresh"]')).toBeNull();
     expect(
       host.querySelector('button[aria-label="settings.models.deleteProvider"]')
