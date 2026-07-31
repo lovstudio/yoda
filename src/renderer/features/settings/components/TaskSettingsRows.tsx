@@ -4,11 +4,11 @@ import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskOutputLanguage } from '@shared/project-settings';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
+import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/auto-trust-worktrees-control';
 import { useTaskSettings } from '@renderer/features/tasks/hooks/useTaskSettings';
 import { useInstallTmux } from '@renderer/lib/components/tmux-install';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
-import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import { Input } from '@renderer/lib/ui/input';
 import {
   Select,
@@ -156,38 +156,7 @@ export const InputPromptLanguageRow: React.FC = observer(() => {
 });
 
 export const AutoTrustWorktreesRow: React.FC = () => {
-  const { t } = useTranslation();
-  const taskSettings = useTaskSettings();
-
-  return (
-    <SettingRow
-      title={
-        <div className="flex items-center gap-1.5">
-          {t('settings.tasks.autoTrustWorktrees')}
-          <InfoTooltip
-            label={t('settings.tasks.autoTrustWorktreesInfoLabel')}
-            content={t('settings.tasks.autoTrustWorktreesInfo')}
-          />
-        </div>
-      }
-      description={t('settings.tasks.autoTrustWorktreesDescription')}
-      control={
-        <>
-          <ResetToDefaultButton
-            visible={taskSettings.isFieldOverridden('autoTrustWorktrees')}
-            defaultLabel="on"
-            onReset={taskSettings.resetAutoTrustWorktrees}
-            disabled={taskSettings.loading || taskSettings.saving}
-          />
-          <Switch
-            checked={taskSettings.autoTrustWorktrees}
-            disabled={taskSettings.loading || taskSettings.saving}
-            onCheckedChange={taskSettings.updateAutoTrustWorktrees}
-          />
-        </>
-      }
-    />
-  );
+  return <AutoTrustWorktreesControl />;
 };
 
 export const PreArchiveCommandRow: React.FC = () => {
