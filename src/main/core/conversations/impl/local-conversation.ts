@@ -9,6 +9,7 @@ import { agentHookService } from '@main/core/agent-hooks/agent-hook-service';
 import { makeCodexNotifyCommand } from '@main/core/agent-hooks/agent-notify-command';
 import { wireAgentClassifier } from '@main/core/agent-hooks/classifier-wiring';
 import { claudeTrustService } from '@main/core/agent-hooks/claude-trust-service';
+import { codexTrustService } from '@main/core/agent-hooks/codex-trust-service';
 import { HookConfigWriter } from '@main/core/agent-hooks/hook-config';
 import { applyHookOverrides } from '@main/core/agent-hooks/inspect/hook-overrides-apply';
 import { hookOverridesStore } from '@main/core/agent-hooks/inspect/hook-overrides-store';
@@ -211,6 +212,14 @@ export class LocalConversationProvider implements ConversationProvider {
         (conversation.runtimeId === 'codex' || conversation.runtimeId === 'claude')
           ? withRuntimeStateRoot(conversation.runtimeId, providerConfig, runtimeStateRoot)
           : providerConfig;
+      if (conversation.runtimeId === 'codex') {
+        await codexTrustService.maybeAutoTrustLocal({
+          runtimeId: conversation.runtimeId,
+          cwd: this.taskPath,
+          codexHome: resolveRuntimeStateDirectory('codex', sessionProviderConfig),
+        });
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
+      }
       const titleStateRoot =
         conversation.runtimeId === 'codex' || conversation.runtimeId === 'claude'
           ? resolveRuntimeStateDirectory(conversation.runtimeId, sessionProviderConfig)

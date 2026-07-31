@@ -76,6 +76,14 @@ vi.mock('@renderer/features/tasks/components/permission-mode-select', async () =
   };
 });
 
+vi.mock('@renderer/features/tasks/components/auto-trust-worktrees-control', async () => {
+  const React = await import('react');
+  return {
+    AutoTrustWorktreesControl: () =>
+      React.createElement('div', { 'data-slot': 'auto-trust-worktrees-control' }),
+  };
+});
+
 vi.mock('@renderer/lib/stores/app-state', () => ({
   appState: {
     navigation: {
@@ -130,6 +138,7 @@ describe('ComposerSettingsContent', () => {
 
     expect(host.querySelectorAll('section')).toHaveLength(3);
     expect(host.querySelector('[data-slot="permission-mode-select"]')).not.toBeNull();
+    expect(host.querySelector('[data-slot="auto-trust-worktrees-control"]')).not.toBeNull();
     expect(host.textContent).toContain('2 enabled');
     expect(host.textContent).not.toContain('Detailed global prompt');
     expect(host.textContent).not.toContain('Detailed project prompt');

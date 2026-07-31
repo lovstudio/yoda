@@ -7,6 +7,7 @@ import { getRuntime, type RuntimeId } from '@shared/runtime-registry';
 import { effectiveGlobalEnabled } from '@renderer/features/projects/project-prompt-principles';
 import { getProjectSettingsStore } from '@renderer/features/projects/stores/project-selectors';
 import { usePrompts } from '@renderer/features/prompt-library/use-prompts';
+import { AutoTrustWorktreesControl } from '@renderer/features/tasks/components/auto-trust-worktrees-control';
 import { PermissionModeSelect } from '@renderer/features/tasks/components/permission-mode-select';
 import { appState } from '@renderer/lib/stores/app-state';
 import { Button } from '@renderer/lib/ui/button';
@@ -142,6 +143,11 @@ export const ComposerSettingsContent = observer(function ComposerSettingsContent
               />
             }
           />
+          {runtimeId === 'codex' || runtimeId === 'claude' ? (
+            <div className="px-3 py-2">
+              <AutoTrustWorktreesControl compact />
+            </div>
+          ) : null}
         </ComposerSettingsSection>
       ) : null}
       {runtimeId && supportsPromptConfiguration ? (

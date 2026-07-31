@@ -5,6 +5,7 @@ import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { makePtySessionId } from '@shared/ptySessionId';
 import { wireAgentClassifier } from '@main/core/agent-hooks/classifier-wiring';
 import { claudeTrustService } from '@main/core/agent-hooks/claude-trust-service';
+import { codexTrustService } from '@main/core/agent-hooks/codex-trust-service';
 import { agentSessionRuntimeStore } from '@main/core/conversations/agent-session-runtime';
 import { agentSilenceReconciler } from '@main/core/conversations/agent-silence-reconciler';
 import { createClaudeInterruptSniffer } from '@main/core/conversations/claude-interrupt-sniffer';
@@ -141,6 +142,18 @@ export class SshConversationProvider implements ConversationProvider {
 
       const providerConfig = await runtimeOverrideSettings.getItem(conversation.runtimeId);
       if (!this.ownsPendingStart(sessionId, startToken)) return;
+      if (conversation.runtimeId === 'codex') {
+        await codexTrustService.maybeAutoTrustSsh({
+          runtimeId: conversation.runtimeId,
+          cwd: this.taskPath,
+          codexHome: resolveRuntimeEnv(providerConfig, {
+            runtimeId: conversation.runtimeId,
+          })?.CODEX_HOME,
+          ctx: this.ctx,
+          remoteFs: new SshFileSystem(this.proxy, '/'),
+        });
+        if (!this.ownsPendingStart(sessionId, startToken)) return;
+      }
       recordConversationAuthProvider(conversation.id, providerConfig);
       if (conversation.skillPolicy) {
         log.warn('Skipping local Agent skill profile for SSH conversation', {

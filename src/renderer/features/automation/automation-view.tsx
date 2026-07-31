@@ -6,6 +6,7 @@ import {
   Pencil,
   Play,
   Plus,
+  RefreshCw,
   Save,
   Trash2,
   X,
@@ -154,6 +155,7 @@ export const AutomationMainPanel = observer(function AutomationMainPanel({
   };
 
   const openEdit = (entry: Automation) => {
+    if (entry.source === 'codex') return;
     setEditingId(entry.id);
     setDraft(draftFromEntry(entry));
   };
@@ -505,6 +507,7 @@ const AutomationRow = observer(function AutomationRow({
   const { t } = useTranslation();
   const runtime = RUNTIMES.find((item) => item.id === entry.runtime);
   const detected = appState.dependencies.agentStatuses[entry.runtime]?.status === 'available';
+  const syncedFromCodex = entry.source === 'codex';
 
   let rightLabel: string;
   if (entry.status !== 'active') {
@@ -522,7 +525,8 @@ const AutomationRow = observer(function AutomationRow({
       <button
         type="button"
         onClick={() => onEdit(entry)}
-        className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-center text-left"
+        disabled={syncedFromCodex}
+        className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-center text-left disabled:cursor-default disabled:opacity-100"
       >
         <span className="flex items-center justify-start">
           {entry.status === 'active' ? (
@@ -543,6 +547,19 @@ const AutomationRow = observer(function AutomationRow({
             <Bot className="size-3" />
             {runtime?.name ?? entry.runtime}
           </span>
+          {syncedFromCodex && (
+            <TooltipProvider delay={150}>
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex" />}>
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-background-secondary px-1.5 py-0.5 text-[10px] text-foreground-muted">
+                    <RefreshCw className="size-3" />
+                    {t('automation.source.codex')}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{t('automation.source.codexHint')}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           {lastRun && (
             <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-foreground-passive">
               <span className={cn('size-1.5 rounded-full', RUN_STATUS_DOT[lastRun.status])} />
@@ -553,69 +570,71 @@ const AutomationRow = observer(function AutomationRow({
       </button>
       <div className="flex items-center gap-3">
         <span className="min-w-24 text-right text-lg text-foreground-muted">{rightLabel}</span>
-        <TooltipProvider delay={150}>
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-            <IconTooltip label={t('automation.actions.run')}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => void onRun(entry)}
-                disabled={isRunning}
-                aria-label={t('automation.actions.run')}
-              >
-                {isRunning ? (
-                  <Loader2 className="size-3 animate-spin" />
-                ) : (
-                  <Play className="size-3" />
-                )}
-              </Button>
-            </IconTooltip>
-            <IconTooltip label={t('automation.actions.edit')}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => onEdit(entry)}
-                aria-label={t('automation.actions.edit')}
-              >
-                <Pencil className="size-3" />
-              </Button>
-            </IconTooltip>
-            <IconTooltip
-              label={
-                entry.status === 'active'
-                  ? t('automation.actions.pause')
-                  : t('automation.actions.resume')
-              }
-            >
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => onToggle(entry)}
-                aria-label={
+        {!syncedFromCodex && (
+          <TooltipProvider delay={150}>
+            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+              <IconTooltip label={t('automation.actions.run')}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => void onRun(entry)}
+                  disabled={isRunning}
+                  aria-label={t('automation.actions.run')}
+                >
+                  {isRunning ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : (
+                    <Play className="size-3" />
+                  )}
+                </Button>
+              </IconTooltip>
+              <IconTooltip label={t('automation.actions.edit')}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => onEdit(entry)}
+                  aria-label={t('automation.actions.edit')}
+                >
+                  <Pencil className="size-3" />
+                </Button>
+              </IconTooltip>
+              <IconTooltip
+                label={
                   entry.status === 'active'
                     ? t('automation.actions.pause')
                     : t('automation.actions.resume')
                 }
               >
-                <PauseCircle className="size-3" />
-              </Button>
-            </IconTooltip>
-            <IconTooltip label={t('automation.actions.delete')}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => onDelete(entry)}
-                aria-label={t('automation.actions.delete')}
-              >
-                <Trash2 className="size-3" />
-              </Button>
-            </IconTooltip>
-          </div>
-        </TooltipProvider>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => onToggle(entry)}
+                  aria-label={
+                    entry.status === 'active'
+                      ? t('automation.actions.pause')
+                      : t('automation.actions.resume')
+                  }
+                >
+                  <PauseCircle className="size-3" />
+                </Button>
+              </IconTooltip>
+              <IconTooltip label={t('automation.actions.delete')}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => onDelete(entry)}
+                  aria-label={t('automation.actions.delete')}
+                >
+                  <Trash2 className="size-3" />
+                </Button>
+              </IconTooltip>
+            </div>
+          </TooltipProvider>
+        )}
       </div>
     </div>
   );

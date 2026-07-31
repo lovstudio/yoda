@@ -20,6 +20,7 @@ describe('shared composer settings surfaces', () => {
     expect(content).toContain("t('settings.tasks.sessionTitleLanguageLabel')");
     expect(content).toContain("t('settings.tasks.summaryLanguageLabel')");
     expect(content).toContain('<PermissionModeSelect');
+    expect(content).toContain('<AutoTrustWorktreesControl compact');
     expect(content).toContain("t('home.enabledPromptCount'");
     expect(content).toContain("t('home.openPromptLibrary')");
     expect(content).toContain("appState.navigation.navigate('library', { section: 'prompts' })");
