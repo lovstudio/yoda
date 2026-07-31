@@ -1129,7 +1129,7 @@ export function PromptLibraryPanel({ embedded = false }: { embedded?: boolean })
                                   prompts={group.prompts}
                                   isPromptEnabled={(prompt) => prompt.injectionEnabled}
                                   disabled={setGroupInjection.isPending}
-                                  className="pr-3"
+                                  className="mr-3"
                                   onEnabledChange={(enabled) =>
                                     setGroupInjection.mutate({ groupName: group.name, enabled })
                                   }

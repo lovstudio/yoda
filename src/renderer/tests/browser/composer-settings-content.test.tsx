@@ -174,12 +174,21 @@ describe('ComposerSettingsContent', () => {
     expect(promptList?.className).not.toContain('overflow-y-auto');
     expect(host.querySelectorAll('[data-slot="prompt-injection-row"]')).toHaveLength(2);
     expect(host.querySelectorAll('[data-slot="project-prompt-injection-row"]')).toHaveLength(1);
+    const groupToggle = host.querySelector<HTMLButtonElement>(
+      '[data-slot="prompt-group-injection-toggle"][data-size="sm"]'
+    );
+    expect(groupToggle).not.toBeNull();
+    expect(groupToggle?.closest('[data-slot="prompt-injection-group"]')?.textContent).not.toContain(
+      'enabled'
+    );
+    await act(async () => groupToggle?.click());
+    expect(mocks.settingsStore.save).toHaveBeenCalledTimes(1);
 
     const projectPromptToggle = host.querySelector<HTMLButtonElement>(
       '[aria-label="toggle Detailed project prompt"]'
     );
     await act(async () => projectPromptToggle?.click());
-    expect(mocks.settingsStore.save).toHaveBeenCalled();
+    expect(mocks.settingsStore.save).toHaveBeenCalledTimes(2);
 
     const libraryButton = host.querySelector<HTMLButtonElement>(
       'button[aria-label="Manage prompts in Library"]'
