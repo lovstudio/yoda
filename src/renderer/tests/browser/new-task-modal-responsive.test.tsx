@@ -11,11 +11,18 @@ type ChildrenProps = {
   className?: string;
 };
 
-function chip(label: string, width: number, surface?: string): ReactNode {
+function chip(
+  label: string,
+  width: number,
+  options: {
+    marginLeft?: string;
+    surface?: string;
+  } = {}
+): ReactNode {
   return createElement(
     'button',
     {
-      'data-yoda-surface': surface,
+      'data-yoda-surface': options.surface,
       type: 'button',
       style: {
         alignItems: 'center',
@@ -23,13 +30,25 @@ function chip(label: string, width: number, surface?: string): ReactNode {
         borderRadius: 7,
         display: 'flex',
         flex: '0 0 auto',
+        fontSize: 12,
+        gap: 6,
         height: 28,
         justifyContent: 'center',
+        marginLeft: options.marginLeft,
         padding: '0 10px',
-        width,
       },
     },
-    label
+    createElement('svg', {
+      'aria-hidden': true,
+      height: 14,
+      style: { flex: '0 0 auto' },
+      width: 14,
+    }),
+    createElement(
+      'span',
+      { style: { whiteSpace: 'nowrap', width: Math.max(0, width - 42) } },
+      label
+    )
   );
 }
 
@@ -82,30 +101,15 @@ vi.mock('@renderer/app/home-view', () => ({
             },
           },
           chip('项目', 96),
-          chip('环境', 88),
-          chip('分支', 128),
-          chip('代理', 132),
-          chip('配置', 72, 'home-composer-session-settings'),
-          createElement(
-            'button',
-            {
-              'data-yoda-surface': 'home-composer-compare-action',
-              type: 'button',
-              style: {
-                alignItems: 'center',
-                border: '1px solid currentColor',
-                borderRadius: 7,
-                display: 'flex',
-                flex: '0 0 auto',
-                height: 28,
-                justifyContent: 'center',
-                marginLeft: 'auto',
-                padding: '0 10px',
-                width: 72,
-              },
-            },
-            '对比'
-          )
+          chip('环境', 84),
+          chip('分支', 124),
+          chip('分叉', 96),
+          chip('代理', 172),
+          chip('配置', 64, { surface: 'home-composer-session-settings' }),
+          chip('对比', 64, {
+            marginLeft: 'auto',
+            surface: 'home-composer-compare-action',
+          })
         )
       )
     ),
@@ -155,9 +159,13 @@ describe('NewTaskModal responsive layout', () => {
     const toolbar = host.querySelector('[data-yoda-surface="home-composer-toolbar"]');
     const settings = host.querySelector('[data-yoda-surface="home-composer-session-settings"]');
     const compare = host.querySelector('[data-yoda-surface="home-composer-compare-action"]');
+    const settingsLabel = settings?.querySelector('span');
+    const compareLabel = compare?.querySelector('span');
 
     expect(getComputedStyle(modal as Element).containerType).toBe('inline-size');
     expect(getComputedStyle(content as Element).paddingLeft).toBe('16px');
+    expect(getComputedStyle(settingsLabel as Element).display).toBe('none');
+    expect(getComputedStyle(compareLabel as Element).display).toBe('none');
     expect(settings?.parentElement).toBe(compare?.parentElement);
     expect(rect(compare).left - rect(settings).right).toBeGreaterThan(32);
     expect(rect(toolbar).right - rect(compare).right).toBeCloseTo(0, 0);
@@ -166,16 +174,38 @@ describe('NewTaskModal responsive layout', () => {
     );
   });
 
+  it('compacts the compare action before the session row wraps at medium widths', async () => {
+    await renderAt(760, 600);
+
+    const toolbar = host.querySelector('[data-yoda-surface="home-composer-toolbar"]');
+    const controlRow = toolbar?.firstElementChild;
+    const controls = Array.from(controlRow?.children ?? []);
+    const settingsLabel = host.querySelector(
+      '[data-yoda-surface="home-composer-session-settings"] > span'
+    );
+    const compareLabel = host.querySelector(
+      '[data-yoda-surface="home-composer-compare-action"] > span'
+    );
+    const firstTop = rect(controls.at(0) ?? null).top;
+
+    expect(controls).toHaveLength(7);
+    expect(controls.every((control) => Math.abs(rect(control).top - firstTop) < 1)).toBe(true);
+    expect(getComputedStyle(settingsLabel as Element).display).not.toBe('none');
+    expect(getComputedStyle(compareLabel as Element).display).toBe('none');
+  });
+
   it('keeps the desktop capture tray compact', async () => {
     await renderAt(900, 700);
 
     const content = host.querySelector('[data-slot="dialog-content-area"]');
     const toolbar = host.querySelector('[data-yoda-surface="home-composer-toolbar"]');
     const compare = host.querySelector('[data-yoda-surface="home-composer-compare-action"]');
+    const compareLabel = compare?.querySelector('span');
     const textarea = host.querySelector('[data-slot="textarea"]');
 
     expect(getComputedStyle(content as Element).paddingLeft).toBe('20px');
     expect(rect(compare).width).toBeLessThan(rect(toolbar).width);
+    expect(getComputedStyle(compareLabel as Element).display).not.toBe('none');
     expect(Number.parseFloat(getComputedStyle(textarea as Element).minHeight)).toBeCloseTo(112, 0);
   });
 
