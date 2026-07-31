@@ -31,6 +31,12 @@ import {
   SUMMARY_CONTEXT_SOURCE_IDS,
 } from '@shared/session-summary';
 import {
+  DEFAULT_TASK_APPEARANCE_SETTINGS,
+  MULTI_AGENT_TASK_MARKERS,
+  TASK_MARKERS,
+  TASK_TITLE_STYLES,
+} from '@shared/task-appearance';
+import {
   DEFAULT_TASK_NAMING_RECENT_TASK_LIMIT,
   DEFAULT_TASK_NAMING_TIMEOUT_MS,
   normalizeTaskNamingTimeoutMs,
@@ -472,6 +478,27 @@ export const runtimeConfigDefaults = Object.fromEntries(
   ])
 );
 
+const taskIdleOpacitySchema = z.union([
+  z.literal(100),
+  z.literal(85),
+  z.literal(70),
+  z.literal(55),
+]);
+
+const taskAppearancePresetSchema = z.object({
+  titleStyle: z.enum(TASK_TITLE_STYLES),
+  idleOpacity: taskIdleOpacitySchema,
+  marker: z.enum(TASK_MARKERS),
+});
+
+export const taskAppearanceSettingsSchema = z.object({
+  standard: taskAppearancePresetSchema,
+  longTerm: taskAppearancePresetSchema,
+  multiAgent: z.object({
+    marker: z.enum(MULTI_AGENT_TASK_MARKERS),
+  }),
+});
+
 export const interfaceSettingsSchema = z.object({
   taskHoverAction: z.enum(['delete', 'archive']),
   autoRightSidebarBehavior: z.boolean(),
@@ -483,6 +510,8 @@ export const interfaceSettingsSchema = z.object({
   dockSessionHistory: z.boolean(),
   /** Number of latest prompts shown after the first prompt in the docked history preview. */
   dockSessionHistoryRows: z.number().int().min(1).max(20),
+  /** Composable visual rules for task rows across the sidebar's task-list variants. */
+  taskAppearance: taskAppearanceSettingsSchema.default(DEFAULT_TASK_APPEARANCE_SETTINGS),
 });
 
 export const browserPreviewSettingsSchema = z.object({ enabled: z.boolean() });

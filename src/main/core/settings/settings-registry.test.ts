@@ -23,4 +23,22 @@ describe('settings defaults', () => {
   it('shows only final agent replies in the conversation panel by default', () => {
     expect(getDefaultForKey('interface').agentReplyDisplayLevel).toBe('concise');
   });
+
+  it('preserves the established task hierarchy in the default appearance preset', () => {
+    expect(getDefaultForKey('interface').taskAppearance).toEqual({
+      standard: {
+        titleStyle: 'regular',
+        idleOpacity: 100,
+        marker: 'none',
+      },
+      longTerm: {
+        titleStyle: 'italic',
+        idleOpacity: 70,
+        marker: 'none',
+      },
+      multiAgent: {
+        marker: 'users',
+      },
+    });
+  });
 });

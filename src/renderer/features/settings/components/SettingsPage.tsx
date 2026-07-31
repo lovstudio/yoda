@@ -45,6 +45,7 @@ import {
 import ModelsSettingsCard, { ModelCatalogAutomaticUpdateSetting } from './ModelsSettingsCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import OpenInAppsSettingsCard from './OpenInAppsSettingsCard';
+import TaskAppearanceSettingsCard from './TaskAppearanceSettingsCard';
 import {
   AutoGenerateTaskNamesRow,
   AutoTrustWorktreesRow,
@@ -476,7 +477,10 @@ export function SettingsPage({
     interface: {
       title: t('settings.tabs.interface'),
       description: t('settings.interfaceTab.description'),
-      sections: [{ id: 'theme', component: <ThemeCard /> }],
+      sections: [
+        { id: 'theme', component: <ThemeCard /> },
+        { id: 'task-appearance', component: <TaskAppearanceSettingsCard /> },
+      ],
     },
     terminal: {
       title: t('settings.tabs.terminal'),
