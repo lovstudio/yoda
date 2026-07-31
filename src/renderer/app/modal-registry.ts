@@ -56,6 +56,7 @@ export type ModalRegistryEntry<TProps = unknown, TResult = unknown> = {
   size?: ModalSize;
   position?: ModalPosition;
   scope?: ModalScope;
+  className?: string;
 };
 
 export function createModal<TProps, TResult>(
@@ -72,7 +73,7 @@ export const modalRegistry = {
   createFeatureModal: createModal(CreateFeatureModal, { size: 'md' }),
   featureArtifactModal: createModal(FeatureArtifactModal, { size: 'sm' }),
   taskModal: createModal(CreateTaskModal),
-  newTaskModal: createModal(NewTaskModal, { size: 'lg' }),
+  newTaskModal: createModal(NewTaskModal, { size: 'lg', className: 'sm:max-w-3xl' }),
   newConversationModal: createModal(NewConversationModal, { size: 'lg' }),
   newSubtaskModal: createModal(NewSubtaskModal, { size: 'sm' }),
   addProjectModal: createModal(AddProjectModal),
