@@ -100,7 +100,8 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   // click target (jump to the pending session) and the working spinner keeps
   // its hover-to-interrupt affordance.
   const hasAgentNotification = taskSessionStatusSummary(task).primaryStatus !== null;
-  const isDeemphasized = shouldDeemphasizeLongTermTask(task.data) && !hasAgentNotification;
+  const isIdle = !isBootstrapping && !hasAgentNotification;
+  const isDeemphasized = shouldDeemphasizeLongTermTask(task.data, isIdle);
 
   const taskName = task.data.name;
   const treeDepth = rowVariant === 'underProject' ? Math.min(depth, TASK_TREE_MAX_VISUAL_DEPTH) : 0;

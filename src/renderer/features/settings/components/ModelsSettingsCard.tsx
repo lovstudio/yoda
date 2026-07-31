@@ -400,18 +400,12 @@ export default function ModelsSettingsCard() {
         </div>
       )}
 
-      <ProviderCatalogStatus
-        provider={selectedProvider}
-        disabled={disabled}
-        onDelete={() => {
-          if (selectedProvider) requestDeleteCustomProvider(selectedProvider);
-        }}
-      />
       <div className="border-t border-border pt-4">
         <div
           className="flex min-w-0 flex-wrap items-center gap-2"
           data-testid="model-catalog-actions"
         >
+          <ProviderCatalogStatus provider={selectedProvider} />
           <Input
             value={customModelDraft}
             onChange={(event) => {
@@ -439,7 +433,19 @@ export default function ModelsSettingsCard() {
             <Plus className="h-3.5 w-3.5" />
             {t('settings.models.customAdd')}
           </Button>
-          {!selectedProvider?.custom && (
+          {selectedProvider?.custom ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => requestDeleteCustomProvider(selectedProvider)}
+              disabled={disabled}
+              className="shrink-0 gap-1.5 text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {t('settings.models.deleteProvider')}
+            </Button>
+          ) : (
             <Button
               type="button"
               variant="outline"
@@ -474,15 +480,7 @@ export default function ModelsSettingsCard() {
   );
 }
 
-function ProviderCatalogStatus({
-  provider,
-  disabled,
-  onDelete,
-}: {
-  provider: ModelProviderCatalogGroup | undefined;
-  disabled: boolean;
-  onDelete: () => void;
-}) {
+function ProviderCatalogStatus({ provider }: { provider: ModelProviderCatalogGroup | undefined }) {
   const { t } = useTranslation();
   if (!provider) return null;
 
@@ -493,55 +491,35 @@ function ProviderCatalogStatus({
   const description = getProviderStatusDescription(provider, date, t);
 
   return (
-    <div className="min-w-0 rounded-md border border-border/70 bg-background-secondary/30 px-3 py-2.5">
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <Badge
-              variant={provider.updateStatus === 'stale' ? 'destructive' : 'secondary'}
-              className="h-auto max-w-full whitespace-normal"
-            >
-              {t(statusKey)}
-            </Badge>
-            <div className="min-w-0 text-xs font-medium text-foreground-muted">
-              {t('settings.models.modelCount', {
-                provider: provider.name,
-                count: provider.models.length,
-              })}
-            </div>
-          </div>
-        </div>
-        {provider.custom && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onDelete}
-            disabled={disabled}
-            className="shrink-0 gap-1.5 text-destructive hover:text-destructive"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            {t('settings.models.deleteProvider')}
-          </Button>
-        )}
+    <div
+      className="flex min-w-0 shrink-0 flex-wrap items-center gap-2"
+      data-testid="model-catalog-status"
+      title={description}
+    >
+      <Badge
+        variant={provider.updateStatus === 'stale' ? 'destructive' : 'secondary'}
+        className="h-auto max-w-full whitespace-normal"
+      >
+        {t(statusKey)}
+      </Badge>
+      <div className="min-w-0 text-xs font-medium text-foreground-muted">
+        {t('settings.models.modelCount', {
+          provider: provider.name,
+          count: provider.models.length,
+        })}
       </div>
-      <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <p className="min-w-48 flex-1 break-words text-xs leading-relaxed text-muted-foreground">
-          {description}
-        </p>
-        {officialSourceUrl && (
-          <Button
-            type="button"
-            variant="link"
-            size="sm"
-            className="h-auto shrink-0 gap-1 p-0 text-xs"
-            onClick={() => void rpc.app.openExternal(officialSourceUrl)}
-          >
-            {t('settings.models.officialSource')}
-            <ExternalLink className="h-3 w-3" />
-          </Button>
-        )}
-      </div>
+      {officialSourceUrl && (
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          className="h-auto shrink-0 gap-1 p-0 text-xs"
+          onClick={() => void rpc.app.openExternal(officialSourceUrl)}
+        >
+          {t('settings.models.officialSource')}
+          <ExternalLink className="h-3 w-3" />
+        </Button>
+      )}
     </div>
   );
 }
