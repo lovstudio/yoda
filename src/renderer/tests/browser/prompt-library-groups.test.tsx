@@ -17,7 +17,6 @@ const mocks = vi.hoisted(() => ({
   refreshPrompt: vi.fn(),
   reorderGroups: vi.fn(),
   reorderPrompts: vi.fn(),
-  setGroupInjection: vi.fn(),
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -38,10 +37,6 @@ vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   useDeletePrompt: () => ({ mutate: mocks.deletePrompt }),
   useReorderPromptGroups: () => ({ mutate: mocks.reorderGroups, isPending: false }),
   useReorderPrompts: () => ({ mutate: mocks.reorderPrompts, isPending: false }),
-  useSetPromptGroupInjectionEnabled: () => ({
-    mutate: mocks.setGroupInjection,
-    isPending: false,
-  }),
   useRefreshPromptSource: () => ({ mutate: mocks.refreshPrompt, isPending: false }),
 }));
 
@@ -366,25 +361,24 @@ describe('PromptLibraryPanel groups', () => {
     );
   });
 
-  it('toggles dynamic injection for a whole group', async () => {
+  it('keeps group headings informational and toggles prompts individually', async () => {
     const { PromptLibraryPanel } = await import(
       '@renderer/features/prompt-library/prompt-library-panel'
     );
     await act(async () => root.render(createElement(PromptLibraryPanel, { embedded: true })));
 
-    const groupToggles = Array.from(
-      host.querySelectorAll<HTMLElement>(
-        '[data-slot="prompt-group-injection-toggle"][aria-label="promptLibrary.groups.toggleInjection"]'
+    expect(host.querySelector('[data-slot="prompt-group-injection-toggle"]')).toBeNull();
+    const promptToggles = Array.from(
+      host.querySelectorAll<HTMLButtonElement>(
+        '[data-slot="switch"][aria-label="promptLibrary.injection.toggle"]'
       )
     );
-    expect(groupToggles).toHaveLength(3);
-    expect(groupToggles.every((toggle) => toggle.dataset.size === 'sm')).toBe(true);
-    expect(host.querySelector('[data-slot="checkbox"]')).toBeNull();
-    await act(async () => groupToggles[0]?.click());
+    expect(promptToggles).toHaveLength(4);
+    await act(async () => promptToggles[0]?.click());
 
-    expect(mocks.setGroupInjection).toHaveBeenCalledWith({
-      groupName: 'Build',
-      enabled: true,
+    expect(mocks.updatePrompt).toHaveBeenCalledWith({
+      id: 'build-first',
+      patch: { injectionEnabled: true },
     });
   });
 

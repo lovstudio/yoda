@@ -5,7 +5,6 @@ import type { PromptPrinciple } from '@shared/project-settings';
 import {
   effectiveGlobalEnabled,
   setGlobalOverride,
-  setGlobalOverrides,
   setProjectItems,
 } from '@renderer/features/projects/project-prompt-principles';
 import { PromptInjectionControls } from '@renderer/features/prompt-library/prompt-injection-controls';
@@ -69,9 +68,6 @@ export const PromptPrinciplesSection = observer(function PromptPrinciplesSection
               isPromptEnabled={(prompt) => effectiveGlobalEnabled(project, prompt)}
               onPromptEnabledChange={(prompt, checked) =>
                 update('promptPrinciples', setGlobalOverride(project, prompt, checked))
-              }
-              onGroupEnabledChange={(_groupName, groupPrompts, enabled) =>
-                update('promptPrinciples', setGlobalOverrides(project, groupPrompts, enabled))
               }
             />
           )}

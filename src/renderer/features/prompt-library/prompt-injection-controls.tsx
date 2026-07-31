@@ -5,51 +5,12 @@ import type { Prompt } from '@shared/prompt-library';
 import { InfoTooltip } from '@renderer/lib/ui/info-tooltip';
 import { Switch } from '@renderer/lib/ui/switch';
 import { cn } from '@renderer/utils/utils';
-import {
-  getInjectionOrderedPromptGroups,
-  getPromptGroupInjectionState,
-  UNGROUPED_PROMPT_GROUP,
-} from './prompt-groups';
-
-export function PromptGroupInjectionToggle({
-  groupName,
-  prompts,
-  isPromptEnabled,
-  onEnabledChange,
-  disabled = false,
-  className,
-}: {
-  groupName: string;
-  prompts: Prompt[];
-  isPromptEnabled: (prompt: Prompt) => boolean;
-  onEnabledChange: (enabled: boolean) => void;
-  disabled?: boolean;
-  className?: string;
-}) {
-  const { t } = useTranslation();
-  const selection = getPromptGroupInjectionState(prompts, isPromptEnabled);
-  const groupLabel =
-    groupName === UNGROUPED_PROMPT_GROUP ? t('promptLibrary.groups.ungrouped') : groupName;
-
-  return (
-    <Switch
-      data-slot="prompt-group-injection-toggle"
-      size="sm"
-      checked={selection.state === 'all'}
-      disabled={disabled || prompts.length === 0}
-      onCheckedChange={onEnabledChange}
-      aria-label={t('promptLibrary.groups.toggleInjection', { name: groupLabel })}
-      title={t('promptLibrary.groups.toggleInjection', { name: groupLabel })}
-      className={className}
-    />
-  );
-}
+import { getInjectionOrderedPromptGroups, UNGROUPED_PROMPT_GROUP } from './prompt-groups';
 
 export function PromptInjectionControls({
   prompts,
   isPromptEnabled,
   onPromptEnabledChange,
-  onGroupEnabledChange,
   disabled = false,
   empty,
   className,
@@ -58,7 +19,6 @@ export function PromptInjectionControls({
   prompts: Prompt[];
   isPromptEnabled: (prompt: Prompt) => boolean;
   onPromptEnabledChange: (prompt: Prompt, enabled: boolean) => void;
-  onGroupEnabledChange: (groupName: string, prompts: Prompt[], enabled: boolean) => void;
   disabled?: boolean;
   empty?: ReactNode;
   className?: string;
@@ -106,15 +66,6 @@ export function PromptInjectionControls({
               >
                 {groupLabel}
               </span>
-              <PromptGroupInjectionToggle
-                groupName={group.name}
-                prompts={group.prompts}
-                isPromptEnabled={isPromptEnabled}
-                disabled={disabled}
-                onEnabledChange={(enabled) =>
-                  onGroupEnabledChange(group.name, group.prompts, enabled)
-                }
-              />
             </div>
             <div className="divide-y divide-border/50">
               {group.prompts.map((prompt) => (

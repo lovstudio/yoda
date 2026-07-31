@@ -8,7 +8,6 @@ import type { Prompt } from '@shared/prompt-library';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
-  setGroupInjection: vi.fn(),
   updatePrompt: vi.fn(),
   prompts: [
     {
@@ -70,10 +69,6 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
 vi.mock('@renderer/features/prompt-library/use-prompts', () => ({
   usePrompts: () => ({ data: mocks.prompts }),
-  useSetPromptGroupInjectionEnabled: () => ({
-    mutate: mocks.setGroupInjection,
-    isPending: false,
-  }),
   useUpdatePrompt: () => ({ mutate: mocks.updatePrompt, isPending: false }),
 }));
 
@@ -174,14 +169,11 @@ describe('ComposerSettingsContent', () => {
     expect(promptList?.className).not.toContain('overflow-y-auto');
     expect(host.querySelectorAll('[data-slot="prompt-injection-row"]')).toHaveLength(2);
     expect(host.querySelectorAll('[data-slot="project-prompt-injection-row"]')).toHaveLength(1);
-    const groupToggle = host.querySelector<HTMLButtonElement>(
-      '[data-slot="prompt-group-injection-toggle"][data-size="sm"]'
+    expect(host.querySelector('[data-slot="prompt-group-injection-toggle"]')).toBeNull();
+    const globalPromptToggle = host.querySelector<HTMLButtonElement>(
+      '[aria-label="toggle Detailed global prompt"]'
     );
-    expect(groupToggle).not.toBeNull();
-    expect(groupToggle?.closest('[data-slot="prompt-injection-group"]')?.textContent).not.toContain(
-      'enabled'
-    );
-    await act(async () => groupToggle?.click());
+    await act(async () => globalPromptToggle?.click());
     expect(mocks.settingsStore.save).toHaveBeenCalledTimes(1);
 
     const projectPromptToggle = host.querySelector<HTMLButtonElement>(

@@ -3,7 +3,6 @@ import type { Prompt } from '@shared/prompt-library';
 import {
   getInjectionOrderedPromptGroups,
   getNamedPromptGroups,
-  getPromptGroupInjectionState,
   groupPrompts,
   reorderPromptIds,
   UNGROUPED_PROMPT_GROUP,
@@ -52,21 +51,6 @@ describe('prompt groups', () => {
     expect(groups.map((group) => group.name)).toEqual(['Review', 'Build']);
     expect(groups[0]?.prompts.map((entry) => entry.id)).toEqual(['review']);
     expect(groups[1]?.prompts).toEqual([]);
-  });
-
-  it('reports all, partial, and empty group injection states', () => {
-    const first = { ...prompt('first', 'Brand'), injectionEnabled: true };
-    const second = prompt('second', 'Brand');
-
-    expect(
-      getPromptGroupInjectionState([first, second], (entry) => entry.injectionEnabled)
-    ).toEqual({ state: 'partial', enabledCount: 1, totalCount: 2 });
-    expect(getPromptGroupInjectionState([first], (entry) => entry.injectionEnabled).state).toBe(
-      'all'
-    );
-    expect(getPromptGroupInjectionState([second], (entry) => entry.injectionEnabled).state).toBe(
-      'none'
-    );
   });
 
   it('keeps injection order within each group and reorders ids by drag target', () => {
