@@ -6,6 +6,11 @@ import type { Branch } from '@shared/git';
 import type { QuickAction } from '@shared/project-settings';
 import type { CompiledQuickAction, ProjectPackageScript } from '@shared/quick-actions';
 import { taskNameFromPrompt } from '@shared/task-name';
+import { ComposerPromptInput } from '@renderer/app/composer-prompt-input';
+import {
+  serializePromptWithTokens,
+  type PromptToken,
+} from '@renderer/app/prompt-attachment-tokens';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
   asMounted,
@@ -66,6 +71,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   const [error, setError] = useState<string | null>(null);
   const [inputMode, setInputMode] = useState<InputMode>('package');
   const [intent, setIntent] = useState('');
+  const [intentTokens, setIntentTokens] = useState<PromptToken[]>([]);
   const [manualCommand, setManualCommand] = useState('');
   const [compiled, setCompiled] = useState<CompiledQuickAction | null>(null);
   const [compiledIntent, setCompiledIntent] = useState<string | null>(null);
@@ -125,9 +131,13 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
 
   const selectedScript = scripts.find((script) => script.id === selectedScriptId) ?? null;
   const cleanedIntent = intent.trim();
+  const serializedIntent = useMemo(
+    () => serializePromptWithTokens(intent, intentTokens, { imagesAsPaths: true }).text.trim(),
+    [intent, intentTokens]
+  );
   const cleanedManualCommand = manualCommand.trim();
   const hasCurrentAnalysis =
-    compiled !== null && compiledIntent === cleanedIntent && cleanedIntent.length > 0;
+    compiled !== null && compiledIntent === serializedIntent && serializedIntent.length > 0;
   const isLocalProject = projectData?.type === 'local';
   const runtimeCanCompile = runtimeId === 'codex' || runtimeId === 'claude';
   const compilationUnavailable = !isLocalProject || !runtimeCanCompile || createDisabled;
@@ -149,7 +159,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     [actionContent, compiled, hasCurrentAnalysis, inputMode, selectedScript]
   );
   const analysisNeedsRefresh =
-    inputMode === 'describe' && compiled !== null && compiledIntent !== cleanedIntent;
+    inputMode === 'describe' && compiled !== null && compiledIntent !== serializedIntent;
   const hasAction =
     inputMode === 'package'
       ? selectedScript !== null
@@ -168,7 +178,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
   };
 
   const handleCompile = async () => {
-    if (!cleanedIntent) {
+    if (!serializedIntent) {
       setError(t('sidebar.captureAutomation.intentRequired'));
       return;
     }
@@ -181,11 +191,11 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
     try {
       const result = await rpc.quickActions.compile({
         projectId,
-        intent: cleanedIntent,
+        intent: serializedIntent,
         runtimeId,
       });
       setCompiled(result);
-      setCompiledIntent(cleanedIntent);
+      setCompiledIntent(serializedIntent);
       if (!labelOverridden) setLabel(result.label);
     } catch (compileError) {
       setError(
@@ -223,7 +233,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
         label: cleanedLabel,
         command: compiledContent(compiled).trim(),
         kind: compiled.kind,
-        sourceIntent: cleanedIntent,
+        sourceIntent: serializedIntent,
       };
     }
     return null;
@@ -333,7 +343,7 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
         ? !cleanedManualCommand
         : hasCurrentAnalysis
           ? !actionContent
-          : !cleanedIntent || compilationUnavailable);
+          : !serializedIntent || compilationUnavailable);
 
   return (
     <>
@@ -443,19 +453,29 @@ export const CaptureProjectAutomationModal = observer(function CaptureProjectAut
               <FieldLabel htmlFor="quick-action-intent">
                 {t('sidebar.captureAutomation.intentLabel')}
               </FieldLabel>
-              <Textarea
-                id="quick-action-intent"
-                rows={4}
+              <ComposerPromptInput
+                textareaId="quick-action-intent"
                 value={intent}
-                onChange={(event) => setIntent(event.currentTarget.value)}
+                onChange={setIntent}
+                tokens={intentTokens}
+                onTokensChange={setIntentTokens}
+                runtimeId={runtimeId}
+                projectId={projectId}
+                projectPath={projectData?.path}
+                imagesAsPaths
+                runHostKind={projectData?.type === 'ssh' ? 'ssh' : 'local'}
                 disabled={loading || compiling}
                 placeholder={t('sidebar.captureAutomation.intentPlaceholder')}
                 autoFocus
+                canSubmit={Boolean(serializedIntent) && !compilationUnavailable}
+                showSubmitButton={false}
+                onSubmit={() => void handleCompile()}
+                textareaClassName="min-h-24 text-sm"
               />
               <FieldDescription>
                 {t('sidebar.captureAutomation.intentDescription')}
               </FieldDescription>
-              {cleanedIntent && compilationUnavailable && !hasCurrentAnalysis ? (
+              {serializedIntent && compilationUnavailable && !hasCurrentAnalysis ? (
                 <FieldDescription className="text-destructive">
                   {t('sidebar.captureAutomation.compilationUnavailable')}
                 </FieldDescription>
