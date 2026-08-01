@@ -14,6 +14,7 @@ import {
 import type { Conversation } from '@shared/conversations';
 import type { AgentSessionRuntimeStatus } from '@shared/events/agentEvents';
 import {
+  canContinueMobileSession,
   createExpoGoPairingUrl,
   createMobilePairingUrl,
   getMobileProjectActivityById,
@@ -86,6 +87,10 @@ import {
   MobileInputAttachmentError,
   MobileInputAttachmentStore,
 } from './mobile-input-attachment-store';
+import {
+  ensureMobileConversationInputSession,
+  resolveMobileSessionAvailability,
+} from './mobile-session-continuation';
 import {
   MOBILE_SESSION_RECONNECT_RETRY_MS,
   MobileSessionEventStream,
@@ -1287,9 +1292,18 @@ export class MobileGatewayService {
   ): Promise<MobileSessionInputResponse> {
     const data = await this.loadTaskSessionData(projectId, taskId);
     const conversation = data.conversations.find((item) => item.id === conversationId);
+    const session = data.sessions.find((item) => item.id === conversationId);
 
-    if (!conversation) {
+    if (!conversation || !session) {
       throw new MobileGatewayError(404, 'session_not_found', 'Mobile session was not found.');
+    }
+
+    if (!canContinueMobileSession(session)) {
+      throw new MobileGatewayError(
+        409,
+        'session_not_resumable',
+        'This session does not support follow-up input.'
+      );
     }
 
     const attachmentIds = params.attachmentIds ?? [];
@@ -1310,6 +1324,7 @@ export class MobileGatewayService {
           'Image input must be submitted in the same request.'
         );
       }
+      await this.ensureConversationInputSession(projectId, taskId, conversationId);
       const sent = await injectConversationPrompt({
         projectId,
         taskId,
@@ -1334,6 +1349,7 @@ export class MobileGatewayService {
       throw new MobileGatewayError(400, 'missing_input', 'Input is required.');
     }
 
+    await this.ensureConversationInputSession(projectId, taskId, conversationId);
     if (!(await this.writeConversationInput(projectId, taskId, conversationId, payload))) {
       throw new MobileGatewayError(
         409,
@@ -1363,6 +1379,35 @@ export class MobileGatewayService {
       ok: true,
       generatedAt: new Date().toISOString(),
     };
+  }
+
+  private async ensureConversationInputSession(
+    projectId: string,
+    taskId: string,
+    conversationId: string
+  ): Promise<void> {
+    await this.ensureProjectOpen(projectId);
+    try {
+      const ready = await ensureMobileConversationInputSession({
+        projectId,
+        taskId,
+        conversationId,
+      });
+      if (ready) return;
+    } catch (error) {
+      log.warn('MobileGateway: failed to restore session for input', {
+        projectId,
+        taskId,
+        conversationId,
+        error: String(error),
+      });
+    }
+
+    throw new MobileGatewayError(
+      409,
+      'session_resume_failed',
+      'This session could not be resumed for follow-up input.'
+    );
   }
 
   private async writeConversationInput(
@@ -1438,7 +1483,10 @@ export class MobileGatewayService {
       });
       return null;
     });
-    const acceptsInput = Boolean(sessionInfo?.running || ptySessionRegistry.get(ptySessionId));
+    const availability = resolveMobileSessionAvailability(
+      sessionInfo,
+      Boolean(ptySessionRegistry.get(ptySessionId))
+    );
 
     return {
       id: conversation.id,
@@ -1451,8 +1499,7 @@ export class MobileGatewayService {
       lastInteractedAt: conversation.lastInteractedAt,
       isInitialConversation: conversation.isInitialConversation,
       runtimeStatus,
-      running: Boolean(sessionInfo?.running || acceptsInput),
-      acceptsInput,
+      ...availability,
       tmuxEnabled: sessionInfo?.tmuxEnabled ?? false,
       sessionId: sessionInfo?.sessionId ?? conversation.id,
       sessionTitle: sessionInfo?.sessionTitle,

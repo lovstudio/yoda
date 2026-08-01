@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canContinueMobileSession,
   createExpoGoPairingUrl,
   createMobilePairingUrl,
   getMobileProjectActivityById,
@@ -7,6 +8,15 @@ import {
   sortMobileProjects,
   type MobileProjectSummary,
 } from './mobile-api';
+
+describe('mobile session continuation', () => {
+  it('keeps both live and cold-resumable sessions actionable', () => {
+    expect(canContinueMobileSession({ acceptsInput: true, resumable: false })).toBe(true);
+    expect(canContinueMobileSession({ acceptsInput: false, resumable: true })).toBe(true);
+    expect(canContinueMobileSession({ acceptsInput: false, resumable: false })).toBe(false);
+    expect(canContinueMobileSession(null)).toBe(false);
+  });
+});
 
 describe('mobile pairing links', () => {
   it('round-trips a gateway connection through the mobile deep link', () => {

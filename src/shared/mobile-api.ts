@@ -383,12 +383,22 @@ export type MobileSessionSummary = {
   lastInteractedAt: string | null;
   isInitialConversation: boolean | null;
   runtimeStatus: MobileSessionRuntimeStatus;
+  /** A provider process is currently attached to this conversation. */
   running: boolean;
+  /** The current provider process can receive input immediately. */
   acceptsInput: boolean;
+  /** The persisted provider session can be restored for a new follow-up turn. */
+  resumable: boolean;
   tmuxEnabled: boolean;
   sessionId: string;
   sessionTitle?: string;
 };
+
+export function canContinueMobileSession(
+  session: Pick<MobileSessionSummary, 'acceptsInput' | 'resumable'> | null | undefined
+): boolean {
+  return Boolean(session?.acceptsInput || session?.resumable);
+}
 
 export type MobileTaskSessionsResponse = {
   projectId: string;
