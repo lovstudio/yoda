@@ -6,6 +6,12 @@ import type { PullRequest } from '@shared/pull-requests';
 export type TaskLifecycleStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'cancelled';
 export type TaskSetupStatus = 'ready' | 'pending' | 'naming_failed' | 'branch_failed';
 
+export type QuickActionTaskSource = {
+  prompt: string;
+  conversationId: string;
+  invokedSkill: boolean;
+};
+
 export type Issue = {
   provider: 'github' | 'linear' | 'jira' | 'gitlab' | 'plain' | 'forgejo' | 'featurebase';
   url: string;
@@ -57,6 +63,8 @@ export type Task = {
   sidebarWorkspaceId?: string;
   /** Parent task id for subtask trees (same project only). */
   parentTaskId?: string;
+  /** Natural-language quick-action entry that may be distilled after the task finishes. */
+  quickActionSource?: QuickActionTaskSource;
 };
 
 export type TaskBootstrapStatus =
@@ -108,6 +116,8 @@ export type CreateTaskParams = {
   sidebarWorkspaceId?: string;
   /** Create the task as a subtask of this parent (must be in the same project). */
   parentTaskId?: string;
+  /** Marks a natural-language quick-action task for non-blocking post-run distillation. */
+  quickActionSource?: QuickActionTaskSource;
 };
 
 export type SetTaskParentError =

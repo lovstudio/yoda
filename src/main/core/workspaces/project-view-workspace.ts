@@ -6,6 +6,7 @@ import { SshFileSystem } from '@main/core/fs/impl/ssh-fs';
 import { GitService } from '@main/core/git/impl/git-service';
 import { githubConnectionService } from '@main/core/github/services/github-connection-service';
 import type { ProjectProvider } from '@main/core/projects/project-provider';
+import { appSettingsService } from '@main/core/settings/settings-service';
 import type { Workspace } from '@main/core/workspaces/workspace';
 import { buildTaskProviders } from '@main/core/workspaces/workspace-factory';
 import { projectViewWorkspaceId } from '@main/core/workspaces/workspace-id';
@@ -66,13 +67,19 @@ function createProjectViewWorkspaceFactory(
     );
     const gitService = new GitService(baseGitCtx, authGitCtx, workspaceFs);
 
-    // Inert terminal provider — only present to satisfy LifecycleScriptService;
-    // the project-view workspace never runs lifecycle scripts.
+    const [projectSettings, projectDefaults] = await Promise.all([
+      provider.settings.get(),
+      appSettingsService.get('project'),
+    ]);
+
+    // Project-root terminals share the same tmux policy as task terminals, but
+    // remain scoped to this project-view workspace rather than any one task.
     const { terminals } = buildTaskProviders(type, {
       projectId: provider.projectId,
       taskId: workspaceId,
       taskPath: workDir,
-      tmuxEnabled: false,
+      tmuxEnabled: projectDefaults.tmuxByDefault,
+      shellSetup: projectSettings.shellSetup,
       taskEnvVars: {},
     });
 
@@ -92,6 +99,10 @@ function createProjectViewWorkspaceFactory(
       fetchService: provider.gitFetchService,
     };
 
-    return { workspace };
+    return {
+      workspace,
+      onDestroy: async (current) => current.terminals.destroyAll(),
+      onDetach: async (current) => current.terminals.detachAll(),
+    };
   };
 }

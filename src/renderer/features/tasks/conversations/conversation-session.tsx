@@ -55,7 +55,7 @@ export function getResumeInitialSize(
  * the task's conversations panel (its active conversation) and the team-room
  * session inspector (a specific member's conversation), so a room session looks
  * and behaves exactly like the standard session tab. Must be rendered inside a
- * provisioned task view (ProvisionedTaskProvider + TaskViewWrapper).
+ * ready task view (TaskViewWrapper's discriminated state snapshot).
  */
 export const ConversationSession = observer(function ConversationSession({
   conversation,

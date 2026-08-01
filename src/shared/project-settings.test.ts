@@ -42,7 +42,7 @@ describe('shareableProjectSettingsSchema', () => {
 });
 
 describe('quickActionSchema', () => {
-  it('keeps actions saved before programmatic quick actions as Agent instructions', () => {
+  it('migrates actions saved before command and Skill quick actions to Skills', () => {
     expect(
       quickActionSchema.parse({
         id: 'release',
@@ -53,8 +53,19 @@ describe('quickActionSchema', () => {
       id: 'release',
       label: 'Release',
       command: '/release-via-cicd',
-      kind: 'agent',
+      kind: 'skill',
     });
+  });
+
+  it('migrates legacy shell actions to commands', () => {
+    expect(
+      quickActionSchema.parse({
+        id: 'dev',
+        label: 'Start locally',
+        command: 'pnpm run dev',
+        kind: 'shell',
+      }).kind
+    ).toBe('command');
   });
 });
 

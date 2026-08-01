@@ -4,14 +4,12 @@ import { Fragment, useEffect, type ReactNode } from 'react';
 import { EditorProvider } from '@renderer/features/tasks/editor/editor-provider';
 import { TaskMainPanel } from '@renderer/features/tasks/main-panel';
 import {
+  asProvisioned,
   getTaskManagerStore,
   getTaskStore,
   taskViewKind,
 } from '@renderer/features/tasks/stores/task-selectors';
-import {
-  ProvisionedTaskProvider,
-  TaskViewWrapper,
-} from '@renderer/features/tasks/task-view-context';
+import { TaskViewWrapper } from '@renderer/features/tasks/task-view-context';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { cn } from '@renderer/utils/utils';
@@ -33,6 +31,7 @@ export const SelfContainedTaskPane = observer(function SelfContainedTaskPane({
 }) {
   const taskStore = getTaskStore(projectId, taskId);
   const kind = taskViewKind(taskStore, projectId);
+  const provisioned = asProvisioned(taskStore);
 
   // Auto-provision an idle task the same way the route does.
   useEffect(() => {
@@ -45,19 +44,25 @@ export const SelfContainedTaskPane = observer(function SelfContainedTaskPane({
 
   if (kind !== 'ready') {
     return (
-      <TaskViewWrapper projectId={projectId} taskId={taskId} hosted>
+      <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind} hosted>
         <TaskMainPanel />
       </TaskViewWrapper>
     );
   }
 
+  if (!provisioned) return null;
+
   return (
-    <TaskViewWrapper projectId={projectId} taskId={taskId} hosted>
-      <ProvisionedTaskProvider projectId={projectId} taskId={taskId}>
-        <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
-          <TaskMainPanel />
-        </EditorProvider>
-      </ProvisionedTaskProvider>
+    <TaskViewWrapper
+      projectId={projectId}
+      taskId={taskId}
+      kind={kind}
+      provisionedTask={provisioned}
+      hosted
+    >
+      <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
+        <TaskMainPanel />
+      </EditorProvider>
     </TaskViewWrapper>
   );
 });

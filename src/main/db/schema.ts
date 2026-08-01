@@ -730,6 +730,35 @@ export const terminals = sqliteTable(
   })
 );
 
+/**
+ * Project-root terminals are not owned by a task, so they cannot use the
+ * task-terminal table's task foreign key. Persist their identity separately so
+ * a tmux-backed terminal can be reattached after Yoda restarts.
+ */
+export const workspaceTerminals = sqliteTable(
+  'workspace_terminals',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    scopeId: text('scope_id').notNull(),
+    name: text('name').notNull(),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    projectScopeIdx: index('idx_workspace_terminals_project_scope').on(
+      table.projectId,
+      table.scopeId
+    ),
+  })
+);
+
 export const messages = sqliteTable(
   'messages',
   {

@@ -51,6 +51,9 @@ function makeTerminalProvider(): {
         preserveBufferOnExit: true,
       });
     },
+    isTerminalDetachable() {
+      return false;
+    },
     async killTerminal() {},
     async destroyAll() {},
     async detachAll() {},

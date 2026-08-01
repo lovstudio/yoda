@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   createExpoGoPairingUrl,
   createMobilePairingUrl,
+  getMobileProjectActivityById,
   parseMobilePairingUrl,
+  sortMobileProjects,
+  type MobileProjectSummary,
 } from './mobile-api';
 
 describe('mobile pairing links', () => {
@@ -53,5 +56,131 @@ describe('mobile pairing links', () => {
       parseMobilePairingUrl('yodamobile://connect?baseUrl=http%3A%2F%2F192.168.1.10%3A3879')
     ).toBeNull();
     expect(parseMobilePairingUrl('not a url')).toBeNull();
+  });
+});
+
+describe('mobile project ordering', () => {
+  function project(
+    id: string,
+    updatedAt: string,
+    options: { displayName?: string; isOpen?: boolean; lastActivityAt?: string } = {}
+  ): MobileProjectSummary {
+    return {
+      id,
+      name: id,
+      displayName: options.displayName ?? id,
+      type: 'local',
+      path: `/projects/${id}`,
+      isInternal: false,
+      isOpen: options.isOpen ?? false,
+      updatedAt,
+      lastActivityAt: options.lastActivityAt,
+    };
+  }
+
+  it('sorts projects by latest activity without mutating the snapshot', () => {
+    const projects = [
+      project('older', '2026-07-28T08:00:00.000Z'),
+      project('newest', '2026-07-31T08:00:00.000Z'),
+      project('middle', '2026-07-30T08:00:00.000Z'),
+    ];
+
+    expect(sortMobileProjects(projects, 'recent').map(({ id }) => id)).toEqual([
+      'newest',
+      'middle',
+      'older',
+    ]);
+    expect(projects.map(({ id }) => id)).toEqual(['older', 'newest', 'middle']);
+  });
+
+  it('keeps invalid and tied timestamps stable at the end', () => {
+    const projects = [
+      project('invalid-a', 'unknown'),
+      project('valid-a', '2026-07-31T08:00:00.000Z'),
+      project('invalid-b', ''),
+      project('valid-b', '2026-07-31T08:00:00.000Z'),
+    ];
+
+    expect(sortMobileProjects(projects, 'recent').map(({ id }) => id)).toEqual([
+      'valid-a',
+      'valid-b',
+      'invalid-a',
+      'invalid-b',
+    ]);
+  });
+
+  it('uses task activity instead of stale project metadata for recent ordering', () => {
+    const projects = [
+      project('metadata-newer', '2026-07-31T08:00:00.000Z'),
+      project('task-active', '2026-06-08T08:00:00.000Z', {
+        lastActivityAt: '2026-08-01T00:43:00.000Z',
+      }),
+    ];
+
+    expect(sortMobileProjects(projects, 'recent').map(({ id }) => id)).toEqual([
+      'task-active',
+      'metadata-newer',
+    ]);
+  });
+
+  it('parses SQLite timestamps as UTC on native clients', () => {
+    const projects = [
+      project('iso', '2026-07-31T16:59:59.000Z'),
+      project('sqlite', '2026-07-31 17:00:00'),
+    ];
+
+    expect(sortMobileProjects(projects, 'recent').map(({ id }) => id)).toEqual(['sqlite', 'iso']);
+  });
+
+  it('sorts projects by display name using natural ordering', () => {
+    const projects = [
+      project('ten', '2026-07-31T08:00:00.000Z', { displayName: 'Project 10' }),
+      project('alpha', '2026-07-29T08:00:00.000Z', { displayName: 'alpha' }),
+      project('two', '2026-07-30T08:00:00.000Z', { displayName: 'Project 2' }),
+    ];
+
+    expect(sortMobileProjects(projects, 'name').map(({ id }) => id)).toEqual([
+      'alpha',
+      'two',
+      'ten',
+    ]);
+  });
+
+  it('sorts open projects first and keeps each group in recent order', () => {
+    const projects = [
+      project('closed-newest', '2026-07-31T08:00:00.000Z'),
+      project('open-older', '2026-07-28T08:00:00.000Z', { isOpen: true }),
+      project('closed-older', '2026-07-27T08:00:00.000Z'),
+      project('open-newest', '2026-07-30T08:00:00.000Z', { isOpen: true }),
+    ];
+
+    expect(sortMobileProjects(projects, 'open').map(({ id }) => id)).toEqual([
+      'open-newest',
+      'open-older',
+      'closed-newest',
+      'closed-older',
+    ]);
+  });
+
+  it('derives project activity from the latest task interaction with project fallback', () => {
+    const projects = [
+      project('active', '2026-06-08T08:00:00.000Z'),
+      project('empty', '2026-07-30T08:00:00.000Z'),
+    ];
+    const activityByProjectId = getMobileProjectActivityById(projects, [
+      {
+        projectId: 'active',
+        createdAt: '2026-07-31 14:04:46',
+        lastInteractedAt: '2026-07-31T16:43:51.748Z',
+      },
+      {
+        projectId: 'active',
+        createdAt: '2026-07-30 10:00:00',
+        lastInteractedAt: undefined,
+      },
+    ]);
+
+    expect(activityByProjectId.get('active')).toBe('2026-07-31T16:43:51.748Z');
+    expect(activityByProjectId.get('empty')).toBe('2026-07-30T08:00:00.000Z');
   });
 });

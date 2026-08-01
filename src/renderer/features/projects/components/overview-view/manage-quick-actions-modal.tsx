@@ -1,10 +1,9 @@
-import { Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { QuickAction } from '@shared/project-settings';
 import { getProjectSettingsStore } from '@renderer/features/projects/stores/project-selectors';
-import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { type BaseModalProps } from '@renderer/lib/modal/modal-provider';
 import { Button } from '@renderer/lib/ui/button';
 import { ConfirmButton } from '@renderer/lib/ui/confirm-button';
@@ -15,13 +14,10 @@ import {
   DialogTitle,
 } from '@renderer/lib/ui/dialog';
 import { Input } from '@renderer/lib/ui/input';
+import { cn } from '@renderer/utils/utils';
 
 type ManageQuickActionsModalArgs = { projectId: string };
 type Props = BaseModalProps<void> & ManageQuickActionsModalArgs;
-
-function genId(): string {
-  return crypto.randomUUID();
-}
 
 function actionsEqual(a: QuickAction[], b: QuickAction[]): boolean {
   if (a.length !== b.length) return false;
@@ -47,18 +43,12 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
   onClose,
 }: Props) {
   const { t } = useTranslation();
-  const { value: homeDraft } = useAppSettingsKey('homeDraft');
-  const globalDefaults: QuickAction[] = useMemo(
-    () => homeDraft?.defaultQuickActions ?? [],
-    [homeDraft?.defaultQuickActions]
-  );
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Null means "use global defaults"; an array means project-specific override. */
-  const [override, setOverride] = useState<QuickAction[] | null>(null);
-  const [initial, setInitial] = useState<QuickAction[] | null>(null);
+  const [actions, setActions] = useState<QuickAction[]>([]);
+  const [initial, setInitial] = useState<QuickAction[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,8 +61,8 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
     void (async () => {
       await settingsStore.pageData.load();
       if (cancelled) return;
-      const existing = settingsStore.settings?.quickActions ?? null;
-      setOverride(existing);
+      const existing = settingsStore.settings?.quickActions ?? [];
+      setActions(existing);
       setInitial(existing);
       setLoading(false);
     })();
@@ -81,37 +71,16 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
     };
   }, [projectId, t]);
 
-  const displayList: QuickAction[] = override ?? globalDefaults;
-  const usingDefaults = override === null;
-  const dirty =
-    initial === null ? override !== null : override === null || !actionsEqual(override, initial);
+  const dirty = !actionsEqual(actions, initial);
 
-  const updateRow = (
-    id: string,
-    patch: Partial<Pick<QuickAction, 'label' | 'command' | 'kind'>>
-  ) => {
-    setOverride((prev) => {
-      const base = prev ?? globalDefaults;
-      return base.map((a) => (a.id === id ? { ...a, ...patch } : a));
-    });
+  const updateLabel = (id: string, label: string) => {
+    setActions((current) =>
+      current.map((action) => (action.id === id ? { ...action, label } : action))
+    );
   };
 
   const deleteRow = (id: string) => {
-    setOverride((prev) => {
-      const base = prev ?? globalDefaults;
-      return base.filter((a) => a.id !== id);
-    });
-  };
-
-  const addRow = () => {
-    setOverride((prev) => {
-      const base = prev ?? globalDefaults;
-      return [...base, { id: genId(), label: '', command: '', kind: 'shell' }];
-    });
-  };
-
-  const resetToGlobal = () => {
-    setOverride(null);
+    setActions((current) => current.filter((action) => action.id !== id));
   };
 
   const handleSubmit = async () => {
@@ -124,10 +93,7 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
     }
     setSubmitting(true);
     setError(null);
-    const cleaned: QuickAction[] | undefined =
-      override === null
-        ? undefined
-        : override.filter((a) => a.label.trim() !== '' && a.command.trim() !== '');
+    const cleaned = actions.filter((action) => action.label.trim() && action.command.trim());
     const nextSettings = JSON.parse(
       JSON.stringify({ ...currentSettings, quickActions: cleaned })
     ) as typeof currentSettings;
@@ -147,50 +113,35 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
       </DialogHeader>
       <DialogContentArea>
         <p className="text-xs text-foreground-muted">{t('projects.quickActions.description')}</p>
-        {usingDefaults && (
-          <p className="text-xs text-foreground-muted">
-            {t('projects.quickActions.usingDefaults')}
-          </p>
-        )}
         <div className="flex flex-col gap-2">
-          {displayList.map((action) => (
+          {actions.length === 0 ? (
+            <p className="py-3 text-xs text-foreground-muted">{t('projects.quickActions.empty')}</p>
+          ) : null}
+          {actions.map((action) => (
             <div key={action.id} className="flex items-center gap-2">
               <Input
                 className="w-32"
                 placeholder={t('projects.quickActions.labelPlaceholder')}
                 value={action.label}
                 disabled={loading}
-                onChange={(e) => updateRow(action.id, { label: e.target.value })}
+                onChange={(event) => updateLabel(action.id, event.target.value)}
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-24 shrink-0"
-                disabled={loading}
-                onClick={() =>
-                  updateRow(action.id, {
-                    kind: action.kind === 'shell' ? 'agent' : 'shell',
-                  })
-                }
-              >
+              <span className="w-16 shrink-0 text-center text-xs text-foreground-muted">
                 {t(
-                  action.kind === 'shell'
-                    ? 'projects.quickActions.shellKind'
-                    : 'projects.quickActions.agentKind'
+                  action.kind === 'command'
+                    ? 'projects.quickActions.commandKind'
+                    : 'projects.quickActions.skillKind'
                 )}
-              </Button>
-              <Input
-                className="flex-1"
-                placeholder={
-                  action.kind === 'shell'
-                    ? t('projects.quickActions.shellPlaceholder')
-                    : t('projects.quickActions.agentPlaceholder')
-                }
-                value={action.command}
-                disabled={loading}
-                onChange={(e) => updateRow(action.id, { command: e.target.value })}
-              />
+              </span>
+              <span
+                className={cn(
+                  'min-w-0 flex-1 truncate text-xs text-foreground-muted',
+                  action.kind === 'command' && 'font-mono'
+                )}
+                title={action.command}
+              >
+                {action.command}
+              </span>
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -202,18 +153,6 @@ export const ManageQuickActionsModal = observer(function ManageQuickActionsModal
               </Button>
             </div>
           ))}
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={loading} onClick={addRow}>
-              <Plus className="size-3.5" />
-              {t('projects.quickActions.addAction')}
-            </Button>
-            {!usingDefaults && (
-              <Button variant="ghost" size="sm" disabled={loading} onClick={resetToGlobal}>
-                <RotateCcw className="size-3.5" />
-                {t('projects.quickActions.resetToGlobalDefault')}
-              </Button>
-            )}
-          </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
       </DialogContentArea>

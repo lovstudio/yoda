@@ -12,9 +12,10 @@ export const WorkspaceTerminalPanel = observer(function WorkspaceTerminalPanel()
   const { t } = useTranslation();
   const manager = workspaceTerminalStore.manager;
   const tabs = workspaceTerminalStore.tabs;
-  const project = workspaceTerminalStore.activeProjectId
-    ? asMounted(getProjectStore(workspaceTerminalStore.activeProjectId))
+  const projectStore = workspaceTerminalStore.activeProjectId
+    ? getProjectStore(workspaceTerminalStore.activeProjectId)
     : undefined;
+  const project = projectStore ? asMounted(projectStore) : undefined;
   const remoteConnectionId = project?.data.type === 'ssh' ? project.data.connectionId : undefined;
 
   if (!manager || !tabs) return null;
@@ -25,6 +26,16 @@ export const WorkspaceTerminalPanel = observer(function WorkspaceTerminalPanel()
         <div className="flex h-5 shrink-0 items-center gap-1 rounded-sm bg-background-2 px-1.5 text-[11px] text-foreground">
           <Terminal className="size-3" />
           <span>{t('tasks.bottomPanel.terminals')}</span>
+          {projectStore ? (
+            <>
+              <span aria-hidden className="text-foreground-muted">
+                ·
+              </span>
+              <span className="max-w-40 truncate" title={projectStore.displayName}>
+                {projectStore.displayName}
+              </span>
+            </>
+          ) : null}
         </div>
         <button
           type="button"

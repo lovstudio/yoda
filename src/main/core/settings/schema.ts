@@ -17,11 +17,7 @@ import {
   MAX_CUSTOM_MODELS_PER_PROVIDER,
 } from '@shared/model-provider-catalog';
 import { openInAppIdSchema } from '@shared/openInApps';
-import {
-  promptPrincipleSchema,
-  quickActionSchema,
-  taskOutputLanguageValues,
-} from '@shared/project-settings';
+import { promptPrincipleSchema, taskOutputLanguageValues } from '@shared/project-settings';
 import { runtimeIdSchema } from '@shared/runtime-id-schema';
 import { RUNTIME_MODEL_CANDIDATE_CACHE_SOURCES } from '@shared/runtime-model-candidates';
 import { AGENT_ACCOUNT_PROVIDER_IDS, RUNTIMES } from '@shared/runtime-registry';
@@ -606,9 +602,6 @@ export const homeDraftSchema = z.preprocess(
      *  becomes "$lovstudio-git-commit-with-context" for Codex or
      *  "/lovstudio-git-commit-with-context" for Claude. */
     preArchiveCommand: z.string(),
-    /** Global default quick-action commands shown on each project's overview.
-     *  Projects can override via ShareableProjectSettings.quickActions. */
-    defaultQuickActions: z.array(quickActionSchema),
   })
 );
 

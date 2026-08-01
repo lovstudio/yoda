@@ -11,7 +11,11 @@ import { DialogContentArea, DialogHeader, DialogTitle } from '@renderer/lib/ui/d
 export function NewTaskModal({ onClose }: BaseModalProps) {
   const { t } = useTranslation();
   return (
-    <div data-yoda-surface="new-task-modal" className="flex min-h-0 flex-1 flex-col">
+    <div
+      data-yoda-surface="new-task-modal"
+      data-yoda-composer-modal
+      className="flex min-h-0 flex-1 flex-col"
+    >
       <DialogHeader>
         <DialogTitle>{t('sidebar.newTask')}</DialogTitle>
       </DialogHeader>

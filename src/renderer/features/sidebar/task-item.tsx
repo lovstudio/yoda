@@ -8,7 +8,7 @@ import {
   Users,
 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { selectCurrentPr } from '@shared/pull-requests';
 import {
@@ -43,6 +43,7 @@ import { branchColor } from '@renderer/utils/branch-color';
 import { cn } from '@renderer/utils/utils';
 import { PrBadge } from '../../lib/components/pr-badge';
 import { SidebarItemMiniButton, SidebarMenuRow } from './sidebar-primitives';
+import { useSidebarHoverIntent } from './use-sidebar-hover-intent';
 
 interface SidebarTaskItemProps {
   taskId: string;
@@ -94,6 +95,10 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
 
   const task = getTaskStore(projectId, taskId)!;
   const taskManager = getTaskManagerStore(projectId);
+  const preloadTaskView = useCallback(() => {
+    void taskManager?.preloadTask(taskId);
+  }, [taskManager, taskId]);
+  const taskPreloadIntent = useSidebarHoverIntent(preloadTaskView);
   // Shared task-entity menu wiring (same items as every other task surface).
   const menuActions = useTaskMenuActions(projectId, taskId);
   // Driven by the store so any archive entry point (sidebar, tabs, modal)
@@ -151,10 +156,6 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const handleProvision = () => {
     if (task.state !== 'unprovisioned' || task.phase !== 'idle') return;
     void taskManager?.provisionTask(taskId);
-  };
-
-  const preloadTaskView = () => {
-    void taskManager?.preloadTask(taskId);
   };
 
   const needsReview = task.data.needsReview;
@@ -223,10 +224,11 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
         data-sidebar-project-id={projectId}
         data-sidebar-task-id={taskId}
         isActive={isActive}
-        onPointerEnter={preloadTaskView}
+        onPointerEnter={taskPreloadIntent.schedule}
+        onPointerLeave={taskPreloadIntent.cancel}
         onMouseDown={(e) => {
           e.preventDefault();
-          preloadTaskView();
+          taskPreloadIntent.runNow();
         }}
         onMouseLeave={() => setArchiveConfirming(false)}
         onClick={(e) => {

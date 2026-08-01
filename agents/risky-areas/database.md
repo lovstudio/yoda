@@ -18,3 +18,6 @@
 - database path is resolved by main-process db path helpers
 - `YODA_DB_FILE` overrides the default location
 - database initialization happens in `src/main/db/initialize.ts`
+- `workspace_terminals` stores project-root terminal identities separately from
+  task terminals because it has no task foreign key; the tmux process remains
+  the runtime source of truth after restart
