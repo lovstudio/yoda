@@ -3,7 +3,10 @@ import type {
   ExpoSpeechRecognitionErrorEvent,
   ExpoSpeechRecognitionResultEvent,
 } from 'expo-speech-recognition';
-import { resolveMobileSpeechLocale } from '../../../src/shared/mobile-api';
+import {
+  buildMobileSpeechContextualStrings,
+  resolveMobileSpeechLocale,
+} from '../../../src/shared/mobile-api';
 
 export type MobileVoiceInputSession = {
   abort: () => void;
@@ -12,6 +15,7 @@ export type MobileVoiceInputSession = {
 };
 
 export async function startMobileVoiceInput(options: {
+  contextualStrings?: readonly (string | null | undefined)[];
   onEnd: () => void;
   onError: (message: string) => void;
   onResult: (transcript: string, isFinal: boolean) => void;
@@ -29,6 +33,9 @@ export async function startMobileVoiceInput(options: {
     .then((result) => result.locales)
     .catch(() => []);
   const speechLocale = resolveMobileSpeechLocale(preferredLocales, supportedLocales);
+  const speechContextualStrings = buildMobileSpeechContextualStrings(
+    options.contextualStrings ?? []
+  );
 
   const resultSubscription = ExpoSpeechRecognitionModule.addListener(
     'result',
@@ -58,7 +65,9 @@ export async function startMobileVoiceInput(options: {
     ExpoSpeechRecognitionModule.start({
       addsPunctuation: true,
       continuous: false,
+      contextualStrings: speechContextualStrings,
       interimResults: true,
+      iosTaskHint: 'dictation',
       lang: speechLocale,
       maxAlternatives: 1,
     });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { appendMobileVoiceTranscript, resolveMobileSpeechLocale } from './mobile-api';
+import {
+  appendMobileVoiceTranscript,
+  buildMobileSpeechContextualStrings,
+  MOBILE_SPEECH_CONTEXT_MAX_STRINGS,
+  resolveMobileSpeechLocale,
+} from './mobile-api';
 
 describe('mobile voice input text', () => {
   it('appends Chinese dictation without adding a visual gap', () => {
@@ -32,5 +37,30 @@ describe('mobile voice input text', () => {
   it('falls back deterministically when the device exposes no usable preference', () => {
     expect(resolveMobileSpeechLocale([], ['en-IE', 'zh-CN'])).toBe('zh-CN');
     expect(resolveMobileSpeechLocale([], [])).toBe('zh-CN');
+  });
+
+  it('prioritizes current project context before built-in product hot words', () => {
+    const contextualStrings = buildMobileSpeechContextualStrings([
+      '  语音输入优化  ',
+      'YODA',
+      'React Native',
+    ]);
+
+    expect(contextualStrings.slice(0, 3)).toEqual(['语音输入优化', 'YODA', 'React Native']);
+    expect(contextualStrings.filter((value) => value.toLowerCase() === 'yoda')).toHaveLength(1);
+    expect(contextualStrings).toContain('LovStudio');
+    expect(contextualStrings).toContain('Codex');
+  });
+
+  it('splits long context at sentence boundaries and caps recognizer biasing strings', () => {
+    const longContext = `${'移动端语音热词'.repeat(6)}。${'project-context'.repeat(4)}`;
+    const contextualStrings = buildMobileSpeechContextualStrings([
+      longContext,
+      ...Array.from({ length: 80 }, (_, index) => `custom-term-${index}`),
+    ]);
+
+    expect(contextualStrings[0]).toBe('移动端语音热词'.repeat(6));
+    expect(contextualStrings[1]).toBe('project-context'.repeat(4));
+    expect(contextualStrings).toHaveLength(MOBILE_SPEECH_CONTEXT_MAX_STRINGS);
   });
 });

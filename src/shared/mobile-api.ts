@@ -11,6 +11,36 @@ export const MOBILE_INPUT_ATTACHMENT_MAX_COUNT = 4;
 export const MOBILE_INPUT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 /** Keeps the base64 JSON request comfortably below the gateway and Relay 128 KiB limit. */
 export const MOBILE_INPUT_ATTACHMENT_CHUNK_BYTES = 48 * 1024;
+export const MOBILE_SPEECH_CONTEXT_MAX_STRINGS = 50;
+
+const MOBILE_SPEECH_BASE_CONTEXTUAL_STRINGS = [
+  'Yoda',
+  'Yoda Mobile',
+  'LovStudio',
+  '手工川',
+  '手工川工作室',
+  'Agent',
+  'Codex',
+  'Claude',
+  'ChatGPT',
+  'OpenAI',
+  'Git',
+  'GitHub',
+  'worktree',
+  'MCP',
+  'TypeScript',
+  'JavaScript',
+  'React',
+  'React Native',
+  'Expo',
+  'Electron',
+  'pnpm',
+  'Vercel',
+  'Tauri',
+  'macOS',
+  'iOS',
+  'Android',
+] as const;
 
 type MobileSpeechLocale = {
   language: string;
@@ -97,6 +127,47 @@ export function appendMobileVoiceTranscript(baseValue: string, transcript: strin
     /[\p{Script=Han}，。！？：；、]/u.test(previous) ||
     /[\p{Script=Han}，。！？：；、]/u.test(next);
   return `${baseValue}${joinsWithoutSpace ? '' : ' '}${normalized}`;
+}
+
+function normalizeMobileSpeechContext(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+function splitMobileSpeechContext(value: string): string[] {
+  const normalized = normalizeMobileSpeechContext(value);
+  if (!normalized) return [];
+  if (normalized.length <= 64) return [normalized];
+
+  return normalized
+    .split(/[，。！？；：,.!?;:]+/u)
+    .map(normalizeMobileSpeechContext)
+    .filter((candidate) => candidate.length >= 2 && candidate.length <= 64);
+}
+
+/**
+ * Builds the native speech recognizer's biasing vocabulary. Current project/session context takes
+ * priority over the stable product and development vocabulary when the platform enforces a limit.
+ */
+export function buildMobileSpeechContextualStrings(
+  contextValues: readonly (string | null | undefined)[]
+): string[] {
+  const contextualStrings: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of [...contextValues, ...MOBILE_SPEECH_BASE_CONTEXTUAL_STRINGS]) {
+    if (!value) continue;
+    for (const candidate of splitMobileSpeechContext(value)) {
+      const key = candidate.toLocaleLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      contextualStrings.push(candidate);
+      if (contextualStrings.length === MOBILE_SPEECH_CONTEXT_MAX_STRINGS) {
+        return contextualStrings;
+      }
+    }
+  }
+
+  return contextualStrings;
 }
 
 export type MobilePairingConnection = {

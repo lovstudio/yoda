@@ -30,6 +30,10 @@ describe('mobile native dependencies', () => {
       readFileSync(new URL('../../apps/mobile/app.json', import.meta.url), 'utf8')
     ) as { expo?: { plugins?: unknown[] } };
     const plugins = JSON.stringify(mobileConfig.expo?.plugins ?? []);
+    const voiceInputSource = readFileSync(
+      new URL('../../apps/mobile/src/voice-input.ts', import.meta.url),
+      'utf8'
+    );
 
     expect(mobilePackage.dependencies?.['expo-image-picker']).toBeTruthy();
     expect(mobilePackage.dependencies?.['expo-localization']).toBeTruthy();
@@ -37,5 +41,7 @@ describe('mobile native dependencies', () => {
     expect(plugins).toContain('expo-image-picker');
     expect(plugins).toContain('expo-localization');
     expect(plugins).toContain('expo-speech-recognition');
+    expect(voiceInputSource).toContain('contextualStrings: speechContextualStrings');
+    expect(voiceInputSource).toContain("iosTaskHint: 'dictation'");
   });
 });
