@@ -131,6 +131,20 @@ describe('AgentInfoCard', () => {
     expect(host.querySelector('[data-testid="agent-info-actions-menu"]')).not.toBeNull();
     expect(host.textContent).not.toContain('agents.runtimeInfo.actions');
     expect(host.textContent).not.toContain('agents.runtimeInfo.openCli');
+    expect(host.textContent).not.toContain('agents.runtimeInfo.latestVersionLabel');
+    expect(host.textContent).not.toContain('agents.runtimeInfo.configDetected');
+
+    const versionMenu = host.querySelector<HTMLButtonElement>(
+      '[data-testid="runtime-version-menu"]'
+    );
+    await clickUser(versionMenu!);
+    const versionMenuContent = document.querySelector<HTMLElement>(
+      '[data-slot="dropdown-menu-content"]'
+    );
+    expect(versionMenuContent?.textContent).toContain('agents.runtimeInfo.latestVersionLabel');
+    expect(versionMenuContent?.textContent).toContain('v0.147.0');
+    await clickUser(findMenuItem('agents.runtimeInfo.versionHistory')!);
+    expect(mocks.openExternal).toHaveBeenCalledWith('https://github.com/openai/codex/releases');
 
     const pathMenus = host.querySelectorAll<HTMLButtonElement>(
       'button[aria-label="fileActions.label"]'

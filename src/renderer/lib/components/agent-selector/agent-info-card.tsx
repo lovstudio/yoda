@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   Check,
   Copy,
+  History,
   MoreHorizontal,
   RefreshCw,
   Settings2,
@@ -17,6 +18,7 @@ import {
   getDocUrlForRuntime,
   getInstallCommandForRuntime,
   getRuntime,
+  getVersionHistoryUrlForRuntime,
   type RuntimeId,
 } from '@shared/runtime-registry';
 import AgentLogo from '@renderer/lib/components/agent-logo';
@@ -31,7 +33,9 @@ import { Button } from '@renderer/lib/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/lib/ui/dropdown-menu';
@@ -69,6 +73,7 @@ export const AgentInfoCard: React.FC<Props> = ({
   const description = getDescriptionForRuntime(id);
   const installCommand = getInstallCommandForRuntime(id);
   const docUrl = getDocUrlForRuntime(id);
+  const versionHistoryUrl = getVersionHistoryUrlForRuntime(id);
   const title = runtime?.name ?? id;
   const snapshotQuery = useRuntimeSnapshot(id, connectionId);
   const snapshot = snapshotQuery.data;
@@ -219,10 +224,11 @@ export const AgentInfoCard: React.FC<Props> = ({
         <InfoRow
           label={t('agents.runtimeInfo.version')}
           value={installation?.version ? `v${installation.version}` : t('agents.notDetected')}
-          detail={
-            snapshot?.update.latestVersion
-              ? t('agents.runtimeInfo.latestVersion', { version: snapshot.update.latestVersion })
-              : undefined
+          trailingAction={
+            <VersionInfoDropdown
+              latestVersion={snapshot?.update.latestVersion ?? null}
+              historyUrl={versionHistoryUrl}
+            />
           }
         />
         {!modelEditing ? (
@@ -253,13 +259,6 @@ export const AgentInfoCard: React.FC<Props> = ({
         <InfoRow
           label={t('agents.runtimeInfo.config')}
           value={configPath ?? t('agents.unset')}
-          detail={
-            snapshot?.config.exists === false
-              ? t('agents.runtimeInfo.configMissing')
-              : snapshot?.config.exists
-                ? t('agents.runtimeInfo.configDetected')
-                : undefined
-          }
           mono
           pathTarget={
             configPath
@@ -325,6 +324,52 @@ function RuntimeStateBadge({
   );
 }
 
+function VersionInfoDropdown({
+  latestVersion,
+  historyUrl,
+}: {
+  latestVersion: string | null;
+  historyUrl: string | null;
+}) {
+  const { t } = useTranslation();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className="flex size-5 shrink-0 items-center justify-center rounded-sm text-foreground-passive transition-colors hover:bg-background-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+            title={t('agents.runtimeInfo.versionMenu')}
+            aria-label={t('agents.runtimeInfo.versionMenu')}
+            data-testid="runtime-version-menu"
+          >
+            <MoreHorizontal className="size-3.5" />
+          </button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="flex items-center justify-between gap-4 font-normal">
+            <span>{t('agents.runtimeInfo.latestVersionLabel')}</span>
+            <span className="font-mono text-foreground">
+              {latestVersion ? `v${latestVersion}` : '—'}
+            </span>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
+        {historyUrl ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => void rpc.app.openExternal(historyUrl)}>
+              <History />
+              {t('agents.runtimeInfo.versionHistory')}
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function InfoRow({
   label,
   value,
@@ -332,6 +377,7 @@ function InfoRow({
   mono,
   pathTarget,
   pathActions,
+  trailingAction,
 }: {
   label: string;
   value: string;
@@ -339,6 +385,7 @@ function InfoRow({
   mono?: boolean;
   pathTarget?: FilePathTarget;
   pathActions?: React.ReactNode;
+  trailingAction?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3 px-2.5 py-1.5 text-xs">
@@ -351,6 +398,7 @@ function InfoRow({
           {detail}
         </span>
       ) : null}
+      {trailingAction}
       {pathTarget ? (
         <FilePathActionsDropdown target={pathTarget} className="shrink-0">
           {pathActions}
