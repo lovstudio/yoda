@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   listPathCompletions: vi.fn(async () => ({
     success: true,
     data: {
-      entries: [{ path: 'agents', type: 'dir' }],
+      entries: [{ path: '/Users/tester/Documents', type: 'dir' }],
       total: 1,
       truncated: false,
       durationMs: 1,
@@ -33,6 +33,7 @@ vi.mock('@renderer/lib/ipc', () => ({
   rpc: {
     app: {
       clipboardWriteText: vi.fn(),
+      getHomeDir: vi.fn(async () => '/Users/tester'),
       openIn: vi.fn(),
       triggerVoiceInput: vi.fn(),
     },
@@ -107,8 +108,8 @@ describe('ComposerPromptInput path completion menu', () => {
       await vi.waitFor(() => {
         expect(mocks.listPathCompletions).toHaveBeenCalledWith(
           'project-1',
-          '.',
-          expect.objectContaining({ pathKind: 'home' })
+          '/Users/tester',
+          expect.objectContaining({ pathKind: 'absolute' })
         );
         expect(document.querySelector('[data-path-completion-menu]')).not.toBeNull();
       });
@@ -118,7 +119,7 @@ describe('ComposerPromptInput path completion menu', () => {
     if (!menu) throw new Error('Path completion menu is missing');
     expect(clippingHost.contains(menu)).toBe(false);
     expect(getComputedStyle(menu).position).toBe('fixed');
-    expect(menu.textContent).toContain('~/agents/');
+    expect(menu.textContent).toContain('~/Documents/');
 
     const menuRect = menu.getBoundingClientRect();
     expect(menuRect.left).toBeGreaterThanOrEqual(8);

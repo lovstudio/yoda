@@ -61,7 +61,9 @@ import {
 import {
   applyPathCompletion,
   buildPathCompletionItems,
+  buildPathCompletionRequest,
   findActivePathMention,
+  rebaseHomePathCompletionEntries,
   splitPathMentionQuery,
   type ActivePathMention,
   type PathCompletionItem,
@@ -510,6 +512,7 @@ export function ComposerPromptInput({
   const [skillShortcutSearchQuery, setSkillShortcutSearchQuery] = useState('');
   const [dismissedSkillShortcutKey, setDismissedSkillShortcutKey] = useState<string | null>(null);
   const pathCompletionRequestRef = useRef(0);
+  const localHomeDirectoryRef = useRef<string | null>(null);
 
   const activePathMention = useMemo(
     () =>
@@ -632,15 +635,27 @@ export function ComposerPromptInput({
     setPathCompletionError(false);
 
     const timer = setTimeout(() => {
-      rpc.fs
-        .listPathCompletions(projectId ?? null, queryParts.directoryPath, {
-          pathKind: queryParts.pathKind,
-          recursive: false,
-          includeHidden: true,
-          maxEntries: 80,
-          timeBudgetMs: 1_000,
-        })
-        .then((result) => {
+      void (async () => {
+        let localHomeDirectory: string | undefined;
+        try {
+          if (queryParts.pathKind === 'home' && runHostKind === 'local') {
+            localHomeDirectory = localHomeDirectoryRef.current ?? (await rpc.app.getHomeDir());
+            if (pathCompletionRequestRef.current !== requestId) return;
+            localHomeDirectoryRef.current = localHomeDirectory;
+          }
+
+          const request = buildPathCompletionRequest(queryParts, localHomeDirectory);
+          const result = await rpc.fs.listPathCompletions(
+            projectId ?? null,
+            request.directoryPath,
+            {
+              pathKind: request.pathKind,
+              recursive: false,
+              includeHidden: true,
+              maxEntries: 80,
+              timeBudgetMs: 1_000,
+            }
+          );
           if (pathCompletionRequestRef.current !== requestId) return;
           if (!result.success) {
             setPathCompletionItems([]);
@@ -648,25 +663,28 @@ export function ComposerPromptInput({
             return;
           }
           setPathCompletionItems(
-            buildPathCompletionItems(result.data.entries, queryParts).slice(0, 50)
+            buildPathCompletionItems(
+              rebaseHomePathCompletionEntries(result.data.entries, queryParts, localHomeDirectory),
+              queryParts
+            ).slice(0, 50)
           );
           setActivePathCompletionIndex(0);
-        })
-        .catch(() => {
+        } catch {
           if (pathCompletionRequestRef.current !== requestId) return;
           setPathCompletionItems([]);
           setPathCompletionError(false);
-        })
-        .finally(() => {
-          if (pathCompletionRequestRef.current !== requestId) return;
-          setPathCompletionLoading(false);
-        });
+        } finally {
+          if (pathCompletionRequestRef.current === requestId) {
+            setPathCompletionLoading(false);
+          }
+        }
+      })();
     }, 80);
 
     return () => {
       clearTimeout(timer);
     };
-  }, [activePathMention, disabled, projectId]);
+  }, [activePathMention, disabled, projectId, runHostKind]);
 
   const focusForVoiceInput = useCallback(() => {
     const textarea = textareaRef.current;
