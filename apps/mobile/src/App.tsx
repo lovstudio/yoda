@@ -36,6 +36,7 @@ import {
 } from 'react-native';
 import {
   appendMobileVoiceTranscript,
+  canContinueMobileSession,
   getMobileProjectActivityById,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_SESSION_INPUT_MAX_CHARS,
@@ -2079,7 +2080,7 @@ function SessionRow({ session, onPress }: { session: MobileSessionSummary; onPre
         <MetaItem icon="hardware-chip-outline" label={session.runtimeId} />
         <MetaItem
           icon={session.running ? 'radio-outline' : 'pause-circle-outline'}
-          label={session.acceptsInput ? 'Live' : session.running ? 'Detached' : 'Stopped'}
+          label={session.running ? 'Live' : session.resumable ? 'Ready' : 'Stopped'}
         />
         <MetaItem
           icon="time-outline"
@@ -2276,10 +2277,10 @@ function SessionDetailScreen({
     setRefreshing(false);
   }, [loadDetail]);
 
+  const sessionCanContinue = canContinueMobileSession(detail?.session);
   const handleSendInput = useCallback(async () => {
     const input = sessionInput.trim();
-    if ((!input && sessionImages.length === 0) || !detail?.session.acceptsInput || sendingInput)
-      return;
+    if ((!input && sessionImages.length === 0) || !sessionCanContinue || sendingInput) return;
 
     setSendingInput(true);
     let attachmentIds: string[] = [];
@@ -2307,10 +2308,10 @@ function SessionDetailScreen({
     }
   }, [
     connection,
-    detail?.session.acceptsInput,
     loadDetail,
     scrollToBottom,
     sendingInput,
+    sessionCanContinue,
     sessionId,
     sessionImages,
     sessionInput,
@@ -2414,6 +2415,7 @@ function SessionDetailScreen({
           <SessionInputComposer
             live={detail?.session.running ?? false}
             acceptsInput={detail?.session.acceptsInput ?? false}
+            resumable={detail?.session.resumable ?? false}
             images={sessionImages}
             imagesEnabled={
               projects.find((project) => project.id === task.projectId)?.type === 'local'
@@ -2697,6 +2699,7 @@ function InputMediaControls({
 function SessionInputComposer({
   live,
   acceptsInput,
+  resumable,
   images,
   imagesEnabled,
   runtimeStatus,
@@ -2710,6 +2713,7 @@ function SessionInputComposer({
 }: {
   live: boolean;
   acceptsInput: boolean;
+  resumable: boolean;
   images: MobileImageDraft[];
   imagesEnabled: boolean;
   runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
@@ -2721,8 +2725,9 @@ function SessionInputComposer({
   onImagesChange: (images: MobileImageDraft[]) => void;
   onSend: () => void;
 }) {
+  const canContinue = canContinueMobileSession({ acceptsInput, resumable });
   const canSend =
-    acceptsInput &&
+    canContinue &&
     (value.trim().length > 0 || images.length > 0) &&
     (images.length === 0 || imagesEnabled) &&
     !sending;
@@ -2731,12 +2736,13 @@ function SessionInputComposer({
       <SessionRuntimeStatus
         acceptsInput={acceptsInput}
         live={live}
+        resumable={resumable}
         runtimeStatus={runtimeStatus}
         valueLength={value.length}
       />
       <InputMediaControls
         compact
-        disabled={sending || !acceptsInput}
+        disabled={sending || !canContinue}
         images={images}
         imagesEnabled={imagesEnabled}
         speechContext={speechContext}
@@ -2784,11 +2790,13 @@ function SessionInputComposer({
 function SessionRuntimeStatus({
   acceptsInput,
   live,
+  resumable,
   runtimeStatus,
   valueLength,
 }: {
   acceptsInput: boolean;
   live: boolean;
+  resumable: boolean;
   runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   valueLength: number;
 }) {
@@ -2797,9 +2805,11 @@ function SessionRuntimeStatus({
     ? runtimeStatus === 'completed'
       ? 'This turn is complete. You can send a follow-up.'
       : 'Live input is available.'
-    : live
-      ? 'The session is connected but not accepting input.'
-      : 'The session is offline.';
+    : resumable
+      ? 'Ready for a follow-up. The session will resume when you send.'
+      : live
+        ? 'The session is connected but not accepting input.'
+        : 'The session is offline.';
 
   return (
     <View
