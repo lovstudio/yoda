@@ -7,7 +7,6 @@ export const MOBILE_APP_DEFAULT_INSTALL_URL = 'https://lovstudio.ai/yoda/mobile'
 export const MOBILE_SESSION_CONTENT_MAX_CHARS = 120_000;
 export const MOBILE_SESSION_TRANSCRIPT_MAX_CHARS = 240_000;
 export const MOBILE_SESSION_INPUT_MAX_CHARS = 20_000;
-export const MOBILE_INPUT_ATTACHMENT_MAX_COUNT = 4;
 export const MOBILE_INPUT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 /** Keeps the base64 JSON request comfortably below the gateway and Relay 128 KiB limit. */
 export const MOBILE_INPUT_ATTACHMENT_CHUNK_BYTES = 48 * 1024;

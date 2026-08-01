@@ -1,8 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import {
-  MOBILE_INPUT_ATTACHMENT_MAX_BYTES,
-  MOBILE_INPUT_ATTACHMENT_MAX_COUNT,
-} from '../../../src/shared/mobile-api';
+import { MOBILE_INPUT_ATTACHMENT_MAX_BYTES } from '../../../src/shared/mobile-api';
 import { discardInputAttachment, uploadInputImage, type MobileConnection } from './api-client';
 
 export type MobileImageDraft = {
@@ -30,19 +27,14 @@ function jpegName(fileName: string | null | undefined, index: number): string {
   return `${stem || `mobile-image-${index + 1}`}.jpg`;
 }
 
-export async function pickMobileInputImages(existingCount: number): Promise<MobileImageDraft[]> {
-  const available = MOBILE_INPUT_ATTACHMENT_MAX_COUNT - existingCount;
-  if (available <= 0) {
-    throw new Error(`You can attach up to ${MOBILE_INPUT_ATTACHMENT_MAX_COUNT} images.`);
-  }
-
+export async function pickMobileInputImages(): Promise<MobileImageDraft[]> {
   const result = await ImagePicker.launchImageLibraryAsync({
     allowsMultipleSelection: true,
     base64: true,
     mediaTypes: ['images'],
     orderedSelection: true,
     quality: 0.86,
-    selectionLimit: available,
+    selectionLimit: 0,
   });
   if (result.canceled) return [];
 
