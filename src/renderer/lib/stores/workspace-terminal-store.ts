@@ -35,6 +35,7 @@ export class WorkspaceTerminalStore {
   isOpen = false;
   error: string | null = null;
   activeScope: WorkspaceTerminalScopeStore | null = null;
+  private followsActiveProject = false;
   private readonly scopes = new Map<string, WorkspaceTerminalScopeStore>();
 
   constructor() {
@@ -72,6 +73,7 @@ export class WorkspaceTerminalStore {
     project: MountedProject['data'],
     options: { ensureTerminal?: boolean } = {}
   ): Promise<void> {
+    this.followsActiveProject = true;
     const scopeId = projectTerminalScopeId(project.type, project.id);
     const scope = this.getOrCreateScope(project.id, scopeId, project.id);
     await this.openScope(scope, options.ensureTerminal ?? true);
@@ -86,8 +88,20 @@ export class WorkspaceTerminalStore {
   }
 
   async openGlobal(options: { ensureTerminal?: boolean } = {}): Promise<void> {
+    this.followsActiveProject = false;
     const scope = this.getOrCreateScope(GLOBAL_TERMINAL_PROJECT_ID, GLOBAL_TERMINAL_SCOPE_ID, null);
     await this.openScope(scope, options.ensureTerminal ?? true);
+  }
+
+  async syncActiveProject(project: MountedProject['data'] | null): Promise<void> {
+    if (!this.isOpen || !this.followsActiveProject) return;
+    if (!project) {
+      this.close();
+      return;
+    }
+    const scopeId = projectTerminalScopeId(project.type, project.id);
+    if (this.activeScope?.scopeId === scopeId) return;
+    await this.openProject(project, { ensureTerminal: false });
   }
 
   async runCommand(project: MountedProject['data'], command: string, label: string): Promise<void> {

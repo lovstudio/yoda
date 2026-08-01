@@ -26,14 +26,9 @@ import { roomMemberTabMeta } from '../agent-room/room-member-detail';
 import { TaskProvisionRecovery } from './components/task-provision-recovery';
 import { formatConversationTitleForDisplay } from './conversations/conversation-title-utils';
 import { TaskActiveTabContent } from './main-panel';
-import {
-  getTaskStore,
-  taskErrorMessage,
-  taskViewKind,
-  type TaskViewKind,
-} from './stores/task-selectors';
+import { getTaskStore, taskErrorMessage, type TaskViewKind } from './stores/task-selectors';
 import type { ResolvedTab } from './tabs/tab-manager-store';
-import { useProvisionedTask } from './task-view-context';
+import { useProvisionedTask, useTaskViewKind } from './task-view-context';
 import { TaskViewWrapperWithProviders } from './view';
 
 export const TaskTabWindow = observer(function TaskTabWindow() {
@@ -79,8 +74,7 @@ const TaskTabWindowContent = observer(function TaskTabWindowContent({
 }: {
   target: TaskWindowTarget;
 }) {
-  const taskStore = getTaskStore(target.projectId, target.taskId);
-  const kind = taskViewKind(taskStore, target.projectId);
+  const kind = useTaskViewKind();
 
   if (kind === 'provision-error' || kind === 'project-error') {
     return <TaskProvisionRecovery projectId={target.projectId} taskId={target.taskId} />;

@@ -372,6 +372,11 @@ export class SshTerminalProvider implements TerminalProvider {
     });
   }
 
+  isTerminalDetachable(terminalId: string): boolean {
+    const sessionId = makePtySessionId(this.projectId, this.scopeId, terminalId);
+    return this.tmuxSessionNames.has(sessionId);
+  }
+
   /**
    * Re-spawn all terminals whose sessions are no longer active (e.g. after
    * an SSH reconnect). Skips user-deleted terminals and terminals that are

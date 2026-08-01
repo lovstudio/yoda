@@ -9,6 +9,10 @@ describe('new task modal responsive contract', () => {
       'utf8'
     );
     const modal = readFileSync(new URL('./new-task-modal.tsx', import.meta.url), 'utf8');
+    const conversationModal = readFileSync(
+      new URL('./new-conversation-modal.tsx', import.meta.url),
+      'utf8'
+    );
     const home = readFileSync(new URL('./home-view.tsx', import.meta.url), 'utf8');
 
     expect(registry).toContain(
@@ -16,10 +20,16 @@ describe('new task modal responsive contract', () => {
     );
     expect(renderer).toContain('displayEntry?.className');
     expect(modal).toContain('data-yoda-surface="new-task-modal"');
+    expect(modal).toContain('data-yoda-composer-modal');
+    expect(conversationModal).toContain('data-yoda-surface="new-conversation-modal"');
+    expect(conversationModal).toContain('data-yoda-composer-modal');
     expect(modal).toContain('<HomeComposer onSubmitted={onClose} />');
     expect(modal).not.toContain('onProjectRevealed');
     expect(home).toContain('data-yoda-surface="home-composer-session-settings"');
     expect(home).toContain('data-yoda-surface="home-composer-compare-action"');
+    expect(home).toContain(
+      "{!taskScopedTarget && runMode === 'normal' && renderAddCompareButton()}"
+    );
     expect(home).not.toContain('data-yoda-surface="home-composer-actions"');
   });
 });

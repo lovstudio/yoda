@@ -33,10 +33,14 @@ import {
   type TextStyle,
 } from 'react-native';
 import {
+  getMobileProjectActivityById,
   MOBILE_GATEWAY_DEFAULT_DEV_TOKEN,
   MOBILE_SESSION_INPUT_MAX_CHARS,
   parseMobilePairingUrl,
+  parseMobileTimestamp,
+  sortMobileProjects,
   type MobileDashboardSnapshot,
+  type MobileProjectSortMode,
   type MobileProjectSummary,
   type MobileSessionDetail,
   type MobileSessionSummary,
@@ -483,7 +487,7 @@ function tokenizeInlineMarkdown(value: string): InlineMarkdownToken[] {
 
 function formatTimestamp(value?: string): string {
   if (!value) return 'No activity yet';
-  const date = new Date(value);
+  const date = new Date(parseMobileTimestamp(value));
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString([], {
     month: 'short',
@@ -747,10 +751,14 @@ export function App() {
     return () => clearInterval(timer);
   }, [connection, loadDashboard]);
 
-  const visibleProjects = useMemo(
-    () => snapshot?.projects.filter((project) => !project.isInternal) ?? [],
-    [snapshot]
-  );
+  const visibleProjects = useMemo(() => {
+    const projects = snapshot?.projects.filter((project) => !project.isInternal) ?? [];
+    const activityByProjectId = getMobileProjectActivityById(projects, snapshot?.tasks ?? []);
+    return projects.map((project) => ({
+      ...project,
+      lastActivityAt: activityByProjectId.get(project.id) ?? project.updatedAt,
+    }));
+  }, [snapshot]);
 
   const openProjectIds = useMemo(
     () =>
@@ -1634,27 +1642,11 @@ function DemandComposer({
         value={prompt}
         onChangeText={onPromptChange}
       />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rail}
-      >
-        <ProjectChip
-          active={selectedProjectId === null}
-          label="Drafts"
-          meta="Default"
-          onPress={() => onProjectChange(null)}
-        />
-        {projects.map((project) => (
-          <ProjectChip
-            key={project.id}
-            active={selectedProjectId === project.id}
-            label={project.displayName}
-            meta={project.isOpen ? 'Open' : 'Will open'}
-            onPress={() => onProjectChange(project.id)}
-          />
-        ))}
-      </ScrollView>
+      <DemandProjectAccordion
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        onProjectChange={onProjectChange}
+      />
       <Pressable
         accessibilityLabel="Submit new mobile request"
         disabled={!canSubmit}
@@ -1675,6 +1667,189 @@ function DemandComposer({
         )}
       </Pressable>
     </View>
+  );
+}
+
+function DemandProjectAccordion({
+  projects,
+  selectedProjectId,
+  onProjectChange,
+}: {
+  projects: MobileProjectSummary[];
+  selectedProjectId: string | null;
+  onProjectChange: (projectId: string | null) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const [sortMode, setSortMode] = useState<MobileProjectSortMode>('recent');
+  const sortedProjects = useMemo(
+    () => sortMobileProjects(projects, sortMode),
+    [projects, sortMode]
+  );
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const selectedLabel = selectedProject?.displayName ?? 'Drafts';
+  const selectedMeta = selectedProject
+    ? `Active ${formatTimestamp(selectedProject.lastActivityAt ?? selectedProject.updatedAt)}`
+    : 'Default workspace';
+
+  return (
+    <View style={styles.projectAccordion}>
+      <Pressable
+        accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} project selection`}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        style={({ pressed }) => [
+          styles.projectAccordionTrigger,
+          expanded ? styles.projectAccordionTriggerExpanded : null,
+          pressed ? styles.buttonPressed : null,
+        ]}
+        onPress={() => setExpanded((current) => !current)}
+      >
+        <View style={styles.projectAccordionTriggerIcon}>
+          <Ionicons color={COLORS.charcoal} name="folder-open-outline" size={18} />
+        </View>
+        <View style={styles.projectAccordionTriggerBody}>
+          <Text style={styles.projectAccordionEyebrow}>Project</Text>
+          <Text style={styles.projectAccordionTitle} numberOfLines={1}>
+            {selectedLabel}
+          </Text>
+          <Text style={styles.projectAccordionMeta} numberOfLines={1}>
+            {selectedMeta}
+          </Text>
+        </View>
+        <Ionicons
+          color={COLORS.muted}
+          name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+          size={18}
+        />
+      </Pressable>
+
+      {expanded ? (
+        <View style={styles.projectAccordionList}>
+          <View style={styles.projectAccordionSort}>
+            <Text style={styles.projectAccordionSortLabel}>Sort projects</Text>
+            <View accessibilityRole="radiogroup" style={styles.projectAccordionSortOptions}>
+              <DemandProjectSortOption
+                active={sortMode === 'recent'}
+                label="Recent"
+                onPress={() => setSortMode('recent')}
+              />
+              <DemandProjectSortOption
+                active={sortMode === 'name'}
+                label="Name"
+                onPress={() => setSortMode('name')}
+              />
+              <DemandProjectSortOption
+                active={sortMode === 'open'}
+                label="Open"
+                onPress={() => setSortMode('open')}
+              />
+            </View>
+          </View>
+          <DemandProjectOption
+            icon="documents-outline"
+            label="Drafts"
+            meta="Default workspace"
+            selected={selectedProjectId === null}
+            onPress={() => {
+              onProjectChange(null);
+              setExpanded(false);
+            }}
+          />
+          {sortedProjects.map((project) => (
+            <DemandProjectOption
+              key={project.id}
+              icon={project.isOpen ? 'desktop-outline' : 'folder-outline'}
+              label={project.displayName}
+              meta={`Active ${formatTimestamp(project.lastActivityAt ?? project.updatedAt)}`}
+              selected={selectedProjectId === project.id}
+              onPress={() => {
+                onProjectChange(project.id);
+                setExpanded(false);
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function DemandProjectSortOption({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`Sort projects by ${label.toLowerCase()}`}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: active }}
+      style={({ pressed }) => [
+        styles.projectAccordionSortOption,
+        active ? styles.projectAccordionSortOptionActive : null,
+        pressed ? styles.buttonPressed : null,
+      ]}
+      onPress={onPress}
+    >
+      <Text
+        style={[
+          styles.projectAccordionSortOptionText,
+          active ? styles.projectAccordionSortOptionTextActive : null,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function DemandProjectOption({
+  icon,
+  label,
+  meta,
+  selected,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  meta: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={`${label}, ${meta}`}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      style={({ pressed }) => [
+        styles.projectAccordionOption,
+        selected ? styles.projectAccordionOptionSelected : null,
+        pressed ? styles.buttonPressed : null,
+      ]}
+      onPress={onPress}
+    >
+      <View
+        style={[
+          styles.projectAccordionOptionIcon,
+          selected ? styles.projectAccordionOptionIconSelected : null,
+        ]}
+      >
+        <Ionicons color={selected ? COLORS.surface : COLORS.muted} name={icon} size={17} />
+      </View>
+      <View style={styles.projectAccordionOptionBody}>
+        <Text style={styles.projectAccordionOptionLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={styles.projectAccordionOptionMeta} numberOfLines={1}>
+          {meta}
+        </Text>
+      </View>
+      {selected ? <Ionicons color={COLORS.charcoal} name="checkmark-circle" size={20} /> : null}
+    </Pressable>
   );
 }
 
@@ -3451,6 +3626,142 @@ const styles = StyleSheet.create({
   },
   projectChipMetaActive: {
     color: '#D8D4CB',
+  },
+  projectAccordion: {
+    width: '100%',
+  },
+  projectAccordionTrigger: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+  },
+  projectAccordionTriggerExpanded: {
+    borderBottomWidth: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  projectAccordionTriggerIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#EFEEE7',
+  },
+  projectAccordionTriggerBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  projectAccordionEyebrow: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  projectAccordionTitle: {
+    color: COLORS.ink,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  projectAccordionMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  projectAccordionList: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: COLORS.line,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    backgroundColor: COLORS.surface,
+  },
+  projectAccordionSort: {
+    gap: 7,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  projectAccordionSortLabel: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  projectAccordionSortOptions: {
+    flexDirection: 'row',
+    gap: 3,
+    borderRadius: 8,
+    backgroundColor: COLORS.page,
+    padding: 3,
+  },
+  projectAccordionSortOption: {
+    minHeight: 32,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+  },
+  projectAccordionSortOptionActive: {
+    backgroundColor: COLORS.charcoal,
+  },
+  projectAccordionSortOptionText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  projectAccordionSortOptionTextActive: {
+    color: COLORS.surface,
+  },
+  projectAccordionOption: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.faint,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  projectAccordionOptionSelected: {
+    backgroundColor: '#EFEEE7',
+  },
+  projectAccordionOptionIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: COLORS.page,
+  },
+  projectAccordionOptionIconSelected: {
+    backgroundColor: COLORS.charcoal,
+  },
+  projectAccordionOptionBody: {
+    minWidth: 0,
+    flex: 1,
+    gap: 3,
+  },
+  projectAccordionOptionLabel: {
+    color: COLORS.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  projectAccordionOptionMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '600',
   },
   taskRow: {
     borderWidth: 1,

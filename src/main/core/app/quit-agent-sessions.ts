@@ -1,6 +1,10 @@
 import { PRODUCT_NAME } from '@shared/app-identity';
 import { getRuntime } from '@shared/runtime-registry';
 import type { ActiveAgentSessionSummary } from '@main/core/tasks/task-manager';
+import type {
+  ActiveWorkspaceTerminalSession,
+  ActiveWorkspaceTerminalSessionSummary,
+} from '@main/core/terminals/workspace-terminal-service';
 import type { TeardownMode } from '@main/core/workspaces/workspace-registry';
 
 export type QuitAgentSessionsDecision =
@@ -20,17 +24,37 @@ type QuitDialogOptions = {
 
 type ShowQuitDialog = (options: QuitDialogOptions) => number;
 
+type QuitSessionInfo =
+  | ActiveAgentSessionSummary['nonKeepableSessions'][number]
+  | ActiveWorkspaceTerminalSession;
+
+export type ActiveQuitSessionSummary = {
+  running: number;
+  keepable: number;
+  agentSessions: number;
+  terminalSessions: number;
+  nonKeepableSessions: QuitSessionInfo[];
+};
+
 function pluralize(count: number, singular: string, plural: string): string {
   return count === 1 ? singular : plural;
 }
 
-function messageFor(summary: ActiveAgentSessionSummary): string {
-  return summary.running === 1
+function messageFor(summary: ActiveQuitSessionSummary): string {
+  if (summary.agentSessions > 0 && summary.terminalSessions > 0) {
+    return `${summary.agentSessions} ${pluralize(summary.agentSessions, 'agent session', 'agent sessions')} and ${summary.terminalSessions} ${pluralize(summary.terminalSessions, 'terminal session', 'terminal sessions')} are still running.`;
+  }
+  if (summary.terminalSessions > 0) {
+    return summary.terminalSessions === 1
+      ? 'A terminal session is still running.'
+      : `${summary.terminalSessions} terminal sessions are still running.`;
+  }
+  return summary.agentSessions === 1
     ? 'An agent session is still running.'
-    : `${summary.running} agent sessions are still running.`;
+    : `${summary.agentSessions} agent sessions are still running.`;
 }
 
-type SessionDetail = ActiveAgentSessionSummary['nonKeepableSessions'][number];
+type SessionDetail = ActiveQuitSessionSummary['nonKeepableSessions'][number];
 
 const MAX_VISIBLE_SESSION_DETAILS = 8;
 const MAX_SESSION_LABEL_LENGTH = 96;
@@ -41,6 +65,9 @@ function truncateLabel(value: string): string {
 }
 
 function sessionLabel(session: SessionDetail): string {
+  if ('terminalId' in session) {
+    return truncateLabel(`${session.name.trim() || session.terminalId} (Terminal)`);
+  }
   const taskTitle = session.taskTitle?.trim() || session.taskId;
   const title = session.title.trim() || session.conversationId;
   const runtimeName = getRuntime(session.runtimeId)?.name ?? session.runtimeId;
@@ -60,7 +87,7 @@ function formatSessionList(sessions: SessionDetail[]): string {
   return visible.join('\n');
 }
 
-function directOnlyDetail(summary: ActiveAgentSessionSummary): string {
+function directOnlyDetail(summary: ActiveQuitSessionSummary): string {
   const count = summary.running;
   const sessionText = count === 1 ? "This session isn't" : "These sessions aren't";
   const pronoun = count === 1 ? 'it' : 'they';
@@ -73,7 +100,7 @@ function directOnlyDetail(summary: ActiveAgentSessionSummary): string {
   return list ? `${intro}\n\n${list}\n\n${action}` : `${intro} ${action}`;
 }
 
-function mixedDetail(summary: ActiveAgentSessionSummary, keepable: number, direct: number): string {
+function mixedDetail(summary: ActiveQuitSessionSummary, keepable: number, direct: number): string {
   const list = formatSessionList(summary.nonKeepableSessions);
   const intro = `${keepable} ${pluralize(keepable, 'session can', 'sessions can')} be kept in tmux. ${direct} direct ${pluralize(direct, 'session', 'sessions')} will stop if ${PRODUCT_NAME} quits.`;
 
@@ -81,7 +108,7 @@ function mixedDetail(summary: ActiveAgentSessionSummary, keepable: number, direc
 }
 
 export function resolveQuitAgentSessionsDecision(
-  summary: ActiveAgentSessionSummary,
+  summary: ActiveQuitSessionSummary,
   showDialog: ShowQuitDialog
 ): QuitAgentSessionsDecision {
   if (summary.running <= 0) return { action: 'quit', mode: 'terminate' };
@@ -135,4 +162,17 @@ export function resolveQuitAgentSessionsDecision(
   });
   if (response === 0) return { action: 'quit', mode: 'terminate' };
   return { action: 'cancel' };
+}
+
+export function combineActiveSessionSummaries(
+  agents: ActiveAgentSessionSummary,
+  terminals: ActiveWorkspaceTerminalSessionSummary
+): ActiveQuitSessionSummary {
+  return {
+    running: agents.running + terminals.running,
+    keepable: agents.keepable + terminals.keepable,
+    agentSessions: agents.running,
+    terminalSessions: terminals.running,
+    nonKeepableSessions: [...agents.nonKeepableSessions, ...terminals.nonKeepableSessions],
+  };
 }

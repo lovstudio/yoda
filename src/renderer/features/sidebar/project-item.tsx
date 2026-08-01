@@ -14,6 +14,7 @@ import { buildProjectDeepLink } from '@shared/deep-links';
 import type { QuickAction } from '@shared/project-settings';
 import type { ProjectLaunchCommand } from '@shared/quick-actions';
 import { ensureUniqueTaskSlug } from '@shared/task-name';
+import { openNewTask, resolveNewTaskOpenMode } from '@renderer/app/open-new-task';
 import { runProjectLaunchCommand } from '@renderer/features/projects/run-project-launch-command';
 import { runProjectQuickAction } from '@renderer/features/projects/run-project-quick-action';
 import {
@@ -263,13 +264,16 @@ export const SidebarProjectItem = observer(function SidebarProjectItem({
     const repo = getRepositoryStore(projectId);
     const defaultBranch = repo?.defaultBranch;
     const isUnborn = repo?.isUnborn ?? false;
+    const openMode = await resolveNewTaskOpenMode();
     // Express mode requires a runnable runtime config. Fall back to the home
-    // view whenever any prerequisite is missing so the user can fix it there.
-    if (!expressMode || !mounted || !expressProviderId || !defaultBranch) {
+    // composer whenever any prerequisite is missing so the user can fix it
+    // there. An explicit floating-window preference takes priority over
+    // one-click creation: the `+` button must obey the chosen opening mode.
+    if (openMode === 'modal' || !expressMode || !mounted || !expressProviderId || !defaultBranch) {
       void getProjectManagerStore()
         .mountProject(projectId)
         .catch(() => {});
-      navigate('home', { projectId });
+      openNewTask(openMode, projectId);
       return;
     }
     const strategyKind = homeDraft?.strategyKind ?? 'new-branch';

@@ -31,7 +31,7 @@ The main process is organized into domain modules under `src/main/core/`. Each d
 - **ssh** — SSH connection management, credentials, config parsing, client proxy
 - **tasks** — Task CRUD (create, delete, archive, restore, provision)
 - **terminals** — Terminal lifecycle with provider pattern (`local-terminal-provider.ts`, `ssh-terminal-provider.ts`), lifecycle scripts
-- **terminals/workspace-terminal-service** — Task-free project/global terminals backed by canonical terminal providers, plus allowlisted runtime actions
+- **terminals/workspace-terminal-service** — Task-free project/global terminals backed by canonical terminal providers; project terminals persist independently from task terminals, reattach through tmux, and share the app quit decision with Agent sessions
 - **updates** — Auto-update service
 
 ## Other Main Process Areas
