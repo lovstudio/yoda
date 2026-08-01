@@ -619,11 +619,12 @@ async function ensureInternalTab(
   if (!internalId) {
     const bridge = tabManager.topLevelBridge;
     const key = JSON.stringify(target);
-    if (bridge) bridge.applyingKey = key;
+    const token = Symbol(key);
+    if (bridge) bridge.applying = { key, token };
     try {
       await openProvisionedTaskTab(provisioned, target);
     } finally {
-      if (bridge && bridge.applyingKey === key) bridge.applyingKey = null;
+      if (bridge?.applying?.token === token) bridge.applying = null;
     }
     internalId = findInternalTabId(tabManager, target);
   }

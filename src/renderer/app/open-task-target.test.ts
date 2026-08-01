@@ -124,6 +124,29 @@ describe('openProvisionedTaskTab', () => {
     expect(mocks.showModal).not.toHaveBeenCalled();
   });
 
+  it('does not activate a conversation after an async replay is superseded', async () => {
+    let finishEnsure!: (found: boolean) => void;
+    const provisioned = createProvisionedTask(true);
+    vi.mocked(provisioned.conversations.ensureConversation).mockReturnValue(
+      new Promise((resolve) => {
+        finishEnsure = resolve;
+      })
+    );
+    let current = true;
+
+    const opened = openProvisionedTaskTab(
+      provisioned,
+      { kind: 'conversation', conversationId: 'conversation-1' },
+      { shouldApply: () => current }
+    );
+    current = false;
+    finishEnsure(true);
+
+    await expect(opened).resolves.toBe(true);
+    expect(provisioned.taskView.tabManager.openConversation).not.toHaveBeenCalled();
+    expect(provisioned.taskView.setFocusedRegion).not.toHaveBeenCalled();
+  });
+
   it('opens the archived transcript modal when a deep-linked conversation is archived', async () => {
     const provisioned = createProvisionedTask(false);
     mocks.getArchivedConversationsForTask.mockResolvedValue([archivedConversation]);
@@ -142,6 +165,31 @@ describe('openProvisionedTaskTab', () => {
     expect(mocks.showModal).toHaveBeenCalledWith('archivedSessionTranscriptModal', {
       conversation: archivedConversation,
     });
+  });
+
+  it('does not open an archived transcript after its replay is superseded', async () => {
+    let finishArchiveLookup!: (conversations: Conversation[]) => void;
+    const provisioned = createProvisionedTask(false);
+    mocks.getArchivedConversationsForTask.mockReturnValue(
+      new Promise((resolve) => {
+        finishArchiveLookup = resolve;
+      })
+    );
+    let current = true;
+
+    const opened = openProvisionedTaskTab(
+      provisioned,
+      { kind: 'conversation', conversationId: 'conversation-1' },
+      { shouldApply: () => current }
+    );
+    await vi.waitFor(() => expect(mocks.getArchivedConversationsForTask).toHaveBeenCalledOnce());
+    current = false;
+    finishArchiveLookup([archivedConversation]);
+
+    await expect(opened).resolves.toBe(true);
+    expect(provisioned.taskView.setSidebarCollapsed).not.toHaveBeenCalled();
+    expect(provisioned.taskView.setSidebarTab).not.toHaveBeenCalled();
+    expect(mocks.showModal).not.toHaveBeenCalled();
   });
 
   describe('prepareTaskTarget', () => {

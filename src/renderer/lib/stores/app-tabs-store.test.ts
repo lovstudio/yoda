@@ -140,6 +140,82 @@ describe('AppTabsStore persisted route migration', () => {
 });
 
 describe('AppTabsStore task scope entry', () => {
+  it('opens a remembered task target through one explicit navigation', () => {
+    const sessionParams = {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      tab: { kind: 'conversation', conversationId: 'conversation-1' },
+    };
+    const navigation = createNavigationStub();
+    const tabs = new AppTabsStore(navigation);
+    tabs.restoreSnapshot({
+      tabs: [
+        { id: 'home-tab', viewId: 'home', params: {}, seq: 2 },
+        { id: 'session-tab', viewId: 'task', params: sessionParams, seq: 1 },
+      ],
+      activeTabId: 'home-tab',
+    });
+    const opened = tabs.openTaskScope('project-1', 'task-1');
+
+    expect(opened).toBe(true);
+    expect(tabs.activeTabId).toBe('session-tab');
+    expect(tabs.replayNonce).toBe(1);
+    expect(navigation.navigate).toHaveBeenCalledOnce();
+    expect(navigation.navigate).toHaveBeenCalledWith('task', sessionParams);
+    expect(navigation._applyNavigation).not.toHaveBeenCalled();
+    tabs.dispose();
+  });
+
+  it('defers a fresh task until provisioning can resolve its target', () => {
+    const navigation = createNavigationStub();
+    const tabs = new AppTabsStore(navigation);
+
+    expect(tabs.openTaskScope('project-1', 'task-1')).toBe(false);
+    expect(navigation.navigate).not.toHaveBeenCalled();
+
+    expect(tabs.openTaskScope('project-1', 'task-1', { kind: 'overview' })).toBe(true);
+    expect(navigation.navigate).toHaveBeenCalledOnce();
+    expect(navigation.navigate).toHaveBeenCalledWith('task', {
+      projectId: 'project-1',
+      taskId: 'task-1',
+      tab: { kind: 'overview' },
+    });
+    tabs.dispose();
+  });
+
+  it.each([
+    ['inactive', 'home-tab'],
+    ['active', 'session-tab'],
+  ])(
+    'moves the strip into a task scope when its remembered tab is sticky and %s',
+    (_, activeTabId) => {
+      const sessionParams = {
+        projectId: 'project-1',
+        taskId: 'task-1',
+        tab: { kind: 'conversation', conversationId: 'conversation-1' },
+      };
+      const navigation = createNavigationStub();
+      const tabs = new AppTabsStore(navigation);
+      tabs.restoreSnapshot({
+        tabs: [
+          { id: 'home-tab', viewId: 'home', params: {}, seq: 2 },
+          { id: 'session-tab', viewId: 'task', params: sessionParams, seq: 1 },
+        ],
+        activeTabId,
+        stickyTabIds: ['session-tab'],
+        stripScope: 'view:home',
+      });
+
+      expect(tabs.openTaskScope('project-1', 'task-1')).toBe(true);
+
+      expect(tabs.activeTabId).toBe('session-tab');
+      expect(tabs.stripScope).toBe(tabScopeKey('task', sessionParams));
+      expect(tabs.visibleTabs.every((tab) => tab.viewId === 'task')).toBe(true);
+      expect(navigation.navigate).toHaveBeenCalledOnce();
+      tabs.dispose();
+    }
+  );
+
   it('restores the task scope session with the latest activation sequence', () => {
     const overviewParams = {
       projectId: 'project-1',

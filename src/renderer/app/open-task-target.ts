@@ -238,8 +238,14 @@ export function openTaskWindowTarget(
 
 export async function openProvisionedTaskTab(
   provisioned: ProvisionedTask,
-  tabTarget: TaskWindowTabTarget
+  tabTarget: TaskWindowTabTarget,
+  options?: { shouldApply?: () => boolean }
 ): Promise<boolean> {
+  const shouldApply = options?.shouldApply ?? (() => true);
+  // A cancelled replay is already superseded, not a missing target. Report a
+  // successful no-op so its caller never removes the newer route as dangling.
+  if (!shouldApply()) return true;
+
   switch (tabTarget.kind) {
     case 'overview':
       provisioned.taskView.tabManager.setActiveTab(OVERVIEW_TAB_ID);
@@ -247,7 +253,10 @@ export async function openProvisionedTaskTab(
       return true;
     case 'conversation': {
       const found = await provisioned.conversations.ensureConversation(tabTarget.conversationId);
-      if (!found) return openArchivedConversationFallback(provisioned, tabTarget.conversationId);
+      if (!shouldApply()) return true;
+      if (!found) {
+        return openArchivedConversationFallback(provisioned, tabTarget.conversationId, shouldApply);
+      }
       provisioned.taskView.tabManager.openConversation(tabTarget.conversationId);
       provisioned.taskView.setFocusedRegion('main');
       return true;
@@ -269,12 +278,14 @@ export async function openProvisionedTaskTab(
 
 async function openArchivedConversationFallback(
   provisioned: ProvisionedTask,
-  conversationId: string
+  conversationId: string,
+  shouldApply: () => boolean
 ): Promise<boolean> {
   const archived = await rpc.conversations.getArchivedConversationsForTask(
     provisioned.projectId,
     provisioned.taskId
   );
+  if (!shouldApply()) return true;
   const conversation = archived.find((row) => row.id === conversationId);
   if (!conversation) return false;
 

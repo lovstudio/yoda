@@ -52,7 +52,7 @@ export class ConversationManagerStore {
       conversations: observable,
       taskStatus: computed,
     });
-    if (preloaded && preloaded.length > 0) {
+    if (preloaded !== undefined) {
       this._loaded = true;
       const owned = preloaded.filter((conversation) => this._belongsHere(conversation));
       for (const conversation of owned) {

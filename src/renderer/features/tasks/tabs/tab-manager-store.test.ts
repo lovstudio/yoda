@@ -146,6 +146,54 @@ describe('TabManagerStore overview tab', () => {
   });
 });
 
+describe('TabManagerStore top-level replay bridge', () => {
+  it('consumes a pre-bridge initial target only once', () => {
+    const store = new TabManagerStore(
+      makeConversationManager([
+        makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
+      ]),
+      'workspace-1'
+    );
+
+    store.initializeDefault();
+
+    expect(store.flushPendingTopLevelTarget()).toEqual({
+      kind: 'conversation',
+      conversationId: 'conversation-1',
+    });
+    expect(store.flushPendingTopLevelTarget()).toBeNull();
+  });
+
+  it('matches a replay by key without letting a different target bypass the bridge', () => {
+    const store = new TabManagerStore(
+      makeConversationManager([
+        makeConversation('conversation-1', '2026-05-01T00:00:00.000Z', true),
+        makeConversation('conversation-2', '2026-05-02T00:00:00.000Z', false),
+      ]),
+      'workspace-1'
+    );
+    const open = vi.fn();
+    store.setVisible(true);
+    store.topLevelBridge = {
+      applying: {
+        key: JSON.stringify({ kind: 'conversation', conversationId: 'conversation-1' }),
+        token: Symbol('replay-1'),
+      },
+      open,
+    };
+
+    store.openConversation('conversation-1');
+    store.openConversation('conversation-2');
+
+    expect(store.activeConversationId).toBe('conversation-1');
+    expect(open).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith({
+      kind: 'conversation',
+      conversationId: 'conversation-2',
+    });
+  });
+});
+
 describe('TabManagerStore sidebar file locations', () => {
   it('keeps the requested line and column on the pinned file entry', () => {
     const store = new TabManagerStore(makeConversationManager([]), 'workspace-1');

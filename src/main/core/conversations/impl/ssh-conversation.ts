@@ -58,6 +58,7 @@ export class SshConversationProvider implements ConversationProvider {
   >;
   private readonly tmuxSessionNames = new Map<string, string>();
   private readonly sessionInfos = new Map<string, Omit<ActiveConversationSession, 'detachable'>>();
+  private readonly silenceReconcilerDetachers = new Map<string, () => void>();
 
   constructor({
     projectId,
@@ -257,6 +258,7 @@ export class SshConversationProvider implements ConversationProvider {
         taskId: conversation.taskId,
         conversationId: conversation.id,
       });
+      this.silenceReconcilerDetachers.set(sessionId, detachSilenceReconciler);
       detachSilenceReconcilerForRollback = detachSilenceReconciler;
       pty.onData(() => agentSilenceReconciler.noteOutput(sessionId));
       if (conversation.runtimeId === 'claude') {
@@ -271,8 +273,8 @@ export class SshConversationProvider implements ConversationProvider {
       }
 
       pty.onExit(({ exitCode }) => {
+        this.releaseSilenceReconciler(sessionId, detachSilenceReconciler);
         if (this.sessions.get(sessionId) !== pty) return;
-        detachSilenceReconciler();
         this.sessions.delete(sessionId);
         this.sessionInfos.delete(sessionId);
         markRuntimeSessionExited({
@@ -343,7 +345,7 @@ export class SshConversationProvider implements ConversationProvider {
         if (this.sessions.get(sessionId) === spawnedPty) {
           this.sessions.delete(sessionId);
         }
-        detachSilenceReconcilerForRollback?.();
+        this.releaseSilenceReconciler(sessionId, detachSilenceReconcilerForRollback);
         try {
           spawnedPty.kill();
         } catch {}
@@ -419,10 +421,18 @@ export class SshConversationProvider implements ConversationProvider {
     }
   }
 
+  private releaseSilenceReconciler(sessionId: string, expected?: () => void): void {
+    const detach = this.silenceReconcilerDetachers.get(sessionId);
+    if (!detach || (expected && detach !== expected)) return;
+    this.silenceReconcilerDetachers.delete(sessionId);
+    detach();
+  }
+
   async stopSession(conversationId: string): Promise<void> {
     const sessionId = makePtySessionId(this.projectId, this.taskId, conversationId);
     this.knownSessionIds.delete(sessionId);
     this.pendingStarts.delete(sessionId);
+    this.releaseSilenceReconciler(sessionId);
     const pty = this.sessions.get(sessionId);
     if (pty) {
       try {
@@ -461,6 +471,9 @@ export class SshConversationProvider implements ConversationProvider {
 
   async detachAll(): Promise<void> {
     this.cancelAllPendingStarts();
+    for (const sessionId of Array.from(this.silenceReconcilerDetachers.keys())) {
+      this.releaseSilenceReconciler(sessionId);
+    }
     for (const [sessionId, pty] of this.sessions) {
       try {
         pty.kill();

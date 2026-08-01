@@ -16,6 +16,7 @@ import {
   resolveTaskAppearance,
   type ResolvedTaskAppearance,
 } from '@shared/task-appearance';
+import type { TaskWindowTabTarget } from '@shared/task-window';
 import { getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { useAppSettingsKey } from '@renderer/features/settings/use-app-settings-key';
 import { TaskSidebarAgentStatus } from '@renderer/features/sidebar/task-sidebar-agent-status';
@@ -187,6 +188,13 @@ export const SidebarTaskItem = observer(function SidebarTaskItem({
   const handleOpenDetails = () => {
     handleProvision();
     openPreferredConversationIfEmpty();
+    const activeTarget: TaskWindowTabTarget | undefined = provisionedTask
+      ? (provisionedTask.taskView.tabManager.activeTopLevelTarget ?? { kind: 'overview' })
+      : undefined;
+    if (appState.appTabs.openTaskScope(projectId, taskId, activeTarget)) return;
+    // A fresh, unprovisioned task has no authoritative target yet. Keep the
+    // scope-entry route so the restored snapshot or pending initial session can
+    // resolve it exactly once after provisioning.
     navigate('task', { projectId, taskId });
   };
 
