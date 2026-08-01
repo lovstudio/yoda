@@ -68,3 +68,20 @@ For product-style pairing, open the desktop sidebar mobile modal, scan the insta
 the connection QR after installing the native app. The connection QR is needed once per device;
 later launches restore the saved credential automatically unless the user explicitly disconnects or
 the desktop device is revoked.
+
+## Installed App Delivery
+
+- A user-requested mobile feature or fix is complete only after the latest `main` code is installed
+  into the branded `Yoda Mobile` app (`ai.lovstudio.yoda.mobile`) on the user's connected iPhone.
+  A source commit, passing tests, an Expo bundle, or a successful native build alone is not the
+  user-visible completion condition.
+- Merge the change to `main` first, then build a signed Release app from that exact mainline commit,
+  overwrite-install it on the connected device, launch it, and verify the requested behavior there.
+  Overwrite the existing bundle instead of uninstalling it so SecureStore pairing data is retained.
+- Confirm the Release `main.jsbundle` contains a marker from the changed mobile code and use
+  `xcrun devicectl device info apps` plus `xcrun devicectl device process launch` to verify the
+  installed bundle and launch. If Expo reports `Build Succeeded` but stalls while connecting to a
+  newer iOS device, install the generated `.app` directly with
+  `xcrun devicectl device install app`.
+- Treat Expo, Metro, Xcode, and `devicectl` as implementation details. Report completion in terms of
+  what the installed `Yoda Mobile` app on the phone can now do.
