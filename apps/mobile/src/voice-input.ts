@@ -1,21 +1,15 @@
+import { getLocales } from 'expo-localization';
 import type {
   ExpoSpeechRecognitionErrorEvent,
   ExpoSpeechRecognitionResultEvent,
 } from 'expo-speech-recognition';
+import { resolveMobileSpeechLocale } from '../../../src/shared/mobile-api';
 
 export type MobileVoiceInputSession = {
   abort: () => void;
   dispose: () => void;
   stop: () => void;
 };
-
-export function mobileSpeechLocale(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().locale || 'zh-CN';
-  } catch {
-    return 'zh-CN';
-  }
-}
 
 export async function startMobileVoiceInput(options: {
   onEnd: () => void;
@@ -30,6 +24,11 @@ export async function startMobileVoiceInput(options: {
   if (!permission.granted) {
     throw new Error('Microphone and speech recognition permission are required.');
   }
+  const preferredLocales = getLocales().map((locale) => locale.languageTag);
+  const supportedLocales = await ExpoSpeechRecognitionModule.getSupportedLocales({})
+    .then((result) => result.locales)
+    .catch(() => []);
+  const speechLocale = resolveMobileSpeechLocale(preferredLocales, supportedLocales);
 
   const resultSubscription = ExpoSpeechRecognitionModule.addListener(
     'result',
@@ -60,7 +59,7 @@ export async function startMobileVoiceInput(options: {
       addsPunctuation: true,
       continuous: false,
       interimResults: true,
-      lang: mobileSpeechLocale(),
+      lang: speechLocale,
       maxAlternatives: 1,
     });
   } catch (error) {

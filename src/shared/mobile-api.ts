@@ -12,6 +12,80 @@ export const MOBILE_INPUT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 /** Keeps the base64 JSON request comfortably below the gateway and Relay 128 KiB limit. */
 export const MOBILE_INPUT_ATTACHMENT_CHUNK_BYTES = 48 * 1024;
 
+type MobileSpeechLocale = {
+  language: string;
+  region: string | null;
+  tag: string;
+};
+
+const MOBILE_SPEECH_LANGUAGE_DEFAULTS: Record<string, string> = {
+  de: 'de-DE',
+  en: 'en-US',
+  es: 'es-ES',
+  fr: 'fr-FR',
+  it: 'it-IT',
+  pt: 'pt-BR',
+  yue: 'yue-CN',
+  zh: 'zh-CN',
+};
+
+function parseMobileSpeechLocale(value: string): MobileSpeechLocale | null {
+  const tag = value.trim().replace(/_/g, '-');
+  if (!tag) return null;
+  const parts = tag.split('-').filter(Boolean);
+  const language = parts[0]?.toLowerCase() ?? '';
+  if (!/^[a-z]{2,3}$/.test(language)) return null;
+  const regionPart = parts.slice(1).find((part) => /^[a-z]{2}$|^\d{3}$/i.test(part));
+  return {
+    language,
+    region: regionPart?.toUpperCase() ?? null,
+    tag,
+  };
+}
+
+export function resolveMobileSpeechLocale(
+  preferredLocales: readonly string[],
+  supportedLocales: readonly string[]
+): string {
+  const preferred = preferredLocales
+    .map(parseMobileSpeechLocale)
+    .filter((locale): locale is MobileSpeechLocale => locale !== null);
+  const supported = supportedLocales
+    .map(parseMobileSpeechLocale)
+    .filter((locale): locale is MobileSpeechLocale => locale !== null);
+
+  for (const candidate of preferred) {
+    const exact = supported.find(
+      (locale) => locale.tag.toLowerCase() === candidate.tag.toLowerCase()
+    );
+    if (exact) return exact.tag;
+  }
+  for (const candidate of preferred) {
+    if (!candidate.region) continue;
+    const regional = supported.find(
+      (locale) => locale.language === candidate.language && locale.region === candidate.region
+    );
+    if (regional) return regional.tag;
+  }
+  for (const candidate of preferred) {
+    const languageDefault = MOBILE_SPEECH_LANGUAGE_DEFAULTS[candidate.language];
+    const preferredDefault = supported.find(
+      (locale) => locale.tag.toLowerCase() === languageDefault?.toLowerCase()
+    );
+    if (preferredDefault) return preferredDefault.tag;
+    const languageMatch = supported.find((locale) => locale.language === candidate.language);
+    if (languageMatch) return languageMatch.tag;
+  }
+
+  const chineseFallback = supported.find((locale) => locale.tag.toLowerCase() === 'zh-cn');
+  if (chineseFallback) return chineseFallback.tag;
+  if (supported[0]) return supported[0].tag;
+  const firstPreferred = preferred[0];
+  return firstPreferred
+    ? (MOBILE_SPEECH_LANGUAGE_DEFAULTS[firstPreferred.language] ?? firstPreferred.tag)
+    : 'zh-CN';
+}
+
 export function appendMobileVoiceTranscript(baseValue: string, transcript: string): string {
   const normalized = transcript.trim();
   if (!normalized) return baseValue;

@@ -27,7 +27,7 @@
   live invalidation.
 - Mobile request creation should use narrow desktop operations. Avoid exposing raw RPC or terminal controls over the gateway.
 - Mobile image input uploads through `/v1/attachments` in bounded base64 chunks, then passes opaque attachment ids to demand/session input routes. The desktop stores generated filenames under app data and reuses `injectConversationPrompt`; never send phone filenames as trusted desktop paths. Images are local-project-only until the gateway has an explicit SSH transfer path.
-- Voice input is speech-to-editable-text on the phone, not an audio file disguised as an Agent attachment. It uses the `expo-speech-recognition` config plugin and therefore requires a native development/production build; Expo Go keeps system-keyboard dictation as its fallback.
+- Voice input is speech-to-editable-text on the phone, not an audio file disguised as an Agent attachment. It uses `expo-localization` preferences negotiated against `expo-speech-recognition.getSupportedLocales()`; never pass an app-region hybrid such as `en-CN` directly to the recognizer. Both modules require a native development/production build; Expo Go keeps system-keyboard dictation as its fallback.
 
 ## Development
 

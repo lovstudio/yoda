@@ -21,7 +21,8 @@
           "microphonePermission": "Allow Yoda Mobile to turn your voice into editable request text.",
           "speechRecognitionPermission": "Allow Yoda Mobile to recognize speech for Agent requests."
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "ios": {
       "bundleIdentifier": "ai.lovstudio.yoda.mobile",
