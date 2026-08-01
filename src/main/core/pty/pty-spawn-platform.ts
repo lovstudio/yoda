@@ -35,6 +35,10 @@ export type PtySpawnIntent =
       tmuxSize?: { cols: number; rows: number };
       /** Environment exported inside the tmux-created shell command. */
       tmuxEnv?: Record<string, string>;
+      /** Agent thread bound to the reusable tmux session. */
+      tmuxSessionIdentity?: string;
+      /** Temporary identities accepted while the runtime's real thread is discovered. */
+      tmuxSessionIdentityAliases?: string[];
     }
   | {
       kind: 'run-command';
@@ -46,6 +50,10 @@ export type PtySpawnIntent =
       tmuxSize?: { cols: number; rows: number };
       /** Environment exported inside the tmux-created shell command. */
       tmuxEnv?: Record<string, string>;
+      /** Agent thread bound to the reusable tmux session. */
+      tmuxSessionIdentity?: string;
+      /** Temporary identities accepted while the runtime's real thread is discovered. */
+      tmuxSessionIdentityAliases?: string[];
     };
 
 export type LocalPtySpawnWarning = 'shell_setup_ignored_on_windows' | 'tmux_unsupported_on_windows';
@@ -236,7 +244,14 @@ function resolvePosixSpawn(
         command: shell,
         args: [
           '-c',
-          buildTmuxShellLine(intent.tmuxSessionName, commandLine, intent.tmuxSize, intent.tmuxEnv),
+          buildTmuxShellLine(
+            intent.tmuxSessionName,
+            commandLine,
+            intent.tmuxSize,
+            intent.tmuxEnv,
+            intent.tmuxSessionIdentity,
+            intent.tmuxSessionIdentityAliases
+          ),
         ],
         cwd: intent.cwd,
         warnings: [],
@@ -278,7 +293,9 @@ function resolvePosixSpawn(
           intent.tmuxSessionName,
           tmuxCommandLine,
           intent.tmuxSize,
-          intent.tmuxEnv
+          intent.tmuxEnv,
+          intent.tmuxSessionIdentity,
+          intent.tmuxSessionIdentityAliases
         ),
       ],
       cwd: intent.cwd,

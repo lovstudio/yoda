@@ -574,6 +574,14 @@ describe('LocalConversationProvider', () => {
       resumeSessionIdArg: true,
       initialPromptFlag: '',
     });
+    expect(mocks.resolveLocalPtySpawn).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({
+          tmuxSessionIdentity: 'codex-thread-1',
+          tmuxSessionIdentityAliases: [codexConversation.id],
+        }),
+      })
+    );
     expect(spawned).toHaveLength(2);
     expect(spawned[1].options.args).toEqual(['resume', '--cd', '/workspace', 'codex-thread-1']);
   });
@@ -667,6 +675,46 @@ describe('LocalConversationProvider', () => {
       })
     );
     expect(spawned[0].options.args).toEqual(['resume', '--cd', '/workspace', 'native-thread-1']);
+  });
+
+  it('binds a surviving tmux session to the current Codex fork instead of its imported root', async () => {
+    mocks.getProviderConfig.mockResolvedValue({
+      cli: 'codex',
+      resumeFlag: 'resume',
+      resumeSessionIdArg: true,
+      initialPromptFlag: '',
+    });
+    mocks.resolveAvailableTmuxSessionName.mockResolvedValue('tmux-session');
+    mocks.resolveAgentResumeSessionId.mockReturnValue('current-fork-thread');
+    const importedConversation: Conversation = {
+      ...conversation,
+      runtimeId: 'codex',
+      sessionSource: {
+        catalogId: 'catalog-1',
+        runtimeId: 'codex',
+        sessionId: 'stale-root-thread',
+        stateRoot: '/state/codex-account-a',
+      },
+    };
+    const provider = createProvider();
+
+    await provider.startSession(importedConversation, { cols: 80, rows: 24 }, true);
+
+    expect(spawned[0].options.args).toEqual([
+      'resume',
+      '--cd',
+      '/workspace',
+      'current-fork-thread',
+    ]);
+    expect(mocks.resolveLocalPtySpawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({
+          tmuxSessionName: 'tmux-session',
+          tmuxSessionIdentity: 'current-fork-thread',
+          tmuxSessionIdentityAliases: undefined,
+        }),
+      })
+    );
   });
 
   it('injects Codex notify as a runtime config override when hooks are active', async () => {
@@ -797,6 +845,7 @@ describe('LocalConversationProvider', () => {
       expect.objectContaining({
         intent: expect.objectContaining({
           tmuxSessionName: 'tmux-session',
+          tmuxSessionIdentity: conversation.id,
         }),
       })
     );

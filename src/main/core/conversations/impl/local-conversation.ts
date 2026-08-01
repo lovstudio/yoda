@@ -434,6 +434,11 @@ export class LocalConversationProvider implements ConversationProvider {
               tmuxSessionName,
               tmuxSize: initialSize,
               tmuxEnv: resolveRuntimeTmuxEnv(providerEnv),
+              tmuxSessionIdentity: agentSessionId,
+              tmuxSessionIdentityAliases:
+                conversation.runtimeId === 'codex' && !conversation.sessionSource
+                  ? [conversation.id]
+                  : undefined,
             },
           });
 
