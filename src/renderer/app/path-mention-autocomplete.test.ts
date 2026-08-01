@@ -33,6 +33,25 @@ describe('path mention autocomplete helpers', () => {
     });
   });
 
+  it('preserves parent-relative completion paths outside the project', () => {
+    const parts = splitPathMentionQuery('../');
+    expect(parts).toEqual({
+      pathKind: 'relative',
+      directoryPath: '..',
+      namePrefix: '',
+      preserveDotSlash: false,
+    });
+    expect(
+      buildPathCompletionItems(
+        [
+          { path: '../project', type: 'dir' },
+          { path: '../sibling', type: 'dir' },
+        ],
+        parts
+      ).map((item) => item.insertText)
+    ).toEqual(['../project/', '../sibling/']);
+  });
+
   it('splits absolute path queries', () => {
     expect(splitPathMentionQuery('/Users/mark/project/src/ren')).toEqual({
       pathKind: 'absolute',

@@ -650,6 +650,7 @@ export function ComposerPromptInput({
             projectId ?? null,
             request.directoryPath,
             {
+              allowOutsideProject: queryParts.pathKind === 'relative',
               pathKind: request.pathKind,
               recursive: false,
               includeHidden: shouldIncludeHiddenPathCompletions(queryParts),
