@@ -23,6 +23,11 @@ export type MobileConnection = {
   token: string;
 };
 
+export type MobileInputImageUploadProgress = {
+  receivedBytes: number;
+  totalBytes: number;
+};
+
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.trim().replace(/\/+$/, '');
 }
@@ -213,7 +218,8 @@ function base64ByteLength(value: string): number {
 
 export async function uploadInputImage(
   connection: MobileConnection,
-  input: { base64: string; mimeType: string; name: string }
+  input: { base64: string; mimeType: string; name: string },
+  onProgress?: (progress: MobileInputImageUploadProgress) => void
 ): Promise<MobileInputAttachment> {
   const sizeBytes = base64ByteLength(input.base64);
   if (sizeBytes <= 0 || sizeBytes > MOBILE_INPUT_ATTACHMENT_MAX_BYTES) {
@@ -254,6 +260,7 @@ export async function uploadInputImage(
         }
       );
       offset = chunk.receivedBytes;
+      onProgress?.({ receivedBytes: offset, totalBytes: sizeBytes });
     }
     const completed = await request<MobileInputAttachmentCompleteResponse>(
       connection,

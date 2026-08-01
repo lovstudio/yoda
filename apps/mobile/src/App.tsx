@@ -71,11 +71,12 @@ import {
 } from './connection-bootstrap';
 import { clearConnection, loadConnection, saveConnection } from './connection-storage';
 import { prepareCreatedDemandNavigation } from './demand-navigation';
+import { pickMobileInputImages } from './input-media';
 import {
-  pickMobileInputImages,
   uploadMobileInputImages,
   type MobileImageDraft,
-} from './input-media';
+  type MobileInputUploadProgress,
+} from './input-upload';
 import { subscribeSessionEvents } from './session-event-stream';
 import { startMobileVoiceInput, type MobileVoiceInputSession } from './voice-input';
 
@@ -250,6 +251,18 @@ function runtimeLabel(status: MobileSessionSummary['runtimeStatus']): string {
     case 'idle':
       return 'Idle';
   }
+}
+
+function mobileInputUploadProgressText(progress: MobileInputUploadProgress): string {
+  const percentage =
+    progress.totalBytes > 0
+      ? Math.min(100, Math.round((progress.uploadedBytes / progress.totalBytes) * 100))
+      : 0;
+  return `${percentage}% · ${progress.completedImages}/${progress.totalImages} images`;
+}
+
+function mobileInputUploadLabel(progress: MobileInputUploadProgress): string {
+  return `Uploading ${mobileInputUploadProgressText(progress)}`;
 }
 
 function runtimeColor(status: MobileSessionSummary['runtimeStatus']): string {
@@ -637,6 +650,8 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [demandUploadProgress, setDemandUploadProgress] =
+    useState<MobileInputUploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const applyPairingUrl = useCallback(async (url: string | null) => {
@@ -856,9 +871,15 @@ export function App() {
     if (!connection || !snapshot || (!prompt.trim() && demandImages.length === 0) || submitting)
       return;
     setSubmitting(true);
+    setDemandUploadProgress(null);
     let attachmentIds: string[] = [];
     try {
-      attachmentIds = await uploadMobileInputImages(connection, demandImages);
+      attachmentIds = await uploadMobileInputImages(
+        connection,
+        demandImages,
+        setDemandUploadProgress
+      );
+      setDemandUploadProgress(null);
       const result = await createDemand(connection, {
         projectId: demandProjectId,
         prompt: prompt.trim(),
@@ -895,6 +916,7 @@ export function App() {
       );
       setError(errorMessage(e));
     } finally {
+      setDemandUploadProgress(null);
       setSubmitting(false);
     }
   }, [connection, demandImages, demandProjectId, loadDashboard, prompt, snapshot, submitting]);
@@ -1028,6 +1050,7 @@ export function App() {
                     prompt={prompt}
                     selectedProjectId={demandProjectId}
                     submitting={submitting}
+                    uploadProgress={demandUploadProgress}
                     onPromptChange={setPrompt}
                     onProjectChange={setDemandProjectId}
                     onImagesChange={setDemandImages}
@@ -1659,6 +1682,7 @@ function DemandComposer({
   prompt,
   selectedProjectId,
   submitting,
+  uploadProgress,
   onPromptChange,
   onProjectChange,
   onImagesChange,
@@ -1670,6 +1694,7 @@ function DemandComposer({
   prompt: string;
   selectedProjectId: string | null;
   submitting: boolean;
+  uploadProgress: MobileInputUploadProgress | null;
   onPromptChange: (prompt: string) => void;
   onProjectChange: (projectId: string | null) => void;
   onImagesChange: (images: MobileImageDraft[]) => void;
@@ -1734,7 +1759,12 @@ function DemandComposer({
         onPress={onSubmit}
       >
         {submitting ? (
-          <ActivityIndicator color={COLORS.surface} />
+          <>
+            <ActivityIndicator color={COLORS.surface} />
+            <Text style={styles.primaryButtonText}>
+              {uploadProgress ? mobileInputUploadLabel(uploadProgress) : 'Starting…'}
+            </Text>
+          </>
         ) : (
           <>
             <Ionicons color={COLORS.surface} name="arrow-up-outline" size={18} />
@@ -2128,6 +2158,8 @@ function SessionDetailScreen({
   const [sessionInput, setSessionInput] = useState('');
   const [sessionImages, setSessionImages] = useState<MobileImageDraft[]>([]);
   const [sendingInput, setSendingInput] = useState(false);
+  const [sessionUploadProgress, setSessionUploadProgress] =
+    useState<MobileInputUploadProgress | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2295,9 +2327,15 @@ function SessionDetailScreen({
     if ((!input && sessionImages.length === 0) || !sessionCanContinue || sendingInput) return;
 
     setSendingInput(true);
+    setSessionUploadProgress(null);
     let attachmentIds: string[] = [];
     try {
-      attachmentIds = await uploadMobileInputImages(connection, sessionImages);
+      attachmentIds = await uploadMobileInputImages(
+        connection,
+        sessionImages,
+        setSessionUploadProgress
+      );
+      setSessionUploadProgress(null);
       await sendSessionInput(connection, task.projectId, task.id, sessionId, {
         input,
         attachmentIds,
@@ -2316,6 +2354,7 @@ function SessionDetailScreen({
       );
       setError(errorMessage(e));
     } finally {
+      setSessionUploadProgress(null);
       setSendingInput(false);
     }
   }, [
@@ -2434,6 +2473,7 @@ function SessionDetailScreen({
             }
             runtimeStatus={detail?.session.runtimeStatus ?? null}
             sending={sendingInput}
+            uploadProgress={sessionUploadProgress}
             speechContext={[
               taskProject?.displayName,
               taskProject?.name,
@@ -2716,6 +2756,7 @@ function SessionInputComposer({
   imagesEnabled,
   runtimeStatus,
   sending,
+  uploadProgress,
   speechContext,
   value,
   onChange,
@@ -2730,6 +2771,7 @@ function SessionInputComposer({
   imagesEnabled: boolean;
   runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
   sending: boolean;
+  uploadProgress: MobileInputUploadProgress | null;
   speechContext: readonly (string | null | undefined)[];
   value: string;
   onChange: (value: string) => void;
@@ -2750,6 +2792,8 @@ function SessionInputComposer({
         live={live}
         resumable={resumable}
         runtimeStatus={runtimeStatus}
+        sending={sending}
+        uploadProgress={uploadProgress}
         valueLength={value.length}
       />
       <InputMediaControls
@@ -2804,24 +2848,40 @@ function SessionRuntimeStatus({
   live,
   resumable,
   runtimeStatus,
+  sending,
+  uploadProgress,
   valueLength,
 }: {
   acceptsInput: boolean;
   live: boolean;
   resumable: boolean;
   runtimeStatus: MobileSessionSummary['runtimeStatus'] | null;
+  sending: boolean;
+  uploadProgress: MobileInputUploadProgress | null;
   valueLength: number;
 }) {
-  const presentation = sessionRuntimePresentation(runtimeStatus);
-  const detail = acceptsInput
-    ? runtimeStatus === 'completed'
-      ? 'This turn is complete. You can send a follow-up.'
-      : 'Live input is available.'
-    : resumable
-      ? 'Ready for a follow-up. The session will resume when you send.'
-      : live
-        ? 'The session is connected but not accepting input.'
-        : 'The session is offline.';
+  const presentation = sending
+    ? {
+        animated: true,
+        backgroundColor: '#EFF4FF',
+        color: COLORS.blue,
+        icon: 'cloud-upload-outline' as const,
+        label: uploadProgress ? 'Uploading' : 'Sending',
+      }
+    : sessionRuntimePresentation(runtimeStatus);
+  const detail = uploadProgress
+    ? mobileInputUploadProgressText(uploadProgress)
+    : sending
+      ? 'Resuming the session and sending your message…'
+      : acceptsInput
+        ? runtimeStatus === 'completed'
+          ? 'This turn is complete. You can send a follow-up.'
+          : 'Live input is available.'
+        : resumable
+          ? 'Ready for a follow-up. The session will resume when you send.'
+          : live
+            ? 'The session is connected but not accepting input.'
+            : 'The session is offline.';
 
   return (
     <View

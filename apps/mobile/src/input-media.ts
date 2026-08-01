@@ -1,17 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { MOBILE_INPUT_ATTACHMENT_MAX_BYTES } from '../../../src/shared/mobile-api';
-import { discardInputAttachment, uploadInputImage, type MobileConnection } from './api-client';
-
-export type MobileImageDraft = {
-  id: string;
-  base64: string;
-  height: number;
-  mimeType: 'image/jpeg';
-  name: string;
-  sizeBytes: number;
-  uri: string;
-  width: number;
-};
+import type { MobileImageDraft } from './input-upload';
 
 function base64ByteLength(value: string): number {
   const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
@@ -58,25 +47,4 @@ export async function pickMobileInputImages(): Promise<MobileImageDraft[]> {
       width: asset.width,
     };
   });
-}
-
-export async function uploadMobileInputImages(
-  connection: MobileConnection,
-  images: MobileImageDraft[]
-): Promise<string[]> {
-  const attachmentIds: string[] = [];
-  try {
-    for (const image of images) {
-      const attachment = await uploadInputImage(connection, image);
-      attachmentIds.push(attachment.id);
-    }
-    return attachmentIds;
-  } catch (error) {
-    await Promise.all(
-      attachmentIds.map((attachmentId) =>
-        discardInputAttachment(connection, attachmentId).catch(() => undefined)
-      )
-    );
-    throw error;
-  }
 }

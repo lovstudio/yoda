@@ -85,13 +85,18 @@ describe('mobile API connectivity diagnostics', () => {
         )
       );
     vi.stubGlobal('fetch', fetchMock);
+    const onProgress = vi.fn();
 
     await expect(
-      uploadInputImage(connection, {
-        base64: Buffer.from('1234567').toString('base64'),
-        mimeType: 'image/jpeg',
-        name: 'photo.jpg',
-      })
+      uploadInputImage(
+        connection,
+        {
+          base64: Buffer.from('1234567').toString('base64'),
+          mimeType: 'image/jpeg',
+          name: 'photo.jpg',
+        },
+        onProgress
+      )
     ).resolves.toMatchObject({ id: 'attachment-1', sizeBytes: 7 });
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
@@ -106,5 +111,9 @@ describe('mobile API connectivity diagnostics', () => {
     expect(fetchMock.mock.calls[3]?.[0]).toBe(
       'http://127.0.0.1:3879/v1/attachments/attachment-1/complete'
     );
+    expect(onProgress.mock.calls).toEqual([
+      [{ receivedBytes: 6, totalBytes: 7 }],
+      [{ receivedBytes: 7, totalBytes: 7 }],
+    ]);
   });
 });
