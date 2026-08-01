@@ -37,7 +37,7 @@ import {
 } from '@renderer/lib/ui/dropdown-menu';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
-import { SessionModelEditor } from './session-model-editor';
+import { SessionModelEditor, type SessionModelSettings } from './session-model-editor';
 import { useRuntimeSnapshot } from './use-runtime-snapshot';
 
 type Props = {
@@ -48,7 +48,8 @@ type Props = {
   connectionId?: string;
   modelEditing?: {
     reasoningEffort?: string | null;
-    onRestartWithModel: (model: string) => Promise<void>;
+    fastMode?: boolean | null;
+    onRestartWithModel: (settings: SessionModelSettings) => Promise<void>;
     onManageModels: () => void;
     allowDefaultChange: boolean;
   };
@@ -152,6 +153,7 @@ export const AgentInfoCard: React.FC<Props> = ({
           currentModel={resolvedModel}
           currentModelSource={modelSource}
           reasoningEffort={modelEditing.reasoningEffort}
+          fastMode={modelEditing.fastMode}
           onRestartWithModel={modelEditing.onRestartWithModel}
           onManageModels={modelEditing.onManageModels}
           allowDefaultChange={modelEditing.allowDefaultChange}

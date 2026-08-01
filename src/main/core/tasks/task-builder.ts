@@ -209,7 +209,7 @@ export async function buildTaskFromWorkspace(
           start.initialPrompt,
           undefined,
           start.imagePaths,
-          start.model
+          { model: start.model }
         );
         if (pending) {
           await clearPendingInitialPrompt(conv.id);

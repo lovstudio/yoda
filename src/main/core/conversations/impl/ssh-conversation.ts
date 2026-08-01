@@ -1,5 +1,5 @@
 import type { AgentSessionConfig } from '@shared/agent-session';
-import type { Conversation } from '@shared/conversations';
+import type { Conversation, SessionRuntimeOverrides } from '@shared/conversations';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { makePtySessionId } from '@shared/ptySessionId';
@@ -101,7 +101,7 @@ export class SshConversationProvider implements ConversationProvider {
     initialPrompt?: string,
     tmuxOverride?: boolean,
     imagePaths?: string[],
-    model?: string | null
+    runtimeOverrides?: SessionRuntimeOverrides
   ): Promise<void> {
     const sessionId = makePtySessionId(
       conversation.projectId,
@@ -181,7 +181,7 @@ export class SshConversationProvider implements ConversationProvider {
           ? initialPrompt
           : substituteImageMentions(initialPrompt, imagePaths ?? []),
         appendSystemPrompt,
-        model,
+        ...runtimeOverrides,
         terminalThemeMode,
         executionMode: conversation.executionMode,
       });

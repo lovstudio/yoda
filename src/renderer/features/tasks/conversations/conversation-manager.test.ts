@@ -354,10 +354,14 @@ describe('ConversationManagerStore', () => {
     );
   });
 
-  it('passes a selected model when restarting the current session', async () => {
+  it('passes selected runtime parameters when restarting the current session', async () => {
     const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
 
-    await store.restartConversation('conversation-1', undefined, undefined, undefined, 'o4-mini');
+    await store.restartConversation('conversation-1', undefined, undefined, undefined, {
+      model: 'o4-mini',
+      reasoningEffort: 'high',
+      fastMode: true,
+    });
 
     expect(mocks.restartConversationMock).toHaveBeenCalledWith(
       'project-1',
@@ -366,7 +370,7 @@ describe('ConversationManagerStore', () => {
       undefined,
       undefined,
       undefined,
-      'o4-mini'
+      { model: 'o4-mini', reasoningEffort: 'high', fastMode: true }
     );
   });
 

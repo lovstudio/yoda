@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import type { Conversation } from '@shared/conversations';
+import type { Conversation, SessionRuntimeOverrides } from '@shared/conversations';
 import { agentSessionExitedChannel } from '@shared/events/agentEvents';
 import type { ProjectPromptPrinciples } from '@shared/project-settings';
 import { makePtyId } from '@shared/ptyId';
@@ -150,7 +150,7 @@ export class LocalConversationProvider implements ConversationProvider {
     initialPrompt?: string,
     tmuxOverride?: boolean,
     imagePaths?: string[],
-    model?: string | null
+    runtimeOverrides?: SessionRuntimeOverrides
   ): Promise<void> {
     const sessionId = makePtySessionId(
       conversation.projectId,
@@ -368,7 +368,7 @@ export class LocalConversationProvider implements ConversationProvider {
         initialPrompt: useClipboardImagePaste ? undefined : effectiveInitialPrompt,
         workingDirectory: this.taskPath,
         appendSystemPrompt,
-        model,
+        ...runtimeOverrides,
         terminalThemeMode,
         skillPolicy: conversation.skillPolicy,
         executionMode: conversation.executionMode,

@@ -1,5 +1,5 @@
 import { ChevronDown, ExternalLink, RotateCcw, Save } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import {
@@ -13,7 +13,6 @@ import { useModelProviderCatalog } from '@renderer/features/settings/model-provi
 import { useRuntimeSettings } from '@renderer/features/settings/use-runtime-settings';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
-import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import {
   Combobox,
@@ -27,7 +26,27 @@ import {
   ComboboxList,
   ComboboxTrigger,
 } from '@renderer/lib/ui/combobox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/lib/ui/select';
+import { Switch } from '@renderer/lib/ui/switch';
 import { isImeComposing } from '@renderer/utils/ime';
+
+const CODEX_REASONING_EFFORTS = [
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+  'ultra',
+] as const;
+const DEFAULT_CODEX_REASONING_EFFORT = 'medium';
 
 type ModelOption = {
   key: string;
@@ -49,9 +68,16 @@ export type SessionModelEditorProps = {
   currentModel: string | null;
   currentModelSource: string;
   reasoningEffort?: string | null;
-  onRestartWithModel: (model: string) => Promise<void>;
+  fastMode?: boolean | null;
+  onRestartWithModel: (settings: SessionModelSettings) => Promise<void>;
   onManageModels: () => void;
   allowDefaultChange: boolean;
+};
+
+export type SessionModelSettings = {
+  model: string;
+  reasoningEffort?: string;
+  fastMode?: boolean;
 };
 
 export function SessionModelEditor({
@@ -59,6 +85,7 @@ export function SessionModelEditor({
   currentModel,
   currentModelSource,
   reasoningEffort,
+  fastMode,
   onRestartWithModel,
   onManageModels,
   allowDefaultChange,
@@ -66,6 +93,7 @@ export function SessionModelEditor({
   const { t } = useTranslation();
   const { toast } = useToast();
   const showConfirm = useShowModal('confirmActionModal');
+  const fastModeControlId = useId();
   const catalogQuery = useModelProviderCatalog();
   const {
     value: runtimeSettings,
@@ -79,29 +107,57 @@ export function SessionModelEditor({
   );
   const options = useMemo(() => groups.flatMap((group) => group.items), [groups]);
   const appliedModel = currentModel?.trim() ?? '';
+  const codexParameters = runtimeId === 'codex';
   const [selectedOption, setSelectedOption] = useState<ModelOption | null>(null);
+  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState(
+    DEFAULT_CODEX_REASONING_EFFORT
+  );
+  const [selectedFastMode, setSelectedFastMode] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
-  const [savedDefaultModel, setSavedDefaultModel] = useState<string>();
+  const [savedDefaults, setSavedDefaults] = useState<SessionModelSettings>();
 
   useEffect(() => {
     setSelectedOption(findModelOption(options, appliedModel));
   }, [appliedModel, options]);
 
   useEffect(() => {
-    setSavedDefaultModel(undefined);
+    setSavedDefaults(undefined);
   }, [runtimeId]);
 
+  const appliedReasoningEffort =
+    reasoningEffort?.trim() ||
+    runtimeSettings?.defaultReasoningEffort?.trim() ||
+    DEFAULT_CODEX_REASONING_EFFORT;
+  const appliedFastMode = fastMode ?? runtimeSettings?.defaultFastMode ?? false;
+
+  useEffect(() => {
+    if (!codexParameters) return;
+    setSelectedReasoningEffort(appliedReasoningEffort);
+    setSelectedFastMode(appliedFastMode);
+  }, [appliedFastMode, appliedReasoningEffort, codexParameters, runtimeId]);
+
   const selectedModel = selectedOption?.runtimeModelId ?? appliedModel;
-  const defaultModel = savedDefaultModel ?? runtimeSettings?.defaultModel?.trim() ?? '';
+  const defaultModel = savedDefaults?.model ?? runtimeSettings?.defaultModel?.trim() ?? '';
+  const defaultReasoningEffort =
+    savedDefaults?.reasoningEffort ?? runtimeSettings?.defaultReasoningEffort?.trim();
+  const defaultFastMode = savedDefaults?.fastMode ?? runtimeSettings?.defaultFastMode;
   const provider = selectedOption
     ? { id: selectedOption.providerId, name: selectedOption.providerName }
     : resolveModelProvider(selectedModel);
   const busy = isRestarting || isSaving;
-  const canRestart = Boolean(selectedOption && selectedModel !== appliedModel && !busy);
+  const currentSettingsChanged =
+    selectedModel !== appliedModel ||
+    (codexParameters &&
+      (selectedReasoningEffort !== appliedReasoningEffort || selectedFastMode !== appliedFastMode));
+  const defaultSettingsChanged =
+    selectedModel !== defaultModel ||
+    (codexParameters &&
+      (selectedReasoningEffort !== defaultReasoningEffort || selectedFastMode !== defaultFastMode));
+  const canRestart = Boolean(selectedModel && currentSettingsChanged && !busy);
   const canSaveDefault = Boolean(
     allowDefaultChange &&
-      selectedOption &&
-      selectedModel !== defaultModel &&
+      selectedModel &&
+      defaultSettingsChanged &&
       runtimeSettings &&
       !isLoading &&
       !busy
@@ -111,8 +167,28 @@ export function SessionModelEditor({
     if (!selectedModel) return;
     setIsRestarting(true);
     try {
-      await onRestartWithModel(selectedModel);
-      toast.success(t('workspaceRuntime.model.restartSuccess', { model: selectedModel }));
+      await onRestartWithModel({
+        model: selectedModel,
+        ...(codexParameters
+          ? { reasoningEffort: selectedReasoningEffort, fastMode: selectedFastMode }
+          : {}),
+      });
+      toast.success(
+        t(
+          codexParameters
+            ? 'workspaceRuntime.model.restartSuccessWithParameters'
+            : 'workspaceRuntime.model.restartSuccess',
+          {
+            model: selectedModel,
+            effort: selectedReasoningEffort,
+            speed: t(
+              selectedFastMode
+                ? 'workspaceRuntime.model.fastSpeed'
+                : 'workspaceRuntime.model.standardSpeed'
+            ),
+          }
+        )
+      );
     } catch (error) {
       toast.error(t('workspaceRuntime.model.restartFailed'), {
         description: error instanceof Error ? error.message : String(error),
@@ -126,7 +202,20 @@ export function SessionModelEditor({
     if (!selectedModel || !canRestart) return;
     showConfirm({
       title: t('workspaceRuntime.model.restartTitle'),
-      description: t('workspaceRuntime.model.restartDescription', { model: selectedModel }),
+      description: t(
+        codexParameters
+          ? 'workspaceRuntime.model.restartDescriptionWithParameters'
+          : 'workspaceRuntime.model.restartDescription',
+        {
+          model: selectedModel,
+          effort: selectedReasoningEffort,
+          speed: t(
+            selectedFastMode
+              ? 'workspaceRuntime.model.fastSpeed'
+              : 'workspaceRuntime.model.standardSpeed'
+          ),
+        }
+      ),
       confirmLabel: t('workspaceRuntime.model.restartConfirm'),
       variant: 'default',
       onSuccess: () => void restartWithModel(),
@@ -136,10 +225,26 @@ export function SessionModelEditor({
   const saveDefault = async () => {
     if (!selectedModel || !runtimeSettings || !canSaveDefault) return;
     const next: RuntimeCustomConfig = { ...runtimeSettings, defaultModel: selectedModel };
+    if (codexParameters) {
+      next.defaultReasoningEffort = selectedReasoningEffort;
+      next.defaultFastMode = selectedFastMode;
+    }
     try {
       await updateAsync(next);
-      setSavedDefaultModel(selectedModel);
-      toast.success(t('workspaceRuntime.model.defaultSuccess', { model: selectedModel }));
+      setSavedDefaults({
+        model: selectedModel,
+        ...(codexParameters
+          ? { reasoningEffort: selectedReasoningEffort, fastMode: selectedFastMode }
+          : {}),
+      });
+      toast.success(
+        t(
+          codexParameters
+            ? 'workspaceRuntime.model.defaultSuccessWithParameters'
+            : 'workspaceRuntime.model.defaultSuccess',
+          { model: selectedModel }
+        )
+      );
     } catch (error) {
       toast.error(t('workspaceRuntime.model.defaultFailed'), {
         description: error instanceof Error ? error.message : String(error),
@@ -152,18 +257,13 @@ export function SessionModelEditor({
       className="mb-2 overflow-hidden rounded-md border border-border bg-background-secondary/35"
       data-testid="session-model-editor"
     >
-      <div className="flex items-start justify-between gap-3 px-2.5 pb-2 pt-2.5">
+      <div className="px-2.5 pb-2 pt-2.5">
         <div className="min-w-0">
           <div className="text-xs font-medium text-foreground">
             {t('workspaceRuntime.model.title')}
           </div>
           <div className="mt-0.5 text-[10px] text-foreground-passive">{currentModelSource}</div>
         </div>
-        {reasoningEffort ? (
-          <Badge variant="outline" className="max-w-32 shrink-0 truncate font-mono text-[10px]">
-            {t('workspaceRuntime.model.reasoningEffort', { effort: reasoningEffort })}
-          </Badge>
-        ) : null}
       </div>
 
       <div className="border-t border-border px-2.5 py-2.5">
@@ -241,6 +341,65 @@ export function SessionModelEditor({
           </ComboboxContent>
         </Combobox>
 
+        {codexParameters ? (
+          <div className="mt-2 divide-y divide-border overflow-hidden rounded-md border border-border bg-background/60">
+            <div className="flex min-h-10 items-center justify-between gap-3 px-2.5 py-1.5">
+              <div className="min-w-0">
+                <div className="text-[11px] font-medium text-foreground">
+                  {t('workspaceRuntime.model.reasoningLabel')}
+                </div>
+                <div className="truncate text-[10px] text-foreground-passive">
+                  {t('workspaceRuntime.model.reasoningDescription')}
+                </div>
+              </div>
+              <Select
+                value={selectedReasoningEffort}
+                onValueChange={(value) => value && setSelectedReasoningEffort(value)}
+                disabled={busy}
+              >
+                <SelectTrigger
+                  size="sm"
+                  aria-label={t('workspaceRuntime.model.reasoningLabel')}
+                  className="h-7 w-28 shrink-0 bg-background font-mono text-[11px]"
+                >
+                  <SelectValue>
+                    {() => formatReasoningEffort(selectedReasoningEffort, (key) => t(key))}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent align="end">
+                  {reasoningEffortOptions(selectedReasoningEffort).map((effort) => (
+                    <SelectItem key={effort} value={effort} className="text-xs">
+                      {formatReasoningEffort(effort, (key) => t(key))}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex min-h-10 items-center justify-between gap-3 px-2.5 py-1.5">
+              <label
+                htmlFor={fastModeControlId}
+                className="min-w-0 cursor-pointer"
+                data-testid="session-model-fast-mode-label"
+              >
+                <span className="block text-[11px] font-medium text-foreground">
+                  {t('workspaceRuntime.model.fastMode')}
+                </span>
+                <span className="block truncate text-[10px] text-foreground-passive">
+                  {t('workspaceRuntime.model.fastModeDescription')}
+                </span>
+              </label>
+              <Switch
+                id={fastModeControlId}
+                size="sm"
+                checked={selectedFastMode}
+                onCheckedChange={setSelectedFastMode}
+                disabled={busy}
+                aria-label={t('workspaceRuntime.model.fastMode')}
+              />
+            </div>
+          </div>
+        ) : null}
+
         <div className="mt-2 grid min-w-0 grid-cols-1 gap-1 text-[10px] text-foreground-passive">
           <span className="block w-full min-w-0 max-w-full truncate">
             {t('workspaceRuntime.model.provider', {
@@ -252,6 +411,21 @@ export function SessionModelEditor({
               model: defaultModel || t('agents.runtimeInfo.clientDefault'),
             })}
           </span>
+          {codexParameters ? (
+            <span className="block w-full min-w-0 max-w-full truncate">
+              {t('workspaceRuntime.model.defaultParameters', {
+                effort: defaultReasoningEffort ?? t('workspaceRuntime.model.inheritClientDefault'),
+                speed:
+                  defaultFastMode === undefined
+                    ? t('workspaceRuntime.model.inheritClientDefault')
+                    : t(
+                        defaultFastMode
+                          ? 'workspaceRuntime.model.fastSpeed'
+                          : 'workspaceRuntime.model.standardSpeed'
+                      ),
+              })}
+            </span>
+          ) : null}
         </div>
 
         <div className="mt-2.5 flex flex-wrap gap-2">
@@ -316,4 +490,16 @@ function findModelOption(options: readonly ModelOption[], model: string): ModelO
     options.find((option) => option.runtimeModelId === model || option.catalogModelId === model) ??
     null
   );
+}
+
+function reasoningEffortOptions(current: string): string[] {
+  return CODEX_REASONING_EFFORTS.includes(current as (typeof CODEX_REASONING_EFFORTS)[number])
+    ? [...CODEX_REASONING_EFFORTS]
+    : [current, ...CODEX_REASONING_EFFORTS];
+}
+
+function formatReasoningEffort(effort: string, translate: (key: string) => string): string {
+  return CODEX_REASONING_EFFORTS.includes(effort as (typeof CODEX_REASONING_EFFORTS)[number])
+    ? translate(`workspaceRuntime.model.reasoning.${effort}`)
+    : effort;
 }

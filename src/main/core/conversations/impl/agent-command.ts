@@ -101,6 +101,63 @@ type RuntimeModelArgOccurrence = {
   model: string | undefined;
 };
 
+type CodexConfigArgOccurrence = {
+  end: number;
+  insertionIndex: number;
+};
+
+function codexConfigKey(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const separatorIndex = value.indexOf('=');
+  return separatorIndex > 0 ? value.slice(0, separatorIndex).trim() : undefined;
+}
+
+function matchCodexConfigArg(
+  args: readonly string[],
+  start: number,
+  configKey: string
+): Omit<CodexConfigArgOccurrence, 'insertionIndex'> | undefined {
+  const candidate = args[start];
+  if (candidate === '-c' || candidate === '--config') {
+    const value = args[start + 1];
+    if (codexConfigKey(value) === configKey) return { end: start + 2 };
+    return undefined;
+  }
+  for (const prefix of ['-c=', '--config=']) {
+    if (!candidate?.startsWith(prefix)) continue;
+    const value = candidate.slice(prefix.length);
+    if (codexConfigKey(value) === configKey) return { end: start + 1 };
+  }
+  return undefined;
+}
+
+/** Keep one canonical Codex `-c key=value` argument, with the managed value winning. */
+export function normalizeCodexConfigArgs(
+  args: readonly string[],
+  configKey: string,
+  preferredValue: string
+): string[] {
+  const cleanedArgs: string[] = [];
+  let insertionIndex: number | undefined;
+  for (let index = 0; index < args.length; ) {
+    const match = matchCodexConfigArg(args, index, configKey);
+    if (!match) {
+      cleanedArgs.push(args[index]);
+      index += 1;
+      continue;
+    }
+    insertionIndex ??= cleanedArgs.length;
+    index = match.end;
+  }
+  cleanedArgs.splice(
+    insertionIndex ?? cleanedArgs.length,
+    0,
+    '-c',
+    `${configKey}=${formatTomlString(preferredValue)}`
+  );
+  return cleanedArgs;
+}
+
 function matchRuntimeModelArg(
   args: readonly string[],
   start: number,
@@ -241,6 +298,8 @@ export function buildAgentCommand({
   workingDirectory,
   appendSystemPrompt,
   model,
+  reasoningEffort,
+  fastMode,
   terminalThemeMode,
   skillPolicy,
   executionMode,
@@ -262,6 +321,10 @@ export function buildAgentCommand({
   appendSystemPrompt?: string;
   /** Agent/slot model; falls back to the runtime default for a new session. */
   model?: string | null;
+  /** Codex reasoning effort; falls back to the runtime default for a new session. */
+  reasoningEffort?: string | null;
+  /** Codex Fast mode; falls back to the runtime default for a new session. */
+  fastMode?: boolean;
   /**
    * Light/dark mode of Yoda's embedded terminal. When set, the Claude CLI is
    * told to match it so its menu/selection colors stay readable against the
@@ -350,6 +413,17 @@ export function buildAgentCommand({
     args.push(...parseArgField(providerDef.modelFlag), effectiveModel);
   }
 
+  const effectiveReasoningEffort =
+    reasoningEffort?.trim() || (!isResuming ? providerConfig?.defaultReasoningEffort?.trim() : '');
+  const effectiveFastMode =
+    fastMode !== undefined ? fastMode : !isResuming ? providerConfig?.defaultFastMode : undefined;
+  if (runtimeId === 'codex' && effectiveReasoningEffort) {
+    args.push('-c', `model_reasoning_effort=${formatTomlString(effectiveReasoningEffort)}`);
+  }
+  if (runtimeId === 'codex' && effectiveFastMode !== undefined) {
+    args.push('-c', `service_tier=${formatTomlString(effectiveFastMode ? 'fast' : 'default')}`);
+  }
+
   if (!isResuming && initialPrompt && !providerDef?.useKeystrokeInjection) {
     args.push(...parseArgField(providerConfig?.initialPromptFlag), initialPrompt);
   }
@@ -386,7 +460,7 @@ export function buildAgentCommand({
 
   args.push(...extraArgs);
 
-  const normalizedArgs =
+  let normalizedArgs =
     shouldNormalizeModelArgs && providerDef?.modelFlag
       ? normalizeRuntimeModelArgs(
           args,
@@ -395,6 +469,21 @@ export function buildAgentCommand({
           providerDef.modelFlagAliases
         )
       : args;
+
+  if (runtimeId === 'codex' && effectiveReasoningEffort) {
+    normalizedArgs = normalizeCodexConfigArgs(
+      normalizedArgs,
+      'model_reasoning_effort',
+      effectiveReasoningEffort
+    );
+  }
+  if (runtimeId === 'codex' && effectiveFastMode !== undefined) {
+    normalizedArgs = normalizeCodexConfigArgs(
+      normalizedArgs,
+      'service_tier',
+      effectiveFastMode ? 'fast' : 'default'
+    );
+  }
 
   return { command, args: normalizedArgs };
 }
