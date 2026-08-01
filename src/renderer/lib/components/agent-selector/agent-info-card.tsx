@@ -145,6 +145,61 @@ export const AgentInfoCard: React.FC<Props> = ({
             <p className="mt-1 text-xs leading-relaxed text-foreground-muted">{description}</p>
           ) : null}
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="-mr-1 -mt-1 shrink-0"
+                title={t('common.more')}
+                aria-label={t('common.more')}
+                data-testid="agent-info-actions-menu"
+              >
+                <MoreHorizontal className="size-3.5" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-48">
+            {installed && !connectionId && snapshot?.update.command ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  void workspaceTerminalStore.runRuntimeAction(id, 'update').catch(() => {});
+                }}
+              >
+                <RefreshCw />
+                {t('agents.runtimeInfo.update')}
+              </DropdownMenuItem>
+            ) : null}
+            {id === 'codex' && installed && !connectionId ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  void workspaceTerminalStore.runRuntimeAction(id, 'doctor').catch(() => {});
+                }}
+              >
+                <Stethoscope />
+                {t('agents.runtimeInfo.doctor')}
+              </DropdownMenuItem>
+            ) : null}
+            {!connectionId ? (
+              <DropdownMenuItem onClick={manage}>
+                <Settings2 />
+                {t('agents.runtimeInfo.manage')}
+              </DropdownMenuItem>
+            ) : null}
+            {docUrl ? (
+              <DropdownMenuItem onClick={() => void rpc.app.openExternal(docUrl)}>
+                <ArrowUpRight />
+                {t('agents.docs')}
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={snapshotQuery.isFetching} onClick={() => void refresh()}>
+              <RefreshCw className={cn(snapshotQuery.isFetching && 'animate-spin')} />
+              {t('agents.runtimeInfo.refresh')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {modelEditing ? (
@@ -182,6 +237,18 @@ export const AgentInfoCard: React.FC<Props> = ({
               ? { absolutePath: installation.path, kind: 'file', sshConnectionId: connectionId }
               : undefined
           }
+          pathActions={
+            installed && !connectionId ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  void workspaceTerminalStore.runRuntimeAction(id, 'open').catch(() => {});
+                }}
+              >
+                <Terminal />
+                {t('agents.runtimeInfo.openCli')}
+              </DropdownMenuItem>
+            ) : undefined
+          }
         />
         <InfoRow
           label={t('agents.runtimeInfo.config')}
@@ -206,93 +273,6 @@ export const AgentInfoCard: React.FC<Props> = ({
             value={t(`agents.runtimeInfo.authProviders.${snapshot.config.authProvider}`)}
           />
         ) : null}
-      </div>
-
-      <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-foreground-passive">
-          {t('agents.runtimeInfo.actions')}
-        </span>
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
-          {installed && !connectionId ? (
-            <Button
-              size="xs"
-              onClick={() => {
-                void workspaceTerminalStore.runRuntimeAction(id, 'open').catch(() => {});
-              }}
-            >
-              <Terminal className="size-3.5" />
-              {t('agents.runtimeInfo.openCli')}
-            </Button>
-          ) : null}
-          {installed && !connectionId && snapshot?.update.command && snapshot.update.available ? (
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => {
-                void workspaceTerminalStore.runRuntimeAction(id, 'update').catch(() => {});
-              }}
-            >
-              <RefreshCw className="size-3.5" />
-              {t('agents.runtimeInfo.update')}
-            </Button>
-          ) : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  title={t('common.more')}
-                  aria-label={t('common.more')}
-                >
-                  <MoreHorizontal className="size-3.5" />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-48">
-              {installed &&
-              !connectionId &&
-              snapshot?.update.command &&
-              !snapshot.update.available ? (
-                <DropdownMenuItem
-                  onClick={() => {
-                    void workspaceTerminalStore.runRuntimeAction(id, 'update').catch(() => {});
-                  }}
-                >
-                  <RefreshCw />
-                  {t('agents.runtimeInfo.update')}
-                </DropdownMenuItem>
-              ) : null}
-              {id === 'codex' && installed && !connectionId ? (
-                <DropdownMenuItem
-                  onClick={() => {
-                    void workspaceTerminalStore.runRuntimeAction(id, 'doctor').catch(() => {});
-                  }}
-                >
-                  <Stethoscope />
-                  {t('agents.runtimeInfo.doctor')}
-                </DropdownMenuItem>
-              ) : null}
-              {!connectionId ? (
-                <DropdownMenuItem onClick={manage}>
-                  <Settings2 />
-                  {t('agents.runtimeInfo.manage')}
-                </DropdownMenuItem>
-              ) : null}
-              {docUrl ? (
-                <DropdownMenuItem onClick={() => void rpc.app.openExternal(docUrl)}>
-                  <ArrowUpRight />
-                  {t('agents.docs')}
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={snapshotQuery.isFetching} onClick={() => void refresh()}>
-                <RefreshCw className={cn(snapshotQuery.isFetching && 'animate-spin')} />
-                {t('agents.runtimeInfo.refresh')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </div>
 
       {!installed && installCommand ? (
@@ -351,12 +331,14 @@ function InfoRow({
   detail,
   mono,
   pathTarget,
+  pathActions,
 }: {
   label: string;
   value: string;
   detail?: string;
   mono?: boolean;
   pathTarget?: FilePathTarget;
+  pathActions?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3 px-2.5 py-1.5 text-xs">
@@ -369,7 +351,11 @@ function InfoRow({
           {detail}
         </span>
       ) : null}
-      {pathTarget ? <FilePathActionsDropdown target={pathTarget} className="shrink-0" /> : null}
+      {pathTarget ? (
+        <FilePathActionsDropdown target={pathTarget} className="shrink-0">
+          {pathActions}
+        </FilePathActionsDropdown>
+      ) : null}
     </div>
   );
 }

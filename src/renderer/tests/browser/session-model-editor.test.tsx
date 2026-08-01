@@ -114,12 +114,28 @@ describe('SessionModelEditor', () => {
 
     expect(host.textContent).toContain('gpt-5.5');
     expect(host.textContent).toContain('workspaceRuntime.model.reasoning.high');
+    const settings = host.querySelector('[data-testid="session-model-settings"]');
+    expect(settings).not.toBeNull();
+    expect(settings?.children).toHaveLength(3);
+    expect(host.querySelector('[data-testid="session-model-model-row"]')?.parentElement).toBe(
+      settings
+    );
+    expect(host.querySelector('[data-testid="session-model-reasoning-row"]')?.parentElement).toBe(
+      settings
+    );
+    expect(host.querySelector('[data-testid="session-model-fast-mode-row"]')?.parentElement).toBe(
+      settings
+    );
+    expect(host.querySelector('[data-testid="session-model-actions"]')).toBeNull();
+    expect(host.textContent).not.toContain('workspaceRuntime.model.defaultModel');
+    expect(host.textContent).not.toContain('workspaceRuntime.model.defaultParameters');
 
     await openModelPicker(host);
     const option = await waitForComboboxItem('claude-sonnet-4-6');
     expect(option).not.toBeUndefined();
     await clickUser(option!);
     await settle();
+    expect(host.querySelector('[data-testid="session-model-actions"]')).not.toBeNull();
 
     await chooseReasoningEffort(host, 'workspaceRuntime.model.reasoning.xhigh');
     const fastSwitch = host.querySelector<HTMLElement>('[data-slot="switch"]');

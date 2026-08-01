@@ -3,7 +3,6 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuntimeCustomConfig } from '@shared/app-settings';
 import {
-  resolveModelProvider,
   toRuntimeModelId,
   type ModelProviderCatalogGroup,
   type ModelProviderCatalogSource,
@@ -115,6 +114,7 @@ export function SessionModelEditor({
   const [selectedFastMode, setSelectedFastMode] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [savedDefaults, setSavedDefaults] = useState<SessionModelSettings>();
+  const [hasUserEdited, setHasUserEdited] = useState(false);
 
   useEffect(() => {
     setSelectedOption(findModelOption(options, appliedModel));
@@ -122,6 +122,7 @@ export function SessionModelEditor({
 
   useEffect(() => {
     setSavedDefaults(undefined);
+    setHasUserEdited(false);
   }, [runtimeId]);
 
   const appliedReasoningEffort =
@@ -141,9 +142,6 @@ export function SessionModelEditor({
   const defaultReasoningEffort =
     savedDefaults?.reasoningEffort ?? runtimeSettings?.defaultReasoningEffort?.trim();
   const defaultFastMode = savedDefaults?.fastMode ?? runtimeSettings?.defaultFastMode;
-  const provider = selectedOption
-    ? { id: selectedOption.providerId, name: selectedOption.providerName }
-    : resolveModelProvider(selectedModel);
   const busy = isRestarting || isSaving;
   const currentSettingsChanged =
     selectedModel !== appliedModel ||
@@ -162,6 +160,7 @@ export function SessionModelEditor({
       !isLoading &&
       !busy
   );
+  const showActions = hasUserEdited && currentSettingsChanged;
 
   const restartWithModel = async () => {
     if (!selectedModel) return;
@@ -257,209 +256,211 @@ export function SessionModelEditor({
       className="mb-2 overflow-hidden rounded-md border border-border bg-background-secondary/35"
       data-testid="session-model-editor"
     >
-      <div className="px-2.5 pb-2 pt-2.5">
-        <div className="min-w-0">
-          <div className="text-xs font-medium text-foreground">
-            {t('workspaceRuntime.model.title')}
-          </div>
-          <div className="mt-0.5 text-[10px] text-foreground-passive">{currentModelSource}</div>
+      <div className="px-2.5 py-2.5">
+        <div className="text-xs font-medium text-foreground">
+          {t('workspaceRuntime.model.title')}
         </div>
       </div>
 
       <div className="border-t border-border px-2.5 py-2.5">
-        <Combobox
-          items={groups}
-          value={selectedOption}
-          onValueChange={(option: ModelOption | null) => setSelectedOption(option)}
-          isItemEqualToValue={(left: ModelOption, right: ModelOption) => left.key === right.key}
-          filter={(option: ModelOption, query) => {
-            const needle = query.trim().toLowerCase();
-            if (!needle) return true;
-            return `${option.providerName} ${option.catalogModelId} ${option.runtimeModelId}`
-              .toLowerCase()
-              .includes(needle);
-          }}
-          autoHighlight
+        <div
+          className="divide-y divide-border overflow-hidden rounded-md border border-border bg-background/60"
+          data-testid="session-model-settings"
         >
-          <ComboboxTrigger
-            aria-label={t('workspaceRuntime.model.choose')}
-            className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md border border-border bg-background px-2.5 text-left text-xs outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-ring"
+          <div
+            className="flex min-h-10 items-center justify-between gap-3 px-2.5 py-1.5"
+            data-testid="session-model-model-row"
           >
-            <span className="min-w-0 flex-1 truncate font-mono">
-              {selectedModel || t('workspaceRuntime.model.choose')}
-            </span>
-            <ChevronDown className="size-3.5 shrink-0 text-foreground-passive" />
-          </ComboboxTrigger>
-          <ComboboxContent className="w-[min(24rem,var(--available-width))]">
-            <ComboboxInput
-              showTrigger={false}
-              placeholder={t('workspaceRuntime.model.searchPlaceholder')}
-              onKeyDownCapture={(event) => {
-                if (event.key === 'Enter' && isImeComposing(event)) event.stopPropagation();
+            <div className="min-w-0">
+              <div className="text-[11px] font-medium text-foreground">
+                {t('agents.runtimeInfo.model')}
+              </div>
+              <div className="truncate text-[10px] text-foreground-passive">
+                {currentModelSource}
+              </div>
+            </div>
+            <Combobox
+              items={groups}
+              value={selectedOption}
+              onValueChange={(option: ModelOption | null) => {
+                if (option?.key !== selectedOption?.key) setHasUserEdited(true);
+                setSelectedOption(option);
               }}
-            />
-            <ComboboxEmpty>
-              {catalogQuery.isLoading
-                ? t('workspaceRuntime.model.loading')
-                : catalogQuery.isError
-                  ? t('workspaceRuntime.model.loadFailed')
-                  : t('workspaceRuntime.model.empty')}
-            </ComboboxEmpty>
-            <ComboboxList>
-              {(group: ModelOptionGroup) => (
-                <ComboboxGroup key={group.value} items={group.items}>
-                  <ComboboxLabel>{group.label}</ComboboxLabel>
-                  <ComboboxCollection>
-                    {(option: ModelOption) => (
-                      <ComboboxItem key={option.key} value={option} className="text-xs">
-                        <span className="min-w-0 flex-1 truncate font-mono">
-                          {option.runtimeModelId}
-                        </span>
-                        {option.sources.includes('custom') ? (
-                          <span className="shrink-0 text-[10px] text-foreground-passive">
-                            {t('settings.models.customBadge')}
-                          </span>
-                        ) : null}
-                      </ComboboxItem>
-                    )}
-                  </ComboboxCollection>
-                </ComboboxGroup>
-              )}
-            </ComboboxList>
-            <div className="border-t border-border p-1">
+              isItemEqualToValue={(left: ModelOption, right: ModelOption) => left.key === right.key}
+              filter={(option: ModelOption, query) => {
+                const needle = query.trim().toLowerCase();
+                if (!needle) return true;
+                return `${option.providerName} ${option.catalogModelId} ${option.runtimeModelId}`
+                  .toLowerCase()
+                  .includes(needle);
+              }}
+              autoHighlight
+            >
+              <ComboboxTrigger
+                aria-label={t('workspaceRuntime.model.choose')}
+                className="flex h-7 w-44 max-w-[62%] shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-left text-[11px] outline-none transition-colors hover:bg-background-2 focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <span className="min-w-0 flex-1 truncate font-mono">
+                  {selectedModel || t('workspaceRuntime.model.choose')}
+                </span>
+                <ChevronDown className="size-3.5 shrink-0 text-foreground-passive" />
+              </ComboboxTrigger>
+              <ComboboxContent className="w-[min(24rem,var(--available-width))]">
+                <ComboboxInput
+                  showTrigger={false}
+                  placeholder={t('workspaceRuntime.model.searchPlaceholder')}
+                  onKeyDownCapture={(event) => {
+                    if (event.key === 'Enter' && isImeComposing(event)) event.stopPropagation();
+                  }}
+                />
+                <ComboboxEmpty>
+                  {catalogQuery.isLoading
+                    ? t('workspaceRuntime.model.loading')
+                    : catalogQuery.isError
+                      ? t('workspaceRuntime.model.loadFailed')
+                      : t('workspaceRuntime.model.empty')}
+                </ComboboxEmpty>
+                <ComboboxList>
+                  {(group: ModelOptionGroup) => (
+                    <ComboboxGroup key={group.value} items={group.items}>
+                      <ComboboxLabel>{group.label}</ComboboxLabel>
+                      <ComboboxCollection>
+                        {(option: ModelOption) => (
+                          <ComboboxItem key={option.key} value={option} className="text-xs">
+                            <span className="min-w-0 flex-1 truncate font-mono">
+                              {option.runtimeModelId}
+                            </span>
+                            {option.sources.includes('custom') ? (
+                              <span className="shrink-0 text-[10px] text-foreground-passive">
+                                {t('settings.models.customBadge')}
+                              </span>
+                            ) : null}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxCollection>
+                    </ComboboxGroup>
+                  )}
+                </ComboboxList>
+                <div className="border-t border-border p-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start text-xs"
+                    onClick={onManageModels}
+                  >
+                    <ExternalLink className="size-3.5" />
+                    {t('workspaceRuntime.model.manage')}
+                  </Button>
+                </div>
+              </ComboboxContent>
+            </Combobox>
+          </div>
+
+          {codexParameters ? (
+            <>
+              <div
+                className="flex min-h-10 items-center justify-between gap-3 px-2.5 py-1.5"
+                data-testid="session-model-reasoning-row"
+              >
+                <div className="min-w-0">
+                  <div className="text-[11px] font-medium text-foreground">
+                    {t('workspaceRuntime.model.reasoningLabel')}
+                  </div>
+                  <div className="truncate text-[10px] text-foreground-passive">
+                    {t('workspaceRuntime.model.reasoningDescription')}
+                  </div>
+                </div>
+                <Select
+                  value={selectedReasoningEffort}
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    if (value !== selectedReasoningEffort) setHasUserEdited(true);
+                    setSelectedReasoningEffort(value);
+                  }}
+                  disabled={busy}
+                >
+                  <SelectTrigger
+                    size="sm"
+                    aria-label={t('workspaceRuntime.model.reasoningLabel')}
+                    className="h-7 w-28 shrink-0 bg-background font-mono text-[11px]"
+                  >
+                    <SelectValue>
+                      {() => formatReasoningEffort(selectedReasoningEffort, (key) => t(key))}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    {reasoningEffortOptions(selectedReasoningEffort).map((effort) => (
+                      <SelectItem key={effort} value={effort} className="text-xs">
+                        {formatReasoningEffort(effort, (key) => t(key))}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div
+                className="flex min-h-10 items-center justify-between gap-3 px-2.5 py-1.5"
+                data-testid="session-model-fast-mode-row"
+              >
+                <label
+                  htmlFor={fastModeControlId}
+                  className="min-w-0 cursor-pointer"
+                  data-testid="session-model-fast-mode-label"
+                >
+                  <span className="block text-[11px] font-medium text-foreground">
+                    {t('workspaceRuntime.model.fastMode')}
+                  </span>
+                  <span className="block truncate text-[10px] text-foreground-passive">
+                    {t('workspaceRuntime.model.fastModeDescription')}
+                  </span>
+                </label>
+                <Switch
+                  id={fastModeControlId}
+                  size="sm"
+                  checked={selectedFastMode}
+                  onCheckedChange={(checked) => {
+                    if (checked !== selectedFastMode) setHasUserEdited(true);
+                    setSelectedFastMode(checked);
+                  }}
+                  disabled={busy}
+                  aria-label={t('workspaceRuntime.model.fastMode')}
+                />
+              </div>
+            </>
+          ) : null}
+        </div>
+
+        {showActions ? (
+          <div className="mt-2.5 flex flex-wrap gap-2" data-testid="session-model-actions">
+            {currentSettingsChanged ? (
               <Button
                 type="button"
-                variant="ghost"
                 size="sm"
-                className="w-full justify-start text-xs"
-                onClick={onManageModels}
+                className="min-w-36 flex-1"
+                onClick={confirmRestart}
+                disabled={!canRestart}
               >
-                <ExternalLink className="size-3.5" />
-                {t('workspaceRuntime.model.manage')}
+                <RotateCcw className="size-3.5" />
+                {isRestarting
+                  ? t('workspaceRuntime.model.restarting')
+                  : t('workspaceRuntime.model.restartCurrent')}
               </Button>
-            </div>
-          </ComboboxContent>
-        </Combobox>
-
-        {codexParameters ? (
-          <div className="mt-2 divide-y divide-border overflow-hidden rounded-md border border-border bg-background/60">
-            <div className="flex min-h-10 items-center justify-between gap-3 px-2.5 py-1.5">
-              <div className="min-w-0">
-                <div className="text-[11px] font-medium text-foreground">
-                  {t('workspaceRuntime.model.reasoningLabel')}
-                </div>
-                <div className="truncate text-[10px] text-foreground-passive">
-                  {t('workspaceRuntime.model.reasoningDescription')}
-                </div>
-              </div>
-              <Select
-                value={selectedReasoningEffort}
-                onValueChange={(value) => value && setSelectedReasoningEffort(value)}
-                disabled={busy}
-              >
-                <SelectTrigger
-                  size="sm"
-                  aria-label={t('workspaceRuntime.model.reasoningLabel')}
-                  className="h-7 w-28 shrink-0 bg-background font-mono text-[11px]"
-                >
-                  <SelectValue>
-                    {() => formatReasoningEffort(selectedReasoningEffort, (key) => t(key))}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {reasoningEffortOptions(selectedReasoningEffort).map((effort) => (
-                    <SelectItem key={effort} value={effort} className="text-xs">
-                      {formatReasoningEffort(effort, (key) => t(key))}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex min-h-10 items-center justify-between gap-3 px-2.5 py-1.5">
-              <label
-                htmlFor={fastModeControlId}
-                className="min-w-0 cursor-pointer"
-                data-testid="session-model-fast-mode-label"
-              >
-                <span className="block text-[11px] font-medium text-foreground">
-                  {t('workspaceRuntime.model.fastMode')}
-                </span>
-                <span className="block truncate text-[10px] text-foreground-passive">
-                  {t('workspaceRuntime.model.fastModeDescription')}
-                </span>
-              </label>
-              <Switch
-                id={fastModeControlId}
+            ) : null}
+            {allowDefaultChange && defaultSettingsChanged ? (
+              <Button
+                type="button"
+                variant="outline"
                 size="sm"
-                checked={selectedFastMode}
-                onCheckedChange={setSelectedFastMode}
-                disabled={busy}
-                aria-label={t('workspaceRuntime.model.fastMode')}
-              />
-            </div>
+                className="min-w-36 flex-1"
+                onClick={() => void saveDefault()}
+                disabled={!canSaveDefault}
+              >
+                <Save className="size-3.5" />
+                {t('workspaceRuntime.model.setDefault')}
+              </Button>
+            ) : null}
           </div>
         ) : null}
-
-        <div className="mt-2 grid min-w-0 grid-cols-1 gap-1 text-[10px] text-foreground-passive">
-          <span className="block w-full min-w-0 max-w-full truncate">
-            {t('workspaceRuntime.model.provider', {
-              provider: provider?.name ?? t('workspaceRuntime.model.unknownProvider'),
-            })}
-          </span>
-          <span className="block w-full min-w-0 max-w-full truncate font-mono">
-            {t('workspaceRuntime.model.defaultModel', {
-              model: defaultModel || t('agents.runtimeInfo.clientDefault'),
-            })}
-          </span>
-          {codexParameters ? (
-            <span className="block w-full min-w-0 max-w-full truncate">
-              {t('workspaceRuntime.model.defaultParameters', {
-                effort: defaultReasoningEffort ?? t('workspaceRuntime.model.inheritClientDefault'),
-                speed:
-                  defaultFastMode === undefined
-                    ? t('workspaceRuntime.model.inheritClientDefault')
-                    : t(
-                        defaultFastMode
-                          ? 'workspaceRuntime.model.fastSpeed'
-                          : 'workspaceRuntime.model.standardSpeed'
-                      ),
-              })}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            className="min-w-36 flex-1"
-            onClick={confirmRestart}
-            disabled={!canRestart}
-          >
-            <RotateCcw className="size-3.5" />
-            {isRestarting
-              ? t('workspaceRuntime.model.restarting')
-              : t('workspaceRuntime.model.restartCurrent')}
-          </Button>
-          {allowDefaultChange ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="min-w-36 flex-1"
-              onClick={() => void saveDefault()}
-              disabled={!canSaveDefault}
-            >
-              <Save className="size-3.5" />
-              {t('workspaceRuntime.model.setDefault')}
-            </Button>
-          ) : null}
-        </div>
-        <p className="mt-2 text-[10px] leading-relaxed text-foreground-passive">
-          {allowDefaultChange
-            ? t('workspaceRuntime.model.applyHint')
-            : t('workspaceRuntime.model.remoteHint')}
-        </p>
       </div>
     </div>
   );
