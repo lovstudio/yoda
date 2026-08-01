@@ -1,6 +1,6 @@
 import type { RuntimeId } from './runtime-registry';
 
-export type ProjectLaunchCommand = {
+export type ProjectPackageScript = {
   id: string;
   label: string;
   command: string;
@@ -13,8 +13,16 @@ export type CompileQuickActionInput = {
   runtimeId: RuntimeId;
 };
 
-export type CompiledQuickAction = {
-  label: string;
-  command: string;
-  explanation: string;
-};
+export type CompiledQuickAction =
+  | {
+      kind: 'command';
+      label: string;
+      command: string;
+      explanation: string;
+    }
+  | {
+      kind: 'skill';
+      label: string;
+      instruction: string;
+      explanation: string;
+    };

@@ -36,6 +36,7 @@ describe('compileQuickAction', () => {
     mocks.getRuntimeConfig.mockResolvedValue({});
     mocks.runAgentCli.mockResolvedValue({
       stdout: JSON.stringify({
+        kind: 'command',
         label: 'Start locally',
         command: 'pnpm run dev',
         explanation: 'package.json defines the dev script',
@@ -52,6 +53,7 @@ describe('compileQuickAction', () => {
         runtimeId: 'codex',
       })
     ).resolves.toEqual({
+      kind: 'command',
       label: 'Start locally',
       command: 'pnpm run dev',
       explanation: 'package.json defines the dev script',

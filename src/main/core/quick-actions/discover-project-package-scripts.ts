@@ -1,23 +1,10 @@
-import type { ProjectLaunchCommand } from '@shared/quick-actions';
+import type { ProjectPackageScript } from '@shared/quick-actions';
 import type { FileSystemProvider } from '@main/core/fs/types';
 
 type ProjectManifestReader = Pick<FileSystemProvider, 'exists' | 'read'>;
 type PackageManager = 'bun' | 'npm' | 'pnpm' | 'yarn';
 
 const PACKAGE_JSON_MAX_BYTES = 512 * 1024;
-const LAUNCH_SCRIPT_NAMES = [
-  'dev',
-  'start',
-  'serve',
-  'preview',
-  'watch',
-  'desktop',
-  'web',
-  'app',
-  'docs',
-  'doc',
-  'mobile',
-] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -51,24 +38,6 @@ async function detectPackageManager(
   return 'npm';
 }
 
-function launchScriptRank(name: string, command: string): number | null {
-  const normalized = name.toLowerCase();
-  const exactRank = LAUNCH_SCRIPT_NAMES.indexOf(normalized as (typeof LAUNCH_SCRIPT_NAMES)[number]);
-  if (exactRank >= 0) return exactRank;
-
-  const segments = normalized.split(/[:_-]/);
-  const segmentRank = segments.reduce<number | null>((best, segment) => {
-    const rank = LAUNCH_SCRIPT_NAMES.indexOf(segment as (typeof LAUNCH_SCRIPT_NAMES)[number]);
-    if (rank < 0) return best;
-    return best === null ? rank : Math.min(best, rank);
-  }, null);
-  if (segmentRank !== null) return LAUNCH_SCRIPT_NAMES.length + segmentRank;
-
-  const delegatesToLaunchScript =
-    /(?:^|[;&|]\s*)(?:npm|pnpm|yarn|bun)(?:\s+run)?\s+(?:dev|start|serve|preview)(?:\s|$)/i;
-  return delegatesToLaunchScript.test(command) ? LAUNCH_SCRIPT_NAMES.length * 2 : null;
-}
-
 function buildPackageScriptCommand(packageManager: PackageManager, scriptName: string): string {
   const scriptArgument = /^[A-Za-z0-9:._-]+$/.test(scriptName)
     ? scriptName
@@ -77,14 +46,13 @@ function buildPackageScriptCommand(packageManager: PackageManager, scriptName: s
 }
 
 /**
- * Reads repository-owned manifests and returns only commands that are plausible
- * interactive launchers. Validation/build/cleanup scripts stay out of the
- * sidebar so opening a project menu never exposes a destructive-looking wall of
- * every package script.
+ * Reads every package.json script as a command candidate for the quick-action
+ * creation modal. Discovery never makes a script visible in the quick-action
+ * list by itself; the user must select and run it first.
  */
-export async function discoverProjectLaunchCommands(
+export async function discoverProjectPackageScripts(
   fs: ProjectManifestReader
-): Promise<ProjectLaunchCommand[]> {
+): Promise<ProjectPackageScript[]> {
   let packageJson: unknown;
   try {
     const result = await fs.read('package.json', PACKAGE_JSON_MAX_BYTES);
@@ -97,14 +65,8 @@ export async function discoverProjectLaunchCommands(
 
   const packageManager = await detectPackageManager(fs, packageJson.packageManager);
   return Object.entries(packageJson.scripts)
-    .flatMap(([name, value]) => {
-      if (typeof value !== 'string') return [];
-      const rank = launchScriptRank(name, value);
-      if (rank === null) return [];
-      return [{ name, rank }];
-    })
-    .sort((left, right) => left.rank - right.rank || left.name.localeCompare(right.name))
-    .map(({ name }) => ({
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    .map(([name]) => ({
       id: `package.json:${name}`,
       label: name,
       command: buildPackageScriptCommand(packageManager, name),

@@ -8,18 +8,15 @@ import {
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QuickAction } from '@shared/project-settings';
-import type { ProjectLaunchCommand } from '@shared/quick-actions';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const translations: Record<string, string> = {
-  'sidebar.captureAutomation.menuLabel': 'Launch commands',
-  'sidebar.captureAutomation.createLabel': 'Generate command from a requirement…',
-  'sidebar.captureAutomation.detectedCommands': 'Detected from project',
-  'sidebar.captureAutomation.savedCommands': 'Saved commands',
-  'sidebar.captureAutomation.loadingCommands': 'Reading project commands…',
-  'sidebar.captureAutomation.loadCommandsFailed': 'Project commands could not be read.',
-  'sidebar.captureAutomation.noCommands': 'No launch commands detected.',
+  'sidebar.captureAutomation.menuLabel': 'Quick actions',
+  'sidebar.captureAutomation.createLabel': 'New quick action…',
+  'sidebar.captureAutomation.noCommands': 'No previously run quick actions.',
+  'sidebar.captureAutomation.commandKind': 'Command',
+  'sidebar.captureAutomation.skillKind': 'Skill',
   'projects.quickActions.manage': 'Manage quick actions',
 };
 
@@ -118,14 +115,7 @@ const savedAction: QuickAction = {
   id: 'saved-action',
   label: 'Start and verify',
   command: 'Start this project and verify the local URL.',
-  kind: 'agent',
-};
-
-const detectedCommand: ProjectLaunchCommand = {
-  id: 'package.json:dev',
-  label: 'dev',
-  command: 'pnpm run dev',
-  source: 'package.json',
+  kind: 'skill',
 };
 
 function requiredActions() {
@@ -145,7 +135,7 @@ function requiredActions() {
   };
 }
 
-describe('ProjectMenu launch commands submenu', () => {
+describe('ProjectMenu quick actions submenu', () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -164,20 +154,17 @@ describe('ProjectMenu launch commands submenu', () => {
     ['context', 'context-menu-item'],
     ['dropdown', 'dropdown-menu-item'],
   ] as const)(
-    'shows detected and saved commands in the %s menu and keeps generation discoverable',
+    'shows only previously run actions in the %s menu and keeps creation discoverable',
     async (surface, itemSlot) => {
       const { ProjectActionsMenu, ProjectContextMenu } = await import(
         '@renderer/features/sidebar/project-menu'
       );
-      const onRunLaunchCommand = vi.fn();
       const onRunQuickAction = vi.fn();
       const onCaptureAutomation = vi.fn();
       const onManageQuickActions = vi.fn();
       const actions = {
         ...requiredActions(),
         quickActions: [savedAction],
-        launchCommands: [detectedCommand],
-        onRunLaunchCommand,
         onRunQuickAction,
         onCaptureAutomation,
         onManageQuickActions,
@@ -198,30 +185,18 @@ describe('ProjectMenu launch commands submenu', () => {
       });
 
       expect(host.querySelector('[data-slot$="menu-sub-trigger"]')?.textContent).toContain(
-        'Launch commands'
+        'Quick actions'
       );
-      const labels = Array.from(host.querySelectorAll<HTMLElement>('[data-slot$="menu-label"]'));
-      expect(labels).toHaveLength(2);
-      expect(
-        labels.every((label) => label.parentElement?.dataset.slot === `${surface}-menu-group`)
-      ).toBe(true);
       const items = Array.from(
         host.querySelectorAll<HTMLButtonElement>(`button[data-slot="${itemSlot}"]`)
       );
-      const detectedCommandItem = items.find((item) =>
-        item.textContent?.includes(detectedCommand.command)
-      );
       const savedActionItem = items.find((item) => item.textContent?.includes(savedAction.label));
-      const createActionItem = items.find((item) =>
-        item.textContent?.includes('Generate command from a requirement')
-      );
+      const createActionItem = items.find((item) => item.textContent?.includes('New quick action'));
       const manageActionsItem = items.find((item) =>
         item.textContent?.includes('Manage quick actions')
       );
 
-      await act(async () => detectedCommandItem?.click());
-      expect(onRunLaunchCommand).toHaveBeenCalledWith(detectedCommand);
-      expect(onRunQuickAction).not.toHaveBeenCalled();
+      expect(host.textContent).not.toContain('pnpm run dev');
       await act(async () => savedActionItem?.click());
       expect(onRunQuickAction).toHaveBeenCalledWith(savedAction);
 
