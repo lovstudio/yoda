@@ -4,6 +4,7 @@ import { Fragment, useEffect, type ReactNode } from 'react';
 import { EditorProvider } from '@renderer/features/tasks/editor/editor-provider';
 import { TaskMainPanel } from '@renderer/features/tasks/main-panel';
 import {
+  asProvisioned,
   getTaskManagerStore,
   getTaskStore,
   taskViewKind,
@@ -33,6 +34,7 @@ export const SelfContainedTaskPane = observer(function SelfContainedTaskPane({
 }) {
   const taskStore = getTaskStore(projectId, taskId);
   const kind = taskViewKind(taskStore, projectId);
+  const provisioned = asProvisioned(taskStore);
 
   // Auto-provision an idle task the same way the route does.
   useEffect(() => {
@@ -45,15 +47,17 @@ export const SelfContainedTaskPane = observer(function SelfContainedTaskPane({
 
   if (kind !== 'ready') {
     return (
-      <TaskViewWrapper projectId={projectId} taskId={taskId} hosted>
+      <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind} hosted>
         <TaskMainPanel />
       </TaskViewWrapper>
     );
   }
 
+  if (!provisioned) return null;
+
   return (
-    <TaskViewWrapper projectId={projectId} taskId={taskId} hosted>
-      <ProvisionedTaskProvider projectId={projectId} taskId={taskId}>
+    <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind} hosted>
+      <ProvisionedTaskProvider task={provisioned}>
         <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
           <TaskMainPanel />
         </EditorProvider>
