@@ -2845,7 +2845,9 @@
     "source": {
       "codex": "Synced from Codex",
       "codexHint": "Configuration, scheduling, and notifications stay in Codex; Yoda mirrors it read-only",
-      "codexManaged": "Managed by Codex"
+      "codexManaged": "Managed by Codex",
+      "yodaManaged": "Managed by Yoda",
+      "readOnly": "Read-only sync"
     },
     "status": {
       "active": "Active",
@@ -2880,6 +2882,7 @@
     "card": {
       "schedule": "Schedule",
       "workspace": "Workspace",
+      "runner": "Agent: {{name}}",
       "lastRun": "Last run",
       "openLastRun": "Open the last run for \"{{name}}\"",
       "neverRun": "Never run"

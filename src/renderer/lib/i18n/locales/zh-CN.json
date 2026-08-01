@@ -2845,11 +2845,13 @@
     "source": {
       "codex": "Codex 同步",
       "codexHint": "配置、调度和通知由 Codex 管理，Yoda 只读同步展示",
-      "codexManaged": "由 Codex 管理"
+      "codexManaged": "由 Codex 管理",
+      "yodaManaged": "由 Yoda 管理",
+      "readOnly": "只读同步"
     },
     "status": {
-      "active": "启用",
-      "paused": "暂停"
+      "active": "启用中",
+      "paused": "已暂停"
     },
     "trigger": {
       "manual": "手动",
@@ -2880,6 +2882,7 @@
     "card": {
       "schedule": "运行计划",
       "workspace": "工作区",
+      "runner": "执行 Agent：{{name}}",
       "lastRun": "上次运行",
       "openLastRun": "查看“{{name}}”的上次运行",
       "neverRun": "尚未运行"
