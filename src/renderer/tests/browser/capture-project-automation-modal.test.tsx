@@ -1,10 +1,32 @@
-import { act, createElement, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import {
+  act,
+  createElement,
+  type ButtonHTMLAttributes,
+  type ChangeEvent,
+  type ReactNode,
+} from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 type ChildrenProps = { children?: ReactNode };
+type MockPromptToken = {
+  id: string;
+  kind: 'image' | 'file';
+  label: string;
+  path: string;
+};
+type MockComposerPromptInputProps = {
+  value: string;
+  onChange: (value: string) => void;
+  tokens: MockPromptToken[];
+  onTokensChange: (tokens: MockPromptToken[]) => void;
+  textareaId?: string;
+  placeholder?: string;
+  disabled?: boolean;
+  autoFocus?: boolean;
+};
 
 const mocks = vi.hoisted(() => {
   const pageLoad = vi.fn();
@@ -71,6 +93,55 @@ vi.mock('react-i18next', () => ({
 vi.mock('@shared/task-name', () => ({
   taskNameFromPrompt: () => 'start-project',
 }));
+
+vi.mock('@renderer/app/composer-prompt-input', async () => {
+  const { createElement: create } = await import('react');
+  return {
+    ComposerPromptInput: ({
+      value,
+      onChange,
+      tokens,
+      onTokensChange,
+      textareaId,
+      placeholder,
+      disabled,
+      autoFocus,
+    }: MockComposerPromptInputProps) =>
+      create('div', { 'data-yoda-surface': 'composer' }, [
+        create('textarea', {
+          key: 'input',
+          id: textareaId,
+          value,
+          placeholder,
+          disabled,
+          autoFocus,
+          onChange: (event: ChangeEvent<HTMLTextAreaElement>) =>
+            onChange(event.currentTarget.value),
+        }),
+        create(
+          'button',
+          {
+            key: 'attach',
+            type: 'button',
+            'data-testid': 'attach-reference',
+            onClick: () => {
+              const token: MockPromptToken = {
+                id: 'reference-1',
+                kind: 'file',
+                label: 'release.md',
+                path: '/tmp/example-project/docs/release.md',
+              };
+              onTokensChange([...tokens, token]);
+              onChange(
+                `${value}${value ? ' ' : ''}\u2002\u2002\u2002${token.label}\u2002\u2002\u2002`
+              );
+            },
+          },
+          'attach reference'
+        ),
+      ]),
+  };
+});
 
 vi.mock('@renderer/features/projects/run-project-quick-action', () => ({
   runProjectQuickAction: mocks.runProjectQuickAction,
@@ -283,6 +354,7 @@ describe('CaptureProjectAutomationModal', () => {
   it('classifies natural language once, then runs and saves the resulting command', async () => {
     await renderModal();
     await act(async () => buttonWithText('sidebar.captureAutomation.describeMode').click());
+    expect(host.querySelector('[data-yoda-surface="composer"]')).not.toBeNull();
     await analyze('Start this project and verify the local URL.');
 
     expect(mocks.compile).toHaveBeenCalledWith({
@@ -305,6 +377,27 @@ describe('CaptureProjectAutomationModal', () => {
     });
     expect(mocks.repositoryStore.localData.load).not.toHaveBeenCalled();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('serializes Yoda composer references before asking AI to analyze them', async () => {
+    await renderModal();
+    await act(async () => buttonWithText('sidebar.captureAutomation.describeMode').click());
+    await act(async () => setTextareaValue(textarea('quick-action-intent'), 'Review'));
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('[data-testid="attach-reference"]')?.click()
+    );
+
+    await act(async () => primaryButton()?.click());
+    await waitFor(
+      () => mocks.compile.mock.calls.length === 1,
+      'referenced prompt was not analyzed'
+    );
+
+    expect(mocks.compile).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      intent: 'Review @/tmp/example-project/docs/release.md',
+      runtimeId: 'codex',
+    });
   });
 
   it('keeps adaptive natural-language work as a Skill and opens its task', async () => {
