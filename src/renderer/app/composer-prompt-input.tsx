@@ -588,7 +588,7 @@ export function ComposerPromptInput({
     const timer = setTimeout(() => {
       rpc.fs
         .listPathCompletions(projectId ?? null, queryParts.directoryPath, {
-          pathKind: queryParts.isAbsolute ? 'absolute' : 'relative',
+          pathKind: queryParts.pathKind,
           recursive: false,
           includeHidden: true,
           maxEntries: 80,

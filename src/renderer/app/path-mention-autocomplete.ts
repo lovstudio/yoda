@@ -5,7 +5,7 @@ export interface ActivePathMention {
 }
 
 export interface PathMentionQueryParts {
-  isAbsolute: boolean;
+  pathKind: 'relative' | 'absolute' | 'home';
   directoryPath: string;
   namePrefix: string;
   preserveDotSlash: boolean;
@@ -43,11 +43,25 @@ export function splitPathMentionQuery(query: string): PathMentionQueryParts {
   const lastSlash = normalized.lastIndexOf('/');
   const isAbsolute =
     normalized.startsWith('/') || WINDOWS_DRIVE_ABSOLUTE_RE.test(query) || query.startsWith('\\\\');
+  const isHome = normalized === '~' || normalized.startsWith('~/');
+  const pathKind = isHome ? 'home' : isAbsolute ? 'absolute' : 'relative';
   const preserveDotSlash = normalized.startsWith('./');
+
+  if (isHome) {
+    const homeRelativeQuery = normalized === '~' ? '' : normalized.slice(2);
+    const homeLastSlash = homeRelativeQuery.lastIndexOf('/');
+    return {
+      pathKind,
+      directoryPath: homeLastSlash === -1 ? '.' : homeRelativeQuery.slice(0, homeLastSlash) || '.',
+      namePrefix:
+        homeLastSlash === -1 ? homeRelativeQuery : homeRelativeQuery.slice(homeLastSlash + 1),
+      preserveDotSlash,
+    };
+  }
 
   if (lastSlash === -1) {
     return {
-      isAbsolute,
+      pathKind,
       directoryPath: '.',
       namePrefix: normalized,
       preserveDotSlash,
@@ -59,7 +73,7 @@ export function splitPathMentionQuery(query: string): PathMentionQueryParts {
     rawDirectory.length === 0 && normalized.startsWith('/') ? '/' : rawDirectory || '.';
 
   return {
-    isAbsolute,
+    pathKind,
     directoryPath,
     namePrefix: normalized.slice(lastSlash + 1),
     preserveDotSlash,
@@ -78,7 +92,11 @@ export function buildPathCompletionItems(
       const name = pathBaseName(path);
       const type = entry.type === 'directory' ? 'dir' : entry.type;
       const insertBase =
-        parts.preserveDotSlash && !parts.isAbsolute && !path.startsWith('./') ? `./${path}` : path;
+        parts.pathKind === 'home'
+          ? `~/${path}`
+          : parts.preserveDotSlash && parts.pathKind === 'relative' && !path.startsWith('./')
+            ? `./${path}`
+            : path;
       const insertText = type === 'dir' ? ensureTrailingSlash(insertBase) : insertBase;
       return { path, name, type, insertText };
     })
