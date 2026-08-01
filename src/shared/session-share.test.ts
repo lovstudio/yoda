@@ -17,6 +17,7 @@ function detail(overrides: Partial<MobileSessionDetail> = {}): MobileSessionDeta
       runtimeStatus: 'idle',
       running: false,
       acceptsInput: false,
+      resumable: true,
       tmuxEnabled: false,
       sessionId: 'private-runtime-session-id',
     },
