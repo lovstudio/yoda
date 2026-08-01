@@ -1,6 +1,7 @@
 import type { Branch } from '@shared/git';
 import type { QuickAction } from '@shared/project-settings';
 import type { RuntimeId } from '@shared/runtime-registry';
+import type { QuickActionTaskSource } from '@shared/tasks';
 import type { MountedProject } from '@renderer/features/projects/stores/project';
 import { workspaceTerminalStore } from '@renderer/lib/stores/workspace-terminal-store';
 import { runProjectCommand } from './run-project-command';
@@ -19,14 +20,30 @@ export async function runProjectQuickAction(args: {
   action: QuickAction;
   runtimeId?: RuntimeId | null;
   defaultBranch?: Branch;
+  quickActionSource?: Omit<QuickActionTaskSource, 'conversationId'>;
+  onTaskCreated?: (taskId: string) => void;
 }): Promise<ProjectQuickActionRunResult> {
-  const { project, action, runtimeId = null, defaultBranch } = args;
+  const {
+    project,
+    action,
+    runtimeId = null,
+    defaultBranch,
+    quickActionSource,
+    onTaskCreated,
+  } = args;
   if (action.kind === 'command') {
     await workspaceTerminalStore.runCommand(project.data, action.command, action.label);
     return { kind: 'command' };
   }
 
-  const taskId = await runProjectCommand({ project, action, runtimeId, defaultBranch });
+  const taskId = await runProjectCommand({
+    project,
+    action,
+    runtimeId,
+    defaultBranch,
+    quickActionSource,
+    onTaskCreated,
+  });
   if (!taskId) {
     throw new Error('The Agent runtime or default branch is unavailable.');
   }

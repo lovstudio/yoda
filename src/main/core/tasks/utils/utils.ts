@@ -3,6 +3,7 @@ import {
   createTaskStrategyRequiresBranchName,
   type CreateTaskParams,
   type Issue,
+  type QuickActionTaskSource,
   type Task,
   type TaskLifecycleStatus,
 } from '@shared/tasks';
@@ -18,6 +19,32 @@ function setupRequiresBranchName(setupData: string | null): boolean {
       : false;
   } catch {
     return false;
+  }
+}
+
+function quickActionSource(setupData: string | null): QuickActionTaskSource | undefined {
+  if (!setupData) return undefined;
+  try {
+    const parsed = JSON.parse(setupData) as {
+      params?: { quickActionSource?: Partial<QuickActionTaskSource> };
+    };
+    const source = parsed.params?.quickActionSource;
+    if (
+      typeof source?.prompt !== 'string' ||
+      !source.prompt.trim() ||
+      typeof source.conversationId !== 'string' ||
+      !source.conversationId ||
+      typeof source.invokedSkill !== 'boolean'
+    ) {
+      return undefined;
+    }
+    return {
+      prompt: source.prompt.trim(),
+      conversationId: source.conversationId,
+      invokedSkill: source.invokedSkill,
+    };
+  } catch {
+    return undefined;
   }
 }
 
@@ -60,5 +87,6 @@ export function mapTaskRowToTask(
     workspaceProviderData: row.workspaceProviderData ?? undefined,
     sidebarWorkspaceId: row.sidebarWorkspaceId ?? undefined,
     parentTaskId: row.parentTaskId ?? undefined,
+    quickActionSource: quickActionSource(row.setupData),
   };
 }

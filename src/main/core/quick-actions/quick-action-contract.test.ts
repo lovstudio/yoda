@@ -14,8 +14,34 @@ describe('quick action compilation contract', () => {
     expect(prompt).toContain('Inspect the repository');
     expect(prompt).toContain('Choose "command"');
     expect(prompt).toContain('Choose "skill"');
+    expect(prompt).toContain('Choose "none"');
     expect(prompt).toContain('must not invoke claude, codex');
     expect(prompt).toContain('/tmp/example-project');
+  });
+
+  it('uses the completed run as evidence for post-task distillation', () => {
+    const prompt = buildQuickActionCompilationPrompt(
+      'Start the local preview.',
+      '/tmp/example-project',
+      'The task succeeded by running pnpm run dev.'
+    );
+
+    expect(prompt).toContain('WHAT ACTUALLY HAPPENED IN THIS RUN');
+    expect(prompt).toContain('pnpm run dev');
+  });
+
+  it('keeps the UI quiet for tasks without a reusable operation', () => {
+    expect(
+      parseCompiledQuickAction(
+        JSON.stringify({
+          kind: 'none',
+          explanation: 'This was a one-off investigation.',
+        })
+      )
+    ).toEqual({
+      kind: 'none',
+      explanation: 'This was a one-off investigation.',
+    });
   });
 
   it('parses a strict compiled command response', () => {

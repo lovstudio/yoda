@@ -18,14 +18,26 @@ import { Label } from '@renderer/lib/ui/label';
 import { Textarea } from '@renderer/lib/ui/textarea';
 import { captureTelemetry } from '@renderer/utils/telemetryClient';
 
-type Props = BaseModalProps<void>;
+type CreateSkillModalArgs = {
+  initialName?: string;
+  initialDescription?: string;
+  initialContent?: string;
+};
 
-export function CreateSkillModal({ onSuccess, onClose }: Props) {
+type Props = BaseModalProps<void> & CreateSkillModalArgs;
+
+export function CreateSkillModal({
+  initialName = '',
+  initialDescription = '',
+  initialContent = '',
+  onSuccess,
+  onClose,
+}: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [content, setContent] = useState('');
+  const [name, setName] = useState(initialName);
+  const [description, setDescription] = useState(initialDescription);
+  const [content, setContent] = useState(initialContent);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 

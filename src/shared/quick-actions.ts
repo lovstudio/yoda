@@ -11,9 +11,17 @@ export type CompileQuickActionInput = {
   projectId: string;
   intent: string;
   runtimeId: RuntimeId;
+  taskContext?: {
+    taskId: string;
+    conversationId: string;
+  };
 };
 
 export type CompiledQuickAction =
+  | {
+      kind: 'none';
+      explanation: string;
+    }
   | {
       kind: 'command';
       label: string;

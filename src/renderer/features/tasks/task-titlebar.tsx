@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { asMounted, getProjectStore } from '@renderer/features/projects/stores/project-selectors';
 import { TaskFinishControl } from '@renderer/features/tasks/finish-flow/finish-control';
+import { QuickActionSuggestionControl } from '@renderer/features/tasks/quick-action-suggestion-control';
 import { getTabMeta } from '@renderer/features/tasks/tabs/tab-meta';
 import {
   useIsHostedTaskView,
@@ -55,6 +56,7 @@ export const ActiveTaskTitlebar = observer(function ActiveTaskTitlebar({
       rightSlot={
         <div className="flex items-center gap-2">
           <DevServerPills projectId={projectId} taskId={taskId} />
+          <QuickActionSuggestionControl />
           <TaskFinishControl />
           {!isRemoteProject && (
             <OpenInMenu path={provisionedTask.path} className="h-7 bg-background" borderless />

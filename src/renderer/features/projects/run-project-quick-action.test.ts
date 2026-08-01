@@ -94,7 +94,39 @@ describe('runProjectQuickAction', () => {
       action,
       runtimeId: 'codex',
       defaultBranch,
+      quickActionSource: undefined,
+      onTaskCreated: undefined,
     });
     expect(mocks.runCommand).not.toHaveBeenCalled();
+  });
+
+  it('forwards immediate task-entry and post-run distillation metadata', async () => {
+    const action: QuickAction = {
+      id: 'review',
+      label: 'Review',
+      command: 'Review the current changes.',
+      kind: 'skill',
+    };
+    const defaultBranch = { type: 'local', branch: 'main' } as const;
+    const onTaskCreated = vi.fn();
+    mocks.runProjectCommand.mockResolvedValue('task-2');
+
+    await runProjectQuickAction({
+      project: localProject,
+      action,
+      runtimeId: 'codex',
+      defaultBranch,
+      quickActionSource: { prompt: action.command, invokedSkill: false },
+      onTaskCreated,
+    });
+
+    expect(mocks.runProjectCommand).toHaveBeenCalledWith({
+      project: localProject,
+      action,
+      runtimeId: 'codex',
+      defaultBranch,
+      quickActionSource: { prompt: action.command, invokedSkill: false },
+      onTaskCreated,
+    });
   });
 });

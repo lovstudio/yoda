@@ -4,8 +4,15 @@ const MAX_LABEL_CHARS = 60;
 const MAX_COMMAND_CHARS = 32_000;
 const MAX_EXPLANATION_CHARS = 240;
 
-export function buildQuickActionCompilationPrompt(intent: string, projectPath: string): string {
-  return `You classify a user's repeatable project operation as either a deterministic command or a reusable Skill instruction.
+export function buildQuickActionCompilationPrompt(
+  intent: string,
+  projectPath: string,
+  executionSummary?: string
+): string {
+  const executionContext = executionSummary?.trim()
+    ? `\nWHAT ACTUALLY HAPPENED IN THIS RUN:\n${executionSummary.trim()}\n`
+    : '';
+  return `You decide whether a completed project task is worth saving as a repeatable quick action. If it is, classify it as either a deterministic command or a reusable intelligent instruction.
 
 You are running read-only inside this project:
 ${projectPath}
@@ -14,10 +21,13 @@ Inspect the repository before answering. Reuse its actual package manager, scrip
 
 USER OPERATION:
 ${intent}
+${executionContext}
 
 COMPILATION RULES:
+- Choose "none" for one-off work, work already fully captured by an invoked Skill, or tasks without a useful repeatable operation. This keeps the UI quiet.
 - Choose "command" when the operation can always be completed deterministically by one shell command or an inline automation script, without further intelligent judgment.
 - Choose "skill" when every run still needs contextual reasoning, interpretation, content generation, review, or adaptive decisions.
+- When an execution summary is present, prefer commands and instructions supported by what actually worked during this run.
 - A command runs directly from the project root in the user's normal shell. Prefer existing scripts and checked-in automation over reimplementing their behavior.
 - Make commands repeatable. Use an inline script, shell conditionals, or && when deterministic work needs multiple steps.
 - A command must not invoke claude, codex, an AI agent, or another natural-language executor.
@@ -25,10 +35,12 @@ COMPILATION RULES:
 - A Skill keeps the user's reusable natural-language intent. Make it self-contained and action-oriented, but do not turn repository evidence or private analysis context into user-facing requirements.
 - Do not add destructive behavior unless the user explicitly requested that behavior.
 - The label should be concise and describe the action.
+- Write the label and explanation in the same language as the user's operation.
 - The explanation should briefly state why the operation is deterministic or still requires intelligence.
 
 OUTPUT CONTRACT:
 Return exactly one strict JSON object, with no Markdown fence or commentary.
+No suggestion: {"kind":"none","explanation":"brief rationale"}
 Command: {"kind":"command","label":"short action label","command":"one executable shell command","explanation":"brief rationale"}
 Skill: {"kind":"skill","label":"short action label","instruction":"reusable natural-language instruction","explanation":"brief rationale"}`;
 }
@@ -61,6 +73,12 @@ export function parseCompiledQuickAction(raw: string): CompiledQuickAction {
     instruction?: unknown;
     explanation?: unknown;
   };
+  if (candidate.kind === 'none' && typeof candidate.explanation === 'string') {
+    return {
+      kind: 'none',
+      explanation: candidate.explanation.trim().slice(0, MAX_EXPLANATION_CHARS),
+    };
+  }
   if (
     (candidate.kind !== 'command' && candidate.kind !== 'skill') ||
     typeof candidate.label !== 'string' ||
