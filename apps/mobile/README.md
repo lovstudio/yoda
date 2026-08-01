@@ -140,7 +140,7 @@ pair the app with the current desktop gateway automatically.
 
 - `GET /v1/snapshot` shows projects, open/idle state, active tasks, lifecycle status, and bootstrap status.
 - `POST /v1/demands` creates a no-worktree task with an initial conversation. If no project is selected, it targets the internal Drafts project.
-- New requests and live session follow-ups support up to four image attachments for local projects. Images use the desktop Agent's existing native image-input path and upload in Relay-safe chunks.
+- New requests and live session follow-ups support multiple image attachments without a fixed count limit for local projects. Images use the desktop Agent's existing native image-input path and upload in Relay-safe chunks.
 - Voice input uses the phone's speech recognizer and inserts editable text before submission. It requires a native Yoda Mobile development or production build; Expo Go users can use the system keyboard microphone.
 - The mobile UI polls every 8 seconds and supports pull-to-refresh.
 

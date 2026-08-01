@@ -2525,7 +2525,7 @@ function InputMediaControls({
     if (disabled || pickingImages || !imagesEnabled) return;
     setPickingImages(true);
     try {
-      const picked = await pickMobileInputImages(images.length);
+      const picked = await pickMobileInputImages();
       if (picked.length > 0) onImagesChange([...images, ...picked]);
     } catch (error) {
       onError(errorMessage(error));
@@ -2685,7 +2685,9 @@ function InputMediaControls({
         {!imagesEnabled ? (
           <Text style={styles.inputMediaHint}>Images require a local project.</Text>
         ) : images.length > 0 ? (
-          <Text style={styles.inputMediaHint}>{images.length}/4 images</Text>
+          <Text style={styles.inputMediaHint}>
+            {images.length} {images.length === 1 ? 'image' : 'images'}
+          </Text>
         ) : null}
       </View>
     </View>

@@ -91,4 +91,25 @@ describe('MobileInputAttachmentStore', () => {
     await store.discard(created.attachmentId);
     await expect(fs.readdir(directory)).resolves.toEqual([]);
   });
+
+  it('resolves completed images beyond the previous per-request cap', async () => {
+    const attachmentIds: string[] = [];
+    for (let index = 0; index < 40; index += 1) {
+      const content = Buffer.from(String(index % 10));
+      const created = await store.create({
+        kind: 'image',
+        mimeType: 'image/jpeg',
+        name: `image-${index}.jpg`,
+        sizeBytes: content.byteLength,
+      });
+      await store.append(created.attachmentId, {
+        offset: 0,
+        dataBase64: content.toString('base64'),
+      });
+      await store.complete(created.attachmentId);
+      attachmentIds.push(created.attachmentId);
+    }
+
+    expect(store.resolve(attachmentIds)).toHaveLength(40);
+  });
 });
