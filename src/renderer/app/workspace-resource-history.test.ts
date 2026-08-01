@@ -4,6 +4,7 @@ import {
   appendWorkspaceResourceSnapshot,
   createWorkspaceResourceHistoryStore,
   getWorkspaceLatencyP95,
+  mergeWorkspaceResourceHistories,
   WORKSPACE_RESOURCE_HISTORY_MAX_POINTS,
 } from './workspace-resource-history';
 
@@ -46,6 +47,17 @@ describe('workspace resource history', () => {
       snapshotAt(0).sampledAt,
       snapshotAt(5).sampledAt,
     ]);
+  });
+
+  it('merges modal seed history with the shared history without duplicate samples', () => {
+    const initial = Array.from({ length: 7 }, (_, index) => snapshotAt(index * 5));
+    const shared = Array.from({ length: 9 }, (_, index) => snapshotAt(30 + index * 5));
+    const merged = mergeWorkspaceResourceHistories(initial, shared);
+
+    expect(merged).toHaveLength(WORKSPACE_RESOURCE_HISTORY_MAX_POINTS);
+    expect(new Set(merged.map((point) => point.sampledAt)).size).toBe(merged.length);
+    expect(merged[0]?.sampledAt).toBe(snapshotAt(10).sampledAt);
+    expect(merged.at(-1)?.sampledAt).toBe(snapshotAt(70).sampledAt);
   });
 
   it('uses the slower user-facing renderer signal for the compact latency metric', () => {

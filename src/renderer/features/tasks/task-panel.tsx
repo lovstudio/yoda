@@ -37,8 +37,8 @@ export function useTaskTodos(): {
     queryFn: () => rpc.conversations.getClaudeSessionMetadata(cwd, sessionId),
     enabled: Boolean(isClaude && conversation),
     refetchInterval: REFRESH_MS,
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     staleTime: 0,
   });
 

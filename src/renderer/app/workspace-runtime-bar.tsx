@@ -43,7 +43,7 @@ import { formatConversationTitleForDisplay } from '@renderer/features/tasks/conv
 import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import {
   resolveSessionPrompts,
-  SESSION_PROMPTS_REFRESH_MS,
+  startVisibleSessionRefresh,
 } from '@renderer/features/tasks/session-prompts';
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
@@ -76,7 +76,10 @@ import {
   workspaceResourceHistoryStore,
 } from './workspace-resource-history';
 import { WorkspaceResourceMetric } from './workspace-resource-metric';
-import { WORKSPACE_RESOURCE_QUERY_TIMING } from './workspace-resource-monitoring';
+import {
+  WORKSPACE_RESOURCE_QUERY_KEY,
+  WORKSPACE_RESOURCE_QUERY_TIMING,
+} from './workspace-resource-monitoring';
 import { WorkspaceResourceTrend } from './workspace-resource-trend';
 import { getDistinctAgentTaskTitle, getQuotaWindowLabel } from './workspace-runtime-bar-format';
 
@@ -358,7 +361,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     ? `MaaS (${selectedMaasConnection?.displayName ?? getMaasPlatformDefinition(selectedMaasPlatformId).name})`
     : 'MaaS';
   const { data: resourceSnapshot } = useQuery({
-    queryKey: ['app', 'resourceSnapshot'],
+    queryKey: WORKSPACE_RESOURCE_QUERY_KEY,
     queryFn: () => rpc.app.getResourceSnapshot(),
     ...WORKSPACE_RESOURCE_QUERY_TIMING,
   });
@@ -460,11 +463,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
         }
       });
 
-    void load();
-    const interval = window.setInterval(() => void load(), SESSION_PROMPTS_REFRESH_MS);
+    const stopRefresh = startVisibleSessionRefresh(load);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      stopRefresh();
     };
   }, [activeConversation, provisionedTask]);
 

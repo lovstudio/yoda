@@ -23,6 +23,7 @@ import {
   type ResolvedTaskRuntime,
   type WorkspaceType,
 } from '../workspaces/workspace-factory';
+import { hydratePersistedTerminals } from './terminal-hydration';
 
 export type BuildTaskResult = {
   taskProvider: TaskProvider;
@@ -186,16 +187,7 @@ export async function buildTaskFromWorkspace(
     terminals: terminalProvider,
   };
 
-  await Promise.all(
-    hydrate.terminals.map((term) =>
-      terminalProvider.spawnTerminal(term).catch((e) => {
-        log.error(`${logPrefix}: failed to hydrate terminal`, {
-          terminalId: term.id,
-          error: String(e),
-        });
-      })
-    )
-  );
+  await hydratePersistedTerminals(terminalProvider, hydrate.terminals, logPrefix);
 
   void Promise.all(
     hydrate.conversations.map(async (conv) => {

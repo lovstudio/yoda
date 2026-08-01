@@ -8,6 +8,7 @@ import {
   setTabActive,
   setTabActiveIndex,
 } from '@renderer/lib/stores/tab-utils';
+import { log } from '@renderer/utils/logger';
 import type { TerminalManagerStore, TerminalStore } from './terminal-manager';
 
 export class TerminalTabViewStore
@@ -18,6 +19,7 @@ export class TerminalTabViewStore
 
   private readonly resource: TerminalManagerStore;
   private readonly disposers: (() => void)[] = [];
+  private disposed = false;
 
   constructor(resource: TerminalManagerStore) {
     this.resource = resource;
@@ -61,10 +63,6 @@ export class TerminalTabViewStore
           // Auto-select first if nothing is active
           if (!this.activeTabId && this.tabOrder.length > 0) {
             this.activeTabId = this.tabOrder[0];
-          }
-          // When all terminals have been removed, create a replacement immediately
-          if (ids.length === 0) {
-            void this.resource.createDefaultTerminal();
           }
         })
       )
@@ -114,7 +112,20 @@ export class TerminalTabViewStore
   addTab(_args: never): void {}
 
   removeTab(id: string): void {
-    void this.resource.deleteTerminal(id);
+    if (this.disposed) return;
+    void this.removeTabAndEnsureReplacement(id);
+  }
+
+  private async removeTabAndEnsureReplacement(id: string): Promise<void> {
+    try {
+      await this.resource.deleteTerminal(id);
+      if (this.disposed) return;
+      if (this.resource.terminals.size === 0) {
+        await this.resource.ensureDefaultTerminal();
+      }
+    } catch (error) {
+      log.error('Failed to delete or replace terminal:', error);
+    }
   }
 
   closeActiveTab(): void {
@@ -122,6 +133,8 @@ export class TerminalTabViewStore
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     for (const d of this.disposers) d();
   }
 }

@@ -222,8 +222,8 @@ function ClaudeHarnessSection({
     queryKey: ['claudeSessionContext', cwd, sessionId],
     queryFn: () => rpc.conversations.getClaudeSessionContext(cwd, sessionId),
     refetchInterval: CONTEXT_REFRESH_MS,
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     staleTime: 0,
   });
 
@@ -293,8 +293,8 @@ function CodexHarnessSection({
         'harness'
       ),
     refetchInterval: CONTEXT_REFRESH_MS,
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     staleTime: 0,
   });
 

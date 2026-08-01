@@ -13,12 +13,18 @@ import {
   sshConnectionManager,
   type SshConnectionEvent,
 } from '@main/core/ssh/ssh-connection-manager';
+import { hydratePersistedTerminals } from '@main/core/tasks/terminal-hydration';
 import {
+  TERMINAL_SPAWN_TIMEOUT_MS,
+  TerminalSpawnCancelledError,
+  TerminalSpawnTimeoutError,
   type LifecycleScriptSpawnRequest,
   type TerminalProvider,
+  type TerminalSpawnOptions,
 } from '@main/core/terminals/terminal-provider';
 import { log } from '@main/lib/logger';
 import { wireTerminalDevServerWatcher } from '../dev-server-watcher';
+import { acquireSshTerminalOpenSlot } from './ssh-terminal-open-limiter';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
@@ -33,12 +39,28 @@ type SpawnPolicy = {
 
 type StartOperation = {
   readonly token: symbol;
+  readonly terminalId: string;
   promise?: Promise<void>;
   registrationEpoch?: number;
   tmuxSessionName?: string;
+  rejectCancellation?: (error: Error) => void;
 };
 
+export class SshTerminalOpenError extends Error {
+  readonly code = 'ssh_terminal_open_failed';
+
+  constructor(
+    readonly terminalId: string,
+    readonly kind: string,
+    message: string
+  ) {
+    super(`Failed to open SSH terminal ${terminalId}: ${message}`);
+    this.name = 'SshTerminalOpenError';
+  }
+}
+
 export class SshTerminalProvider implements TerminalProvider {
+  readonly terminalHydrationConcurrencyKey: string;
   private sessions = new Map<string, Pty>();
   private knownSessionIds = new Set<string>();
   private respawnCounts = new Map<string, number>();
@@ -56,6 +78,7 @@ export class SshTerminalProvider implements TerminalProvider {
   private readonly proxy: SshClientProxy;
   private readonly connectionId: string;
   private readonly _handleReconnect: (evt: SshConnectionEvent) => void;
+  private reconnectListenerAttached = true;
   private readonly tmuxSessionNames = new Map<string, string>();
 
   constructor({
@@ -88,6 +111,7 @@ export class SshTerminalProvider implements TerminalProvider {
     this.ctx = ctx;
     this.proxy = proxy;
     this.connectionId = connectionId;
+    this.terminalHydrationConcurrencyKey = `ssh:${connectionId}`;
     this._handleReconnect = (evt: SshConnectionEvent) => {
       if (evt.type === 'reconnected' && evt.connectionId === this.connectionId) {
         this.rehydrate().catch((e: unknown) => {
@@ -105,14 +129,21 @@ export class SshTerminalProvider implements TerminalProvider {
   async spawnTerminal(
     terminal: Terminal,
     initialSize: { cols: number; rows: number } = { cols: DEFAULT_COLS, rows: DEFAULT_ROWS },
-    command?: { command: string; args: string[] }
+    command?: { command: string; args: string[] },
+    options: TerminalSpawnOptions = {}
   ): Promise<void> {
-    return this.spawnWithPolicy(terminal, initialSize, command, {
-      respawnOnExit: true,
-      preserveBufferOnExit: false,
-      watchDevServer: true,
-      trackForRehydrate: true,
-    });
+    return this.spawnWithPolicy(
+      terminal,
+      initialSize,
+      command,
+      {
+        respawnOnExit: true,
+        preserveBufferOnExit: false,
+        watchDevServer: true,
+        trackForRehydrate: true,
+      },
+      options
+    );
   }
 
   async spawnLifecycleScript({
@@ -132,7 +163,8 @@ export class SshTerminalProvider implements TerminalProvider {
         preserveBufferOnExit,
         watchDevServer,
         trackForRehydrate: false,
-      }
+      },
+      {}
     );
   }
 
@@ -140,8 +172,12 @@ export class SshTerminalProvider implements TerminalProvider {
     terminal: Terminal,
     initialSize: { cols: number; rows: number },
     command: { command: string; args: string[] } | undefined,
-    policy: SpawnPolicy
+    policy: SpawnPolicy,
+    options: TerminalSpawnOptions = {}
   ): Promise<void> {
+    if (options.signal?.aborted) {
+      return Promise.reject(this.cancellationError(terminal.id, options.signal.reason));
+    }
     const sessionId = makePtySessionId(terminal.projectId, terminal.taskId, terminal.id);
     this.knownSessionIds.add(sessionId);
     if (policy.trackForRehydrate) {
@@ -153,9 +189,12 @@ export class SshTerminalProvider implements TerminalProvider {
     const existing = this.startOperations.get(sessionId);
     if (existing?.promise) return existing.promise;
 
-    const operation: StartOperation = { token: Symbol(sessionId) };
+    const operation: StartOperation = {
+      token: Symbol(sessionId),
+      terminalId: terminal.id,
+    };
     this.startOperations.set(sessionId, operation);
-    const promise = this.runStartOperation(
+    const start = this.runStartOperation(
       sessionId,
       terminal,
       initialSize,
@@ -163,11 +202,13 @@ export class SshTerminalProvider implements TerminalProvider {
       policy,
       operation
     );
-    operation.promise = promise.finally(() => {
-      if (this.isCurrentStart(sessionId, operation)) {
-        this.startOperations.delete(sessionId);
+    operation.promise = this.guardStartOperation(sessionId, operation, start, options).finally(
+      () => {
+        if (this.startOperations.get(sessionId) === operation) {
+          this.startOperations.delete(sessionId);
+        }
       }
-    });
+    );
     return operation.promise;
   }
 
@@ -202,16 +243,28 @@ export class SshTerminalProvider implements TerminalProvider {
       const sshCommand = resolveSshCommand('general', cfg, this.taskEnvVars, profile);
 
       if (!this.isCurrentStart(sessionId, operation)) return;
-      const result = await openSsh2Pty(this.proxy.client, {
-        id: sessionId,
-        command: sshCommand,
-        cols: initialSize.cols,
-        rows: initialSize.rows,
-      });
+      const client = this.proxy.client;
+      const releaseOpenSlot = await acquireSshTerminalOpenSlot(client);
+      let result: Awaited<ReturnType<typeof openSsh2Pty>>;
+      try {
+        // An outer timeout may invalidate this generation while it waits for
+        // a real ssh2 slot. Do not turn that stale queued work into a channel.
+        if (!this.isCurrentStart(sessionId, operation)) return;
+        result = await openSsh2Pty(client, {
+          id: sessionId,
+          command: sshCommand,
+          cols: initialSize.cols,
+          rows: initialSize.rows,
+        });
+      } finally {
+        // The slot deliberately outlives the caller-facing timeout. It is
+        // released only after openSsh2Pty's ssh2 callback actually settles.
+        releaseOpenSlot();
+      }
 
       if (!this.isCurrentStart(sessionId, operation)) {
         if (result.success) {
-          this.rollbackSpawnedPty(sessionId, result.data, operation);
+          await this.rollbackSpawnedPty(sessionId, result.data, operation);
         }
         return;
       }
@@ -220,7 +273,7 @@ export class SshTerminalProvider implements TerminalProvider {
           sessionId,
           error: result.error.message,
         });
-        return;
+        throw new SshTerminalOpenError(terminal.id, result.error.kind, result.error.message);
       }
       const pty = result.data;
       spawnedPty = pty;
@@ -258,7 +311,7 @@ export class SshTerminalProvider implements TerminalProvider {
       });
 
       if (!this.isCurrentStart(sessionId, operation) || this.sessions.get(sessionId) !== pty) {
-        this.rollbackSpawnedPty(sessionId, pty, operation);
+        await this.rollbackSpawnedPty(sessionId, pty, operation);
         return;
       }
       ptySessionRegistry.register(sessionId, pty, {
@@ -268,7 +321,7 @@ export class SshTerminalProvider implements TerminalProvider {
       });
       registrationCompleted = true;
       if (!this.isCurrentStart(sessionId, operation)) {
-        this.rollbackSpawnedPty(sessionId, pty, operation);
+        await this.rollbackSpawnedPty(sessionId, pty, operation);
         return;
       }
       if (this.sessions.get(sessionId) === pty && tmuxSessionName) {
@@ -277,7 +330,7 @@ export class SshTerminalProvider implements TerminalProvider {
       spawnedPty = undefined;
     } catch (error) {
       if (spawnedPty) {
-        this.rollbackSpawnedPty(sessionId, spawnedPty, operation);
+        await this.rollbackSpawnedPty(sessionId, spawnedPty, operation);
       }
       throw error;
     } finally {
@@ -291,17 +344,76 @@ export class SshTerminalProvider implements TerminalProvider {
     return this.startOperations.get(sessionId)?.token === operation.token;
   }
 
-  private invalidateStart(sessionId: string): StartOperation | undefined {
+  private guardStartOperation(
+    sessionId: string,
+    operation: StartOperation,
+    start: Promise<void>,
+    options: TerminalSpawnOptions
+  ): Promise<void> {
+    const timeoutMs = options.timeoutMs ?? TERMINAL_SPAWN_TIMEOUT_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let abortListener: (() => void) | undefined;
+    const cancellation = new Promise<never>((_, reject) => {
+      operation.rejectCancellation = reject;
+    });
+
+    if (options.signal) {
+      abortListener = () => {
+        this.invalidateStart(
+          sessionId,
+          this.cancellationError(operation.terminalId, options.signal?.reason),
+          operation
+        );
+      };
+      options.signal.addEventListener('abort', abortListener, { once: true });
+      if (options.signal.aborted) abortListener();
+    }
+
+    if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+      timer = setTimeout(() => {
+        this.invalidateStart(
+          sessionId,
+          new TerminalSpawnTimeoutError(operation.terminalId, timeoutMs),
+          operation
+        );
+      }, timeoutMs);
+      timer.unref?.();
+    }
+
+    return Promise.race([start, cancellation]).finally(() => {
+      if (timer) clearTimeout(timer);
+      if (options.signal && abortListener) {
+        options.signal.removeEventListener('abort', abortListener);
+      }
+      operation.rejectCancellation = undefined;
+    });
+  }
+
+  private cancellationError(terminalId: string, reason: unknown): Error {
+    if (reason instanceof TerminalSpawnTimeoutError) return reason;
+    return new TerminalSpawnCancelledError(terminalId);
+  }
+
+  private invalidateStart(
+    sessionId: string,
+    reason?: Error,
+    expectedOperation?: StartOperation
+  ): StartOperation | undefined {
     const operation = this.startOperations.get(sessionId);
-    if (!operation) return undefined;
+    if (!operation || (expectedOperation && operation !== expectedOperation)) return undefined;
     this.startOperations.delete(sessionId);
     if (operation.registrationEpoch !== undefined) {
       ptySessionRegistry.cancelRegistration(sessionId, operation.registrationEpoch);
     }
+    operation.rejectCancellation?.(reason ?? new TerminalSpawnCancelledError(operation.terminalId));
     return operation;
   }
 
-  private rollbackSpawnedPty(sessionId: string, pty: Pty, operation: StartOperation): void {
+  private async rollbackSpawnedPty(
+    sessionId: string,
+    pty: Pty,
+    operation: StartOperation
+  ): Promise<void> {
     if (this.sessions.get(sessionId) === pty) {
       this.sessions.delete(sessionId);
     }
@@ -320,6 +432,27 @@ export class SshTerminalProvider implements TerminalProvider {
     } catch (error) {
       log.warn('SshTerminalProvider: failed to kill rolled-back PTY', {
         sessionId,
+        error: String(error),
+      });
+    }
+
+    const tmuxSessionName = operation.tmuxSessionName;
+    if (!tmuxSessionName) return;
+
+    if (this.knownSessionIds.has(sessionId)) {
+      // A timed-out generation is stale, but its persistent terminal is not.
+      // Keep the tmux identity so reconnect or a later kill can reuse/clean it.
+      this.tmuxSessionNames.set(sessionId, tmuxSessionName);
+      return;
+    }
+
+    this.tmuxSessionNames.delete(sessionId);
+    try {
+      await killTmuxSession(this.ctx, tmuxSessionName);
+    } catch (error) {
+      log.warn('SshTerminalProvider: failed to clean rolled-back tmux session', {
+        sessionId,
+        tmuxSessionName,
         error: String(error),
       });
     }
@@ -384,19 +517,16 @@ export class SshTerminalProvider implements TerminalProvider {
    */
   rehydrate(): Promise<void> {
     if (this.rehydrateOperation) return this.rehydrateOperation;
-    const terminals = Array.from(this.terminals.values());
-    const operation = Promise.all(
-      terminals.map(async (terminal) => {
+    const terminals = Array.from(this.terminals.values()).filter((terminal) => {
+      const sessionId = makePtySessionId(terminal.projectId, terminal.taskId, terminal.id);
+      return !this.sessions.has(sessionId);
+    });
+    const operation = hydratePersistedTerminals(this, terminals, 'SshTerminalProvider: rehydrate', {
+      shouldHydrate: (terminal) => {
         const sessionId = makePtySessionId(terminal.projectId, terminal.taskId, terminal.id);
-        if (this.sessions.has(sessionId)) return;
-        await this.spawnTerminal(terminal).catch((e) => {
-          log.error('SshTerminalProvider: rehydrate failed', {
-            terminalId: terminal.id,
-            error: String(e),
-          });
-        });
-      })
-    ).then(() => undefined);
+        return this.terminals.get(terminal.id) === terminal && !this.sessions.has(sessionId);
+      },
+    });
     const trackedOperation = operation.finally(() => {
       if (this.rehydrateOperation === trackedOperation) this.rehydrateOperation = null;
     });
@@ -426,7 +556,6 @@ export class SshTerminalProvider implements TerminalProvider {
   }
 
   async destroyAll(): Promise<void> {
-    sshConnectionManager.off('connection-event', this._handleReconnect);
     const sessionIds = Array.from(this.knownSessionIds);
     const tmuxSessionNames = sessionIds.flatMap((id) => {
       const name = this.tmuxSessionNames.get(id) ?? this.startOperations.get(id)?.tmuxSessionName;
@@ -440,6 +569,10 @@ export class SshTerminalProvider implements TerminalProvider {
   }
 
   async detachAll(): Promise<void> {
+    if (this.reconnectListenerAttached) {
+      this.reconnectListenerAttached = false;
+      sshConnectionManager.off('connection-event', this._handleReconnect);
+    }
     this.rehydrateOperation = null;
     const sessionIds = new Set([
       ...this.knownSessionIds,

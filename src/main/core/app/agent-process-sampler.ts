@@ -3,6 +3,58 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
+type CachedSample<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+/**
+ * Keeps expensive samplers single-flight and briefly reuses their last result.
+ * The TTL starts when sampling completes so a slow sample is not immediately
+ * considered stale.
+ */
+export class TtlSingleFlightSampler<T> {
+  private cached: CachedSample<T> | null = null;
+  private inFlight: Promise<T> | null = null;
+  private generation = 0;
+
+  constructor(
+    private readonly ttlMs: number,
+    private readonly now: () => number = Date.now
+  ) {
+    if (!Number.isFinite(ttlMs) || ttlMs < 0) {
+      throw new Error('Sampler TTL must be a non-negative finite number.');
+    }
+  }
+
+  sample(load: () => Promise<T>): Promise<T> {
+    const cached = this.cached;
+    if (cached && this.now() < cached.expiresAt) return Promise.resolve(cached.value);
+    if (this.inFlight) return this.inFlight;
+
+    const generation = this.generation;
+    const inFlight = Promise.resolve()
+      .then(load)
+      .then((value) => {
+        if (generation === this.generation) {
+          this.cached = { value, expiresAt: this.now() + this.ttlMs };
+        }
+        return value;
+      })
+      .finally(() => {
+        if (this.inFlight === inFlight) this.inFlight = null;
+      });
+    this.inFlight = inFlight;
+    return inFlight;
+  }
+
+  clear(): void {
+    this.generation += 1;
+    this.cached = null;
+    this.inFlight = null;
+  }
+}
+
 export type ProcessTreeResource = {
   pid: number;
   cpuPercent: number;

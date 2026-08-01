@@ -6,6 +6,7 @@ import {
   killTmuxSession,
   listTmuxSessionMarkers,
   makeTmuxSessionName,
+  TMUX_KILL_TIMEOUT_MS,
 } from './tmux-session-name';
 
 describe('buildTmuxShellLine', () => {
@@ -141,15 +142,29 @@ describe('killTmuxSession', () => {
 
     await killTmuxSession(ctx, 'agent-session');
 
-    expect(ctx.exec).toHaveBeenCalledWith('tmux', [
-      '-L',
-      'yoda',
-      '-f',
-      '/dev/null',
-      'kill-session',
-      '-t',
-      'agent-session',
-    ]);
+    expect(ctx.exec).toHaveBeenCalledWith(
+      'tmux',
+      ['-L', 'yoda', '-f', '/dev/null', 'kill-session', '-t', 'agent-session'],
+      { timeout: TMUX_KILL_TIMEOUT_MS }
+    );
+  });
+
+  it('passes a cleanup-specific timeout through to the underlying execution context', async () => {
+    const ctx = {
+      root: undefined,
+      supportsLocalSpawn: true,
+      exec: vi.fn().mockResolvedValue({ stdout: '', stderr: '' }),
+      execStreaming: vi.fn(),
+      dispose: vi.fn(),
+    };
+
+    await killTmuxSession(ctx, 'agent-session', { timeout: 5_000 });
+
+    expect(ctx.exec).toHaveBeenCalledWith(
+      'tmux',
+      ['-L', 'yoda', '-f', '/dev/null', 'kill-session', '-t', 'agent-session'],
+      { timeout: 5_000 }
+    );
   });
 });
 

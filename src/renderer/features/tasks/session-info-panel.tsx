@@ -53,7 +53,7 @@ import { useTaskStats } from '@renderer/features/tasks/hooks/useTaskStats';
 import { SessionConversationList } from '@renderer/features/tasks/session-conversation-list';
 import {
   resolveSessionConversation,
-  SESSION_PROMPTS_REFRESH_MS,
+  startVisibleSessionRefresh,
   type SessionConversationData,
 } from '@renderer/features/tasks/session-prompts';
 import { useProvisionedTask, useTaskViewContext } from '@renderer/features/tasks/task-view-context';
@@ -474,13 +474,12 @@ export function useSessionPrompts(active: boolean): {
         .finally(() => {
           if (!cancelled) setIsLoading(false);
         });
-    void load();
     // Poll while open so the header count stays live as prompts stream in
     // mid-reply, not just on each session-status transition.
-    const interval = setInterval(() => void load(), SESSION_PROMPTS_REFRESH_MS);
+    const stopRefresh = startVisibleSessionRefresh(load);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stopRefresh();
     };
   }, [active, conversation, provisionedTask.path, sessionStatus]);
 
