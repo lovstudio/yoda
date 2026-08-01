@@ -43,6 +43,11 @@ type TaskViewWrapperProps = {
 
 export const TaskViewWrapper = observer(function TaskViewWrapper(props: TaskViewWrapperProps) {
   const { children, projectId, taskId, hosted = false } = props;
+  // Context updates reach every mounted consumer, including descendants that
+  // the nearest ready guard is about to remove. Replace the subtree whenever
+  // its entity or readiness boundary changes so an old ready consumer never
+  // receives a different task's non-ready snapshot during reconciliation.
+  const snapshotBoundaryKey = `${projectId}:${taskId}:${props.kind === 'ready' ? 'ready' : 'pending'}`;
   const value: TaskViewContext =
     props.kind === 'ready'
       ? {
@@ -56,7 +61,9 @@ export const TaskViewWrapper = observer(function TaskViewWrapper(props: TaskView
 
   return (
     <ProjectViewWrapper projectId={projectId}>
-      <TaskViewContext.Provider value={value}>{children}</TaskViewContext.Provider>
+      <TaskViewContext.Provider key={snapshotBoundaryKey} value={value}>
+        {children}
+      </TaskViewContext.Provider>
     </ProjectViewWrapper>
   );
 });
