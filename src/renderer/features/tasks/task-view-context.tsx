@@ -4,45 +4,11 @@ import { ProjectViewWrapper } from '@renderer/features/projects/components/proje
 import { type ProvisionedTask } from '@renderer/features/tasks/stores/task';
 import { type TaskViewKind } from '@renderer/features/tasks/stores/task-selectors';
 
-const ProvisionedTaskContext = createContext<ProvisionedTask | null>(null);
+type NonReadyTaskViewKind = Exclude<TaskViewKind, 'ready'>;
 
-/** Uses the ready-state owner's captured task so provider and branch cannot disagree. */
-export function ProvisionedTaskProvider({
-  task,
-  children,
-}: {
-  task: ProvisionedTask;
-  children: ReactNode;
-}) {
-  return <ProvisionedTaskContext.Provider value={task}>{children}</ProvisionedTaskContext.Provider>;
-}
-
-/** Nullable. For components that also render outside a task view (e.g. the composer popover). */
-export function useProvisionedTaskOrNull(): ProvisionedTask | null {
-  return useContext(ProvisionedTaskContext);
-}
-
-/** Non-nullable. Only call inside a ProvisionedTaskProvider subtree (kind === 'ready'). */
-export function useProvisionedTask(): ProvisionedTask {
-  const ctx = useContext(ProvisionedTaskContext);
-  if (!ctx) {
-    throw new Error(
-      'useProvisionedTask must be used inside ProvisionedTaskProvider (kind === "ready")'
-    );
-  }
-  return ctx;
-}
-
-interface TaskViewContext {
+interface TaskViewContextBase {
   projectId: string;
   taskId: string;
-  /**
-   * Captured by the same owner that decides whether ProvisionedTaskProvider is
-   * mounted. Consumers must use this snapshot instead of independently
-   * deriving the task state, otherwise a child can observe `ready` one render
-   * before its provider boundary is installed.
-   */
-  kind: TaskViewKind;
   /**
    * True when this task view is HOSTED as a non-primary pane (a split-view
    * extra) rather than owning the global route + app-tab strip. Hosted panes
@@ -52,29 +18,62 @@ interface TaskViewContext {
   hosted: boolean;
 }
 
+/**
+ * One discriminated snapshot owns both task readiness and its ready payload.
+ * Keeping them in a single context makes the invalid state "ready without a
+ * provisioned task" unrepresentable for descendants during MobX transitions.
+ */
+type TaskViewContext = TaskViewContextBase &
+  (
+    | { kind: 'ready'; provisionedTask: ProvisionedTask }
+    | { kind: NonReadyTaskViewKind; provisionedTask: null }
+  );
+
 const TaskViewContext = createContext<TaskViewContext | null>(null);
 
-export const TaskViewWrapper = observer(function TaskViewWrapper({
-  children,
-  projectId,
-  taskId,
-  kind,
-  hosted = false,
-}: {
+type TaskViewWrapperProps = {
   children: ReactNode;
   projectId: string;
   taskId: string;
-  kind: TaskViewKind;
   hosted?: boolean;
-}) {
+} & (
+  | { kind: 'ready'; provisionedTask: ProvisionedTask }
+  | { kind: NonReadyTaskViewKind; provisionedTask?: never }
+);
+
+export const TaskViewWrapper = observer(function TaskViewWrapper(props: TaskViewWrapperProps) {
+  const { children, projectId, taskId, hosted = false } = props;
+  const value: TaskViewContext =
+    props.kind === 'ready'
+      ? {
+          projectId,
+          taskId,
+          hosted,
+          kind: props.kind,
+          provisionedTask: props.provisionedTask,
+        }
+      : { projectId, taskId, hosted, kind: props.kind, provisionedTask: null };
+
   return (
     <ProjectViewWrapper projectId={projectId}>
-      <TaskViewContext.Provider value={{ projectId, taskId, kind, hosted }}>
-        {children}
-      </TaskViewContext.Provider>
+      <TaskViewContext.Provider value={value}>{children}</TaskViewContext.Provider>
     </ProjectViewWrapper>
   );
 });
+
+/** Nullable. For components that also render outside a task view (e.g. the composer popover). */
+export function useProvisionedTaskOrNull(): ProvisionedTask | null {
+  return useContext(TaskViewContext)?.provisionedTask ?? null;
+}
+
+/** Non-nullable. Only call after the shared task-view snapshot reports `ready`. */
+export function useProvisionedTask(): ProvisionedTask {
+  const task = useProvisionedTaskOrNull();
+  if (!task) {
+    throw new Error('useProvisionedTask requires a ready task view snapshot');
+  }
+  return task;
+}
 
 export function useTaskViewContext(): TaskViewContext {
   const context = useContext(TaskViewContext);

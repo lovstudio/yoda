@@ -34,11 +34,7 @@ import {
   getTabMeta,
   openTaskTabInWindow,
 } from '@renderer/features/tasks/tabs/tab-meta';
-import {
-  ProvisionedTaskProvider,
-  TaskViewWrapper,
-  useProvisionedTask,
-} from '@renderer/features/tasks/task-view-context';
+import { TaskViewWrapper, useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { SidebarPinnedContent } from '@renderer/features/tasks/view/sidebar-pinned-content';
 import { ChipContextMenu } from '@renderer/lib/components/chip-context-menu';
 import { FilePathMenuItems } from '@renderer/lib/components/file-path-actions';
@@ -417,15 +413,24 @@ const ShellPinnedTaskHost = observer(function ShellPinnedTaskHost({
   const kind = taskViewKind(taskStore, projectId);
   const provisioned = asProvisioned(taskStore);
 
-  if (kind === 'ready' && !provisioned) return null;
+  if (kind !== 'ready') {
+    return (
+      <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind}>
+        {null}
+      </TaskViewWrapper>
+    );
+  }
+
+  if (!provisioned) return null;
 
   return (
-    <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind}>
-      {kind === 'ready' && provisioned ? (
-        <ProvisionedTaskProvider task={provisioned}>
-          <ShellPinnedTaskBody tabId={tabId} />
-        </ProvisionedTaskProvider>
-      ) : null}
+    <TaskViewWrapper
+      projectId={projectId}
+      taskId={taskId}
+      kind={kind}
+      provisionedTask={provisioned}
+    >
+      <ShellPinnedTaskBody tabId={tabId} />
     </TaskViewWrapper>
   );
 });

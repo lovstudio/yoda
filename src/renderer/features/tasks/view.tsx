@@ -12,11 +12,7 @@ import {
   getTaskStore,
   taskViewKind,
 } from '@renderer/features/tasks/stores/task-selectors';
-import {
-  ProvisionedTaskProvider,
-  TaskViewWrapper,
-  useProvisionedTask,
-} from '@renderer/features/tasks/task-view-context';
+import { TaskViewWrapper, useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { events } from '@renderer/lib/ipc';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -248,14 +244,17 @@ export const TaskViewWrapperWithProviders = observer(function TaskViewWrapperWit
   if (!provisioned) return null;
 
   return (
-    <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind}>
-      <ProvisionedTaskProvider task={provisioned}>
-        <TabManagerVisibilitySync projectId={projectId} taskId={taskId} />
-        <TopLevelTabSync projectId={projectId} taskId={taskId} />
-        <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
-          {children}
-        </EditorProvider>
-      </ProvisionedTaskProvider>
+    <TaskViewWrapper
+      projectId={projectId}
+      taskId={taskId}
+      kind={kind}
+      provisionedTask={provisioned}
+    >
+      <TabManagerVisibilitySync projectId={projectId} taskId={taskId} />
+      <TopLevelTabSync projectId={projectId} taskId={taskId} />
+      <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
+        {children}
+      </EditorProvider>
     </TaskViewWrapper>
   );
 });

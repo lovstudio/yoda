@@ -6,9 +6,8 @@ import { useProvisionedTaskOrNull } from '@renderer/features/tasks/task-view-con
  * Reads/writes runtime open state for an ad-hoc disclosure (a `<details>`,
  * a group toggle, …). The id must be stable across renders so the remembered
  * state reattaches during the current app session. `defaultOpen` is used until
- * the user has explicitly toggled this id. Outside a task view (no
- * ProvisionedTaskProvider, e.g. the composer popover) the state falls back to
- * plain component state.
+ * the user has explicitly toggled this id. Outside a ready task-view snapshot
+ * (e.g. the composer popover), the state falls back to plain component state.
  */
 export function usePersistedDisclosure(
   id: string,

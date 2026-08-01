@@ -9,10 +9,7 @@ import {
   getTaskStore,
   taskViewKind,
 } from '@renderer/features/tasks/stores/task-selectors';
-import {
-  ProvisionedTaskProvider,
-  TaskViewWrapper,
-} from '@renderer/features/tasks/task-view-context';
+import { TaskViewWrapper } from '@renderer/features/tasks/task-view-context';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@renderer/lib/ui/resizable';
 import { cn } from '@renderer/utils/utils';
@@ -56,12 +53,16 @@ export const SelfContainedTaskPane = observer(function SelfContainedTaskPane({
   if (!provisioned) return null;
 
   return (
-    <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind} hosted>
-      <ProvisionedTaskProvider task={provisioned}>
-        <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
-          <TaskMainPanel />
-        </EditorProvider>
-      </ProvisionedTaskProvider>
+    <TaskViewWrapper
+      projectId={projectId}
+      taskId={taskId}
+      kind={kind}
+      provisionedTask={provisioned}
+      hosted
+    >
+      <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
+        <TaskMainPanel />
+      </EditorProvider>
     </TaskViewWrapper>
   );
 });

@@ -4,9 +4,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { ProvisionedTask } from './stores/task';
 import {
-  ProvisionedTaskProvider,
   TaskViewWrapper,
   useProvisionedTask,
+  useProvisionedTaskOrNull,
   useTaskViewContext,
   useTaskViewKind,
 } from './task-view-context';
@@ -19,6 +19,10 @@ function TaskKindProbe() {
 
 function ProvisionedTaskProbe() {
   return createElement('span', null, useProvisionedTask().taskId);
+}
+
+function OptionalTaskProbe() {
+  return createElement('span', null, useProvisionedTaskOrNull()?.taskId ?? 'not-ready');
 }
 
 describe('task view state snapshot', () => {
@@ -49,15 +53,31 @@ describe('task view state snapshot', () => {
     expect(taskWindowSource).not.toContain('const kind = taskViewKind(');
   });
 
-  it('provides the task instance captured by the ready-state owner', () => {
+  it('publishes readiness and its task payload as one context snapshot', () => {
     const task = { taskId: 'task-1' } as ProvisionedTask;
     const markup = renderToStaticMarkup(
-      createElement(ProvisionedTaskProvider, {
-        task,
+      createElement(TaskViewWrapper, {
+        projectId: 'project-1',
+        taskId: 'task-1',
+        kind: 'ready',
+        provisionedTask: task,
         children: createElement(ProvisionedTaskProbe),
       })
     );
 
     expect(markup).toContain('task-1');
+  });
+
+  it('keeps the optional task payload empty for non-ready snapshots', () => {
+    const markup = renderToStaticMarkup(
+      createElement(TaskViewWrapper, {
+        projectId: 'project-1',
+        taskId: 'task-1',
+        kind: 'creating',
+        children: createElement(OptionalTaskProbe),
+      })
+    );
+
+    expect(markup).toContain('not-ready');
   });
 });

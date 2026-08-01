@@ -117,8 +117,8 @@ export const TaskMainPanel = observer(function TaskMainPanel() {
   }
 
   // Keep every present and future non-ready state outside consumers that
-  // require ProvisionedTaskProvider. The owner snapshot may intentionally
-  // advance one render after the mutable task store during provisioning.
+  // require a provisioned task. The shared context snapshot advances readiness
+  // and its task payload together during provisioning.
   if (kind !== 'ready') {
     return null;
   }
