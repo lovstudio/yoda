@@ -51,6 +51,7 @@ export function useRuntimeSettings(runtimeId: string) {
     isFieldOverridden: (field: keyof RuntimeCustomConfig) =>
       !!(data?.overrides && field in data.overrides),
     update: updateMutation.mutate,
+    updateAsync: updateMutation.mutateAsync,
     reset: resetMutation.mutate,
   };
 }

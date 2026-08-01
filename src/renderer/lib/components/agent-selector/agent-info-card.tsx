@@ -37,16 +37,31 @@ import {
 } from '@renderer/lib/ui/dropdown-menu';
 import { agentConfig } from '@renderer/utils/agentConfig';
 import { cn } from '@renderer/utils/utils';
+import { SessionModelEditor } from './session-model-editor';
 import { useRuntimeSnapshot } from './use-runtime-snapshot';
 
 type Props = {
   id: RuntimeId;
   dependency?: DependencyState;
   selectedModel?: string | null;
+  selectedModelSource?: 'agentOverride' | 'currentSession';
   connectionId?: string;
+  modelEditing?: {
+    reasoningEffort?: string | null;
+    onRestartWithModel: (model: string) => Promise<void>;
+    onManageModels: () => void;
+    allowDefaultChange: boolean;
+  };
 };
 
-export const AgentInfoCard: React.FC<Props> = ({ id, dependency, selectedModel, connectionId }) => {
+export const AgentInfoCard: React.FC<Props> = ({
+  id,
+  dependency,
+  selectedModel,
+  selectedModelSource = 'agentOverride',
+  connectionId,
+  modelEditing,
+}) => {
   const { t } = useTranslation();
   const runtime = getRuntime(id);
   const config = agentConfig[id];
@@ -58,13 +73,11 @@ export const AgentInfoCard: React.FC<Props> = ({ id, dependency, selectedModel, 
   const snapshot = snapshotQuery.data;
   const installation = dependency ?? snapshot?.installation ?? null;
   const installed = installation?.status === 'available';
-  const model =
-    selectedModel?.trim() ||
-    snapshot?.model.defaultModel ||
-    snapshot?.model.nativeModel ||
-    t('agents.runtimeInfo.clientDefault');
+  const resolvedModel =
+    selectedModel?.trim() || snapshot?.model.defaultModel || snapshot?.model.nativeModel || null;
+  const model = resolvedModel ?? t('agents.runtimeInfo.clientDefault');
   const modelSource = selectedModel?.trim()
-    ? t('agents.runtimeInfo.agentOverride')
+    ? t(`agents.runtimeInfo.${selectedModelSource}`)
     : snapshot?.model.defaultModel
       ? t('agents.runtimeInfo.yodaDefault')
       : snapshot?.model.nativeModel
@@ -106,7 +119,7 @@ export const AgentInfoCard: React.FC<Props> = ({ id, dependency, selectedModel, 
   };
 
   return (
-    <div className="w-96 max-w-[24rem] rounded-lg border border-border bg-background p-3 text-foreground shadow-md">
+    <div className="w-[min(24rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] rounded-lg border border-border bg-background p-3 text-foreground shadow-md">
       <div className="mb-2 flex items-start gap-2">
         <AgentLogo
           logo={config.logo}
@@ -133,6 +146,18 @@ export const AgentInfoCard: React.FC<Props> = ({ id, dependency, selectedModel, 
         </div>
       </div>
 
+      {modelEditing ? (
+        <SessionModelEditor
+          runtimeId={id}
+          currentModel={resolvedModel}
+          currentModelSource={modelSource}
+          reasoningEffort={modelEditing.reasoningEffort}
+          onRestartWithModel={modelEditing.onRestartWithModel}
+          onManageModels={modelEditing.onManageModels}
+          allowDefaultChange={modelEditing.allowDefaultChange}
+        />
+      ) : null}
+
       <div className="mb-2 divide-y divide-border overflow-hidden rounded-md border border-border">
         <InfoRow
           label={t('agents.runtimeInfo.version')}
@@ -143,7 +168,9 @@ export const AgentInfoCard: React.FC<Props> = ({ id, dependency, selectedModel, 
               : undefined
           }
         />
-        <InfoRow label={t('agents.runtimeInfo.model')} value={model} detail={modelSource} mono />
+        {!modelEditing ? (
+          <InfoRow label={t('agents.runtimeInfo.model')} value={model} detail={modelSource} mono />
+        ) : null}
         <InfoRow
           label={t('agents.runtimeInfo.executable')}
           value={installation?.path ?? t('agents.unset')}

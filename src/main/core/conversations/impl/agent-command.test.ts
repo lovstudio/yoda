@@ -313,7 +313,7 @@ describe('buildAgentCommand', () => {
     expect(result.args).toContain('gpt-5.6-codex');
   });
 
-  it('lets the Agent model override the runtime default and does not add it on resume', () => {
+  it('lets the Agent model override the runtime default on fresh and resumed sessions', () => {
     const providerConfig = { ...runtimeConfigDefaults.codex, defaultModel: 'gpt-5.6-codex' };
     const fresh = buildAgentCommand({
       runtimeId: 'codex',
@@ -331,7 +331,21 @@ describe('buildAgentCommand', () => {
 
     expect(fresh.args).toContain('o4-mini');
     expect(fresh.args).not.toContain('gpt-5.6-codex');
-    expect(resumed.args).not.toContain('--model');
+    expect(resumed.args).toContain('--model');
+    expect(resumed.args).toContain('o4-mini');
+    expect(resumed.args).not.toContain('gpt-5.6-codex');
+  });
+
+  it('does not apply the new-session default while resuming without an explicit model', () => {
+    const result = buildAgentCommand({
+      runtimeId: 'codex',
+      providerConfig: { ...runtimeConfigDefaults.codex, defaultModel: 'gpt-5.6-codex' },
+      sessionId: 'conv-1',
+      isResuming: true,
+    });
+
+    expect(result.args).not.toContain('--model');
+    expect(result.args).not.toContain('gpt-5.6-codex');
   });
 
   it('keeps only the Agent model when defaults and extra args also select models', () => {
@@ -406,7 +420,7 @@ describe('buildAgentCommand', () => {
     ]);
   });
 
-  it('does not normalize or inject model arguments while resuming', () => {
+  it('normalizes an explicit resume-time model override', () => {
     const result = buildAgentCommand({
       runtimeId: 'claude',
       providerConfig: makeConfig({
@@ -419,13 +433,7 @@ describe('buildAgentCommand', () => {
       isResuming: true,
     });
 
-    expect(result.args).toEqual([
-      '--model',
-      'default-args-model',
-      '--resume',
-      'conv-1',
-      '--model=extra-args-model',
-    ]);
+    expect(result.args).toEqual(['--resume', 'conv-1', '--model', 'agent-model']);
   });
 
   it('rejects shell control syntax that makes managed args ambiguous', () => {

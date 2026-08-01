@@ -39,7 +39,9 @@ export async function restartConversation(
   /** Override tmux for the restarted session only; omit to keep the task default. */
   tmuxOverride?: boolean,
   /** Add a newly installed skill to an explicit session allowlist before restarting. */
-  enableSkillKey?: string
+  enableSkillKey?: string,
+  /** Explicit model override for this restart; the runtime persists it with the native session. */
+  modelOverride?: string
 ): Promise<void> {
   const [row] = await db
     .select()
@@ -72,5 +74,13 @@ export async function restartConversation(
     );
   }
   await task.conversations.stopSession(conversationId);
-  await task.conversations.startSession(conversation, initialSize, true, undefined, tmuxOverride);
+  await task.conversations.startSession(
+    conversation,
+    initialSize,
+    true,
+    undefined,
+    tmuxOverride,
+    undefined,
+    modelOverride
+  );
 }

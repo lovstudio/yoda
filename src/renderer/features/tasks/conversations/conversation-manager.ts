@@ -537,7 +537,8 @@ export class ConversationManagerStore {
     conversationId: string,
     initialSize?: { cols: number; rows: number },
     tmuxOverride?: boolean,
-    enableSkillKey?: string
+    enableSkillKey?: string,
+    modelOverride?: string
   ): Promise<void> {
     const store = this.conversations.get(conversationId);
     if (!store) return;
@@ -554,7 +555,8 @@ export class ConversationManagerStore {
         conversationId,
         effectiveSize,
         tmuxOverride,
-        enableSkillKey
+        enableSkillKey,
+        modelOverride
       );
       await store.session.reconnect();
       if (effectiveSize) {
