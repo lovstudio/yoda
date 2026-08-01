@@ -40,12 +40,14 @@ describe('mobile native dependencies', () => {
     );
 
     expect(mobilePackage.dependencies?.['expo-image-picker']).toBeTruthy();
+    expect(mobilePackage.dependencies?.['expo-image-manipulator']).toBeTruthy();
     expect(mobilePackage.dependencies?.['expo-localization']).toBeTruthy();
     expect(mobilePackage.dependencies?.['expo-speech-recognition']).toBe('3.1.3');
     expect(plugins).toContain('expo-image-picker');
     expect(plugins).toContain('expo-localization');
     expect(plugins).toContain('expo-speech-recognition');
     expect(imageInputSource).toContain('selectionLimit: 0');
+    expect(imageInputSource).toContain('format: SaveFormat.JPEG');
     expect(voiceInputSource).toContain('contextualStrings: speechContextualStrings');
     expect(voiceInputSource).toContain("iosTaskHint: 'dictation'");
   });
