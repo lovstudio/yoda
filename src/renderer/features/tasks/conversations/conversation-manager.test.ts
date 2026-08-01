@@ -312,6 +312,7 @@ describe('ConversationManagerStore', () => {
       'conversation-1',
       { cols: 120, rows: 30 },
       undefined,
+      undefined,
       undefined
     );
     expect(mocks.ptyReconnectMock).toHaveBeenCalled();
@@ -348,7 +349,24 @@ describe('ConversationManagerStore', () => {
       'conversation-1',
       undefined,
       undefined,
-      'skill:local:new'
+      'skill:local:new',
+      undefined
+    );
+  });
+
+  it('passes a selected model when restarting the current session', async () => {
+    const store = new ConversationManagerStore('project-1', 'task-1', [conversation]);
+
+    await store.restartConversation('conversation-1', undefined, undefined, undefined, 'o4-mini');
+
+    expect(mocks.restartConversationMock).toHaveBeenCalledWith(
+      'project-1',
+      'task-1',
+      'conversation-1',
+      undefined,
+      undefined,
+      undefined,
+      'o4-mini'
     );
   });
 

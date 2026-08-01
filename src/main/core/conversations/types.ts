@@ -30,7 +30,7 @@ export interface ConversationProvider {
     tmuxOverride?: boolean,
     /** Absolute local paths of image attachments to deliver with the initial prompt. */
     imagePaths?: string[],
-    /** Agent's configured model for a new session (ignored on resume). */
+    /** Explicit model for a new session, or a supported resume-time model override. */
     model?: string | null
   ): Promise<void>;
   stopSession(conversationId: string): Promise<void>;

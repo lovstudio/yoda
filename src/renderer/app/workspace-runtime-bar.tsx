@@ -17,6 +17,7 @@ import { observer } from 'mobx-react-lite';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AppAgentSessionResource } from '@shared/app-resource';
+import type { Conversation } from '@shared/conversations';
 import { getMaasPlatformDefinition } from '@shared/maas';
 import type { ComposerDefaults } from '@shared/project-settings';
 import {
@@ -47,6 +48,7 @@ import {
 import { asProvisioned, getTaskStore } from '@renderer/features/tasks/stores/task-selectors';
 import AgentLogo from '@renderer/lib/components/agent-logo';
 import { AgentInfoCard } from '@renderer/lib/components/agent-selector/agent-info-card';
+import { runtimeSnapshotQueryKey } from '@renderer/lib/components/agent-selector/use-runtime-snapshot';
 import { useToast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 import { useNavigate } from '@renderer/lib/layout/navigation-provider';
@@ -111,6 +113,11 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const { value: defaultRuntime } = useAppSettingsKey('defaultRuntime');
   const [isCompacting, setIsCompacting] = useState(false);
   const [isResettingAccountUsage, setIsResettingAccountUsage] = useState(false);
+  const [isRuntimePopoverOpen, setIsRuntimePopoverOpen] = useState(false);
+  const [sessionModelOverride, setSessionModelOverride] = useState<{
+    conversationId: string;
+    model: string;
+  } | null>(null);
   const [isAgentPopoverOpen, setIsAgentPopoverOpen] = useState(false);
   const [isResourcePopoverOpen, setIsResourcePopoverOpen] = useState(false);
   const [isConfigPopoverOpen, setIsConfigPopoverOpen] = useState(false);
@@ -250,6 +257,42 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
       ].join('\n')
     : null;
   const connectionId = provisionedTask?.workspace.sshConnectionId;
+  const { data: runtimeSnapshot } = useQuery({
+    queryKey: runtimeId
+      ? runtimeSnapshotQueryKey(runtimeId, connectionId)
+      : (['runtimeSnapshot', 'inactive', connectionId ?? 'local'] as const),
+    queryFn: () => {
+      if (!runtimeId) throw new Error('A runtime is required to read its model.');
+      return rpc.runtimeSettings.getRuntimeSnapshot(runtimeId, { connectionId });
+    },
+    enabled: Boolean(runtimeId),
+    staleTime: 30_000,
+  });
+  const { data: sessionModelDetails } = useActiveSessionModelDetails({
+    runtimeId,
+    cwd: provisionedTask?.path,
+    conversation: activeConversation,
+    connectionId,
+  });
+  const optimisticSessionModel =
+    sessionModelOverride && sessionModelOverride.conversationId === activeConversation?.id
+      ? sessionModelOverride.model
+      : null;
+  const activeSessionModel = optimisticSessionModel ?? sessionModelDetails?.model ?? null;
+  const displayedModel =
+    activeSessionModel ??
+    runtimeSnapshot?.model.defaultModel ??
+    runtimeSnapshot?.model.nativeModel ??
+    null;
+  useEffect(() => {
+    if (
+      sessionModelOverride &&
+      sessionModelOverride.conversationId === activeConversation?.id &&
+      sessionModelDetails?.model === sessionModelOverride.model
+    ) {
+      setSessionModelOverride(null);
+    }
+  }, [activeConversation?.id, sessionModelDetails?.model, sessionModelOverride]);
   const dependency = runtimeId
     ? connectionId
       ? appState.dependencies.getRemote(connectionId).data?.[runtimeId]
@@ -467,6 +510,25 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     appState.sidePane.pinView('settings', { tab: 'clis-models', runtimeId });
   };
 
+  const manageModels = () => {
+    setIsRuntimePopoverOpen(false);
+    appState.sidePane.pinView('settings', { tab: 'models' });
+  };
+
+  const restartCurrentSessionWithModel = async (model: string) => {
+    if (!provisionedTask || !activeConversation || !runtime?.modelFlagOnResume) {
+      throw new Error(t('workspaceRuntime.model.restartUnavailable'));
+    }
+    await provisionedTask.conversations.restartConversation(
+      activeConversation.id,
+      undefined,
+      undefined,
+      undefined,
+      model
+    );
+    setSessionModelOverride({ conversationId: activeConversation.id, model });
+  };
+
   const handleAccountUsagePopoverOpen = (open: boolean) => {
     if (open && runtimeId === 'codex' && !connectionId) {
       void refreshAccountUsageQuery();
@@ -566,7 +628,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     >
       {runtimeId ? (
         <div className="flex min-w-0 items-center gap-0.5 overflow-hidden @min-[1121px]:gap-1.5">
-          <Popover>
+          <Popover open={isRuntimePopoverOpen} onOpenChange={setIsRuntimePopoverOpen}>
             <PopoverTrigger
               aria-label={t('workspaceRuntime.currentSessionTitle', {
                 name: runtime?.name ?? runtimeId,
@@ -588,6 +650,21 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               <span className="truncate font-medium text-foreground @max-[720px]:hidden">
                 {runtime?.name ?? runtimeId}
               </span>
+              {displayedModel ? (
+                <>
+                  <span aria-hidden className="text-foreground-passive @max-[720px]:hidden">
+                    ·
+                  </span>
+                  <span className="max-w-52 truncate font-mono text-[10px] text-foreground">
+                    {displayedModel}
+                  </span>
+                  {sessionModelDetails?.reasoningEffort ? (
+                    <span className="max-w-16 truncate rounded-sm bg-background-2 px-1 font-mono text-[9px] text-foreground-passive @max-[960px]:hidden">
+                      {sessionModelDetails.reasoningEffort}
+                    </span>
+                  ) : null}
+                </>
+              ) : null}
             </PopoverTrigger>
             <PopoverContent
               align="start"
@@ -595,7 +672,23 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
               sideOffset={8}
               className="w-auto border border-border bg-background p-0 text-foreground shadow-lg"
             >
-              <AgentInfoCard id={runtimeId} dependency={dependency} connectionId={connectionId} />
+              <AgentInfoCard
+                id={runtimeId}
+                dependency={dependency}
+                selectedModel={activeSessionModel}
+                selectedModelSource="currentSession"
+                connectionId={connectionId}
+                modelEditing={
+                  activeConversation && runtime?.modelFlagOnResume
+                    ? {
+                        reasoningEffort: sessionModelDetails?.reasoningEffort,
+                        onRestartWithModel: restartCurrentSessionWithModel,
+                        onManageModels: manageModels,
+                        allowDefaultChange: !connectionId,
+                      }
+                    : undefined
+                }
+              />
             </PopoverContent>
           </Popover>
           {activeConversationId ? (
@@ -1312,6 +1405,67 @@ function ContextProgressBar({
       />
     </span>
   );
+}
+
+type ActiveSessionModelDetails = {
+  model: string | null;
+  reasoningEffort: string | null;
+};
+
+function useActiveSessionModelDetails({
+  runtimeId,
+  cwd,
+  conversation,
+  connectionId,
+}: {
+  runtimeId: RuntimeId | null;
+  cwd?: string;
+  conversation: Conversation | null;
+  connectionId?: string;
+}) {
+  const supportedRuntime = !connectionId && (runtimeId === 'codex' || runtimeId === 'claude');
+  return useQuery<ActiveSessionModelDetails | null>({
+    queryKey: [
+      'workspaceSessionModel',
+      runtimeId ?? 'none',
+      cwd ?? '',
+      conversation?.id ?? '',
+      conversation?.title ?? '',
+      conversation?.createdAt ?? '',
+      connectionId ?? 'local',
+    ],
+    queryFn: async () => {
+      if (!runtimeId || !cwd || !conversation) return null;
+      if (runtimeId === 'codex') {
+        const context = await rpc.conversations.getCodexSessionContext(
+          cwd,
+          conversation.id,
+          conversation.title,
+          conversation.createdAt ?? null,
+          'harness'
+        );
+        return context
+          ? {
+              model: context.model,
+              reasoningEffort: context.turnContexts.at(-1)?.effort ?? null,
+            }
+          : null;
+      }
+      if (runtimeId === 'claude') {
+        const sessionId =
+          conversation.sessionSource?.runtimeId === 'claude'
+            ? conversation.sessionSource.sessionId
+            : conversation.id;
+        const metadata = await rpc.conversations.getClaudeSessionMetadata(cwd, sessionId);
+        return metadata ? { model: metadata.model, reasoningEffort: null } : null;
+      }
+      return null;
+    },
+    enabled: Boolean(supportedRuntime && cwd && conversation),
+    staleTime: 3_000,
+    refetchInterval: supportedRuntime && cwd && conversation ? 5_000 : false,
+    refetchOnWindowFocus: true,
+  });
 }
 
 function ContextMetric({ label, value }: { label: string; value: string }) {

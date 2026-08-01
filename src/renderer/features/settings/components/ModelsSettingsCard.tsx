@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -31,9 +31,12 @@ import { Switch } from '@renderer/lib/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/lib/ui/tooltip';
 import { isImeComposing } from '@renderer/utils/ime';
 import { cn } from '@renderer/utils/utils';
+import {
+  MODEL_PROVIDERS_QUERY_KEY,
+  useModelProviderCatalog,
+} from '../model-provider-catalog-query';
 import { SettingRow } from './SettingRow';
 
-const MODEL_PROVIDERS_QUERY_KEY = ['llm', 'modelProviders'] as const;
 const ADD_CUSTOM_PROVIDER_ACTION = '__add_custom_provider__';
 
 type UpdateCustomModelsInput = {
@@ -44,11 +47,7 @@ type UpdateCustomModelsInput = {
 export function ModelCatalogAutomaticUpdateSetting() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const catalogQuery = useQuery<ModelProviderCatalogResult>({
-    queryKey: MODEL_PROVIDERS_QUERY_KEY,
-    queryFn: () => rpc.llm.listModelProviders(),
-    staleTime: 60_000,
-  });
+  const catalogQuery = useModelProviderCatalog();
   const updateAutomaticUpdates = useMutation<ModelProviderCatalogResult, Error, boolean>({
     mutationFn: (enabled) => rpc.llm.setModelProviderAutomaticUpdates(enabled),
     onSuccess: (result) => {
@@ -88,11 +87,7 @@ export default function ModelsSettingsCard() {
   const [initialModelDraft, setInitialModelDraft] = useState('');
   const [providerFormError, setProviderFormError] = useState<string | null>(null);
 
-  const catalogQuery = useQuery<ModelProviderCatalogResult>({
-    queryKey: MODEL_PROVIDERS_QUERY_KEY,
-    queryFn: () => rpc.llm.listModelProviders(),
-    staleTime: 60_000,
-  });
+  const catalogQuery = useModelProviderCatalog();
 
   const providers = useMemo(
     () => catalogQuery.data?.providers ?? fallbackProviderGroups(),

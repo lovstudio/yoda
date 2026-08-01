@@ -127,6 +127,8 @@ export type RuntimeDefinition = {
   modelFlag?: string;
   /** Alternate CLI spellings that select the same model (for example `-m`). */
   modelFlagAliases?: string[];
+  /** The resume subcommand accepts an explicit model override for the existing session. */
+  modelFlagOnResume?: boolean;
   newConversationFlag?: string;
   sessionIdOnResumeOnly?: boolean;
   defaultArgs?: string[];
@@ -345,6 +347,7 @@ export const RUNTIMES: RuntimeDefinition[] = [
     initialPromptFlag: '',
     modelFlag: '--model',
     modelFlagAliases: ['-m'],
+    modelFlagOnResume: true,
     appendSystemPromptConfigKey: 'developer_instructions',
     resumeFlag: 'resume',
     resumeSessionIdArg: true,
@@ -374,6 +377,7 @@ export const RUNTIMES: RuntimeDefinition[] = [
     initialPromptFlag: '',
     modelFlag: '--model',
     modelFlagAliases: ['-m'],
+    modelFlagOnResume: true,
     clipboardImagePaste: true,
     resumeFlag: '--resume',
     sessionIdFlag: '--session-id',

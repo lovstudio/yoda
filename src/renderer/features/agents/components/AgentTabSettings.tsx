@@ -15,6 +15,7 @@ import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { Label } from '@renderer/lib/ui/label';
 import { Textarea } from '@renderer/lib/ui/textarea';
+import { isImeComposing } from '@renderer/utils/ime';
 import { log } from '@renderer/utils/logger';
 import { AgentSection } from './AgentSection';
 
@@ -106,7 +107,7 @@ const AgentDefaultModelSettings: React.FC<{ agentId: RuntimeId; agentName: strin
           disabled={isLoading || isSaving}
           onChange={(event) => setDraftModel(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') save();
+            if (event.key === 'Enter' && !isImeComposing(event)) save();
           }}
           placeholder={t('agents.settings.defaultModelPlaceholder')}
           className="h-8 flex-1 font-mono text-xs"

@@ -333,11 +333,20 @@ export function buildAgentCommand({
     args.push(providerDef.appendSystemPromptFlag, appendSystemPrompt);
   }
 
-  const effectiveModel = model?.trim() || providerConfig?.defaultModel?.trim();
+  const requestedModel = model?.trim();
+  const effectiveModel =
+    requestedModel || (!isResuming ? providerConfig?.defaultModel?.trim() : '');
+  const shouldApplyModel = Boolean(
+    effectiveModel && providerDef?.modelFlag && (!isResuming || providerDef.modelFlagOnResume)
+  );
+  const shouldNormalizeModelArgs = Boolean(
+    providerDef?.modelFlag && (!isResuming || shouldApplyModel)
+  );
 
-  // Model selection applies to a NEW session only — on resume the CLI session
-  // already carries its model, and --model alongside --resume is often rejected.
-  if (!isResuming && effectiveModel && providerDef?.modelFlag) {
+  // Existing sessions normally keep their persisted model. A user-triggered
+  // model change supplies `model` explicitly; only runtimes that advertise
+  // resume-time support receive the override.
+  if (effectiveModel && providerDef?.modelFlag && (!isResuming || providerDef.modelFlagOnResume)) {
     args.push(...parseArgField(providerDef.modelFlag), effectiveModel);
   }
 
@@ -378,7 +387,7 @@ export function buildAgentCommand({
   args.push(...extraArgs);
 
   const normalizedArgs =
-    !isResuming && providerDef?.modelFlag
+    shouldNormalizeModelArgs && providerDef?.modelFlag
       ? normalizeRuntimeModelArgs(
           args,
           providerDef.modelFlag,
