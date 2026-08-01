@@ -109,7 +109,7 @@ describe('ComposerPromptInput path completion menu', () => {
         expect(mocks.listPathCompletions).toHaveBeenCalledWith(
           'project-1',
           '/Users/tester',
-          expect.objectContaining({ pathKind: 'absolute' })
+          expect.objectContaining({ includeHidden: false, pathKind: 'absolute' })
         );
         expect(document.querySelector('[data-path-completion-menu]')).not.toBeNull();
       });

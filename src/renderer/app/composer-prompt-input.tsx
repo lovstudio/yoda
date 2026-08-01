@@ -64,6 +64,7 @@ import {
   buildPathCompletionRequest,
   findActivePathMention,
   rebaseHomePathCompletionEntries,
+  shouldIncludeHiddenPathCompletions,
   splitPathMentionQuery,
   type ActivePathMention,
   type PathCompletionItem,
@@ -651,7 +652,7 @@ export function ComposerPromptInput({
             {
               pathKind: request.pathKind,
               recursive: false,
-              includeHidden: true,
+              includeHidden: shouldIncludeHiddenPathCompletions(queryParts),
               maxEntries: 80,
               timeBudgetMs: 1_000,
             }

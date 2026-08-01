@@ -5,6 +5,7 @@ import {
   buildPathCompletionRequest,
   findActivePathMention,
   rebaseHomePathCompletionEntries,
+  shouldIncludeHiddenPathCompletions,
   splitPathMentionQuery,
 } from './path-mention-autocomplete';
 
@@ -101,6 +102,13 @@ describe('path mention autocomplete helpers', () => {
       pathKind: 'home',
       directoryPath: '.',
     });
+  });
+
+  it('only includes hidden entries after the user types a dot prefix', () => {
+    expect(shouldIncludeHiddenPathCompletions(splitPathMentionQuery('~/'))).toBe(false);
+    expect(shouldIncludeHiddenPathCompletions(splitPathMentionQuery('~/.'))).toBe(true);
+    expect(shouldIncludeHiddenPathCompletions(splitPathMentionQuery('~/.config/'))).toBe(false);
+    expect(shouldIncludeHiddenPathCompletions(splitPathMentionQuery('~/.config/.'))).toBe(true);
   });
 
   it('filters and sorts completion items by prefix and type', () => {

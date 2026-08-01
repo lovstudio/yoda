@@ -130,6 +130,10 @@ export function buildPathCompletionRequest(
   };
 }
 
+export function shouldIncludeHiddenPathCompletions(parts: PathMentionQueryParts): boolean {
+  return parts.namePrefix.startsWith('.');
+}
+
 export function rebaseHomePathCompletionEntries(
   entries: PathCompletionEntry[],
   parts: PathMentionQueryParts,
