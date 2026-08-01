@@ -138,6 +138,7 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
   const activeMountedProject = activeProjectId
     ? asMounted(getProjectStore(activeProjectId))
     : undefined;
+  const activeMountedProjectData = activeMountedProject?.data ?? null;
   const projectSettingsStore = activeProjectId
     ? getProjectSettingsStore(activeProjectId)
     : undefined;
@@ -389,6 +390,10 @@ export const WorkspaceRuntimeBar = observer(function WorkspaceRuntimeBar() {
     if (!resourceSnapshot) return;
     workspaceResourceHistoryStore.append(resourceSnapshot);
   }, [resourceSnapshot]);
+
+  useEffect(() => {
+    void workspaceTerminalStore.syncActiveProject(activeMountedProjectData).catch(() => {});
+  }, [activeMountedProjectData]);
 
   useEffect(() => {
     if (!activeConversation || !provisionedTask) return;

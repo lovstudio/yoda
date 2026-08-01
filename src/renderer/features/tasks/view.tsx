@@ -7,15 +7,12 @@ import type { TaskWindowTabTarget } from '@shared/task-window';
 import { openProvisionedTaskTab, openTaskTopTab } from '@renderer/app/open-task-target';
 import { type ViewDefinition } from '@renderer/app/view-registry';
 import {
+  asProvisioned,
   getTaskManagerStore,
   getTaskStore,
   taskViewKind,
 } from '@renderer/features/tasks/stores/task-selectors';
-import {
-  ProvisionedTaskProvider,
-  TaskViewWrapper,
-  useProvisionedTask,
-} from '@renderer/features/tasks/task-view-context';
+import { TaskViewWrapper, useProvisionedTask } from '@renderer/features/tasks/task-view-context';
 import { events } from '@renderer/lib/ipc';
 import { useNavigate, useParams } from '@renderer/lib/layout/navigation-provider';
 import { appState } from '@renderer/lib/stores/app-state';
@@ -220,6 +217,7 @@ export const TaskViewWrapperWithProviders = observer(function TaskViewWrapperWit
 }) {
   const taskStore = getTaskStore(projectId, taskId);
   const kind = taskViewKind(taskStore, projectId);
+  const provisioned = asProvisioned(taskStore);
 
   // Auto-provision when the task view is rendered with an idle task — covers
   // session restore where the task wasn't in openTaskIds, direct navigation,
@@ -235,21 +233,28 @@ export const TaskViewWrapperWithProviders = observer(function TaskViewWrapperWit
 
   if (kind !== 'ready') {
     return (
-      <TaskViewWrapper projectId={projectId} taskId={taskId}>
+      <TaskViewWrapper projectId={projectId} taskId={taskId} kind={kind}>
         {children}
       </TaskViewWrapper>
     );
   }
 
+  // `kind` and the provider payload are captured in this render. Never let a
+  // nested provider re-read mutable task state and disagree with this branch.
+  if (!provisioned) return null;
+
   return (
-    <TaskViewWrapper projectId={projectId} taskId={taskId}>
-      <ProvisionedTaskProvider projectId={projectId} taskId={taskId}>
-        <TabManagerVisibilitySync projectId={projectId} taskId={taskId} />
-        <TopLevelTabSync projectId={projectId} taskId={taskId} />
-        <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
-          {children}
-        </EditorProvider>
-      </ProvisionedTaskProvider>
+    <TaskViewWrapper
+      projectId={projectId}
+      taskId={taskId}
+      kind={kind}
+      provisionedTask={provisioned}
+    >
+      <TabManagerVisibilitySync projectId={projectId} taskId={taskId} />
+      <TopLevelTabSync projectId={projectId} taskId={taskId} />
+      <EditorProvider key={taskId} taskId={taskId} projectId={projectId}>
+        {children}
+      </EditorProvider>
     </TaskViewWrapper>
   );
 });

@@ -121,6 +121,7 @@ export interface ComposerPromptInputProps {
   className?: string;
   containerClassName?: string;
   textareaClassName?: string;
+  textareaId?: string;
   placeholder?: string;
   disabled?: boolean;
   autoFocus?: boolean;
@@ -321,6 +322,7 @@ export function ComposerPromptInput({
   className,
   containerClassName = 'border-border bg-background-1',
   textareaClassName,
+  textareaId,
   placeholder,
   disabled = false,
   autoFocus = false,
@@ -1038,6 +1040,7 @@ export function ComposerPromptInput({
         <div className="flex flex-col">
           <div ref={inputAnchorRef} className="relative">
             <Textarea
+              id={textareaId}
               ref={textareaRef}
               placeholder={placeholder ?? t('home.promptPlaceholder')}
               value={value}

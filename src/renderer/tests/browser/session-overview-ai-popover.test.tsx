@@ -76,7 +76,6 @@ vi.mock('@renderer/features/tasks/components/task-menu-session-info', () => ({
 }));
 
 vi.mock('@renderer/features/tasks/task-view-context', () => ({
-  ProvisionedTaskProvider: () => null,
   TaskViewWrapper: () => null,
   useProvisionedTask: () => ({
     path: '/tmp/yoda-popover-test',

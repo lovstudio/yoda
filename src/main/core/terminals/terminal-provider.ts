@@ -16,6 +16,7 @@ export interface TerminalProvider {
     command?: { command: string; args: string[] }
   ): Promise<void>;
   spawnLifecycleScript(request: LifecycleScriptSpawnRequest): Promise<void>;
+  isTerminalDetachable(terminalId: string): boolean;
   killTerminal(terminalId: string): Promise<void>;
   destroyAll(): Promise<void>;
   detachAll(): Promise<void>;
