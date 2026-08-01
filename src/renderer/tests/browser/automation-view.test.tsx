@@ -71,7 +71,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof ReactI18nextModule>()),
   useTranslation: () => ({
     t: (key: string) => key,
-    i18n: { language: 'en' },
+    i18n: { language: 'zh-CN', resolvedLanguage: 'zh-CN' },
   }),
 }));
 
@@ -202,6 +202,7 @@ describe('AutomationMainPanel', () => {
     expect(host.textContent).toContain(fixtures.activeAutomation.prompt);
     expect(host.textContent).toContain(fixtures.pausedAutomation.title);
     expect(host.textContent).toContain(fixtures.codexAutomation.title);
+    expect(host.textContent).not.toContain('Aug');
     expect(findButton(host, 'automation.filters.all')?.getAttribute('aria-pressed')).toBe('true');
     expect(host.textContent).not.toContain('automation.recentRuns.title');
 
@@ -254,7 +255,21 @@ describe('AutomationMainPanel', () => {
       card.textContent?.includes(fixtures.codexAutomation.title)
     );
     expect(codexCard?.textContent).toContain('automation.source.codexManaged');
+    expect(codexCard?.textContent).toContain('automation.source.readOnly');
+    expect(codexCard?.querySelector('footer')).not.toBeNull();
     expect(findButton(codexCard as HTMLElement, 'automation.actions.runNow')).toBeUndefined();
     expect(codexCard?.querySelector('button[aria-label^="automation.actions.more"]')).toBeNull();
+  });
+
+  it('uses one card structure while keeping management ownership explicit', async () => {
+    const { AutomationMainPanel } = await import('@renderer/features/automation/automation-view');
+    await act(async () => root.render(createElement(AutomationMainPanel)));
+
+    const cards = Array.from(host.querySelectorAll('article'));
+    expect(cards).toHaveLength(3);
+    expect(cards.every((card) => card.querySelector('footer'))).toBe(true);
+    expect(cards[0]?.textContent).toContain(fixtures.activeAutomation.title);
+    expect(cards[1]?.textContent).toContain('automation.source.yodaManaged');
+    expect(cards[2]?.textContent).toContain(fixtures.codexAutomation.title);
   });
 });
